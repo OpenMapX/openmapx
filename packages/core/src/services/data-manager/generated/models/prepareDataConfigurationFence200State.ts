@@ -7,5 +7,4 @@ export type PrepareDataConfigurationFence200State =
 export const PrepareDataConfigurationFence200State = {
   prepared: "prepared",
   settled: "settled",
-  recovery_required: "recovery_required",
 } as const;

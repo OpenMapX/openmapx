@@ -390,7 +390,7 @@ it.skipIf(!enabled)(
         try {
           return await run();
         } catch (error) {
-          if ((error as { reason?: string }).reason !== "receipt_delivery" || n === 7) throw error;
+          if ((error as { reason?: string }).reason !== "transport" || n === 7) throw error;
           const [row] = await fixture.db
             .select()
             .from(schema.adminJob)

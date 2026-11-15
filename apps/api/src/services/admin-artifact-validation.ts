@@ -2,16 +2,10 @@ import {
   adminArtifactExportInputSchema,
   adminArtifactImportInputSchema,
 } from "@openmapx/core/api-contracts";
-import {
-  artifactPublicationResultSchema,
-  canonicalJson,
-  type OpsOperation,
-  stageClaimIdentitySchema,
-  transferStageSchema,
-} from "@openmapx/core/ops";
+import { canonicalJson, type OpsOperation } from "@openmapx/core/ops";
 import { z } from "zod/v4";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
-import { ensureAdminJobReceiptDelivery, executeAdminJobOperation } from "./admin-job-ops";
+import { checkpointTerminalCopy, executeAdminJobOperation } from "./admin-job-ops";
 import { readProjection } from "./admin-job-projection";
 import {
   purposeObservationSchema,
@@ -22,8 +16,8 @@ import { createApiOpsClient } from "./ops-client";
 import { assertRetainedMaintenanceJob } from "./retained-maintenance-authorization";
 
 /** Observation never submits a second import/validation. Copy the exact purpose
- * receipt into the owned SQL checkpoint BEFORE acknowledging its immutable
- * canonical operation, so later family/stage retirement cannot erase the result. */
+ * receipt into the owned SQL checkpoint, so a later prune of the agent's records
+ * or stage cannot erase the result. */
 async function recoverArtifactPurpose(
   ctx: JobContext,
   operation: Extract<
@@ -110,7 +104,7 @@ async function recoverArtifactPurpose(
       projected.receiptDelivery?.terminalReceipt ??
       (await client.status(operation.kind, projected.operationId));
   } catch {
-    throw new JobObservationPending("receipt_delivery");
+    throw new JobObservationPending("transport");
   }
   if (
     !["succeeded", "failed", "timed_out"].includes(canonical.state) ||
@@ -132,7 +126,7 @@ async function recoverArtifactPurpose(
   else projected.errorClass = canonical.errorClass;
   if (canonical.failureResult === undefined) delete projected.failureResult;
   else projected.failureResult = canonical.failureResult;
-  await ensureAdminJobReceiptDelivery(ctx, projection, projected, client, canonical);
+  await checkpointTerminalCopy(ctx, projection, projected, canonical);
   return observation;
 }
 

@@ -54,7 +54,7 @@ export async function assertStandaloneSettlementCheckpoint(
     body.inspectionId !== state.request.inspectionId ||
     body.expectedContentDigest !== state.request.expectedContentDigest ||
     !source.terminal ||
-    delivery?.state !== "confirmed" ||
+    !delivery ||
     delivery.terminalReceipt.state !== "succeeded"
   )
     throw new JobOwnershipLost();
@@ -151,7 +151,7 @@ export async function hasVerifiedStandaloneRestoration(
             x.operation.decision === "restore",
         );
       return (
-        children.every((x) => x.terminal && x.receiptDelivery?.state === "confirmed") &&
+        children.every((x) => x.terminal && x.receiptDelivery !== undefined) &&
         restores.length === 1 &&
         restores[0]?.receiptDelivery?.terminalReceipt.state === "succeeded" &&
         (restores[0].receiptDelivery.terminalReceipt.result as { outcome?: string }).outcome ===
@@ -162,11 +162,7 @@ export async function hasVerifiedStandaloneRestoration(
     if (state.jobId !== jobId || state.phase !== "complete" || state.outcome !== "restored")
       return false;
     const operations = Object.values(readProjection(value).operations);
-    if (
-      operations.some(
-        (operation) => !operation.terminal || operation.receiptDelivery?.state !== "confirmed",
-      )
-    )
+    if (operations.some((operation) => !operation.terminal || !operation.receiptDelivery))
       return false;
     const restore = operations.filter(
       (operation) =>

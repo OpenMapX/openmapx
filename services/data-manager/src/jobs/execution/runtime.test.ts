@@ -13,6 +13,7 @@ import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
 import { preserveTransitPending } from "../transitous/owned-ops.js";
 import { buildJobContext } from "../transitous/pipeline.js";
+import { removePrunedDataRows } from "./prune-rows.js";
 import { createDataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore } from "./store.js";
 import { publishDataChange, withDataSqlCancellation } from "./worker-scope.js";
@@ -591,13 +592,13 @@ describe.skipIf(
     }
   }, 60000);
   it.each(["startup", "periodic"] as const)(
-    "retires the indexed unbound phase cells through production %s maintenance",
+    "prunes a finished execution's records and row through the production %s prune",
     async (phase) => {
       const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
       if (!url) throw Error("Owned PostgreSQL required");
       const sql = postgres(url, { max: 4 });
       drizzle(sql);
-      const root = mkdtempSync(join(tmpdir(), "omx-phase-retirement-")),
+      const root = mkdtempSync(join(tmpdir(), "omx-data-prune-")),
         data = join(root, "data");
       mkdirSync(data, { mode: 0o700 });
       await control.provisionControlInstallation(root);
@@ -662,12 +663,14 @@ describe.skipIf(
           initializeOfflineStorage: async () => {},
           reconcileJobs: async () => [],
           setupCronSchedulers: () => ({ stop() {} }) as never,
+          removePrunedRows: (keys) => removePrunedDataRows(sql, keys),
         });
-        stopRetention = startup.stopControlRetention;
+        stopRetention = startup.stopControlPrune;
         if (phase === "periodic") {
           expect(await store.inspect(id)).not.toBeNull();
           clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
-          await vi.advanceTimersByTimeAsync(5 * 60_000);
+          // The prune runs hourly after its startup pass.
+          await vi.advanceTimersByTimeAsync(3600_000);
           await stopRetention?.();
         }
         expect(await store.inspect(id)).toBeNull();

@@ -27,7 +27,8 @@ import { services as coreServices } from "@openmapx/core/server";
 
 /** The file keeps its jobs-v1.json name; its contents are format version 2. */
 const JOURNAL_FILE_VERSION = 2;
-const OPS_JOB_JOURNAL_MAX_ENTRIES = 256;
+// Twice the server capacity: new work and entries needing recovery each have half.
+const OPS_JOB_JOURNAL_MAX_ENTRIES = 512;
 const OPS_JOB_JOURNAL_MAX_BYTES = 24 * 1024 * 1024;
 export const OPS_JOB_JOURNAL_MAX_ORPHANS = 8;
 const OPERATION_ID = /^job1_[A-Za-z0-9_-]{16,64}$/;

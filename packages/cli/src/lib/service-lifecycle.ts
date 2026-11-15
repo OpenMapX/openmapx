@@ -92,7 +92,7 @@ export async function runCliServiceLifecycle(options: {
   const ops = await import("@openmapx/core/ops");
   const { log } = await import("./output");
   const { repoPaths } = await import("./paths");
-  const { cliControlContext, collectHostControlRetention } = await import("./control-context");
+  const { cliControlContext, pruneHostControlRecords } = await import("./control-context");
   const { assertCliDeploymentSecrets } = await import("./deployment-secret-policy");
   const { renderComposeWithWriter } = await import("../commands/compose");
   const { dockerComposeStream, dockerCompose } = await import("./docker");
@@ -177,7 +177,7 @@ export async function runCliServiceLifecycle(options: {
       role: "host-cli",
       serviceIds: targets,
     });
-  if (!inherited) await collectHostControlRetention(installation);
+  if (!inherited) await pruneHostControlRecords(installation);
   const admittedAt = Date.now(),
     deadlineAt = admittedAt + ops.opsExecutionBudget(operation.kind).processMs;
   const operationFingerprint = ops.opsOperationFingerprint(operation);

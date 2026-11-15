@@ -96,7 +96,7 @@ export async function checkpointOwnedAdminJob(
           maintenance = current._configurationMaintenance as Record<string, unknown> | undefined;
         if (
           original?.kind !== "configurationMaintenance.prepare" ||
-          delivery?.state !== "confirmed" ||
+          !delivery ||
           delivery.terminalReceipt.state !== "succeeded"
         )
           throw new JobOwnershipLost();
@@ -242,14 +242,8 @@ export async function checkpointOwnedAdminJob(
           Object.assign(merged, previous);
           merged.cursor = Math.max(previous.cursor, entry.cursor);
         }
-        if (previous.receiptDelivery?.state === "confirmed")
-          merged.receiptDelivery = previous.receiptDelivery;
-        else if (previous.receiptDelivery && entry.receiptDelivery) {
-          const { state: _a, ...a } = previous.receiptDelivery,
-            { state: _b, ...b } = entry.receiptDelivery;
-          if (!equal(a, b)) throw Error("Terminal receipt delivery identity changed");
-          merged.receiptDelivery = entry.receiptDelivery;
-        }
+        // The first checkpointed terminal copy wins.
+        if (previous.receiptDelivery) merged.receiptDelivery = previous.receiptDelivery;
         if (mapped.has(key)) {
           eventDelta += Math.max(0, entry.events - previous.events);
           byteDelta += Math.max(0, entry.bytes - previous.bytes);

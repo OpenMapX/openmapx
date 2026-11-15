@@ -12,7 +12,6 @@ import {
   type OpsJobStatus,
   opsOperationFingerprint,
   parseOpsJobStatus,
-  signApiRetentionProof,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { build } from "esbuild";
@@ -82,20 +81,6 @@ async function interrupt(
     await exited;
   }
 }
-function progress(root: string) {
-  return JSON.parse(
-    readFileSync(
-      join(root, "control-private/ops-agent/retention-families/slot-0/progress.json"),
-      "utf8",
-    ),
-  ) as {
-    terminalAt: number;
-    executions: Record<
-      string,
-      { known: boolean; terminalAt: number; terminalDigest: string; journalContained: boolean }
-    >;
-  };
-}
 function terminalStatus(job: PersistedOpsJob): OpsJobStatus {
   return parseOpsJobStatus({
     version: 2,
@@ -149,8 +134,7 @@ it.each(
       if (!original.terminalAt) throw Error("Missing original terminal timestamp");
       const originalTime = Date.parse(original.terminalAt),
         originalDigest = controlTerminalReceiptDigest(terminalStatus(original));
-      const before = progress(root),
-        altered = structuredClone(original);
+      const altered = structuredClone(original);
       const commitmentPath = join(
         root,
         `control-private/ops-agent/observations/terminal-${original.operationKey}.json`,
@@ -194,11 +178,6 @@ it.each(
         return { journal, server: app };
       };
       await start(altered);
-      expect(Object.values(progress(root).executions)[0]?.terminalDigest).toBe(
-        Object.values(before.executions)[0]?.terminalDigest,
-      );
-      expect(Object.values(progress(root).executions)[0]?.journalContained).toBe(false);
-      expect(progress(root).terminalAt).toBe(before.terminalAt);
       expect(readFileSync(commitmentPath)).toEqual(commitment);
       await app?.close();
       app = undefined;
@@ -207,60 +186,29 @@ it.each(
       const restoredJournal = await openOpsJobJournal(file);
       await restoredJournal.replace([original]);
       clock.mockReturnValue(originalTime + 71.5 * 3600_000);
-      const { journal, server } = await start(original);
-      const ack = {
-        kind: "controlRetention.acknowledge",
-        originRootKey: original.operationKey,
-        operationKey: original.operationKey,
-        fingerprint: original.fingerprint,
-        terminalDigest: originalDigest,
-        proof: signApiRetentionProof(token, {
-          version: 1,
-          apiJobId: stopped.apiJobId,
-          originalApiOwnerVersion: 1,
-          attemptId: stopped.attemptId,
-          checkpointOwnerVersion: 1,
-          terminalCopyId: randomUUID(),
-          operationKey: original.operationKey,
-          fingerprint: original.fingerprint,
-          terminalDigest: originalDigest,
-        }),
-      };
-      for (let retry = 0; retry < 2; retry++) {
-        const response = await server.inject({
-          method: "POST",
-          url: "/v1/operations",
-          headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
-          payload: {
-            version: 2,
-            requestId: `ops1_${randomUUID().replaceAll("-", "")}`,
-            operationKey: "opk1_ackrequest123456",
-            issuedAt: new Date(Date.now()).toISOString(),
-            expiresAt: new Date(Date.now() + 10000).toISOString(),
-            operation: ack,
-          },
-        });
-        expect(response.statusCode, response.body).toBe(200);
-      }
-      expect(Object.values(progress(root).executions)[0]).toMatchObject({
-        journalContained: true,
-        terminalDigest: originalDigest,
-      });
-      expect(progress(root).terminalAt).toBeLessThanOrEqual(
-        Math.max(before.terminalAt, originalTime),
-      );
+      const { journal } = await start(original);
       expect(
         readFileSync(
           join(root, `control-private/ops-agent/executions/${original.operationKey}.json`),
         ),
       ).toEqual(admission);
-      clock.mockReturnValue(Math.max(before.terminalAt, originalTime) + 73 * 3600_000);
       if (!installation) throw Error("Missing restored installation");
-      expect(await c.reconcileControlRetention(installation, { maxFamilies: 1 })).toEqual({
-        retired: 1,
-        pending: 0,
-      });
-      expect(journal.records()).toHaveLength(0);
+      expect(controlTerminalReceiptDigest(terminalStatus(journal.records()[0]!))).toBe(
+        originalDigest,
+      );
+      // The repaired original terminal is pruned 72 hours after it finished
+      // and after its root key expired.
+      expect(
+        await c.pruneControlRecords(installation, {
+          now: Math.max(originalTime, original.deadlineAt ?? 0) + 73 * 3600_000,
+        }),
+      ).toEqual([original.operationKey]);
+      expect(
+        existsSync(
+          join(root, `control-private/ops-agent/executions/${original.operationKey}.json`),
+        ),
+      ).toBe(false);
+      expect(journal.records()).toEqual([original]);
       expect(dispatch).not.toHaveBeenCalled();
       expect(
         existsSync(join(root, "effect-calls"))
@@ -335,17 +283,9 @@ it.each(
         }
       }
       expect(
-        existsSync(
-          join(root, "control-private/ops-agent/retention-families/slot-0/.family-writer"),
-        ),
-      ).toBe(false);
-      expect(
         existsSync(join(root, `control-private/ops-agent/effect-writers/${original.operationKey}`)),
       ).toBe(false);
       if (!original.terminalAt) throw Error("Missing actual terminal journal timestamp");
-      const initial = progress(root);
-      expect(Object.values(initial.executions)[0]?.journalContained).toBe(false);
-      const originalEligibility = initial.terminalAt;
       const now = vi
         .spyOn(Date, "now")
         .mockReturnValue(Date.parse(original.terminalAt) + 71 * 3600_000);
@@ -403,7 +343,6 @@ it.each(
           ) as import("./trusted-config-source").VerifiedTerminalClaimCleanup,
         });
         await app.ready();
-        expect(Object.values(progress(root).executions)[0]?.journalContained).toBe(false);
         expect(existsSync(claimed)).toBe(true);
         await app.close();
         app = undefined;
@@ -438,88 +377,26 @@ it.each(
         updatedAt: original.updatedAt,
       });
       const digest = controlTerminalReceiptDigest(status);
-      if (!("tamper" in scenario))
-        expect(Object.values(initial.executions)[0]?.terminalDigest === digest).toBe(
-          boundary === "digest",
-        );
-      const ack = {
-        kind: "controlRetention.acknowledge",
-        originRootKey: original.operationKey,
-        operationKey: original.operationKey,
-        fingerprint: original.fingerprint,
-        terminalDigest: digest,
-        proof: signApiRetentionProof(Buffer.alloc(32, 7).toString("base64url"), {
-          version: 1,
-          apiJobId: stopped.apiJobId,
-          originalApiOwnerVersion: 1,
-          attemptId: stopped.attemptId,
-          checkpointOwnerVersion: 1,
-          terminalCopyId: randomUUID(),
-          operationKey: original.operationKey,
-          fingerprint: original.fingerprint,
-          terminalDigest: digest,
-        }),
-      };
-      const acknowledge = async () => {
-        if (!app) throw Error("Missing restarted server");
-        return app.inject({
-          method: "POST",
-          url: "/v1/operations",
-          headers: {
-            authorization: `Bearer ${Buffer.alloc(32, 7).toString("base64url")}`,
-            "x-ops-protocol-version": "2",
-          },
-          payload: {
-            version: 2,
-            requestId: `ops1_${randomUUID().replaceAll("-", "")}`,
-            operationKey: "opk1_ackrequest123456",
-            issuedAt: new Date(Date.now()).toISOString(),
-            expiresAt: new Date(Date.now() + 10000).toISOString(),
-            operation: ack,
-          },
-        });
-      };
+      if (!installation) throw Error("Missing reopened installation");
+      const expiredAt = Math.max(Date.parse(original.terminalAt), original.deadlineAt ?? 0);
       if (known) {
-        expect((await acknowledge()).statusCode).toBe(200);
-        const repaired = progress(root);
-        expect(Object.values(repaired.executions)[0]).toMatchObject({
-          known: true,
-          terminalDigest: digest,
-          journalContained: true,
-        });
-        expect(repaired.terminalAt).toBeLessThanOrEqual(
-          Math.max(originalEligibility, Date.parse(original.terminalAt)),
-        );
         await app?.close();
         app = undefined;
-        if (installation) c.closeControlInstallation(installation);
+        c.closeControlInstallation(installation);
         installation = undefined;
         now.mockReturnValue(Date.parse(original.terminalAt) + 71.5 * 3600_000);
         journal = await start();
-        expect(await get()).toEqual(status);
-        expect(progress(root)).toEqual(repaired);
-        expect((await acknowledge()).statusCode).toBe(200);
-        now.mockReturnValue(
-          Math.max(originalEligibility, Date.parse(original.terminalAt)) + 73 * 3600_000,
-        );
+        expect(controlTerminalReceiptDigest(await get())).toBe(digest);
         if (!installation) throw Error("Missing reopened installation");
-        expect(await c.reconcileControlRetention(installation, { maxFamilies: 1 })).toEqual({
-          retired: 1,
-          pending: 0,
-        });
-        expect(journal.records()).toHaveLength(0);
-        expect(existsSync(join(root, "control-private/ops-agent/retention-families/slot-0"))).toBe(
-          false,
-        );
+        // A proven terminal is pruned once 72 hours have passed and its key expired.
+        expect(
+          await c.pruneControlRecords(installation, { now: expiredAt + 73 * 3600_000 }),
+        ).toEqual([original.operationKey]);
       } else {
-        expect((await acknowledge()).statusCode).toBe(409);
-        expect(Object.values(progress(root).executions)[0]?.journalContained).toBe(false);
-        now.mockReturnValue(Date.parse(original.terminalAt) + 96 * 3600_000);
-        if (!installation) throw Error("Missing reopened installation");
-        expect(await c.reconcileControlRetention(installation, { maxFamilies: 1 })).toEqual({
-          retired: 0,
-          pending: 1,
-        });
+        // An unproven terminal stays unknown and is never pruned.
+        expect(
+          await c.pruneControlRecords(installation, { now: expiredAt + 96 * 3600_000 }),
+        ).toEqual([]);
         expect(journal.records()).toEqual([original]);
       }
       expect(dispatch).not.toHaveBeenCalled();
@@ -614,8 +491,6 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     c.closeControlInstallation(peer);
     const stopped = await interrupt(root, "digest", "success", { assertion, execution });
-    const initial = progress(root);
-    expect(Object.values(initial.executions)[0]?.journalContained).toBe(false);
     installation = c.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -631,11 +506,6 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     await app.ready();
     expect(journal.records()).toEqual([stopped.job]);
-    expect(Object.values(progress(root).executions)[0]).toMatchObject({
-      journalContained: true,
-      known: true,
-    });
-    expect(progress(root).terminalAt).toBe(initial.terminalAt);
     expect(existsSync(join(root, "data/.admin-target-control/locks/motis"))).toBe(true);
     c.retainControlEffectReceipt(authority, {
       outcome: "failed_without_effect",
@@ -644,14 +514,11 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     await c.settleArtifactTargetLeaseChild(lease, c.verifyControlEffectSettlement(dm, owner));
     await c.releaseArtifactTargetLease(lease);
-    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
-    let retired = 0;
-    for (let n = 0; n < 12 && retired < 2; n++) {
-      retired += (await c.reconcileControlRetention(installation, { maxFamilies: 1 })).retired;
-      retired += (await c.reconcileControlRetention(dm, { maxFamilies: 1 })).retired;
-    }
-    expect(retired).toBe(2);
-    expect(journal.records()).toHaveLength(0);
+    const later = Math.max(Date.now(), execution.deadlineAt, owner.deadlineAt) + 96 * 3600_000;
+    expect(await c.pruneControlRecords(installation, { now: later })).toContain(
+      stopped.job.operationKey,
+    );
+    expect(await c.pruneControlRecords(dm, { now: later })).toContain(owner.operationKey);
     expect(readFileSync(join(root, "effect-calls"), "utf8")).toBe("effect\n");
     expect(dispatch).not.toHaveBeenCalled();
   } finally {

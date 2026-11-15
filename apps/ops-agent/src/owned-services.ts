@@ -12,10 +12,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import {
   type ControlInstallation,
-  type ControlRetentionPreparationContext,
-  controlDigest,
   controlInstallationDataRoot,
-  controlRetentionPreparationState,
   readVerifiedStagedCoordinatorOwnership,
   type VerifiedCoordinatorPullBaseline,
   type VerifiedStagedCoordinatorOwnerBaseline,
@@ -147,11 +144,7 @@ export function bindCoordinatorStagedOwnershipSource(
   readProductionCoordinatorJournalIndex(journal, controlInstallationDataRoot(installation));
   stagedSources.set(resolver, { installation, journal });
 }
-function stagedProofForJob(
-  installation: ControlInstallation,
-  job: PersistedOpsJob,
-  context?: ControlRetentionPreparationContext,
-) {
+function stagedProofForJob(installation: ControlInstallation, job: PersistedOpsJob) {
   const status = parseOpsJobStatus({
     version: 2,
     admittedAt: job.admittedAt,
@@ -176,15 +169,8 @@ function stagedProofForJob(
     fingerprint: job.fingerprint,
     deadlineAt: job.deadlineAt!,
   };
-  return readVerifiedStagedCoordinatorOwnership(installation, execution, status, context);
+  return readVerifiedStagedCoordinatorOwnership(installation, execution, status);
 }
-const stagedRetentionInspectors = new WeakMap<
-  OwnedServiceResolver,
-  (
-    proof: VerifiedStagedCoordinatorOwnership,
-    signal: AbortSignal,
-  ) => Promise<"needed" | "not-needed">
->();
 const stagedConfigurationInspectors = new WeakMap<
   OwnedServiceResolver,
   (signal: AbortSignal) => Promise<"none" | "required" | "unknown">
@@ -198,87 +184,6 @@ export async function inspectLiteralStagedConfigurationDependency(
   const inspect = stagedConfigurationInspectors.get(resolver);
   if (!inspect) throw Error(FAILED);
   return inspect(signal);
-}
-const oldStagedDigest = (
-  baseline: import("@openmapx/core/build-artifacts").CoordinatorPullBaseline,
-) =>
-  controlDigest({
-    container: baseline.container,
-    configImageReference: baseline.configImageReference,
-    composeSourcesDigest: baseline.composeSourcesDigest,
-    configurationRevisionId: baseline.configurationRevisionId,
-  });
-export async function readLiteralCoordinatorStagedRetention(
-  resolver: OwnedServiceResolver,
-  installation: ControlInstallation,
-  journal: OpsJobJournal,
-  context: ControlRetentionPreparationContext,
-) {
-  const bound = stagedSources.get(resolver),
-    state = controlRetentionPreparationState(context);
-  if (
-    !bound ||
-    bound.installation !== installation ||
-    bound.journal !== journal ||
-    state.installationId !== installation.installationId ||
-    state.role !== "ops-agent"
-  )
-    throw Error(FAILED);
-  if (state.mode === "committed-cleanup") return undefined;
-  const records = readProductionCoordinatorJournalIndex(
-    journal,
-    controlInstallationDataRoot(installation),
-  );
-  let result:
-    | {
-        source: ReturnType<typeof verifiedStagedCoordinatorOwnershipState>["source"];
-        condition: "not-needed" | "higher-ranked-successor";
-        successor: ReturnType<typeof verifiedStagedCoordinatorOwnershipState>["source"] | null;
-        oldContainerDigest: string;
-      }
-    | undefined;
-  for (const fact of state.executions) {
-    const job = records.find(
-      (job) =>
-        job.operationId === fact.execution.executionId &&
-        job.operationKey === fact.execution.operationKey,
-    );
-    if (!job) {
-      if (fact.requiresJournal) throw Error("Actual retiring journal member required");
-      continue;
-    }
-    if (
-      job.operation.kind !== "service.pull" ||
-      job.operation.serviceId !== "data-manager" ||
-      !job.operation.candidateId ||
-      job.state !== "succeeded"
-    )
-      continue;
-    if (result) throw Error("Ambiguous staged retirement source family");
-    const proof = stagedProofForJob(installation, job, context),
-      source = verifiedStagedCoordinatorOwnershipState(proof).source;
-    const inspect = stagedRetentionInspectors.get(resolver);
-    if (!inspect) throw Error(FAILED);
-    const need = await inspect(proof, AbortSignal.timeout(15000)),
-      oldContainerDigest = oldStagedDigest(source.baseline);
-    if (need === "not-needed") {
-      result = { source, condition: "not-needed", successor: null, oldContainerDigest };
-      continue;
-    }
-    const successor = stagedProofs(resolver)
-      .map((value) => verifiedStagedCoordinatorOwnershipState(value).source)
-      .find(
-        (value) =>
-          value.execution.operationKey !== source.execution.operationKey &&
-          (value.admittedAt > source.admittedAt ||
-            (value.admittedAt === source.admittedAt &&
-              value.execution.operationKey > source.execution.operationKey)) &&
-          oldStagedDigest(value.baseline) === oldContainerDigest,
-      );
-    if (!successor) throw Error("Last staged coordinator source remains required");
-    result = { source, condition: "higher-ranked-successor", successor, oldContainerDigest };
-  }
-  return result;
 }
 function stagedProofs(resolver: OwnedServiceResolver): VerifiedStagedCoordinatorOwnership[] {
   const source = stagedSources.get(resolver);
@@ -833,40 +738,6 @@ export function createOwnedServiceResolver(options: {
     if (!actual || canonicalJson({ ...actual, state: old.state }) !== canonicalJson(old))
       throw Error(FAILED);
     return result.services;
-  });
-  stagedRetentionInspectors.set(resolver, async (proof, signal) => {
-    const source = verifiedStagedCoordinatorOwnershipState(proof),
-      baseline = source.source.baseline;
-    const ordinary = await inspectInventory(signal, undefined, undefined, undefined, true),
-      dm = ordinary.services.find((s) => s.serviceId === "data-manager");
-    if (dm) return "not-needed";
-    if (
-      !ordinary.observedContainerIds.includes(baseline.container.containerId) &&
-      !ordinary.unverifiedServiceIds.includes("data-manager")
-    )
-      return "not-needed";
-    const current = services.currentConfigurationGeneration(options.stack.infraDir),
-      authority = await options.loadAuthority();
-    if (!current) throw Error(FAILED);
-    const actual = await inspectInventory(
-      signal,
-      {
-        baseline,
-        expectedCurrentRevisionId: current,
-        currentAuthorityRevision: authority.revisionId,
-      },
-      undefined,
-      undefined,
-      true,
-    );
-    const old = actual.services.find((s) => s.serviceId === "data-manager");
-    if (
-      !old ||
-      canonicalJson({ ...old, state: baseline.container.state }) !==
-        canonicalJson(baseline.container)
-    )
-      throw Error(FAILED);
-    return "needed";
   });
   return resolver;
 }

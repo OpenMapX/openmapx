@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import {
   closeControlInstallation,
@@ -11,18 +11,12 @@ import {
   type ConfigurationApplyResult,
   type ConfigurationHardlinksPreview,
   canonicalJson,
-  coordinatorPullSubmissionDigest,
   type OpsOperation,
   opsOperationFingerprint,
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
-import { assertProspectiveConfigurationMaintenancePreludeBudget } from "../../../packages/core/src/build-artifacts/configuration-maintenance-budget";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
-import {
-  readConfigurationHandoffReleaseOverlay,
-  readConfigurationHandoffReleaseState,
-} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
 import {
   executionAuthorityState,
   retainConfigurationGenerationNonCommit,
@@ -402,49 +396,16 @@ export function installTrustedConfigurationRuntime(
       allowMissingSelected: !candidate.payload.selectedRoots && desired.source === "default",
     });
     const plan = rendered.rendered.hardlinkPlan;
-    const coordinator = candidate.record.privateCoordinatorLifecycle
-      ? renderCoordinatorCandidate(
-          candidate,
-          authority ?? {
-            revisionId: "registry-v1",
-            services,
-            integrationSchemas: options.integrationSchemas,
-          },
-          options.infraDir,
-        )
-      : undefined;
-    const genericDmRecreate =
-      candidate.record.apiFollowUp === "service-apply" &&
-      candidate.record.affectedServiceIds.includes("data-manager");
-    const selectedDmImage =
-      !coordinator && genericDmRecreate
-        ? coreServices.readServiceReleaseImageSelection(options.infraDir, "data-manager")
-        : undefined;
-    const prospectiveCoordinatorImage = coordinator
-      ? {
-          action: coordinator.fixed.action,
-          noDeps: coordinator.fixed.noDeps,
-          imageReference: coordinator.imageReference,
-          releaseSelectionDigest: coordinator.releaseSelectionDigest,
-          pullSubmissionDigest:
-            coordinator.fixed.action === "update"
-              ? coordinatorPullSubmissionDigest(coordinator.fixed.pull)
-              : null,
-        }
-      : selectedDmImage
-        ? {
-            action: "apply" as const,
-            noDeps: false,
-            imageReference:
-              selectedDmImage.imageReference ??
-              coreServices.configurationImageReference(
-                rendered.rendered.composeYaml,
-                "data-manager",
-              ),
-            releaseSelectionDigest: selectedDmImage.releaseSelectionDigest,
-            pullSubmissionDigest: null,
-          }
-        : undefined;
+    if (candidate.record.privateCoordinatorLifecycle)
+      renderCoordinatorCandidate(
+        candidate,
+        authority ?? {
+          revisionId: "registry-v1",
+          services,
+          integrationSchemas: options.integrationSchemas,
+        },
+        options.infraDir,
+      );
     if (candidate.record.maintenanceId) {
       if (!options.ownedServices) throw Error("Actual maintenance ownership inventory unavailable");
       const originalContainers = await options.ownedServices.inspectOwnedServices(context.signal);
@@ -489,45 +450,21 @@ export function installTrustedConfigurationRuntime(
           closeControlInstallation(reading);
         }
       }
-      const release = releaseSelection
-        ? frozenRelease
-          ? await verifyFrozenConfigurationRelease({
-              infraDir: options.infraDir,
-              selection: releaseSelection,
-              frozen: frozenRelease,
-              execFile: options.execFile ?? runContainedProcess,
-              signal: context.signal,
-            })
-          : await preflightConfigurationRelease({
-              infraDir: options.infraDir,
-              selection: releaseSelection,
-              execFile: options.execFile ?? runContainedProcess,
-              signal: context.signal,
-            })
-        : undefined;
-      assertProspectiveConfigurationMaintenancePreludeBudget({
-        ...(release
-          ? {
-              release,
-              releaseSourceBytes: Buffer.byteLength(
-                canonicalJson({
-                  overlay: readConfigurationHandoffReleaseOverlay(options.infraDir),
-                  state: readConfigurationHandoffReleaseState(options.infraDir),
-                }),
-              ),
-            }
-          : {}),
-        installationId: installation.installationId,
-        record: candidate.record,
-        sourceAuthorityRevision: authority?.revisionId ?? "registry-v1",
-        infraDir: realpathSync(options.infraDir),
-        currentServiceIds: [
-          ...(coreServices.readAppliedServiceIds(options.infraDir, services) ?? []),
-        ],
-        originalContainers,
-        rendered,
-        ...(prospectiveCoordinatorImage ? { coordinatorImage: prospectiveCoordinatorImage } : {}),
-      });
+      if (releaseSelection && frozenRelease)
+        await verifyFrozenConfigurationRelease({
+          infraDir: options.infraDir,
+          selection: releaseSelection,
+          frozen: frozenRelease,
+          execFile: options.execFile ?? runContainedProcess,
+          signal: context.signal,
+        });
+      else if (releaseSelection)
+        await preflightConfigurationRelease({
+          infraDir: options.infraDir,
+          selection: releaseSelection,
+          execFile: options.execFile ?? runContainedProcess,
+          signal: context.signal,
+        });
     }
     if (plan.length > 256) throw Error("Configuration preview budget exceeded");
     let coordinatorState: ConfigurationHardlinksPreview["coordinatorState"] = "not_required";

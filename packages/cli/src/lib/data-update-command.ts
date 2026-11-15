@@ -9,7 +9,7 @@ import { services } from "@openmapx/core/server";
 import { renderComposeWithWriter } from "../commands/compose";
 import {
   cliControlContext,
-  collectHostControlRetention,
+  pruneHostControlRecords,
   withHostDataControlContext,
 } from "./control-context";
 import { ensureCliCoordinatorReady } from "./coordinator-ready";
@@ -45,7 +45,7 @@ export async function runCliDataUpdate(options: {
       role: "host-cli",
       serviceIds: targets,
     });
-    await collectHostControlRetention(installation);
+    await pruneHostControlRecords(installation);
     const operation = {
         kind: "data.update" as const,
         ...(options.region ? { regionId: options.region } : {}),

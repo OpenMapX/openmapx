@@ -23,20 +23,6 @@ export class JobStepCapacityExceeded extends Error {
     super("Administrative step capacity exhausted");
   }
 }
-export function hasPendingReceiptDelivery(result: unknown): boolean {
-  const projection = (
-    result as {
-      opsProjection?: {
-        version?: number;
-        operations?: Record<string, { receiptDelivery?: { state?: string } }>;
-      };
-    } | null
-  )?.opsProjection;
-  return (
-    projection?.version === 3 &&
-    Object.values(projection.operations ?? {}).some((o) => o.receiptDelivery?.state === "pending")
-  );
-}
 export function hasUnsettledManagedOperation(result: unknown): boolean {
   const p = (
     result as {
@@ -64,9 +50,6 @@ export function hasUnsettledManagedOperation(result: unknown): boolean {
 }
 export function noUnsettledManagedOperation() {
   return sql`(${adminJob.result}->'_standalone' IS NULL OR ${adminJob.result}->'_standaloneSettled' = 'true'::jsonb) AND NOT (coalesce(${adminJob.result}->'opsProjection'->>'version','') = '3' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.result}->'opsProjection'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true')) AND CASE WHEN ${adminJob.result}->'_dataExecutions' IS NULL THEN true WHEN jsonb_typeof(${adminJob.result}->'_dataExecutions') <> 'array' THEN false ELSE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${adminJob.result}->'_dataExecutions') AS backend_entry WHERE backend_entry->>'state' IS DISTINCT FROM 'terminal' OR coalesce(backend_entry->>'publication','unknown') NOT IN ('not_started','committed') OR coalesce(backend_entry->>'status','') NOT IN ('ok','partial','error','canceled','interrupted') OR coalesce(backend_entry->>'id','') !~ '^[a-f0-9-]{36}$' OR coalesce(backend_entry->>'operationKey','') !~ '^opk1_[A-Za-z0-9_-]{16,64}$' OR coalesce(backend_entry->>'fingerprint','') !~ '^[a-f0-9]{64}$') END`;
-}
-export function noPendingReceiptDelivery() {
-  return sql`NOT (coalesce(${adminJob.result}->'opsProjection'->>'version','') = '3' AND EXISTS (SELECT 1 FROM jsonb_each(coalesce(${adminJob.result}->'opsProjection'->'operations','{}'::jsonb)) AS receipt_entry WHERE receipt_entry.value->'receiptDelivery'->>'state' = 'pending'))`;
 }
 export function readJobExecution(result: unknown): JobExecution | undefined {
   if (
@@ -104,7 +87,7 @@ export function jobOwnership(
 export const ADMIN_JOB_LEASE_MS = 60_000;
 export function adminJobObservationDue(now = new Date().toISOString()) {
   return and(
-    sql`(${adminJob.status} = 'cancel_pending' OR ${adminJob.result}->'observation'->>'state' IN ('unknown','receipt_delivery') OR ${adminJob.result}->>'_observationLeaseUntil' IS NOT NULL)`,
+    sql`(${adminJob.status} = 'cancel_pending' OR ${adminJob.result}->'observation'->>'state' = 'unknown' OR ${adminJob.result}->>'_observationLeaseUntil' IS NOT NULL)`,
     sql`coalesce(${adminJob.result}->'observation'->>'nextCheckAt', '') <= ${now}`,
     sql`coalesce(${adminJob.result}->>'_observationLeaseUntil', '') <= ${now}`,
   );

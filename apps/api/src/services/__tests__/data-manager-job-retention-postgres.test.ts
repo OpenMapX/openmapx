@@ -16,11 +16,8 @@ import { pruneDataManagerJobs } from "../activity-retention.js";
 const DAY = 86_400_000;
 const users: string[] = [];
 const requests: string[] = [];
-const protectedJobs: string[] = [];
 
 afterEach(async () => {
-  if (protectedJobs.length)
-    await db.delete(dataManagerJobs).where(inArray(dataManagerJobs.id, protectedJobs.splice(0)));
   await db.delete(dataManagerJobs).where(like(dataManagerJobs.kind, "retention-fixture-%"));
   for (const id of requests.splice(0))
     await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.id, id));
@@ -111,33 +108,20 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(stages).toEqual([]);
     });
 
-    it("leaves managed execution and maintenance receipts to proof GC while pruning legacy pipeline history", async () => {
+    it("leaves managed execution rows to the control prune while pruning legacy pipeline history", async () => {
       const kind = `retention-fixture-${randomUUID()}`,
         expiredLegacy = await insertJob(kind, { daysAgo: 50 }),
         lastLegacy = await insertJob(kind, { daysAgo: 45 }),
-        managed = await insertJob(kind, { daysAgo: 40, managed: true }),
-        oldMaintenance = await insertJob("configuration-maintenance", { daysAgo: 60 }),
-        newerMaintenance = await insertJob("configuration-maintenance", { daysAgo: 35 });
-      protectedJobs.push(oldMaintenance, newerMaintenance);
+        managed = await insertJob(kind, { daysAgo: 40, managed: true });
       await pruneDataManagerJobs(30);
-      expect(
-        await remaining([expiredLegacy, lastLegacy, managed, oldMaintenance, newerMaintenance]),
-      ).toEqual([lastLegacy, managed, oldMaintenance, newerMaintenance].sort());
+      expect(await remaining([expiredLegacy, lastLegacy, managed])).toEqual(
+        [lastLegacy, managed].sort(),
+      );
       const stages = await db
         .select({ jobId: dataManagerJobStages.jobId })
         .from(dataManagerJobStages)
-        .where(
-          inArray(dataManagerJobStages.jobId, [
-            expiredLegacy,
-            lastLegacy,
-            managed,
-            oldMaintenance,
-            newerMaintenance,
-          ]),
-        );
-      expect(stages.map((row) => row.jobId).sort()).toEqual(
-        [lastLegacy, managed, oldMaintenance, newerMaintenance].sort(),
-      );
+        .where(inArray(dataManagerJobStages.jobId, [expiredLegacy, lastLegacy, managed]));
+      expect(stages.map((row) => row.jobId).sort()).toEqual([lastLegacy, managed].sort());
     });
 
     it("keeps the jobs an account triggered while its data-subject request needs them", async () => {

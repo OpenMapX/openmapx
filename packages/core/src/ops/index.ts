@@ -17,8 +17,8 @@ export * from "./configuration-maintenance-control-validation";
 export * from "./configuration-preparation";
 export * from "./configuration-release-downloads";
 export * from "./contract";
-export * from "./control-retention-receipt";
 export * from "./control-root-key";
+export * from "./control-terminal-receipt";
 export * from "./coordinator-lifecycle-records";
 export * from "./execution-identity";
 export {

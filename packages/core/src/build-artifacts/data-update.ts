@@ -26,7 +26,6 @@ import {
 } from "./data-update-records";
 import { dataUpdateHostDefaults, dataUpdateSourcesDigest } from "./data-update-sources";
 import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
-import { verifyFamilyOwnedRecord } from "./retention-family";
 
 const domain = "openmapx-data-update-plan-v1";
 export function planDataUpdate(options: {
@@ -80,7 +79,6 @@ function validate(authority: VerifiedExecutionAuthority, plan: DataUpdatePlan) {
   const s = executionAuthorityState(authority);
   if (
     s.kind !== "data.update" ||
-    !s.origin ||
     opsOperationFingerprint(plan.operation) !== s.execution.operationFingerprint
   )
     throw Error("Original Full Update authority required");
@@ -114,20 +112,12 @@ export function retainDataUpdatePlan(
     `data-update-plan-${s.execution.operationKey}.json`,
     signControl(s.installation.privateKey, domain, plan),
     true,
-    s.origin,
   );
 }
 export function readDataUpdatePlan(authority: VerifiedExecutionAuthority): DataUpdatePlan {
   const s = executionAuthorityState(authority),
     name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  if (!s.origin) throw Error("Dated Full Update owner required");
-  verifyFamilyOwnedRecord(
-    s.installation,
-    s.origin,
-    { scope: "private", namespace: "observations", container: "", name },
-    canonicalJson(raw),
-  );
   const plan = verifyControl(
     s.installation.installation.publicKey,
     domain,

@@ -264,7 +264,7 @@ export async function withDataAdmissionTransaction<T>(
       await tx`SELECT pg_try_advisory_xact_lock(${DATA_ADMISSION_LOCK[0]},${DATA_ADMISSION_LOCK[1]}) AS held`;
     if (lock[0]?.held !== true) throw new DataConfigurationMaintenanceBusy();
     const guard =
-      await tx`SELECT id FROM data_manager.jobs WHERE kind='configuration-maintenance' AND coalesce(metadata->'configurationMaintenance'->>'guardState','recovery_required') <> 'settled' LIMIT 1`;
+      await tx`SELECT maintenance_id FROM data_manager.configuration_fence WHERE state='prepared' LIMIT 1`;
     if (guard.length) throw new DataConfigurationMaintenanceBusy();
     return { value: await run(tx) };
   });

@@ -338,11 +338,9 @@ describe.skipIf(
       };
       const execute = vi.fn(
         async (
-          operation: OpsOperation,
+          _operation: OpsOperation,
           options: NonNullable<Parameters<ApiOpsClient["execute"]>[1]>,
         ) => {
-          if (operation.kind === "controlRetention.acknowledge")
-            return { execution: "sync", kind: operation.kind, value: { acknowledged: true } };
           if (!options.operationKey || !options.execution)
             throw Error("Missing durable fixture root");
           terminal.operationKey = options.operationKey;
@@ -569,17 +567,12 @@ describe.skipIf(
   }
   function successfulClient() {
     const statuses = new Map<string, OpsJobStatus>();
-    let mutations = 0,
-      acks = 0;
+    let mutations = 0;
     const execute = vi.fn(
       async (
         operation: OpsOperation,
         options: NonNullable<Parameters<ApiOpsClient["execute"]>[1]>,
       ) => {
-        if (operation.kind === "controlRetention.acknowledge") {
-          acks++;
-          return { execution: "sync", kind: operation.kind, value: { acknowledged: true } };
-        }
         if (operation.kind !== "backup.delete" || !options.operationKey || !options.execution)
           throw Error("Unsupported fixture operation");
         mutations++;
@@ -625,7 +618,7 @@ describe.skipIf(
       })),
       cancel: vi.fn(),
     } as unknown as ApiOpsClient;
-    return { client, counts: () => ({ mutations, acks }), statuses };
+    return { client, counts: () => ({ mutations }), statuses };
   }
   function retainedParent(id: string) {
     return {
@@ -703,7 +696,6 @@ describe.skipIf(
         ...(attempt
           ? {
               receiptDelivery: {
-                state: "confirmed",
                 terminalCopyId: randomUUID(),
                 checkpointOwnerVersion: 1,
                 terminalDigest: controlTerminalReceiptDigest(status),
@@ -775,105 +767,6 @@ describe.skipIf(
     });
     await holders.finish();
   });
-  it("renewal: lost acknowledgement and confirmation checkpoint keep a copied known result pending across cached restart", async () => {
-    const job = await seedCapacity(0),
-      holders = await checkpointContexts(job),
-      remote = successfulClient(),
-      ctx = required(holders.contexts[0]);
-    const execute = remote.client.execute.bind(remote.client);
-    let loseAck = true;
-    remote.client.execute = vi.fn(async (...args: Parameters<ApiOpsClient["execute"]>) => {
-      const result = await execute(...args);
-      if (args[0].kind === "controlRetention.acknowledge" && loseAck) {
-        loseAck = false;
-        throw new OpsClientError("timeout");
-      }
-      return result;
-    }) as ApiOpsClient["execute"];
-    await expect(
-      executeAdminJobOperation(ctx, { kind: "backup.delete", backupId: "original" }, "test", {
-        operationKey: "opk1_receiptdelivery123",
-        client: remote.client,
-        pollIntervalMs: 1,
-      }),
-    ).rejects.toMatchObject({ reason: "receipt_delivery" });
-    const saved = checkedCheckpoint((await row(job.id)).result),
-      projected = required(Object.values(saved.opsProjection.operations)[0]);
-    expect(projected).toMatchObject({
-      terminal: true,
-      result: { backupId: "original" },
-      receiptDelivery: {
-        state: "pending",
-        terminalReceipt: { state: "succeeded", result: { backupId: "original" } },
-      },
-    });
-    expect(projected.outcome).toBeUndefined();
-    const { cancelAdminJobOperations } = await import("../admin-job-ops");
-    loseAck = true;
-    await expect(
-      cancelAdminJobOperations(saved, remote.client, { context: ctx, jobId: job.id }),
-    ).rejects.toMatchObject({ reason: "receipt_delivery" });
-    state.client = remote.client;
-    loseAck = true;
-    expect(await jobRunner.cancel(job.id)).toBe(false);
-    expect((await row(job.id)).result).toMatchObject({
-      observation: { state: "receipt_delivery", reason: "receipt_delivery" },
-    });
-    const { and } = await import("drizzle-orm"),
-      { noPendingReceiptDelivery } = await import("../admin-job-state");
-    expect(
-      await state.db
-        .update(adminJob)
-        .set({ status: "success" })
-        .where(and(eq(adminJob.id, job.id), noPendingReceiptDelivery()))
-        .returning({ id: adminJob.id }),
-    ).toEqual([]);
-    const restarted = required(holders.contexts[1]);
-    restarted.checkpointResult = saved;
-    const abort = new AbortController();
-    abort.abort();
-    restarted.signal = abort.signal;
-    const checkpoint = restarted.checkpoint;
-    let blockConfirmation = true;
-    restarted.checkpoint = async (...args) => {
-      const entries = Object.values(readProjection(args[0]).operations);
-      if (blockConfirmation && entries.some((o) => o.receiptDelivery?.state === "confirmed"))
-        throw Error("confirmation DB unavailable");
-      await checkpoint(...args);
-    };
-    await expect(
-      executeAdminJobOperation(restarted, { kind: "backup.delete", backupId: "changed" }, "test", {
-        operationKey: "opk1_receiptdelivery123",
-        client: remote.client,
-      }),
-    ).rejects.toMatchObject({ reason: "receipt_delivery" });
-    expect(
-      checkedCheckpoint((await row(job.id)).result).opsProjection.operations[projected.operationKey]
-        ?.receiptDelivery?.state,
-    ).toBe("pending");
-    blockConfirmation = false;
-    await expect(
-      executeAdminJobOperation(
-        restarted,
-        { kind: "backup.delete", backupId: "changed-again" },
-        "test",
-        { operationKey: "opk1_receiptdelivery123", client: remote.client },
-      ),
-    ).resolves.toEqual({ backupId: "original" });
-    const ackCalls = vi
-      .mocked(remote.client.execute)
-      .mock.calls.filter((c) => c[0].kind === "controlRetention.acknowledge");
-    expect(
-      new Set(
-        ackCalls.map((c) =>
-          c[0].kind === "controlRetention.acknowledge" ? c[0].proof : undefined,
-        ),
-      ).size,
-    ).toBe(1);
-    expect(ackCalls.every((c) => !c[1]?.signal?.aborted)).toBe(true);
-    expect(remote.counts().mutations).toBe(1);
-    await holders.finish();
-  });
   it("renewal: current-row log capacity admits one last event and stale checkpoints cannot reset its charge", async () => {
     const job = await seedCapacity(0),
       execution = required(readJobExecution(job.result));
@@ -911,61 +804,6 @@ describe.skipIf(
       await state.db.select().from(adminJobLog).where(eq(adminJobLog.jobId, job.id)),
     ).toHaveLength(1);
   });
-  it("renewal: actual expiry cleanup preserves the last pending terminal copy", async () => {
-    const { lt, and, ne } = await import("drizzle-orm"),
-      { pruneCompletedJobs } = await import("../activity-retention");
-    const job = await seedCapacity(1),
-      value = checkedCheckpoint(structuredClone(job.result));
-    required(required(Object.values(value.opsProjection.operations)[0]).receiptDelivery).state =
-      "pending";
-    const cutoff = new Date(Date.now() - 36500 * 24 * 3600_000);
-    expect(
-      await state.db
-        .select({ id: adminJob.id })
-        .from(adminJob)
-        .where(and(ne(adminJob.id, job.id), lt(adminJob.finishedAt, cutoff))),
-    ).toEqual([]);
-    await state.db
-      .update(adminJob)
-      .set({
-        status: "failed",
-        finishedAt: new Date(cutoff.getTime() - 24 * 3600_000),
-        result: value,
-      })
-      .where(eq(adminJob.id, job.id));
-    expect(await pruneCompletedJobs(36500)).toBe(0);
-    expect(await row(job.id)).toBeDefined();
-  });
-  it.each(["success", "failure"])(
-    "renewal: actual runner blocks %s finalization when receipt delivery is pending",
-    async (outcome) => {
-      const job = await seed(`test.renewal.finalization.${outcome}`),
-        remote = successfulClient();
-      const execute = remote.client.execute.bind(remote.client);
-      remote.client.execute = vi.fn(async (...args: Parameters<ApiOpsClient["execute"]>) => {
-        if (args[0].kind === "controlRetention.acknowledge") throw new OpsClientError("timeout");
-        return execute(...args);
-      }) as ApiOpsClient["execute"];
-      jobRunner.register(job.type, async (ctx) => {
-        try {
-          await executeAdminJobOperation(
-            ctx,
-            { kind: "backup.delete", backupId: "known" },
-            "test",
-            { client: remote.client, pollIntervalMs: 1 },
-          );
-        } catch {}
-        if (outcome === "failure") throw Error("Known parent failure");
-        return { known: "success" };
-      });
-      await run(job);
-      const saved = await row(job.id);
-      expect(saved.status).toBe("running");
-      expect(saved.finishedAt).toBeNull();
-      expect(saved.result).toHaveProperty("observation.reason", "receipt_delivery");
-      expect(remote.counts().mutations).toBe(1);
-    },
-  );
   it("renewal: ambiguous committed allocation sends no POST and recovery remains lookup-only", async () => {
     const job = await seed("test.renewal.ambiguous"),
       holders = await checkpointContexts(job),

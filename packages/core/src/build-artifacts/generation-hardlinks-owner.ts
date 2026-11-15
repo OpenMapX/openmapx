@@ -134,7 +134,6 @@ export function retainGenerationHardlinksOwnerPlan(
     name(authority),
     signControl(s.installation.privateKey, domain, plan),
     true,
-    s.origin,
   );
 }
 export function readGenerationHardlinksOwnerPlan(

@@ -378,6 +378,17 @@ changes. An unknown publication is recorded as not started and the unsettled
 child records are dropped, so the data manager's recovery pass cannot reopen the
 job. Finished jobs are untouched. If this step fails, the API stays stopped.
 
+**Do not restore while a configuration maintenance runs, and do not restore a
+snapshot taken during one.** An update or a configuration apply holds a
+configuration fence: one row in Data Manager's database that stops data jobs
+until the operations agent settles it. The agent's own record of that
+maintenance lives outside the database. Restoring the database while the fence
+is held, or restoring a snapshot taken while it was held, leaves the two out of
+step: data jobs then stay refused, or the agent's maintenance no longer finds
+its fence. Wait until the update or apply has finished in **Activity**, and take
+the pre-upgrade backup before starting the update (the update dialog does this
+by default).
+
 After the selected data has been restored and before restarting the API, the
 CLI revalidates the journal/key pair and HMAC-matches restored
 user IDs against `infra/docker/data/erasure/journal.jsonl` and removes every

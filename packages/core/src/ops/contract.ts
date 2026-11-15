@@ -104,7 +104,6 @@ export const OPS_OPERATION_KINDS = [
   "artifactTransfer.claim",
   "artifactTransfer.inspectClaim",
   "artifactTransfer.settle",
-  "controlRetention.acknowledge",
   "docker.status",
   "stack.status",
   "services.inspect",
@@ -250,7 +249,6 @@ export const OPS_KIND_POLICIES = {
   "artifactTransfer.inspectClaim": sync("api", 30_000),
   "artifactTransfer.settle": sync("api", 30_000),
 
-  "controlRetention.acknowledge": sync("api", 15_000),
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
   "services.inspect": sync("api", 15_000, 512 * 1024),
@@ -453,14 +451,6 @@ const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
 export const opsOperationSchema = z.discriminatedUnion("kind", [
   ...standaloneIntegrationOperationSchemas,
   ...artifactTransferOperationSchemas,
-  z.strictObject({
-    kind: z.literal("controlRetention.acknowledge"),
-    originRootKey: operationKeySchema,
-    operationKey: operationKeySchema,
-    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-    terminalDigest: z.string().regex(/^[a-f0-9]{64}$/),
-    proof: z.string().min(1).max(4096),
-  }),
   kindOnly("docker.status"),
   kindOnly("stack.status"),
   kindOnly("services.inspect"),
@@ -767,7 +757,6 @@ export type OpsErrorClass =
   | "conflict"
   | "not_found"
   | "not_wired"
-  | "control_upgrade_required"
   | "recovery_required"
   | "host_update_required"
   | "configuration_prerequisite"
@@ -787,8 +776,6 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
     "Apply or update Data Manager before changing instance configuration.",
   not_found: "Operation was not found",
   not_wired: "Operation is not available",
-  control_upgrade_required:
-    "Update the API or CLI client to persist a timed control root before submitting this mutation.",
   recovery_required: "Operation requires an explicit retry",
   host_update_required:
     "Host update required: the operations agent or its backup helper could not be verified or updated. Inspect Activity and host diagnostics, then follow the upgrading guide to resolve the prerequisite. Retrying the candidate through the CLI does not repair the host. Preserve the current release selection.",
@@ -1039,7 +1026,6 @@ const pinnedImageReference = z
 export const OPS_RESULT_SCHEMAS = {
   ...standaloneIntegrationResultSchemas,
   ...artifactTransferResultSchemas,
-  "controlRetention.acknowledge": z.strictObject({ acknowledged: z.literal(true) }),
   "docker.status": z.strictObject({
     reachable: z.boolean(),
     version: z.string().max(128).optional(),

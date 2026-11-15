@@ -15,7 +15,6 @@ import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import {
   AnchoredDirectory,
-  acknowledgeControlRetention,
   artifactFingerprint,
   assertArtifactTargetLeaseExecution,
   executionAuthorityState,
@@ -29,7 +28,6 @@ import {
 } from "@openmapx/core/build-artifacts";
 import {
   type ArtifactFilePublicationResult,
-  assertKnownArtifactStageReceipt,
   cleanupRestoredArtifactPublication,
   inspectArtifactPublication,
   inspectUnstartedArtifactImport,
@@ -110,7 +108,6 @@ const integrationClaimRecordSchema = z.strictObject({
   settlement: stageClaimSettlementSchema.nullable(),
   preparation: z.record(z.string(), z.unknown()).nullable(),
   transactionId: z.uuid().nullable(),
-  receiptDelivered: z.boolean().default(false),
 });
 const metaSchema = z.strictObject({
   stage: transferStageSchema,
@@ -630,12 +627,7 @@ export class ArtifactTransferStore {
               meta.reservedBytes !== 0 ||
               this.streams.has(stage.stageId) ||
               meta.claims.some(
-                (entry) =>
-                  !entry.settlement ||
-                  entry.settlement.outcome === "unknown" ||
-                  (meta.stage.purpose === "prepared-artifact" &&
-                    ["validate-build", "import-build"].includes(entry.claim.use) &&
-                    !entry.receiptDelivered),
+                (entry) => !entry.settlement || entry.settlement.outcome === "unknown",
               )
             )
               return;
@@ -1439,38 +1431,6 @@ export class ArtifactTransferStore {
     } finally {
       await owner?.release();
     }
-  }
-  async confirmPreparedReceipt(
-    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
-    input: Parameters<typeof acknowledgeControlRetention>[1],
-    token: string,
-  ) {
-    const owner = executionAuthorityState(authority),
-      operation =
-        owner.kind === "artifactTransfer.import"
-          ? originalArtifactImportOperation(authority)
-          : originalArtifactValidationOperation(authority);
-    if (
-      input.operationKey !== authority.execution.operationKey ||
-      input.fingerprint !== authority.execution.fingerprint ||
-      input.originRootKey !== owner.origin?.rootKey
-    )
-      throw Error("Original prepared receipt required");
-    assertKnownArtifactStageReceipt(authority);
-    acknowledgeControlRetention(owner.installation.installation, input, token);
-    this.lock(() => {
-      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
-        entry = meta.claims.find(
-          (value) =>
-            value.claim.identity.executionId === authority.execution.executionId &&
-            value.claim.identity.operationKey === authority.execution.operationKey &&
-            value.claim.identity.fingerprint === authority.execution.fingerprint,
-        );
-      if (!entry?.settlement || entry.settlement.outcome === "unknown")
-        throw Error("Prepared purpose receipt unresolved");
-      entry.receiptDelivered = true;
-      this.save(meta);
-    });
   }
   async recoverPreparedValidation(
     authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
@@ -2280,7 +2240,6 @@ export class ArtifactTransferStore {
               )?.preparation ?? null)
             : null,
         transactionId: operation.kind === "integration.install" ? operation.operationId : null,
-        receiptDelivered: false,
       });
       meta.stage.state = ["inspect-integration", "validate-build"].includes(input.use)
         ? "validating"

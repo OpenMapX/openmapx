@@ -23,12 +23,8 @@ import {
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { servicePullResultSchema } from "../ops/service-operation-records";
-import {
-  dataConfigurationFencePrepareSchema,
-  dataConfigurationFenceSettleSchema,
-} from "../services/data-manager/contracts/configuration-maintenance";
+import { dataConfigurationFencePrepareSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import { generationHardlinksPlanSchema } from "../services/data-manager/contracts/executions";
-import { deriveConfigurationFenceSettlementId } from "./configuration-fence-settlement-records";
 import {
   type ConfigurationReleaseSnapshot,
   configurationReleaseSnapshotSchema,
@@ -73,11 +69,10 @@ export const fixedConfigurationMaintenancePlanSchema = z.strictObject({
   steps: z.array(configurationMaintenanceStepSchema).min(1).max(32),
   reservations: z
     .array(z.lazy(() => controlChildReservationSchema))
-    .min(3)
-    .max(34),
+    .min(2)
+    .max(33),
   nestedHardlinks: z.lazy(() => controlChildReservationSchema).nullable(),
   dmPrepare: dataConfigurationFencePrepareSchema,
-  dmSettle: dataConfigurationFenceSettleSchema,
 });
 export type FixedConfigurationMaintenancePlan = z.infer<
   typeof fixedConfigurationMaintenancePlanSchema
@@ -338,34 +333,6 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       ...dmPrepare,
     }),
   });
-  const dmSettle = dataConfigurationFenceSettleSchema.parse({
-    version: 2,
-    maintenanceId: operation.maintenanceId,
-    candidateId: operation.candidateId,
-    planDigest,
-    settlementId: deriveConfigurationFenceSettlementId({
-      installationId: input.installationId,
-      ownerPrepare: prepare,
-      maintenanceId: operation.maintenanceId,
-      candidateId: operation.candidateId,
-      planDigest,
-    }),
-  });
-  reservations.push({
-    version: 1,
-    phase: "configuration-fence-settle",
-    ordinal: steps.length + 1,
-    kind: "configuration-maintenance.settle",
-    recipient: "data-manager",
-    serviceIds,
-    execution: address(
-      prepare.operationKey,
-      "configuration-fence-settle",
-      steps.length + 1,
-      "data-manager",
-    ),
-    operationFingerprint: controlDigest({ kind: "configuration-maintenance.settle", ...dmSettle }),
-  });
   const middle = reservations.find((value) => value.phase === "maintenance-hardlinks");
   const handoffStep = steps.find((step) => step.phase === "maintenance-handoff");
   const nestedHandoff =
@@ -403,7 +370,6 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       steps,
       reservations,
       dmPrepare,
-      dmSettle,
       nestedHardlinks: middle
         ? generationHardlinksReservation({
             parent: middle.execution,

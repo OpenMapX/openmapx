@@ -1,5 +1,5 @@
 import { jobStages, jobs } from "@openmapx/db-schema";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type postgres from "postgres";
 import z from "zod/v4";
 import { db, rawSql } from "../db/index.js";
@@ -48,13 +48,7 @@ export async function finalizeJobRow(jobId: string, status: string): Promise<voi
   await db
     .update(jobs)
     .set({ status, finishedAt: new Date() })
-    .where(
-      and(
-        eq(jobs.id, jobId),
-        isNull(jobs.executionVersion),
-        ne(jobs.kind, "configuration-maintenance"),
-      ),
-    );
+    .where(and(eq(jobs.id, jobId), isNull(jobs.executionVersion)));
 }
 
 export function makePersistingOnStageComplete<TStage extends PersistableStageResult>(

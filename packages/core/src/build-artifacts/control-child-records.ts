@@ -23,7 +23,6 @@ export type ControlChildPhase =
   | "proxy-restore"
   | "paired-pin-commit"
   | "configuration-fence"
-  | "configuration-fence-settle"
   | "configuration-commit"
   | "maintenance-hardlinks"
   | "maintenance-recreate"
@@ -63,7 +62,6 @@ export const childPhaseKinds: Readonly<Record<ControlChildPhase, readonly string
   "proxy-restore": ["feedProxy.validateAndReload"],
   "paired-pin-commit": ["transitousLock.approve"],
   "configuration-fence": ["configuration-maintenance.prepare"],
-  "configuration-fence-settle": ["configuration-maintenance.settle"],
   "configuration-commit": [
     "stack.render",
     "serviceSelection.apply",

@@ -46,7 +46,6 @@ export class ApiOpsError extends Error {
   ) {
     super(
       errorClass === "host_update_required" ||
-        errorClass === "control_upgrade_required" ||
         errorClass === "configuration_prerequisite" ||
         errorClass === "unsupported_peer"
         ? OPS_PUBLIC_ERROR_MESSAGES[errorClass]
@@ -463,7 +462,7 @@ export async function executeAndWait<K extends OpsOperationKind>(
 ): Promise<OpsResultFor<K>> {
   throwIfAborted(options.signal);
   if (opsKindRequiresControlAuthority(operation.kind) && !options.parentAssertion) {
-    throw new ApiOpsError("control_upgrade_required");
+    throw new ApiOpsError("validation");
   }
   try {
     const submitted = await submitOpsOperationWithRecovery(client, operation, operationKey, {

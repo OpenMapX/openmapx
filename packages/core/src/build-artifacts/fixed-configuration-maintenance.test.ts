@@ -1,13 +1,11 @@
 import { expect, it } from "vitest";
 import {
+  canonicalJson,
   createControlRootOperationKey,
   executionFingerprint,
   opsOperationFingerprint,
 } from "../ops";
 import { releaseProvenance } from "../services/__fixtures__/release-provenance";
-import { renderConfiguration } from "../services/configuration-generation";
-import type { LoadedService } from "../services/types";
-import { assertProspectiveConfigurationMaintenanceBudget } from "./configuration-maintenance-budget";
 import { controlChildOperationKey } from "./control-authority";
 import {
   assertFixedConfigurationMaintenancePlan,
@@ -100,7 +98,7 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   ]);
   expect(plan.steps[0]!.operation).toEqual(source.apply);
   expect(plan.steps[0]!.operationKey).toBe(source.operation.applyOperationKey);
-  expect(plan.reservations.map((value) => value.ordinal)).toEqual([0, 1, 2, 3, 4]);
+  expect(plan.reservations.map((value) => value.ordinal)).toEqual([0, 1, 2, 3]);
   expect(plan.reservations.map((value) => value.kind)).not.toContain("service.start");
   expect(plan.nestedHardlinks).toMatchObject({
     kind: "generation-hardlinks",
@@ -110,16 +108,9 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   });
   expect(plan.dmPrepare.planDigest).toBe(plan.planDigest);
   expect(plan.dmPrepare.hardlinkPlanDigest).not.toBe(plan.planDigest);
-  expect(Object.keys(plan.dmSettle).sort()).toEqual([
-    "candidateId",
-    "maintenanceId",
-    "planDigest",
-    "settlementId",
-    "version",
-  ]);
-  const original = JSON.stringify(plan.dmSettle);
-  expect(Reflect.set(plan.dmSettle, "outcome", "applied")).toBe(false);
-  expect(JSON.stringify(plan.dmSettle)).toBe(original);
+  const original = JSON.stringify(plan.dmPrepare);
+  expect(Reflect.set(plan.dmPrepare, "planDigest", "0".repeat(64))).toBe(false);
+  expect(JSON.stringify(plan.dmPrepare)).toBe(original);
   expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
   const changed = structuredClone(plan);
   changed.steps[1]!.prerequisites = [];
@@ -186,7 +177,7 @@ it("retains the frozen coordinator image in the cross-role graph used to reconst
   expect(rebuilt.steps).toEqual(plan.steps);
 });
 
-it("freezes the checked release helper graph and budgets a complete 13-service stack", async () => {
+it("freezes the checked release helper graph and plans a complete 13-service stack", async () => {
   const source = input(),
     { serviceId: _serviceId, ...ordinary } = source.apply as Extract<
       typeof source.apply,
@@ -352,7 +343,6 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
   expect(graph.release).toEqual(release);
 
   // A realistic stack must fit without relaxing the private-record limits.
-  const infraDir = "/srv/instances/openmapx/checkout/infra/docker";
   const names = [
     "app-api",
     "app-web",
@@ -375,33 +365,6 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
     "ops-agent": 20,
     "transitous-runner": 5,
   };
-  const loaded: LoadedService[] = names.map((id) => ({
-    manifest: {
-      id,
-      name: id,
-      version: "1.0.0",
-      quality: "built-in",
-      container: { image: `example/${id}`, tag: "1" },
-      volumes: Array.from({ length: mountCounts[id] ?? 0 }, (_, i) => ({
-        name: `data-${i}`,
-        mountAt: `/data/${i}`,
-      })),
-    },
-    directory: `/trusted/services/${id}`,
-    isBuiltIn: true,
-    enabled: true,
-  }));
-  const rendered = renderConfiguration({
-    infraDir,
-    services: loaded,
-    input: {
-      domain: "maps.example.test",
-      selectedRoots: names,
-      serviceConfigs: [],
-      serviceSecrets: [],
-      integrationConfigs: [],
-    },
-  });
   const serviceIds = Object.keys(mountCounts).sort();
   const large = buildFixedConfigurationMaintenancePlan({
     ...args,
@@ -414,40 +377,9 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
       ),
     },
   });
-  const originalContainers = names.map((serviceId, i) => ({
-    serviceId,
-    containerId: i.toString(16).padStart(64, "0"),
-    state: "running" as const,
-    provenance: {
-      project: "openmapx",
-      imageId: `sha256:${"1".repeat(64)}`,
-      composeWorkingDirectory: `${infraDir}/state/ops-agent/configuration/.base-cfg1_${"a".repeat(43)}`,
-      composeConfigFiles: [
-        `${infraDir}/state/ops-agent/configuration/generations/cfg1_${"a".repeat(43)}/docker-compose.generated.yml`,
-        `${infraDir}/state/ops-agent/releases/docker-compose.release.yml`,
-      ],
-    },
-  }));
-  const budget = {
-    installationId: source.installationId,
-    plan: large,
-    originalContainers,
-    rendered,
-    releaseSourceBytes: 6000,
-  };
-  expect(assertProspectiveConfigurationMaintenanceBudget(budget).ownerBytes).toBeLessThanOrEqual(
-    131072,
-  );
-  expect(() =>
-    assertProspectiveConfigurationMaintenanceBudget({
-      ...budget,
-      originalContainers: Array.from({ length: 256 }, (_, i) => {
-        const original = originalContainers[i % names.length];
-        if (!original) throw Error("Missing fixture container");
-        return { ...original, containerId: i.toString(16).padStart(64, "0") };
-      }),
-    }),
-  ).toThrow("Prospective private maintenance observation capacity exceeded");
+
+  expect(large.reservations.length).toBeLessThanOrEqual(33);
+  expect(Buffer.byteLength(canonicalJson(large))).toBeLessThanOrEqual(131072);
 
   const { release: _release, ...missing } = args;
   expect(() => buildFixedConfigurationMaintenancePlan(missing)).toThrow();

@@ -294,7 +294,6 @@ dbDescribe("retained finite maintenance requests", () => {
         expect(imported.status).toBe(202);
         if (imported.status !== 202) throw Error("Import admission unavailable");
         let historicalTerminal: string | undefined;
-        let lostPurposeAck = false;
         const purposeReads: { status: number; publication: boolean }[] = [];
         if (loseImportResult) {
           await vi.waitFor(
@@ -367,26 +366,6 @@ dbDescribe("retained finite maintenance requests", () => {
                 publication: JSON.stringify(value).includes('"publication"'),
               });
             }
-            if (
-              !lostPurposeAck &&
-              reply.statusCode === 200 &&
-              op?.kind === "controlRetention.acknowledge" &&
-              op.operationKey === original.operationKey
-            ) {
-              const [row] = await state.fixture.db
-                .select()
-                .from(adminJob)
-                .where(eq(adminJob.id, imported.data.jobId));
-              expect(row?.result).toMatchObject({
-                _artifactPurposeObservation: {
-                  kind: "artifactTransfer.import",
-                  publication: { outcome: "committed", followUp: "complete" },
-                },
-              });
-              lostPurposeAck = true;
-              reply.code(503);
-              return JSON.stringify({ error: "Named lost purpose receipt acknowledgement" });
-            }
             return payload;
           });
           await agent.listen({ host: "127.0.0.1", port: Number(new URL(agentUrl).port) });
@@ -413,7 +392,6 @@ dbDescribe("retained finite maintenance requests", () => {
           { timeout: 30000, interval: 100 },
         );
         if (historicalTerminal) {
-          expect(lostPurposeAck).toBe(true);
           const original = journal
             .records()
             .find((row) => row.operation.kind === "artifactTransfer.import")!;

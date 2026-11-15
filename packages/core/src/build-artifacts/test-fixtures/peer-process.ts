@@ -9,55 +9,7 @@ import * as l from "../target-lease";
 for await (const line of createInterface({ input: process.stdin })) {
   try {
     const input = JSON.parse(line);
-    if (input.mode === "retention") {
-      if (input.now) Date.now = () => input.now;
-      if (input.assertPrivateRole) {
-        const read = AnchoredDirectory.prototype.read;
-        AnchoredDirectory.prototype.read = function (name, max, privateMode) {
-          const role = this.path.match(
-            /control-private\/(ops-agent|data-manager|host-cli)(?:\/|$)/,
-          )?.[1];
-          if (role && role !== (input.role ?? "host-cli"))
-            throw Error("Sibling private read forbidden");
-          return read.call(this, name, max, privateMode);
-        };
-      }
-      const installation = c.openControlInstallation({
-        infraDir: input.infraDir,
-        role: input.role ?? "host-cli",
-        serviceIds: ["motis", "osrm"],
-      });
-      const write = AnchoredDirectory.prototype.write;
-      let injected = false;
-      AnchoredDirectory.prototype.write = function (name, bytes, exclusive, beforePublish) {
-        write.call(this, name, bytes, exclusive, beforePublish);
-        if (
-          input.fault &&
-          !injected &&
-          (name === ".retention-transaction" || name === "retention-slot-transaction.json")
-        ) {
-          const value = JSON.parse(bytes.toString());
-          if (
-            (name === ".retention-transaction" && value?.phase === input.fault) ||
-            (name === "retention-slot-transaction.json" &&
-              input.fault === "slot_planned" &&
-              value?.phase === "planned")
-          ) {
-            injected = true;
-            if (input.kill) {
-              process.stdout.write(`${JSON.stringify({ ready: true })}\n`);
-              while (true) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
-            }
-            throw Error("Contained synthetic fault after durable quota phase");
-          }
-        }
-      };
-      const result = await c.reconcileControlRetention(installation, {
-        maxFamilies: input.maxFamilies ?? 1,
-      });
-      c.closeControlInstallation(installation);
-      process.stdout.write(`${JSON.stringify({ ok: true, ...result, injected })}\n`);
-    } else if (input.mode === "deadline-lease") {
+    if (input.mode === "deadline-lease") {
       const installation = c.openControlInstallation({
         infraDir: input.infraDir,
         role: input.role,

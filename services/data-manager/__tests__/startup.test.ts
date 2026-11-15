@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,7 +15,7 @@ function handles() {
 }
 
 describe("initializeRequiredSubsystems", () => {
-  it("publishes the stop handle before awaiting initial retention and does not start cron after shutdown", async () => {
+  it("publishes the stop handle before awaiting the initial prune and does not start cron after shutdown", async () => {
     const root = mkdtempSync(join(tmpdir(), "omx-startup-stop-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
     await provisionControlInstallation(root);
@@ -24,7 +24,6 @@ describe("initializeRequiredSubsystems", () => {
       role: "data-manager",
       serviceIds: ["data-manager"],
     });
-    const guard = join(root, "control-private/data-manager/.retention-reconcile-writer");
     const setupCronSchedulers = vi.fn();
     let stopped: Promise<void> | undefined;
     try {
@@ -35,14 +34,12 @@ describe("initializeRequiredSubsystems", () => {
           initializeOfflineStorage: async () => {},
           reconcileJobs: async () => [],
           setupCronSchedulers,
-          onRetentionStarted: (stop) => {
-            expect(existsSync(guard)).toBe(true);
+          onControlPruneStarted: (stop) => {
             stopped = stop();
           },
         }),
       ).rejects.toMatchObject({ name: "AbortError" });
       await stopped;
-      expect(existsSync(guard)).toBe(false);
       expect(setupCronSchedulers).not.toHaveBeenCalled();
     } finally {
       await stopped;

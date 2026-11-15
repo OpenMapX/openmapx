@@ -1,13 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -28,7 +20,7 @@ import {
   openControlInstallation,
   prepareFixedControlChild,
   provisionControlInstallation,
-  requireControlJournalRetention,
+  reserveControlTerminal,
   restoreConfigurationPreEffectTerminal,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
@@ -162,45 +154,11 @@ it.each(["begun", "bound", "issued"])(
     expect(existsSync(join(root, "data/.admin-target-control/locks/data-manager"))).toBe(true);
   },
 );
-it("rejects a byte-identical not-started effect copied to a replacement inode", () => {
-  const owner = start();
-  retainConfigurationPreEffectRefusal(owner);
-  const path = join(
-      root,
-      "control-private/ops-agent/effects",
-      `${owner.execution.operationKey}.json`,
-    ),
-    bytes = readFileSync(path);
-  renameSync(path, `${path}.original`);
-  writeFileSync(path, bytes, { mode: 0o600 });
-  expect(() => inspectConfigurationPreEffectRefusal(owner)).toThrow();
-});
-it.each(["retain", "inspect"])(
-  "rejects a replaced indexed admission before pre-effect %s",
-  (phase) => {
-    const owner = start();
-    if (phase === "inspect") retainConfigurationPreEffectRefusal(owner);
-    const path = join(
-        root,
-        "control-private/ops-agent/executions",
-        `${owner.execution.operationKey}.json`,
-      ),
-      bytes = readFileSync(path);
-    renameSync(path, `${path}.original`);
-    writeFileSync(path, bytes, { mode: 0o600 });
-    expect(() =>
-      phase === "retain"
-        ? retainConfigurationPreEffectRefusal(owner)
-        : inspectConfigurationPreEffectRefusal(owner),
-    ).toThrow();
-  },
-);
-
-it.each(["exact", "different error", "missing", "copied commitment"] as const)(
+it.each(["exact", "different error", "missing"] as const)(
   "restores original pre-effect whole tuple only from %s commitment",
   async (mode) => {
     const owner = start();
-    requireControlJournalRetention(owner);
+    reserveControlTerminal(owner);
     retainConfigurationPreEffectRefusal(owner);
     const admission = JSON.parse(
         readFileSync(
@@ -232,16 +190,6 @@ it.each(["exact", "different error", "missing", "copied commitment"] as const)(
         failureResult: {},
       };
     if (mode !== "missing") retainControlTerminalCommitment(owner, status, terminalAt);
-    if (mode === "copied commitment") {
-      const path = join(
-          root,
-          "control-private/ops-agent/observations",
-          `terminal-${owner.execution.operationKey}.json`,
-        ),
-        bytes = readFileSync(path);
-      renameSync(path, `${path}.original`);
-      writeFileSync(path, bytes, { mode: 0o600 });
-    }
     const observed = {
       ...status,
       errorClass: "recovery_required" as const,

@@ -18,6 +18,7 @@ import type { DataExecutionReceiver } from "./jobs/execution/api.js";
 import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "./jobs/execution/dispatch.js";
 import { applyOwnedGenerationHardlinks } from "./jobs/execution/hardlinks.js";
+import { removePrunedDataRows } from "./jobs/execution/prune-rows.js";
 import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "./jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "./jobs/execution/store.js";
@@ -52,11 +53,11 @@ import { StateStore } from "./state.js";
 
 const app = Fastify({ loggerInstance: rootLogger });
 let executionReceiver: DataExecutionReceiver | undefined;
-let stopControlRetention: (() => Promise<void>) | undefined;
+let stopControlPrune: (() => Promise<void>) | undefined;
 let interruptedJobReconciler: InterruptedLegacyJobReconciler | undefined;
 let shuttingDown = false;
 app.addHook("onClose", async () => {
-  await stopControlRetention?.();
+  await stopControlPrune?.();
 });
 registerAuth(app, resolveCallerTokens(app), { executionReceiver: () => executionReceiver });
 const readiness = new DataManagerReadiness();
@@ -223,10 +224,10 @@ async function start(): Promise<void> {
   const initialized = await initializeRequiredSubsystems({
     readiness,
     controlInstallation: controlStartup.installation ?? undefined,
-    onRetentionError: (err) =>
-      app.log.warn({ err }, "Control retention cleanup requires attention"),
-    onRetentionStarted: (stop) => {
-      stopControlRetention = stop;
+    onControlPruneError: (err) => app.log.warn({ err }, "Control record prune failed"),
+    removePrunedRows: (operationKeys) => removePrunedDataRows(rawSql, operationKeys),
+    onControlPruneStarted: (stop) => {
+      stopControlPrune = stop;
       if (shuttingDown) void stop();
     },
     initializeOfflineStorage: async () => {
@@ -261,7 +262,7 @@ async function start(): Promise<void> {
       }),
   });
   cronHandles = initialized.cronHandles;
-  stopControlRetention = initialized.stopControlRetention;
+  stopControlPrune = initialized.stopControlPrune;
   // Orphans were just marked interrupted, so the first pass has work to settle.
   // It observes the ops agent and must not delay listening when that is down.
   interruptedJobReconciler = startInterruptedLegacyJobReconciler({
@@ -353,7 +354,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   cronHandles?.stop();
   notablePlacesSchedule?.stop();
   await interruptedJobReconciler?.stop();
-  await stopControlRetention?.();
+  await stopControlPrune?.();
   await offlinePackages.close();
   await executionRuntime.close();
   await cronHandles?.closeTrafficWriter();

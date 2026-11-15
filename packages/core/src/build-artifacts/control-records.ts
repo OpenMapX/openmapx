@@ -3,8 +3,7 @@ import { createHash, createPublicKey, type KeyObject, sign, verify } from "node:
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
-import type { ControlIssuer, ExecutionRef } from "../ops/execution-identity";
-import type { ControlRetentionPreparationContext } from "./coordinator-pull-records";
+import type { ControlIssuer } from "../ops/execution-identity";
 import type { AnchoredDirectory } from "./filesystem";
 
 declare const installationBrand: unique symbol;
@@ -23,17 +22,6 @@ export interface InstallationState {
   privateRoot: AnchoredDirectory;
   dataRoot: string;
   registeredTargets: ReadonlySet<string>;
-  retentionJournal?: {
-    prepare?(
-      executions: readonly { execution: ExecutionRef; digest?: string }[],
-      context?: ControlRetentionPreparationContext,
-    ): Promise<void>;
-    contained(execution: ExecutionRef, digest: string | undefined): boolean;
-    retire(
-      executions: readonly { execution: ExecutionRef; digest: string; terminalAt?: number }[],
-      manifestDigest: string,
-    ): Promise<void>;
-  };
 }
 export const controlOriginSchema = z
   .strictObject({
@@ -59,16 +47,6 @@ export function sameControlOrigin(
         a.rootKey === b.rootKey &&
         a.issuer === b.issuer &&
         a.notAfter === b.notAfter;
-}
-export function originRecordDomain(base: string, envelope: unknown): string {
-  const version = (envelope as { payload?: { version?: number } } | null)?.payload?.version;
-  return `${base}-v${version === 2 ? 2 : 1}`;
-}
-export function validateOriginRecord(value: {
-  version?: number;
-  origin?: ControlExecutionOrigin;
-}): boolean {
-  return value.version === 2 ? !!value.origin : value.origin === undefined;
 }
 export const uuid = z.uuid();
 export const digest = z.string().regex(/^[a-f0-9]{64}$/);

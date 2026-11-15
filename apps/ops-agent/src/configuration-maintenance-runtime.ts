@@ -7,6 +7,4 @@ export {
   prepareConfigurationMaintenanceAdmission,
   prepareMaintenanceContinueObservation,
   registerConfigurationMaintenanceSource,
-  unconsumedMaintenanceCandidateState,
-  withUnconsumedMaintenanceCandidate,
 } from "./configuration-maintenance-store";

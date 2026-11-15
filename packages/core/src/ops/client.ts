@@ -47,7 +47,6 @@ const ERROR_CLASSES = new Set<OpsErrorClass>([
   "not_wired",
   "recovery_required",
   "host_update_required",
-  "control_upgrade_required",
   "unsupported_peer",
   "runtime",
 ]);

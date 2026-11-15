@@ -32,7 +32,7 @@ try {
     const bytes=Buffer.concat(chunks),stage=await store.createStage({ownerId:'native-admin',purpose:'prepared-artifact',direction:'upload',declaredBytes:bytes.length,operationKey:'opk1_'+randomUUID().replaceAll('-','')});
     await store.upload({stageId:stage.stageId,ownerId:'native-admin',purpose:stage.purpose,attemptId:randomUUID(),deadlineAt:Date.now()+60000,body:new ReadableStream({start(c){c.enqueue(bytes);c.close();}})});
     const operation={kind:'artifactTransfer.validate',stageId:stage.stageId,ownerId:'native-admin',purpose:'prepared-artifact'},operationFingerprint=ops.opsOperationFingerprint(operation),admittedAt=Date.now(),requestedDeadlineAt=admittedAt+600000,operationKey=ops.createControlRootOperationKey({notAfter:requestedDeadlineAt,nonce:randomBytes(16)}),admission=ops.normalizeExecutionAdmission({operationFingerprint,operationKey,kind:operation.kind,admittedAt,requestedDeadlineAt}),execution={executor:'ops-agent',principal:'api',executionId:'job1_'+randomUUID().replaceAll('-',''),operationKey,operationFingerprint,deadlineAt:admission.deadlineAt,fingerprint:admission.fingerprint},authority=control.retainAdmittedControlExecution(installation,{execution,kind:operation.kind,operation,admittedAt,requestedDeadlineAt,serviceIds:['osrm']});
-    control.requireControlJournalRetention(authority);control.beginControlEffect(authority);
+    control.reserveControlTerminal(authority);control.beginControlEffect(authority);
     const native=fs.writeSync;let stopped=false;
     fs.writeSync=function(fd,...args){const value=native.call(fs,fd,...args);if(!stopped && fs.readlinkSync('/proc/self/fd/'+fd).includes('/prepared-')){stopped=true;native.call(fs,1,Buffer.from(JSON.stringify({stage,execution,operation,admittedAt})+'\\n'));process.kill(process.pid,'SIGSTOP');}return value;};syncBuiltinESMExports();
     await store.validatePreparedArtifact({execution,controlAuthority:authority,signal:new AbortController().signal,emitLog(){},claim:{source:'registry',operation,fingerprint:operationFingerprint,capability:{revisionId:'fixture',values:{}}}});
@@ -127,7 +127,6 @@ try {
     receipt: { kind: "ops-result", result: contained },
   });
   retainArtifactValidationObservation(authority, status, at, contained);
-  control.completeControlJournalExecution(authority);
   assert.equal(
     control.controlDigest(
       control.readPrivateRecord(

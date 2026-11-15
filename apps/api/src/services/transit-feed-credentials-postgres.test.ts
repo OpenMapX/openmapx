@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,7 +59,6 @@ describe.skipIf(!enabled)(
     let nativeRecovery = false;
     let releaseAdmission: (() => void) | undefined;
     const children: ReturnType<typeof spawn>[] = [];
-    let ackReplies: unknown[] = [];
     let wire: unknown[] = [];
     let journal: Awaited<ReturnType<typeof openOpsJobJournal>>;
 
@@ -123,7 +122,6 @@ describe.skipIf(!enabled)(
         journal,
         controlInstallation: installation,
       });
-      ackReplies = [];
       wire = [];
       agent.addHook("preHandler", async (request) => {
         const kind = (request.body as { operation?: { kind?: string } } | undefined)?.operation
@@ -154,12 +152,6 @@ describe.skipIf(!enabled)(
             dropped.add(kind);
             reply.raw.destroy();
           }
-          if (kind === "controlRetention.acknowledge")
-            ackReplies.push({
-              status: reply.statusCode,
-              code: body.error?.class,
-              message: body.error?.message,
-            });
         }
         if (
           nativeRecovery &&
@@ -187,10 +179,9 @@ describe.skipIf(!enabled)(
         sql: state.fixture.sql,
         infraDir: host.infraDir,
         serviceIds: host.loaded.map((service) => service.manifest.id),
-        losePrepareResponse: faults,
+        losePrepareResponseOnce: faults,
         loseHardlinkResponse: faults,
-        observeSettlementSql: true,
-        loseSettlementCommitAcknowledgement: faults,
+        loseSettleResponseOnce: faults,
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
       vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
@@ -634,9 +625,10 @@ describe.skipIf(!enabled)(
         .from(schema.adminActionReauthentication)
         .where(eq(schema.adminActionReauthentication.id, challenge.challengeId));
       expect(proof?.state).toBe("consumed");
-      expect(dm.preparePosts).toBe(1);
+      // The first prepare reply is lost; the agent repeats the same body.
+      expect(dm.preparePosts).toBe(2);
       expect(dm.posts).toBe(1);
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(dropped.size).toBe(3);
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
       expect(services.readAppliedTransitCredentialsRevision(host.infraDir)).toBe(
@@ -649,7 +641,7 @@ describe.skipIf(!enabled)(
       });
       expect(JSON.stringify(view)).not.toContain("synthetic-private-key");
       expect(await jobRunner.applyImmediateTransitCredentials(input)).toEqual(result);
-      expect(dm.preparePosts).toBe(1);
+      expect(dm.preparePosts).toBe(2);
       const [job] = await state.fixture.db.select().from(schema.adminJob);
       expect(job?.status).toBe("success");
       const logs = await state.fixture.db.select().from(schema.adminJobLog),

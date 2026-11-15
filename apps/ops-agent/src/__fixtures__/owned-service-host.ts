@@ -33,7 +33,7 @@ import { testExecution } from "./execution";
 import { createDefaultFixedCli, inspectReleaseAuthority } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
-export async function ownedServiceHost(options: { configurationReleaseMetadata?:boolean; configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean; composeConfigIO?: DockerRuntimeOptions["execFile"] } = {}) {
+export async function ownedServiceHost(options: { configurationReleaseMetadata?:boolean; configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean; composeConfigIO?: DockerRuntimeOptions["execFile"] } = {}) {
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
@@ -64,10 +64,6 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       container: {...(options.environment?.[id]?{environment:options.environment[id]}:{}),...(options.resources?.[id]??{}),...(options.capabilities?.[id]?{expose:[8080]}:{}),...(options.imageReferences?.[id] ?? { image: `example/${id}`, tag: "1" }),
         ...(options.coordinatorDependency && id==="motis"?{dependsOn:[{service:"data-manager"}]}:{})},
       ...(options.schemas?.[id] ? { configSchema: options.schemas[id] } : {}),
-      ...(options.oversizedMaintenancePlan && id==="motis" ? {
-        produces:Array.from({length:256},(_,index)=>({type:`capacity-${index}`,sourceDir:`data/${Array.from({length:10},(_,part)=>`${part}${"p".repeat(79)}`).join("/")}/${index}`})),
-        consumes:Array.from({length:256},(_,index)=>({type:`capacity-${index}`,mountAt:`/input/${index}`,readOnly:true,required:true})),
-      }:{}),
       ...(options.withHardlinks && id === "motis" ? {
         produces: [{ type: "osm-pbf", sourceDir: "data/source-osm" }],
         consumes: [{ type: "osm-pbf", mountAt: "/input", readOnly: true, required: true }],

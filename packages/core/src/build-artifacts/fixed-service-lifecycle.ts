@@ -44,7 +44,7 @@ export function ownedServiceLifecycleFinalRevisionId(
   authority: VerifiedExecutionAuthority,
 ): string {
   const s = executionAuthorityState(authority);
-  if (!["service.start", "service.update"].includes(s.kind) || !s.origin)
+  if (!["service.start", "service.update"].includes(s.kind))
     throw Error("Original lifecycle authority required");
   return serviceLifecycleFinalRevisionId(s.origin.rootKey);
 }
@@ -143,7 +143,6 @@ export function retainFixedServiceLifecyclePlan(
     `service-lifecycle-${s.execution.operationKey}.json`,
     signControl(s.installation.privateKey, domain, plan),
     true,
-    s.origin,
   );
 }
 export function readFixedServiceLifecyclePlan(

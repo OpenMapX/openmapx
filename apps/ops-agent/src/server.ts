@@ -1,19 +1,19 @@
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 import {
-  acknowledgeControlRetention,
   acquireArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseForward,
+  assertControlStorageAvailable,
   assertFreshControlRoot,
   beginControlEffect,
   bindBorrowedControlExecution,
   buildArtifactSpec,
+  CONTROL_PRUNE_AFTER_MS,
   type ControlInstallation,
   cancelArtifactTargetLease,
   cancelControlExecution,
   closeArtifactTargetLeaseHandle,
   commitFeedProxyValidationFailure,
-  completeControlJournalExecution,
   controlInstallationDataRoot,
   controlRegisteredServiceIds,
   inspectConfigurationPreEffectRefusal,
@@ -22,14 +22,12 @@ import {
   isFixedSingleDataCommand,
   markFeedProxyReloadAttempted,
   planFixedSingleDataCommand,
-  publishConfigurationSettlementReservationProjection,
   controlHeaders as readControlHeaders,
   reconcileConfigurationPreEffectRoot,
-  registerControlRetentionJournal,
   releaseArtifactTargetLease,
   repairControlJournalTerminal,
   replaceControlRegisteredServiceIds,
-  requireControlJournalRetention,
+  reserveControlTerminal,
   reserveFeedProxyValidation,
   restoreAdmittedControlExecution,
   restoreArtifactTargetLeaseForSettlement,
@@ -46,7 +44,7 @@ import {
   retainFixedSingleDataPlan,
   retainGenerationHardlinksOwnerPlan,
   settleArtifactTargetLeaseChild,
-  startControlRetentionMaintenance,
+  startControlPrune,
   type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
@@ -63,7 +61,6 @@ import {
   type ConfigurationApplyResult,
   canonicalJson,
   configurationApplyResultSchema,
-  configurationMaintenanceReceiptSchema,
   controlTerminalReceiptDigest,
   type ExecutionRef,
   executionFingerprint,
@@ -130,8 +127,6 @@ import {
   prepareMaintenanceContinueObservation,
 } from "./configuration-maintenance-runtime";
 import {
-  acknowledgeConfigurationMaintenanceControl,
-  acknowledgeConfigurationMaintenanceStep,
   admitConfigurationMaintenanceControlOwner,
   assertManagedCliConfigurationPreflight,
   ConfigurationMaintenanceControlConflict,
@@ -153,10 +148,7 @@ import {
   retainConfigurationMaintenanceSettleControl,
   retainOwnedConfigurationMaintenance,
 } from "./configuration-maintenance-store";
-import {
-  installCoordinatorStagedOwnershipSource,
-  prepareCoordinatorStagedRetention,
-} from "./coordinator-staged-ownership";
+import { installCoordinatorStagedOwnershipSource } from "./coordinator-staged-ownership";
 import { prepareDataUpdateAdmission, resolveDataDefaultRegion } from "./data-workflow-runtime";
 import {
   type DawarichSubjectExportRouteOptions,
@@ -200,13 +192,14 @@ const DEFAULT_CLAIM_TIMEOUT_MS = 5_000;
 const MAX_JOB_ID_ATTEMPTS = 8;
 const MAX_RETAINED_EVENTS_PER_JOB = 64;
 const MAX_RETAINED_EVENT_BYTES_PER_JOB = 32 * 1024;
+// New work and entries that need recovery have a bound each.
 export const OPS_AGENT_RETENTION_LIMITS = {
-  maxJobs: DEFAULT_JOB_ENTRIES,
+  maxJobs: 2 * DEFAULT_JOB_ENTRIES,
   maxEventsPerJob: MAX_RETAINED_EVENTS_PER_JOB,
   maxEventBytesPerJob: MAX_RETAINED_EVENT_BYTES_PER_JOB,
   maxResultBytesPerJob: OPS_MAX_RESULT_BYTES,
   maxAggregateJournalBytes: 24 * 1024 * 1024,
-  maxAggregateEventBytes: DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
+  maxAggregateEventBytes: 2 * DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
 } as const;
 // Conservative read-only surface while the release store cannot be read safely.
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
@@ -515,9 +508,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const jobsByKey = new Map<string, JobRecord>();
   const activeControllers = new Map<string, AbortController>();
   const activeSettlements = new Map<string, Promise<void>>();
-  let stopControlRetention: (() => Promise<void>) | undefined;
+  let stopControlPrune: (() => Promise<void>) | undefined;
   app.addHook("preClose", async () => {
-    await stopControlRetention?.();
+    await stopControlPrune?.();
   });
   const stickyRecoveryRequired = new Set<string>();
   const configurationResultsSettling = new Set<string>();
@@ -542,7 +535,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   };
 
   const restoredRecords = journal.records();
-  if (restoredRecords.length > maxJobEntries) {
+  if (restoredRecords.length > 2 * maxJobEntries) {
     throw new Error("Ops job journal exceeds the configured server capacity");
   }
   for (const persisted of restoredRecords) {
@@ -648,31 +641,109 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     await flushDiagnostics();
   });
 
+  const recoveryRequired = (job: JobRecord) =>
+    job.state === "failed" && job.errorClass === "recovery_required";
+  /** The newest succeeded staged data-manager pull describes the running
+   * coordinator; its journal entry and control records stay. */
+  const newestStagedCoordinatorKey = () =>
+    [...jobsById.values()]
+      .filter(
+        (job) =>
+          job.role === "api" &&
+          job.state === "succeeded" &&
+          job.operation.kind === "service.pull" &&
+          job.operation.serviceId === "data-manager" &&
+          !!job.operation.candidateId,
+      )
+      .sort((a, b) => b.admittedAt - a.admittedAt)[0]?.operationKey;
+  /** Control-authority entries stay until 72 hours after terminal and until
+   * their timed root key has expired, so an API restarting in that window can
+   * still read them. Other entries stay for the configured job retention. */
+  const retainedJob = (job: JobRecord, nowMs: number) => {
+    if (
+      recoveryRequired(job) ||
+      configurationResultsSettling.has(job.operationId) ||
+      job.terminalAt === undefined ||
+      job.operationKey === newestStagedCoordinatorKey()
+    )
+      return true;
+    if (!options.controlInstallation || !opsKindRequiresControlAuthority(job.operation.kind))
+      return job.terminalAt + jobRetentionMs > nowMs;
+    let notAfter = 0;
+    try {
+      notAfter = parseControlRootOperationKey(job.operationKey).notAfter;
+    } catch {
+      /* A derived child key carries no expiry of its own. */
+    }
+    return job.terminalAt + CONTROL_PRUNE_AFTER_MS > nowMs || notAfter > nowMs;
+  };
   const pruneJobs = async (nowMs: number) => {
     await withAdmissionLock(async () => {
-      const retained = [...jobsById.values()].filter(
-        (job) =>
-          (job.state === "failed" && job.errorClass === "recovery_required") ||
-          configurationResultsSettling.has(job.operationId) ||
-          job.terminalAt === undefined ||
-          (options.controlInstallation && opsKindRequiresControlAuthority(job.operation.kind)) ||
-          job.terminalAt + jobRetentionMs > nowMs,
-      );
+      const retained = [...jobsById.values()].filter((job) => retainedJob(job, nowMs));
       if (retained.length === jobsById.size) return;
       await journal.replace(retained.map(persisted));
-      for (const [id, job] of jobsById) {
-        if (
-          !(job.state === "failed" && job.errorClass === "recovery_required") &&
-          !configurationResultsSettling.has(job.operationId) &&
-          !(options.controlInstallation && opsKindRequiresControlAuthority(job.operation.kind)) &&
-          job.terminalAt !== undefined &&
-          job.terminalAt + jobRetentionMs <= nowMs
-        ) {
+      for (const [id, job] of jobsById)
+        if (!retainedJob(job, nowMs)) {
           jobsById.delete(id);
           jobsByKey.delete(`${job.role}:${job.operationKey}`);
         }
-      }
     });
+  };
+  /** A journal entry still describes this key's execution, directly or as the
+   * preparation its maintenance controls belong to; its records stay. */
+  const journalReferences = (operationKey: string) => {
+    for (const job of jobsById.values())
+      if (
+        job.operationKey === operationKey ||
+        ("prepareOperationKey" in job.operation &&
+          job.operation.prepareOperationKey === operationKey)
+      )
+        return true;
+    return false;
+  };
+  /** Records a maintenance step's terminal with its owner. False only when a
+   * step's terminal could not be recorded. */
+  const recordStepTerminal = (job: JobRecord): boolean => {
+    if (
+      !options.controlInstallation ||
+      job.terminalAt === undefined ||
+      !(
+        isTrustedConfigurationApplyOperation(job.operation) ||
+        job.operation.kind === "configuration.hardlinks.apply" ||
+        job.operation.kind === "configurationHandoff.prepare" ||
+        job.operation.kind === "service.recreate" ||
+        job.operation.kind === "service.recreateIsolated"
+      ) ||
+      !job.operation.maintenanceId
+    )
+      return true;
+    try {
+      recordOwnedConfigurationMaintenanceStepTerminal(
+        options.controlInstallation,
+        job.operation,
+        executionFor(job),
+        statusFor(job),
+        job.terminalAt,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  /** Entries that need recovery are bounded separately, so they never use up
+   * the capacity for new work. */
+  const journalFull = (jobs: Iterable<JobRecord> = jobsById.values(), adding?: JobRecord) => {
+    let recovery = 0,
+      total = 0;
+    for (const job of jobs) {
+      total++;
+      if (recoveryRequired(job)) recovery++;
+    }
+    if (adding)
+      return recoveryRequired(adding)
+        ? recovery >= maxJobEntries
+        : total - recovery >= maxJobEntries;
+    return total - recovery >= maxJobEntries || recovery >= maxJobEntries;
   };
 
   const truncateUtf8 = (message: string, maxBytes: number): string => {
@@ -921,7 +992,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             if (lease.mode === "owner") {
               await releaseArtifactTargetLease(lease);
               verifyRetainedArtifactTargetRootRelease(authority);
-              // Classify only this freshly proved, fully released no-guard
+              // Classify only this freshly proved, fully released never-prepared
               // refusal before the immutable terminal is first committed.
               // An unknown/partial release never takes this branch.
               if (state === "failed" && updates.errorClass === "recovery_required")
@@ -1012,7 +1083,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           job.terminalAt,
           containedValidation,
         );
-        completeControlJournalExecution(authority);
       }
       if (lease && ["succeeded", "failed", "timed_out"].includes(state)) {
         closeArtifactTargetLeaseHandle(lease);
@@ -1242,110 +1312,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       : { errorClass: job.errorClass }),
   });
 
-  const unregisterRetention = options.controlInstallation
-    ? registerControlRetentionJournal(options.controlInstallation, {
-        ...(literalProductionRuntime && options.journal
-          ? {
-              prepare: async (
-                _executions: readonly { execution: ExecutionRef; digest?: string }[],
-                context?: import("@openmapx/core/build-artifacts").ControlRetentionPreparationContext,
-              ) =>
-                withAdmissionLock(async () => {
-                  if (!context) throw Error("Actual collector preparation required");
-                  await prepareCoordinatorStagedRetention(
-                    context,
-                    runtime,
-                    options.controlInstallation!,
-                    journal,
-                  );
-                }),
-            }
-          : {}),
-        contained: (execution, digest) => {
-          const job = jobsById.get(execution.executionId);
-          return (
-            !!job &&
-            !activeControllers.has(job.operationId) &&
-            ["succeeded", "failed", "timed_out"].includes(job.state) &&
-            !!digest &&
-            controlTerminalReceiptDigest(statusFor(job)) === digest
-          );
-        },
-        retire: async (executions, _manifestDigest) =>
-          withAdmissionLock(async () => {
-            const remove = new Set<string>();
-            for (const { execution, digest } of executions) {
-              const job = jobsById.get(execution.executionId);
-              if (!job) continue;
-              if (
-                activeControllers.has(job.operationId) ||
-                job.operationKey !== execution.operationKey ||
-                job.fingerprint !== execution.fingerprint ||
-                controlTerminalReceiptDigest(statusFor(job)) !== digest
-              )
-                throw Error("Agent terminal journal changed during retirement");
-              remove.add(job.operationId);
-            }
-            // These two metadata controls deliberately have no ordinary
-            // execution/family node. Retire their secondary projections only
-            // with the original root's committed all-role retirement. Private
-            // owner cleanup has already happened at this point; startup must
-            // continue to reject an orphan outside this cleanup capability.
-            for (const job of jobsById.values()) {
-              const body = job.operation;
-              if (
-                body.kind !== "configurationMaintenance.decide" &&
-                body.kind !== "configurationMaintenance.settle"
-              )
-                continue;
-              const original = executions.find(
-                ({ execution }) => execution.operationKey === body.prepareOperationKey,
-              );
-              if (!original) continue;
-              const receipt = configurationMaintenanceReceiptSchema.parse(job.result),
-                parent = job.parent;
-              if (
-                activeControllers.has(job.operationId) ||
-                job.state !== "succeeded" ||
-                job.terminalAt === undefined ||
-                job.role !== "api" ||
-                parent?.issuer !== "api" ||
-                canonicalJson(receipt.prepare) !== canonicalJson(original.execution) ||
-                original.execution.operationFingerprint !== body.prepareFingerprint ||
-                receipt.binding.maintenanceId !== body.maintenanceId ||
-                receipt.binding.candidateId !== body.candidateId ||
-                receipt.planDigest !== body.planDigest ||
-                receipt.decision?.decisionId !== body.decisionId ||
-                receipt.apiJobId !== parent.apiJobId ||
-                receipt.parentOperationKey !== parent.operationKey ||
-                receipt.parentFingerprint !== parent.fingerprint ||
-                receipt.parentDeadlineAt !== parent.deadlineAt ||
-                (body.kind === "configurationMaintenance.decide" &&
-                  (receipt.decision.decision !== body.decision ||
-                    receipt.decision.checkpointVersion !== body.checkpointVersion ||
-                    receipt.decision.checkpointDigest !== body.checkpointDigest)) ||
-                (body.kind === "configurationMaintenance.settle" &&
-                  (receipt.state !== "settled" || receipt.dmFence?.state !== "settled"))
-              )
-                throw Error("Agent maintenance control journal changed during retirement");
-              remove.add(job.operationId);
-            }
-            await journal.replace(
-              [...jobsById.values()].filter((job) => !remove.has(job.operationId)).map(persisted),
-            );
-            for (const id of remove) {
-              const job = jobsById.get(id);
-              if (!job) throw Error("Missing retiring operation journal");
-              jobsById.delete(id);
-              jobsByKey.delete(`${job.role}:${job.operationKey}`);
-              controlAuthorities.delete(id);
-            }
-          }),
-      })
-    : undefined;
-  app.addHook("onClose", async () => {
-    unregisterRetention?.();
-  });
   const runAsync = async (
     job: JobRecord,
     startedAt: number,
@@ -1623,36 +1589,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   statusFor(job),
                   job.terminalAt,
                 );
-              if (terminalDurable && claimReleased && authority)
-                completeControlJournalExecution(authority);
-              if (
-                terminalDurable &&
-                claimReleased &&
-                authority &&
-                options.controlInstallation &&
-                job.terminalAt !== undefined &&
-                job.state === "succeeded" &&
-                (isTrustedConfigurationApplyOperation(job.operation) ||
-                  job.operation.kind === "configuration.hardlinks.apply" ||
-                  job.operation.kind === "configurationHandoff.prepare" ||
-                  job.operation.kind === "service.recreate" ||
-                  job.operation.kind === "service.recreateIsolated") &&
-                job.operation.maintenanceId
-              ) {
-                try {
-                  recordOwnedConfigurationMaintenanceStepTerminal(
-                    options.controlInstallation,
-                    job.operation,
-                    executionFor(job),
-                    statusFor(job),
-                    job.terminalAt,
-                  );
-                } catch {
-                  stickyRecoveryRequired.add(
-                    job.operationId,
-                  ); /* Exact ACK publication may repair this committed source; no target replay. */
-                }
-              }
+              if (terminalDurable && claimReleased && authority && !recordStepTerminal(job))
+                // The step's terminal is not recorded with its owner; the
+                // maintenance stays held for recovery and nothing replays.
+                stickyRecoveryRequired.add(job.operationId);
             } finally {
               // The slot is returned even when terminal bookkeeping throws.
               activeControllers.delete(job.operationId);
@@ -1753,8 +1693,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   statusFor(job),
                   job.terminalAt,
                 );
-              if (terminalDurable && claimReleased && authority)
-                completeControlJournalExecution(authority);
             } finally {
               // The slot is returned even when terminal bookkeeping throws.
               activeControllers.delete(job.operationId);
@@ -1854,7 +1792,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               statusFor(job),
               job.terminalAt,
             );
-            completeControlJournalExecution(authority);
             stickyRecoveryRequired.delete(job.operationId);
           } catch {
             // Preserve an older canonical tuple. Its fixed purpose observer
@@ -1922,7 +1859,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             job.terminalAt,
             validation,
           );
-          completeControlJournalExecution(authority);
           stickyRecoveryRequired.delete(job.operationId);
           return { ...found, validation };
         }
@@ -1942,6 +1878,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     await options.artifactTransfers
       ?.reconcileTransferStages({ signal: AbortSignal.timeout(30000) })
       .catch(() => undefined);
+    // Entries past their retention go before any record is restored, so a
+    // record the control prune removed is never looked up for them.
+    await pruneJobs(now().getTime());
     let changed = false;
     if (options.controlInstallation) {
       const accepted = restoreConfigurationMaintenanceControlJournal(options.controlInstallation),
@@ -1994,8 +1933,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           )
             throw Error("Original maintenance control canonical conflict");
           if (canonicalJson(persisted(prior)) === canonicalJson(source)) continue;
-        } else if (next.size >= maxJobEntries)
-          throw Error("Original maintenance control recovery capacity exceeded");
+        }
         const restored: JobRecord = {
           ...source,
           terminalAt: source.terminalAt === undefined ? undefined : Date.parse(source.terminalAt),
@@ -2004,6 +1942,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           eventBytes: prior?.eventBytes ?? 0,
           eventsTruncated: true,
         };
+        if (!prior) {
+          // An entry already past its retention is not brought back, so it
+          // cannot keep the records it names from the prune.
+          if (!retainedJob(restored, now().getTime())) continue;
+          if (journalFull(next.values(), restored))
+            throw Error("Original maintenance control recovery capacity exceeded");
+        }
         next.set(restored.operationId, restored);
         changed = true;
       }
@@ -2215,12 +2160,19 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
     }
     if (changed) await journal.replace([...jobsById.values()].map(persisted));
+    // A step whose terminal was journaled before its owner record was updated
+    // (the agent stopped in between) is recorded now; recording is idempotent.
+    for (const job of jobsById.values())
+      if (job.terminalAt !== undefined && !recoveryRequired(job) && !recordStepTerminal(job))
+        console.warn("Maintenance step terminal not recorded", job.operationId);
     if (options.controlInstallation) {
-      const maintenance = startControlRetentionMaintenance(options.controlInstallation, (err) =>
-        app.log.warn({ err }, "Control retention cleanup requires attention"),
-      );
-      stopControlRetention = maintenance.stop;
-      await maintenance.ready;
+      const prune = startControlPrune(options.controlInstallation, {
+        onError: (error) => console.warn("Control record prune failed", error),
+        keep: (operationKey) =>
+          newestStagedCoordinatorKey() === operationKey || journalReferences(operationKey),
+      });
+      stopControlPrune = prune.stop;
+      await prune.ready;
     }
   });
 
@@ -2250,76 +2202,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         replay.accept(parsed.requestId, timing.expiresAtMs, nowMs);
         const policy = OPS_KIND_POLICIES[operation.kind];
         const operationFingerprint = opsOperationFingerprint(operation);
-        if (operation.kind === "controlRetention.acknowledge") {
-          if (role !== "api" || !options.controlInstallation)
-            throw new RequestGuardError("authorization", 403);
-          try {
-            const existing = jobsByKey.get(`api:${operation.operationKey}`);
-            if (
-              existing &&
-              controlTerminalReceiptDigest(statusFor(existing)) !== operation.terminalDigest
-            )
-              throw Error("Current terminal digest conflict");
-            const phase =
-              existing &&
-              (isTrustedConfigurationApplyOperation(existing.operation) ||
-                existing.operation.kind === "configuration.hardlinks.apply" ||
-                existing.operation.kind === "configurationHandoff.prepare" ||
-                existing.operation.kind === "service.recreate" ||
-                existing.operation.kind === "service.recreateIsolated") &&
-              existing.operation.maintenanceId;
-            if (phase && existing.terminalAt !== undefined)
-              recordOwnedConfigurationMaintenanceStepTerminal(
-                options.controlInstallation,
-                existing.operation,
-                executionFor(existing),
-                statusFor(existing),
-                existing.terminalAt,
-              );
-            const value = phase
-              ? acknowledgeConfigurationMaintenanceStep(
-                  options.controlInstallation,
-                  operation,
-                  options.tokens.api,
-                )
-              : operation.originRootKey !== operation.operationKey &&
-                  (existing?.operation.kind === "configurationMaintenance.decide" ||
-                    existing?.operation.kind === "configurationMaintenance.settle")
-                ? acknowledgeConfigurationMaintenanceControl(
-                    options.controlInstallation,
-                    operation,
-                    options.tokens.api,
-                  )
-                : acknowledgeControlRetention(
-                    options.controlInstallation,
-                    operation,
-                    options.tokens.api,
-                  );
-            if (
-              existing &&
-              ["artifactTransfer.import", "artifactTransfer.validate"].includes(
-                existing.operation.kind,
-              ) &&
-              options.artifactTransfers
-            ) {
-              await options.artifactTransfers.confirmPreparedReceipt(
-                restoreAdmittedControlExecution(
-                  options.controlInstallation,
-                  executionFor(existing),
-                ),
-                operation,
-                options.tokens.api,
-              );
-            }
-            return reply
-              .code(200)
-              .send(
-                opsSuccess(parsed.requestId, { execution: "sync", kind: operation.kind, value }),
-              );
-          } catch (error) {
-            throw new RequestGuardError("recovery_required", 409);
-          }
-        }
         if (
           operation.kind === "service.pull" &&
           operation.serviceId === "data-manager" &&
@@ -2515,9 +2397,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             if (!matchesRetained(existing)) throw new RequestGuardError("conflict", 409);
             return reply.code(202).send(opsSuccess(parsed.requestId, admissionFor(existing)));
           }
-          if (jobsById.size >= maxJobEntries) {
-            throw new RequestGuardError("busy", 429);
-          }
+          if (journalFull()) throw new RequestGuardError("busy", 429);
         }
         const pendingHandoffs = configurationHandoffPendingMaintenanceIds(runtime);
         if (
@@ -2543,14 +2423,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             const key = parseControlRootOperationKey(parsed.operationKey);
             if (key.notAfter !== parsed.execution?.requestedDeadlineAt) throw Error();
           } catch {
-            throw new RequestGuardError("control_upgrade_required", 409);
+            throw new RequestGuardError("validation", 400);
           }
           try {
-            assertFreshControlRoot(
-              options.controlInstallation,
-              parsed.operationKey,
-              parsed.execution?.requestedDeadlineAt,
-            );
+            assertFreshControlRoot(parsed.operationKey, parsed.execution?.requestedDeadlineAt);
           } catch {
             throw new RequestGuardError("recovery_required", 409);
           }
@@ -2651,7 +2527,16 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               }
               return { type: "retained", job: retained } as const;
             }
-            if (jobsById.size >= maxJobEntries) throw new RequestGuardError("busy", 429);
+            if (journalFull()) throw new RequestGuardError("busy", 429);
+            if (
+              options.controlInstallation &&
+              opsKindRequiresControlAuthority(parsed.operation.kind)
+            )
+              try {
+                assertControlStorageAvailable(options.controlInstallation);
+              } catch {
+                throw new RequestGuardError("busy", 429);
+              }
             if (normalized.deadlineAt <= now().getTime())
               throw new RequestGuardError("timeout", 504);
             const timestamp = new Date(normalized.admittedAt).toISOString();
@@ -2926,7 +2811,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 if (hardlinksPlan) retainGenerationHardlinksOwnerPlan(authority, hardlinksPlan);
                 if (artifactImport) retainArtifactImportPlan(authority, artifactImport.plan);
                 if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
-                requireControlJournalRetention(authority);
+                reserveControlTerminal(authority);
                 controlAuthorities.set(job.operationId, authority);
                 if (
                   [
@@ -2963,13 +2848,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     owner: authority,
                   });
                   controlLeases.set(job.operationId, lease);
-                  if (maintenanceAdmission) {
+                  if (maintenanceAdmission)
                     retainOwnedConfigurationMaintenance(authority, lease, maintenanceAdmission);
-                    publishConfigurationSettlementReservationProjection(
-                      authority,
-                      maintenancePlan!.operation.maintenanceId,
-                    );
-                  }
                 }
               } catch (error) {
                 forceRecoveryRequired(job);
@@ -3012,7 +2892,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                       lease.serviceIds,
                     ),
                   );
-                requireControlJournalRetention(authority);
+                reserveControlTerminal(authority);
                 controlLeases.set(job.operationId, lease);
                 controlAuthorities.set(job.operationId, authority);
                 job.controlAdoption = { ...adoption, phase: "ready" };
@@ -3299,7 +3179,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               },
             }),
           );
-        } catch (error) {
+        } catch {
           return reply.code(409).send(redactedOpsError(requestId, "recovery_required"));
         }
       }

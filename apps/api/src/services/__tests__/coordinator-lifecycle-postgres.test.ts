@@ -17,22 +17,16 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   acquireArtifactTargetLease,
-  assertControlExecutionForward,
   assertCoordinatorPullLeaseCompatibility,
   closeControlInstallation,
-  controlDigest,
-  controlRetentionPreparationState,
   lookupControlChildPhase,
   openControlInstallation,
   ownedCoordinatorPullBaseline,
-  reconcileControlRetention,
-  recordStagedCoordinatorRetentionCheck,
   releaseArtifactTargetLease,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   settleArtifactTargetLeaseChild,
-  verifyControl,
   verifyControlEffectSettlement,
   verifyRetainedArtifactTargetRootRelease,
 } from "@openmapx/core/build-artifacts";
@@ -47,10 +41,6 @@ import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  stagedCoordinatorRetirementDomain,
-  stagedCoordinatorRetirementPayloadSchema,
-} from "../../../../../packages/core/src/build-artifacts/coordinator-pull-records";
 import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
@@ -236,9 +226,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
             }
           : {}),
-        ...(test.task.name.includes("full future owner budget")
-          ? { oversizedMaintenancePlan: true }
-          : {}),
         ...(test.task.name.includes("3072-byte baseline") ? { nestedRootSegments: 9 } : {}),
         ...(references
           ? { imageReferences: { motis: references.sibling, "data-manager": references.target } }
@@ -272,7 +259,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }
       }
       dm = await ownedDataManager({
-        observeSettlementSql: true,
         sql: fixture.sql,
         infraDir: host.infraDir,
         serviceIds: host.loaded.map((s) => s.manifest.id),
@@ -704,10 +690,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await delay(25);
       }
     }
-    async function canceledSuccessfulCoordinatorStage(
-      beforeAcknowledgement?: () => Promise<void>,
-      serviceIds = ["data-manager"],
-    ) {
+    async function canceledSuccessfulCoordinatorStage(serviceIds = ["data-manager"]) {
       let reachedTerminalReply = false;
       const release = Promise.withResolvers<void>();
       pullTerminalReplyGate = {
@@ -743,7 +726,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             );
           await delay(25);
         }
-        await beforeAcknowledgement?.();
         const { jobRunner } = await import("../job-runner"),
           cancellation = jobRunner.cancel(id);
         const until = performance.now() + 10000;
@@ -853,11 +835,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         for (const line of lines) {
           const event = JSON.parse(line);
           if (event.event === "ready") ready.resolve(event);
-          if (event.event === "source-writer-busy")
-            console.info(
-              "actual native source writer busy",
-              JSON.stringify({ sameProcess: event.sameProcess, frames: event.frames }),
-            );
           if (event.event === "pre-effect-release-unlinked") {
             observedFault = true;
             fault.resolve();
@@ -934,20 +911,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
       return Object.assign(stop, { fault: fault.promise, killAfterFault });
     }
-    it("requires the actual API ACK before a successful staged pull becomes ownership evidence", async () => {
-      await canceledSuccessfulCoordinatorStage(async () => {
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-            (s) => s.serviceId === "data-manager",
-          ),
-        ).toBe(false);
-      });
-      expect(
-        (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-          (s) => s.serviceId === "data-manager",
-        ),
-      ).toBe(true);
-    }, 180000);
     it("reconstructs staged ownership in a NEW native production agent before a fresh user Update", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
         original = readFileSync(pullPath),
@@ -1342,62 +1305,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).toBe(pulledImageId);
       expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(1);
     }, 180000);
-    it("pins the LAST authenticated staged normal family beyond 72h while OLD B still needs it", async () => {
-      const { pullPath } = await canceledSuccessfulCoordinatorStage();
-      expect(existsSync(pullPath)).toBe(true);
-      expect(
-        (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-          (s) => s.serviceId === "data-manager",
-        ),
-      ).toBe(true);
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(Date.now() + 96 * 3600000);
-      try {
-        for (let step = 0; step < 12; step++)
-          await reconcileControlRetention(installation, { maxFamilies: 64 });
-        expect(existsSync(pullPath)).toBe(true);
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-            (s) => s.serviceId === "data-manager",
-          ),
-        ).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
-    }, 180000);
-    it("retires the authenticated staged family after actual guarded E replacement restores ordinary ownership", async () => {
-      const { pullPath } = await canceledSuccessfulCoordinatorStage();
-      const next = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/data-manager/action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "apply" },
-      });
-      expect((await finished(next.json().jobId)).status).toBe("success");
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(Date.now() + 96 * 3600000);
-      try {
-        let retired = 0;
-        for (let step = 0; step < 12; step++)
-          retired += (await reconcileControlRetention(installation, { maxFamilies: 64 })).retired;
-        expect(existsSync(pullPath)).toBe(false);
-        expect(retired).toBeGreaterThan(0);
-        const jobs = JSON.parse(
-          readFileSync(join(host.infraDir, "state/ops-agent/jobs-v1.json"), "utf8"),
-        ).jobs as { operationKey: string }[];
-        expect(jobs.some((job) => pullPath.endsWith(`/${job.operationKey}.json`))).toBe(false);
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-            (s) => s.serviceId === "data-manager",
-          ),
-        ).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
-    }, 180000);
     it("refuses candidate DM staging before Docker while an actual ordinary full-target root remains held", async () => {
       const reached = Promise.withResolvers<void>(),
         release = Promise.withResolvers<void>();
@@ -1481,7 +1388,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       expect((await finished(repaired.json().jobId)).status).toBe("success");
     }, 240000);
-    it("observes its genuine pull admission without target metadata writes and rejects replacement of its indexed inode", async () => {
+    it("observes its genuine pull admission without target metadata writes", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
         bytes = readFileSync(pullPath),
         actual = JSON.parse(bytes.toString("utf8")).payload,
@@ -1519,9 +1426,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         syncBuiltinESMExports();
       }
       expect(snapshot()).toEqual(before);
-      renameSync(pullPath, `${pullPath}.original-indexed-inode`);
-      writeFileSync(pullPath, bytes, { mode: 0o600 });
-      expect(() => assertCoordinatorPullLeaseCompatibility(authority)).toThrow();
     }, 180000);
     it("refuses actual candidate pull before Docker against a separately admitted physical host-command root", async () => {
       // Component competitor uses the real normal host issuer and physical
@@ -2419,294 +2323,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("service.pull")).toBe(2);
       expect(dm.settlementResponseStatuses).toEqual([200]);
     }, 180000);
-    it("retains the LAST source for a currently stopped OLD container without reporting historical running state", async () => {
-      const { pullPath } = await canceledSuccessfulCoordinatorStage();
-      host.setServiceState("data-manager", "exited");
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(Date.now() + 96 * 3600000);
-      try {
-        for (let pass = 0; pass < 4; pass++)
-          await reconcileControlRetention(installation, { maxFamilies: 64 });
-        expect(existsSync(pullPath)).toBe(true);
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
-            (service) => service.serviceId === "data-manager",
-          )?.state,
-        ).toBe("stopped");
-      } finally {
-        vi.useRealTimers();
-      }
-    }, 120000);
-    it("vetoes lower-ranked source GC while actual Docker observation is unavailable, then rechecks its real successor", async () => {
-      const first = await canceledSuccessfulCoordinatorStage(),
-        second = await canceledSuccessfulCoordinatorStage();
-      let failures = 0;
-      const unavailable = async () => {
-        failures++;
-        host.setInventoryProcess(unavailable);
-        throw Error("Named Docker inventory unavailable");
-      };
-      host.setInventoryProcess(unavailable);
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(Date.now() + 96 * 3600000);
-      try {
-        for (let pass = 0; pass < 4; pass++)
-          await reconcileControlRetention(installation, { maxFamilies: 64 });
-        expect(failures).toBeGreaterThan(0);
-        expect(existsSync(first.pullPath)).toBe(true);
-        expect(existsSync(second.pullPath)).toBe(true);
-        host.setInventoryProcess(undefined);
-        for (let pass = 0; pass < 8; pass++)
-          await reconcileControlRetention(installation, { maxFamilies: 64 });
-        expect(existsSync(first.pullPath)).toBe(false);
-        expect(existsSync(second.pullPath)).toBe(true);
-      } finally {
-        host.setInventoryProcess(undefined);
-        vi.useRealTimers();
-      }
-    }, 180000);
-    it.each(["admission", "canonical", "effect"] as const)(
-      "refuses a byte-identical %s source copied onto a different private indexed inode",
-      async (kind) => {
-        const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-          key = pullPath.split("/").at(-1)!,
-          path =
-            kind === "admission"
-              ? pullPath
-              : join(
-                  host.infraDir,
-                  "control-private/ops-agent",
-                  kind === "canonical" ? "observations" : "effects",
-                  kind === "canonical" ? `terminal-${key}` : key,
-                ),
-          original = readFileSync(path),
-          backup = `${path}.fixture-original`;
-        renameSync(path, backup);
-        writeFileSync(path, original, { mode: 0o600, flag: "wx" });
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-            (s) => s.serviceId === "data-manager",
-          ),
-        ).toBe(false);
-      },
-      120000,
-    );
-    it("retires ONLY the lower-ranked authenticated F family while the actual G source remains pinned", async () => {
-      const first = await canceledSuccessfulCoordinatorStage(),
-        second = await canceledSuccessfulCoordinatorStage();
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(Date.now() + 96 * 3600000);
-      try {
-        for (let step = 0; step < 12; step++)
-          await reconcileControlRetention(installation, { maxFamilies: 64 });
-        expect(existsSync(first.pullPath)).toBe(false);
-        expect(existsSync(second.pullPath)).toBe(true);
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-            (s) => s.serviceId === "data-manager",
-          ),
-        ).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
-    }, 180000);
-    it("authenticates signed F-to-G retirement and NATIVE restart after first actual private unlink", async () => {
-      const first = await canceledSuccessfulCoordinatorStage(),
-        second = await canceledSuccessfulCoordinatorStage();
-      const raw = JSON.parse(readFileSync(first.pullPath, "utf8")),
-        originHash = controlDigest(raw.payload.origin),
-        privateRoot = join(host.infraDir, "control-private/ops-agent"),
-        location = JSON.parse(
-          readFileSync(join(privateRoot, "retention-locations", `${originHash}.json`), "utf8"),
-        ),
-        slot = join(privateRoot, "retention-families", location.name),
-        io = { signal: new AbortController().signal, timeout: 15000, maxBuffer: 1024 * 1024 };
-      const rows = (
-        await host.execFile("docker", ["container", "inspect", "--format", "owned-snapshot"], io)
-      ).stdout
-        .trim()
-        .split("\n")
-        .map((row) => JSON.parse(row));
-      const images: Record<string, string> = {};
-      for (const row of rows)
-        images[row.ConfigImage] = (
-          await host.execFile(
-            "docker",
-            ["image", "inspect", "--format", "{{.Id}}", row.ConfigImage],
-            io,
-          )
-        ).stdout.trim();
-      const directory = process.env.OPENMAPX_TEST_EVIDENCE_DIR ?? host.cleanupRoot;
-      const packetsDirectory = join(directory, "staged-retirement-signed-packets");
-      mkdirSync(packetsDirectory, { recursive: true });
-      const evidenceFile = join(packetsDirectory, `${raw.payload.execution.operationKey}.json`);
-      await agent.close();
-      const base = {
-        root: host.root,
-        infraDir: host.infraDir,
-        stack: host.stack,
-        queue: host.queue,
-        token: host.token,
-        serviceIds: host.loaded.map((service) => service.manifest.id),
-        now: Date.now() + 96 * 3600000,
-        rows,
-        images,
-        firstPullPath: first.pullPath,
-        secondPullPath: second.pullPath,
-        firstSlot: slot,
-        evidenceFile,
-      };
-      const start = (mode: "fault" | "resume") => {
-        const argv = [
-          "--import",
-          createRequire(import.meta.url).resolve("tsx/esm"),
-          fileURLToPath(
-            new URL(
-              "../../../../ops-agent/src/test-fixtures/staged-coordinator-retention-process.mjs",
-              import.meta.url,
-            ),
-          ),
-        ];
-        console.info("actual native staged GC argv", JSON.stringify([process.execPath, ...argv]));
-        const child = spawn(process.execPath, argv, {
-          cwd: process.cwd(),
-          env: process.env,
-          stdio: ["pipe", "pipe", "pipe"],
-        });
-        let output = "",
-          stderr = "";
-        const boundary = Promise.withResolvers<Record<string, unknown>>();
-        child.stdout.on("data", (chunk) => {
-          output += chunk.toString();
-          for (const line of output.split("\n")) {
-            try {
-              const value = JSON.parse(line);
-              if (value.boundary) boundary.resolve(value);
-            } catch {}
-          }
-        });
-        child.stderr.on("data", (chunk) => {
-          stderr += chunk.toString();
-          if (stderr.length > 1024 * 1024) child.kill("SIGKILL");
-        });
-        const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-          (resolve) =>
-            child.once("exit", (code, signal) => {
-              if (!output.includes('"boundary"'))
-                boundary.reject(Error(`Native staged GC exited ${code}: ${stderr.slice(-2500)}`));
-              resolve({ code, signal });
-            }),
-        );
-        child.stdin.end(JSON.stringify({ ...base, mode }));
-        return { child, boundary: boundary.promise, exited };
-      };
-      // An active source with a valid successor still cannot retire from
-      // missing/corrupt original signed bytes. Restore only the exact fixture
-      // bytes after proving refusal; production supplies no corruption bypass.
-      const originalAdmission = readFileSync(first.pullPath),
-        brokenAdmission = JSON.parse(originalAdmission.toString());
-      brokenAdmission.signature =
-        (brokenAdmission.signature[0] === "A" ? "B" : "A") + brokenAdmission.signature.slice(1);
-      writeFileSync(first.pullPath, JSON.stringify(brokenAdmission));
-      try {
-        const blocked = start("resume"),
-          observed = await blocked.boundary;
-        expect(await blocked.exited).toEqual({ code: 0, signal: null });
-        expect(observed).toMatchObject({
-          Fpresent: true,
-          Gpresent: true,
-          FslotPresent: true,
-          ordinaryOwnedDM: true,
-        });
-        expect(observed.journalKeys as string[]).toContain(raw.payload.execution.operationKey);
-      } finally {
-        writeFileSync(first.pullPath, originalAdmission);
-      }
-      const crashed = start("fault");
-      try {
-        const actual = await crashed.boundary;
-        expect(actual).toMatchObject({
-          boundary: "actual-first-F-private-unlink",
-          faulted: true,
-          Fpresent: false,
-          Gpresent: true,
-          FslotPresent: true,
-        });
-        expect(actual.journalKeys as string[]).toContain(raw.payload.execution.operationKey);
-        crashed.child.kill("SIGKILL");
-        expect((await crashed.exited).signal).toBe("SIGKILL");
-        const packets = JSON.parse(readFileSync(evidenceFile, "utf8")),
-          before = packets.candidate.payload.stagedCoordinatorDependency,
-          after = packets.progress.stagedCoordinatorRevalidation;
-        expect(packets.publicKey).toBe(installation.publicKey);
-        verifyControl(
-          packets.publicKey,
-          stagedCoordinatorRetirementDomain,
-          before,
-          stagedCoordinatorRetirementPayloadSchema,
-        );
-        verifyControl(
-          packets.publicKey,
-          stagedCoordinatorRetirementDomain,
-          after,
-          stagedCoordinatorRetirementPayloadSchema,
-        );
-        expect(before.payload.condition).toBe("higher-ranked-successor");
-        expect(after.payload.condition).toBe("higher-ranked-successor");
-        expect(Buffer.byteLength(JSON.stringify(before))).toBeLessThanOrEqual(4096);
-        expect(Buffer.byteLength(JSON.stringify(after))).toBeLessThanOrEqual(4096);
-        expect(packets.manifest.payload.stagedCoordinatorDependencyDigest).toBe(
-          controlDigest(before),
-        );
-        expect(packets.decision.payload.stagedCoordinatorRevalidationDigest).toBe(
-          controlDigest(after),
-        );
-        expect(after.payload.manifestDigest).toBe(controlDigest(packets.manifest.payload));
-        expect(after.payload.checkNonce).not.toBe(before.payload.checkNonce);
-        expect(() =>
-          controlRetentionPreparationState({
-            ...after.payload,
-            mode: "committed-cleanup",
-          } as never),
-        ).toThrow();
-        expect(() =>
-          recordStagedCoordinatorRetentionCheck({ ...after.payload } as never, after),
-        ).toThrow();
-        const proofPath = join(slot, "proof.json"),
-          originalProof = readFileSync(proofPath),
-          brokenProof = JSON.parse(originalProof.toString());
-        brokenProof.signature =
-          (brokenProof.signature[0] === "A" ? "B" : "A") + brokenProof.signature.slice(1);
-        writeFileSync(proofPath, JSON.stringify(brokenProof));
-        try {
-          const blocked = start("resume"),
-            observed = await blocked.boundary;
-          expect(await blocked.exited).toEqual({ code: 0, signal: null });
-          expect(observed).toMatchObject({
-            Fpresent: false,
-            Gpresent: true,
-            FslotPresent: true,
-            ordinaryOwnedDM: true,
-          });
-          expect(observed.journalKeys as string[]).toContain(raw.payload.execution.operationKey);
-        } finally {
-          writeFileSync(proofPath, originalProof);
-        }
-        const replacement = start("resume"),
-          observed = await replacement.boundary;
-        expect(await replacement.exited).toEqual({ code: 0, signal: null });
-        expect(observed).toMatchObject({
-          Fpresent: false,
-          Gpresent: true,
-          FslotPresent: false,
-          ordinaryOwnedDM: true,
-        });
-        expect(observed.journalKeys as string[]).not.toContain(raw.payload.execution.operationKey);
-      } finally {
-        crashed.child.kill("SIGKILL");
-        await crashed.exited;
-      }
-    }, 180000);
     it("guards the actual existing coordinator Apply entry even with empty links", async () => {
       const response = await api.inject({
         method: "POST",
@@ -2776,7 +2392,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(owner.apiControls.settle.result.state).toBe("settled");
       expect(owner.apiControls.settle.receiptDelivery).not.toBeNull();
       expect(dm.settlePosts).toBe(1);
-      expect(dm.settlementSqlIo).toEqual({ commits: 1, updates: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(host.calls.filter((a) => a.includes("--force-recreate"))).toHaveLength(1);
       const actual = (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
         (s) => s.serviceId === "data-manager",
@@ -2810,7 +2426,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       { action: "apply", point: "decision" },
       { action: "update", point: "decision" },
       { action: "update", point: "pull" },
-      { action: "update", point: "prepared family retention" },
       { action: "apply", point: "candidate unlink" },
       { action: "update", point: "candidate unlink" },
       { action: "update", point: "mixed pull" },
@@ -3026,94 +2641,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const { jobRunner } = await import("../job-runner");
             await jobRunner.cancel(id);
           }
-          if (point === "prepared family retention") {
-            if (!originalNormal || inspected.privateCoordinatorLifecycle?.action !== "update")
-              throw Error("Actual original pull source required");
-            const normalPath = join(
-              host.infraDir,
-              "control-private/ops-agent/executions",
-              `${inspected.privateCoordinatorLifecycle.pull.operationKey}.json`,
-            );
-            const maintenanceId = (
-              prior._configurationMaintenance as { receipt: { binding: { maintenanceId: string } } }
-            ).receipt.binding.maintenanceId;
-            const ownerPath = join(
-                host.infraDir,
-                "control-private/ops-agent/configuration-maintenance",
-                `${maintenanceId}.json`,
-              ),
-              originalOwner = readFileSync(ownerPath),
-              owner = JSON.parse(originalOwner.toString()).payload,
-              authority = restoreAdmittedControlExecution(installation, owner.plan.prepare),
-              copied = JSON.stringify(owner.coordinatorPull);
-            expect(
-              Buffer.byteLength(JSON.stringify(JSON.parse(originalNormal.toString()))),
-            ).toBeLessThanOrEqual(65536);
-            expect(
-              owner.coordinatorPull.payload.baselineAdmissionDigest ===
-                controlDigest(JSON.parse(originalNormal.toString())),
-            ).toBe(true);
-            const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600000);
-            try {
-              // The prepared owner's copied baseline does not replace the
-              // LAST staged source needed by the still-running OLD container.
-              await reconcileControlRetention(installation, { maxFamilies: 64 });
-              expect(readFileSync(normalPath).equals(originalNormal)).toBe(true);
-              const privateRoot = join(host.infraDir, "control-private/ops-agent"),
-                originHash = controlDigest(JSON.parse(originalNormal.toString()).payload.origin),
-                location = JSON.parse(
-                  readFileSync(
-                    join(privateRoot, "retention-locations", `${originHash}.json`),
-                    "utf8",
-                  ),
-                ),
-                progress = JSON.parse(
-                  readFileSync(
-                    join(privateRoot, "retention-families", location.name, "progress.json"),
-                    "utf8",
-                  ),
-                );
-              expect(progress.lastError).toBe(
-                "Error: Last staged coordinator source remains required",
-              );
-              expect(existsSync(ownerPath)).toBe(true);
-              const proof = ownedCoordinatorPullBaseline(authority),
-                old = await inspectOriginalCoordinatorServices(
-                  host.owned,
-                  proof,
-                  new AbortController().signal,
-                );
-              expect(
-                old.find((value) => value.serviceId === "data-manager")?.provenance.imageId,
-              ).toBe(`sha256:${"b".repeat(64)}`);
-              expect(
-                (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
-                  (value) => value.serviceId === "data-manager",
-                )?.provenance.imageId,
-              ).toBe(`sha256:${"b".repeat(64)}`);
-              expect(
-                JSON.stringify(JSON.parse(readFileSync(ownerPath, "utf8")).payload.coordinatorPull),
-              ).toBe(copied);
-              expect(() => assertControlExecutionForward(authority)).toThrow();
-              const corrupt = Buffer.from(originalOwner);
-              corrupt[12] = corrupt[12] === 120 ? 121 : 120;
-              try {
-                writeFileSync(ownerPath, corrupt);
-                expect(() => ownedCoordinatorPullBaseline(authority)).toThrow();
-              } finally {
-                writeFileSync(ownerPath, originalOwner);
-              }
-              expect(() => ownedCoordinatorPullBaseline(authority)).not.toThrow();
-              expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-              expect(posts.get("service.pull")).toBe(1);
-              expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(
-                0,
-              );
-            } finally {
-              clock.mockRestore();
-            }
-            return;
-          }
           const [retained] = await fixture.db
               .select()
               .from(schema.adminJob)
@@ -3162,7 +2689,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     | {
                         operations?: Record<
                           string,
-                          { kind?: string; phase?: string; receiptDelivery?: { state?: string } }
+                          { kind?: string; phase?: string; receiptDelivery?: object }
                         >;
                       }
                     | undefined
@@ -3170,7 +2697,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ).map(({ kind, phase, receiptDelivery }) => ({
                 kind,
                 phase,
-                delivery: receiptDelivery?.state,
+                delivered: receiptDelivery !== undefined,
               })),
             }),
           ).toBe(0);
@@ -3276,7 +2803,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(snapshots.find((s) => s.serviceId === "data-manager")?.provenance.imageId).toBe(
         pulledImageId,
       );
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
     }, 180000);
     it.each([
       "generic resolver",
@@ -3379,7 +2906,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(pull).toBeGreaterThan(start);
       expect(recreate).toBeGreaterThan(pull);
       expect(host.calls.filter((args) => args.includes("--no-recreate"))).toHaveLength(1);
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
     }, 180000);
     it("closes a prepared pull locally after whole-candidate coordinator refusal without inventing an admission", async () => {
       services.writeServiceSelectionFile(host.infraDir, ["motis"]);
@@ -3485,7 +3012,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
       expect(posts.get("configurationMaintenance.prepare")).toBe(1);
       expect(posts.get("configurationMaintenance.settle")).toBe(1);
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
       const original = await inspectOriginalCoordinatorServices(
         host.owned,
@@ -3506,71 +3033,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(row.error ?? "").not.toContain('update "admin_job"');
       expect(row.error ?? "").not.toContain(host.root);
     }, 180000);
-    it("refuses a valid full future owner budget before image staging or lifecycle", async () => {
-      expect(host.loaded.find((s) => s.manifest.id === "motis")?.manifest.consumes).toHaveLength(
-        256,
-      );
-      const reply = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      const id = reply.json().jobId,
-        until = Date.now() + 45000;
-      let row: typeof schema.adminJob.$inferSelect | undefined;
-      for (;;) {
-        [row] = await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id));
-        const result = row?.result as { observation?: { state?: string } } | undefined;
-        if (
-          row &&
-          (["failed", "success", "canceled"].includes(row.status) ||
-            result?.observation?.state === "unknown")
-        )
-          break;
-        if (Date.now() > until) throw Error("Actual owner capacity refusal not observable");
-        await delay(10);
-      }
-      const observed = row!.result as {
-        observation?: { state?: string; reason?: string };
-        opsProjection?: {
-          operations?: Record<
-            string,
-            { kind: string; phase: string; terminal: boolean; errorClass?: string }
-          >;
-        };
-        _configurationCandidate?: { phase?: string };
-      };
-      console.info(
-        "actual prelude budget diagnostic",
-        JSON.stringify({
-          jobState: row!.status,
-          observation: observed.observation,
-          candidatePhase: observed._configurationCandidate?.phase,
-          posts: [...posts],
-          operations: Object.values(observed.opsProjection?.operations ?? {}).map((value) => ({
-            kind: value.kind,
-            phase: value.phase,
-            terminal: value.terminal,
-            errorClass: value.errorClass,
-          })),
-        }),
-      );
-      expect(posts.get("service.pull") ?? 0).toBe(0);
-      expect(host.calls.filter((args) => args[0] === "image" && args[1] === "pull")).toHaveLength(
-        0,
-      );
-      expect(row!.status).toBe("failed");
-      expect(posts.get("service.start") ?? 0).toBe(0);
-      expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
-      expect(dm.preparePosts).toBe(0);
-      expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
-      expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
-    }, 60000);
     it("preserves actual first-delivery CAS against stale prepared and forged unissued generic checkpoints", async () => {
       const reached = Promise.withResolvers<void>(),
         release = Promise.withResolvers<void>();
@@ -3855,7 +3317,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
     }, 240000);
     it("closes three-target cancellation after an acknowledged ordinary prefix and successful coordinator staging", async () => {
-      const { id } = await canceledSuccessfulCoordinatorStage(undefined, [
+      const { id } = await canceledSuccessfulCoordinatorStage([
           "motis",
           "data-manager",
           "valhalla",

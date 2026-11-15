@@ -24,7 +24,6 @@ import {
   opsOperationSchema,
   parseOpsJobStatus,
   readOpsTokenFile,
-  signApiRetentionProof,
   verifyMaintenanceRecoveryProof,
 } from "@openmapx/core/ops";
 import { cancelAdminDataChildren } from "./admin-data-children";
@@ -41,7 +40,6 @@ import {
   JobStepAllocationConflict,
 } from "./admin-job-state";
 import { readArtifactPurposeObservation } from "./artifact-purpose-observation";
-import { configurationMaintenanceProjectedStepOrigin } from "./configuration-maintenance-step-records";
 import {
   assertCoordinatorPullIntent,
   type CoordinatorLifecycleIntent,
@@ -71,7 +69,6 @@ const ADMISSION_REFUSALS = new Set([
   "busy",
   "not_wired",
   "host_update_required",
-  "control_upgrade_required",
   "unsupported_peer",
   "recovery_required",
 ]);
@@ -101,12 +98,12 @@ async function persistProjection(
   if (!context.execution) context.checkpointResult = value;
 }
 
-/** Delivery is a durable observation obligation, independent of the worker's abort signal. */
-export async function ensureAdminJobReceiptDelivery(
+/** Checkpoints the agent's terminal status copy before a caller returns or
+ * throws. The copy is independent of the worker's abort signal. */
+export async function checkpointTerminalCopy(
   context: JobContext,
   projection: OpsProjection,
   projected: ProjectedOperation,
-  client: ApiOpsClient,
   status?: OpsJobStatus,
 ): Promise<void> {
   if (
@@ -136,106 +133,38 @@ export async function ensureAdminJobReceiptDelivery(
     )
       throw new JobObservationPending("recovery_required");
   }
+  if (projected.receiptDelivery) return;
+  if (!status || !context.execution) throw new JobObservationPending("recovery_required");
+  const { diagnostics: _diagnostics, ...safe } = parseOpsJobStatus(status);
+  if (
+    safe.operationKey !== projected.operationKey ||
+    safe.operationId !== projected.operationId ||
+    safe.fingerprint !== projected.fingerprint ||
+    safe.deadlineAt !== projected.deadlineAt ||
+    safe.kind !== projected.kind ||
+    Buffer.byteLength(JSON.stringify(safe)) > 128 * 1024
+  )
+    throw new JobObservationPending("recovery_required");
+  projected.receiptDelivery = {
+    terminalCopyId: randomUUID(),
+    checkpointOwnerVersion: context.execution.version,
+    terminalDigest: controlTerminalReceiptDigest(safe),
+    terminalReceipt: safe,
+    ...(status.diagnostics?.maintenanceRecovery
+      ? { maintenanceRecovery: status.diagnostics.maintenanceRecovery }
+      : {}),
+  };
   try {
-    if (!projected.receiptDelivery) {
-      if (!status || !context.execution) throw new JobObservationPending("recovery_required");
-      const { diagnostics: _diagnostics, ...safe } = parseOpsJobStatus(status);
-      if (
-        safe.operationKey !== projected.operationKey ||
-        safe.operationId !== projected.operationId ||
-        safe.fingerprint !== projected.fingerprint ||
-        safe.deadlineAt !== projected.deadlineAt ||
-        safe.kind !== projected.kind ||
-        Buffer.byteLength(JSON.stringify(safe)) > 128 * 1024
-      )
-        throw new JobObservationPending("recovery_required");
-      projected.receiptDelivery = {
-        state: "pending",
-        terminalCopyId: randomUUID(),
-        checkpointOwnerVersion: context.execution.version,
-        terminalDigest: controlTerminalReceiptDigest(safe),
-        terminalReceipt: safe,
-        ...(status.diagnostics?.maintenanceRecovery
-          ? { maintenanceRecovery: status.diagnostics.maintenanceRecovery }
-          : {}),
-      };
-      await persistProjection(context, projection);
-      // Only the confirmed CAS result is authority to mint the proof.
-      const retained = readProjection(context.checkpointResult).operations[projected.operationKey]
-        ?.receiptDelivery;
-      if (!retained || retained.terminalCopyId !== projected.receiptDelivery.terminalCopyId)
-        throw new JobObservationPending("receipt_delivery");
-      projected.receiptDelivery = retained;
-    }
-    const delivery = projected.receiptDelivery;
-    if (delivery.state === "confirmed") return;
-    const fingerprint = projected.fingerprint;
-    if (!fingerprint) throw new JobObservationPending("recovery_required");
-    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-    const proof = signApiRetentionProof(token, {
-      version: 1,
-      apiJobId: projected.attempt.apiJobId,
-      originalApiOwnerVersion: projected.attempt.apiOwnerVersion,
-      attemptId: projected.attempt.attemptId,
-      checkpointOwnerVersion: delivery.checkpointOwnerVersion,
-      terminalCopyId: delivery.terminalCopyId,
-      operationKey: projected.operationKey,
-      fingerprint: fingerprint,
-      terminalDigest: delivery.terminalDigest,
-    });
-    const ownerControl =
-      projected.operation?.kind === "configurationMaintenance.decide" ||
-      projected.operation?.kind === "configurationMaintenance.settle"
-        ? projected.operation
-        : undefined;
-    if (
-      ["configurationMaintenance.decide", "configurationMaintenance.settle"].includes(
-        projected.kind,
-      ) &&
-      !ownerControl
-    )
-      throw new JobObservationPending("recovery_required");
-    const frozenOrigin =
-      projected.operation &&
-      "maintenanceId" in projected.operation &&
-      projected.operation.maintenanceId &&
-      !ownerControl &&
-      context.checkpointResult?._configurationMaintenanceSteps
-        ? configurationMaintenanceProjectedStepOrigin(
-            context.checkpointResult,
-            projected.operationKey,
-            projected.operation,
-            projected.attempt,
-          )
-        : undefined;
-    const response = await client.execute(
-      {
-        kind: "controlRetention.acknowledge",
-        originRootKey: ownerControl?.prepareOperationKey ?? frozenOrigin ?? projected.operationKey,
-        operationKey: projected.operationKey,
-        fingerprint: fingerprint,
-        terminalDigest: delivery.terminalDigest,
-        proof,
-      },
-      { signal: AbortSignal.timeout(15_000) },
-    );
-    if (response.execution !== "sync" || response.value.acknowledged !== true)
-      throw Error("Receipt acknowledgement unavailable");
-    projected.receiptDelivery = { ...delivery, state: "confirmed" };
     await persistProjection(context, projection);
-    if (
-      readProjection(context.checkpointResult).operations[projected.operationKey]?.receiptDelivery
-        ?.state !== "confirmed"
-    )
-      throw Error("Receipt confirmation checkpoint unavailable");
   } catch (error) {
-    if (
-      error instanceof JobOwnershipLost ||
-      (error instanceof JobObservationPending && error.reason === "recovery_required")
-    )
-      throw error;
-    throw new JobObservationPending("receipt_delivery");
+    if (error instanceof JobOwnershipLost) throw error;
+    throw new JobObservationPending("transport");
   }
+  const retained = readProjection(context.checkpointResult).operations[projected.operationKey]
+    ?.receiptDelivery;
+  if (!retained || retained.terminalCopyId !== projected.receiptDelivery.terminalCopyId)
+    throw new JobObservationPending("transport");
+  projected.receiptDelivery = retained;
 }
 /**
  * Submit a typed administrative effect and mirror its bounded durable event
@@ -457,8 +386,7 @@ async function observeOperation(
   options: ExecuteAdminJobOperationOptions,
   fresh = false,
 ): Promise<unknown> {
-  if (projected.terminal)
-    await ensureAdminJobReceiptDelivery(context, projection, projected, client);
+  if (projected.terminal) await checkpointTerminalCopy(context, projection, projected);
   if (!projected.terminal) context.signal.throwIfAborted();
   let terminalStatus: OpsJobStatus | undefined;
   const observer = new AbortController();
@@ -663,7 +591,7 @@ async function observeOperation(
     projected.terminal = true;
     projected.phase = "terminal";
     delete projected.outcome;
-    await ensureAdminJobReceiptDelivery(context, projection, projected, client, terminalStatus);
+    await checkpointTerminalCopy(context, projection, projected, terminalStatus);
     return result;
   } catch (error) {
     if (error instanceof ApiOpsError) {
@@ -702,8 +630,8 @@ async function observeOperation(
         ...error.failureResult,
         ...(error.errorClass === "host_update_required" ? { errorCode: error.errorClass } : {}),
       };
-      await ensureAdminJobReceiptDelivery(context, projection, projected, client, terminalStatus);
-    } else if (!(error instanceof JobObservationPending && error.reason === "receipt_delivery")) {
+      await checkpointTerminalCopy(context, projection, projected, terminalStatus);
+    } else if (!(error instanceof JobObservationPending)) {
       projected.outcome = "unknown";
     }
     throw error;
@@ -855,7 +783,7 @@ async function verifiedOriginalMaintenanceRecovery(
 
 /** Routing only: a completed negative recovery does not itself discard the
  * API's sealed candidate. Only the fixed original producer may authenticate
- * that packet and finish its NoGuard cleanup under a replacement owner. */
+ * that packet and finish its never-prepared cleanup under a replacement owner. */
 export async function hasRecoveredMaintenanceCandidate(
   result: unknown,
   jobId: string,
@@ -881,7 +809,7 @@ export async function hasRecoveredMaintenanceCandidate(
       !operation?.terminal ||
       operation.attempt?.apiJobId !== jobId ||
       operation.phase !== "terminal" ||
-      delivery?.state !== "confirmed" ||
+      !delivery ||
       !terminal ||
       terminal.errorClass !== "recovery_required" ||
       !["failed", "timed_out"].includes(terminal.state) ||
@@ -1018,12 +946,7 @@ export async function cancelAdminJobOperations(
           await persistProjection(options.context, projection);
           recovered = true;
         }
-        await ensureAdminJobReceiptDelivery(
-          options.context,
-          projection,
-          operation,
-          client as ApiOpsClient,
-        );
+        await checkpointTerminalCopy(options.context, projection, operation);
       } catch (error) {
         if (error instanceof JobObservationPending) throw error;
         return "pending";
@@ -1154,13 +1077,7 @@ export async function cancelAdminJobOperations(
     if (opsKindRequiresControlAuthority(operation.kind)) {
       if (!options.context) return "pending";
       try {
-        await ensureAdminJobReceiptDelivery(
-          options.context,
-          projection,
-          operation,
-          client as ApiOpsClient,
-          status,
-        );
+        await checkpointTerminalCopy(options.context, projection, operation, status);
       } catch (error) {
         if (error instanceof JobObservationPending) throw error;
         return "pending";

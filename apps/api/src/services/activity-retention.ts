@@ -1,4 +1,4 @@
-import { and, desc, isNotNull, isNull, lt, ne, notInArray, sql } from "drizzle-orm";
+import { and, desc, isNotNull, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   adminAuditLog,
@@ -12,7 +12,7 @@ import {
   preservationAllowsDeletion,
   withPreservationRetentionLock,
 } from "../privacy/preservation.js";
-import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "./admin-job-state";
+import { noUnsettledManagedOperation } from "./admin-job-state";
 import { prunePlatformConfigurationPreviews } from "./platform-preview-store";
 import { pruneTransitCredentialPreviews } from "./transit-credential-retention";
 
@@ -84,7 +84,6 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
       .where(
         and(
           lt(adminJob.finishedAt, cutoff),
-          noPendingReceiptDelivery(),
           noUnsettledManagedOperation(),
           sql`NOT EXISTS (SELECT 1 FROM ${platformConfigurationPreview} WHERE ${platformConfigurationPreview.consumedByJobId}::text = ${adminJob.id})`,
           sql`(coalesce(${adminJob.result}->'opsProjection'->>'version','') <> '3' OR ${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamp)`,
@@ -121,12 +120,9 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   const result = await withPreservationRetentionLock(db, (tx) => {
-    // Managed execution receipts belong to the all-role proof GC, including
+    // Managed execution rows belong to data-manager's control prune, including
     // finished rows still referenced by an original owner awaiting recovery.
-    const legacyPipelineJob = and(
-      isNull(dataManagerJobs.executionVersion),
-      ne(dataManagerJobs.kind, "configuration-maintenance"),
-    );
+    const legacyPipelineJob = isNull(dataManagerJobs.executionVersion);
     const newestFinishedOfEachKind = tx
       .selectDistinctOn([dataManagerJobs.kind], { id: dataManagerJobs.id })
       .from(dataManagerJobs)

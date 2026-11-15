@@ -43,12 +43,8 @@ import {
   digest,
   signControl,
   uuid,
-  validateOriginRecord,
   verifyControl,
 } from "./control-records";
-// biome-ignore-start lint/suspicious/noImportCycles: Reserved-child publication verifies original indexed bytes; family recovery consults the same admitted-child guards. Both calls are deferred until initialization completes.
-import { verifyFamilyOwnedRecord } from "./retention-family";
-// biome-ignore-end lint/suspicious/noImportCycles: Exact deferred original-owner/index guard join.
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   delegateArtifactTargetLease,
@@ -164,20 +160,7 @@ function readCell(
     raw,
     cellSchema,
   );
-  if (!state.origin) throw Error("Reserved phase origin is missing");
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    {
-      scope: "private",
-      namespace: "observations",
-      name: cellName(authority, input.ordinal),
-      container: "",
-    },
-    canonicalJson(raw),
-  );
   if (
-    !validateOriginRecord(cell) ||
     cell.installationId !== state.installation.installation.installationId ||
     controlDigest(cell.origin) !== controlDigest(state.origin) ||
     controlDigest(cell.parent) !== controlDigest(state.execution) ||
@@ -235,13 +218,11 @@ function writeCell(
     cellName(authority, ordinal),
     signed,
     exclusive,
-    state.origin,
   );
 }
 /** Called by durable admission before any forward witness/effect becomes ready. */
 export function initializeControlChildReservations(authority: VerifiedExecutionAuthority): void {
   const state = executionAuthorityState(authority);
-  if (!state.origin) throw Error("Missing reserved phase origin");
   const cells = state.reservations.map((r) => ({
     r,
     cell: cellSchema.parse({

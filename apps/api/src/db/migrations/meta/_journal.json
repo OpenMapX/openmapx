@@ -442,6 +442,13 @@
       "when": 1794559153744,
       "tag": "0062_data_manager_role_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1794669803740,
+      "tag": "0063_configuration_fence_table",
+      "breakpoints": true
     }
   ]
 }

@@ -814,7 +814,7 @@ export * from "./settleDataConfigurationFence429";
 export * from "./settleDataConfigurationFence500";
 export * from "./settleDataConfigurationFence503";
 export * from "./settleDataConfigurationFenceBody";
-export * from "./settleDataConfigurationFenceBodyVersion";
+export * from "./settleDataConfigurationFenceBodyOutcome";
 export * from "./startDataExecution202";
 export * from "./startDataExecution202Diagnostics";
 export * from "./startDataExecution202DiagnosticsTailItem";

@@ -30,7 +30,7 @@ import {
   installationState,
   publishDataControlTerminalWitness,
   readPrivateRecord,
-  requireControlJournalRetention,
+  reserveControlTerminal,
   restoreAdmittedControlExecution,
   settleExecutionLifecycle,
   type VerifiedExecutionAuthority,
@@ -44,24 +44,11 @@ import {
   signControl,
   verifyControl,
 } from "./control-records";
-import {
-  dataFenceRetirementTuple,
-  verifyRetainedDataFenceRefusal,
-  verifyRetainedDataFenceTerminal,
-} from "./data-configuration-fence";
 import { retainedDataDatabaseTimestamp } from "./data-database-time";
 import { DataExecutionPartialResult } from "./data-execution-outcome";
 import { verifyFeedProxyCanonicalTerminal } from "./feed-proxy-validation";
 import {
-  assertFamilyCanonicalCompatibility,
-  completeFamilyJournal,
-  markFamilyTerminal,
-  publishFamilyCanonicalTerminal,
-  verifyFamilyOwnedRecord,
-} from "./retention-family";
-import {
   assertRetainedCatalogActivationChildrenSettled,
-  closeArtifactTargetLeaseHandle,
   inspectArtifactTargetLeaseChildSettlement,
   inspectRetainedOwnedArtifactTargetChildSettlement,
   restoreArtifactTargetLeaseForSettlement,
@@ -200,7 +187,7 @@ export function createDataExecutionControlJournal(
   database: DataExecutionJournalDatabase,
 ) {
   const local = installationState(installation);
-  if (installation.role !== "data-manager" || local.fixedChildId || local.retentionJournal)
+  if (installation.role !== "data-manager" || local.fixedChildId)
     throw Error("Fixed data-manager journal required");
   const contained = new Map<string, string>();
   async function load(execution: ExecutionRef) {
@@ -352,8 +339,7 @@ export function createDataExecutionControlJournal(
       state.kind !== "catalog.activate" ||
       input.kind !== "catalog.activate" ||
       !input.acknowledgeLicenseChanges ||
-      controlDigest(input) !== state.execution.operationFingerprint ||
-      !state.origin
+      controlDigest(input) !== state.execution.operationFingerprint
     )
       throw Error("Original reviewed catalog activation required");
     assertRetainedCatalogActivationChildrenSettled(authority);
@@ -476,103 +462,6 @@ export function createDataExecutionControlJournal(
     verifyControlEffectSettlement(installation, execution);
     return { value, authority, proof };
   }
-  const journal = {
-    async prepare(executions: readonly { execution: ExecutionRef; digest?: string }[]) {
-      contained.clear();
-      for (const item of executions)
-        try {
-          const rows = await database.unsafe(
-            "SELECT * FROM data_manager.jobs WHERE operation_key=$1",
-            [item.execution.operationKey],
-          );
-          if (rows.length === 0) {
-            const proof = verifyRetainedDataFenceRefusal(installation, item.execution);
-            if (item.digest === proof.digest)
-              contained.set(item.execution.operationKey, proof.digest);
-            continue;
-          }
-          if (rows.length !== 1) continue;
-          if (rows[0]!.kind === "configuration-maintenance") {
-            const proof = verifyRetainedDataFenceTerminal(installation, item.execution, rows[0]!);
-            if (item.digest !== undefined && item.digest !== proof.digest) continue;
-            contained.set(item.execution.operationKey, proof.digest);
-          } else {
-            const { proof } = await verifyStored(item.execution, item.digest);
-            contained.set(item.execution.operationKey, proof.terminalDigest);
-          }
-        } catch {
-          /* Missing, unfinished or unknown guard/worker evidence is retained. */
-        }
-    },
-    contained(execution: ExecutionRef, digest: string | undefined) {
-      return digest !== undefined && contained.get(execution.operationKey) === digest;
-    },
-    async retire(
-      executions: readonly { execution: ExecutionRef; digest: string; terminalAt?: number }[],
-      _manifestDigest: string,
-    ) {
-      // The signed family manifest has already committed the original tuple
-      // and time. Private records may already be removed on a resumed cleanup.
-      for (const item of executions) {
-        // A resumed, already committed family cleanup may have deleted its row.
-        // Absence here permits no effects; the caller owns the signed manifest.
-        const rows = await database.unsafe(
-          "SELECT * FROM data_manager.jobs WHERE execution_version=2 AND operation_key=$1",
-          [item.execution.operationKey],
-        );
-        if (rows.length === 0) {
-          const guards = await database.unsafe(
-            "SELECT * FROM data_manager.jobs WHERE kind='configuration-maintenance' AND operation_key=$1",
-            [item.execution.operationKey],
-          );
-          if (guards.length) {
-            const guard = guards[0]!,
-              tuple = dataFenceRetirementTuple(guard);
-            if (
-              guards.length !== 1 ||
-              guard.id !== item.execution.executionId ||
-              tuple.digest !== item.digest ||
-              tuple.terminalAt !== item.terminalAt
-            )
-              throw Error("Retiring guard tuple/time changed");
-            const deleted = await database.unsafe(
-              "DELETE FROM data_manager.jobs WHERE id=$1::uuid AND kind='configuration-maintenance' AND operation_key=$2 AND ownership_version=$3 RETURNING id",
-              [
-                item.execution.executionId,
-                item.execution.operationKey,
-                z.number().int().parse(guard.ownership_version),
-              ],
-            );
-            if (deleted.length !== 1) throw Error("Guard retirement CAS conflict");
-          }
-          contained.delete(item.execution.operationKey);
-          continue;
-        }
-        const value = statusOf(rows[0]);
-        if (
-          rows.length !== 1 ||
-          controlDigest(value.execution) !== controlDigest(item.execution) ||
-          !isDataExecutionTerminal(value.status) ||
-          dataTerminalReceiptDigest(value.status) !== item.digest ||
-          !item.terminalAt ||
-          value.row.finished_at?.getTime() !== item.terminalAt
-        )
-          throw Error("Retiring data terminal tuple/time changed");
-        const removed = await database.unsafe(
-          "DELETE FROM data_manager.jobs WHERE id=$1::uuid AND execution_version=2 AND operation_key=$2 AND ownership_version=$3 AND finished_at=$4::text::timestamptz RETURNING id",
-          [
-            value.status.id,
-            item.execution.operationKey,
-            value.row.ownership_version,
-            value.row.finished_at.toISOString(),
-          ],
-        );
-        if (removed.length !== 1) throw Error("Data journal retirement CAS conflict");
-        contained.delete(item.execution.operationKey);
-      }
-    },
-  };
-  local.retentionJournal = journal;
   return {
     installation,
     dataRoot: local.dataRoot,
@@ -634,7 +523,6 @@ export function createDataExecutionControlJournal(
         .find((child) => child.phase === "proxy-restore");
       if (
         s.installation !== local ||
-        !s.origin ||
         !restore ||
         child?.state !== "reserved" ||
         child.operationKey !== restore.execution.operationKey ||
@@ -661,15 +549,13 @@ export function createDataExecutionControlJournal(
         `proxy-recovery-${s.execution.operationKey}.json`,
         signControl(local.privateKey, "openmapx-data-proxy-recovery-v1", payload),
         true,
-        s.origin,
       );
     },
     pendingRunnerAttempts(authority: VerifiedExecutionAuthority) {
       const state = executionAuthorityState(authority);
       if (
         state.installation !== local ||
-        !["transit-sync", "catalog.validate"].includes(state.kind) ||
-        !state.origin
+        !["transit-sync", "catalog.validate"].includes(state.kind)
       )
         throw Error("Original transit worker required");
       try {
@@ -697,8 +583,7 @@ export function createDataExecutionControlJournal(
         body = transitousRunnerRequestSchema.parse(request);
       if (
         state.installation !== local ||
-        !["transit-sync", "catalog.validate"].includes(state.kind) ||
-        !state.origin
+        !["transit-sync", "catalog.validate"].includes(state.kind)
       )
         throw Error("Original transit worker required");
       withPrivateEffectWriter(state, () => {
@@ -733,7 +618,6 @@ export function createDataExecutionControlJournal(
           name,
           signControl(local.privateKey, "openmapx-data-runner-journal-v1", next),
           false,
-          state.origin,
         );
       });
     },
@@ -775,7 +659,6 @@ export function createDataExecutionControlJournal(
             attempts: saved.attempts.filter((entry) => entry.capability !== body.capability),
           }),
           false,
-          state.origin,
         );
       });
     },
@@ -828,7 +711,6 @@ export function createDataExecutionControlJournal(
         `${s.execution.executionId}.json`,
         signControl(local.privateKey, "openmapx-data-hardlinks-v1", payload),
         true,
-        s.origin,
       );
     },
     async readHardlinksPlan(execution: ExecutionRef) {
@@ -861,7 +743,7 @@ export function createDataExecutionControlJournal(
       const value = await load(authority.execution);
       if (value.status.status !== "queued" || value.status.cancellationRequestedAt)
         throw Error("Only a newly admitted data worker may begin");
-      requireControlJournalRetention(authority);
+      reserveControlTerminal(authority);
       beginControlEffect(authority);
     },
     /** The actual dispatcher promise must contain and await all of its process,
@@ -929,7 +811,6 @@ export function createDataExecutionControlJournal(
         result = undefined;
         error = Error("Remote runner containment remains unknown");
       }
-      if (!state.origin) throw Error("Dated contained worker origin required");
       const proof =
         state.kind === "catalog.activate" &&
         result?.kind === "catalog.activate" &&
@@ -957,7 +838,6 @@ export function createDataExecutionControlJournal(
         `worker-${state.execution.operationKey}.json`,
         signControl(local.privateKey, "openmapx-data-worker-contained-v1", proof),
         true,
-        state.origin,
       );
       const completion = Object.freeze({ [completionBrand]: true as const });
       completions.set(completion, {
@@ -975,7 +855,7 @@ export function createDataExecutionControlJournal(
     async repairCommittedCatalogActivation(execution: ExecutionRef): Promise<void> {
       const authority = restoreAdmittedControlExecution(installation, execution),
         state = executionAuthorityState(authority);
-      if (state.kind !== "catalog.activate" || !state.origin)
+      if (state.kind !== "catalog.activate")
         throw Error("Original catalog activation owner required");
       // This closes all future issuance under the original owner, even when its
       // deadline passed. Every already-issued physical child must be settled.
@@ -987,17 +867,11 @@ export function createDataExecutionControlJournal(
         const retained = readPrivateRecord(local, "observations", name, 65536);
         if (canonicalJson(retained) !== canonicalJson(signed))
           throw Error("Original worker completion already differs");
-        verifyFamilyOwnedRecord(
-          local,
-          state.origin,
-          { scope: "private", namespace: "observations", name, container: "" },
-          canonicalJson(retained),
-        );
         return;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
-      writePrivateRecord(local, "observations", name, signed, true, state.origin);
+      writePrivateRecord(local, "observations", name, signed, true);
     },
     async restoreCompletion(execution: ExecutionRef) {
       const value = await load(execution),
@@ -1010,18 +884,8 @@ export function createDataExecutionControlJournal(
         workerSchema,
       );
       if (proof.outcome === "catalog-activation-committed") {
-        if (
-          !state.origin ||
-          canonicalJson(proof) !== canonicalJson(await catalogActivationCompletion(authority))
-        )
+        if (canonicalJson(proof) !== canonicalJson(await catalogActivationCompletion(authority)))
           throw Error("Original final approval completion changed");
-        const name = `worker-${execution.operationKey}.json`;
-        verifyFamilyOwnedRecord(
-          local,
-          state.origin,
-          { scope: "private", namespace: "observations", name, container: "" },
-          canonicalJson(readPrivateRecord(local, "observations", name, 65536)),
-        );
       }
       if (
         proof.installationId !== installation.installationId ||
@@ -1083,7 +947,6 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Contained worker/current child union changed");
       if (
-        !s.origin ||
         owned.publication === "unknown" ||
         terminal.publication !== owned.publication ||
         !isDataExecutionTerminal(terminal) ||
@@ -1152,7 +1015,6 @@ export function createDataExecutionControlJournal(
             prior.childrenDigest !== childrenDigest)
         )
           throw Error("Original data terminal tuple is immutable");
-        assertFamilyCanonicalCompatibility(local, s.origin!, s.execution, digest, original);
         const payload = terminalSchema.parse({
           version: 1,
           phase: "prepared",
@@ -1171,7 +1033,6 @@ export function createDataExecutionControlJournal(
           `terminal-${s.execution.operationKey}.json`,
           signControl(local.privateKey, "openmapx-data-terminal-v1", payload),
           false,
-          s.origin,
         );
         const receipt = {
             kind: "data-execution" as const,
@@ -1195,9 +1056,7 @@ export function createDataExecutionControlJournal(
           `${s.execution.operationKey}.json`,
           signControl(local.privateKey, "openmapx-control-settlement-v1", effect),
           false,
-          s.origin,
         );
-        markFamilyTerminal(local, s.origin!, s.execution, true, controlDigest(effect));
         return original;
       });
     },
@@ -1226,17 +1085,7 @@ export function createDataExecutionControlJournal(
               phase: "canonical",
             }),
             false,
-            s.origin,
           );
-        publishFamilyCanonicalTerminal(
-          local,
-          proof.origin,
-          execution,
-          true,
-          proof.terminalDigest,
-          proof.terminalAt,
-        );
-        completeFamilyJournal(local, proof.origin, execution, proof.terminalAt);
       });
       contained.set(execution.operationKey, proof.terminalDigest);
     },
@@ -1260,7 +1109,6 @@ export function createDataExecutionControlJournal(
       return authority;
     },
     close() {
-      if (local.retentionJournal === journal) local.retentionJournal = undefined;
       contained.clear();
     },
   };

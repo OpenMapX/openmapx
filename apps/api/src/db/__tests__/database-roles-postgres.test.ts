@@ -196,6 +196,13 @@ integration("database roles", () => {
     await dataManager.unsafe(
       "UPDATE data_manager.offline_package_jobs SET status = status WHERE false",
     );
+    await dataManager.unsafe(
+      "INSERT INTO data_manager.configuration_fence SELECT * FROM data_manager.configuration_fence WHERE false",
+    );
+    await dataManager.unsafe(
+      "UPDATE data_manager.configuration_fence SET state = state WHERE false",
+    );
+    await dataManager.unsafe("DELETE FROM data_manager.configuration_fence WHERE false");
     await api.unsafe("DELETE FROM data_manager.jobs WHERE false");
   });
 

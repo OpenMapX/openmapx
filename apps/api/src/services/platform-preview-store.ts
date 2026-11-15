@@ -12,7 +12,7 @@ import type { AuthDatabase } from "../account/auth-database";
 import { db } from "../db";
 import { adminJob, platformConfigurationPreview as table } from "../db/schema";
 import { preservationAllowsDeletion, withPreservationRetentionLock } from "../privacy/preservation";
-import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "./admin-job-state";
+import { noUnsettledManagedOperation } from "./admin-job-state";
 
 const TTL = 600_000;
 const storedPreviewSchema = z.strictObject({
@@ -88,7 +88,7 @@ export async function prunePlatformConfigurationPreviews(
               and ${adminJob.status} in ('success','failed','canceled')
               and ${adminJob.finishedAt} is not null
               and greatest(${table.retiredAt},${adminJob.finishedAt}) < ${new Date(now.getTime() - 72 * 3600000).toISOString()}::timestamptz
-              and ${noPendingReceiptDelivery()}
+             
               and ${noUnsettledManagedOperation()}
           )`,
           ),

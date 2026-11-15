@@ -12,8 +12,8 @@ import {
   closeArtifactTargetLeaseHandle,
   closeControlInstallation,
   openFixedChildInstallation,
+  pruneControlRecords,
   readFixedCliSpawnIntent,
-  reconcileControlRetention,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   retainDataUpdatePlan,
@@ -35,15 +35,13 @@ const contexts = new AsyncLocalStorage<{
   dataUpdatePlan?: import("@openmapx/core/build-artifacts").DataUpdatePlan;
 }>();
 
-/** Short-lived standalone commands also participate in retention. Fixed
- * children do not call this: they cannot coordinate their parent's cleanup. */
-export async function collectHostControlRetention(
-  installation: ControlInstallation,
-): Promise<void> {
+/** Short-lived standalone commands prune their own finished control records.
+ * Fixed children do not call this; their parent prunes. */
+export async function pruneHostControlRecords(installation: ControlInstallation): Promise<void> {
   try {
-    await reconcileControlRetention(installation, { maxFamilies: 64 });
-  } catch {
-    process.stderr.write("Control retention cleanup requires attention\n");
+    await pruneControlRecords(installation);
+  } catch (error) {
+    process.stderr.write(`Control record prune failed: ${String(error)}\n`);
   }
 }
 class FixedCliCommandExit extends Error {

@@ -9,7 +9,7 @@ import {
   configurationMaintenanceSettleSchema,
 } from "../ops/configuration-maintenance";
 import { type OpsJobStatus, opsResourceId, parseOpsJobStatus } from "../ops/contract";
-import { controlTerminalReceiptDigest } from "../ops/control-retention-receipt";
+import { controlTerminalReceiptDigest } from "../ops/control-terminal-receipt";
 import {
   executionFingerprint,
   executionRefSchema,
@@ -17,13 +17,10 @@ import {
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { ownedServiceSnapshotSchema } from "../ops/owned-service-records";
-import {
-  configurationNoGuardIntentSchema,
-  configurationSettlementOwnerIdentitySchema,
-  signedConfigurationSettlementCapacitySchema,
-} from "./configuration-fence-settlement-records";
+import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import {
   configurationMaintenanceFinalRecordSchema,
+  configurationOwnerIdentitySchema,
   signedConfigurationMaintenanceRuntimeInspectionSchema,
 } from "./configuration-maintenance-final-records";
 import { controlOriginSchema } from "./control-records";
@@ -31,7 +28,6 @@ import {
   coordinatorPullWitnessSchema,
   stagedCoordinatorObservationSchema,
 } from "./coordinator-pull-records";
-import { dataConfigurationFencePreparedWitnessSchema } from "./data-configuration-fence-witness-records";
 import {
   assertFixedConfigurationMaintenancePlan,
   fixedConfigurationMaintenancePlanSchema,
@@ -55,7 +51,7 @@ export const configurationMaintenanceDecisionCommitmentDomain =
  * non-secret attestation is copied verbatim by the fixed shared publisher. */
 export const configurationMaintenanceDecisionCommitmentPayloadSchema = z.strictObject({
   version: z.literal(1),
-  identity: z.lazy(() => configurationSettlementOwnerIdentitySchema),
+  identity: z.lazy(() => configurationOwnerIdentitySchema),
   operation: z.lazy(() => configurationMaintenanceDecisionSchema),
   execution: executionRefSchema,
   apiParent: z
@@ -75,7 +71,7 @@ export const configurationMaintenanceDecisionCommitmentSchema = z.strictObject({
 });
 /** The original owner's finite metadata control. This ExecutionRef is ONLY
  * journal/receipt correlation; it is never admitted as a forward execution,
- * target owner/borrower or a separate origin/family. */
+ * target owner/borrower or a separate origin. */
 export const configurationMaintenanceDecisionSourceSchema = z.strictObject({
   version: z.literal(1),
   operation: z.lazy(() => configurationMaintenanceDecisionSchema),
@@ -92,13 +88,6 @@ export const configurationMaintenanceDecisionSourceSchema = z.strictObject({
   result: configurationMaintenanceControlSnapshotSchema,
   canonicalDigest: digest,
   commitment: configurationMaintenanceDecisionCommitmentSchema,
-  receiptDelivery: z
-    .strictObject({
-      terminalCopyId: z.uuid(),
-      checkpointOwnerVersion: sequence,
-      proofDigest: digest,
-    })
-    .nullable(),
 });
 export const configurationMaintenanceStepControlSourceSchema = z.strictObject({
   version: z.literal(1),
@@ -124,13 +113,6 @@ export const configurationMaintenanceStepControlSourceSchema = z.strictObject({
       effectSettlementDigest: digest,
     })
     .nullable(),
-  receiptDelivery: z
-    .strictObject({
-      terminalCopyId: z.uuid(),
-      checkpointOwnerVersion: sequence,
-      proofDigest: digest,
-    })
-    .nullable(),
 });
 export const configurationMaintenanceSettleControlSourceSchema = z.strictObject({
   version: z.literal(1),
@@ -150,13 +132,6 @@ export const configurationMaintenanceSettleControlSourceSchema = z.strictObject(
   completedAt: sequence.nullable(),
   result: configurationMaintenanceControlSnapshotSchema.nullable(),
   canonicalDigest: digest.nullable(),
-  receiptDelivery: z
-    .strictObject({
-      terminalCopyId: z.uuid(),
-      checkpointOwnerVersion: sequence,
-      proofDigest: digest,
-    })
-    .nullable(),
 });
 export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   version: z.literal(2),
@@ -171,8 +146,8 @@ export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   stagedCoordinatorProvenance: stagedCoordinatorObservationSchema.optional(),
   sequence,
   receipt: z.lazy(() => configurationMaintenanceReceiptSchema),
-  guardSource: z.lazy(() => dataConfigurationFencePreparedWitnessSchema).nullable(),
-  capacity: z.lazy(() => signedConfigurationSettlementCapacitySchema).nullable(),
+  /** The data-manager's receipt for the prepared fence. */
+  preparedFence: dataConfigurationFenceReceiptSchema.nullable(),
   apiControls: z.strictObject({
     decide: configurationMaintenanceDecisionSourceSchema.nullable(),
     settle: configurationMaintenanceSettleControlSourceSchema.nullable(),
@@ -186,8 +161,6 @@ export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   // Only the actual fixed final/inspection producers may install these states.
   final: z.lazy(() => configurationMaintenanceFinalRecordSchema).nullable(),
   inspection: z.lazy(() => signedConfigurationMaintenanceRuntimeInspectionSchema).nullable(),
-  issuance: z.enum(["open", "closing_without_guard", "closed_without_guard"]),
-  noGuard: z.lazy(() => configurationNoGuardIntentSchema).nullable(),
 });
 export type ConfigurationMaintenanceOwnerRecord = z.infer<
   typeof configurationMaintenanceOwnerRecordSchema
@@ -202,9 +175,7 @@ export function configurationMaintenanceReleasedOwner(
   if (
     owner.receipt.state !== "settling" ||
     owner.receipt.dmFence?.state !== "settled" ||
-    !owner.guardSource ||
-    owner.noGuard ||
-    owner.issuance !== "open" ||
+    !owner.preparedFence ||
     !owner.final ||
     !owner.inspection ||
     (retained &&
@@ -302,7 +273,6 @@ export function configurationMaintenanceDecisionCommitmentPayload(
       maintenanceId: owner.plan.operation.maintenanceId,
       candidateId: owner.plan.operation.candidateId,
       planDigest: owner.plan.planDigest,
-      settlementId: owner.plan.dmSettle.settlementId,
     },
     operation: source.operation,
     execution: source.execution,
@@ -344,8 +314,7 @@ export function assertConfigurationMaintenanceDecisionSource(
   if (
     parent.issuer !== "api" ||
     original.issuer !== "api" ||
-    !owner.guardSource ||
-    owner.noGuard ||
+    !owner.preparedFence ||
     body.maintenanceId !== owner.plan.operation.maintenanceId ||
     body.candidateId !== owner.plan.operation.candidateId ||
     body.prepareOperationKey !== owner.plan.prepare.operationKey ||
@@ -384,7 +353,7 @@ export function assertConfigurationMaintenanceDecisionSource(
     result.generation !== "not_started" ||
     result.appliedRevisionId !== null ||
     result.followUp !== "not_started" ||
-    canonicalJson(result.dmFence) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+    canonicalJson(result.dmFence) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(result.decision) !==
       canonicalJson({
         decisionId: body.decisionId,
@@ -392,9 +361,7 @@ export function assertConfigurationMaintenanceDecisionSource(
         checkpointVersion: body.checkpointVersion,
         checkpointDigest: body.checkpointDigest,
       }) ||
-    canonicalJson(owner.receipt.decision) !== canonicalJson(result.decision) ||
-    (source.receiptDelivery &&
-      source.receiptDelivery.checkpointOwnerVersion < parent.apiOwnerVersion)
+    canonicalJson(owner.receipt.decision) !== canonicalJson(result.decision)
   )
     throw Error("Original authenticated decision source changed");
   const receipt = configurationMaintenanceReceiptSchema.parse({ ...owner.receipt, ...result });
@@ -430,7 +397,6 @@ export function assertConfigurationMaintenanceDecisionSource(
     if (
       !step ||
       source.operation.decision !== "continue" ||
-      !source.receiptDelivery ||
       actor.issuer !== "api" ||
       original.issuer !== "api" ||
       actor.apiJobId !== original.apiJobId ||
@@ -452,11 +418,7 @@ export function assertConfigurationMaintenanceDecisionSource(
           operationFingerprint: step.operationFingerprint,
           deadlineAt: control.execution.deadlineAt,
           parent,
-        }) ||
-      (control.receiptDelivery &&
-        (!control.grant ||
-          !control.canonical ||
-          control.receiptDelivery.checkpointOwnerVersion < actor.apiOwnerVersion))
+        })
     )
       throw Error("Original purpose-bound frozen maintenance step changed");
     if (control.canonical) {
@@ -511,9 +473,7 @@ export function assertConfigurationMaintenanceDecisionSource(
       settle.acceptedAt < settle.admittedAt ||
       settle.acceptedAt >= settle.execution.deadlineAt ||
       (settle.result === null &&
-        (settle.completedAt !== null ||
-          settle.canonicalDigest !== null ||
-          settle.receiptDelivery !== null)) ||
+        (settle.completedAt !== null || settle.canonicalDigest !== null)) ||
       (settle.result !== null &&
         (settle.completedAt === null ||
           settle.canonicalDigest === null ||

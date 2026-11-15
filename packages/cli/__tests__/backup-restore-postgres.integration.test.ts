@@ -839,7 +839,7 @@ VALUES
       expect(isDataExecutionTerminal(execution as never), `execution ${execution.id}`).toBe(true);
     expect(
       await psql(
-        "SELECT count(*) FROM data_manager.jobs WHERE kind <> 'configuration-maintenance' AND (finished_at IS NULL OR execution_state->>'publication' = 'unknown' OR (execution_version IS NULL AND finished_at IS NULL AND status = 'interrupted'));",
+        "SELECT count(*) FROM data_manager.jobs WHERE (finished_at IS NULL OR execution_state->>'publication' = 'unknown' OR (execution_version IS NULL AND finished_at IS NULL AND status = 'interrupted'));",
       ),
     ).toBe("0");
     expect(

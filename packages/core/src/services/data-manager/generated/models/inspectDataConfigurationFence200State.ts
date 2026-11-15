@@ -7,5 +7,4 @@ export type InspectDataConfigurationFence200State =
 export const InspectDataConfigurationFence200State = {
   prepared: "prepared",
   settled: "settled",
-  recovery_required: "recovery_required",
 } as const;

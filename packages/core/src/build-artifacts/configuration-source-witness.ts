@@ -37,7 +37,6 @@ import {
   writePrivateRecord,
 } from "./control-authority";
 import { signControl, verifyControl } from "./control-records";
-import { verifyFamilyOwnedRecord } from "./retention-family";
 
 const domain = "openmapx-configuration-source-witness-v1";
 const witnessSchema = z.strictObject({
@@ -79,7 +78,6 @@ export function captureConfigurationHandoffHostSources(
   if (
     state.kind !== "configurationHandoff.prepare" ||
     local.fixedChildId ||
-    !state.origin ||
     !child.fixedChildId ||
     helper.installationId !== local.installation.installationId ||
     fixedControlChildId(local, helper.publicKey, state.execution) !== child.fixedChildId
@@ -110,18 +108,12 @@ export function captureConfigurationHandoffHostSources(
       readPrivateRecord(local, "observations", name(owner.plan.operation.expectedSourceRevision)),
       witnessSchema,
     );
-  verifyFamilyOwnedRecord(
-    local,
-    state.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name: ownerName },
-    canonicalJson(raw),
-  );
   if (
     canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
     owner.receipt.generation !== "committed" ||
     owner.receipt.appliedRevisionId !== operation.expectedCurrentRevisionId ||
     owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide?.receiptDelivery ||
+    !owner.apiControls.decide ||
     !owner.plan.steps.some(
       (step) =>
         step.phase === "maintenance-handoff" &&
@@ -194,12 +186,6 @@ export function assertConfigurationHandoffHostSources(authority: VerifiedExecuti
       configurationHandoffWorkerRecordSchema,
     ),
     files = currentSources(infraDir, {});
-  verifyFamilyOwnedRecord(
-    local,
-    intent.origin,
-    { scope: "private", namespace: "observations", container: "", name: file },
-    canonicalJson(publication),
-  );
   if (
     worker.intentDigest !== controlDigest(intent) ||
     canonicalJson(worker.execution) !== canonicalJson(intent.helper) ||

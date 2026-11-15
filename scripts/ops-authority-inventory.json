@@ -63,7 +63,6 @@
       "configurationMaintenance.inspect",
       "configurationMaintenance.prepare",
       "configurationMaintenance.settle",
-      "controlRetention.acknowledge",
       "coreService.restart",
       "data.clean",
       "data.convertOverpass",
@@ -191,14 +190,6 @@
       "callSiteIds": [],
       "semanticSources": ["apps/ops-agent/src/production-runtime.ts#createProductionOpsRuntime"],
       "typedKinds": ["services.inspect"]
-    },
-    {
-      "id": "api.control-retention.acknowledge",
-      "callSiteIds": [],
-      "semanticSources": [
-        "packages/core/src/build-artifacts/control-authority.ts#acknowledgeControlRetention"
-      ],
-      "typedKinds": ["controlRetention.acknowledge"]
     },
     {
       "id": "api.admin-cli.data",

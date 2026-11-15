@@ -462,25 +462,30 @@ and [Valhalla scripted image](https://github.com/valhalla/valhalla/blob/master/d
 
 Platform-wide settings use the reviewed [Platform configuration](./platform-configuration.md) workflow.
 
-## Control retention and interrupted shutdown
+## Control record prune and interrupted shutdown
 
-The operations agent and Data Manager each collect eligible control records at
-startup and every five minutes, even when no new job is submitted. Standalone
-host CLI mutations also make a bounded cleanup pass. Cleanup requires the
-original completed-operation proofs, participating roles' acknowledgements, origin
-expiry and the retention floor (at least 72 hours). Pending or unverifiable work
-is preserved; expiry alone never authorizes deleting a lock or replaying an effect.
-Two consecutive passes blocked by the same role's collector guard produce a
-warning; the collector never removes that guard automatically.
+The operations agent, Data Manager and standalone host CLI mutations each prune
+their own control records at startup, and the long-running services then prune
+hourly, even when no new job is submitted. A finished operation's records are
+removed 72 hours after its root key expired, once its outcome is known and any
+target lease it held is released. Records of an operation whose outcome is
+unknown, or that needs recovery, are kept; age alone never authorizes deleting a
+lock or replaying an effect. A failed prune pass is logged as a warning and
+retried at the next pass.
+
+A service refuses new control work while its control state filesystem has less
+than 64 MiB free. Free space on that filesystem and retry; recorded work is not
+affected. Keep host clocks synchronised: a clock set back by days can admit an
+expired operation key again after its records were pruned.
 
 The agent handles SIGTERM and SIGINT by closing its listener and awaiting close
-hooks, including any running retention pass. Its shutdown deadline is 30 seconds;
+hooks, including any running prune pass. Its shutdown deadline is 30 seconds;
 the shipped Compose manifest allows 45 seconds before Docker forces termination.
 Re-render and recreate the agent to adopt that Compose setting. A forced stop,
 process crash or power failure can still leave an operation or writer guard
 requiring supervised recovery.
 
-If cleanup reports a busy or unrecoverable writer after a crash:
+If a service reports a busy or unrecoverable writer after a crash:
 
 1. Preserve the logs and an ownership/mode-preserving copy of the control stores.
    Identify the affected role and its actual mounts using the deployment's
@@ -490,17 +495,16 @@ If cleanup reports a busy or unrecoverable writer after a crash:
    of a directory or absence of one PID is insufficient evidence.
 3. Only after establishing that exclusion, an interrupted **empty writer-guard
    directory** may be removed with `rmdir` at its verified exact path. Do not
-   recursively remove a control store, family, target lease/lock, execution,
-   receipt, index, clock or high-water record. Do not reset signed state to zero
-   to make capacity available.
+   recursively remove a control store, target lease/lock, execution, receipt or
+   index record. Do not delete signed records to make capacity available.
 4. Restart the services and inspect their recovery logs and Activity. Original
-   signature, inode, clock and completion checks still apply. Removing a stale
+   signature and completion checks still apply. Removing a stale
    writer guard proves neither cancellation nor containment: an uncertain
    operation must remain fenced until its original recovery requirements hold.
 
-Clock rollback, mismatched signed files or missing completion evidence need
-separate supervised recovery. Do not repair those by editing signatures, copying
-records onto new inodes or repeatedly deleting guards.
+Mismatched signed files or missing completion evidence need separate supervised
+recovery. Do not repair those by editing signatures, copying records or
+repeatedly deleting guards.
 
 ## Platform configuration topics
 

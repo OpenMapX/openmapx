@@ -257,7 +257,7 @@ describe("typed Compose facade", () => {
       });
       expect(result).toMatchObject({
         exitCode: 1,
-        stderr: "Operations request failed (control_upgrade_required).",
+        stderr: "Operations request failed (validation).",
       });
       expect(execute).not.toHaveBeenCalled();
     },

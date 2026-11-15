@@ -30,7 +30,6 @@ import { readProjection } from "./admin-job-projection";
 import {
   adminJobObservationDue,
   claimAdminJob,
-  hasPendingReceiptDelivery,
   hasUnsettledManagedOperation,
   insertOwnedJobLog,
   type JobExecution,
@@ -38,7 +37,6 @@ import {
   JobStepAllocationConflict,
   JobStepCapacityExceeded,
   jobOwnership,
-  noPendingReceiptDelivery,
   noUnsettledManagedOperation,
   readJobExecution,
   renewAdminJobClaim,
@@ -947,12 +945,7 @@ class AdminJobRunner {
       .update(adminJob)
       .set({ status: "canceled", finishedAt: canceledAt })
       .where(
-        and(
-          eq(adminJob.id, jobId),
-          eq(adminJob.status, "queued"),
-          noPendingReceiptDelivery(),
-          noUnsettledManagedOperation(),
-        ),
+        and(eq(adminJob.id, jobId), eq(adminJob.status, "queued"), noUnsettledManagedOperation()),
       )
       .returning({ id: adminJob.id });
     if (queued.length > 0) {
@@ -986,20 +979,7 @@ class AdminJobRunner {
             .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
         },
       });
-    } catch (error) {
-      if (error instanceof JobObservationPending && error.reason === "receipt_delivery") {
-        const observation = {
-          state: "receipt_delivery",
-          reason: "receipt_delivery",
-          nextCheckAt: new Date(Date.now() + 5000).toISOString(),
-        };
-        await db
-          .update(adminJob)
-          .set({
-            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ observation })}::jsonb`,
-          })
-          .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
-      }
+    } catch {
       /* Retain intent. */
     }
     if (outcome !== "canceled" && outcome !== "recovered_failure") return false;
@@ -1039,7 +1019,6 @@ class AdminJobRunner {
       .where(
         and(
           jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]),
-          noPendingReceiptDelivery(),
           noUnsettledManagedOperation(),
         ),
       )
@@ -1490,14 +1469,14 @@ class AdminJobRunner {
 
     if (!observe) this.announce(jobId, "running", { startedAt: new Date().toISOString() });
     const startedAtMs = Date.now();
-    const pending = async (reason: OpsObservationPending["reason"] | "receipt_delivery") => {
+    const pending = async (reason: OpsObservationPending["reason"]) => {
       try {
         const attempts = Math.min(12, Number(ctx.checkpointResult?._observationAttempts ?? 0) + 1);
         const observationPatch = {
           _observationAttempts: attempts,
           _observationLeaseUntil: null,
           observation: {
-            state: reason === "receipt_delivery" ? "receipt_delivery" : "unknown",
+            state: "unknown",
             reason,
             nextCheckAt: new Date(
               Date.now() + Math.min(60_000, 5_000 * 2 ** (attempts - 1)),
@@ -1545,15 +1524,6 @@ class AdminJobRunner {
               .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
           throw new JobObservationPending("recovery_required");
         }
-        if (hasPendingReceiptDelivery(ctx.checkpointResult)) {
-          await db
-            .update(adminJob)
-            .set({
-              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(safeMerged), error } })}::jsonb`,
-            })
-            .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
-          throw new JobObservationPending("receipt_delivery");
-        }
         const finishedAt = new Date();
         const rows = await db
           .update(adminJob)
@@ -1564,13 +1534,7 @@ class AdminJobRunner {
             finishedAt,
             ...(status === "success" ? { progress: 100 } : {}),
           })
-          .where(
-            and(
-              jobOwnership(jobId, execution),
-              noPendingReceiptDelivery(),
-              noUnsettledManagedOperation(),
-            ),
-          )
+          .where(and(jobOwnership(jobId, execution), noUnsettledManagedOperation()))
           .returning({ id: adminJob.id });
         if (rows.length) {
           this.announce(jobId, status, {
@@ -1587,7 +1551,7 @@ class AdminJobRunner {
               result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(safeMerged), error } })}::jsonb`,
             })
             .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
-          await pending("receipt_delivery");
+          await pending("transport");
         }
       } catch (error) {
         if (error instanceof JobObservationPending) throw error;
@@ -1687,7 +1651,6 @@ class AdminJobRunner {
               .where(
                 and(
                   jobOwnership(jobId, execution, ["cancel_pending"]),
-                  noPendingReceiptDelivery(),
                   noUnsettledManagedOperation(),
                 ),
               )
@@ -1777,7 +1740,6 @@ class AdminJobRunner {
             inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
             sql`${adminJob.result}->'_configurationCandidate'->>'phase' IN ('prepared','discarding_without_guard')`,
             sql`${adminJob.result}->>'_cancelRequestedAt' IS NOT NULL`,
-            noPendingReceiptDelivery(),
             noUnsettledManagedOperation(),
           ),
         )

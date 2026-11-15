@@ -44,7 +44,6 @@ import {
   childSettlementState,
   readPrivateRecord,
 } from "../../../packages/core/src/build-artifacts/control-authority";
-import { originRecordDomain } from "../../../packages/core/src/build-artifacts/control-records";
 import { verifyDataTransitCandidateForExecution } from "../../../packages/core/src/build-artifacts/data-execution-candidate";
 import { AnchoredDirectory } from "../../../packages/core/src/build-artifacts/filesystem";
 import type { OpsRuntime } from "./runtime";
@@ -197,15 +196,7 @@ export function installCatalogApprovalRuntime(
       throw Error("Successful original validation completion required");
     const admission = verifyControl(
       installation.publicKey,
-      originRecordDomain(
-        "openmapx-control-execution",
-        readPrivateRecord(
-          own.installation,
-          "executions",
-          `${context.execution.operationKey}.json`,
-          65536,
-        ),
-      ),
+      "openmapx-control-execution-v2",
       readPrivateRecord(
         own.installation,
         "executions",

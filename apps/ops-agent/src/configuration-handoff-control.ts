@@ -1,10 +1,9 @@
 /** The detached helper adopts only its original fixed child grant. It has an
  * ephemeral signing key, no installation role key and no root acquisition. */
 import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
-  ArtifactTargetAdoptionObservationBusyError,
   ArtifactTargetJournalBusyError,
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
@@ -28,7 +27,6 @@ import {
   verifiedParentForArtifactDelegation,
   verifyConfigurationHelperReady,
   verifyControl,
-  verifyFamilyOwnedRecord,
   verifyFixedCliControlPeer,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson, type ExecutionRef, executionRefSchema } from "@openmapx/core/ops";
@@ -52,14 +50,7 @@ const children = new WeakMap<
   }
 >();
 function sourceReadBusy(error: unknown): boolean {
-  const io = error as NodeJS.ErrnoException | undefined;
-  return (
-    error instanceof ArtifactTargetJournalBusyError ||
-    (io?.code === "EEXIST" &&
-      io.syscall === "mkdir" &&
-      typeof io.path === "string" &&
-      basename(io.path) === ".family-writer")
-  );
+  return error instanceof ArtifactTargetJournalBusyError;
 }
 /** Retry only the caller's certified pre-write contention. The original
  * deadline remains authoritative; no lock is removed or stolen. */
@@ -154,10 +145,8 @@ export async function openConfigurationHandoffChild(input: {
           execution,
           serviceIds: intent.operation.serviceIds,
         }),
-      // A raw family-writer error may follow partial adoption and is never retried.
-      (error) =>
-        error instanceof ArtifactTargetAdoptionObservationBusyError ||
-        error instanceof ArtifactTargetJournalBusyError,
+      // Any other error may follow partial adoption and is never retried.
+      (error) => error instanceof ArtifactTargetJournalBusyError,
     );
     const authority = retainAdmittedControlExecution(installation, {
       execution,
@@ -215,17 +204,6 @@ export async function reconcileCompletedConfigurationHandoff(input: {
       configurationHandoffRecordDomains.completion,
       raw,
       configurationHandoffWorkerRecordSchema,
-    );
-    await waitForHandoffContention(
-      execution,
-      () =>
-        verifyFamilyOwnedRecord(
-          state,
-          intent.origin,
-          { scope: "private", namespace: "observations", container: "", name: file },
-          canonicalJson(raw),
-        ),
-      sourceReadBusy,
     );
     if (worker.phase !== "applied" || canonicalJson(worker.execution) !== canonicalJson(execution))
       throw Error("Unfinished original helper remains fenced");

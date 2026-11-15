@@ -10,6 +10,7 @@ export { configurationMigrationPreview } from "./configuration-migration-schema"
 
 // data-manager pipeline observability (Postgres schema "data_manager")
 export {
+  configurationFence as dataManagerConfigurationFence,
   dataManager,
   feedState as dataManagerFeedState,
   jobStages as dataManagerJobStages,

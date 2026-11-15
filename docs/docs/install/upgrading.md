@@ -45,6 +45,13 @@ still happen in steps; it does not promise a simultaneous switch or automatic
 rollback of database changes. The docs website has its own publication channel
 and is not part of this application update.
 
+Some releases change how the operations agent and Data Manager store their
+records of host operations and do not convert earlier records; their release
+notes mark the change as breaking. Upgrade to such a release only when Activity
+shows no running operation and none waiting for recovery. Finished operations'
+records are pruned 72 hours after their keys expire, so an upgrade does not need
+to wait for them.
+
 ## 1. Optional: create a backup
 
 The backup command captures declared backup targets under

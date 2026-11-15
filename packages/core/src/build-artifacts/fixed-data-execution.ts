@@ -171,7 +171,6 @@ export function retainFixedSingleDataPlan(
     `data-plan-${s.execution.operationKey}.json`,
     signControl(s.installation.privateKey, "openmapx-fixed-data-plan-v1", body),
     true,
-    s.origin,
   );
 }
 export function readFixedSingleDataPlan(authority: VerifiedExecutionAuthority) {
@@ -256,7 +255,6 @@ export function retainCliDataAttempt(
       `data-attempt-${attempt.operationKey}.json`,
       signControl(s.installation.privateKey, "openmapx-cli-data-attempt-v1", attempt),
       !prior,
-      s.origin,
     );
   });
 }
