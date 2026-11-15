@@ -1,13 +1,9 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
-import Button from "@mui/material/Button";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
-import Typography from "@mui/material/Typography";
 import { useDirectionsStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import type { VoiceTiming } from "@openmapx/core/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -18,7 +14,7 @@ import {
 } from "@/integration-api/runtime/useFullScreenOnMobile";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { speakOnce, useAvailableVoices } from "@/lib/navigation/useNavigationVoice";
-import { Section, SettingRow, SwitchControl } from "./settingsPrimitives";
+import { ActionRow, ChoiceRow, Section, SwitchRow } from "./settingsPrimitives";
 
 const VOICE_TIMING_OPTIONS: { value: VoiceTiming; labelKey: string }[] = [
   { value: "early", labelKey: "voiceTimingEarly" },
@@ -68,12 +64,6 @@ export function NavigationSettingsDialog({
   const avoidFerries = useDirectionsStore((s) => s.avoidFerries);
   const setAvoidFerries = useDirectionsStore((s) => s.setAvoidFerries);
 
-  const hint = (text: string) => (
-    <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-      {text}
-    </Typography>
-  );
-
   return (
     <Dialog
       open={open}
@@ -89,91 +79,83 @@ export function NavigationSettingsDialog({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent dividers>
+      <DialogContent dividers sx={{ px: 0, pt: 0 }}>
         <Section title={tn("sectionVoice")}>
-          <SettingRow label={tn("voiceGuidance")}>
-            <SwitchControl checked={voiceEnabled} onChange={() => void toggleVoice()} />
-          </SettingRow>
-          <SettingRow label={ts("voiceGuidanceTiming")}>
-            <Select
-              size="small"
-              fullWidth
-              value={voiceGuidanceTiming}
-              onChange={(e) => void setVoiceTiming(e.target.value as VoiceTiming)}
-            >
-              {VOICE_TIMING_OPTIONS.map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {ts(o.labelKey)}
-                </MenuItem>
-              ))}
-            </Select>
-          </SettingRow>
-          <SettingRow label={tn("voice")}>
-            <Select
-              size="small"
-              fullWidth
-              value={voiceName ?? ""}
-              onChange={(e) => setVoiceName(e.target.value || null)}
-            >
-              <MenuItem value="">{tn("voiceDefault")}</MenuItem>
-              {voices.map((v) => (
-                <MenuItem key={v.name} value={v.name}>
-                  {`${v.name} (${v.lang})`}
-                </MenuItem>
-              ))}
-            </Select>
-          </SettingRow>
-          <Button
-            size="small"
-            variant="outlined"
-            sx={{ mt: 0.5 }}
+          <SwitchRow
+            label={tn("voiceGuidance")}
+            checked={voiceEnabled}
+            onChange={() => void toggleVoice()}
+          />
+          <ChoiceRow
+            label={ts("voiceGuidanceTiming")}
+            value={voiceGuidanceTiming}
+            choices={VOICE_TIMING_OPTIONS.map((o) => ({ value: o.value, label: ts(o.labelKey) }))}
+            onChange={(next) => void setVoiceTiming(next)}
+          />
+          <ChoiceRow
+            label={tn("voice")}
+            value={voiceName ?? ""}
+            choices={[
+              { value: "", label: tn("voiceDefault") },
+              ...voices.map((v) => ({ value: v.name, label: `${v.name} (${v.lang})` })),
+            ]}
+            onChange={(next) => setVoiceName(next || null)}
+          />
+          <ActionRow
+            label={tn("voiceTest")}
             onClick={() => speakOnce(tn("voiceTestSample"), locale, voiceName)}
-          >
-            {tn("voiceTest")}
-          </Button>
+          />
         </Section>
 
         <Section title={tn("sectionAlerts")}>
-          <SettingRow label={ts("incidentAlerts")}>
-            <SwitchControl checked={incidentAlerts} onChange={setIncidentAlerts} />
-          </SettingRow>
-          {hint(ts("incidentAlertsHint"))}
-          <SettingRow label={ts("speedCameraAlerts")}>
-            <SwitchControl checked={speedCameraAlerts} onChange={setSpeedCameraAlerts} />
-          </SettingRow>
-          {hint(ts("speedCameraAlertsHint"))}
+          <SwitchRow
+            label={ts("incidentAlerts")}
+            description={ts("incidentAlertsHint")}
+            checked={incidentAlerts}
+            onChange={setIncidentAlerts}
+          />
+          <SwitchRow
+            label={ts("speedCameraAlerts")}
+            description={ts("speedCameraAlertsHint")}
+            checked={speedCameraAlerts}
+            onChange={setSpeedCameraAlerts}
+          />
         </Section>
 
         <Section title={tn("sectionRouting")}>
-          <SettingRow label={tn("avoidClosures")}>
-            <SwitchControl checked={avoidIncidents} onChange={setAvoidIncidents} />
-          </SettingRow>
-          <SettingRow label={tn("fasterRoutes")}>
-            <SwitchControl checked={fasterRoutes} onChange={setFasterRoutes} />
-          </SettingRow>
-          {hint(tn("fasterRoutesHint"))}
-          <SettingRow label={tn("autoSwitchFasterRoutes")}>
-            <SwitchControl checked={autoSwitchFasterRoutes} onChange={setAutoSwitchFasterRoutes} />
-          </SettingRow>
-          {hint(tn("autoSwitchFasterRoutesHint"))}
-          <SettingRow label={tn("avoidMotorways")}>
-            <SwitchControl checked={avoidHighways} onChange={setAvoidHighways} />
-          </SettingRow>
-          <SettingRow label={tn("avoidTolls")}>
-            <SwitchControl checked={avoidTolls} onChange={setAvoidTolls} />
-          </SettingRow>
-          <SettingRow label={tn("avoidFerries")}>
-            <SwitchControl checked={avoidFerries} onChange={setAvoidFerries} />
-          </SettingRow>
+          <SwitchRow
+            label={tn("avoidClosures")}
+            checked={avoidIncidents}
+            onChange={setAvoidIncidents}
+          />
+          <SwitchRow
+            label={tn("fasterRoutes")}
+            description={tn("fasterRoutesHint")}
+            checked={fasterRoutes}
+            onChange={setFasterRoutes}
+          />
+          <SwitchRow
+            label={tn("autoSwitchFasterRoutes")}
+            description={tn("autoSwitchFasterRoutesHint")}
+            checked={autoSwitchFasterRoutes}
+            onChange={setAutoSwitchFasterRoutes}
+          />
+          <SwitchRow
+            label={tn("avoidMotorways")}
+            checked={avoidHighways}
+            onChange={setAvoidHighways}
+          />
+          <SwitchRow label={tn("avoidTolls")} checked={avoidTolls} onChange={setAvoidTolls} />
+          <SwitchRow label={tn("avoidFerries")} checked={avoidFerries} onChange={setAvoidFerries} />
         </Section>
 
         <Section title={tn("sectionDuringNav")}>
-          <SettingRow label={tn("mapNorthUp")}>
-            <SwitchControl checked={mapNorthUp} onChange={setMapNorthUp} />
-          </SettingRow>
-          <SettingRow label={tnav("keepScreenOn")}>
-            <SwitchControl checked={keepScreenOn} onChange={() => void toggleKeepScreenOn()} />
-          </SettingRow>
+          <SwitchRow label={tn("mapNorthUp")} checked={mapNorthUp} onChange={setMapNorthUp} />
+          <SwitchRow
+            label={tnav("keepScreenOn")}
+            checked={keepScreenOn}
+            onChange={() => void toggleKeepScreenOn()}
+          />
         </Section>
       </DialogContent>
     </Dialog>

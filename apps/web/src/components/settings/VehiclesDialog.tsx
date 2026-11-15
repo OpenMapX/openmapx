@@ -324,7 +324,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
         )}
 
         {draft && (
-          <Section title={draft.id ? t("edit") : t("add")}>
+          <Section inset title={draft.id ? t("edit") : t("add")}>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               <TextField
                 size="small"

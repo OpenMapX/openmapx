@@ -237,7 +237,7 @@ describe("failed saves on personal data surfaces", () => {
     act(() => useSavedPlacesStore.getState().selectList("list-1"));
     renderWithNotice(<SavedListDetail />);
 
-    await userEvent.click(screen.getByRole("button", { name: `+ ${en.saved.note}` }));
+    await userEvent.click(screen.getByRole("button", { name: en.saved.addNote }));
     await userEvent.keyboard("Window seat{Enter}");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(FAILED);

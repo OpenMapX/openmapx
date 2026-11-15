@@ -1,14 +1,6 @@
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import IconButton from "@mui/material/IconButton";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Link from "next/link";
-import { getTranslations } from "next-intl/server";
 
-export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
-  const t = await getTranslations("settings");
+export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   return (
     <Box
       sx={{
@@ -23,39 +15,9 @@ export default async function SettingsLayout({ children }: { children: React.Rea
         pb: "var(--omx-safe-bottom)",
       }}
     >
-      <Box
-        component="header"
-        sx={{
-          flexShrink: 0,
-          bgcolor: "background.paper",
-          borderBottom: 1,
-          borderColor: "divider",
-        }}
-      >
-        <Container maxWidth="md" sx={{ py: 1.5 }}>
-          <Stack
-            direction="row"
-            spacing={1.5}
-            sx={{
-              alignItems: "center",
-            }}
-          >
-            <Link href="/" aria-label={t("back")} style={{ display: "inline-flex" }}>
-              <IconButton size="small" component="span">
-                <ArrowBackIcon />
-              </IconButton>
-            </Link>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              {t("title")}
-            </Typography>
-          </Stack>
-        </Container>
-      </Box>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        <Container maxWidth="md" sx={{ py: 3 }}>
-          {children}
-        </Container>
-      </Box>
+      {/* Each page brings its own header (SettingsPageHeader), which sticks
+          to the top of this scroll container. */}
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>{children}</Box>
     </Box>
   );
 }

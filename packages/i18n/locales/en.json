@@ -3294,7 +3294,8 @@
     "importListLimit": "This list was not created because you already have {count, number} lists. Places already imported have been kept.",
     "importPlaceLimit": "Import stopped at the limit of {count, number} saved places. Places already imported have been kept.",
     "itemOptions": "Options for {name}",
-    "changeIcon": "Change list icon"
+    "changeIcon": "Change list icon",
+    "addNote": "Add note"
   },
   "share": {
     "sharedList": "Shared list",

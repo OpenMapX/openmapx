@@ -39,9 +39,6 @@ export function PreferencesClient() {
   return (
     <Stack spacing={3}>
       <Box>
-        <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
-          {t("preferencesTitle")}
-        </Typography>
         <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("preferencesDescription")}
         </Typography>

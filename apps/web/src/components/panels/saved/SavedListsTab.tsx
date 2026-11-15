@@ -33,7 +33,7 @@ import { useRef, useState } from "react";
 import { ClickableRow } from "@/components/ui/ClickableRow";
 import Dialog from "@/components/ui/Dialog";
 import Menu from "@/components/ui/Menu";
-import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
 import { type SavedWriteError, savedWriteError } from "@/lib/savedWriteError";
 
@@ -112,38 +112,23 @@ export function SavedListsTab() {
 
   return (
     <Box sx={{ px: 2, py: 1.5 }}>
-      <Button
-        fullWidth
-        startIcon={<AddIcon />}
-        onClick={handleCreate}
-        disabled={createListMutation.isPending}
-        sx={{
-          borderRadius: 24,
-          bgcolor: BRAND_LIGHT,
-          color: BRAND,
-          textTransform: "none",
-          fontWeight: 500,
-          mb: 1.5,
-          "&:hover": { bgcolor: BRAND_LIGHT, filter: "brightness(0.95)" },
-        }}
-      >
-        {t("newList")}
-      </Button>
-      <Button
-        fullWidth
-        startIcon={<UploadFileIcon />}
-        onClick={() => importInput.current?.click()}
-        sx={{
-          borderRadius: 24,
-          bgcolor: BRAND_LIGHT,
-          color: BRAND,
-          textTransform: "none",
-          fontWeight: 500,
-          mb: 1.5,
-        }}
-      >
-        {t("import")}
-      </Button>
+      <Box sx={{ display: "flex", gap: 1, mb: 1.5 }}>
+        <Button
+          variant="tonal"
+          startIcon={<AddIcon />}
+          onClick={handleCreate}
+          disabled={createListMutation.isPending}
+        >
+          {t("newList")}
+        </Button>
+        <Button
+          variant="tonal"
+          startIcon={<UploadFileIcon />}
+          onClick={() => importInput.current?.click()}
+        >
+          {t("import")}
+        </Button>
+      </Box>
       <ImportPlacesPicker inputRef={importInput} />
       {createError && (
         <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setCreateError(null)}>
@@ -164,7 +149,19 @@ export function SavedListsTab() {
             onClick={() => selectList(list.id)}
             sx={{ flex: 1, gap: 1.5, py: 1.5, px: 1 }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+            {/* In a tinted circle, like the other lists' leading icons. */}
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "var(--omx-hover-bg)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
               {resolveListIcon(list.icon)}
             </Box>
 
