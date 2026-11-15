@@ -18,6 +18,7 @@ export async function installDisposableDataAdmission(sql: postgres.Sql): Promise
   for (const name of [
     "0004_data_manager_jobs_and_feed_state.sql",
     "0042_admin_data_execution.sql",
+    "0063_configuration_fence_table.sql",
   ]) {
     const body = readFileSync(join(migrations, name), "utf8")
       .replace('CREATE SCHEMA "data_manager";', 'CREATE SCHEMA IF NOT EXISTS "data_manager";')
