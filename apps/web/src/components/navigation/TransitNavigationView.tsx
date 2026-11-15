@@ -12,6 +12,8 @@ import { nextTransferFor } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { TransitLegChain } from "@/components/panels/directions/TransitLegChain";
+import { summaryChainLegs } from "@/components/panels/directions/transitSummary";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { NAV_CHROME_TOP, NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
@@ -124,6 +126,19 @@ export function TransitNavigationView() {
     );
   };
 
+  // The trip at a glance, as its route card named it; a single ride is
+  // already named by the controls below.
+  const chain =
+    summaryChainLegs(legs).length > 1 ? (
+      <TransitLegChain legs={legs} sx={{ px: 2, pt: isMobile ? 0 : 1.5 }} />
+    ) : null;
+  const controls = (
+    <TransitJourneyControls
+      walkRepair={walkRepair}
+      onAlternatives={() => setAlternativesOpen(true)}
+    />
+  );
+
   const menu = (
     <TransitNavMenu onOverview={handleOverview} onOpenSettings={() => setSettingsOpen(true)} />
   );
@@ -230,13 +245,11 @@ export function TransitNavigationView() {
                 onExpandedChange={setSheetOpen}
                 header={
                   <>
-                    <TransitJourneyControls
-                      walkRepair={walkRepair}
-                      onAlternatives={() => setAlternativesOpen(true)}
-                    />
-                    <TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />
+                    {chain}
+                    {controls}
                   </>
                 }
+                footer={<TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />}
               >
                 <TransitJourneySheet
                   itinerary={itinerary}
@@ -269,10 +282,8 @@ export function TransitNavigationView() {
                 }}
               >
                 <Box sx={{ flexShrink: 0 }}>
-                  <TransitJourneyControls
-                    walkRepair={walkRepair}
-                    onAlternatives={() => setAlternativesOpen(true)}
-                  />
+                  {chain}
+                  {controls}
                   <TransitNavBottomBar
                     itinerary={itinerary}
                     currentLeg={currentLeg}

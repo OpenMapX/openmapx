@@ -1,6 +1,5 @@
 "use client";
 
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DirectionsRunIcon from "@mui/icons-material/DirectionsRun";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import Box from "@mui/material/Box";
@@ -25,7 +24,6 @@ import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { DepartureTime } from "@/components/panels/transit/DepartureTime";
-import { LegBadge } from "@/components/panels/transit/LegBadge";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
@@ -45,7 +43,7 @@ import {
 import { formatCo2Emission } from "../../../lib/formatCo2";
 import { RouteCardActions, routeCardFrameSx } from "./routeCardChrome";
 import { TransitAccessibilityIndicator } from "./TransitAccessibilityIndicator";
-import { summaryChainLegs } from "./transitSummary";
+import { TransitLegChain } from "./TransitLegChain";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
   low: 0,
@@ -156,11 +154,14 @@ function LiveStopTime({
   event = "departure",
   tripId,
   stopId,
+  emphasis = false,
 }: {
   time: TransitTime;
   event?: TransitTimeEvent;
   tripId?: string;
   stopId?: string;
+  /** Body-sized and in full colour, as the times column of the trip's timeline. */
+  emphasis?: boolean;
 }) {
   const { data: journey } = useVehicleJourney(tripId ?? null);
   const stop = stopId ? journey?.stops.find((s) => s.stopId === stopId) : undefined;
@@ -171,7 +172,12 @@ function LiveStopTime({
   const changed = (transitDelayMinutes(pair) ?? 0) !== 0;
   return (
     <>
-      <DepartureTime {...pair} variant="caption" canceled={stop?.canceled} muted />
+      <DepartureTime
+        {...pair}
+        variant={emphasis ? "body2" : "caption"}
+        canceled={stop?.canceled}
+        muted={!emphasis}
+      />
       {changed && prediction && stop && (
         <AttributionStrip attributions={contributorsForRecords([stop])} variant="inline" />
       )}
@@ -333,8 +339,6 @@ export function TransitItineraryCard({
     );
   }
 
-  const summaryLegs = summaryChainLegs(itinerary.legs);
-
   const startNavigation = async () => {
     // Unlock TTS from this gesture so board/alight cues can speak on iOS.
     // A no-op inside the shell, where native owns the voice.
@@ -409,17 +413,7 @@ export function TransitItineraryCard({
       <Box
         sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 0.75 }}
       >
-        <Box
-          sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap", minWidth: 0 }}
-        >
-          {summaryLegs.map((leg, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-            <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-              {i > 0 && <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />}
-              <LegBadge leg={leg} />
-            </Box>
-          ))}
-        </Box>
+        <TransitLegChain legs={itinerary.legs} />
         {fareSummary && (
           <Typography
             variant="caption"
@@ -519,4 +513,4 @@ export function TransitItineraryCard({
 }
 
 // Re-export internal helpers needed by TransitDetailsView
-export { LegBadge, LegRemarks, LiveStopTime, TransitEmissionsBadge, TransitLiveBadge };
+export { LegRemarks, LiveStopTime, TransitEmissionsBadge, TransitLiveBadge };

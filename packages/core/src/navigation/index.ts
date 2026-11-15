@@ -406,6 +406,7 @@ export {
 } from "./transitStops";
 export {
   composeWalkInstruction,
+  nextWalkManeuver,
   type TransitWalkManeuver,
   transitWalkVoiceCue,
   type WalkStepInfo,

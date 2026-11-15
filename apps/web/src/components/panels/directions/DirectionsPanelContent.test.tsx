@@ -147,7 +147,6 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
       </div>
     );
   },
-  LegBadge: () => <span />,
   LegRemarks: () => null,
   LiveStopTime: ({ time }: { time: { scheduledAt?: string; expectedAt?: string } }) => (
     <span>{time.expectedAt ?? time.scheduledAt}</span>

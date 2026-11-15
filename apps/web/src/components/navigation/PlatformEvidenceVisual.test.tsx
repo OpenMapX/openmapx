@@ -32,6 +32,7 @@ vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<object>()),
   useVehicleJourney: () => ({ data: undefined, isError: false, isFetching: false }),
+  useRouteAlerts: () => ({ data: undefined }),
   useStopTransfers: () => ({ data: undefined }),
 }));
 const codes = ["2", "2", "2", "3", "1", "3", "3", "3", "5 A-C"];
@@ -137,7 +138,9 @@ it("renders comparable RE1 platform states from the production banner and journe
         </ThemeProvider>
       </NextIntlClientProvider>,
     );
-    if (state === "before") expect(view.container.textContent).toContain("Pl. 37");
+    // Horrem is a stop the train only passes through: the journey sheet names
+    // platforms where the rider boards and gets off, not at every stop.
+    if (state === "before") expect(view.container.textContent).not.toContain("Pl. 37");
     else if (state === "after") {
       expect(view.container.textContent).not.toContain("Pl. 37");
       expect(view.container.textContent).toContain("5 A-C");
