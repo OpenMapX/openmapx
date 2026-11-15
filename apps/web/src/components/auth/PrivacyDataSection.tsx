@@ -81,109 +81,115 @@ async function saveResponse(response: Response): Promise<void> {
   }
 }
 
-export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
-  function PrivacyDataSection(_props, headingRef) {
-    const t = useTranslations("account");
-    const format = useFormatter();
-    const dateLabel = (value: string | null | undefined) => {
-      if (!value) return "";
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime())
-        ? ""
-        : format.dateTime(parsed, { dateStyle: "medium", timeStyle: "short" });
+export const PrivacyDataSection = forwardRef<
+  HTMLHeadingElement,
+  {
+    /** Off on the privacy page, whose own header already names the section. */
+    showTitle?: boolean;
+  }
+>(function PrivacyDataSection({ showTitle = true }, headingRef) {
+  const t = useTranslations("account");
+  const format = useFormatter();
+  const dateLabel = (value: string | null | undefined) => {
+    if (!value) return "";
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime())
+      ? ""
+      : format.dateTime(parsed, { dateStyle: "medium", timeStyle: "short" });
+  };
+  const [requests, setRequests] = useState<PrivacyRequestView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const mounted = useRef(false);
+  const loadVersion = useRef(0);
+  const load = useCallback(async () => {
+    if (!mounted.current) return;
+    const version = ++loadVersion.current;
+    const isCurrent = () => mounted.current && version === loadVersion.current;
+    setLoading(true);
+    try {
+      const result = await getPrivacyDataRequests();
+      if (!isCurrent()) return;
+      setRequests(result.requests.slice(0, 20));
+      // Clear only a previous list failure; keep an export message visible.
+      const loadFailed = t("privacyData.loadFailed");
+      setError((current) => (current === loadFailed ? null : current));
+    } catch {
+      if (isCurrent()) setError(t("privacyData.loadFailed"));
+    } finally {
+      if (isCurrent()) setLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    mounted.current = true;
+    void load();
+    return () => {
+      mounted.current = false;
+      ++loadVersion.current;
     };
-    const [requests, setRequests] = useState<PrivacyRequestView[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [busy, setBusy] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+  }, [load]);
 
-    const mounted = useRef(false);
-    const loadVersion = useRef(0);
-    const load = useCallback(async () => {
-      if (!mounted.current) return;
-      const version = ++loadVersion.current;
-      const isCurrent = () => mounted.current && version === loadVersion.current;
-      setLoading(true);
+  const download = useCallback(
+    async (retry = false) => {
+      setBusy("export");
+      setError(null);
       try {
-        const result = await getPrivacyDataRequests();
-        if (!isCurrent()) return;
-        setRequests(result.requests.slice(0, 20));
-        // Clear only a previous list failure; keep an export message visible.
-        const loadFailed = t("privacyData.loadFailed");
-        setError((current) => (current === loadFailed ? null : current));
-      } catch {
-        if (isCurrent()) setError(t("privacyData.loadFailed"));
-      } finally {
-        if (isCurrent()) setLoading(false);
-      }
-    }, [t]);
-
-    useEffect(() => {
-      mounted.current = true;
-      void load();
-      return () => {
-        mounted.current = false;
-        ++loadVersion.current;
-      };
-    }, [load]);
-
-    const download = useCallback(
-      async (retry = false) => {
-        setBusy("export");
-        setError(null);
-        try {
-          const response = await requestPrivacyExport("access_and_portability");
-          if (response.status === 401) {
-            const body = (await response.json().catch(() => null)) as { code?: string } | null;
-            if (body?.code === FRESH_SIGN_IN_REQUIRED) {
-              if (retry) {
-                // The new sign-in was not enough, usually because it skipped
-                // the account's second factor. Explain instead of looping.
-                writePendingExport(null);
-                if (mounted.current) setError(t("privacyData.secondFactorRequired"));
-                return;
-              }
-              // A new interactive sign-in proves the request; the export then
-              // continues once when this page loads again.
-              writePendingExport({ at: Date.now(), retried: false });
-              window.location.assign("/auth/privacy");
+        const response = await requestPrivacyExport("access_and_portability");
+        if (response.status === 401) {
+          const body = (await response.json().catch(() => null)) as { code?: string } | null;
+          if (body?.code === FRESH_SIGN_IN_REQUIRED) {
+            if (retry) {
+              // The new sign-in was not enough, usually because it skipped
+              // the account's second factor. Explain instead of looping.
+              writePendingExport(null);
+              if (mounted.current) setError(t("privacyData.secondFactorRequired"));
               return;
             }
-          }
-          if (!response.ok) throw new Error("export failed");
-          await saveResponse(response);
-          if (retry) writePendingExport(null);
-        } catch {
-          if (retry) writePendingExport(null);
-          if (mounted.current) setError(t("privacyData.exportFailed"));
-        } finally {
-          if (mounted.current) {
-            setBusy(null);
-            void load();
+            // A new interactive sign-in proves the request; the export then
+            // continues once when this page loads again.
+            writePendingExport({ at: Date.now(), retried: false });
+            window.location.assign("/auth/privacy");
+            return;
           }
         }
-      },
-      [load, t],
-    );
-
-    useEffect(() => {
-      if (claimPendingExport()) void download(true);
-    }, [download]);
-
-    const withdraw = async (request: PrivacyRequestView) => {
-      setBusy(request.id);
-      try {
-        await withdrawPrivacyDataRequest(request.id, request.version);
-        await load();
+        if (!response.ok) throw new Error("export failed");
+        await saveResponse(response);
+        if (retry) writePendingExport(null);
       } catch {
-        setError(t("privacyData.actionFailed"));
+        if (retry) writePendingExport(null);
+        if (mounted.current) setError(t("privacyData.exportFailed"));
       } finally {
-        setBusy(null);
+        if (mounted.current) {
+          setBusy(null);
+          void load();
+        }
       }
-    };
+    },
+    [load, t],
+  );
 
-    return (
-      <Box>
+  useEffect(() => {
+    if (claimPendingExport()) void download(true);
+  }, [download]);
+
+  const withdraw = async (request: PrivacyRequestView) => {
+    setBusy(request.id);
+    try {
+      await withdrawPrivacyDataRequest(request.id, request.version);
+      await load();
+    } catch {
+      setError(t("privacyData.actionFailed"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Box>
+      {showTitle && (
         <Typography
           ref={headingRef}
           tabIndex={-1}
@@ -192,85 +198,85 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
         >
           {t("privacyData.title")}
         </Typography>
-        <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>
-          {t("privacyData.description")}
-        </Typography>
-        {error && (
-          <Alert severity="warning" onClose={() => setError(null)} sx={{ mb: 1.5 }}>
-            {error}
-          </Alert>
-        )}
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1.5 }}>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<PrivacyTipIcon />}
-            onClick={() => void download(false)}
-            disabled={busy !== null}
-          >
-            {busy === "export" ? <CircularProgress size={16} /> : t("privacyData.downloadExport")}
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<DownloadIcon />}
-            onClick={() => void downloadPrivacyDeviceData()}
-          >
-            {t("privacyData.downloadDevice")}
-          </Button>
-        </Box>
-        <Divider sx={{ my: 1.5 }} />
-        {loading ? (
-          <CircularProgress size={20} />
-        ) : requests.length === 0 ? (
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {t("privacyData.noRequests")}
-          </Typography>
-        ) : (
-          <List dense disablePadding>
-            {requests.map((request) => (
-              <ListItem
-                key={request.id}
-                disableGutters
-                alignItems="flex-start"
-                sx={{ display: "block", py: 1 }}
-              >
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <PrivacyTipIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={t(`privacyData.states.${request.state}`)}
-                    secondary={t("privacyData.due", { date: dateLabel(request.dueAt) })}
-                  />
-                  <Chip
-                    size="small"
-                    label={
-                      request.kind === "access_and_portability"
-                        ? t("privacyData.accessAndPortability")
-                        : request.kind === "portability"
-                          ? t("privacyData.portability")
-                          : t("privacyData.access")
-                    }
-                  />
-                </Box>
-                {acceptsWithdrawal(request.state) && (
-                  <Box sx={{ pl: 4, display: "flex", gap: 1, flexWrap: "wrap", mt: 0.75 }}>
-                    <Button
-                      size="small"
-                      color="warning"
-                      onClick={() => void withdraw(request)}
-                      disabled={busy !== null}
-                    >
-                      {t("privacyData.withdraw")}
-                    </Button>
-                  </Box>
-                )}
-              </ListItem>
-            ))}
-          </List>
-        )}
+      )}
+      <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>
+        {t("privacyData.description")}
+      </Typography>
+      {error && (
+        <Alert severity="warning" onClose={() => setError(null)} sx={{ mb: 1.5 }}>
+          {error}
+        </Alert>
+      )}
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1.5 }}>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<PrivacyTipIcon />}
+          onClick={() => void download(false)}
+          disabled={busy !== null}
+        >
+          {busy === "export" ? <CircularProgress size={16} /> : t("privacyData.downloadExport")}
+        </Button>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<DownloadIcon />}
+          onClick={() => void downloadPrivacyDeviceData()}
+        >
+          {t("privacyData.downloadDevice")}
+        </Button>
       </Box>
-    );
-  },
-);
+      <Divider sx={{ my: 1.5 }} />
+      {loading ? (
+        <CircularProgress size={20} />
+      ) : requests.length === 0 ? (
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
+          {t("privacyData.noRequests")}
+        </Typography>
+      ) : (
+        <List dense disablePadding>
+          {requests.map((request) => (
+            <ListItem
+              key={request.id}
+              disableGutters
+              alignItems="flex-start"
+              sx={{ display: "block", py: 1 }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  <PrivacyTipIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={t(`privacyData.states.${request.state}`)}
+                  secondary={t("privacyData.due", { date: dateLabel(request.dueAt) })}
+                />
+                <Chip
+                  size="small"
+                  label={
+                    request.kind === "access_and_portability"
+                      ? t("privacyData.accessAndPortability")
+                      : request.kind === "portability"
+                        ? t("privacyData.portability")
+                        : t("privacyData.access")
+                  }
+                />
+              </Box>
+              {acceptsWithdrawal(request.state) && (
+                <Box sx={{ pl: 4, display: "flex", gap: 1, flexWrap: "wrap", mt: 0.75 }}>
+                  <Button
+                    size="small"
+                    color="warning"
+                    onClick={() => void withdraw(request)}
+                    disabled={busy !== null}
+                  >
+                    {t("privacyData.withdraw")}
+                  </Button>
+                </Box>
+              )}
+            </ListItem>
+          ))}
+        </List>
+      )}
+    </Box>
+  );
+});

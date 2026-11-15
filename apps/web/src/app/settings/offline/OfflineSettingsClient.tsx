@@ -40,6 +40,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SwitchRow } from "@/components/settings/settingsPrimitives";
 import Dialog from "@/components/ui/Dialog";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import type { ClientEnv } from "@/integration-api/runtime/env";
@@ -189,9 +190,6 @@ export function OfflineSettingsClient() {
   return (
     <Stack spacing={3}>
       <Box>
-        <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
-          {t("offline")}
-        </Typography>
         <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("offlineDescription")}
         </Typography>
@@ -304,26 +302,13 @@ function RecentDataOfflineToggle() {
     }
   };
   return (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-      <FormControlLabel
-        control={
-          <Switch
-            checked={enabled}
-            disabled={busy}
-            onChange={(event) => void handleChange(event.target.checked)}
-          />
-        }
-        label={
-          <Stack spacing={0.5}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {t("rememberRecentMapData")}
-            </Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              {t("rememberRecentMapDataDescription")}
-            </Typography>
-          </Stack>
-        }
-        sx={{ alignItems: "flex-start", m: 0 }}
+    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
+      <SwitchRow
+        label={t("rememberRecentMapData")}
+        description={t("rememberRecentMapDataDescription")}
+        checked={enabled}
+        disabled={busy}
+        onChange={(next) => void handleChange(next)}
       />
     </Paper>
   );
