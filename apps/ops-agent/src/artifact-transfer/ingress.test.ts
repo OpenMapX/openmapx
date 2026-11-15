@@ -1,4 +1,9 @@
-/** Opt-in exact-image ingress check; synthetic bytes only. No host Docker socket is mounted. */
+/** Opt-in exact-image ingress check; synthetic bytes only. No host Docker socket is mounted.
+ * Run from the repository root (it reads services/traefik/config/traefik.yml relative to the cwd):
+ *   RUN_ARTIFACT_INGRESS_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/artifact-transfer/ingress.test.ts
+ * Needs a local Docker daemon that can run (or pull) the pinned traefik@sha256:575fa15b… image
+ * and resolve host.docker.internal (Docker Desktop or OrbStack). Takes about a minute by design.
+ * Ordinary test runs and CI skip it. */
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
