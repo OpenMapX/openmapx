@@ -502,8 +502,20 @@ function isHttpUrl(s: string): boolean {
 
 function DetailItem({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
-      <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", fontSize: 20 }}>{icon}</Box>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 0.75 }}>
+      {/* As wide as the overview rows' icons, so text lines up in one column. */}
+      <Box
+        sx={{
+          color: BRAND,
+          flexShrink: 0,
+          display: "flex",
+          justifyContent: "center",
+          width: 22,
+          fontSize: 20,
+        }}
+      >
+        {icon}
+      </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
     </Box>
   );
@@ -550,6 +562,8 @@ export function getOverviewConsumedKeys(tags: Record<string, string>): Set<strin
 interface Props {
   osmTags: Record<string, string>;
   section?: "all" | "practical" | "remaining";
+  /** Off when the details continue a section that already opened with a divider. */
+  divider?: boolean;
   representedEmail?: string;
   place?: Pick<Place, "contributors" | "fieldContributors">;
 }
@@ -567,7 +581,13 @@ const PRACTICAL_GRID_KEYS = new Set([
   "changing_table",
 ]);
 
-export function PlaceTagDetails({ osmTags, section = "all", representedEmail, place }: Props) {
+export function PlaceTagDetails({
+  osmTags,
+  section = "all",
+  divider = true,
+  representedEmail,
+  place,
+}: Props) {
   const t = useTranslations("place");
 
   const tag = (k: string) => osmTags[k];
@@ -1206,7 +1226,7 @@ export function PlaceTagDetails({ osmTags, section = "all", representedEmail, pl
 
   return (
     <>
-      <Divider sx={{ mx: section === "practical" ? 0 : 2, my: 1 }} />
+      {divider && <Divider sx={{ mx: section === "practical" ? 0 : 2, my: 1 }} />}
       <Box sx={{ px: section === "practical" ? 0 : 2, py: 0.5 }}>
         {/* Operator */}
         {section !== "practical" &&
@@ -1395,8 +1415,17 @@ export function PlaceTagDetails({ osmTags, section = "all", representedEmail, pl
         {/* Multilingual text entries (description, note, *:location, etc.) */}
         {section !== "practical" &&
           multilingualEntries.map((entry) => (
-            <Box key={entry.label} sx={{ display: "flex", gap: 1.5, py: 0.75 }}>
-              <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", mt: "2px" }}>
+            <Box key={entry.label} sx={{ display: "flex", gap: 2, py: 0.75 }}>
+              <Box
+                sx={{
+                  color: BRAND,
+                  flexShrink: 0,
+                  display: "flex",
+                  justifyContent: "center",
+                  width: 22,
+                  mt: "2px",
+                }}
+              >
                 <NotesIcon sx={{ fontSize: 20 }} />
               </Box>
               <Box sx={{ flex: 1, minWidth: 0 }}>

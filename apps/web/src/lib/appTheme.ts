@@ -61,6 +61,27 @@ export const appTheme = createTheme({
     MuiPaper: {
       defaultProps: { elevation: 0 },
     },
+    MuiButton: {
+      styleOverrides: {
+        // Pill-shaped buttons; fields and cards keep the shared corner radius.
+        root: { borderRadius: 999 },
+      },
+      variants: [
+        {
+          // A secondary action on a light brand tint, quieter than `contained`
+          // and more present than `text`.
+          props: { variant: "tonal" },
+          style: {
+            paddingInline: 16,
+            backgroundColor: "var(--omx-brand-light)",
+            color: "var(--omx-brand)",
+            "&:hover": {
+              backgroundColor: "color-mix(in srgb, var(--omx-brand-light) 85%, var(--omx-brand))",
+            },
+          },
+        },
+      ],
+    },
     MuiAccordion: {
       styleOverrides: {
         // MUI draws a top divider via an ::before pseudo-element intended for
@@ -119,3 +140,9 @@ export const appTheme = createTheme({
     },
   },
 });
+
+declare module "@mui/material/Button" {
+  interface ButtonPropsVariantOverrides {
+    tonal: true;
+  }
+}

@@ -25,6 +25,7 @@ import { useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useAttributionGroupPlacement } from "@/components/ui/attributionGroupContext";
 import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
+import { PanelSectionTitle } from "../shared/PanelSectionTitle";
 import { buildExternalRefs, type ExternalRef } from "./externalIdLinks";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
 
@@ -368,15 +369,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
         <>
           {hasDescription && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-            <Typography
-              variant="subtitle2"
-              gutterBottom
-              sx={{
-                fontWeight: 600,
-              }}
-            >
-              {t("aboutThisPlace")}
-            </Typography>
+            <PanelSectionTitle>{t("aboutThisPlace")}</PanelSectionTitle>
             <Box
               sx={{
                 display: "grid",
@@ -408,15 +401,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
         <Box key={group.labelKey}>
           {(idx === 0 ? showDividerBeforeOsm : true) && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-            <Typography
-              variant="subtitle2"
-              gutterBottom
-              sx={{
-                fontWeight: 600,
-              }}
-            >
-              {t(group.labelKey)}
-            </Typography>
+            <PanelSectionTitle>{t(group.labelKey)}</PanelSectionTitle>
             <Box
               sx={{
                 display: "grid",
@@ -436,15 +421,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
         <>
           {(hasDescription || hasFacts || osmGroups.length > 0) && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-            <Typography
-              variant="subtitle2"
-              gutterBottom
-              sx={{
-                fontWeight: 600,
-              }}
-            >
-              {t("externalReferences")}
-            </Typography>
+            <PanelSectionTitle>{t("externalReferences")}</PanelSectionTitle>
             <Box sx={{ display: "flex", flexDirection: "column" }}>
               {externalRefs.map((ref) => (
                 <ExternalRefRow key={ref.scheme} ref={ref} />

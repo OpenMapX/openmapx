@@ -33,6 +33,7 @@ import type { ReactNode } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";
+import { PanelSectionTitle } from "../shared/PanelSectionTitle";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
 import { DataSourceNearbyTransit } from "./DataSourceNearbyTransit";
 import { useDataSourceI18nResolver } from "./useDataSourceI18nResolver";
@@ -282,16 +283,9 @@ export function DataSourceSections({ detail, domain }: Props) {
       <Divider sx={{ mx: 2, my: 1 }} />
       {/* Section header — like Transit section */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
-        <Box sx={{ color: BRAND, display: "flex" }}>{header.icon}</Box>
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 600,
-            color: "text.primary",
-          }}
-        >
+        <PanelSectionTitle icon={header.icon} gutterBottom={false}>
           {header.titleKey ? t(header.titleKey) : header.titleFallback}
-        </Typography>
+        </PanelSectionTitle>
       </Box>
       {(rentalUri || detail.actions?.mapContext) && (
         <Box sx={{ display: "flex", gap: 1, px: 2, py: 1, flexWrap: "wrap" }}>

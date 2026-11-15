@@ -21,6 +21,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { PanelSectionTitle } from "../shared/PanelSectionTitle";
 import { SectionLabel } from "../shared/SectionLabel";
 
 const FT_TO_M = 0.3048;
@@ -42,18 +43,9 @@ export function PlaceAirportInfo({ airport, attributions }: Props) {
       <Divider sx={{ mx: 2, my: 1 }} />
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
-        <Box sx={{ color: BRAND, display: "flex" }}>
-          <FlightTakeoffIcon sx={{ fontSize: 20 }} />
-        </Box>
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 600,
-            color: "text.primary",
-          }}
-        >
+        <PanelSectionTitle icon={<FlightTakeoffIcon />} gutterBottom={false}>
           {t("section")}
-        </Typography>
+        </PanelSectionTitle>
         <Box sx={{ flex: 1 }} />
         <Typography
           variant="caption"
