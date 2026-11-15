@@ -7,7 +7,9 @@ import Typography from "@mui/material/Typography";
 import { formatDuration } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
+import { tripPlaceName } from "@/components/panels/directions/transitSummary";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { useTripEndLabels } from "@/lib/navigation/useTripEndLabels";
 
 /**
  * Transit arrival summary: names the destination and recaps the trip (total
@@ -24,7 +26,9 @@ export function TransitArrivalCard({
   const t = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
-  const destination = itinerary.legs[itinerary.legs.length - 1]?.to.name;
+  const labels = useTripEndLabels();
+  const last = itinerary.legs[itinerary.legs.length - 1];
+  const destination = last && tripPlaceName(last.to, labels.destination);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1.5, p: 3 }}>

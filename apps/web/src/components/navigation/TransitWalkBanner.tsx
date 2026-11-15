@@ -3,6 +3,7 @@
 import { type TransitProgress, useNavigationStore } from "@openmapx/core";
 import {
   composeWalkInstruction,
+  nextWalkManeuver,
   transitWalkVoiceCue,
   walkLegStepProgress,
   walkStepInfo,
@@ -11,9 +12,11 @@ import { formatNavigationCue } from "@openmapx/i18n";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect } from "react";
+import { tripPlaceName } from "@/components/panels/directions/transitSummary";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { claimBrowserTransitCue } from "@/lib/navigation/transitCueLedger";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
+import { useTripEndLabels } from "@/lib/navigation/useTripEndLabels";
 import { ManeuverBanner } from "./ManeuverBanner";
 
 /**
@@ -38,6 +41,7 @@ export function TransitWalkBanner({
   const speak = useNavigationVoice(locale);
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
 
+  const destination = tripPlaceName(leg.to, useTripEndLabels().destination);
   const steps = leg.steps ?? [];
   const fraction = transitProgress?.fractionAlongLeg ?? 0;
   const fallback = walkLegStepProgress(steps, fraction);
@@ -48,14 +52,27 @@ export function TransitWalkBanner({
   // The maneuver you're approaching sits at the END of the current step, i.e. the
   // next step's turn; past the last step you're arriving at the leg destination.
   const upcoming = steps[currentStepIndex + 1];
-  const nextAfter = steps[currentStepIndex + 2];
+  // What the banner shows skips the planner's bare "continue" steps, so it
+  // counts down to the next real turn (or the stop) rather than to a
+  // "Continue, then continue".
+  const shown = nextWalkManeuver(steps, currentStepIndex, distanceToNextStepMeters);
+  const then = shown.index === null ? null : nextWalkManeuver(steps, shown.index, 0);
+  const shownInfo = shown.index === null ? null : walkStepInfo(steps[shown.index]);
+  const maneuver = shownInfo ? shownInfo.maneuver : { type: "arrive" };
+  const shownInstruction = shownInfo
+    ? composeWalkInstruction(shownInfo, t)
+    : t("walkDir.arrive", { place: destination });
+  const nextInfo = then?.index != null ? walkStepInfo(steps[then.index]) : null;
+  const nextInstruction = nextInfo
+    ? composeWalkInstruction(nextInfo, t)
+    : then
+      ? t("walkDir.arrive", { place: destination })
+      : undefined;
+  // The voice cue still follows each step, which carries its own geometry.
   const upcomingInfo = upcoming ? walkStepInfo(upcoming) : null;
-  const maneuver = upcomingInfo ? upcomingInfo.maneuver : { type: "arrive" };
   const instruction = upcomingInfo
     ? composeWalkInstruction(upcomingInfo, t)
-    : t("walkDir.arrive", { place: leg.to.name });
-  const nextInfo = nextAfter ? walkStepInfo(nextAfter) : null;
-  const nextInstruction = nextInfo ? composeWalkInstruction(nextInfo, t) : undefined;
+    : t("walkDir.arrive", { place: destination });
 
   useEffect(() => {
     if (!browserAuthority || !transitProgress || transitProgress.confidence !== "gps" || !upcoming)
@@ -100,11 +117,11 @@ export function TransitWalkBanner({
 
   return (
     <ManeuverBanner
-      instruction={instruction}
-      distanceToManeuver={distanceToNextStepMeters}
+      instruction={shownInstruction}
+      distanceToManeuver={shown.distanceMeters}
       maneuver={maneuver}
       nextInstruction={nextInstruction}
-      nextManeuver={nextInfo?.maneuver}
+      nextManeuver={nextInfo?.maneuver ?? (then ? { type: "arrive" } : undefined)}
       units={units}
     />
   );

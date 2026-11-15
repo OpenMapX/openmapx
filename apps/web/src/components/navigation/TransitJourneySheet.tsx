@@ -5,11 +5,18 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
+import {
+  routeColor,
+  type TransitProgress,
+  useNavigationStore,
+  useVehicleJourney,
+} from "@openmapx/core";
 import { selectLegPlatform } from "@openmapx/core/navigation";
 import { selectStopPlatform } from "@openmapx/mobility-core/platform";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
+import { tripPlaceName } from "@/components/panels/directions/transitSummary";
+import { PanelSectionTitle } from "@/components/panels/shared/PanelSectionTitle";
 import { DepartureTime } from "@/components/panels/transit/DepartureTime";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
@@ -18,6 +25,7 @@ import {
   TransitQueryNotice,
 } from "@/components/panels/transit/TransitDataStatus";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
+import { useTripEndLabels } from "@/lib/navigation/useTripEndLabels";
 import { legTransitTime, stopTransitTime } from "@/lib/transitTime";
 import { useNow } from "@/lib/useNow";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
@@ -32,6 +40,9 @@ function StopTimeline({
   leg: TripLeg;
 }) {
   const t = useTranslations("navigation");
+  // The ride in its line's colour, as on the network map; the stretch already
+  // travelled greys out.
+  const line = routeColor({ color: leg.route?.color, mode: leg.mode });
   return (
     <Box sx={{ px: 2, py: 0.5 }}>
       {stops.map((stop, i) => {
@@ -46,7 +57,7 @@ function StopTimeline({
           : isLast
             ? legTransitTime(leg, "arrival", stop)
             : stopTransitTime(stop);
-        const dotColor = isNext ? "primary.main" : passed ? "text.disabled" : "text.secondary";
+        const dotColor = passed ? "text.disabled" : line;
         return (
           <Box
             // biome-ignore lint/suspicious/noArrayIndexKey: stops are ordered by sequence
@@ -82,8 +93,8 @@ function StopTimeline({
               <Box
                 sx={{
                   position: "absolute",
-                  width: 2,
-                  bgcolor: "divider",
+                  width: 4,
+                  bgcolor: i < nextIdx ? "divider" : line,
                   top: isFirst ? "9px" : 0,
                   bottom: isLast ? "calc(100% - 9px)" : 0,
                 }}
@@ -130,7 +141,8 @@ function StopTimeline({
                   {t("stopSkipped")}
                 </Typography>
               )}
-              {platform.code && !stop.canceled && (
+              {/* Only where the rider boards and gets off. */}
+              {(isFirst || isLast) && platform.code && !stop.canceled && (
                 <Box sx={{ mt: 0.25 }}>
                   <PlatformBadge code={platform.code} scheduledCode={platform.scheduledCode} />
                 </Box>
@@ -151,6 +163,7 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
   const legs = useNavigationStore((s) => s.itinerary?.legs);
   const platform = selectLegPlatform(leg, legs?.indexOf(leg) ?? -1, captures, "departure");
   const isWalk = leg.mode === "walking" || !leg.route;
+  const destination = useTripEndLabels().destination;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75 }}>
       <Box sx={{ width: "5.5em", fontSize: ".75rem", textAlign: "right", flexShrink: 0 }}>
@@ -173,7 +186,7 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
           variant="body2"
           sx={{ textDecoration: leg.cancelled ? "line-through" : undefined }}
         >
-          {isWalk ? t("walkTo", { place: leg.to.name }) : leg.to.name}
+          {isWalk ? t("walkTo", { place: tripPlaceName(leg.to, destination) }) : leg.to.name}
         </Typography>
         {leg.cancelled && (
           <Typography variant="caption" color="error.main" sx={{ fontWeight: 600 }}>
@@ -283,12 +296,9 @@ export function TransitJourneySheet({
       {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} leg={currentLeg} />}
       {upcomingLegs.length > 0 && (
         <>
-          <Typography
-            variant="overline"
-            sx={{ display: "block", px: 2, pt: 1, color: "text.secondary" }}
-          >
-            {t("restOfJourney")}
-          </Typography>
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <PanelSectionTitle gutterBottom={false}>{t("restOfJourney")}</PanelSectionTitle>
+          </Box>
           {upcomingLegs.map((leg) => (
             <UpcomingLegRow
               key={`${leg.tripId ?? leg.mode}-${leg.startTime}-${leg.from.stopId ?? leg.from.name}-${leg.to.stopId ?? leg.to.name}`}

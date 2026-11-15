@@ -2,6 +2,7 @@ import type { TransitStep } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
 import {
   composeWalkInstruction,
+  nextWalkManeuver,
   transitWalkVoiceCue,
   walkLegStepProgress,
   walkStepInfo,
@@ -120,4 +121,36 @@ it("keeps a distant walking turn quiet, then announces it at walking distances",
   expect(cue?.tier).toBe("far");
   if (!cue) throw Error("Expected a walking cue");
   expect(transitWalkVoiceCue(turn, 0, 100, 1.4, "Turn left", [cue.key])).toBeNull();
+});
+
+describe("nextWalkManeuver", () => {
+  it("folds bare continue steps into the distance to the next turn", () => {
+    const steps = [
+      step({ instruction: "DEPART", distanceMeters: 20 }),
+      step({ distanceMeters: 30 }),
+      step({ distanceMeters: 40 }),
+      step({ instruction: "LEFT", distanceMeters: 50 }),
+    ];
+    expect(nextWalkManeuver(steps, 0, 15)).toEqual({ index: 3, distanceMeters: 85 });
+  });
+
+  it("keeps a continue that names a street, a level change or its own text", () => {
+    expect(nextWalkManeuver([step({}), step({ streetName: "Main St" })], 0, 5).index).toBe(1);
+    expect(nextWalkManeuver([step({}), step({ stairs: true })], 0, 5).index).toBe(1);
+    expect(nextWalkManeuver([step({}), step({ instructionText: "Cross" })], 0, 5).index).toBe(1);
+  });
+
+  it("folds a continue along the street the walker is already on", () => {
+    const steps = [
+      step({ instruction: "LEFT", streetName: "Main St", distanceMeters: 20 }),
+      step({ streetName: "Main St", distanceMeters: 30 }),
+      step({ streetName: "High St", distanceMeters: 40 }),
+    ];
+    expect(nextWalkManeuver(steps, 0, 10)).toEqual({ index: 2, distanceMeters: 40 });
+  });
+
+  it("runs to the end of the walk when only bare continues remain", () => {
+    const steps = [step({ distanceMeters: 10 }), step({ distanceMeters: 25 })];
+    expect(nextWalkManeuver(steps, 0, 7)).toEqual({ index: null, distanceMeters: 32 });
+  });
 });

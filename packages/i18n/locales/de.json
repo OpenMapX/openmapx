@@ -268,7 +268,6 @@
     "alightedElsewhere": "Du bist möglicherweise nicht am geplanten Halt. Prüfe den nächsten Einstieg oder suche Alternativen.",
     "transitActionsUpdateRequired": "Aktualisiere die installierte App, um Ein- und Ausstieg zu bestätigen.",
     "transitActionFailed": "Die Aktion konnte nicht bestätigt werden. Deine Verbindung bleibt erhalten. Versuche es erneut.",
-    "nextStopLabel": "Nächster Halt",
     "transitAlternativesShort": "Alternativen",
     "findTransitAlternatives": "Alternativen suchen",
     "findingTransitAlternatives": "Alternativen werden gesucht",
@@ -286,6 +285,8 @@
     "stopCountUnavailable": "Haltestellenanzahl nicht verfügbar. Beachte die Haltestellen deiner Verbindung und bestätige den Ausstieg.",
     "stayOnBoard": "Sitzen bleiben",
     "stopsRemaining": "{count, plural, one {Noch # Halt} other {Noch # Halte}}",
+    "rideRemaining": "{count, plural, one {# Halt} other {# Halte}} · {minutes} Min.",
+    "stopsToGo": "{count, plural, one {# Halt} other {# Halte}}",
     "transitWalkRepair": {
       "repairing": "Gehweg zum gewählten Halt wird aktualisiert…",
       "unavailable": "Der Gehweg konnte nicht aktualisiert werden. Deine Verbindung bleibt bestehen. Suche bei Bedarf Alternativen.",

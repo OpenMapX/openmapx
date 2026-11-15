@@ -123,6 +123,41 @@ export function walkLegStepProgress(
   return { currentStepIndex: steps.length - 1, distanceToNextStepMeters: 0 };
 }
 
+/**
+ * The next walk step worth announcing after `currentStepIndex`, and how far
+ * away it is. Planners split a walk into many steps that only say "continue",
+ * with no turn, level or new street; showing those leaves the walker reading
+ * "Continue, then continue". They are folded into the distance instead, so the
+ * countdown runs to the next real turn. `index` is null when no such step
+ * remains, meaning the walk ends at its destination `distanceMeters` away.
+ */
+export function nextWalkManeuver(
+  steps: TransitStep[],
+  currentStepIndex: number,
+  distanceToNextStepMeters: number,
+): { index: number | null; distanceMeters: number } {
+  let distanceMeters = distanceToNextStepMeters;
+  for (let i = currentStepIndex + 1; i < steps.length; i++) {
+    const previousStreet = steps[i - 1]?.streetName || undefined;
+    if (!isBareContinue(walkStepInfo(steps[i]), previousStreet)) {
+      return { index: i, distanceMeters };
+    }
+    distanceMeters += steps[i].distanceMeters || 0;
+  }
+  return { index: null, distanceMeters };
+}
+
+/** A step that only carries on: no turn, no level change, no new street. */
+function isBareContinue(info: WalkStepInfo, previousStreet: string | undefined): boolean {
+  return (
+    info.maneuver.type === "continue" &&
+    !info.instructionText &&
+    (!info.streetName || info.streetName === previousStreet) &&
+    !info.stairs &&
+    !info.elevator
+  );
+}
+
 export function transitWalkVoiceCue(
   step: TransitStep,
   index: number,

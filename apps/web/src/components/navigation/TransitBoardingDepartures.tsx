@@ -1,9 +1,9 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
 import { useDepartures } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { PanelSectionTitle } from "@/components/panels/shared/PanelSectionTitle";
 import { DepartureRow } from "@/components/panels/transit/DepartureRow";
 import { TransitQueryNotice } from "@/components/panels/transit/TransitDataStatus";
 import { useNow } from "@/lib/useNow";
@@ -46,13 +46,11 @@ export function TransitBoardingDepartures({
 
   return (
     <Box>
-      <Typography
-        variant="overline"
-        sx={{ display: "block", px: 2, pt: 1, color: "text.secondary" }}
-        noWrap
-      >
-        {t("departuresAt", { stop: stopName })}
-      </Typography>
+      <Box sx={{ px: 2, pt: 1.5 }}>
+        <PanelSectionTitle gutterBottom={false}>
+          {t("departuresAt", { stop: stopName })}
+        </PanelSectionTitle>
+      </Box>
       <TransitQueryNotice
         failed={query.isError}
         partial={query.freshness?.isPartial}

@@ -1,7 +1,6 @@
 "use client";
 
 import type { SvgIconComponent } from "@mui/icons-material";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CommuteIcon from "@mui/icons-material/Commute";
 import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
@@ -59,15 +58,15 @@ import { composeTransitAlternative } from "@openmapx/mobility-core/transit-alter
 import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
+import { TransitLegChain } from "@/components/panels/directions/TransitLegChain";
 import {
-  LegBadge,
   LegRemarks,
   LiveStopTime,
   TransitEmissionsBadge,
   TransitLiveBadge,
 } from "@/components/panels/directions/TransitRouteView";
 import { TransitTransferSummary } from "@/components/panels/directions/TransitTransferSummary";
-import { summaryChainLegs } from "@/components/panels/directions/transitSummary";
+import { tripPlaceName } from "@/components/panels/directions/transitSummary";
 import { LegAlerts } from "@/components/panels/transit/LegAlerts";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
@@ -361,15 +360,7 @@ export function TransitDetailsView({
           </Typography>
         )}
         {/* Leg badges summary */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.75, flexWrap: "wrap" }}>
-          {summaryChainLegs(itinerary.legs).map((leg, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-            <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-              {i > 0 && <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />}
-              <LegBadge leg={leg} />
-            </Box>
-          ))}
-        </Box>
+        <TransitLegChain legs={itinerary.legs} sx={{ mt: 0.75 }} />
         {summaryBits.length > 0 && (
           <Typography
             variant="caption"
@@ -452,9 +443,7 @@ export function TransitDetailsView({
                 >
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {/* The trip's own start is a point, not a stop; the planner
-                          only names it with a placeholder. */}
-                      {i === 0 && !leg.from.stopId ? originLabel || leg.from.name : leg.from.name}
+                      {i === 0 ? tripPlaceName(leg.from, originLabel) : leg.from.name}
                     </Typography>
                     {!isWalk && leg.from.platformCode && (
                       <PlatformBadge
@@ -770,7 +759,7 @@ export function TransitDetailsView({
                       sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}
                     >
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {!leg.to.stopId ? destinationLabel || leg.to.name : leg.to.name}
+                        {tripPlaceName(leg.to, destinationLabel)}
                       </Typography>
                       {!isWalk && leg.to.platformCode && (
                         <PlatformBadge

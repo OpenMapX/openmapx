@@ -151,6 +151,13 @@ describe("TransitLegBanner while waiting at the boarding stop", () => {
     expect(screen.getByText(/^nextStop/)).toBeTruthy();
   });
 
+  it("leads with where to get off, and how far that is, once aboard", () => {
+    const leg = { ...freshLeg(), endTime: new Date(Date.now() + 5 * 60_000).toISOString() };
+    render(<TransitLegBanner leg={leg} legIndex={0} transitProgress={progressAt(0.0005)} />);
+    expect(screen.getByText("alightAt")).toBeTruthy();
+    expect(screen.getByText("rideRemaining")).toBeTruthy();
+  });
+
   it("never sounds the get-off alarm before boarding", () => {
     const leg = freshLeg();
     const approaching = {

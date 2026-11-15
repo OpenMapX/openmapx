@@ -2,9 +2,18 @@
 
 import Box from "@mui/material/Box";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { DetentConfig } from "@/components/panels/sheet/detents";
 import { MobileBottomSheet } from "@/components/panels/sheet/MobileBottomSheet";
+import { DetailChromeContext } from "@/components/panels/sheet/mobileSheetShared";
 import { useWindowHeight } from "@/lib/mobilePanelHeight";
 
 // Cap the expanded sheet so the maneuver banner up top stays visible.
@@ -36,18 +45,25 @@ const MAX_HEIGHT_FRACTION = 0.9;
  * toggling — the inset is composed into the detent lengths as a CSS `calc()`
  * against `--omx-safe-bottom` instead, so there is nothing to re-measure or
  * resnap to when the swap happens.
+ *
+ * An optional `footer` stays pinned to the sheet's bottom edge, in the shared
+ * sheet's footer slot, so the content revealed by a swipe opens between the
+ * header and it rather than pushing it up the screen. It then carries the
+ * safe-area inset itself.
  */
 export function NavSwipeSheet({
   expanded,
   onExpandedChange,
   header,
   children,
+  footer,
   topClearance = 0,
 }: {
   expanded: boolean;
   onExpandedChange: (next: boolean) => void;
   header: ReactNode;
   children: ReactNode;
+  footer?: ReactNode;
   /** Keep expanded content below the measured instruction banner. */
   topClearance?: number;
 }) {
@@ -56,6 +72,8 @@ export function NavSwipeSheet({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [headerPx, setHeaderPx] = useState(0);
   const [menuPx, setMenuPx] = useState(0);
+  const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
+  const [footerPx, setFooterPx] = useState(0);
   const viewportH = useWindowHeight();
 
   // Layout effects so the first paint already has the right numbers: an
@@ -81,23 +99,35 @@ export function NavSwipeSheet({
     return () => ro.disconnect();
   }, []);
 
+  useLayoutEffect(() => {
+    if (!footerEl) {
+      setFooterPx(0);
+      return;
+    }
+    setFooterPx(footerEl.offsetHeight);
+    const ro = new ResizeObserver(() => setFooterPx(footerEl.offsetHeight));
+    ro.observe(footerEl);
+    return () => ro.disconnect();
+  }, [footerEl]);
+
   // `headerPx` and `menuPx` are pure content measurements — no safe-area inset
   // baked in — so this stays invariant across `expanded` toggling too.
-  const cap = viewportH > 0 ? viewportH * MAX_HEIGHT_FRACTION : headerPx + menuPx;
-  const expandedContentPx = Math.min(headerPx + menuPx, cap);
+  const peekPx = headerPx + footerPx;
+  const cap = viewportH > 0 ? viewportH * MAX_HEIGHT_FRACTION : peekPx + menuPx;
+  const expandedContentPx = Math.min(peekPx + menuPx, cap);
 
   // No mid: the shared sheet then falls back to the default follow-cap
   // fraction for the map chrome above it, instead of tracking this sheet.
   const detents = useMemo<DetentConfig>(
     () => ({
-      peek: `calc(${Math.round(headerPx)}px + var(--omx-safe-bottom))`,
+      peek: `calc(${Math.round(peekPx)}px + var(--omx-safe-bottom))`,
       maxHeight:
         topClearance > 0
           ? `min(calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom)), calc(100dvh - ${Math.ceil(topClearance + 8)}px))`
           : `calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom))`,
       initial: "peek",
     }),
-    [headerPx, expandedContentPx, topClearance],
+    [peekPx, expandedContentPx, topClearance],
   );
 
   return (
@@ -141,17 +171,31 @@ export function NavSwipeSheet({
         </Box>
         {header}
       </Box>
-      {!expanded && (
-        <Box
-          sx={{ height: "var(--omx-safe-bottom)", "[data-map-footer-owned] &": { height: 0 } }}
-        />
-      )}
+      {!footer && !expanded && <SafeAreaSpacer />}
       <Box ref={menuRef}>{children}</Box>
-      {expanded && (
-        <Box
-          sx={{ height: "var(--omx-safe-bottom)", "[data-map-footer-owned] &": { height: 0 } }}
-        />
+      {!footer && expanded && <SafeAreaSpacer />}
+      {footer && (
+        <PinnedFooter>
+          <Box ref={setFooterEl}>{footer}</Box>
+          <SafeAreaSpacer />
+        </PinnedFooter>
       )}
     </MobileBottomSheet>
   );
+}
+
+function SafeAreaSpacer() {
+  return (
+    <Box sx={{ height: "var(--omx-safe-bottom)", "[data-map-footer-owned] &": { height: 0 } }} />
+  );
+}
+
+/** Hands its children to the surrounding sheet's footer slot. */
+function PinnedFooter({ children }: { children: ReactNode }) {
+  const chrome = useContext(DetailChromeContext);
+  useEffect(() => {
+    chrome?.setFooter(children);
+    return () => chrome?.setFooter(null);
+  }, [chrome, children]);
+  return null;
 }
