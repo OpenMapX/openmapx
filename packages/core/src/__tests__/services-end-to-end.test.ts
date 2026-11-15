@@ -11,744 +11,723 @@ import {
 } from "../services";
 
 const repoRoot = join(__dirname, "..", "..", "..", "..");
-const manifestsPresent = existsSync(join(repoRoot, "services", "postgis", "service.json"));
 
-describe.skipIf(!manifestsPresent)(
-  "end-to-end: built-in manifests render to a valid compose",
-  () => {
-    it("renders the full built-in set once every required producer exists", async () => {
-      const registry = new ServiceRegistry({ rootDir: repoRoot });
-      await registry.load();
+describe("end-to-end: built-in manifests render to a valid compose", () => {
+  it("renders the full built-in set once every required producer exists", async () => {
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
 
-      const result = renderCompose(registry.enabled(), { domain: "example.com" });
-      expect(result.hardlinkPlan).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            source: "data/pelias/placeholder",
-            target: "data/pelias-placeholder/pelias-placeholder-data",
-            consumerService: "pelias-placeholder",
-            dataType: "pelias-placeholder-data",
-          }),
-          expect.objectContaining({
-            source: "data/pelias/whosonfirst",
-            target: "data/pelias-pip/pelias-whosonfirst-data",
-            consumerService: "pelias-pip",
-            dataType: "pelias-whosonfirst-data",
-          }),
-        ]),
-      );
-    });
-
-    describe("OpenConditions bridge", () => {
-      const bridges: Record<string, string[]> = {
-        postgis: ["openconditions-ingest", "openconditions-contributions-api"],
-        "app-api": ["openconditions-ingest", "openconditions-contributions-api"],
-        "data-manager": ["openconditions-ingest"],
-        overpass: ["openconditions-ingest"],
-      };
-
-      function community(id: string): LoadedService {
-        return {
-          manifest: {
-            id,
-            name: id,
-            version: "1.0.0",
-            quality: "community-verified",
-            container: {
-              image: `ghcr.io/openconditions/${id}`,
-              tag: "latest",
-              expose: [4100],
-              memory: "256m",
-            },
-          },
-          directory: `/community/${id}`,
-          isBuiltIn: false,
-          enabled: true,
-        };
-      }
-
-      function networksOf(composeYaml: string): Record<string, unknown> {
-        const doc = parseYaml(composeYaml) as {
-          services: Record<string, { networks: unknown }>;
-        };
-        return Object.fromEntries(
-          Object.keys(bridges).map((id) => [id, doc.services[id]?.networks]),
-        );
-      }
-
-      it("declares exactly the OpenConditions services each audited bridge talks to", async () => {
-        const registry = new ServiceRegistry({ rootDir: repoRoot });
-        await registry.load();
-        for (const [id, targets] of Object.entries(bridges)) {
-          expect(registry.get(id)?.manifest.communityNetworkAccess, id).toEqual(targets);
-        }
-      });
-
-      it("renders the real built-ins without OpenConditions installed, silently", async () => {
-        const registry = new ServiceRegistry({ rootDir: repoRoot });
-        await registry.load();
-        const enabled = registry.list().map((s) => ({
-          ...s,
-          enabled: s.enabled || s.manifest.id in bridges,
-        }));
-        const result = renderCompose(
-          enabled.filter((s) => s.enabled),
-          { domain: "example.com", allServices: enabled },
-        );
-        for (const network of Object.values(networksOf(result.composeYaml))) {
-          expect(JSON.stringify(network)).not.toContain("openmapx-community-");
-        }
-        expect(JSON.stringify(result.warnings ?? [])).not.toContain("openconditions");
-      });
-
-      it("joins each bridge to the OpenConditions networks once they are installed", async () => {
-        const registry = new ServiceRegistry({ rootDir: repoRoot });
-        await registry.load();
-        const oc = [
-          community("openconditions-ingest"),
-          community("openconditions-contributions-api"),
-        ];
-        const all = [
-          ...registry.list().map((s) => ({ ...s, enabled: s.enabled || s.manifest.id in bridges })),
-          ...oc,
-        ];
-        const result = renderCompose(
-          all.filter((s) => s.enabled),
-          { domain: "example.com", allServices: all },
-        );
-        const networks = networksOf(result.composeYaml);
-        for (const [id, targets] of Object.entries(bridges)) {
-          const names = JSON.stringify(networks[id]);
-          expect(names, id).toContain('"openmapx"');
-          for (const target of targets) expect(names, id).toContain(`openmapx-community-${target}`);
-        }
-        expect(JSON.stringify(networks["data-manager"])).not.toContain(
-          "openmapx-community-openconditions-contributions-api",
-        );
-      });
-    });
-
-    it("publishes /api but denies the internal-only sub-prefix at the proxy", async () => {
-      // These handlers are unauthenticated by design and are documented as
-      // internal-only, so the bundled proxy must reject their public route.
-      const registry = new ServiceRegistry({ rootDir: repoRoot });
-      await registry.load();
-
-      const result = renderCompose(registry.enabled(), { domain: "example.com" });
-      const document = parseYaml(result.composeYaml) as {
-        services: Record<string, { labels: Record<string, string> }>;
-      };
-      const labels = document.services["app-api"].labels;
-      expect(labels["traefik.http.routers.app-api.rule"]).toContain("PathPrefix(`/api`)");
-      const internal = Object.entries(labels).filter(
-        ([key, value]) => key.endsWith(".rule") && value.includes("PathPrefix(`/api/internal`)"),
-      );
-      expect(internal).toHaveLength(1);
-      expect(labels[internal[0][0].replace(/\.rule$/, ".middlewares")].split(",")).toContain(
-        "internal-deny@file",
-      );
-    });
-
-    it("renders OSRM against a prepared osrm-graph product, not raw OSM PBFs", async () => {
-      const registry = new ServiceRegistry({ rootDir: repoRoot });
-      await registry.load();
-
-      const services = registry
-        .list()
-        .filter((service) => ["data-manager", "osrm"].includes(service.manifest.id));
-      const result = renderCompose(services, {
-        domain: "example.com",
-        allServices: registry.list(),
-      });
-      const osrmPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "osrm");
-
-      expect(osrmPlanEntry).toEqual(
+    const result = renderCompose(registry.enabled(), { domain: "example.com" });
+    expect(result.hardlinkPlan).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
-          source: "data/osrm-graph",
-          target: "data/osrm/osrm-graph",
-          dataType: "osrm-graph",
+          source: "data/pelias/placeholder",
+          target: "data/pelias-placeholder/pelias-placeholder-data",
+          consumerService: "pelias-placeholder",
+          dataType: "pelias-placeholder-data",
         }),
-      );
-      expect(result.composeYaml).toContain("./data/osrm/osrm-graph:/data:ro");
-      expect(result.composeYaml).not.toContain("./data/osrm/osm-pbf:/data");
-    });
-
-    it("renders TileServer with MBTiles and fonts while styles stay in the web app", async () => {
-      const registry = new ServiceRegistry({ rootDir: repoRoot });
-      await registry.load();
-
-      const services = registry
-        .list()
-        .filter((service) => ["data-manager", "tileserver"].includes(service.manifest.id));
-      const result = renderCompose(services, {
-        domain: "example.com",
-        allServices: registry.list(),
-      });
-
-      expect(result.hardlinkPlan).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            source: "data/tile-mbtiles",
-            target: "data/tileserver/tile-mbtiles",
-            consumerService: "tileserver",
-            dataType: "tile-mbtiles",
-          }),
-          expect.objectContaining({
-            source: "data/tile-fonts",
-            target: "data/tileserver/tile-fonts",
-            consumerService: "tileserver",
-            dataType: "tile-fonts",
-          }),
-        ]),
-      );
-      expect(result.composeYaml).toContain("./data/tileserver/tile-mbtiles:/data/mbtiles:ro");
-      expect(result.composeYaml).toContain("./data/tileserver/tile-fonts:/data/fonts:ro");
-      expect(result.composeYaml).not.toContain("tile-styles");
-    });
-
-    it("renders OTP against a prepared otp-graph product, not raw OSM or GTFS inputs", async () => {
-      const registry = new ServiceRegistry({ rootDir: repoRoot });
-      await registry.load();
-
-      const services = registry
-        .list()
-        .filter((service) => ["data-manager", "otp"].includes(service.manifest.id));
-      const result = renderCompose(services, {
-        domain: "example.com",
-        allServices: registry.list(),
-      });
-      const otpPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "otp");
-
-      expect(otpPlanEntry).toEqual(
         expect.objectContaining({
-          source: "data/otp-graph",
-          target: "data/otp/otp-graph",
-          dataType: "otp-graph",
+          source: "data/pelias/whosonfirst",
+          target: "data/pelias-pip/pelias-whosonfirst-data",
+          consumerService: "pelias-pip",
+          dataType: "pelias-whosonfirst-data",
         }),
-      );
-      expect(result.composeYaml).toContain("./data/otp/otp-graph:/var/opentripplanner");
-      expect(result.composeYaml).not.toContain("./data/otp/otp-graph:/var/opentripplanner:ro");
-      expect(result.composeYaml).not.toContain("./data/otp/osm-pbf");
-      expect(result.composeYaml).not.toContain("./data/otp/gtfs");
+      ]),
+    );
+  });
+
+  describe("OpenConditions bridge", () => {
+    const bridges: Record<string, string[]> = {
+      postgis: ["openconditions-ingest", "openconditions-contributions-api"],
+      "app-api": ["openconditions-ingest", "openconditions-contributions-api"],
+      "data-manager": ["openconditions-ingest"],
+      overpass: ["openconditions-ingest"],
+    };
+
+    function community(id: string): LoadedService {
+      return {
+        manifest: {
+          id,
+          name: id,
+          version: "1.0.0",
+          quality: "community-verified",
+          container: {
+            image: `ghcr.io/openconditions/${id}`,
+            tag: "latest",
+            expose: [4100],
+            memory: "256m",
+          },
+        },
+        directory: `/community/${id}`,
+        isBuiltIn: false,
+        enabled: true,
+      };
+    }
+
+    function networksOf(composeYaml: string): Record<string, unknown> {
+      const doc = parseYaml(composeYaml) as {
+        services: Record<string, { networks: unknown }>;
+      };
+      return Object.fromEntries(Object.keys(bridges).map((id) => [id, doc.services[id]?.networks]));
+    }
+
+    it("declares exactly the OpenConditions services each audited bridge talks to", async () => {
+      const registry = new ServiceRegistry({ rootDir: repoRoot });
+      await registry.load();
+      for (const [id, targets] of Object.entries(bridges)) {
+        expect(registry.get(id)?.manifest.communityNetworkAccess, id).toEqual(targets);
+      }
     });
 
-    it("renders MOTIS as a pipeline-owned writable bind-mount, not a hardlinked product", async () => {
+    it("renders the real built-ins without OpenConditions installed, silently", async () => {
+      const registry = new ServiceRegistry({ rootDir: repoRoot });
+      await registry.load();
+      const enabled = registry.list().map((s) => ({
+        ...s,
+        enabled: s.enabled || s.manifest.id in bridges,
+      }));
+      const result = renderCompose(
+        enabled.filter((s) => s.enabled),
+        { domain: "example.com", allServices: enabled },
+      );
+      for (const network of Object.values(networksOf(result.composeYaml))) {
+        expect(JSON.stringify(network)).not.toContain("openmapx-community-");
+      }
+      expect(JSON.stringify(result.warnings ?? [])).not.toContain("openconditions");
+    });
+
+    it("joins each bridge to the OpenConditions networks once they are installed", async () => {
+      const registry = new ServiceRegistry({ rootDir: repoRoot });
+      await registry.load();
+      const oc = [
+        community("openconditions-ingest"),
+        community("openconditions-contributions-api"),
+      ];
+      const all = [
+        ...registry.list().map((s) => ({ ...s, enabled: s.enabled || s.manifest.id in bridges })),
+        ...oc,
+      ];
+      const result = renderCompose(
+        all.filter((s) => s.enabled),
+        { domain: "example.com", allServices: all },
+      );
+      const networks = networksOf(result.composeYaml);
+      for (const [id, targets] of Object.entries(bridges)) {
+        const names = JSON.stringify(networks[id]);
+        expect(names, id).toContain('"openmapx"');
+        for (const target of targets) expect(names, id).toContain(`openmapx-community-${target}`);
+      }
+      expect(JSON.stringify(networks["data-manager"])).not.toContain(
+        "openmapx-community-openconditions-contributions-api",
+      );
+    });
+  });
+
+  it("publishes /api but denies the internal-only sub-prefix at the proxy", async () => {
+    // These handlers are unauthenticated by design and are documented as
+    // internal-only, so the bundled proxy must reject their public route.
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
+
+    const result = renderCompose(registry.enabled(), { domain: "example.com" });
+    const document = parseYaml(result.composeYaml) as {
+      services: Record<string, { labels: Record<string, string> }>;
+    };
+    const labels = document.services["app-api"].labels;
+    expect(labels["traefik.http.routers.app-api.rule"]).toContain("PathPrefix(`/api`)");
+    const internal = Object.entries(labels).filter(
+      ([key, value]) => key.endsWith(".rule") && value.includes("PathPrefix(`/api/internal`)"),
+    );
+    expect(internal).toHaveLength(1);
+    expect(labels[internal[0][0].replace(/\.rule$/, ".middlewares")].split(",")).toContain(
+      "internal-deny@file",
+    );
+  });
+
+  it("renders OSRM against a prepared osrm-graph product, not raw OSM PBFs", async () => {
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
+
+    const services = registry
+      .list()
+      .filter((service) => ["data-manager", "osrm"].includes(service.manifest.id));
+    const result = renderCompose(services, {
+      domain: "example.com",
+      allServices: registry.list(),
+    });
+    const osrmPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "osrm");
+
+    expect(osrmPlanEntry).toEqual(
+      expect.objectContaining({
+        source: "data/osrm-graph",
+        target: "data/osrm/osrm-graph",
+        dataType: "osrm-graph",
+      }),
+    );
+    expect(result.composeYaml).toContain("./data/osrm/osrm-graph:/data:ro");
+    expect(result.composeYaml).not.toContain("./data/osrm/osm-pbf:/data");
+  });
+
+  it("renders TileServer with MBTiles and fonts while styles stay in the web app", async () => {
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
+
+    const services = registry
+      .list()
+      .filter((service) => ["data-manager", "tileserver"].includes(service.manifest.id));
+    const result = renderCompose(services, {
+      domain: "example.com",
+      allServices: registry.list(),
+    });
+
+    expect(result.hardlinkPlan).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "data/tile-mbtiles",
+          target: "data/tileserver/tile-mbtiles",
+          consumerService: "tileserver",
+          dataType: "tile-mbtiles",
+        }),
+        expect.objectContaining({
+          source: "data/tile-fonts",
+          target: "data/tileserver/tile-fonts",
+          consumerService: "tileserver",
+          dataType: "tile-fonts",
+        }),
+      ]),
+    );
+    expect(result.composeYaml).toContain("./data/tileserver/tile-mbtiles:/data/mbtiles:ro");
+    expect(result.composeYaml).toContain("./data/tileserver/tile-fonts:/data/fonts:ro");
+    expect(result.composeYaml).not.toContain("tile-styles");
+  });
+
+  it("renders OTP against a prepared otp-graph product, not raw OSM or GTFS inputs", async () => {
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
+
+    const services = registry
+      .list()
+      .filter((service) => ["data-manager", "otp"].includes(service.manifest.id));
+    const result = renderCompose(services, {
+      domain: "example.com",
+      allServices: registry.list(),
+    });
+    const otpPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "otp");
+
+    expect(otpPlanEntry).toEqual(
+      expect.objectContaining({
+        source: "data/otp-graph",
+        target: "data/otp/otp-graph",
+        dataType: "otp-graph",
+      }),
+    );
+    expect(result.composeYaml).toContain("./data/otp/otp-graph:/var/opentripplanner");
+    expect(result.composeYaml).not.toContain("./data/otp/otp-graph:/var/opentripplanner:ro");
+    expect(result.composeYaml).not.toContain("./data/otp/osm-pbf");
+    expect(result.composeYaml).not.toContain("./data/otp/gtfs");
+  });
+
+  it("renders MOTIS as a pipeline-owned writable bind-mount, not a hardlinked product", async () => {
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
+
+    const services = registry
+      .list()
+      .filter((service) => ["data-manager", "motis"].includes(service.manifest.id));
+    const result = renderCompose(services, {
+      domain: "example.com",
+      allServices: registry.list(),
+      composeOutDir: "/repo/infra/docker",
+    });
+
+    // The MOTIS dataset is owned + atomically swapped by the data-manager
+    // pipeline, so it's a plain writable bind-mount with NO producer/hardlink
+    // indirection (the hardlink sentinel/prune model can't carry the
+    // container-built import output the swap depends on).
+    const motisPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "motis");
+    expect(motisPlanEntry).toBeUndefined();
+
+    // Writable (no `:ro`) — MOTIS imports in place + writes its compiled
+    // timetable into the mounted dir.
+    expect(result.composeYaml).toContain("./data/motis/live:/motis-data");
+    expect(result.composeYaml).not.toContain("./data/motis/live:/motis-data:ro");
+    // The deploy step pre-creates this writable data dir as the data-owning user.
+    expect(result.writableBindDirs?.some((d) => d.endsWith("/data/motis/live"))).toBe(true);
+    expect(result.composeYaml).not.toContain("./data/motis/osm-pbf");
+    expect(result.composeYaml).not.toContain("./data/motis/gtfs");
+  });
+
+  it("pre-creates the data directories a service mounts read-only", async () => {
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
+
+    const services = registry
+      .list()
+      .filter((service) =>
+        ["data-manager", "app-api", "transitous-runner"].includes(service.manifest.id),
+      );
+    const result = renderCompose(services, {
+      domain: "example.com",
+      allServices: registry.list(),
+      composeOutDir: "/repo/infra/docker",
+    });
+
+    // The data-manager writes these directories, so Docker must not create
+    // them as root when the stack first starts.
+    expect(result.composeYaml).toContain("./data/motis/live:/var/lib/openmapx/motis-live:ro");
+    expect(result.composeYaml).toContain("./data/.transitous-catalog:/data/.transitous-catalog:ro");
+    expect(result.writableBindDirs).toEqual(
+      expect.arrayContaining([
+        "/repo/infra/docker/data/motis/live",
+        "/repo/infra/docker/data/.transitous-catalog",
+      ]),
+    );
+  });
+
+  it("renders Pelias with produced placeholder and PIP data plus explicit runtime dependencies", async () => {
+    const registry = new ServiceRegistry({ rootDir: repoRoot });
+    await registry.load();
+
+    const services = registry
+      .list()
+      .filter((service) =>
+        ["data-manager", "elasticsearch", "pelias", "pelias-placeholder", "pelias-pip"].includes(
+          service.manifest.id,
+        ),
+      );
+    const result = renderCompose(services, {
+      domain: "example.com",
+      allServices: registry.list(),
+      composeOutDir: "/repo/infra/docker",
+    });
+
+    expect(result.hardlinkPlan).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "data/pelias/placeholder",
+          target: "data/pelias-placeholder/pelias-placeholder-data",
+          consumerService: "pelias-placeholder",
+          dataType: "pelias-placeholder-data",
+        }),
+        expect.objectContaining({
+          source: "data/pelias/whosonfirst",
+          target: "data/pelias-pip/pelias-whosonfirst-data",
+          consumerService: "pelias-pip",
+          dataType: "pelias-whosonfirst-data",
+        }),
+      ]),
+    );
+    expect(result.composeYaml).toContain(
+      "./data/pelias-placeholder/pelias-placeholder-data:/data/placeholder:ro",
+    );
+    expect(result.composeYaml).toContain(
+      "./data/pelias-pip/pelias-whosonfirst-data:/data/whosonfirst:ro",
+    );
+    // The index lives in the data tree (not a named volume) so a Pelias
+    // build can be exported and served elsewhere.
+    expect(result.composeYaml).toContain(
+      "./data/pelias/elasticsearch:/usr/share/elasticsearch/data",
+    );
+    expect(result.composeYaml).not.toContain("openmapx-esdata");
+    expect(result.writableBindDirs?.some((dir) => dir.endsWith("/data/pelias/elasticsearch"))).toBe(
+      true,
+    );
+    expect(result.composeYaml).toContain("pelias-placeholder:");
+    expect(result.composeYaml).toContain("pelias-pip:");
+    expect(result.composeYaml).toContain("pelias-placeholder:\n        condition: service_started");
+    expect(result.composeYaml).toContain("pelias-pip:\n        condition: service_started");
+  });
+
+  describe("managed Dawarich bundle", () => {
+    it("selects the complete isolated topology without an app-to-worker runtime edge", async () => {
       const registry = new ServiceRegistry({ rootDir: repoRoot });
       await registry.load();
 
-      const services = registry
-        .list()
-        .filter((service) => ["data-manager", "motis"].includes(service.manifest.id));
-      const result = renderCompose(services, {
-        domain: "example.com",
-        allServices: registry.list(),
-        composeOutDir: "/repo/infra/docker",
-      });
-
-      // The MOTIS dataset is owned + atomically swapped by the data-manager
-      // pipeline, so it's a plain writable bind-mount with NO producer/hardlink
-      // indirection (the hardlink sentinel/prune model can't carry the
-      // container-built import output the swap depends on).
-      const motisPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "motis");
-      expect(motisPlanEntry).toBeUndefined();
-
-      // Writable (no `:ro`) — MOTIS imports in place + writes its compiled
-      // timetable into the mounted dir.
-      expect(result.composeYaml).toContain("./data/motis/live:/motis-data");
-      expect(result.composeYaml).not.toContain("./data/motis/live:/motis-data:ro");
-      // The deploy step pre-creates this writable data dir as the data-owning user.
-      expect(result.writableBindDirs?.some((d) => d.endsWith("/data/motis/live"))).toBe(true);
-      expect(result.composeYaml).not.toContain("./data/motis/osm-pbf");
-      expect(result.composeYaml).not.toContain("./data/motis/gtfs");
-    });
-
-    it("pre-creates the data directories a service mounts read-only", async () => {
-      const registry = new ServiceRegistry({ rootDir: repoRoot });
-      await registry.load();
-
-      const services = registry
-        .list()
-        .filter((service) =>
-          ["data-manager", "app-api", "transitous-runner"].includes(service.manifest.id),
-        );
-      const result = renderCompose(services, {
-        domain: "example.com",
-        allServices: registry.list(),
-        composeOutDir: "/repo/infra/docker",
-      });
-
-      // The data-manager writes these directories, so Docker must not create
-      // them as root when the stack first starts.
-      expect(result.composeYaml).toContain("./data/motis/live:/var/lib/openmapx/motis-live:ro");
-      expect(result.composeYaml).toContain(
-        "./data/.transitous-catalog:/data/.transitous-catalog:ro",
-      );
-      expect(result.writableBindDirs).toEqual(
-        expect.arrayContaining([
-          "/repo/infra/docker/data/motis/live",
-          "/repo/infra/docker/data/.transitous-catalog",
-        ]),
-      );
-    });
-
-    it("renders Pelias with produced placeholder and PIP data plus explicit runtime dependencies", async () => {
-      const registry = new ServiceRegistry({ rootDir: repoRoot });
-      await registry.load();
-
-      const services = registry
-        .list()
-        .filter((service) =>
-          ["data-manager", "elasticsearch", "pelias", "pelias-placeholder", "pelias-pip"].includes(
-            service.manifest.id,
-          ),
-        );
-      const result = renderCompose(services, {
-        domain: "example.com",
-        allServices: registry.list(),
-        composeOutDir: "/repo/infra/docker",
-      });
-
-      expect(result.hardlinkPlan).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            source: "data/pelias/placeholder",
-            target: "data/pelias-placeholder/pelias-placeholder-data",
-            consumerService: "pelias-placeholder",
-            dataType: "pelias-placeholder-data",
-          }),
-          expect.objectContaining({
-            source: "data/pelias/whosonfirst",
-            target: "data/pelias-pip/pelias-whosonfirst-data",
-            consumerService: "pelias-pip",
-            dataType: "pelias-whosonfirst-data",
-          }),
-        ]),
-      );
-      expect(result.composeYaml).toContain(
-        "./data/pelias-placeholder/pelias-placeholder-data:/data/placeholder:ro",
-      );
-      expect(result.composeYaml).toContain(
-        "./data/pelias-pip/pelias-whosonfirst-data:/data/whosonfirst:ro",
-      );
-      // The index lives in the data tree (not a named volume) so a Pelias
-      // build can be exported and served elsewhere.
-      expect(result.composeYaml).toContain(
-        "./data/pelias/elasticsearch:/usr/share/elasticsearch/data",
-      );
-      expect(result.composeYaml).not.toContain("openmapx-esdata");
-      expect(
-        result.writableBindDirs?.some((dir) => dir.endsWith("/data/pelias/elasticsearch")),
-      ).toBe(true);
-      expect(result.composeYaml).toContain("pelias-placeholder:");
-      expect(result.composeYaml).toContain("pelias-pip:");
-      expect(result.composeYaml).toContain(
-        "pelias-placeholder:\n        condition: service_started",
-      );
-      expect(result.composeYaml).toContain("pelias-pip:\n        condition: service_started");
-    });
-
-    describe("managed Dawarich bundle", () => {
-      it("selects the complete isolated topology without an app-to-worker runtime edge", async () => {
-        const registry = new ServiceRegistry({ rootDir: repoRoot });
-        await registry.load();
-
-        const selection = expandServiceSelection(registry.list(), ["dawarich-app"]);
-        expect(selection.missingIds).toEqual([]);
-        expect(selection.warnings).toEqual([]);
-        expect(selection.enabledIds).toEqual(
-          new Set([
-            "traefik",
-            "dawarich-app",
-            "dawarich-sidekiq",
-            "dawarich-postgis",
-            "dawarich-redis",
-          ]),
-        );
-
-        const app = registry.get("dawarich-app")?.manifest;
-        const worker = registry.get("dawarich-sidekiq")?.manifest;
-        expect(registry.get("dawarich-redis")?.manifest.license).toBe(
-          "RSALv2 OR SSPL-1.0 OR AGPL-3.0",
-        );
-        expect(app?.container).toMatchObject({
-          image: "freikin/dawarich",
-          expose: [3000],
-          entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
-          command: ["bin/rails", "server", "-p", "3000", "-b", "::"],
-          healthcheck: {
-            type: "http",
-            path: "/api/v1/health",
-            port: 3000,
-          },
-        });
-        expect(app?.container.dependsOn).toEqual([
-          { service: "dawarich-postgis", condition: "service_healthy" },
-          { service: "dawarich-redis", condition: "service_healthy" },
-        ]);
-        expect(app?.selectionDependencies).toEqual(["dawarich-sidekiq"]);
-        expect(app?.container.dependsOn?.map((dependency) => dependency.service)).not.toContain(
-          "dawarich-sidekiq",
-        );
-        expect(worker?.container.dependsOn).toEqual([
-          { service: "dawarich-postgis", condition: "service_healthy" },
-          { service: "dawarich-redis", condition: "service_healthy" },
-          { service: "dawarich-app", condition: "service_healthy" },
-        ]);
-
-        const appEnvironment = app?.container.environment;
-        // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
-        expect(appEnvironment).toMatchObject({
-          RAILS_ENV: "production",
-          REDIS_URL: "redis://dawarich-redis:6379",
-          DATABASE_HOST: "dawarich-postgis",
-          DATABASE_PORT: "5432",
-          DATABASE_USERNAME: "postgres",
-          DATABASE_NAME: "dawarich_production",
-          APPLICATION_HOSTS: "timeline.${DOMAIN:-localhost}",
-          APPLICATION_PROTOCOL: "https",
-          RAILS_LOG_TO_STDOUT: "true",
-          SELF_HOSTED: "true",
-          STORE_GEODATA: "true",
-          OIDC_AUTO_REGISTER: "true",
-          OIDC_PROVIDER_NAME: "OpenMapX",
-          OIDC_PKCE_ENABLED: "true",
-          OIDC_ISSUER: "https://${DOMAIN:-localhost}/api/auth",
-          OIDC_REDIRECT_URI:
-            "https://timeline.${DOMAIN:-localhost}/users/auth/openid_connect/callback",
-          ALLOW_EMAIL_PASSWORD_REGISTRATION: "false",
-        });
-        // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
-        for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
-          expect(appEnvironment).not.toHaveProperty(key);
-        }
-        const appConfig = (app?.configSchema?.properties ?? {}) as Record<
-          string,
-          Record<string, unknown>
-        >;
-        for (const key of [
-          "APPLICATION_HOSTS",
-          "APPLICATION_URL",
-          "DOMAIN",
-          "APPLICATION_PROTOCOL",
-          "TIME_ZONE",
-          "REDIS_URL",
-          "DATABASE_HOST",
-          "DATABASE_PORT",
-          "DATABASE_USERNAME",
-          "DATABASE_NAME",
-          "OIDC_CLIENT_ID",
-          "OIDC_ISSUER",
-          "OIDC_REDIRECT_URI",
-          "OIDC_PROVIDER_NAME",
-          "OIDC_AUTO_REGISTER",
-          "OIDC_PKCE_ENABLED",
-          "OPENMAPX_PROVISIONING_GENERATION",
-          "WEB_CONCURRENCY",
-          "RAILS_MAX_THREADS",
-          "LOG_MAX_SIZE",
-          "LOG_MAX_FILE",
-        ]) {
-          expect(appConfig[key]?.type, key).toBe("string");
-          expect(appConfig[key]?.["x-openmapx-secret"], key).not.toBe(true);
-        }
-        for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
-          expect(appConfig[key]?.["x-openmapx-secret"], key).toBe(true);
-        }
-        expect(appConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
-        const workerConfig = (worker?.configSchema?.properties ?? {}) as Record<
-          string,
-          Record<string, unknown>
-        >;
-        expect(workerConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
-        const postgisConfig = (registry.get("dawarich-postgis")?.manifest.configSchema
-          ?.properties ?? {}) as Record<string, Record<string, unknown>>;
-        expect(postgisConfig.POSTGRES_USER?.type).toBe("string");
-        expect(postgisConfig.POSTGRES_DB?.type).toBe("string");
-        expect(app?.bindMounts).toEqual([
-          {
-            source: "scripts/openmapx-entrypoint.sh",
-            target: "/usr/local/bin/openmapx-entrypoint.sh",
-            readOnly: true,
-          },
-          {
-            source: "scripts/openmapx-subject-export.rb",
-            target: "/opt/openmapx/subject-export/openmapx-subject-export.rb",
-            readOnly: true,
-          },
-          {
-            source: "scripts/subject_export/schema.rb",
-            target: "/opt/openmapx/subject-export/subject_export/schema.rb",
-            readOnly: true,
-          },
-        ]);
-        expect(app?.volumes).toEqual([
-          {
-            name: "openmapx-dawarich-public",
-            mountAt: "/var/app/public",
-            backup: true,
-            backupMode: "tar",
-          },
-          {
-            name: "openmapx-dawarich-watched",
-            mountAt: "/var/app/tmp/imports/watched",
-            backup: true,
-            backupMode: "tar",
-          },
-          {
-            name: "openmapx-dawarich-storage",
-            mountAt: "/var/app/storage",
-            backup: true,
-            backupMode: "tar",
-          },
-        ]);
-
-        expect(worker?.container).toMatchObject({
-          image: "freikin/dawarich",
-          entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
-          command: ["sidekiq"],
-          healthcheck: {
-            type: "exec",
-            command: ["pgrep", "-f", "sidekiq"],
-          },
-        });
-        expect(worker?.container.environment).toMatchObject(appEnvironment ?? {});
-        expect(worker?.bindMounts).toEqual([
-          {
-            source: "scripts/openmapx-entrypoint.sh",
-            target: "/usr/local/bin/openmapx-entrypoint.sh",
-            readOnly: true,
-          },
-        ]);
-        expect(worker?.volumes).toEqual(
-          app?.volumes?.map((volume) => ({ ...volume, backup: false, backupMode: undefined })),
-        );
-      });
-
-      it("keeps every Dawarich container off openmapx and lets only Traefik and app-api reach the app", async () => {
-        const registry = new ServiceRegistry({ rootDir: repoRoot });
-        await registry.load();
-        const render = (dawarich: boolean) => {
-          const services = registry.list().map((service) => ({
-            ...service,
-            enabled: service.manifest.id.startsWith("dawarich-")
-              ? dawarich
-              : ["traefik", "app-api", "postgis", "redis"].includes(service.manifest.id),
-          }));
-          return parseYaml(renderCompose(services, { domain: "example.com" }).composeYaml) as {
-            services: Record<string, { networks: string[] }>;
-            networks: Record<string, unknown>;
-          };
-        };
-
-        const doc = render(true);
-        expect(doc.services["dawarich-app"]?.networks).toEqual([
-          "openmapx-private-dawarich",
-          "openmapx-private-dawarich-ingress",
-        ]);
-        for (const id of ["dawarich-sidekiq", "dawarich-postgis", "dawarich-redis"]) {
-          expect(doc.services[id]?.networks).toEqual(["openmapx-private-dawarich"]);
-        }
-        for (const id of ["traefik", "app-api"]) {
-          expect(doc.services[id]?.networks).toContain("openmapx-private-dawarich-ingress");
-          expect(doc.services[id]?.networks).not.toContain("openmapx-private-dawarich");
-        }
-        for (const id of ["postgis", "redis"]) {
-          expect(doc.services[id]?.networks).toEqual(["openmapx"]);
-        }
-
-        const withoutDawarich = render(false);
-        expect(withoutDawarich.services.traefik?.networks).toEqual(["openmapx"]);
-        expect(withoutDawarich.services["app-api"]?.networks).toEqual(["openmapx"]);
-        expect(Object.keys(withoutDawarich.networks)).toEqual(["openmapx"]);
-      });
-
-      it("renders the pinned private data services, shared app data, file-only secrets and host-only TLS route", async () => {
-        const registry = new ServiceRegistry({ rootDir: repoRoot });
-        await registry.load();
-        const selection = expandServiceSelection(registry.list(), ["dawarich-app"]);
-        registry.applyEnabledIds(selection.enabledIds);
-
-        const secretKeys = ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"];
-        const provisioningGeneration = "0123456789abcdef0123456789abcdef";
-        const { composeYaml } = renderCompose(registry.enabled(), {
-          domain: "example.test",
-          allServices: registry.list(),
-          resolvedServiceConfigs: new Map([
-            ["dawarich-app", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
-            ["dawarich-sidekiq", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
-          ]),
-          serviceSecretKeys: new Map([
-            ["dawarich-postgis", ["POSTGRES_PASSWORD"]],
-            ["dawarich-app", secretKeys],
-            ["dawarich-sidekiq", secretKeys],
-          ]),
-        });
-        const compose = parseYaml(composeYaml) as {
-          services: Record<
-            string,
-            {
-              image: string;
-              ports?: string[];
-              volumes?: string[];
-              environment?: Record<string, string>;
-              secrets?: Array<{ source: string; target: string }>;
-              labels?: Record<string, string>;
-              depends_on?: Record<string, { condition: string }>;
-            }
-          >;
-          volumes: Record<string, null>;
-        };
-
-        expect(Object.keys(compose.services).sort()).toEqual([
-          "dawarich-app",
-          "dawarich-postgis",
-          "dawarich-redis",
-          "dawarich-sidekiq",
+      const selection = expandServiceSelection(registry.list(), ["dawarich-app"]);
+      expect(selection.missingIds).toEqual([]);
+      expect(selection.warnings).toEqual([]);
+      expect(selection.enabledIds).toEqual(
+        new Set([
           "traefik",
-        ]);
-        for (const id of [
-          "dawarich-postgis",
-          "dawarich-redis",
           "dawarich-app",
           "dawarich-sidekiq",
-        ]) {
-          const container = registry.get(id)!.manifest.container;
-          expect(container.digest, id).toMatch(/^sha256:[a-f0-9]{64}$/);
-          expect(compose.services[id]?.image).toBe(
-            `${container.image}:${container.tag}@${container.digest}`,
-          );
-        }
-        expect(compose.services["dawarich-app"].image).toBe(
-          compose.services["dawarich-sidekiq"].image,
-        );
-        expect(compose.services["dawarich-postgis"]?.ports).toBeUndefined();
-        expect(compose.services["dawarich-redis"]?.ports).toBeUndefined();
-        expect(compose.services["dawarich-app"]?.depends_on).not.toHaveProperty("dawarich-sidekiq");
+          "dawarich-postgis",
+          "dawarich-redis",
+        ]),
+      );
 
-        const appVolumes = compose.services["dawarich-app"]?.volumes ?? [];
-        const workerVolumes = compose.services["dawarich-sidekiq"]?.volumes ?? [];
-        expect(appVolumes).toEqual(
-          expect.arrayContaining([
-            "openmapx-dawarich-public:/var/app/public",
-            "openmapx-dawarich-watched:/var/app/tmp/imports/watched",
-            "openmapx-dawarich-storage:/var/app/storage",
-          ]),
-        );
-        expect(workerVolumes).toEqual(
-          expect.arrayContaining([
-            "openmapx-dawarich-public:/var/app/public",
-            "openmapx-dawarich-watched:/var/app/tmp/imports/watched",
-            "openmapx-dawarich-storage:/var/app/storage",
-          ]),
-        );
-        expect(appVolumes.join("\n")).not.toContain("openmapx-dawarich-db-data");
-        expect(Object.keys(compose.volumes).sort()).toEqual([
-          "openmapx-dawarich-db-data",
-          "openmapx-dawarich-public",
-          "openmapx-dawarich-redis-data",
-          "openmapx-dawarich-storage",
-          "openmapx-dawarich-watched",
-          "openmapx-traefik-acme",
-        ]);
-        expect(Object.keys(compose.volumes)).not.toContain("openmapx-pgdata");
-        expect(Object.keys(compose.volumes)).not.toContain("openmapx-redisdata");
-
-        for (const serviceId of ["dawarich-app", "dawarich-sidekiq"]) {
-          const service = compose.services[serviceId];
-          expect(service?.environment?.DATABASE_HOST).toBe("dawarich-postgis");
-          expect(service?.environment?.DATABASE_NAME).toBe("dawarich_production");
-          expect(service?.environment?.OIDC_CLIENT_ID).toBeDefined();
-          expect(service?.environment?.OPENMAPX_PROVISIONING_GENERATION).toBe(
-            provisioningGeneration,
-          );
-          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
-          expect(service?.environment?.OIDC_ISSUER).toBe("https://${DOMAIN:-localhost}/api/auth");
-          expect(service?.environment?.DATABASE_PASSWORD).toBeUndefined();
-          expect(service?.environment?.SECRET_KEY_BASE).toBeUndefined();
-          expect(service?.environment?.OIDC_CLIENT_SECRET).toBeUndefined();
-          expect(service?.secrets).toEqual(
-            secretKeys.map((target) => ({ source: `${serviceId}__${target}`, target })),
-          );
-        }
-        expect(
-          compose.services["dawarich-postgis"]?.environment?.POSTGRES_PASSWORD,
-        ).toBeUndefined();
-        expect(compose.services["dawarich-postgis"]?.secrets).toEqual([
-          { source: "dawarich-postgis__POSTGRES_PASSWORD", target: "POSTGRES_PASSWORD" },
-        ]);
-        expect(composeYaml).not.toContain("password:-");
-        expect(composeYaml).not.toContain("CHANGE_ME");
-
-        const labels = compose.services["dawarich-app"]?.labels;
-        expect(labels?.["traefik.http.routers.dawarich-app.rule"]).toBe(
-          "Host(`timeline.example.test`)",
-        );
-        expect(labels?.["traefik.http.routers.dawarich-app.entrypoints"]).toBe(
-          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation
-          "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
-        );
-        expect(labels?.["traefik.http.routers.dawarich-app.tls.certresolver"]).toBe(
-          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation
-          "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
-        );
-        expect(labels?.["traefik.http.services.dawarich-app.loadbalancer.server.port"]).toBe(
-          "3000",
-        );
-        expect(composeYaml).not.toContain("PathPrefix(`/dawarich-app`)");
+      const app = registry.get("dawarich-app")?.manifest;
+      const worker = registry.get("dawarich-sidekiq")?.manifest;
+      expect(registry.get("dawarich-redis")?.manifest.license).toBe(
+        "RSALv2 OR SSPL-1.0 OR AGPL-3.0",
+      );
+      expect(app?.container).toMatchObject({
+        image: "freikin/dawarich",
+        expose: [3000],
+        entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
+        command: ["bin/rails", "server", "-p", "3000", "-b", "::"],
+        healthcheck: {
+          type: "http",
+          path: "/api/v1/health",
+          port: 3000,
+        },
       });
+      expect(app?.container.dependsOn).toEqual([
+        { service: "dawarich-postgis", condition: "service_healthy" },
+        { service: "dawarich-redis", condition: "service_healthy" },
+      ]);
+      expect(app?.selectionDependencies).toEqual(["dawarich-sidekiq"]);
+      expect(app?.container.dependsOn?.map((dependency) => dependency.service)).not.toContain(
+        "dawarich-sidekiq",
+      );
+      expect(worker?.container.dependsOn).toEqual([
+        { service: "dawarich-postgis", condition: "service_healthy" },
+        { service: "dawarich-redis", condition: "service_healthy" },
+        { service: "dawarich-app", condition: "service_healthy" },
+      ]);
+
+      const appEnvironment = app?.container.environment;
+      // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
+      expect(appEnvironment).toMatchObject({
+        RAILS_ENV: "production",
+        REDIS_URL: "redis://dawarich-redis:6379",
+        DATABASE_HOST: "dawarich-postgis",
+        DATABASE_PORT: "5432",
+        DATABASE_USERNAME: "postgres",
+        DATABASE_NAME: "dawarich_production",
+        APPLICATION_HOSTS: "timeline.${DOMAIN:-localhost}",
+        APPLICATION_PROTOCOL: "https",
+        RAILS_LOG_TO_STDOUT: "true",
+        SELF_HOSTED: "true",
+        STORE_GEODATA: "true",
+        OIDC_AUTO_REGISTER: "true",
+        OIDC_PROVIDER_NAME: "OpenMapX",
+        OIDC_PKCE_ENABLED: "true",
+        OIDC_ISSUER: "https://${DOMAIN:-localhost}/api/auth",
+        OIDC_REDIRECT_URI:
+          "https://timeline.${DOMAIN:-localhost}/users/auth/openid_connect/callback",
+        ALLOW_EMAIL_PASSWORD_REGISTRATION: "false",
+      });
+      // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
+      for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
+        expect(appEnvironment).not.toHaveProperty(key);
+      }
+      const appConfig = (app?.configSchema?.properties ?? {}) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      for (const key of [
+        "APPLICATION_HOSTS",
+        "APPLICATION_URL",
+        "DOMAIN",
+        "APPLICATION_PROTOCOL",
+        "TIME_ZONE",
+        "REDIS_URL",
+        "DATABASE_HOST",
+        "DATABASE_PORT",
+        "DATABASE_USERNAME",
+        "DATABASE_NAME",
+        "OIDC_CLIENT_ID",
+        "OIDC_ISSUER",
+        "OIDC_REDIRECT_URI",
+        "OIDC_PROVIDER_NAME",
+        "OIDC_AUTO_REGISTER",
+        "OIDC_PKCE_ENABLED",
+        "OPENMAPX_PROVISIONING_GENERATION",
+        "WEB_CONCURRENCY",
+        "RAILS_MAX_THREADS",
+        "LOG_MAX_SIZE",
+        "LOG_MAX_FILE",
+      ]) {
+        expect(appConfig[key]?.type, key).toBe("string");
+        expect(appConfig[key]?.["x-openmapx-secret"], key).not.toBe(true);
+      }
+      for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
+        expect(appConfig[key]?.["x-openmapx-secret"], key).toBe(true);
+      }
+      expect(appConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
+      const workerConfig = (worker?.configSchema?.properties ?? {}) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      expect(workerConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
+      const postgisConfig = (registry.get("dawarich-postgis")?.manifest.configSchema?.properties ??
+        {}) as Record<string, Record<string, unknown>>;
+      expect(postgisConfig.POSTGRES_USER?.type).toBe("string");
+      expect(postgisConfig.POSTGRES_DB?.type).toBe("string");
+      expect(app?.bindMounts).toEqual([
+        {
+          source: "scripts/openmapx-entrypoint.sh",
+          target: "/usr/local/bin/openmapx-entrypoint.sh",
+          readOnly: true,
+        },
+        {
+          source: "scripts/openmapx-subject-export.rb",
+          target: "/opt/openmapx/subject-export/openmapx-subject-export.rb",
+          readOnly: true,
+        },
+        {
+          source: "scripts/subject_export/schema.rb",
+          target: "/opt/openmapx/subject-export/subject_export/schema.rb",
+          readOnly: true,
+        },
+      ]);
+      expect(app?.volumes).toEqual([
+        {
+          name: "openmapx-dawarich-public",
+          mountAt: "/var/app/public",
+          backup: true,
+          backupMode: "tar",
+        },
+        {
+          name: "openmapx-dawarich-watched",
+          mountAt: "/var/app/tmp/imports/watched",
+          backup: true,
+          backupMode: "tar",
+        },
+        {
+          name: "openmapx-dawarich-storage",
+          mountAt: "/var/app/storage",
+          backup: true,
+          backupMode: "tar",
+        },
+      ]);
+
+      expect(worker?.container).toMatchObject({
+        image: "freikin/dawarich",
+        entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
+        command: ["sidekiq"],
+        healthcheck: {
+          type: "exec",
+          command: ["pgrep", "-f", "sidekiq"],
+        },
+      });
+      expect(worker?.container.environment).toMatchObject(appEnvironment ?? {});
+      expect(worker?.bindMounts).toEqual([
+        {
+          source: "scripts/openmapx-entrypoint.sh",
+          target: "/usr/local/bin/openmapx-entrypoint.sh",
+          readOnly: true,
+        },
+      ]);
+      expect(worker?.volumes).toEqual(
+        app?.volumes?.map((volume) => ({ ...volume, backup: false, backupMode: undefined })),
+      );
     });
 
-    describe("first-party manifest provenance", () => {
-      const builtInManifestPaths = readdirSync(join(repoRoot, "services"), {
-        withFileTypes: true,
-      })
-        .filter((e) => e.isDirectory() && !e.name.startsWith(".") && !e.name.startsWith("_"))
-        .map((e) => join(repoRoot, "services", e.name, "service.json"))
-        .filter((p) => existsSync(p));
+    it("keeps every Dawarich container off openmapx and lets only Traefik and app-api reach the app", async () => {
+      const registry = new ServiceRegistry({ rootDir: repoRoot });
+      await registry.load();
+      const render = (dawarich: boolean) => {
+        const services = registry.list().map((service) => ({
+          ...service,
+          enabled: service.manifest.id.startsWith("dawarich-")
+            ? dawarich
+            : ["traefik", "app-api", "postgis", "redis"].includes(service.manifest.id),
+        }));
+        return parseYaml(renderCompose(services, { domain: "example.com" }).composeYaml) as {
+          services: Record<string, { networks: string[] }>;
+          networks: Record<string, unknown>;
+        };
+      };
 
-      it("loads and validates every shipped manifest under first-party provenance without warnings", async () => {
-        expect(builtInManifestPaths.length).toBeGreaterThan(0);
-        const warnings: string[] = [];
-        const registry = new ServiceRegistry({ rootDir: repoRoot, warnings });
-        await registry.load();
-        expect(warnings).toEqual([]);
-        const discoveredIds = builtInManifestPaths
-          .map((path) => JSON.parse(readFileSync(path, "utf8")).id)
-          .sort();
-        expect(
-          registry
-            .list()
-            .filter((service) => service.isBuiltIn)
-            .map((service) => service.manifest.id)
-            .sort(),
-        ).toEqual(discoveredIds);
-        for (const path of builtInManifestPaths) {
-          const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
-          const result = validateServiceManifest(raw, { firstParty: true });
-          expect(result.valid, `${path}: ${result.errors.join("; ")}`).toBe(true);
-        }
+      const doc = render(true);
+      expect(doc.services["dawarich-app"]?.networks).toEqual([
+        "openmapx-private-dawarich",
+        "openmapx-private-dawarich-ingress",
+      ]);
+      for (const id of ["dawarich-sidekiq", "dawarich-postgis", "dawarich-redis"]) {
+        expect(doc.services[id]?.networks).toEqual(["openmapx-private-dawarich"]);
+      }
+      for (const id of ["traefik", "app-api"]) {
+        expect(doc.services[id]?.networks).toContain("openmapx-private-dawarich-ingress");
+        expect(doc.services[id]?.networks).not.toContain("openmapx-private-dawarich");
+      }
+      for (const id of ["postgis", "redis"]) {
+        expect(doc.services[id]?.networks).toEqual(["openmapx"]);
+      }
+
+      const withoutDawarich = render(false);
+      expect(withoutDawarich.services.traefik?.networks).toEqual(["openmapx"]);
+      expect(withoutDawarich.services["app-api"]?.networks).toEqual(["openmapx"]);
+      expect(Object.keys(withoutDawarich.networks)).toEqual(["openmapx"]);
+    });
+
+    it("renders the pinned private data services, shared app data, file-only secrets and host-only TLS route", async () => {
+      const registry = new ServiceRegistry({ rootDir: repoRoot });
+      await registry.load();
+      const selection = expandServiceSelection(registry.list(), ["dawarich-app"]);
+      registry.applyEnabledIds(selection.enabledIds);
+
+      const secretKeys = ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"];
+      const provisioningGeneration = "0123456789abcdef0123456789abcdef";
+      const { composeYaml } = renderCompose(registry.enabled(), {
+        domain: "example.test",
+        allServices: registry.list(),
+        resolvedServiceConfigs: new Map([
+          ["dawarich-app", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
+          ["dawarich-sidekiq", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
+        ]),
+        serviceSecretKeys: new Map([
+          ["dawarich-postgis", ["POSTGRES_PASSWORD"]],
+          ["dawarich-app", secretKeys],
+          ["dawarich-sidekiq", secretKeys],
+        ]),
       });
+      const compose = parseYaml(composeYaml) as {
+        services: Record<
+          string,
+          {
+            image: string;
+            ports?: string[];
+            volumes?: string[];
+            environment?: Record<string, string>;
+            secrets?: Array<{ source: string; target: string }>;
+            labels?: Record<string, string>;
+            depends_on?: Record<string, { condition: string }>;
+          }
+        >;
+        volumes: Record<string, null>;
+      };
 
-      it("declares an explicit mode for every first-party backup volume", () => {
-        for (const path of builtInManifestPaths) {
-          const raw = JSON.parse(readFileSync(path, "utf-8")) as {
-            volumes?: Array<{ name: string; backup?: boolean; backupMode?: unknown }>;
-          };
-          for (const volume of raw.volumes ?? []) {
-            if (volume.backup === true) {
-              expect(volume.backupMode, `${path}: ${volume.name}`).toMatch(/^(tar|pg_dump)$/);
-            }
+      expect(Object.keys(compose.services).sort()).toEqual([
+        "dawarich-app",
+        "dawarich-postgis",
+        "dawarich-redis",
+        "dawarich-sidekiq",
+        "traefik",
+      ]);
+      for (const id of ["dawarich-postgis", "dawarich-redis", "dawarich-app", "dawarich-sidekiq"]) {
+        const container = registry.get(id)!.manifest.container;
+        expect(container.digest, id).toMatch(/^sha256:[a-f0-9]{64}$/);
+        expect(compose.services[id]?.image).toBe(
+          `${container.image}:${container.tag}@${container.digest}`,
+        );
+      }
+      expect(compose.services["dawarich-app"].image).toBe(
+        compose.services["dawarich-sidekiq"].image,
+      );
+      expect(compose.services["dawarich-postgis"]?.ports).toBeUndefined();
+      expect(compose.services["dawarich-redis"]?.ports).toBeUndefined();
+      expect(compose.services["dawarich-app"]?.depends_on).not.toHaveProperty("dawarich-sidekiq");
+
+      const appVolumes = compose.services["dawarich-app"]?.volumes ?? [];
+      const workerVolumes = compose.services["dawarich-sidekiq"]?.volumes ?? [];
+      expect(appVolumes).toEqual(
+        expect.arrayContaining([
+          "openmapx-dawarich-public:/var/app/public",
+          "openmapx-dawarich-watched:/var/app/tmp/imports/watched",
+          "openmapx-dawarich-storage:/var/app/storage",
+        ]),
+      );
+      expect(workerVolumes).toEqual(
+        expect.arrayContaining([
+          "openmapx-dawarich-public:/var/app/public",
+          "openmapx-dawarich-watched:/var/app/tmp/imports/watched",
+          "openmapx-dawarich-storage:/var/app/storage",
+        ]),
+      );
+      expect(appVolumes.join("\n")).not.toContain("openmapx-dawarich-db-data");
+      expect(Object.keys(compose.volumes).sort()).toEqual([
+        "openmapx-dawarich-db-data",
+        "openmapx-dawarich-public",
+        "openmapx-dawarich-redis-data",
+        "openmapx-dawarich-storage",
+        "openmapx-dawarich-watched",
+        "openmapx-traefik-acme",
+      ]);
+      expect(Object.keys(compose.volumes)).not.toContain("openmapx-pgdata");
+      expect(Object.keys(compose.volumes)).not.toContain("openmapx-redisdata");
+
+      for (const serviceId of ["dawarich-app", "dawarich-sidekiq"]) {
+        const service = compose.services[serviceId];
+        expect(service?.environment?.DATABASE_HOST).toBe("dawarich-postgis");
+        expect(service?.environment?.DATABASE_NAME).toBe("dawarich_production");
+        expect(service?.environment?.OIDC_CLIENT_ID).toBeDefined();
+        expect(service?.environment?.OPENMAPX_PROVISIONING_GENERATION).toBe(provisioningGeneration);
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
+        expect(service?.environment?.OIDC_ISSUER).toBe("https://${DOMAIN:-localhost}/api/auth");
+        expect(service?.environment?.DATABASE_PASSWORD).toBeUndefined();
+        expect(service?.environment?.SECRET_KEY_BASE).toBeUndefined();
+        expect(service?.environment?.OIDC_CLIENT_SECRET).toBeUndefined();
+        expect(service?.secrets).toEqual(
+          secretKeys.map((target) => ({ source: `${serviceId}__${target}`, target })),
+        );
+      }
+      expect(compose.services["dawarich-postgis"]?.environment?.POSTGRES_PASSWORD).toBeUndefined();
+      expect(compose.services["dawarich-postgis"]?.secrets).toEqual([
+        { source: "dawarich-postgis__POSTGRES_PASSWORD", target: "POSTGRES_PASSWORD" },
+      ]);
+      expect(composeYaml).not.toContain("password:-");
+      expect(composeYaml).not.toContain("CHANGE_ME");
+
+      const labels = compose.services["dawarich-app"]?.labels;
+      expect(labels?.["traefik.http.routers.dawarich-app.rule"]).toBe(
+        "Host(`timeline.example.test`)",
+      );
+      expect(labels?.["traefik.http.routers.dawarich-app.entrypoints"]).toBe(
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation
+        "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      );
+      expect(labels?.["traefik.http.routers.dawarich-app.tls.certresolver"]).toBe(
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      );
+      expect(labels?.["traefik.http.services.dawarich-app.loadbalancer.server.port"]).toBe("3000");
+      expect(composeYaml).not.toContain("PathPrefix(`/dawarich-app`)");
+    });
+  });
+
+  describe("first-party manifest provenance", () => {
+    const builtInManifestPaths = readdirSync(join(repoRoot, "services"), {
+      withFileTypes: true,
+    })
+      .filter((e) => e.isDirectory() && !e.name.startsWith(".") && !e.name.startsWith("_"))
+      .map((e) => join(repoRoot, "services", e.name, "service.json"))
+      .filter((p) => existsSync(p));
+
+    it("loads and validates every shipped manifest under first-party provenance without warnings", async () => {
+      expect(builtInManifestPaths.length).toBeGreaterThan(0);
+      const warnings: string[] = [];
+      const registry = new ServiceRegistry({ rootDir: repoRoot, warnings });
+      await registry.load();
+      expect(warnings).toEqual([]);
+      const discoveredIds = builtInManifestPaths
+        .map((path) => JSON.parse(readFileSync(path, "utf8")).id)
+        .sort();
+      expect(
+        registry
+          .list()
+          .filter((service) => service.isBuiltIn)
+          .map((service) => service.manifest.id)
+          .sort(),
+      ).toEqual(discoveredIds);
+      for (const path of builtInManifestPaths) {
+        const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
+        const result = validateServiceManifest(raw, { firstParty: true });
+        expect(result.valid, `${path}: ${result.errors.join("; ")}`).toBe(true);
+      }
+    });
+
+    it("declares an explicit mode for every first-party backup volume", () => {
+      for (const path of builtInManifestPaths) {
+        const raw = JSON.parse(readFileSync(path, "utf-8")) as {
+          volumes?: Array<{ name: string; backup?: boolean; backupMode?: unknown }>;
+        };
+        for (const volume of raw.volumes ?? []) {
+          if (volume.backup === true) {
+            expect(volume.backupMode, `${path}: ${volume.name}`).toMatch(/^(tar|pg_dump)$/);
           }
         }
-      });
-
-      it("rejects every shipped manifest when it arrives without first-party provenance", () => {
-        for (const path of builtInManifestPaths) {
-          const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
-          const result = validateServiceManifest(raw, { firstParty: false });
-          expect(result.valid, `${path} was accepted as a community manifest`).toBe(false);
-        }
-      });
+      }
     });
-  },
-);
+
+    it("rejects every shipped manifest when it arrives without first-party provenance", () => {
+      for (const path of builtInManifestPaths) {
+        const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
+        const result = validateServiceManifest(raw, { firstParty: false });
+        expect(result.valid, `${path} was accepted as a community manifest`).toBe(false);
+      }
+    });
+  });
+});
