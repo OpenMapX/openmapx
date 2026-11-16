@@ -163,9 +163,10 @@ export function setup(ctx: IntegrationContext): void {
     { rateLimitTier: "expensive" },
   );
 
-  // GET /geocode/country — coarse coordinate → lowercase ISO 3166-1 alpha-2
-  // country code. Used by region-aware integrations (e.g. food-delivery) when a
-  // place carries no countryCode of its own. Country-level zoom, cached 24h.
+  // GET /geocode/country — coordinate → lowercase ISO 3166-1 alpha-2 country
+  // code. Used by region-aware integrations (e.g. food-delivery) when a place
+  // carries no countryCode of its own. Country-level zoom, cached 24 h per
+  // ~1 km cell; failed lookups are not cached.
   ctx.registerRoute(
     "GET",
     "/geocode/country",
@@ -177,7 +178,12 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       const countryCode = await reverseGeocodeCountry(lat, lng);
-      reply.header("Cache-Control", "public, max-age=86400");
+      // A failed lookup answers like "no country" but must not be kept for a
+      // day by browsers or shared caches.
+      reply.header(
+        "Cache-Control",
+        countryCode === undefined ? "no-cache" : "public, max-age=86400",
+      );
       reply.send({ countryCode: countryCode ?? null });
     },
     { rateLimitTier: "expensive" },

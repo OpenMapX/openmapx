@@ -74,14 +74,23 @@ function harness(label: string, shared = new Map<string, unknown>()) {
     const route = ctx.registered.routes.find((entry) => entry.path === "/autocomplete");
     if (!route) throw new Error("Missing autocomplete route");
     let result: unknown;
-    await route.handler({ query: { q: "coffee" }, params: {}, body: undefined, headers: {} }, {
-      send: (value: unknown) => {
-        result = value;
+    await route.handler(
+      {
+        query: { q: "coffee" },
+        params: {},
+        body: undefined,
+        headers: {},
+        clientKey: "test-client",
       },
-      header: () => undefined,
-      status: () => undefined,
-      type: () => undefined,
-    } as never);
+      {
+        send: (value: unknown) => {
+          result = value;
+        },
+        header: () => undefined,
+        status: () => undefined,
+        type: () => undefined,
+      } as never,
+    );
     return result as AutocompleteResult[];
   };
   return {
@@ -285,5 +294,100 @@ describe("country cache lifecycle", () => {
     expect(await pending).toBe("de");
     expect(await reverseGeocodeCountry(10, 20)).toBe("fr");
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives towns in the same whole-degree cell their own country", async () => {
+    clearPlaceLookupCaches();
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const lon = Number(new URL(String(input)).searchParams.get("lon"));
+      return new Response(JSON.stringify({ address: { country_code: lon > 5.9 ? "DE" : "NL" } }));
+    });
+    vi.stubGlobal("fetch", fetch);
+    expect(await reverseGeocodeCountry(50.7753, 6.0839)).toBe("de"); // Aachen
+    expect(await reverseGeocodeCountry(50.8514, 5.691)).toBe("nl"); // Maastricht
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses one upstream answer for the same spot and its 0.01° cell", async () => {
+    clearPlaceLookupCaches();
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ address: { country_code: "DE" } })),
+    );
+    vi.stubGlobal("fetch", fetch);
+    expect(await reverseGeocodeCountry(50.7753, 6.0839)).toBe("de");
+    expect(await reverseGeocodeCountry(50.7753, 6.0839)).toBe("de");
+    expect(await reverseGeocodeCountry(50.7751, 6.0841)).toBe("de");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a failed lookup as undefined and retries it on the next call", async () => {
+    clearPlaceLookupCaches();
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ address: { country_code: "FR" } })),
+    );
+    fetch.mockRejectedValueOnce(new Error("network down"));
+    vi.stubGlobal("fetch", fetch);
+    expect(await reverseGeocodeCountry(48.8566, 2.3522)).toBeUndefined();
+    expect(await reverseGeocodeCountry(48.8566, 2.3522)).toBe("fr");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks only a failed country lookup uncacheable in the route response", async () => {
+    clearPlaceLookupCaches();
+    const provider: GeocodingProvider = {
+      geocode: async () => [],
+      autocomplete: async () => [],
+      reverseGeocode: async () => null,
+    };
+    const ctx = createMockIntegrationContext({
+      config: { provider: "maptiler" },
+      cache: {
+        get: async () => null,
+        set: async () => undefined,
+        del: async () => undefined,
+        withCache: async (_key, _ttl, fn) => fn(new AbortController().signal),
+      },
+    });
+    const integrations = [
+      { id: "geocoding-maptiler", providers: new Map([["geocoding", [provider]]]) },
+    ] as unknown as ReturnType<IntegrationContext["getIntegrationsByDomain"]>;
+    ctx.getIntegrationsByDomain = () => integrations;
+    setup(ctx);
+    const route = ctx.registered.routes.find((r) => r.path === "/geocode/country");
+    if (!route) throw new Error("country route not registered");
+    const call = async () => {
+      const send = vi.fn();
+      const reply = { send, header: vi.fn(), status: vi.fn(() => ({ send })), type: vi.fn() };
+      await route.handler(
+        {
+          query: { lat: "50.7753", lng: "6.0839" },
+          params: {},
+          body: undefined,
+          headers: {},
+          clientKey: "test-client",
+        },
+        reply,
+      );
+      return reply;
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    );
+    const failed = await call();
+    expect(failed.header).toHaveBeenCalledWith("Cache-Control", "no-cache");
+    expect(failed.send).toHaveBeenCalledWith({ countryCode: null });
+
+    clearPlaceLookupCaches();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ address: {} }))),
+    );
+    const openSea = await call();
+    expect(openSea.header).toHaveBeenCalledWith("Cache-Control", "public, max-age=86400");
+    expect(openSea.send).toHaveBeenCalledWith({ countryCode: null });
   });
 });
