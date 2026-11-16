@@ -115,8 +115,8 @@ export async function inspectConfigurationReleaseDownloads(input: {
     images = await Promise.all(tasks);
   } catch (error) {
     controller.abort(Error("Release metadata inspection canceled"));
-    // The caller owns the release-store lock until every contained process
-    // has finished, including siblings still shutting down after cancellation.
+    // Every contained process finishes before the error is raised, including
+    // siblings still shutting down after cancellation.
     await Promise.allSettled(tasks);
     throw error;
   }

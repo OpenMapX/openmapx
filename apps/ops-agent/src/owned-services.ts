@@ -553,8 +553,8 @@ export function createOwnedServiceResolver(options: {
           configurations.set(key, configuration);
         }
         // Deselection removes Compose membership, but the registered manifest
-        // remains authority for its effective image. Release overlays still win
-        // when they provide an explicit image for that service.
+        // remains authority for its effective image. A release pin in the
+        // generation wins when it names an image for that service.
         const registered = registry.get(serviceId);
         const reference =
           configuration[serviceId]?.image ??

@@ -304,11 +304,11 @@ stays interrupted until the operation's deadline plus 30 seconds has passed.
 Every command that changes containers (stop, restart, start, recreate, update,
 remove, `compose up` and `compose down`, backup create and restore) first claims
 its services in the operations agent's lease store. While one holds a service,
-another refuses at once with a message that names the holder's operation key and
-points to `openmapx control status`. A failure Docker reports releases the
-services; a crash, timeout, killed command or lost connection to the Docker
-daemon leaves the outcome unknown, and the services stay held until you resolve
-it. On the host:
+another waits up to five seconds for it and then refuses with a message that
+names the holder's operation key and points to `openmapx control status`. A
+failure Docker reports with an exit code releases the services; a crash, timeout,
+killed command or lost connection to the Docker daemon leaves the outcome
+unknown, and the services stay held until you resolve it. On the host:
 
 ```bash
 pnpm openmapx control status                                  # held leases, unfinished operations, lock holders

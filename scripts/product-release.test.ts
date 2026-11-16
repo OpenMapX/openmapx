@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
 import { fixture } from "./product-release.fixtures";
 import {
   inspectPublication,
@@ -278,22 +277,14 @@ it.each([
   expect(t.state.preview).toBeNull();
 });
 
-it("provides an auditable usable overlay and exact evidence links before publishing approval", async () => {
+it("provides exact evidence links before publishing approval", async () => {
   const t = setup();
   const review = await t.stage();
-  const summary = parse(t.state.draft.assets["docker-compose.release.yml"]) as {
-    "x-openmapx-release": { release: string; images: Record<string, string> };
-    services: Record<string, { image: string }>;
-  };
-  expect(summary["x-openmapx-release"]).toMatchObject({
-    release: t.candidate.version,
-    images: t.candidate.manifest.images,
-  });
-  expect(summary.services["app-api"]?.image).toBe(t.candidate.manifest.images.api);
   expect(review.readiness.checks.cleanInstall.evidence).toBe(
     "https://example.invalid/synthetic/cleanInstall",
   );
   expect(review.assets["readiness.json"]).toBe(sha256(t.state.draft.assets["readiness.json"]));
+  expect(Object.keys(t.state.draft.assets)).not.toContain("docker-compose.release.yml");
 });
 
 it("reconciles a lost registry acknowledgement after the final preview write", async () => {

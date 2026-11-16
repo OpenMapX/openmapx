@@ -339,10 +339,14 @@ removal, backup create and restore. Pull, build, exec and probes take none. A he
 target refuses the operation before anything is recorded, with a busy error that
 names the holder's executor, operation key, kind and state and points to
 `openmapx control status`. On the host, `services stop|restart`, `compose up|down`
-and `backup create|restore` take the same leases. A Docker command that reports a
-failure (a non-zero exit, or an error from Docker) records a contained, known
-outcome and releases the lease; a crash, timeout, killed process or lost daemon
-connection leaves the outcome unknown and the lease held.
+and `backup create|restore` take the same leases. In the agent, only a Docker
+command that ran to its own end and reported a failure with an exit code, while
+the daemon still answered, records a contained, known outcome and releases the
+lease; any other error, including every other failure of an agent backup, leaves
+the outcome unknown and the lease held. On the host, an exit code from 1 to 127,
+or an error that is not a signal or timeout while the daemon still answers,
+releases the lease; a crash, timeout, killed process or lost daemon connection
+leaves the outcome unknown and the lease held.
 
 ### Locks
 

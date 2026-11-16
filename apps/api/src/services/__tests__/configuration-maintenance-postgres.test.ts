@@ -179,7 +179,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     let dm: Awaited<ReturnType<typeof ownedDataManager>> | undefined;
     let actualPosts: Map<string, number>;
     beforeEach(async (context) => {
-      // Synthetic example/* images have no published release overlay.
+      // Synthetic example/* images have no published release.
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       fixture = await createConfigurationPostgresFixture();
       state.fixture = fixture;
@@ -2303,7 +2303,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
     }, 60000);
     it("uses one ownership-only maintenance decision before a durable nonempty coordinator credential continuation", async () => {
-      // Synthetic example/* images intentionally have no published release overlay.
+      // Synthetic example/* images intentionally have no published release.
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       vi.stubEnv("DOMAIN", "example.test");
       dm = await ownedDataManager({
@@ -4980,7 +4980,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it.each(["journal"])(
       "settles actual durable nonempty unused maintenance through the original API control and retains its canonical delivery (%s)",
       async () => {
-        // This synthetic stack uses local example images and selects no product release overlay.
+        // This synthetic stack uses local example images and pins no product release.
         vi.stubEnv("OPENMAPX_RELEASE", "local");
         dm = await ownedDataManager({
           sql: fixture.sql,
