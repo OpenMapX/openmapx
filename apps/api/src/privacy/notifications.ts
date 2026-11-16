@@ -318,9 +318,9 @@ export function createPrivacyNotificationWorker(
     start() {
       if (timer) return;
       started = true;
-      void runOnce();
+      void runOnce().catch(() => undefined);
       timer = setInterval(() => {
-        void runOnce();
+        void runOnce().catch(() => undefined);
       }, intervalMs);
       timer.unref?.();
     },
