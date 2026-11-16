@@ -5,7 +5,6 @@ import {
   type ConfigurationReleaseSnapshot,
   configurationReleaseSnapshotSchema,
 } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
-import { readCheckedConfigurationRelease } from "./configuration-release";
 import { inspectConfigurationReleaseDownloads } from "./configuration-release-downloads";
 import { inspectConfigurationReleaseImages } from "./configuration-release-images";
 import type { DockerRuntimeOptions } from "./docker-runtime";
@@ -20,7 +19,11 @@ export async function preflightConfigurationRelease(input: {
   const channel = services.releaseSelection();
   if (channel.kind === "local") throw new services.ReleaseChannelDisabledError();
   // A cached manifest is named by its digest, so it cannot change under this read.
-  const release = readCheckedConfigurationRelease(input.infraDir, input.selection),
+  const release = services.readCheckedConfigurationRelease(
+      input.infraDir,
+      input.selection,
+      services.readAppliedReleaseSelection(input.infraDir),
+    ),
     downloads = await inspectConfigurationReleaseDownloads({
       release,
       execFile: input.execFile,

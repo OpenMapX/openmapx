@@ -6,9 +6,17 @@ import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
-import { readCheckedConfigurationRelease } from "./configuration-release";
 import { inspectConfigurationReleaseDownloads } from "./configuration-release-downloads";
 
+const readCheckedConfigurationRelease = (
+  infraDir: string,
+  input: { releaseId: string; manifestDigest: string },
+) =>
+  services.readCheckedConfigurationRelease(
+    infraDir,
+    input,
+    services.readAppliedReleaseSelection(infraDir),
+  );
 let root: string, directory: string, raw: string, manifestDigest: string;
 const releaseId = "checked-release-01";
 beforeEach(() => {

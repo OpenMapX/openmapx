@@ -711,16 +711,10 @@ export function createDefaultReleaseEffects(
       } else if (composeReady) {
         composeReady = false;
       }
-      const serviceImages = {
-        "app-api": manifest?.images.api,
-        "app-web": manifest?.images.web,
-        "data-manager": manifest?.images["data-manager"],
-        "ops-agent": manifest?.images["ops-agent"],
-        "transitous-runner": manifest?.images["transitous-runner"],
-      } as const;
+      const serviceImages = manifest ? coreServices.releaseServiceImages(manifest) : undefined;
       const services: OpsResultFor<"system.inspect">["services"] = [];
       for (const serviceId of INSPECT_RELEASE_SERVICE_IDS) {
-        const pinnedImage = serviceImages[serviceId];
+        const pinnedImage = serviceImages?.[serviceId];
         let containerId: string | undefined;
         // A thrown or unparseable `ps -q` is an absent observation, not an
         // observed-absent container. Only an exact empty result proves the

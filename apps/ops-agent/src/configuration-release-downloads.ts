@@ -9,8 +9,8 @@ import {
   configurationReleaseDownloadsSchema,
   configurationReleasePlatformSchema,
 } from "@openmapx/core/ops";
+import type { services } from "@openmapx/core/server";
 import { z } from "zod";
-import type { CheckedConfigurationRelease } from "./configuration-release";
 import type { DockerRuntimeOptions } from "./docker-runtime";
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -51,7 +51,7 @@ const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/),
   });
 
 export async function inspectConfigurationReleaseDownloads(input: {
-  release: CheckedConfigurationRelease;
+  release: services.CheckedConfigurationRelease;
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
   signal: AbortSignal;
 }): Promise<ConfigurationReleaseDownloads> {
