@@ -1,8 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, sql } from "../db";
-import { mobileAuthHandoff } from "../db/schema";
+import {
+  dataSubjectRequest,
+  dataSubjectRequestPreservation,
+  mobileAuthHandoff,
+} from "../db/schema";
 import {
   HANDOFF_TTL_MS,
   hashCallbackCode,
@@ -34,11 +38,17 @@ describe.skipIf(skipDatabase)("MobileAuthHandoffService with PostgreSQL", () => 
   afterAll(() => vi.unstubAllEnvs());
 
   beforeEach(async () => {
+    await db
+      .delete(dataSubjectRequest)
+      .where(inArray(dataSubjectRequest.userId, [USER, OTHER_USER]));
     await db.delete(mobileAuthHandoff).where(eq(mobileAuthHandoff.userId, USER));
     await db.delete(mobileAuthHandoff).where(eq(mobileAuthHandoff.userId, OTHER_USER));
   });
 
   afterEach(async () => {
+    await db
+      .delete(dataSubjectRequest)
+      .where(inArray(dataSubjectRequest.userId, [USER, OTHER_USER]));
     await db.delete(mobileAuthHandoff).where(eq(mobileAuthHandoff.userId, USER));
     await db.delete(mobileAuthHandoff).where(eq(mobileAuthHandoff.userId, OTHER_USER));
   });
@@ -148,6 +158,46 @@ describe.skipIf(skipDatabase)("MobileAuthHandoffService with PostgreSQL", () => 
           nowMs: NOW,
         }),
       ).resolves.toEqual({ ok: false, reason: "too-many-attempts" });
+    });
+
+    it("stops counting expired attempts that a privacy hold keeps", async () => {
+      for (let index = 0; index < MAX_OUTSTANDING_PER_USER; index += 1) await issued();
+
+      // Opening an access request holds the account's existing handoff rows,
+      // so the scrub has to leave them in place once they expire.
+      const [request] = await db
+        .insert(dataSubjectRequest)
+        .values({
+          userId: USER,
+          kind: "access",
+          channel: "self_service",
+          receivedAt: new Date(),
+          dueAt: new Date(Date.now() + 30 * 86_400_000),
+        })
+        .returning({ id: dataSubjectRequest.id });
+      await db.insert(dataSubjectRequestPreservation).values({
+        requestId: request.id,
+        registrationId: "mobile-auth-handoffs",
+        sourceCutoffAt: new Date(),
+        status: "held",
+      });
+
+      const later = await service.issue({
+        userId: USER,
+        purpose: "sign-in",
+        codeChallenge: CHALLENGE,
+        state: STATE,
+        oneTimeToken: "ott",
+        nowMs: NOW + HANDOFF_TTL_MS + 1,
+      });
+
+      expect(later.ok).toBe(true);
+      const rows = await db
+        .select()
+        .from(mobileAuthHandoff)
+        .where(eq(mobileAuthHandoff.userId, USER));
+      // The held rows are still there, alongside the new one.
+      expect(rows).toHaveLength(MAX_OUTSTANDING_PER_USER + 1);
     });
   });
 
