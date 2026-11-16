@@ -1872,7 +1872,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                               ),
                             ).toHaveLength(1);
                             expect(dm.settlePosts).toBe(0);
-                            await expect(dm.assertDataAdmission()).toThrow();
+                            await expect(dm.assertDataAdmission()).rejects.toThrow();
                             expect(() =>
                               verifyLocalArtifactTargetRootRelease(
                                 restoreAdmittedControlExecution(installation, owner.plan.prepare),
@@ -1907,7 +1907,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                                 `configuration-handoff-${owner.plan.handoff!.handoffId}.completion.json`,
                               ),
                               before = readFileSync(file);
-                            await expect(dm.assertDataAdmission()).toThrow();
+                            await expect(dm.assertDataAdmission()).rejects.toThrow();
                             const { inspectConfigurationHandoff } = await import(
                               "../../../../ops-agent/src/configuration-handoff-store"
                             );
