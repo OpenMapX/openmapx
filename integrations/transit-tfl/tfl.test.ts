@@ -248,7 +248,7 @@ describe("TfL transit provider", () => {
 
     expect(alerts).toEqual([
       {
-        id: "tfl:status:central",
+        id: "tfl:status:central:5",
         providers: ["tfl"],
         severity: "warning",
         effect: "Minor Delays",
@@ -259,6 +259,164 @@ describe("TfL transit provider", () => {
         activePeriods: [],
       },
     ]);
+  });
+
+  it("alerts for disruption codes above Good Service", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        {
+          id: "northern",
+          name: "Northern",
+          lineStatuses: [
+            {
+              statusSeverity: 16,
+              statusSeverityDescription: "Not Running",
+              reason: "No service between A and B",
+            },
+          ],
+        },
+        {
+          id: "district",
+          name: "District",
+          lineStatuses: [{ statusSeverity: 11, statusSeverityDescription: "Part Closed" }],
+        },
+      ]),
+    );
+
+    const alerts = await getAlerts();
+
+    expect(alerts).toHaveLength(2);
+    expect(alerts[0]).toMatchObject({
+      id: "tfl:status:northern:16",
+      severity: "severe",
+      title: "Northern: Not Running",
+      description: "No service between A and B",
+    });
+    expect(alerts[1]).toMatchObject({
+      id: "tfl:status:district:11",
+      severity: "warning",
+      title: "District: Part Closed",
+    });
+  });
+
+  it("maps every documented notice code", async () => {
+    const notices: Array<[number, string]> = [
+      [12, "Exit Only"],
+      [13, "No Step Free Access"],
+      [14, "Change of frequency"],
+      [15, "Diverted"],
+      [17, "Issues Reported"],
+      [19, "Information"],
+    ];
+    mockFetch.mockResolvedValueOnce(
+      mockOk(
+        notices.map(([code, description]) => ({
+          id: `line-${code}`,
+          name: `Line ${code}`,
+          lineStatuses: [{ statusSeverity: code, statusSeverityDescription: description }],
+        })),
+      ),
+    );
+
+    const alerts = await getAlerts();
+
+    expect(alerts.map((alert) => alert.severity)).toEqual([
+      "warning",
+      "warning",
+      "info",
+      "warning",
+      "warning",
+      "info",
+    ]);
+  });
+
+  it("raises no alert for good service, no issues or the overnight closure", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        {
+          id: "central",
+          name: "Central",
+          lineStatuses: [{ statusSeverity: 10, statusSeverityDescription: "Good Service" }],
+        },
+        {
+          id: "victoria",
+          name: "Victoria",
+          lineStatuses: [{ statusSeverity: 18, statusSeverityDescription: "No Issues" }],
+        },
+        {
+          id: "jubilee",
+          name: "Jubilee",
+          lineStatuses: [{ statusSeverity: 20, statusSeverityDescription: "Service Closed" }],
+        },
+        { id: "bakerloo", name: "Bakerloo", lineStatuses: [{ statusSeverity: null }] },
+      ]),
+    );
+
+    expect(await getAlerts()).toEqual([]);
+  });
+
+  it("represents every simultaneous status on a line", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        {
+          id: "piccadilly",
+          name: "Piccadilly",
+          lineStatuses: [
+            {
+              statusSeverity: 9,
+              statusSeverityDescription: "Minor Delays",
+              reason: "Earlier signal failure",
+            },
+            {
+              statusSeverity: 5,
+              statusSeverityDescription: "Part Closure",
+              reason: "No service west of Acton Town",
+            },
+            {
+              statusSeverity: 5,
+              statusSeverityDescription: "Part Closure",
+              reason: "No service Hyde Park Corner to Holborn",
+            },
+            { statusSeverity: 10, statusSeverityDescription: "Good Service" },
+          ],
+        },
+      ]),
+    );
+
+    const alerts = await getAlerts();
+
+    expect(alerts).toHaveLength(2);
+    expect(alerts[0]).toMatchObject({
+      id: "tfl:status:piccadilly:9",
+      severity: "info",
+      description: "Earlier signal failure",
+    });
+    expect(alerts[1]).toMatchObject({
+      id: "tfl:status:piccadilly:5",
+      severity: "warning",
+      description: "No service west of Acton Town\n\nNo service Hyde Park Corner to Holborn",
+    });
+  });
+
+  it("keeps an existing low code mapping", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        {
+          id: "metropolitan",
+          name: "Metropolitan",
+          lineStatuses: [{ statusSeverity: 6, statusSeverityDescription: "Severe Delays" }],
+        },
+        {
+          id: "circle",
+          name: "Circle",
+          lineStatuses: [{ statusSeverity: 2, statusSeverityDescription: "Suspended" }],
+        },
+      ]),
+    );
+
+    const alerts = await getAlerts();
+
+    expect(alerts.map((alert) => alert.severity)).toEqual(["warning", "severe"]);
   });
 
   it("strips the tfl: prefix when requesting route stop sequences", async () => {

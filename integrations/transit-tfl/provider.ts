@@ -241,28 +241,78 @@ export async function searchByName(
     .map(normalizeStop);
 }
 
-function mapTflSeverity(severityNumber: number): AlertSeverity {
-  if (severityNumber >= 9) return "info";
-  if (severityNumber >= 5) return "warning";
-  if (severityNumber >= 1) return "severe";
+/**
+ * TfL line-status codes (GET /Line/Meta/Severity). Above 10 the scale is not
+ * ordered by badness: 11–17 and 19 are disruptions or notices, 18 means no
+ * issues and 20 is the routine end of service. Null means no alert.
+ */
+function mapTflSeverity(code: number): AlertSeverity | null {
+  switch (code) {
+    case 10: // Good Service
+    case 18: // No Issues
+    case 20: // Service Closed (overnight); "No Service" for national-rail
+      return null;
+    case 16: // Not Running
+      return "severe";
+    case 11: // Part Closed
+    case 12: // Exit Only
+    case 13: // No Step Free Access
+    case 15: // Diverted
+    case 17: // Issues Reported
+      return "warning";
+    case 14: // Change of frequency
+    case 19: // Information
+      return "info";
+  }
+  if (code > 10) return "info"; // a code TfL may add later: show, do not hide
+  if (code >= 9) return "info";
+  if (code >= 5) return "warning";
+  if (code >= 1) return "severe";
   return "critical";
 }
 
-function lineToAlert(line: TflLineStatus): ServiceAlert | null {
-  const status = line.lineStatuses?.[0];
-  if (!status) return null;
-  if ((status.statusSeverity ?? 10) >= 10) return null; // Good Service
-  return {
-    id: `tfl:status:${line.id}`,
-    providers: ["tfl"],
-    severity: mapTflSeverity(status.statusSeverity ?? 0),
-    effect: status.statusSeverityDescription ?? undefined,
-    title: `${line.name}: ${status.statusSeverityDescription ?? ""}`,
-    description: status.reason ? status.reason.replace(/<[^>]+>/g, "") : undefined,
-    affectedRouteIds: [`tfl:${line.id}`],
-    affectedStopIds: [],
-    activePeriods: [],
-  };
+function stripTags(text: string): string {
+  // Repeat until stable, so that removing one tag cannot leave another behind.
+  let current = text;
+  let previous: string;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]+>/g, "");
+  } while (current !== previous);
+  return current;
+}
+
+/** One alert per distinct alerting status code on the line. */
+function lineToAlerts(line: TflLineStatus): ServiceAlert[] {
+  const byCode = new Map<number, ServiceAlert>();
+  for (const status of line.lineStatuses ?? []) {
+    const code = status.statusSeverity;
+    if (code === null || code === undefined) continue;
+    const severity = mapTflSeverity(code);
+    if (!severity) continue;
+    const reason = status.reason ? stripTags(status.reason) : undefined;
+    const existing = byCode.get(code);
+    if (existing) {
+      // Same status on another section: keep one card, list each reason once.
+      if (reason && !existing.description?.split("\n\n").includes(reason))
+        existing.description = existing.description
+          ? `${existing.description}\n\n${reason}`
+          : reason;
+      continue;
+    }
+    byCode.set(code, {
+      id: `tfl:status:${line.id}:${code}`,
+      providers: ["tfl"],
+      severity,
+      effect: status.statusSeverityDescription ?? undefined,
+      title: `${line.name}: ${status.statusSeverityDescription ?? ""}`,
+      description: reason,
+      affectedRouteIds: [`tfl:${line.id}`],
+      affectedStopIds: [],
+      activePeriods: [],
+    });
+  }
+  return [...byCode.values()];
 }
 
 async function lineAlerts(
@@ -274,8 +324,7 @@ async function lineAlerts(
   const lines = parseProviderPayload(z.array(z.unknown()), data, `TfL ${what}`);
   const alerts: ServiceAlert[] = [];
   for (const line of parseProviderRecords(lineStatusSchema, lines, `TfL ${what}`)) {
-    const alert = lineToAlert(line);
-    if (alert) alerts.push(alert);
+    alerts.push(...lineToAlerts(line));
   }
   return alerts;
 }
