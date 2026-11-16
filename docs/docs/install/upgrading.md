@@ -502,34 +502,47 @@ and [OSM data queries](../guides/osm-data-queries.md).
 
 ## Rolling back
 
-`openmapx control rollback` returns to the configuration generation that was
-applied before the current one, with the release it pins:
+`openmapx control rollback` returns to the configuration that was applied with
+the previous release, and to that release:
 
 ```bash
 pnpm openmapx control rollback        # print the plan; nothing changes
 pnpm openmapx control rollback --yes  # roll back
 ```
 
+The target is the newest retained configuration generation that pins another
+release than the applied one, so a rollback always changes the release; renders
+and configuration saves made since the update do not move it. The command refuses
+when no such generation is retained: no release update was applied, or its
+generation was pruned (sixteen generations are kept).
+
+Check out the target release's source first (step 2 of the upgrade, in reverse).
+The render compares the checkout's built-in service files with the release's and
+refuses on a difference, naming the revision to check out.
+
 It renders that generation's configuration and release again as a new generation
 and recreates the services in the self-update order: every other service first,
 then PostGIS, Redis, the web app, the API, Traefik and the operations agent last.
-A service that fails to recreate stops the rollback; the services after it are
-left as they are.
+A service that fails to recreate stops the rollback, and the services after it are
+left as they are. The previous configuration is applied at that point: fix the
+cause and run `pnpm openmapx compose up` to finish. Do not run rollback again,
+which would return to the configuration you rolled back from.
 
-**Rolling back also reverts every configuration change made since that
-generation:** the release selection, the selected services, service
-configuration and secrets all return to the previous generation's. Re-apply any
-change you still want afterwards.
+**Rolling back reverts every configuration change made since that
+configuration was applied:** the release selection, the selected services,
+service configuration and secrets all return to its values. Re-apply any change
+you still want afterwards. Services that configuration does not select keep
+running; stop them with `pnpm openmapx services stop <id>`.
 
-The command refuses when the release would change and the database has a newer
-migration than the previous release ships. The migrator only applies migrations
-newer than the newest applied one, so an older API would otherwise run against a
-newer schema without complaint. CI records each release's newest migration in its
-release manifest; a release published before that, or a previous configuration
-without pins, cannot be checked and is refused too. In those cases, restore the
-backup taken before the update. PostGIS must be running so that the command can
-read the database's migrations. Only the latest switch between generations is
-recorded, so a second rollback returns to the configuration you rolled back from.
+The command refuses when the database has a newer migration than the previous
+release ships. The migrator only applies migrations newer than the newest applied
+one, so an older API would otherwise run against a newer schema without complaint.
+CI records each release's newest migration in its release manifest; a release
+published before that, or a previous configuration without pins, cannot be
+checked and is refused too. In those cases, restore the backup taken before the
+update. PostGIS must be running so that the command can read the database's
+migrations. A rollback is itself a release change, so a second rollback returns to
+the configuration you rolled back from.
 
 ## Reclaiming disk after an upgrade
 

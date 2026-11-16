@@ -23,7 +23,7 @@ import {
   readAppliedServiceIds,
   readGenerationConfiguration,
   readGenerationRelease,
-  readPreviousConfigurationGeneration,
+  readPreviousReleaseGeneration,
   renderConfiguration,
   withConfigurationGenerationWriter,
 } from "../configuration-generation";
@@ -520,33 +520,32 @@ describe("release pins in the generation", () => {
     expect(compose(infraDir).services["data-manager"]?.environment).toBeUndefined();
   });
 
-  it("records the generation it replaced and what it was rendered from", async () => {
+  it("targets the newest generation applied with another release, and what it was rendered from", async () => {
     const { infraDir } = checkout();
     const first = await commit(infraDir, manifest("release-1", "1"));
-    expect(readPreviousConfigurationGeneration(infraDir, first.revisionId)).toBeNull();
+    expect(readPreviousReleaseGeneration(infraDir, first.revisionId)).toBeNull();
     const second = await commit(infraDir, manifest("release-2", "2"));
-    expect(readPreviousConfigurationGeneration(infraDir, second.revisionId)).toBe(first.revisionId);
+    // Any later render keeps the release, so the target stays the first generation.
+    const rendered = await commit(infraDir);
+    expect(readPreviousReleaseGeneration(infraDir, second.revisionId)).toBe(first.revisionId);
+    expect(readPreviousReleaseGeneration(infraDir, rendered.revisionId)).toBe(first.revisionId);
     expect(readGenerationConfiguration(infraDir, first.revisionId)).toMatchObject({
       domain: "maps.example.test",
       selectedRoots: ["app-api", "data-manager", "alpha"],
       release: manifest("release-1", "1"),
     });
     expect(readGenerationRelease(infraDir, first.revisionId)?.manifest.release).toBe("release-1");
+    // A rollback is a release change itself, so the next one goes forward again.
+    const rolledBack = await commit(infraDir, manifest("release-1", "1"));
+    expect(readPreviousReleaseGeneration(infraDir, rolledBack.revisionId)).toBe(
+      rendered.revisionId,
+    );
   });
 
-  it("keeps the recorded predecessor when an applied generation is committed again", async () => {
+  it("finds no target when every retained generation pins the applied release", async () => {
     const { infraDir } = checkout();
-    const first = await commit(infraDir);
-    const options = {
-      infraDir,
-      services: pinned,
-      input: input({ selectedRoots: ["app-api", "data-manager", "alpha"] }),
-      revisionId: `cfg1_${"r".repeat(43)}`,
-    };
-    await commitConfigurationGeneration(options);
-    await commitConfigurationGeneration(options);
-    expect(readPreviousConfigurationGeneration(infraDir, options.revisionId)).toBe(
-      first.revisionId,
-    );
+    await commit(infraDir, manifest("release-1", "1"));
+    const again = await commit(infraDir);
+    expect(readPreviousReleaseGeneration(infraDir, again.revisionId)).toBeNull();
   });
 });

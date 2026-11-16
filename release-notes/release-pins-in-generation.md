@@ -11,16 +11,16 @@ store's `current.json`, `latest.json` and `selections.json` and the release-stor
 lock are gone. `compose release` renders a new generation pinning the resolved
 release, `compose release --clear` and **Clear selected release pin** render the
 applied configuration again without pins, and every other render keeps the
-applied pins. The agent keeps a cache of the manifests it checked, named by
+applied pins; a start without pins pins the configured release. The agent keeps a cache of the manifests it checked, named by
 digest, under `state/ops-agent/releases/`.
 
-`openmapx control rollback` returns to the configuration generation applied
-before the current one, with its release pins, and recreates the services in the
-self-update order. It refuses when the database has a migration newer than the
-previous release ships; CI now records each release's newest migration in its
-release manifest. Rolling back also reverts the configuration made since that
-generation: the release selection, the selected services, service configuration
-and secrets.
+`openmapx control rollback` returns to the configuration that was applied with
+the previous release, with that release's pins, and recreates the services in the
+self-update order. It refuses when no such configuration is retained, and when the
+database has a migration newer than the previous release ships; CI now records
+each release's newest migration in its release manifest. Rolling back also
+reverts the configuration made since: the release selection, the selected
+services, service configuration and secrets.
 
 ## Who is affected
 

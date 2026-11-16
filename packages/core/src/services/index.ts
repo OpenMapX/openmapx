@@ -96,7 +96,7 @@ export {
   readAppliedTransitCredentialsRevision,
   readGenerationConfiguration,
   readGenerationRelease,
-  readPreviousConfigurationGeneration,
+  readPreviousReleaseGeneration,
   renderConfiguration,
   withConfigurationGenerationWriter,
 } from "./configuration-generation";

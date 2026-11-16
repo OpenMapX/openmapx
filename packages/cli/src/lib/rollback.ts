@@ -8,27 +8,23 @@ export interface RollbackPlan {
   target: services.GenerationRelease | null;
 }
 
-/** The applied generation and the one applied before it, with the releases they pin. */
+/**
+ * The applied generation and the newest retained one that pins another
+ * release: the configuration that was applied with the previous release.
+ */
 export function planRollback(infraDir: string): RollbackPlan {
   const currentRevisionId = services.currentConfigurationGeneration(infraDir);
   if (!currentRevisionId) throw new Error("No configuration has been applied yet");
-  const targetRevisionId = services.readPreviousConfigurationGeneration(
-    infraDir,
-    currentRevisionId,
-  );
+  const current = services.readGenerationRelease(infraDir, currentRevisionId);
+  const targetRevisionId = services.readPreviousReleaseGeneration(infraDir, currentRevisionId);
   if (!targetRevisionId)
-    throw new Error("The applied configuration is the first one; there is nothing to roll back to");
-  try {
-    services.configurationGenerationComposeFile(infraDir, targetRevisionId);
-  } catch (error) {
-    throw new Error(`The previous configuration ${targetRevisionId} is no longer retained`, {
-      cause: error,
-    });
-  }
+    throw new Error(
+      `No retained configuration pins another release than the applied one (${current?.manifest.release ?? "no release"}). Rollback returns to the configuration applied with the previous release, and none is retained: no release update was applied, or its configuration was pruned.`,
+    );
   return {
     currentRevisionId,
     targetRevisionId,
-    current: services.readGenerationRelease(infraDir, currentRevisionId),
+    current,
     target: services.readGenerationRelease(infraDir, targetRevisionId),
   };
 }
@@ -38,14 +34,12 @@ export function planRollback(infraDir: string): RollbackPlan {
  * the migrator only applies migrations newer than the newest applied one, so
  * an older API would start against the newer schema without complaint. The
  * newest applied migration must not be newer than the target release's
- * recorded migration head. Rolling back within one release changes no image
- * and needs no check.
+ * recorded migration head.
  */
 export function assertDatabaseAllowsRollback(
   plan: RollbackPlan,
   newestAppliedMigration: number | null,
 ): void {
-  if (plan.current?.manifestDigest === plan.target?.manifestDigest) return;
   if (!plan.target)
     throw new Error(
       "The previous configuration pins no release, so the database migrations its images expect are unknown. Rollback refuses; restore a backup taken before the update instead.",

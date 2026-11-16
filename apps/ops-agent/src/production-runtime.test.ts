@@ -155,7 +155,7 @@ describe("assembled production service authority", () => {
     const cleared = services.currentConfigurationGeneration(host.infraDir);
     expect(cleared).not.toBe(pinned);
     expect(services.readAppliedRelease(host.infraDir)).toBeNull();
-    expect(services.readPreviousConfigurationGeneration(host.infraDir, cleared!)).toBe(pinned);
+    expect(services.readPreviousReleaseGeneration(host.infraDir, cleared!)).toBe(pinned);
     expect(services.readGenerationRelease(host.infraDir, pinned!)?.manifest.release).toBe(
       "checked-pin",
     );

@@ -882,7 +882,7 @@ dbDescribe("retained finite maintenance requests", () => {
       expect(services.readAppliedRelease(host.infraDir)).toBeNull();
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(pointer);
       expect(
-        services.readPreviousConfigurationGeneration(
+        services.readPreviousReleaseGeneration(
           host.infraDir,
           services.currentConfigurationGeneration(host.infraDir)!,
         ),

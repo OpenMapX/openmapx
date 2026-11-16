@@ -284,7 +284,7 @@ export function registerControlCommands(program: Command): void {
   control
     .command("rollback")
     .description(
-      "Return to the configuration applied before the current one, with the release it pins",
+      "Return to the configuration that was applied with the previous release, and that release",
     )
     .option("--yes", "Roll back; without it the plan is printed and nothing changes")
     .action(async (options: { yes?: boolean }) => {
@@ -294,49 +294,57 @@ export function registerControlCommands(program: Command): void {
         `Applied configuration: ${plan.currentRevisionId} (release ${plan.current?.manifest.release ?? "none"})`,
       );
       log.info(
-        `Previous configuration: ${plan.targetRevisionId} (release ${plan.target?.manifest.release ?? "none"})`,
+        `Configuration applied with the previous release: ${plan.targetRevisionId} (release ${plan.target?.manifest.release ?? "none"})`,
       );
       log.warn(
-        "Rolling back also reverts every configuration change made since then: the release selection, the selected services, service configuration and secrets return to the previous configuration's.",
+        "Rolling back returns to that configuration and reverts every configuration change made since: the release selection, the selected services, service configuration and secrets. Services it does not select keep running; stop them with `pnpm openmapx services stop <id>`.",
       );
-      const sameRelease = plan.current?.manifestDigest === plan.target?.manifestDigest;
-      assertDatabaseAllowsRollback(plan, sameRelease ? null : await readNewestAppliedMigration());
+      assertDatabaseAllowsRollback(plan, await readNewestAppliedMigration());
       if (!options.yes) {
         log.info("Nothing was changed. Run again with --yes to roll back.");
         completeCliCommand(0);
       }
       const { renderComposeForRepo } = await import("./compose");
       const target = services.readGenerationConfiguration(infraDir, plan.targetRevisionId);
-      const code = await leasedHostEffect("control.rollback", "all", async () => {
-        const rendered = await renderComposeForRepo({
-          services: target.selectedRoots,
-          release: target.release,
-          configurationFrom: plan.targetRevisionId,
-          expectedCurrentRevisionId: plan.currentRevisionId,
-        });
-        log.ok(`Rendered the previous configuration again → ${rendered.revisionId}`);
-        // Later renders keep the restored selection.
-        if (services.readDesiredSelection(infraDir).source !== "env")
-          services.writeServiceSelectionFile(infraDir, target.selectedRoots);
-        await applyGeneratedHardlinksBeforeStart();
-        // The self-update order: the database before its clients, the agent last.
-        for (const id of services.selfUpdateServiceOrder(rendered.enabledServiceIds)) {
-          const exit = await dockerComposeStream(["up", "-d", "--no-deps", id]);
-          if (exit !== 0) {
-            log.err(
-              `Recreating ${id} failed (exit ${exit}); the services after it were not touched.`,
-            );
-            return exit;
+      let code: number | null = null;
+      let failure: string | undefined;
+      try {
+        code = await leasedHostEffect("control.rollback", "all", async () => {
+          const rendered = await renderComposeForRepo({
+            services: target.selectedRoots,
+            release: target.release,
+            configurationFrom: plan.targetRevisionId,
+            expectedCurrentRevisionId: plan.currentRevisionId,
+          });
+          log.ok(`Rendered the previous configuration again → ${rendered.revisionId}`);
+          // Later renders keep the restored selection.
+          if (services.readDesiredSelection(infraDir).source !== "env")
+            services.writeServiceSelectionFile(infraDir, target.selectedRoots);
+          await applyGeneratedHardlinksBeforeStart();
+          // The self-update order: the database before its clients, the agent last.
+          for (const id of services.selfUpdateServiceOrder(rendered.enabledServiceIds)) {
+            const exit = await dockerComposeStream(["up", "-d", "--no-deps", id]);
+            if (exit !== 0) {
+              log.err(
+                `Recreating ${id} failed (exit ${exit}); the services after it were not touched. The previous configuration is applied: fix the cause and run \`pnpm openmapx compose up\` to finish. Do not run rollback again, which would return to the configuration rolled back from.`,
+              );
+              return exit;
+            }
           }
-        }
-        return 0;
-      });
-      audit({
-        action: "rollback",
-        from: plan.currentRevisionId,
-        to: plan.targetRevisionId,
-        exitCode: code,
-      });
+          return 0;
+        });
+      } catch (error) {
+        failure = error instanceof Error ? error.message : String(error);
+        throw error;
+      } finally {
+        audit({
+          action: "rollback",
+          from: plan.currentRevisionId,
+          to: plan.targetRevisionId,
+          exitCode: code,
+          ...(failure ? { error: failure } : {}),
+        });
+      }
       completeCliCommand(code);
     });
 }

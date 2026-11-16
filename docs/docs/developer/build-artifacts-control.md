@@ -388,16 +388,20 @@ configuration again without pins. The agent caches the manifests it checked unde
 `state/ops-agent/releases/<digest>.json`; the newest is the release an update can
 apply. A manifest's `producer` and `buildMetadata` are display metadata.
 
-The configuration directory records the last pointer move, which names the
-generation applied before the current one. `openmapx control rollback` renders
-that generation's configuration and release again as a new generation and
-recreates the services in the self-update order. It refuses when the database's
-newest applied migration (`created_at` in `drizzle.__drizzle_migrations`) is newer
-than the target release's `databaseMigrationHead`, which CI writes into the release
-manifest from the API's migration journal; the migrator alone would run an older
-image against a newer schema. Rolling back also reverts the configuration made
-since: the release selection, the selected services, service configuration and
-secrets.
+`openmapx control rollback` targets the newest retained generation, by the age of
+its rendered files, whose pinned release digest differs from the applied one: the
+configuration that was applied with the previous release. It renders that
+generation's configuration and release again as a new generation and recreates the
+services in the self-update order, so a rollback always changes the release and a
+second one goes forward again. It refuses when no such generation is retained, and
+when the database's newest applied migration (`created_at` in
+`drizzle.__drizzle_migrations`) is newer than the target release's
+`databaseMigrationHead`, which CI writes into the release manifest from the API's
+migration journal; the migrator alone would run an older image against a newer
+schema. Rolling back also reverts the configuration made since: the release
+selection, the selected services, service configuration and secrets. Every
+rollback, also one that fails after its commit, is appended to the control audit
+file.
 
 ### Operator exit
 

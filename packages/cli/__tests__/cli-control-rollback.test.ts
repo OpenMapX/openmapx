@@ -111,15 +111,24 @@ async function rollback(...args: string[]) {
 }
 
 describe("rollback plan", () => {
-  it("names the applied generation and the one applied before it", async () => {
+  it("targets the configuration applied with the previous release", async () => {
     expect(() => planRollback(infraDir)).toThrow(/No configuration/);
     const first = await render(["alpha"], manifest("release-1", "1", 100));
-    expect(() => planRollback(infraDir)).toThrow(/first one/);
+    expect(() => planRollback(infraDir)).toThrow(/No retained configuration pins another release/);
     const second = await render(["alpha", "app-api"], manifest("release-2", "2", 200));
+    // A later render keeps release-2, so the target stays the first generation.
+    const third = await render(["alpha", "app-api"], manifest("release-2", "2", 200));
     const plan = planRollback(infraDir);
-    expect(plan).toMatchObject({ currentRevisionId: second, targetRevisionId: first });
+    expect(plan).toMatchObject({ currentRevisionId: third, targetRevisionId: first });
+    expect(second).not.toBe(third);
     expect(plan.current?.manifest.release).toBe("release-2");
     expect(plan.target?.manifest.release).toBe("release-1");
+  });
+
+  it("refuses when every retained configuration pins the applied release", async () => {
+    await render(["alpha"], manifest("release-1", "1", 100));
+    await render(["alpha", "app-api"], manifest("release-1", "1", 100));
+    expect(() => planRollback(infraDir)).toThrow(/none is retained/);
   });
 });
 
@@ -161,12 +170,6 @@ describe("the database check", () => {
       /records no database migration head/,
     );
   });
-
-  it("needs no database when the release does not change", () => {
-    const same = manifest("release-2", "2", 200);
-    expect(() => assertDatabaseAllowsRollback(plan(same, same), 999)).not.toThrow();
-    expect(() => assertDatabaseAllowsRollback(plan(null, null), 999)).not.toThrow();
-  });
 });
 
 describe("openmapx control rollback", () => {
@@ -178,7 +181,8 @@ describe("openmapx control rollback", () => {
     const output = printed.join("\n");
     expect(output).toContain("(release release-2)");
     expect(output).toContain("(release release-1)");
-    expect(output).toContain("also reverts every configuration change made since then");
+    expect(output).toContain("reverts every configuration change made since");
+    expect(output).toContain("Services it does not select keep running");
     expect(output).toContain("Run again with --yes");
     expect(services.currentConfigurationGeneration(infraDir)).toBe(current);
     expect(dockerComposeStream).not.toHaveBeenCalled();
@@ -211,7 +215,8 @@ describe("openmapx control rollback", () => {
     await expect(rollback("--yes")).rejects.toThrow("exit:0");
     const applied = services.currentConfigurationGeneration(infraDir);
     expect(applied).not.toBe(current);
-    expect(services.readPreviousConfigurationGeneration(infraDir, applied!)).toBe(current);
+    // A second rollback goes forward again.
+    expect(services.readPreviousReleaseGeneration(infraDir, applied!)).toBe(current);
     expect(services.readAppliedRelease(infraDir)?.manifest.release).toBe("release-1");
     expect(services.readGenerationConfiguration(infraDir, applied!).selectedRoots).toEqual(
       services.readGenerationConfiguration(infraDir, previous).selectedRoots,
@@ -247,8 +252,24 @@ describe("openmapx control rollback", () => {
       ["up", "-d", "--no-deps", "postgis"],
     ]);
     expect(printed.join("\n")).toContain("Recreating postgis failed (exit 3)");
+    expect(printed.join("\n")).toContain("run `pnpm openmapx compose up` to finish");
     expect(
       openLeaseStore({ directory: leaseStoreDirectory(infraDir), purpose: "test" }).list(),
     ).toEqual([]);
+  });
+  it("records the rollback in the audit file when it fails after its commit", async () => {
+    await render(["alpha"], manifest("release-1", "1", 100));
+    const current = await render(["alpha"], manifest("release-2", "2", 200));
+    newestAppliedMigration(100);
+    vi.mocked(applyGeneratedHardlinksBeforeStart).mockRejectedValueOnce(new Error("links failed"));
+    await expect(rollback("--yes")).rejects.toThrow("links failed");
+    expect(services.currentConfigurationGeneration(infraDir)).not.toBe(current);
+    const audit = readFileSync(join(infraDir, "state/ops-agent/control-audit.jsonl"), "utf8");
+    expect(JSON.parse(audit.trim().split("\n").at(-1) ?? "")).toMatchObject({
+      action: "rollback",
+      from: current,
+      exitCode: null,
+      error: "links failed",
+    });
   });
 });

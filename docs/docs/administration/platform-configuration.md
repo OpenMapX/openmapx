@@ -75,5 +75,5 @@ changed pin is refused. Clearing renders the applied configuration again as a ne
 generation without pins; running containers keep their images until they are next
 recreated, and the configured channel is unchanged. It does not select local
 images: a later start may pin the configured channel again. Finish any pending
-data-manager update first. To return to the previous generation with its pins, use
+data-manager update first. To return to the configuration applied with the previous release, use
 `openmapx control rollback` from the host (see [Upgrading](../install/upgrading.md#rolling-back)).
