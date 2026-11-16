@@ -31,6 +31,7 @@ import {
   mapMotisRoute,
   normalizeStop,
   normalizeStoptime,
+  routeProbeBox,
 } from "../adapter.js";
 import { decodeMotisLineReference, encodeMotisRoutePatternId } from "../route-pattern-id.js";
 
@@ -258,6 +259,183 @@ describe("MOTIS static route adapter", () => {
     mocks.stoptimes.mockResolvedValue({ data: { stopTimes: [] } });
     expect(await getRoutesForStop(instance, "ms:root", "epoch")).toEqual([]);
     expect(mocks.routes).not.toHaveBeenCalled();
+  });
+});
+
+describe("MOTIS routes-for-stop probe sharing", () => {
+  const places: Record<string, ReturnType<typeof stop>> = {
+    root: stop("root", 8.005, 47.005),
+    p1: stop("p1", 8.0052, 47.0051, "root"),
+    p2: stop("p2", 8.0049, 47.0049, "root"),
+    bay: stop("bay", 8.006, 47.006),
+    lone: stop("lone", 8.0065, 47.0065),
+    far: stop("far", 8.505, 47.505),
+  };
+
+  const fixture = (zoomFiltered = false) => ({
+    data: {
+      routes: [
+        route(30, [{ from: 1, to: 4, polyline: 0 }]),
+        route(10, [{ from: 0, to: 4, polyline: 0 }]),
+        route(20, [{ from: 3, to: 4, polyline: 0 }]),
+        route(40, [{ from: 2, to: 3, polyline: 0 }]),
+        route(50, [{ from: 4, to: 4, polyline: 0 }]),
+      ],
+      polylines: [],
+      stops: [places.root, places.p1, places.p2, places.bay, stop("x", 9, 48)],
+      zoomFiltered,
+    },
+  });
+
+  const stationStops = ["ms:root", "ms:p1", "ms:p2", "ms:bay", "ms:lone"];
+
+  const gateRoutes = () => {
+    const gate = Promise.withResolvers<unknown>();
+    mocks.routes.mockImplementation(() => gate.promise);
+    return gate;
+  };
+
+  const shortNames = (routes: Array<{ shortName: string }>) =>
+    routes.map((candidate) => candidate.shortName);
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.stoptimes.mockImplementation(async ({ query }: { query: { stopId: string } }) => ({
+      data: { place: places[query.stopId], stopTimes: [] },
+    }));
+  });
+
+  it("issues one request for a station's stops and answers what each stop answers alone", async () => {
+    const gate = gateRoutes();
+    const pending = Promise.all(
+      stationStops.map((stopId) => getRoutesForStop(instance, stopId, "e")),
+    );
+    await vi.waitFor(() => expect(mocks.routes).toHaveBeenCalledTimes(1));
+    gate.resolve(fixture());
+    const concurrent = await pending;
+
+    const box = routeProbeBox(47.005, 8.005);
+    expect(mocks.routes).toHaveBeenCalledTimes(1);
+    expect(mocks.routes.mock.calls[0][0].query).toEqual({
+      min: "46.999000,7.999000",
+      max: "47.011000,8.011000",
+      zoom: 11,
+    });
+    expect(box).toMatchObject({ min: "46.999000,7.999000", max: "47.011000,8.011000" });
+
+    const sequential = [];
+    for (const stopId of stationStops) {
+      sequential.push(await getRoutesForStop(instance, stopId, "e"));
+    }
+    expect(mocks.routes).toHaveBeenCalledTimes(1 + stationStops.length);
+    expect(sequential).toEqual(concurrent);
+    expect(concurrent.map(shortNames)).toEqual([
+      ["30", "10", "40"],
+      ["30", "10", "40"],
+      ["30", "10", "40"],
+      ["20", "40"],
+      [],
+    ]);
+  });
+
+  it("gives stops in different grid cells their own probe", async () => {
+    mocks.routes.mockResolvedValue({
+      data: {
+        routes: [
+          route(1, [{ from: 0, to: 2, polyline: 0 }]),
+          route(2, [{ from: 1, to: 2, polyline: 0 }]),
+        ],
+        polylines: [],
+        stops: [places.root, places.far, stop("x", 9, 48)],
+        zoomFiltered: false,
+      },
+    });
+    const [near, far] = await Promise.all([
+      getRoutesForStop(instance, "ms:root", "e"),
+      getRoutesForStop(instance, "ms:far", "e"),
+    ]);
+    expect(mocks.routes).toHaveBeenCalledTimes(2);
+    const boxes = [routeProbeBox(47.005, 8.005), routeProbeBox(47.505, 8.505)].map(
+      ({ min, max }) => ({ min, max, zoom: 11 }),
+    );
+    expect(mocks.routes.mock.calls.map((call) => call[0].query)).toEqual(
+      expect.arrayContaining(boxes),
+    );
+    expect(boxes[0]).not.toEqual(boxes[1]);
+    expect(shortNames(near)).toEqual(["1"]);
+    expect(shortNames(far)).toEqual(["2"]);
+  });
+
+  it.each([
+    [47.005, 8.005],
+    [47.0099, 8.0099],
+    [47.01, 8.01],
+    [-33.8688, 151.2093],
+    [-0.0005, -0.0005],
+    [52.5251, 13.3694],
+  ])("snaps (%f, %f) to a probe box containing its ±0.001° box", (lat, lon) => {
+    const { min, max } = routeProbeBox(lat, lon);
+    const [minLat, minLon] = min.split(",").map(Number);
+    const [maxLat, maxLon] = max.split(",").map(Number);
+    expect(minLat).toBeLessThanOrEqual(lat - 0.001 + 1e-9);
+    expect(minLon).toBeLessThanOrEqual(lon - 0.001 + 1e-9);
+    expect(maxLat).toBeGreaterThanOrEqual(lat + 0.001 - 1e-9);
+    expect(maxLon).toBeGreaterThanOrEqual(lon + 0.001 - 1e-9);
+    expect(maxLat - minLat).toBeLessThanOrEqual(0.012 + 1e-9);
+    expect(maxLon - minLon).toBeLessThanOrEqual(0.012 + 1e-9);
+  });
+
+  it("rejects every waiter of a failed probe and retries on the next lookup", async () => {
+    const gate = gateRoutes();
+    const pending = stationStops.map((stopId) => getRoutesForStop(instance, stopId, "e"));
+    await vi.waitFor(() => expect(mocks.routes).toHaveBeenCalledTimes(1));
+    gate.reject(new Error("down"));
+    for (const call of pending) await expect(call).rejects.toThrow(/down/);
+    expect(mocks.routes).toHaveBeenCalledTimes(1);
+
+    mocks.routes.mockResolvedValue(fixture());
+    expect(shortNames(await getRoutesForStop(instance, "ms:root", "e"))).toEqual([
+      "30",
+      "10",
+      "40",
+    ]);
+    expect(mocks.routes).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects every waiter when the shared probe answers an error", async () => {
+    const gate = gateRoutes();
+    const pending = stationStops.map((stopId) => getRoutesForStop(instance, stopId, "e"));
+    await vi.waitFor(() => expect(mocks.routes).toHaveBeenCalledTimes(1));
+    gate.resolve({ data: undefined, error: { e: 1 } });
+    for (const call of pending) await expect(call).rejects.toThrow(/unavailable/);
+    expect(mocks.routes).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects every waiter when the shared response is zoom-filtered", async () => {
+    const gate = gateRoutes();
+    const pending = stationStops.map((stopId) => getRoutesForStop(instance, stopId, "e"));
+    await vi.waitFor(() => expect(mocks.routes).toHaveBeenCalledTimes(1));
+    gate.resolve(fixture(true));
+    for (const call of pending) await expect(call).rejects.toThrow(/unexpectedly filtered/);
+    expect(mocks.routes).toHaveBeenCalledTimes(1);
+  });
+
+  it("never shares a probe between dataset epochs", async () => {
+    const gate = gateRoutes();
+    const pending = Promise.all([
+      getRoutesForStop(instance, "ms:root", "e1"),
+      getRoutesForStop(instance, "ms:root", "e2"),
+    ]);
+    await vi.waitFor(() => expect(mocks.routes).toHaveBeenCalledTimes(2));
+    gate.resolve(fixture());
+    const [first, second] = await pending;
+    const ids = (epoch: string) =>
+      [30, 10, 40].map((routeIdx) =>
+        encodeMotisRoutePatternId(epoch, routeIdx, [`de_feed_route-${routeIdx}`]),
+      );
+    expect(first.map((candidate) => candidate.id)).toEqual(ids("e1"));
+    expect(second.map((candidate) => candidate.id)).toEqual(ids("e2"));
+    expect(mocks.routes).toHaveBeenCalledTimes(2);
   });
 });
 
