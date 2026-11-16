@@ -377,3 +377,144 @@ describe("DeepLinkManager history entries", () => {
     expect(window.location.search).toContain("search=pizza");
   });
 });
+
+describe("DeepLinkManager directions waypoints", () => {
+  const aachen: [number, number] = [6.08, 50.78];
+  const koeln: [number, number] = [6.96, 50.94];
+  const berlin: [number, number] = [13.405, 52.52];
+
+  beforeEach(() => {
+    cleanup();
+    useDirectionsStore.getState().close();
+  });
+
+  afterEach(() => {
+    cleanup();
+    useDirectionsStore.getState().close();
+  });
+
+  function writeNow(): void {
+    act(() => {
+      window.dispatchEvent(new Event(DEEPLINK_UPDATE_EVENT));
+    });
+  }
+
+  function wp(): string[] {
+    return new URLSearchParams(window.location.search).getAll("wp");
+  }
+
+  /** What a reload or an opened shared link does: reset, then read the URL. */
+  function reopen(search: string): void {
+    act(() => {
+      useDirectionsStore.getState().close();
+      window.history.replaceState(null, "", `/${search}`);
+      window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
+    });
+  }
+
+  function slots() {
+    return useDirectionsStore.getState().waypoints.map((w) => ({
+      coords: w.coords,
+      label: w.label,
+      schedule: w.schedule,
+    }));
+  }
+
+  function openDirections(): void {
+    useDirectionsStore.getState().open();
+    useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+  }
+
+  it("puts a blank origin and a destination back into their own fields", () => {
+    render(<DeepLinkManager />);
+    act(() => {
+      useDirectionsStore.getState().setWaypoint(1, berlin, "Berlin");
+      openDirections();
+    });
+    writeNow();
+    expect(wp()).toEqual(["", "52.52,13.405,Berlin"]);
+
+    reopen(window.location.search);
+    expect(slots()[0].coords).toBeNull();
+    expect(slots()[1]).toMatchObject({ coords: berlin, label: "Berlin" });
+  });
+
+  it("keeps a blank intermediate stop in its slot", () => {
+    render(<DeepLinkManager />);
+    act(() => {
+      const d = useDirectionsStore.getState();
+      d.addWaypoint(0);
+      d.setWaypoint(0, aachen, "Aachen");
+      d.setWaypoint(2, berlin, "Berlin");
+      openDirections();
+    });
+    writeNow();
+
+    reopen(window.location.search);
+    expect(slots()).toHaveLength(3);
+    expect(slots()[1].coords).toBeNull();
+    expect(slots()[2]).toMatchObject({ coords: berlin, label: "Berlin" });
+  });
+
+  it("keeps a schedule on its own stop after a blank one", () => {
+    const schedule = { arriveBy: "2026-09-02T14:00", dwellSeconds: 1800 };
+    render(<DeepLinkManager />);
+    act(() => {
+      const d = useDirectionsStore.getState();
+      d.addWaypoint(0);
+      d.addWaypoint(1);
+      d.setWaypoint(0, aachen, "Aachen");
+      d.setWaypoint(2, koeln, "Koeln");
+      d.setWaypoint(3, berlin, "Berlin");
+      d.setWaypointSchedule(2, schedule);
+      openDirections();
+    });
+    writeNow();
+
+    reopen(window.location.search);
+    expect(slots()[2]).toMatchObject({ coords: koeln, label: "Koeln", schedule });
+    expect(slots()[3].schedule).toBeUndefined();
+  });
+
+  it("keeps a schedule on the destination after a blank stop", () => {
+    render(<DeepLinkManager />);
+    act(() => {
+      const d = useDirectionsStore.getState();
+      d.addWaypoint(0);
+      d.setWaypoint(0, aachen, "Aachen");
+      d.setWaypoint(2, berlin, "Berlin");
+      d.setWaypointSchedule(2, { arriveBy: "2026-09-02T14:00" });
+      openDirections();
+    });
+    writeNow();
+
+    reopen(window.location.search);
+    expect(slots()[2]).toMatchObject({
+      coords: berlin,
+      label: "Berlin",
+      schedule: { arriveBy: "2026-09-02T14:00" },
+    });
+  });
+
+  it("opens an existing fully specified link unchanged", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?panel=directions&wp=50.78%2C6.08%2CAachen&wp=52.52%2C13.405%2CBerlin",
+    );
+    render(<DeepLinkManager />);
+
+    expect(slots()).toHaveLength(2);
+    expect(slots()[0]).toMatchObject({ coords: aachen, label: "Aachen" });
+    expect(slots()[1]).toMatchObject({ coords: berlin, label: "Berlin" });
+    expect(wp()).toEqual(["50.78,6.08,Aachen", "52.52,13.405,Berlin"]);
+  });
+
+  it("still reads an existing single-waypoint link as the origin", () => {
+    window.history.replaceState(null, "", "/?panel=directions&wp=50.78%2C6.08%2CAachen");
+    render(<DeepLinkManager />);
+
+    expect(slots()[0]).toMatchObject({ coords: aachen, label: "Aachen" });
+    expect(slots()[1].coords).toBeNull();
+  });
+});
