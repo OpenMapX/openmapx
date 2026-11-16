@@ -71,6 +71,21 @@ describe("useOpeningHoursText — status detail", () => {
     expect(textFor("de").detail(later)).toBe("Öffnet Mo um 09:00");
   });
 
+  it("dates a change a week or more away instead of naming a bare weekday", () => {
+    const nextWeek = {
+      isOpen: false,
+      nextChange: { kind: "opens", at: "08:00", weekday: 6, day: "other", date: "2026-06-06" },
+    } as const;
+    expect(textFor("en").detail(nextWeek)).toBe("Opens Sat, Jun 6 at 08:00 AM");
+    expect(textFor("de").detail(nextWeek)).toBe("Öffnet Sa., 6. Juni um 08:00");
+
+    const closesLater = {
+      isOpen: true,
+      nextChange: { kind: "closes", at: "18:00", weekday: 0, day: "other", date: "2026-06-07" },
+    } as const;
+    expect(textFor("de").detail(closesLater)).toBe("Schließt So., 7. Juni um 18:00");
+  });
+
   it("does not turn unevaluable hours into a closed verdict or primary raw syntax", () => {
     const status = { isOpen: false, isUnknown: true, text: "Mo-Su, PH 00:00-24:00" };
     expect(textFor("en").state(status)).toBe("Opening hours unconfirmed");
