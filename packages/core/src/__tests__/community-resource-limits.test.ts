@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { renderCompose, renderServiceSnippet } from "../services/compose-renderer";
+import {
+  BUILT_IN_SERVICES_WITHOUT_PRIVILEGE_LOCK,
+  renderCompose,
+  renderServiceSnippet,
+} from "../services/compose-renderer";
 import { validateServiceManifest } from "../services/manifest-schema";
 import type { LoadedService, ServiceManifest } from "../services/types";
 
@@ -113,16 +117,29 @@ describe("community container hardening", () => {
     });
   });
 
-  it("leaves a first-party service as the manifest declares it", () => {
+  it("gives a first-party service the privilege lock but only its declared limits", () => {
     const snippet = renderServiceSnippet(service({}, { builtIn: true }), {});
     expect(snippet).not.toHaveProperty("pids_limit");
-    expect(snippet).not.toHaveProperty("security_opt");
+    expect(snippet.security_opt).toEqual(["no-new-privileges:true"]);
     expect(snippet.deploy).toBeUndefined();
 
     const sized = renderServiceSnippet(service({ memory: "2g" }, { builtIn: true }), {});
     expect(sized.deploy?.resources?.limits).toEqual({ memory: "2g" });
     expect(sized).not.toHaveProperty("pids_limit");
-    expect(sized).not.toHaveProperty("security_opt");
+    expect(sized.security_opt).toEqual(["no-new-privileges:true"]);
+  });
+
+  it("leaves a listed first-party service without the privilege lock", () => {
+    const listed = service({}, { builtIn: true });
+    listed.manifest = { ...listed.manifest, id: "nominatim" };
+    expect(BUILT_IN_SERVICES_WITHOUT_PRIVILEGE_LOCK.has("nominatim")).toBe(true);
+    expect(renderServiceSnippet(listed, {})).not.toHaveProperty("security_opt");
+  });
+
+  it("locks a community service even when its id matches a listed first-party one", () => {
+    const community = service({ memory: "256m" }, { builtIn: false });
+    community.manifest = { ...community.manifest, id: "nominatim" };
+    expect(renderServiceSnippet(community, {}).security_opt).toEqual(["no-new-privileges:true"]);
   });
 });
 
@@ -196,6 +213,9 @@ describe.skipIf(!composeAvailable)(
         expect(
           project.services["first-party-limits"]?.deploy?.resources?.limits,
         ).not.toHaveProperty("pids");
+        expect(project.services["first-party-limits"]?.security_opt).toEqual([
+          "no-new-privileges:true",
+        ]);
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
