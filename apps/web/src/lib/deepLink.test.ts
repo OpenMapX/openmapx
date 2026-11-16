@@ -7,6 +7,7 @@ import {
   formatCameraParam,
   formatLabeledPoint,
   formatScheduleParam,
+  formatWaypointParams,
   navigationPath,
   paramsWithoutDeepLink,
   parseCameraParam,
@@ -234,7 +235,7 @@ describe("buildDirectionsDeepLinkUrl", () => {
     expect(parsed.searchParams.getAll("wp")).toEqual(["52.52,13.405,Berlin", "53.55,9.99,Hamburg"]);
     const roundTrip = parseDeepLinkSearch(parsed.search);
     expect(roundTrip.directions?.waypoints).toHaveLength(2);
-    expect(roundTrip.directions?.waypoints[0].coords).toEqual([13.405, 52.52]);
+    expect(roundTrip.directions?.waypoints[0]?.coords).toEqual([13.405, 52.52]);
   });
 
   it("omits mode for driving and avoid when empty", () => {
@@ -305,6 +306,96 @@ describe("schedule deep-link param", () => {
       "?panel=directions&wp=0,0&wp=1,1&sched=1%7C0%2Ca%3D2026-09-02T14%3A00",
     );
     expect(parsed.directions?.schedules).toEqual({ 0: { arriveBy: "2026-09-02T14:00" } });
+  });
+});
+
+describe("directions waypoint slots", () => {
+  const aachen = { coords: [6.08, 50.78] as [number, number], label: "Aachen" };
+  const koeln = { coords: [6.96, 50.94] as [number, number], label: "Koeln" };
+  const berlin = { coords: [13.405, 52.52] as [number, number], label: "Berlin" };
+
+  function slot(
+    id: string,
+    type: Waypoint["type"],
+    point?: { coords: [number, number]; label: string },
+    schedule?: Waypoint["schedule"],
+  ): Waypoint {
+    return {
+      id,
+      coords: point?.coords ?? null,
+      label: point?.label ?? "",
+      type,
+      ...(schedule ? { schedule } : {}),
+    };
+  }
+
+  function roundTrip(waypoints: Waypoint[]) {
+    const params = new URLSearchParams({ panel: "directions" });
+    for (const value of formatWaypointParams(waypoints)) params.append("wp", value);
+    const schedule = formatScheduleParam(waypoints);
+    if (schedule) params.set("sched", schedule);
+    return { params, parsed: parseDeepLinkSearch(`?${params}`).directions };
+  }
+
+  it("keeps a blank origin in front of the destination", () => {
+    const { params, parsed } = roundTrip([slot("o", "origin"), slot("d", "destination", berlin)]);
+    expect(params.getAll("wp")).toEqual(["", "52.52,13.405,Berlin"]);
+    expect(parsed?.waypoints).toEqual([null, berlin]);
+  });
+
+  it("keeps a blank intermediate stop in its slot", () => {
+    const { params, parsed } = roundTrip([
+      slot("o", "origin", aachen),
+      slot("w", "waypoint"),
+      slot("d", "destination", berlin),
+    ]);
+    expect(params.getAll("wp")).toEqual(["50.78,6.08,Aachen", "", "52.52,13.405,Berlin"]);
+    expect(parsed?.waypoints).toEqual([aachen, null, berlin]);
+  });
+
+  it("keeps a schedule on its stop after a blank one", () => {
+    const fourSlots = roundTrip([
+      slot("o", "origin", aachen),
+      slot("w1", "waypoint"),
+      slot("w2", "waypoint", koeln, { arriveBy: "2026-09-02T14:00", dwellSeconds: 1800 }),
+      slot("d", "destination", berlin),
+    ]).parsed;
+    expect(fourSlots?.waypoints[2]).toEqual(koeln);
+    expect(fourSlots?.schedules).toEqual({
+      2: { arriveBy: "2026-09-02T14:00", dwellSeconds: 1800 },
+    });
+
+    const threeSlots = roundTrip([
+      slot("o", "origin", aachen),
+      slot("w", "waypoint"),
+      slot("d", "destination", berlin, { arriveBy: "2026-09-02T14:00" }),
+    ]).parsed;
+    expect(threeSlots?.waypoints[2]).toEqual(berlin);
+    expect(threeSlots?.schedules).toEqual({ 2: { arriveBy: "2026-09-02T14:00" } });
+  });
+
+  it("writes a fully specified route without empty values", () => {
+    const { params } = roundTrip([slot("o", "origin", aachen), slot("d", "destination", berlin)]);
+    expect(params.getAll("wp")).toEqual(["50.78,6.08,Aachen", "52.52,13.405,Berlin"]);
+  });
+
+  it("writes nothing when no slot has a place", () => {
+    expect(formatWaypointParams([slot("o", "origin"), slot("d", "destination")])).toEqual([]);
+  });
+
+  it("parses existing links as before", () => {
+    expect(
+      parseDeepLinkSearch("?panel=directions&wp=50.78,6.08,Aachen").directions?.waypoints,
+    ).toEqual([aachen]);
+    expect(
+      parseDeepLinkSearch("?panel=directions&wp=garbage&wp=52.52,13.405").directions?.waypoints,
+    ).toEqual([{ coords: [13.405, 52.52], label: "" }]);
+  });
+
+  it("parses an empty value as a blank slot", () => {
+    expect(
+      parseDeepLinkSearch("?panel=directions&wp=&wp=52.52,13.405,Berlin").directions?.waypoints,
+    ).toEqual([null, berlin]);
   });
 });
 

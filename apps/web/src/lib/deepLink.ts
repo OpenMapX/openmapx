@@ -110,7 +110,11 @@ export interface ParsedDeepLink {
     mode?: string;
     avoid: string[];
     units?: string;
-    waypoints: LabeledPointDeepLink[];
+    /**
+     * One entry per directions slot; `null` is a blank slot (an empty `wp=`),
+     * kept so later waypoints and the `sched` indices keep their position.
+     */
+    waypoints: (LabeledPointDeepLink | null)[];
     /** Per-waypoint time constraints, keyed by waypoint index. */
     schedules: Record<number, WaypointSchedule>;
   };
@@ -319,7 +323,25 @@ export function parseScheduleParam(value: string | null): Record<number, Waypoin
   return result;
 }
 
-/** `null` when no waypoint is constrained, so an ordinary link is unchanged. */
+/**
+ * The `wp` values for a directions route: one per slot once any slot has a
+ * place, a blank slot as an empty value so the slots after it (and the
+ * `sched` indices, which count every slot) keep their position. Older
+ * builds drop the empty values and read the compact list as before.
+ */
+export function formatWaypointParams(
+  waypoints: readonly Pick<Waypoint, "coords" | "label">[],
+): string[] {
+  if (!waypoints.some((waypoint) => waypoint.coords)) return [];
+  return waypoints.map((waypoint) =>
+    waypoint.coords ? formatLabeledPoint({ coords: waypoint.coords, label: waypoint.label }) : "",
+  );
+}
+
+/**
+ * `null` when no waypoint is constrained, so an ordinary link is unchanged.
+ * Indices count every slot, blank ones included, matching `formatWaypointParams`.
+ */
 export function formatScheduleParam(waypoints: Waypoint[]): string | null {
   const records: string[] = [];
   waypoints.forEach((waypoint, index) => {
@@ -517,10 +539,12 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
               : {}),
             avoid: splitCsv(params.get("avoid")),
             units: params.get("units") ?? undefined,
-            waypoints: params
-              .getAll("wp")
-              .map(parseLabeledPoint)
-              .filter((wp): wp is LabeledPointDeepLink => Boolean(wp)),
+            waypoints: params.getAll("wp").flatMap((value): (LabeledPointDeepLink | null)[] => {
+              // Empty marks a blank slot; anything else unreadable is dropped, as before.
+              if (value === "") return [null];
+              const point = parseLabeledPoint(value);
+              return point ? [point] : [];
+            }),
             schedules: parseScheduleParam(params.get("sched")),
           }
         : undefined,
