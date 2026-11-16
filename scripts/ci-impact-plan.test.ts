@@ -175,8 +175,7 @@ describe("CI applicability and required result enforcement", () => {
     expect(rollout.version).toBe(1);
     expect(rollout.approvedScopes).toEqual(["docs", "web", "mobile", "client"]);
     for (const scope of rollout.approvedScopes) expect(selectiveScopes).toContain(scope);
-    for (const group of rollout.mergeQueueDatabaseGroups)
-      expect(mergeQueueDatabaseGroups).toContain(group);
+    expect(rollout.mergeQueueDatabaseGroups).toEqual(mergeQueueDatabaseGroups);
   });
   it("leaves approved database groups to the merge queue on pull requests only", () => {
     const matrix = [
