@@ -15,7 +15,11 @@
  * Both decrypt to the same JSON-stringified private JWK.
  */
 
-import * as age from "age-encryption";
+// Keep this import dynamic: age-encryption and its noble crypto dependencies
+// (about 180 kB) are needed only for key operations, and a static import would
+// load them with every page that mounts the keypair hooks. Every caller below
+// is already async.
+const loadAge = () => import("age-encryption");
 
 /**
  * Default "name" shown by the browser when a passkey is created for review
@@ -77,6 +81,7 @@ export async function encryptWithPassphrase(
   passphrase: string,
 ): Promise<string> {
   if (!passphrase) throw new Error("Passphrase cannot be empty");
+  const age = await loadAge();
   const encrypter = new age.Encrypter();
   encrypter.setPassphrase(passphrase);
   const ct = await encrypter.encrypt(jwkToBytes(privateJwk));
@@ -87,6 +92,7 @@ export async function decryptWithPassphrase(
   armoredCiphertext: string,
   passphrase: string,
 ): Promise<JsonWebKey> {
+  const age = await loadAge();
   const decrypter = new age.Decrypter();
   decrypter.addPassphrase(passphrase);
   const pt = await decrypter.decrypt(age.armor.decode(armoredCiphertext));
@@ -111,6 +117,7 @@ export async function createWebAuthnIdentity(options: {
   keyName?: string;
   type?: "passkey" | "security-key";
 }): Promise<string> {
+  const age = await loadAge();
   return age.webauthn.createCredential({
     keyName: options.keyName ?? WEBAUTHN_CREDENTIAL_KEY_NAME,
     rpId: options.rpId,
@@ -130,6 +137,7 @@ export async function encryptForWebAuthnIdentities(
   if (identityStrings.length === 0) {
     throw new Error("At least one WebAuthn identity is required");
   }
+  const age = await loadAge();
   const encrypter = new age.Encrypter();
   for (const identity of identityStrings) {
     encrypter.addRecipient(new age.webauthn.WebAuthnRecipient({ identity, rpId }));
@@ -147,6 +155,7 @@ export async function decryptWithWebAuthn(
   armoredCiphertext: string,
   options: { rpId?: string; identityString?: string } = {},
 ): Promise<JsonWebKey> {
+  const age = await loadAge();
   const decrypter = new age.Decrypter();
   decrypter.addIdentity(
     new age.webauthn.WebAuthnIdentity({
