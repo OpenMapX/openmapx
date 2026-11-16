@@ -147,13 +147,39 @@ function buildWeekSchedule(oh: opening_hours, now: Date): DaySchedule[] {
   return schedule;
 }
 
-/** Describes the upcoming flip relative to the place's own today. */
+const DAY_MS = 86_400_000;
+
+/**
+ * Whole calendar days from `from` to `to`, read from their local fields: the
+ * place-local frame `placeNow` sets up. Rounding absorbs a 23- or 25-hour day.
+ */
+function calendarDaysBetween(from: Date, to: Date): number {
+  const start = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((end - start) / DAY_MS);
+}
+
+/** "YYYY-MM-DD" from a Date's local fields. */
+function localIsoDate(d: Date): string {
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Describes the upcoming flip relative to the place's own today. Counted in
+ * calendar days, not weekdays: a change a week away shares today's weekday.
+ */
 function describeChange(nextChange: Date, now: Date, isOpen: boolean): OpeningHoursChange {
-  const weekday = nextChange.getDay();
-  const todayIdx = now.getDay();
-  const day =
-    weekday === todayIdx ? "today" : weekday === (todayIdx + 1) % 7 ? "tomorrow" : "other";
-  return { kind: isOpen ? "closes" : "opens", at: fmt(nextChange), weekday, day };
+  const days = calendarDaysBetween(now, nextChange);
+  const change: OpeningHoursChange = {
+    kind: isOpen ? "closes" : "opens",
+    at: fmt(nextChange),
+    weekday: nextChange.getDay(),
+    day: days === 0 ? "today" : days === 1 ? "tomorrow" : "other",
+  };
+  // A bare weekday reads as the coming one, so date anything a week or more out.
+  return days >= 7 ? { ...change, date: localIsoDate(nextChange) } : change;
 }
 
 /**

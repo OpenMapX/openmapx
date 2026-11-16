@@ -24,7 +24,9 @@ export interface DaySchedule {
 /**
  * The upcoming open/closed flip. `day` is relative to the place's own today so
  * the client can pick between "at 17:00", "tomorrow at 17:00" and naming the
- * weekday, without re-deriving the place's calendar.
+ * weekday, without re-deriving the place's calendar. `day` counts calendar days
+ * in the place's time zone, and changes a week or more away also carry `date`
+ * because a weekday name alone would read as the coming one.
  */
 export interface OpeningHoursChange {
   kind: "opens" | "closes";
@@ -33,6 +35,11 @@ export interface OpeningHoursChange {
   /** 0 = Sunday … 6 = Saturday. */
   weekday: number;
   day: "today" | "tomorrow" | "other";
+  /**
+   * Place-local calendar date "YYYY-MM-DD" of the change. Present only when it
+   * is seven or more days away, where the weekday alone is ambiguous.
+   */
+  date?: string;
 }
 
 /**

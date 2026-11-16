@@ -8,7 +8,10 @@ import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 export interface OpeningHoursText {
   /** Translated open, closed, or neutral unconfirmed state. */
   state: (status: OpeningHoursStatus) => string;
-  /** e.g. "Closes at 17:00", "Opens Mon at 09:00", "Open 24 hours". */
+  /**
+   * e.g. "Closes at 17:00", "Opens Mon at 09:00", "Opens Sat, Jun 6 at 09:00",
+   * "Open 24 hours".
+   */
   detail: (status: OpeningHoursStatus) => string;
   /** Localized weekday name for the expanded schedule, e.g. "Mittwoch". */
   weekday: (weekday: number) => string;
@@ -52,6 +55,18 @@ export function useOpeningHoursText(): OpeningHoursText {
       );
     const longName = nameFor("long");
     const shortName = nameFor("short");
+    // A change a week or more away arrives dated; "Sat, Jun 6" rather than a
+    // bare "Sat", which would read as the coming Saturday.
+    const dateLabel = (isoDate: string, weekday: number) => {
+      const date = new Date(`${isoDate}T00:00:00Z`);
+      if (Number.isNaN(date.getTime())) return shortName(weekday);
+      return new Intl.DateTimeFormat(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        timeZone: "UTC",
+      }).format(date);
+    };
     const at = (hhmm: string) => time(wallClock(hhmm));
 
     // Spelled out rather than built from `${kind}${day}At` so the translation
@@ -60,7 +75,8 @@ export function useOpeningHoursText(): OpeningHoursText {
       const next = status.nextChange;
       // Nothing ahead within a year: open forever, or closed forever.
       if (!next) return status.isOpen ? t("open24Hours") : tc("closed");
-      const values = { time: at(next.at), day: shortName(next.weekday) };
+      const day = next.date ? dateLabel(next.date, next.weekday) : shortName(next.weekday);
+      const values = { time: at(next.at), day };
       if (next.kind === "closes") {
         if (next.day === "today") return t("closesAt", values);
         if (next.day === "tomorrow") return t("closesTomorrowAt", values);
