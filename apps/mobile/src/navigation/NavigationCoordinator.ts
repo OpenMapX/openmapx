@@ -835,7 +835,11 @@ export class NavigationCoordinator {
     const now = clock();
     const session = await repository.loadActive(now);
     if (!session) {
-      await this.deps.effects.run([{ kind: "reconcile-surface" }]);
+      // A stream still delivering with no session has no owner: its trip ended
+      // without the stop reaching the driver, or its record was lost. A start
+      // commits its session before starting the stream, on this same queue, so
+      // no start can be waiting for this stream.
+      await this.deps.effects.run([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
       return;
     }
 
