@@ -1,6 +1,7 @@
 import { fromNodeHeaders } from "better-auth/node";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
+import z from "zod/v4";
 import { auth } from "../auth.js";
 import { db } from "../db/index.js";
 import { dataSubjectRequestTask } from "../db/schema.js";
@@ -16,6 +17,9 @@ import {
 } from "../privacy/subject-export.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+
+/** Request ids are UUIDs; anything else is an unknown request. */
+const requestIdSchema = z.uuid();
 
 export interface PrivacyRequestsRouteOptions {
   service?: PrivacyRequestService;
@@ -150,7 +154,7 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
     "/privacy/data-requests/:requestId",
     async (request, reply) => {
       try {
-        if (!/^[0-9a-f-]{36}$/i.test(request.params.requestId))
+        if (!requestIdSchema.safeParse(request.params.requestId).success)
           throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
         const row = await serviceForRequest().getForUser(
           request.params.requestId,
@@ -178,7 +182,7 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
         const version = Number(request.body?.version);
         if (!Number.isSafeInteger(version) || version < 1)
           throw new PrivacyRequestError("INVALID_VERSION", 400);
-        if (!/^[0-9a-f-]{36}$/i.test(request.params.requestId))
+        if (!requestIdSchema.safeParse(request.params.requestId).success)
           throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
         const row = await serviceForRequest().withdraw(
           request.params.requestId,

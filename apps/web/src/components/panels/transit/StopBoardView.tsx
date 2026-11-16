@@ -64,6 +64,8 @@ export function StopBoardView({ stopId, title, onBack, onDepartureClick }: StopB
   const items = tab === "departures" ? departures : arrivals;
   const isLoading = tab === "departures" ? departuresLoading : arrivalsLoading;
   const hasArrivals = Boolean(arrivals?.length);
+  // Keep the way back once Arrivals is chosen, even if a refetch empties it.
+  const showTabToggle = hasArrivals || tab === "arrivals";
   const mergedAttributions = contributorsForRecords([...(items ?? []), ...(alerts ?? [])]);
 
   return (
@@ -113,7 +115,7 @@ export function StopBoardView({ stopId, title, onBack, onDepartureClick }: StopB
           </Typography>
         </Box>
       </Box>
-      {hasArrivals && (
+      {showTabToggle && (
         <Box sx={{ px: 1.5, pt: 1, pb: 1 }}>
           <ToggleButtonGroup
             value={tab}

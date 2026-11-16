@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { db as defaultDb } from "../db/index.js";
 import { dataSubjectRequestEvent } from "../db/schema.js";
+import { isUniqueViolation } from "../db/unique-violation.js";
 import { PrivacyRequestError } from "./errors.js";
 import { eventPayloadSchema } from "./request-contracts.js";
 
@@ -61,6 +62,36 @@ export async function findIdempotentEvent(
   return event;
 }
 
+/**
+ * The `received` event of the case an earlier create with this key and actor
+ * produced. A create makes a new request id, so the per-request lookup above
+ * cannot find it. A key reused with a different operation is refused.
+ */
+export async function findIdempotentCreate(
+  database: typeof defaultDb,
+  input: { idempotencyKey: string; actorId: string | null; operationDigest: string },
+) {
+  if (!IDEMPOTENCY_KEY.test(input.idempotencyKey)) throw new PrivacyIdempotencyError();
+  const rows = await database
+    .select()
+    .from(dataSubjectRequestEvent)
+    .where(
+      and(
+        eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
+        eq(dataSubjectRequestEvent.eventType, "received"),
+        input.actorId === null
+          ? isNull(dataSubjectRequestEvent.actorId)
+          : eq(dataSubjectRequestEvent.actorId, input.actorId),
+      ),
+    )
+    .limit(1);
+  const event = rows[0];
+  if (!event) return undefined;
+  if (payloadFingerprint(event.payload) !== input.operationDigest)
+    throw new PrivacyIdempotencyError();
+  return event;
+}
+
 export async function recordIdempotentEvent(
   database: typeof defaultDb,
   input: {
@@ -92,7 +123,7 @@ export async function recordIdempotentEvent(
       createdAt: new Date(),
     });
   } catch (error) {
-    if (String(error).includes("data_subject_request_event_idempotency_idx")) {
+    if (isUniqueViolation(error, "data_subject_request_event_idempotency_idx")) {
       await findIdempotentEvent(database, {
         requestId: input.requestId,
         idempotencyKey: input.idempotencyKey,

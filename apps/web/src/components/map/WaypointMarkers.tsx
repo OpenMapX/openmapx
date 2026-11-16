@@ -60,15 +60,28 @@ function createDestinationElement(): HTMLDivElement {
   return el;
 }
 
+interface WaypointMarkerEntry {
+  marker: maplibregl.Marker;
+  /** Position-dependent look the element was built for. */
+  role: string;
+  dragging: boolean;
+}
+
+function markerRole(index: number, count: number): string {
+  if (index === 0) return "origin";
+  if (index === count - 1) return "destination";
+  return `stop:${index}`;
+}
+
 export function WaypointMarkers() {
   const { mapRef, mapReady } = useMap();
-  const { isOpen, waypoints, setWaypoint } = useDirectionsStore();
-  const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const { isOpen, waypoints } = useDirectionsStore();
+  const markersRef = useRef<Map<string, WaypointMarkerEntry>>(new Map());
 
   useEffect(() => {
     if (!isOpen) {
-      for (const marker of markersRef.current.values()) {
-        marker.remove();
+      for (const entry of markersRef.current.values()) {
+        entry.marker.remove();
       }
       markersRef.current.clear();
       return;
@@ -90,10 +103,18 @@ export function WaypointMarkers() {
           if (!wp.coords) return;
           currentIds.add(wp.id);
 
+          const role = markerRole(i, waypoints.length);
           const existing = markersRef.current.get(wp.id);
           if (existing) {
-            existing.setLngLat(wp.coords);
-            return;
+            // Never rebuild or move a marker the user is dragging; the store update
+            // its dragend makes runs this effect again.
+            if (existing.dragging) return;
+            if (existing.role === role) {
+              existing.marker.setLngLat(wp.coords);
+              return;
+            }
+            existing.marker.remove();
+            markersRef.current.delete(wp.id);
           }
 
           const isOrigin = i === 0;
@@ -121,19 +142,30 @@ export function WaypointMarkers() {
             .setLngLat(wp.coords)
             .addTo(map);
 
+          const entry: WaypointMarkerEntry = { marker, role, dragging: false };
+          const id = wp.id;
+          marker.on("dragstart", () => {
+            entry.dragging = true;
+          });
           marker.on("dragend", () => {
+            entry.dragging = false;
             const lngLat = marker.getLngLat();
             const coords: LngLat = [lngLat.lng, lngLat.lat];
-            setWaypoint(i, coords, wp.label);
+            // Waypoints keep their id when reversed, inserted around, removed or
+            // reordered, so look up where this one is now.
+            const { waypoints: current, setWaypoint } = useDirectionsStore.getState();
+            const index = current.findIndex((candidate) => candidate.id === id);
+            if (index < 0) return;
+            setWaypoint(index, coords, current[index].label);
           });
 
-          markersRef.current.set(wp.id, marker);
+          markersRef.current.set(id, entry);
         });
 
         // Remove markers for waypoints that no longer exist
-        for (const [id, marker] of markersRef.current) {
+        for (const [id, entry] of markersRef.current) {
           if (!currentIds.has(id)) {
-            marker.remove();
+            entry.marker.remove();
             markersRef.current.delete(id);
           }
         }
@@ -143,13 +175,13 @@ export function WaypointMarkers() {
     return () => {
       destroyed = true;
     };
-  }, [isOpen, waypoints, mapRef, mapReady, setWaypoint]);
+  }, [isOpen, waypoints, mapRef, mapReady]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      for (const marker of markersRef.current.values()) {
-        marker.remove();
+      for (const entry of markersRef.current.values()) {
+        entry.marker.remove();
       }
       markersRef.current.clear();
     };

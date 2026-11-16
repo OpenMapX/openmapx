@@ -10,7 +10,10 @@ export function installDataMutationAdmission(value: DataConfigurationMaintenance
 export async function assertDataMutationAdmission(tx: postgres.TransactionSql): Promise<void> {
   if (!maintenance)
     throw Object.assign(Error("Data admission prerequisites are unavailable"), { statusCode: 503 });
-  const lock = await tx`SELECT pg_try_advisory_xact_lock(${0x4f4d58},${2}) AS held`;
+  // Shared: ordinary writers only need configuration maintenance and execution
+  // admission kept out, which both take this lock exclusively. An exclusive
+  // lock here turned concurrent writers away from each other as "busy".
+  const lock = await tx`SELECT pg_try_advisory_xact_lock_shared(${0x4f4d58},${2}) AS held`;
   if (lock[0]?.held !== true)
     throw Object.assign(Error("configuration_maintenance_busy"), { statusCode: 409 });
   await maintenance.assertAdmission(tx);

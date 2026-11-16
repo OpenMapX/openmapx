@@ -17,12 +17,36 @@ interface SavedMirror {
   listPlaces?: Record<string, SavedPlace[]>;
 }
 
-/** Drop the persisted mirror and the cached saved-data queries. */
-function dropSavedCaches(queryClient: QueryClient): Promise<void> {
+/** Drop the cached saved-data queries (memory only). */
+function removeSavedQueries(queryClient: QueryClient): void {
   for (const root of SAVED_QUERY_ROOTS) {
     queryClient.removeQueries({ queryKey: [root] });
   }
+}
+
+/** Drop the persisted mirror and the cached saved-data queries. */
+function dropSavedCaches(queryClient: QueryClient): Promise<void> {
+  removeSavedQueries(queryClient);
   return idbDelete(MIRROR_KEY);
+}
+
+/**
+ * Whose saved data this device may show right now: the user id when signed in;
+ * `null` once the server has answered that there is no session (signed out,
+ * expired or revoked; a 401 counts); `undefined` while that is unknown because
+ * the lookup is still pending or failed without an answer (offline, server
+ * unreachable). Only `null` proves the previous owner has left.
+ */
+function sessionOwner(state: {
+  data?: { user?: { id?: string } | null } | null;
+  isPending?: boolean;
+  error?: unknown;
+}): string | null | undefined {
+  const userId = state.data?.user?.id;
+  if (userId) return userId;
+  if (state.isPending) return undefined;
+  if (state.error && (state.error as { status?: unknown }).status !== 401) return undefined;
+  return null;
 }
 
 /**
@@ -32,22 +56,25 @@ function dropSavedCaches(queryClient: QueryClient): Promise<void> {
  * and seeds the query cache from that mirror on startup so the data renders
  * without a connection.
  *
- * The mirror is stamped with its owner's user id and dropped whenever the
- * session user changes or signs out, so on a shared device one user can never
- * see another's saved places. It deliberately does NOT gate offline hydration on
- * a live session (which isn't available offline) — a single-user device hydrates
- * its own last-known data; a different known user wipes it. Read-only offline —
- * queuing offline edits for replay is a separate follow-up.
+ * The mirror is stamped with its owner's user id. It is seeded only for that
+ * owner, or while the session is unknown (lookup pending or offline, when no
+ * live session is available), so a single-user device still hydrates its own
+ * last-known data offline. It is dropped, together with the cached saved-data
+ * queries, as soon as the server confirms there is no session or a different
+ * user signs in, so on a shared device one user can never see another's saved
+ * places. Read-only offline — queuing offline edits for replay is a separate
+ * follow-up.
  */
 export function SavedPlacesMirror(): null {
   const queryClient = useQueryClient();
-  const { data: session } = useSession();
-  const userId = session?.user?.id ?? null;
-  const prevUserIdRef = useRef<string | null | undefined>(undefined);
+  const owner = sessionOwner(useSession());
+  const prevOwnerRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    const prev = prevUserIdRef.current;
-    prevUserIdRef.current = userId;
+    const prev = prevOwnerRef.current;
+    prevOwnerRef.current = owner;
+    // Only a known signed-in user's results are mirrored.
+    const userId = typeof owner === "string" ? owner : null;
 
     let cancelled = false;
     const mirror: SavedMirror = {};
@@ -76,16 +103,16 @@ export function SavedPlacesMirror(): null {
     };
 
     const hydrate = async () => {
-      // A signed-in user just signed out or switched accounts — drop the prior
-      // user's mirror + cached saved data so it can't leak into the next session.
-      if (prev && prev !== userId) {
+      // The server confirmed nobody is signed in, or the signed-in user changed:
+      // the previous owner's saved data must not reach whoever uses the device next.
+      if (owner === null || (typeof prev === "string" && prev !== owner)) {
         await dropSavedCaches(queryClient);
         return;
       }
       const stored = await idbGet<SavedMirror>(MIRROR_KEY);
       if (cancelled || !stored) return;
-      // The persisted mirror belongs to a different (now-known) user.
-      if (userId && stored.userId && stored.userId !== userId) {
+      // A known user only ever gets a mirror stamped with their own id.
+      if (userId && stored.userId !== userId) {
         await dropSavedCaches(queryClient);
         return;
       }
@@ -151,8 +178,12 @@ export function SavedPlacesMirror(): null {
       cancelled = true;
       if (writeTimer) clearTimeout(writeTimer);
       unsubscribe();
+      // This signed-in owner is ending (sign-out, account switch, impersonation).
+      // Release their saved data from memory; the next instance decides about the
+      // IndexedDB copy (kept offline for the same user, dropped otherwise).
+      if (userId) removeSavedQueries(queryClient);
     };
-  }, [queryClient, userId]);
+  }, [queryClient, owner]);
 
   return null;
 }

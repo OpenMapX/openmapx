@@ -79,10 +79,10 @@ import {
   DEEPLINK_UPDATE_EVENT,
   formatBboxParam,
   formatCameraParam,
-  formatLabeledPoint,
   formatLngLat,
   formatLngLatList,
   formatScheduleParam,
+  formatWaypointParams,
   navigationPath,
   type ParsedDeepLink,
   paramsWithoutDeepLink,
@@ -442,7 +442,8 @@ function applyDirections(parsed: ParsedDeepLink["directions"]): void {
   }
   for (let index = 0; index < waypoints.length; index += 1) {
     const waypoint = waypoints[index];
-    directions.setWaypoint(index, waypoint.coords, waypoint.label);
+    // A blank slot stays blank; it is there so the ones after it keep their place.
+    if (waypoint) directions.setWaypoint(index, waypoint.coords, waypoint.label);
   }
   // Applied after the waypoints exist; an out-of-range index is a store no-op.
   for (const [index, schedule] of Object.entries(parsed.schedules ?? {})) {
@@ -674,10 +675,7 @@ function encodeDirections(params: URLSearchParams): void {
   ].filter(Boolean);
   setCsvParam(params, "avoid", avoid);
 
-  for (const waypoint of directions.waypoints) {
-    if (!waypoint.coords) continue;
-    params.append("wp", formatLabeledPoint({ coords: waypoint.coords, label: waypoint.label }));
-  }
+  for (const value of formatWaypointParams(directions.waypoints)) params.append("wp", value);
 
   const schedule = formatScheduleParam(directions.waypoints);
   if (schedule) params.set("sched", schedule);

@@ -78,6 +78,8 @@ export function PlaceDeparturesView({
   const isLoading = tab === "departures" ? depsLoading : arrivalsLoading;
   const filtered = modeFilter ? items?.filter((d) => d.route.mode === modeFilter) : items;
   const hasArrivals = arrivals && arrivals.length > 0;
+  // Keep the way back once Arrivals is chosen, even if a refetch empties it.
+  const showTabToggle = hasArrivals || tab === "arrivals";
   const displayedAlertIds = new Set((filtered ?? []).map((row) => row.route.id));
   const mergedAttributions = contributorsForRecords([
     ...(filtered ?? []),
@@ -140,7 +142,7 @@ export function PlaceDeparturesView({
           </Typography>
         </Box>
       </Box>
-      {hasArrivals && (
+      {showTabToggle && (
         <Box sx={{ px: 1.5, pt: 1, pb: 1 }}>
           <ToggleButtonGroup
             value={tab}

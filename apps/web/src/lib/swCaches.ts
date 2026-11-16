@@ -54,6 +54,17 @@ export async function handleNetworkOnlyNavigation({
 }
 
 /**
+ * Prefix of the worker's build-versioned precache of public shell files (the
+ * offline page, manifest and bundled styles), fetched without credentials and
+ * written only when a worker version installs.
+ */
+export const APP_SHELL_CACHE_PREFIX = "app-shell-";
+
+export function isAppShellCacheName(name: string): boolean {
+  return name.startsWith(APP_SHELL_CACHE_PREFIX);
+}
+
+/**
  * Names of the app-shell precaches that currently exist. Client code cannot
  * name the build-versioned cache directly because the build id is defined only
  * in the worker bundle, so callers that need to refresh shell entries enumerate
@@ -61,7 +72,7 @@ export async function handleNetworkOnlyNavigation({
  */
 export async function appShellCacheNames(): Promise<string[]> {
   if (typeof caches === "undefined") return [];
-  return (await caches.keys()).filter((name) => name.startsWith("app-shell-"));
+  return (await caches.keys()).filter(isAppShellCacheName);
 }
 
 /** Return whether a build-versioned service-worker cache belongs to an older build. */
@@ -69,7 +80,7 @@ export function isStalePrecacheName(
   name: string,
   current: { appShell: string; style: string },
 ): boolean {
-  if (name.startsWith("app-shell-")) return name !== current.appShell;
+  if (isAppShellCacheName(name)) return name !== current.appShell;
   if (name.startsWith("style-assets")) return name !== current.style;
   return false;
 }

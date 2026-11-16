@@ -36,7 +36,7 @@ import { decryptHandoffToken, encryptHandoffToken } from "./mobileAuthHandoffCry
 export type HandoffPurpose = "sign-in" | "link-provider" | "add-passkey";
 
 export const HANDOFF_TTL_MS = 2 * 60_000;
-/** How many unconsumed attempts one account may have outstanding. */
+/** How many unconsumed, unexpired attempts one account may have outstanding. */
 export const MAX_OUTSTANDING_PER_USER = 5;
 
 const PURPOSES: ReadonlySet<string> = new Set<HandoffPurpose>([
@@ -139,10 +139,19 @@ export class MobileAuthHandoffService {
 
     await this.scrubExpired(input.nowMs);
 
+    // Only attempts that can still be redeemed count. An expired row may stay
+    // in the table (a privacy hold keeps it from the scrub above), but it must
+    // not keep the account from starting a new attempt.
     const outstanding = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(mobileAuthHandoff)
-      .where(and(eq(mobileAuthHandoff.userId, input.userId), isNull(mobileAuthHandoff.consumedAt)));
+      .where(
+        and(
+          eq(mobileAuthHandoff.userId, input.userId),
+          isNull(mobileAuthHandoff.consumedAt),
+          gt(mobileAuthHandoff.expiresAt, new Date(input.nowMs)),
+        ),
+      );
     if ((outstanding[0]?.count ?? 0) >= MAX_OUTSTANDING_PER_USER) {
       return { ok: false, reason: "too-many-attempts" };
     }

@@ -3,6 +3,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { idbClear } from "./idbStore";
 import { createOfflinePackageStorage } from "./offlineAreas";
+import { isAppShellCacheName } from "./swCaches";
 
 interface CacheStorageCleanup {
   keys(): Promise<string[]>;
@@ -51,10 +52,19 @@ export async function clearPrivateDeviceData(options: AccountDeletionCleanupOpti
     (options.clearOfflinePackages ?? removeOfflinePackages)(),
   ];
   if (cacheStorage) {
+    // Keep only the worker's public app-shell precache: it holds no personal
+    // data and is written only when a worker installs, so deleting it would
+    // leave offline navigations without the offline page until the next deploy.
     tasks.push(
       cacheStorage
         .keys()
-        .then((names) => Promise.all(names.map((name) => cacheStorage.delete(name)))),
+        .then((names) =>
+          Promise.all(
+            names
+              .filter((name) => !isAppShellCacheName(name))
+              .map((name) => cacheStorage.delete(name)),
+          ),
+        ),
     );
   }
   const results = await Promise.allSettled(tasks);

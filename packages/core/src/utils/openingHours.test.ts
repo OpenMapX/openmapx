@@ -82,6 +82,69 @@ describe("parseOpeningHours — status is data, not prose", () => {
   });
 });
 
+describe("parseOpeningHours — the change's day is counted in calendar days", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("does not call a change seven days away today, and dates it", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-30T11:00:00Z")); // Saturday 13:00 in Berlin
+    const status = parseOpeningHours("Sa 08:00-12:00", BERLIN);
+    expect(status?.isOpen).toBe(false);
+    expect(status?.nextChange).toEqual({
+      kind: "opens",
+      at: "08:00",
+      weekday: 6, // Saturday, next week
+      day: "other",
+      date: "2026-06-06",
+    });
+  });
+
+  it("does not call a change eight days away tomorrow, and dates it across a month boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-30T17:00:00Z")); // Saturday 19:00 in Berlin
+    const status = parseOpeningHours("Mo-Su 08:00-18:00; May 31-Jun 06 off", BERLIN);
+    expect(status?.isOpen).toBe(false);
+    expect(status?.nextChange).toEqual({
+      kind: "opens",
+      at: "08:00",
+      weekday: 0, // Sunday after the closed week
+      day: "other",
+      date: "2026-06-07",
+    });
+  });
+
+  it("calls a change later the same day today", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-30T04:00:00Z")); // Saturday 06:00 in Berlin
+    const status = parseOpeningHours("Mo-Su 08:00-18:00", BERLIN);
+    expect(status?.nextChange).toEqual({ kind: "opens", at: "08:00", weekday: 6, day: "today" });
+  });
+
+  it("calls the next calendar day tomorrow across a month boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-31T18:00:00Z")); // Sunday 31 May, 20:00 in Berlin
+    const status = parseOpeningHours("Mo-Su 08:00-18:00", BERLIN);
+    expect(status?.nextChange).toEqual({
+      kind: "opens",
+      at: "08:00",
+      weekday: 1,
+      day: "tomorrow",
+    });
+  });
+
+  it("calls the next calendar day tomorrow across a year boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-12-31T20:00:00Z")); // Thursday 31 Dec, 21:00 in Berlin
+    const status = parseOpeningHours("Mo-Su 08:00-18:00", BERLIN);
+    expect(status?.nextChange).toEqual({
+      kind: "opens",
+      at: "08:00",
+      weekday: 5,
+      day: "tomorrow",
+    });
+  });
+});
+
 // Aachen, North Rhine-Westphalia. A `PH` selector makes the library resolve
 // German public holidays, which needs the country code from the location.
 const AACHEN = { lat: 50.775, lon: 6.084, countryCode: "de", state: "Nordrhein-Westfalen" };

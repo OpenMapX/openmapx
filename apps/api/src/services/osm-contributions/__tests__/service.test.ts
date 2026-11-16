@@ -676,6 +676,74 @@ describe("notes", () => {
     expect(client.createNote).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    [
+      "the request was sent but no response arrived",
+      () =>
+        new OsmUpstreamError({
+          status: null,
+          operation: "note",
+          requestMayHaveBeenApplied: true,
+          reason: "x",
+        }),
+    ],
+    [
+      "OSM answered 2xx with an invalid body",
+      () =>
+        new OsmUpstreamError({
+          status: null,
+          operation: "note",
+          reason: "upstream note failed validation",
+        }),
+    ],
+    [
+      "OSM answered 2xx but the body could not be read",
+      () =>
+        new OsmUpstreamError({
+          status: 200,
+          operation: "note",
+          reason: "upstream response exceeded the accepted size",
+        }),
+    ],
+  ])("returns an ambiguous result and never posts again when %s", async (_label, failure) => {
+    const client = makeClient({
+      createNote: vi.fn(async (): Promise<{ id: number; status: "open" | "closed" }> => {
+        throw failure();
+      }),
+    });
+    const { service } = makeService({ client });
+    const request = { ref: REF, text: NOTE_TEXT, idempotencyKey: UUID };
+
+    const error = await caught(service.createNote(ctx, request));
+    expect(error.code).toBe("AMBIGUOUS_RESULT");
+    expect(error.status).toBe(502);
+    expect(error.inspect).toBeUndefined();
+    expect(client.createNote).toHaveBeenCalledTimes(1);
+
+    // The terminal outcome replays instead of posting a second public note.
+    expect((await caught(service.createNote(ctx, request))).code).toBe("AMBIGUOUS_RESULT");
+    expect(client.createNote).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [500, "OSM_UNAVAILABLE"],
+    [403, "OSM_REAUTHORIZATION_REQUIRED"],
+    [429, "RATE_LIMITED"],
+  ])("keeps a definitive %i note failure retryable as %s", async (status, code) => {
+    const client = makeClient({
+      createNote: vi.fn(async (): Promise<{ id: number; status: "open" | "closed" }> => {
+        throw new OsmUpstreamError({ status, operation: "note", reason: "x" });
+      }),
+    });
+    const { service } = makeService({ client });
+    const request = { ref: REF, text: NOTE_TEXT, idempotencyKey: UUID };
+
+    expect((await caught(service.createNote(ctx, request))).code).toBe(code);
+    // The server decided and nothing was created, so the same key may try again.
+    expect((await caught(service.createNote(ctx, request))).code).toBe(code);
+    expect(client.createNote).toHaveBeenCalledTimes(2);
+  });
+
   it("never creates a note as a fallback from a failed publish", async () => {
     const client = makeClient({
       updateElement: vi.fn(async () => {

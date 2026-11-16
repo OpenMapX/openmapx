@@ -52,6 +52,7 @@ function formatRemaining(ms: number): string {
 
 export function ParkingPanelContent() {
   const t = useTranslations("parking");
+  const tm = useTranslations("mapContextMenu");
   const locale = useLocale();
   const { data: parked } = useParkedLocations();
   const { data: vehicles } = useVehicles();
@@ -75,6 +76,12 @@ export function ParkingPanelContent() {
   const updateRef = useRef(update.mutate);
   updateRef.current = update.mutate;
   const recordId = record?.id ?? null;
+  // While the field has focus or a typed note is still queued, a refetch can
+  // only carry text the user has already typed past, so it must not replace
+  // the draft. A different record always replaces it.
+  const noteFocused = useRef(false);
+  const syncedRecordId = useRef(recordId);
+  const serverNote = record?.note ?? "";
 
   const cancelPendingNote = useCallback(() => {
     if (noteTimer.current !== null) clearTimeout(noteTimer.current);
@@ -91,8 +98,12 @@ export function ParkingPanelContent() {
   }, [cancelPendingNote]);
 
   useEffect(() => {
-    setNoteDraft(record?.note ?? "");
-  }, [record?.note]);
+    const switched = syncedRecordId.current !== recordId;
+    syncedRecordId.current = recordId;
+    const editing = noteFocused.current || pendingNote.current?.id === recordId;
+    if (!switched && editing) return;
+    setNoteDraft(serverNote);
+  }, [recordId, serverNote]);
 
   // Closing the panel inside the debounce window must not drop the note.
   useEffect(() => flushPendingNote, [flushPendingNote]);
@@ -159,7 +170,8 @@ export function ParkingPanelContent() {
       name: t("title"),
     });
     const result = await shareUrl({ url, title: t("title") });
-    if (result === "copied") setToast(t("share"));
+    if (result === "unavailable") setToast(tm("shareFailed"));
+    else if (result === "copied") setToast(tm("linkCopied"));
   };
 
   const handleClear = () => {
@@ -228,6 +240,12 @@ export function ParkingPanelContent() {
           placeholder={t("notePlaceholder")}
           value={noteDraft}
           onChange={(e) => commitNote(e.target.value)}
+          onFocus={() => {
+            noteFocused.current = true;
+          }}
+          onBlur={() => {
+            noteFocused.current = false;
+          }}
         />
       </DetailRow>
 

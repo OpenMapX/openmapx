@@ -228,6 +228,99 @@ suite("privacy case administration on PostgreSQL", () => {
     }
   });
 
+  describe("creating a case with an Idempotency-Key", () => {
+    const body = (locator: string, channel = "email") => ({
+      channel,
+      kind: "access",
+      subject: { locatorType: "email", locator, accountState: "unknown" },
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const post = (server: Awaited<ReturnType<typeof app>>, key: string, payload: unknown) =>
+      server.inject({
+        method: "POST",
+        url: "/api/privacy/admin/requests",
+        headers: { "idempotency-key": key },
+        payload: payload as Record<string, unknown>,
+      });
+    const caseCount = async () =>
+      (await fixture.db.select({ id: dataSubjectRequest.id }).from(dataSubjectRequest)).length;
+
+    it("returns the first case when the same key is replayed for a subject without an account", async () => {
+      const key = `create-${randomUUID()}`;
+      const locator = `${randomUUID()}@example.test`;
+      const server = await app();
+      try {
+        const before = await caseCount();
+        const first = await post(server, key, body(locator));
+        const second = await post(server, key, body(locator));
+        expect(first.statusCode, first.body).toBe(202);
+        expect(second.statusCode, second.body).toBe(202);
+        expect(second.json().request.id).toBe(first.json().request.id);
+        expect(await caseCount()).toBe(before + 1);
+        const events = await fixture.db
+          .select()
+          .from(dataSubjectRequestEvent)
+          .where(eq(dataSubjectRequestEvent.idempotencyKey, key));
+        expect(events).toHaveLength(1);
+      } finally {
+        await server.close();
+      }
+    });
+
+    it("serializes two concurrent creates with the same key into one case", async () => {
+      const key = `create-${randomUUID()}`;
+      const locator = `${randomUUID()}@example.test`;
+      const server = await app();
+      try {
+        const before = await caseCount();
+        const [a, b] = await Promise.all([
+          post(server, key, body(locator)),
+          post(server, key, body(locator)),
+        ]);
+        expect(a.statusCode, a.body).toBe(202);
+        expect(b.statusCode, b.body).toBe(202);
+        expect(b.json().request.id).toBe(a.json().request.id);
+        expect(await caseCount()).toBe(before + 1);
+      } finally {
+        await server.close();
+      }
+    });
+
+    it("creates a separate case for a different key", async () => {
+      const locator = `${randomUUID()}@example.test`;
+      const server = await app();
+      try {
+        const before = await caseCount();
+        const first = await post(server, `create-${randomUUID()}`, body(locator));
+        const second = await post(server, `create-${randomUUID()}`, body(locator));
+        expect(first.statusCode, first.body).toBe(202);
+        expect(second.statusCode, second.body).toBe(202);
+        expect(second.json().request.id).not.toBe(first.json().request.id);
+        expect(await caseCount()).toBe(before + 2);
+      } finally {
+        await server.close();
+      }
+    });
+
+    it("refuses a key reused with a different request", async () => {
+      const key = `create-${randomUUID()}`;
+      const locator = `${randomUUID()}@example.test`;
+      const server = await app();
+      try {
+        const before = await caseCount();
+        const first = await post(server, key, body(locator));
+        expect(first.statusCode, first.body).toBe(202);
+        const changed = await post(server, key, body(locator, "post"));
+        expect(changed.statusCode, changed.body).toBe(409);
+        expect(changed.json()).toEqual({ code: "IDEMPOTENCY_KEY_REUSED" });
+        expect(await caseCount()).toBe(before + 1);
+      } finally {
+        await server.close();
+      }
+    });
+  });
+
   it("rejects a changed replay of the same idempotency key", async () => {
     const request = await caseIn("in_progress");
     const key = `same-${request.id}`;

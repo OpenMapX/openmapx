@@ -34,7 +34,7 @@ const PROPOSED = "nav-route-proposed";
 const TRANSPARENT = "rgba(0,0,0,0)";
 
 export function NavigationRouteLayer() {
-  const { mapRef } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const status = useNavigationStore((s) => s.status);
   const route = useNavigationStore((s) => s.route);
   const routes = useNavigationStore((s) => s.routes);
@@ -215,9 +215,12 @@ export function NavigationRouteLayer() {
   useMapDynamicLineState(dynamicState);
 
   // Tap an alternative to switch to it; show a pointer cursor over one.
+  // Bound once the map is ready (it is created after this component mounts)
+  // and again if the map instance is replaced.
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapReady) return;
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
       if (getMapClickOwner(e)) return;
       const idx = e.features?.[0]?.properties?.routeIndex;
@@ -237,7 +240,7 @@ export function NavigationRouteLayer() {
       map.off("mouseenter", ALT, onEnter);
       map.off("mouseleave", ALT, onLeave);
     };
-  }, [mapRef]);
+  }, [mapRef, mapReady, styleVersion]);
 
   return null;
 }

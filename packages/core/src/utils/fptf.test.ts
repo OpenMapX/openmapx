@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapFptfLoadFactor, normalizeFptfDeparture } from "./fptf";
+import { mapFptfLoadFactor, normalizeFptfDeparture, normalizeRemarks } from "./fptf";
 
 describe("mapFptfLoadFactor", () => {
   it("maps the four DB load-factor levels to OccupancyLevel", () => {
@@ -97,5 +97,42 @@ describe("normalizeFptfDeparture platform", () => {
     );
     expect(dep.platform).toBe("2");
     expect(dep.canceled).toBe(true);
+  });
+});
+
+describe("normalizeRemarks cancellation", () => {
+  const typeOf = (remark: Record<string, unknown>) => normalizeRemarks([remark])?.[0]?.type;
+
+  it.each([
+    { type: "hint", code: "FB", text: "Fahrradmitnahme nicht möglich" },
+    { type: "hint", code: "bf", text: "Halt nicht barrierefrei" },
+    { type: "hint", text: "WLAN nicht verfügbar" },
+    { type: "status", text: "Reservierung nicht erforderlich" },
+    { type: "hint", text: "Cancellation policy applies to reserved seats" },
+  ])("keeps the informational remark $text as info", (remark) => {
+    expect(typeOf(remark)).toBe("info");
+  });
+
+  it.each([
+    { type: "status", code: "text.realtime.journey.cancelled", text: ": S41" },
+    { type: "status", code: "cancelled", text: "Fahrt" },
+    { type: "status", text: "Zug fällt aus" },
+    { type: "status", text: "Halt entfällt" },
+    { type: "status", text: "Teilausfall zwischen Köln und Bonn" },
+    { type: "status", text: "Fährt nicht" },
+    { type: "status", text: "Journey cancelled" },
+    { type: "status", text: "Stop canceled" },
+  ])("marks $text ($code) as a cancellation", (remark) => {
+    expect(typeOf(remark)).toBe("cancellation");
+  });
+
+  it("keeps a service warning a warning even when it mentions nicht", () => {
+    expect(
+      typeOf({
+        type: "warning",
+        summary: "Haltestelle wird nicht bedient",
+        text: "Bitte nutzen Sie die Ersatzhaltestelle.",
+      }),
+    ).toBe("warning");
   });
 });

@@ -115,6 +115,14 @@ export function mapProducts(products: Record<string, boolean> | undefined): Tran
   return modes.length ? modes : ["bus"];
 }
 
+/**
+ * Phrases that announce a cancelled trip or stop: "fällt aus", "Ausfall"
+ * (also "Teilausfall", "Zugausfall"), "entfällt", "fährt nicht", and
+ * "cancelled"/"canceled". A bare "nicht" is not one: hints such as
+ * "Fahrradmitnahme nicht möglich" use it too.
+ */
+const CANCELLATION_TEXT = /cancel(?:l)?ed|ausfall|fällt\s+aus|entfällt|fährt\s+nicht/i;
+
 /** Normalize FPTF remarks array with deduplication. */
 export function normalizeRemarks(raw: unknown[] | undefined): TripRemark[] | undefined {
   if (!raw?.length) return undefined;
@@ -126,7 +134,10 @@ export function normalizeRemarks(raw: unknown[] | undefined): TripRemark[] | und
     seen.add(text);
     let type: TripRemark["type"] = "info";
     if (r.type === "warning") type = "warning";
-    else if (/cancel|nicht|ausfall|fährt\s+nicht/i.test(text)) type = "cancellation";
+    // hafas-client sets `code` to "cancelled" for HAFAS cancel icons and keeps
+    // endpoint codes such as "text.realtime.journey.cancelled".
+    else if (typeof r.code === "string" && /cancel/i.test(r.code)) type = "cancellation";
+    else if (CANCELLATION_TEXT.test(text)) type = "cancellation";
     result.push({ text, type });
   }
   return result.length ? result : undefined;

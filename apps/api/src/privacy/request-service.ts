@@ -21,11 +21,16 @@ import {
   dataSubjectRequestTask,
   user,
 } from "../db/schema.js";
+import { isUniqueViolation } from "../db/unique-violation.js";
 import { decrypt, encrypt } from "../services/secrets.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
-import { findIdempotentEvent, idempotencyFingerprint } from "./idempotency.js";
+import {
+  findIdempotentCreate,
+  findIdempotentEvent,
+  idempotencyFingerprint,
+} from "./idempotency.js";
 import { withPreservationRetentionLock } from "./preservation.js";
 import {
   assertValidRequestTransition,
@@ -57,6 +62,7 @@ const NOTIFICATION_TARGET = [
   dataSubjectRequestNotification.template,
   dataSubjectRequestNotification.channel,
   dataSubjectRequestNotification.recipientUserId,
+  dataSubjectRequestNotification.occurrenceKey,
 ];
 
 function toDate(value: Date | string | number): Date {
@@ -88,6 +94,7 @@ function notificationValues(input: {
   template: PrivacyNotificationTemplate;
   locale: string;
   at: Date;
+  occurrenceKey?: string;
 }) {
   return {
     requestId: input.requestId,
@@ -99,6 +106,7 @@ function notificationValues(input: {
     state: "pending" as const,
     attempts: 0,
     nextAttemptAt: input.at,
+    occurrenceKey: input.occurrenceKey ?? "",
     createdAt: input.at,
     updatedAt: input.at,
   };
@@ -199,8 +207,42 @@ export class PrivacyRequestService {
     const applicable = this.catalogue.filter(
       (registration) => registration.strategy !== "not_personal",
     );
+    // A replayed create (same key, same administrator, same request) returns
+    // the case it first made. `receivedAt` enters only as supplied, because an
+    // omitted one defaults to "now" and would differ on every retry. The
+    // subject's locator stays out: it is stored encrypted, and an unsalted
+    // digest of an e-mail address could be confirmed by guessing.
+    const createDigest = parsed.idempotencyKey
+      ? idempotencyFingerprint({
+          action: "create",
+          kind: parsed.kind,
+          channel: parsed.channel,
+          userId: parsed.userId,
+          subject: parsed.subject
+            ? {
+                locatorType: parsed.subject.locatorType,
+                accountState: parsed.subject.accountState,
+              }
+            : null,
+          receivedAt: parsed.receivedAt ? toDate(parsed.receivedAt).toISOString() : null,
+          locale: parsed.locale,
+          timeZone: parsed.timeZone,
+        })
+      : undefined;
+    let resultId: string = id;
     try {
       await withPreservationRetentionLock(this.database, async (tx) => {
+        if (parsed.idempotencyKey && createDigest) {
+          const previous = await findIdempotentCreate(tx as unknown as typeof defaultDb, {
+            idempotencyKey: parsed.idempotencyKey,
+            actorId: parsed.actorUserId ?? null,
+            operationDigest: createDigest,
+          });
+          if (previous) {
+            resultId = previous.requestId;
+            return;
+          }
+        }
         const [created] = await tx
           .insert(dataSubjectRequest)
           .values({
@@ -236,7 +278,11 @@ export class PrivacyRequestService {
           eventType: "received",
           actorKind: selfService ? "subject" : "admin",
           actorId: parsed.actorUserId ?? null,
-          payload: boundedEventPayload({ kind: parsed.kind, channel: parsed.channel }),
+          payload: boundedEventPayload({
+            kind: parsed.kind,
+            channel: parsed.channel,
+            ...(createDigest ? { operationDigest: createDigest } : {}),
+          }),
           payloadVersion: 1,
           ...(parsed.idempotencyKey ? { idempotencyKey: parsed.idempotencyKey } : {}),
           createdAt: now,
@@ -315,14 +361,14 @@ export class PrivacyRequestService {
     } catch (error: unknown) {
       // The partial unique index decides a race between two first requests:
       // the loser returns the winner's active case.
-      if (parsed.userId && String(error).includes("data_subject_request_active_user_kind_idx")) {
+      if (parsed.userId && isUniqueViolation(error, "data_subject_request_active_user_kind_idx")) {
         const raced = await this.activeRequestFor(parsed.userId, parsed.kind);
         if (raced) return raced;
         throw new PrivacyRequestError("REQUEST_ALREADY_ACTIVE", 409);
       }
       throw error;
     }
-    return this.getById(id);
+    return this.getById(resultId);
   }
 
   async getById(requestId: string): Promise<RequestRow> {
@@ -434,6 +480,10 @@ export class PrivacyRequestService {
             template,
             locale: updated.locale,
             at: now,
+            // A case can enter the same state again (for example wait on the
+            // requester twice); the version this transition produced tells those
+            // emails apart, and a replayed mutation never reaches this insert.
+            occurrenceKey: `version:${updated.version}`,
           }),
         )
         .onConflictDoNothing({ target: NOTIFICATION_TARGET });
@@ -487,7 +537,7 @@ export class PrivacyRequestService {
         return work(tx, current);
       });
     } catch (error) {
-      if (String(error).includes("data_subject_request_event_idempotency_idx"))
+      if (isUniqueViolation(error, "data_subject_request_event_idempotency_idx"))
         return this.getById(input.requestId);
       throw error;
     }
@@ -727,6 +777,7 @@ export class PrivacyRequestService {
                 template: "extension",
                 locale: updated.locale,
                 at: now,
+                occurrenceKey: `version:${updated.version}`,
               }),
             )
             .onConflictDoNothing({ target: NOTIFICATION_TARGET });

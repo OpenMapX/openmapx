@@ -136,6 +136,37 @@ suite("privacy request lifecycle on PostgreSQL", () => {
     expect(again.id).toBe(request.id);
   });
 
+  it("returns the winner's case to a concurrent first request of the same kind", async () => {
+    const userId = await subject();
+    const holder = await fixture.sql.reserve();
+    try {
+      await holder`select pg_advisory_lock(1330464848, 1380275027)`;
+      const input = {
+        userId,
+        kind: "access_and_portability",
+        channel: "self_service",
+        locale: "de",
+        timeZone: "UTC",
+      } as const;
+      const racing = [service().create(input), service().create(input)];
+      // Wait until both transactions block on the retention lock (both passed the pre-check).
+      for (let i = 0; ; i++) {
+        const [{ waiting }] = await fixture.sql<{ waiting: number }[]>`
+          select count(*)::int as waiting from pg_locks where locktype = 'advisory' and not granted`;
+        if (waiting >= 2) break;
+        if (i > 200) throw new Error("creates never reached the retention lock");
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      await holder`select pg_advisory_unlock(1330464848, 1380275027)`;
+      const [a, b] = await Promise.all(racing);
+      expect(a.id).toBe(b.id);
+    } finally {
+      // A failure above must not leave the session lock held for later tests.
+      await holder`select pg_advisory_unlock_all()`;
+      holder.release();
+    }
+  });
+
   it("alerts only the administrators for an assisted request without a subject account", async () => {
     const request = await service().create({
       channel: "email",
@@ -304,6 +335,112 @@ suite("privacy request lifecycle on PostgreSQL", () => {
         .map((row) => row.recipientUserId)
         .sort(),
     ).toEqual([...ADMINS].sort());
+  });
+
+  it("emails the requester each time the case waits on them again, but not on a replay", async () => {
+    const userId = await subject();
+    const request = await service().create({
+      userId,
+      kind: "access",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    // A self-service request starts in progress, proven by the account session.
+    const decide = (
+      decision: "in_progress" | "waiting_on_requester",
+      version: number,
+      key: string,
+    ) =>
+      service().recordDecision({
+        requestId: request.id,
+        version,
+        decision,
+        reasonCode: "need-information",
+        actorId: ADMINS[0]!,
+        idempotencyKey: key,
+      });
+    const firstWait = await decide("waiting_on_requester", request.version, `wait-1-${request.id}`);
+    const resumed = await decide("in_progress", firstWait.version, `resume-${request.id}`);
+    const secondWait = await decide(
+      "waiting_on_requester",
+      resumed.version,
+      `wait-2-${request.id}`,
+    );
+    expect(secondWait.state).toBe("waiting_on_requester");
+    // The same mutation replayed with its key is a no-op.
+    await decide("waiting_on_requester", resumed.version, `wait-2-${request.id}`);
+    const waits = (await notifications(request.id)).filter(
+      (row) => row.template === "waiting_on_requester",
+    );
+    expect(waits).toHaveLength(2);
+    expect(waits.every((row) => row.recipientUserId === userId)).toBe(true);
+  });
+
+  it("emails the requester for each deadline extension", async () => {
+    const userId = await subject();
+    const request = await service().create({
+      userId,
+      kind: "access",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const day = 86_400_000;
+    const extend = (version: number, until: Date, key: string) =>
+      service().recordExtension({
+        requestId: request.id,
+        version,
+        extendedUntil: until,
+        extensionNotifiedAt: now,
+        reasonCode: "complexity",
+        actorId: ADMINS[0]!,
+        idempotencyKey: key,
+      });
+    const first = await extend(
+      request.version,
+      new Date(request.dueAt.getTime() + 7 * day),
+      `extend-1-${request.id}`,
+    );
+    await extend(
+      first.version,
+      new Date(request.dueAt.getTime() + 14 * day),
+      `extend-2-${request.id}`,
+    );
+    expect(
+      (await notifications(request.id)).filter((row) => row.template === "extension"),
+    ).toHaveLength(2);
+  });
+
+  it("reminds each administrator again when an extension moves the deadline", async () => {
+    const request = await service().create({
+      channel: "email",
+      kind: "access",
+      subject: { locatorType: "email", locator: "extended@example.test", accountState: "unknown" },
+      actorUserId: ADMINS[0],
+      receivedAt: new Date("2026-01-30T12:00:00Z"),
+      locale: "en",
+      timeZone: "UTC",
+    });
+    now = new Date(request.dueAt.getTime() - 24 * 3_600_000);
+    await schedulePrivacyDeadlineReminders({ database: fixture.db, now });
+    const extended = await service().recordExtension({
+      requestId: request.id,
+      version: request.version,
+      extendedUntil: new Date(request.dueAt.getTime() + 14 * 86_400_000),
+      extensionNotifiedAt: now,
+      reasonCode: "complexity",
+      actorId: ADMINS[0]!,
+      idempotencyKey: `extend-reminded-${request.id}`,
+    });
+    now = new Date(extended.dueAt.getTime() - 24 * 3_600_000);
+    const afterExtension = await schedulePrivacyDeadlineReminders({ database: fixture.db, now });
+    const rerun = await schedulePrivacyDeadlineReminders({ database: fixture.db, now });
+    expect(afterExtension.scheduled).toBe(ADMINS.length);
+    expect(rerun.scheduled).toBe(0);
+    expect(
+      (await notifications(request.id)).filter((row) => row.template === "admin_deadline"),
+    ).toHaveLength(2 * ADMINS.length);
   });
 
   it("purges closed cases after the case retention while an active sibling keeps them", async () => {

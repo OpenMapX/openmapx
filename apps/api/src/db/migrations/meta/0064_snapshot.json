@@ -1,5 +1,5 @@
 {
-  "id": "3877f309-a95f-4098-a80d-f59c87d61ba5",
+  "id": "d54df32e-a2d0-488c-a2f4-d3baf396332d",
   "prevId": "6612793a-c6b1-45e2-ad89-200a4214a323",
   "version": "7",
   "dialect": "postgresql",
@@ -1659,6 +1659,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "owner_certificate_digest": {
+          "name": "owner_certificate_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "input": {
           "name": "input",
           "type": "jsonb",
@@ -2899,6 +2905,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "occurrence_key": {
+          "name": "occurrence_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2938,6 +2951,12 @@
             },
             {
               "expression": "recipient_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurrence_key",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

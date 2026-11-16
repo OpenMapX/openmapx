@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@/test";
 
 const values = vi.hoisted(() => {
@@ -51,5 +51,33 @@ describe("displayed board provenance", () => {
     expect(screen.getByTestId("credits").textContent).toBe("Rail supplier A");
     fireEvent.click(screen.getByRole("button", { name: "arrivals" }));
     expect(screen.getByTestId("credits").textContent).toBe("Arrival supplier D");
+  });
+});
+
+describe("departures and arrivals toggle", () => {
+  const initialArrivals = values.arrivals;
+  afterEach(() => {
+    values.arrivals = initialArrivals;
+  });
+
+  it("keeps the way back to departures when arrivals run out", () => {
+    const renderBoard = () => (
+      <PlaceDeparturesView
+        place={{ name: "Stop" } as never}
+        onBack={() => {}}
+        onDepartureClick={() => {}}
+      />
+    );
+    const view = render(renderBoard());
+    fireEvent.click(screen.getByRole("button", { name: "arrivals" }));
+    expect(screen.getByText("d")).toBeTruthy();
+
+    // A refetch returns no arrivals while the Arrivals tab is selected.
+    values.arrivals = [];
+    view.rerender(renderBoard());
+    expect(screen.queryByText("d")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "departures" }));
+    expect(screen.getByText("a")).toBeTruthy();
   });
 });

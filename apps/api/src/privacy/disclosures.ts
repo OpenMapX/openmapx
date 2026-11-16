@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import z from "zod/v4";
 import { db as defaultDb } from "../db/index.js";
 import { dataDisclosureEvent } from "../db/schema.js";
+import { isUniqueViolation } from "../db/unique-violation.js";
 import { getSubjectDataRegistration } from "./catalogue.js";
 
 const code = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
@@ -180,7 +181,9 @@ export async function recordDataDisclosure(
   } catch (error) {
     // Stable operation IDs are idempotent. Other failures must surface so the
     // caller can reconcile an external disclosure without pretending success.
-    if (safe.idempotencyKey && String(error).toLowerCase().includes("duplicate")) return;
+    // Only the idempotency-key index counts as a replay.
+    if (safe.idempotencyKey && isUniqueViolation(error, "data_disclosure_event_idempotency_idx"))
+      return;
     throw error;
   }
 }
