@@ -183,7 +183,8 @@ target user and can expose their personal data. Stop impersonation to return
 to your administrator session. The list prevents impersonating yourself.
 
 An impersonation session cannot change the target's email, passkeys, linked
-providers, password or second factor, and cannot delete the account. Use the
+providers, password or second factor, cannot delete the account and cannot
+sign the mobile app in as the target. Use the
 dedicated administrator actions for those changes.
 
 ### Delete

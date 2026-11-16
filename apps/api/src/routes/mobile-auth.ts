@@ -127,7 +127,9 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
    * Called by the fixed-origin system-browser page, after a session exists.
    *
    * The one-time token is minted here rather than in the browser so it never
-   * appears in a page the user can be persuaded to read out.
+   * appears in a page the user can be persuaded to read out. An administrator
+   * impersonating an account is refused: the token would carry that support
+   * session onto a device.
    */
   fastify.post<{ Body: IssueBody }>(
     "/mobile-auth/issue",
@@ -146,6 +148,7 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
 
       const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
       if (!session) return reply.code(401).send({ error: "authentication_required" });
+      if (session.session.impersonatedBy) return reply.code(403).send({ error: "invalid_request" });
 
       const generated = await auth.api.generateOneTimeToken({
         headers: fromNodeHeaders(request.headers),
