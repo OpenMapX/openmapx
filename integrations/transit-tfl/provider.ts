@@ -272,7 +272,14 @@ function mapTflSeverity(code: number): AlertSeverity | null {
 }
 
 function stripTags(text: string): string {
-  return text.replace(/<[^>]+>/g, "");
+  // Repeat until stable, so that removing one tag cannot leave another behind.
+  let current = text;
+  let previous: string;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]+>/g, "");
+  } while (current !== previous);
+  return current;
 }
 
 /** One alert per distinct alerting status code on the line. */
