@@ -46,6 +46,15 @@ const EXTENSION_REVOCATION_FEED_URL = envString(
   "https://raw.githubusercontent.com/openmapx/community-extensions/main/revocations.json",
 );
 
+// Shared by every catalog, manifest and revocation request. Their URLs come
+// from catalog content, so private hosts stay refused even when the operator
+// allows private feed mirrors; that setting covers feed downloads only.
+const EXTENSION_FETCH_OPTIONS = {
+  headers: { "User-Agent": USER_AGENT_ADMIN },
+  timeoutMs: 15_000,
+  allowPrivateHosts: [] as string[],
+};
+
 const COMMIT_PATH_SEGMENT = /(^|\/)[a-f0-9]{40}(\/|$)/;
 
 /**
@@ -145,10 +154,10 @@ interface RevocationSnapshot {
 async function fetchRevocations(): Promise<{ snapshot: RevocationSnapshot; stale: boolean }> {
   const cached = await readCachedRevocations();
   try {
-    const data = await safeFetchJson<unknown>(EXTENSION_REVOCATION_FEED_URL, {
-      headers: { "User-Agent": USER_AGENT_ADMIN },
-      timeoutMs: 15_000,
-    });
+    const data = await safeFetchJson<unknown>(
+      EXTENSION_REVOCATION_FEED_URL,
+      EXTENSION_FETCH_OPTIONS,
+    );
     // Validate the whole document before using any of it. A document of the
     // wrong shape is a failed refresh, not evidence that nothing is revoked, and
     // it must not replace the last good snapshot.
@@ -401,10 +410,7 @@ async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
   } catch {
     throw new ExtensionStoreError("catalog_acquisition_failed");
   }
-  const data = await safeFetchJson<unknown>(canonical, {
-    headers: { "User-Agent": USER_AGENT_ADMIN },
-    timeoutMs: 15_000,
-  });
+  const data = await safeFetchJson<unknown>(canonical, EXTENSION_FETCH_OPTIONS);
   // Accept either a bare array of entries or `{ extensions, removed, critical }`.
   // Validate the whole document before consuming it: malformed acquisition is
   // not evidence of an empty catalog, and must not clear cached denials.
@@ -440,10 +446,10 @@ export async function fetchManifestMeta(
   url: string,
 ): Promise<{ version?: string; platform?: string } | null> {
   try {
-    const data = await safeFetchJson<{ version?: unknown; platform?: unknown }>(url, {
-      headers: { "User-Agent": USER_AGENT_ADMIN },
-      timeoutMs: 15_000,
-    });
+    const data = await safeFetchJson<{ version?: unknown; platform?: unknown }>(
+      url,
+      EXTENSION_FETCH_OPTIONS,
+    );
     return {
       version: typeof data.version === "string" && data.version ? data.version : undefined,
       platform: typeof data.platform === "string" && data.platform ? data.platform : undefined,
@@ -642,10 +648,10 @@ export async function resolveExtensionManifest(
     // Verify the digest over the exact received bytes BEFORE they are parsed or
     // cached. Parsing first would expose the parser to unverified content and
     // would let a cache hold bytes that were never authorized.
-    const text = await safeFetchText(normalizeExtensionLocator(entry.manifest), {
-      headers: { "User-Agent": USER_AGENT_ADMIN },
-      timeoutMs: 15_000,
-    });
+    const text = await safeFetchText(
+      normalizeExtensionLocator(entry.manifest),
+      EXTENSION_FETCH_OPTIONS,
+    );
     const digest = createHash("sha256").update(text, "utf8").digest("hex");
     if (digest !== entry.manifestSha256.toLowerCase()) {
       throw new ExtensionStoreError("digest_mismatch");
@@ -655,10 +661,10 @@ export async function resolveExtensionManifest(
     if (entry.trust === "verified") {
       throw new ExtensionStoreError("missing_digest");
     }
-    raw = await safeFetchJson<unknown>(normalizeExtensionLocator(entry.manifest), {
-      headers: { "User-Agent": USER_AGENT_ADMIN },
-      timeoutMs: 15_000,
-    });
+    raw = await safeFetchJson<unknown>(
+      normalizeExtensionLocator(entry.manifest),
+      EXTENSION_FETCH_OPTIONS,
+    );
   } else {
     raw = {
       id: entry.id,
@@ -711,10 +717,7 @@ export function normalizeExtensionLocator(url: string): string {
 
 /** Direct content has no catalog authorization to bind against or trust to inherit. */
 export async function resolveDirectExtensionManifest(url: string): Promise<ExtensionManifest> {
-  const raw = await safeFetchJson<unknown>(normalizeExtensionLocator(url), {
-    headers: { "User-Agent": USER_AGENT_ADMIN },
-    timeoutMs: 15_000,
-  });
+  const raw = await safeFetchJson<unknown>(normalizeExtensionLocator(url), EXTENSION_FETCH_OPTIONS);
   return validatedManifest(raw);
 }
 

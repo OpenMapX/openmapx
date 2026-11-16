@@ -243,6 +243,26 @@ describe("resolveExtensionManifest (real safeFetchJson SSRF path)", () => {
   });
 });
 
+describe("extension fetches ignore the private feed mirror allowlist", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("refuses a manifest host the operator allowed as a private feed mirror", async () => {
+    vi.stubEnv("OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS", "feeds.example.test");
+    lookupMock.mockResolvedValue([{ address: "10.0.0.5", family: 4 }]);
+    const fetchMock = stubFetchSequence();
+
+    await expect(
+      fetchManifestMeta("https://feeds.example.test/extension.json"),
+    ).resolves.toBeNull();
+    await expect(
+      resolveExtensionManifest(
+        entry({ id: "e", name: "E", version: "1", manifest: "https://feeds.example.test/e.json" }),
+      ),
+    ).rejects.toThrow(/not allowed \(private/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("immutable verified trust", () => {
   it("treats only an exact 40-hex commit path as immutable", () => {
     expect(

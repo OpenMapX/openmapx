@@ -115,6 +115,7 @@ export {
 // Safe downloader (DNS-aware SSRF protection for server-side fetches).
 export {
   assertResolvesToPublicIp,
+  privateFeedHostAllowlist,
   resolvePublicConnectionAddresses,
   type SafeDownloadOptions,
   type SafeDownloadResult,
