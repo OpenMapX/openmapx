@@ -541,6 +541,7 @@ export class NavigationCoordinator {
 
     const committed = await this.commit(current, outcome as ProcessorMutation, now);
     if (!committed.ok) return errorResponse(committed.code);
+    await this.deps.effects.run(committed.effects);
 
     return {
       type: "session.replaced",
