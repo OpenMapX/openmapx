@@ -206,7 +206,9 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
           const upstream = await fetchWithRedirects(imageUrl, {
             timeoutMs: 10_000,
             signal: clientAbort.signal,
-            headers: { "User-Agent": USER_AGENT },
+            // Undici's fetch otherwise offers gzip/deflate and decodes the body
+            // while keeping the encoded Content-Length.
+            headers: { "User-Agent": USER_AGENT, "Accept-Encoding": "identity" },
             maxRedirects: 5,
             validateRedirectUrl: (next, previous) => {
               if (resolvedGooglePhotos) return isGooglePhotosImageUrl(next);
@@ -268,6 +270,10 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
           // Resource-Policy: same-origin would block cross-origin <img> loads,
           // and the missing Content-Type combined with X-Content-Type-Options:
           // nosniff would refuse to render the bytes as an image).
+          // Fetch decodes gzip/deflate/br bodies but keeps the encoded length,
+          // which would then understate the bytes written below.
+          const contentEncoding = upstream.headers.get("content-encoding")?.trim().toLowerCase();
+          const lengthDescribesBody = !contentEncoding || contentEncoding === "identity";
           reply.hijack();
           reply.raw.setHeader(
             "Cache-Control",
@@ -280,7 +286,7 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
           // to a CORS read from origin-B (which would then fail the browser check).
           reply.raw.setHeader("Vary", "Origin");
           reply.raw.setHeader("Content-Type", contentType);
-          if (declaredBytes !== null && declaredBytes <= MAX_SIZE) {
+          if (lengthDescribesBody && declaredBytes !== null && declaredBytes <= MAX_SIZE) {
             reply.raw.setHeader("Content-Length", contentLength as string);
           }
           reply.raw.flushHeaders?.();

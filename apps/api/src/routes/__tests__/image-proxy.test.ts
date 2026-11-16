@@ -493,6 +493,45 @@ describe("image-proxy route", () => {
     expect(response.headers["content-length"]).toBeUndefined();
   });
 
+  it("omits an encoded Content-Length when it streams the decoded body", async () => {
+    // Fetch decodes a compressed body but keeps the encoded Content-Length.
+    mockFetchWithRedirects.mockResolvedValueOnce(
+      new Response(new Uint8Array(20), {
+        headers: {
+          "content-encoding": "gzip",
+          "content-length": "3",
+          "content-type": "image/png",
+        },
+      }),
+    );
+
+    const response = await inject({ referer: ALLOWED_REFERER });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.rawPayload.byteLength).toBe(20);
+    expect(response.headers["content-length"]).toBeUndefined();
+  });
+
+  it("asks the upstream for an unencoded image", async () => {
+    mockFetchWithRedirects.mockResolvedValueOnce(imageResponse(4));
+
+    await inject({ referer: ALLOWED_REFERER });
+
+    const sent = new Headers(mockFetchWithRedirects.mock.calls[0][1].headers);
+    expect(sent.get("accept-encoding")).toBe("identity");
+    expect(sent.get("user-agent")).toBe("test-agent");
+  });
+
+  it("forwards the Content-Length of an unencoded image", async () => {
+    mockFetchWithRedirects.mockResolvedValueOnce(imageResponse(4));
+
+    const response = await inject({ referer: ALLOWED_REFERER });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.rawPayload.byteLength).toBe(4);
+    expect(response.headers["content-length"]).toBe("4");
+  });
+
   it("caps concurrent streams per client and releases the slot after completion", async () => {
     await rebuildApp({
       RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_PER_CLIENT: "1",
