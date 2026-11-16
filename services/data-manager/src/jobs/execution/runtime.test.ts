@@ -201,7 +201,8 @@ describe.skipIf(
     mkdirSync(join(root, "data"), { mode: 0o700 });
     await control.provisionControlInstallation(root);
     const agent = control.agentStoreLeases(root, "ops-agent");
-    let lostReplies = 1;
+    // Four lost replies span about four seconds, as an agent restart would.
+    let lostReplies = 4;
     const installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
@@ -211,7 +212,8 @@ describe.skipIf(
           // The agent records the lease, and its reply never arrives.
           async acquire(input) {
             const lease = await agent.acquire(input);
-            if (lostReplies-- > 0) throw new OpsClientError("timeout");
+            if (lostReplies-- > 0)
+              throw new OpsClientError(lostReplies % 2 ? "runtime" : "timeout");
             return lease;
           },
         },

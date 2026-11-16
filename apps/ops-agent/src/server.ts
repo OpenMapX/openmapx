@@ -106,6 +106,7 @@ import {
   type VerifiedParentExecution,
   verifyApiJobParentExecution,
 } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import Fastify, { type FastifyInstance } from "fastify";
 import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
 import { ArtifactTransferError } from "./artifact-transfer/errors";
@@ -2289,6 +2290,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             );
           } catch (error) {
             if (error instanceof LeaseRefused) throw new RequestGuardError("authorization", 403);
+            // A busy store lock or a file system error may come after the store
+            // was written; only a lease rule refusal certainly wrote nothing.
+            if (error instanceof services.LockBusyError || (error as { code?: unknown }).code)
+              throw new RequestGuardError("runtime", 500);
             throw new RequestGuardError("conflict", 409);
           }
           return reply

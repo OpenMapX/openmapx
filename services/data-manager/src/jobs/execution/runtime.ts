@@ -123,6 +123,8 @@ async function releaseOwnLease(
 }
 /** Agent answers that refuse a lease acquisition before it records anything. */
 const PRE_EFFECT_REFUSALS = new Set(["authorization", "validation", "busy", "conflict"]);
+/** Repeats of a lost acquisition: 250 ms doubling to 8 s, about 32 s in all. */
+const ACQUIRE_RETRIES = 8;
 export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
   return ["transit-sync", "catalog.validate", "catalog.activate"].includes(input.kind)
     ? ["data-manager", "motis", "motis-feed-proxy", "motis-staging"]
@@ -288,21 +290,24 @@ export function createDataExecutionRuntime(deps: {
     // that cannot answer, ends the execution as failed before any effect, with
     // its publication unchanged.
     // A timeout or transport failure may come after the agent recorded the lease,
-    // so the same acquisition, which returns an existing lease, is repeated.
+    // so the same acquisition, which returns an existing lease, is repeated for
+    // about 30 seconds, long enough for the agent to restart.
     let lease: ArtifactTargetLease | undefined;
     let refusal: unknown;
-    for (let attempt = 1; !leaf && !lease && !refusal; attempt += 1)
+    for (let attempt = 0; !leaf && !lease && !refusal; attempt += 1)
       try {
         lease = await acquireArtifactTargetLease({ serviceIds: targets, owner: authority });
       } catch (error) {
         if (!(error instanceof TargetBusyError || error instanceof OpsClientError)) throw error;
+        const delayMs = Math.min(250 * 2 ** attempt, 8000);
         if (
           error instanceof TargetBusyError ||
           PRE_EFFECT_REFUSALS.has(error.errorClass) ||
-          attempt >= 3
+          attempt >= ACQUIRE_RETRIES ||
+          now() + delayMs >= record.status.deadlineAt
         )
           refusal = error;
-        else await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+        else await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     await owner.begin(authority);
     const controller = new AbortController();
