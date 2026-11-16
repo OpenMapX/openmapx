@@ -1,0 +1,40 @@
+{
+  "en": {
+    "voiceDistanceFeet": "{feet} feet",
+    "voiceDistanceMiles": "{miles} miles",
+    "voiceDistanceMeters": "{meters} metres",
+    "voiceDistanceKilometers": "{kilometers} kilometres",
+    "voiceUpcoming": "In {distance}, {instruction}",
+    "walkToLevel": "{action} to level {level}",
+    "walkOnStreet": "{action} onto {street}",
+    "voiceBoardPlatform": "Board the {line} towards {destination} on platform {platform}",
+    "voiceBoard": "Board the {line} towards {destination}",
+    "voiceAlight": "Get off at the next stop, {stop}",
+    "voiceTransfer": "Get off at {stop} and change to the {line}",
+    "voicePlatformChange": "Platform change: platform {platform}",
+    "voiceOffRoute": "You are off the route",
+    "weakGps": "Weak GPS signal",
+    "voiceScheduleFallback": "No GPS signal — following the timetable",
+    "voicePermissionLost": "Location access was turned off, so guidance has stopped",
+    "arrived": "You have arrived"
+  },
+  "de": {
+    "voiceDistanceFeet": "{feet} Fuß",
+    "voiceDistanceMiles": "{miles} Meilen",
+    "voiceDistanceMeters": "{meters} Meter",
+    "voiceDistanceKilometers": "{kilometers} Kilometer",
+    "voiceUpcoming": "In {distance}, {instruction}",
+    "walkToLevel": "{action} zu Ebene {level}",
+    "walkOnStreet": "{action} auf {street}",
+    "voiceBoardPlatform": "Steig in die {line} Richtung {destination} auf Gleis {platform}",
+    "voiceBoard": "Steig in die {line} Richtung {destination}",
+    "voiceAlight": "Steig am nächsten Halt aus, {stop}",
+    "voiceTransfer": "Steig an {stop} aus und in die {line} um",
+    "voicePlatformChange": "Gleiswechsel: Gleis {platform}",
+    "voiceOffRoute": "Du bist von der Route abgekommen",
+    "weakGps": "Schwaches GPS-Signal",
+    "voiceScheduleFallback": "Kein GPS-Signal – Führung nach Fahrplan",
+    "voicePermissionLost": "Der Standortzugriff wurde deaktiviert, die Führung wurde beendet",
+    "arrived": "Sie haben Ihr Ziel erreicht"
+  }
+}

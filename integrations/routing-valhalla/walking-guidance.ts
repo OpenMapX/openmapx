@@ -21,6 +21,7 @@
  */
 
 import { bearingBetween, haversineDistance, type LngLat, type RouteStep } from "@openmapx/core";
+// biome-ignore lint/style/noRestrictedImports: backend routing provider; never bundled for the browser
 import { createTranslator } from "@openmapx/i18n";
 
 /** The fields of a Valhalla maneuver this reads. */
