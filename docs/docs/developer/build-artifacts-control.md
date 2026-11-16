@@ -413,7 +413,11 @@ host-only, print what Docker reports for the held targets first, and are appende
 to `state/ops-agent/control-audit.jsonl` and printed. Clearing a configuration
 maintenance leaves the data-manager's configuration fence prepared; `control
 resolve` of the same operation settles it through the CLI's data-manager token,
-also after a clear. `control clear --lock <name>` is described under [Locks](#locks).
+also after a clear. `control resolve` refuses a lease data-manager owns:
+data-manager settles its own jobs at startup and in recovery, and `control clear`
+is the explicit release. `control status` leaves out agent operations the audit
+file records as resolved or cleared; they stay in the agent's journal until it is
+pruned. `control clear --lock <name>` is described under [Locks](#locks).
 
 ### Authority keys and the control prune
 

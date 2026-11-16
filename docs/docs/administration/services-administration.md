@@ -503,7 +503,9 @@ host:
    prints what Docker reports for the held services), then record the outcome
    with `pnpm openmapx control resolve --op <key> --as committed|failed`. This
    releases the lease; for a configuration maintenance it also settles Data
-   Manager's configuration fence.
+   Manager's configuration fence. Data Manager settles its own jobs when it
+   starts and during recovery, so `control resolve` refuses a lease Data Manager
+   owns; `control clear` is the explicit release for one it cannot settle.
 3. For a lease whose holder is gone, `pnpm openmapx control clear --op <key>`
    drops it. A cleared configuration maintenance leaves the fence prepared until
    you resolve the same operation.

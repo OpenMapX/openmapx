@@ -97,6 +97,68 @@ describe("openmapx control", () => {
     expect(text).toContain("targets: alpha");
   });
 
+  it("lists agent operations without a final outcome until an operator ends them", async () => {
+    const journal = services.agentStatePaths(infraDir).journal;
+    mkdirSync(join(journal, ".."), { recursive: true });
+    const job = (operationKey: string, state: string, errorClass?: string) => ({
+      operationKey,
+      operation: { kind: "service.restart" },
+      state,
+      ...(errorClass ? { errorClass } : {}),
+    });
+    writeFileSync(
+      journal,
+      JSON.stringify({
+        jobs: [
+          job("opk1_running", "running"),
+          job("opk1_unknown", "failed", "recovery_required"),
+          job("opk1_finished", "succeeded"),
+        ],
+      }),
+    );
+    await run("status");
+    let text = printed.join("\n");
+    expect(text).toContain("Agent operations without a final outcome:");
+    expect(text).toContain("service.restart opk1_running (running)");
+    expect(text).toContain("service.restart opk1_unknown (recovery_required)");
+    expect(text).not.toContain("opk1_finished");
+    writeFileSync(
+      join(control.leaseStoreDirectory(infraDir), "control-audit.jsonl"),
+      `${JSON.stringify({ action: "resolve", operationKey: "opk1_unknown", as: "failed" })}\n`,
+    );
+    printed = [];
+    await run("status");
+    text = printed.join("\n");
+    expect(text).toContain("opk1_running");
+    expect(text).not.toContain("opk1_unknown");
+  });
+
+  it("leaves a data-manager job's lease to data-manager and points to clear", async () => {
+    const execution = {
+      ...owner(),
+      executor: "data-manager" as const,
+      principal: "data-manager" as const,
+    };
+    await control
+      .localLeaseBackend(store())
+      .acquire({ owner: execution, ownerKind: "download-fonts", targets: ["alpha"] });
+    const program = new Command().exitOverride();
+    registerControlCommands(program);
+    await expect(
+      program.parseAsync([
+        "node",
+        "openmapx",
+        "control",
+        "resolve",
+        "--op",
+        execution.operationKey,
+        "--as",
+        "failed",
+      ]),
+    ).rejects.toThrow(/Data-manager settles its own jobs.*control clear --op/);
+    expect(store().list()).toHaveLength(1);
+  });
+
   it("clears the lease of an operation, prints what runs and audits it", async () => {
     const execution = await held();
     await run("clear", "--op", execution.operationKey);

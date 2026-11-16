@@ -104,32 +104,40 @@ function findLease(operationKey: string): LeaseRecord {
   return lease;
 }
 
+interface AuditEntry {
+  action?: string;
+  operationKey?: string;
+  lease?: LeaseRecord | null;
+}
+
+function readAudit(): AuditEntry[] {
+  try {
+    return readFileSync(
+      join(leaseStoreDirectory(repoPaths().infraDir), "control-audit.jsonl"),
+      "utf8",
+    )
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as AuditEntry);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
 /**
  * A maintenance root an operator cleared, from the audit file: its fence can
  * still be settled with `control resolve`.
  */
 function clearedMaintenance(operationKey: string): LeaseRecord | undefined {
-  let lines: string[];
-  try {
-    lines = readFileSync(
-      join(leaseStoreDirectory(repoPaths().infraDir), "control-audit.jsonl"),
-      "utf8",
-    ).split("\n");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-  for (const line of lines.reverse()) {
-    if (!line) continue;
-    const entry = JSON.parse(line) as { action?: string; lease?: LeaseRecord | null };
-    if (
-      entry.action === "clear" &&
-      entry.lease?.owner.operationKey === operationKey &&
-      entry.lease.ownerKind === "configurationMaintenance.prepare"
-    )
-      return entry.lease;
-  }
-  return undefined;
+  return readAudit()
+    .reverse()
+    .find(
+      (entry) =>
+        entry.action === "clear" &&
+        entry.lease?.owner.operationKey === operationKey &&
+        entry.lease.ownerKind === "configurationMaintenance.prepare",
+    )?.lease as LeaseRecord | undefined;
 }
 
 function hasFence(lease: LeaseRecord): boolean {
@@ -176,10 +184,18 @@ export function registerControlCommands(program: Command): void {
       const leases = store().list();
       log.info(leases.length ? "Held leases:" : "No leases are held.");
       for (const lease of leases) for (const line of describe(lease)) log.info(line);
+      // An operation an operator resolved or cleared stays in the agent's journal
+      // until it is pruned; the audit file records that it was ended.
+      const ended = new Set(
+        readAudit()
+          .filter((entry) => entry.action === "resolve" || entry.action === "clear")
+          .flatMap((entry) => [entry.operationKey, entry.lease?.owner.operationKey]),
+      );
       const open = readJournal().filter(
         (job) =>
-          ["queued", "running", "termination_pending"].includes(job.state) ||
-          job.errorClass === "recovery_required",
+          !ended.has(job.operationKey) &&
+          (["queued", "running", "termination_pending"].includes(job.state) ||
+            job.errorClass === "recovery_required"),
       );
       if (open.length) {
         log.info("Agent operations without a final outcome:");
@@ -243,6 +259,10 @@ export function registerControlCommands(program: Command): void {
       const lease = cleared ?? findLease(options.op);
       if (lease.owner.operationKey !== options.op)
         throw new Error("Resolve the operation that owns the lease");
+      if (lease.owner.executor === "data-manager")
+        throw new Error(
+          `Data-manager settles its own jobs when it starts and during recovery; resolving its lease here would leave its job unsettled. If data-manager cannot settle it, release the targets with \`openmapx control clear --op ${options.op}\`.`,
+        );
       for (const line of describe(lease)) log.info(line);
       await printLive(lease.targets);
       // A maintenance root also holds the data-manager fence; the same idempotent
