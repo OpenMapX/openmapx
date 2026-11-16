@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { db as defaultDb } from "../db/index.js";
 import { dataSubjectRequestEvent } from "../db/schema.js";
+import { isUniqueViolation } from "../db/unique-violation.js";
 import { PrivacyRequestError } from "./errors.js";
 import { eventPayloadSchema } from "./request-contracts.js";
 
@@ -92,7 +93,7 @@ export async function recordIdempotentEvent(
       createdAt: new Date(),
     });
   } catch (error) {
-    if (String(error).includes("data_subject_request_event_idempotency_idx")) {
+    if (isUniqueViolation(error, "data_subject_request_event_idempotency_idx")) {
       await findIdempotentEvent(database, {
         requestId: input.requestId,
         idempotencyKey: input.idempotencyKey,

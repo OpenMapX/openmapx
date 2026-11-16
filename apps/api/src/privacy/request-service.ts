@@ -21,6 +21,7 @@ import {
   dataSubjectRequestTask,
   user,
 } from "../db/schema.js";
+import { isUniqueViolation } from "../db/unique-violation.js";
 import { decrypt, encrypt } from "../services/secrets.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
@@ -315,7 +316,7 @@ export class PrivacyRequestService {
     } catch (error: unknown) {
       // The partial unique index decides a race between two first requests:
       // the loser returns the winner's active case.
-      if (parsed.userId && String(error).includes("data_subject_request_active_user_kind_idx")) {
+      if (parsed.userId && isUniqueViolation(error, "data_subject_request_active_user_kind_idx")) {
         const raced = await this.activeRequestFor(parsed.userId, parsed.kind);
         if (raced) return raced;
         throw new PrivacyRequestError("REQUEST_ALREADY_ACTIVE", 409);
@@ -487,7 +488,7 @@ export class PrivacyRequestService {
         return work(tx, current);
       });
     } catch (error) {
-      if (String(error).includes("data_subject_request_event_idempotency_idx"))
+      if (isUniqueViolation(error, "data_subject_request_event_idempotency_idx"))
         return this.getById(input.requestId);
       throw error;
     }
