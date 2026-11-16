@@ -45,6 +45,8 @@ export async function withHostTargets<T>(
     budgetMs?: number;
     /** How the effect's result ended, for effects that report an exit code. */
     outcomeOf?: (result: T) => Outcome;
+    /** Errors the effect raised after undoing its own work, such as a handled interruption. */
+    contained?: (error: unknown) => boolean;
   },
   run: () => Promise<T>,
 ): Promise<T> {
@@ -71,9 +73,10 @@ export async function withHostTargets<T>(
     if (error instanceof TargetBusyError) throw new HostTargetsBusyError(error.message);
     throw error;
   }
-  const finish = async (outcome: Outcome) => {
+  const finish = async (outcome: Outcome, handled = false) => {
     // A command that failed because the daemon went away may have run in part.
-    if (outcome === "contained" && !(await dockerDaemonReachable())) outcome = "unknown";
+    if (outcome === "contained" && !handled && !(await dockerDaemonReachable()))
+      outcome = "unknown";
     const known = outcome !== "unknown";
     await leases.settle({
       leaseId: lease.leaseId,
@@ -97,7 +100,8 @@ export async function withHostTargets<T>(
   try {
     result = await run();
   } catch (error) {
-    await finish(thrownOutcome(error));
+    if (input.contained?.(error)) await finish("contained", true);
+    else await finish(thrownOutcome(error));
     throw error;
   }
   await finish(input.outcomeOf ? input.outcomeOf(result) : "committed");

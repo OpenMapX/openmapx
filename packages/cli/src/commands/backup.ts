@@ -1744,8 +1744,14 @@ export function registerBackupCommands(program: Command): void {
     .action(async (options: { name?: string }) => {
       try {
         // Backups stop the services they copy, so every service is claimed.
-        await withHostTargets({ kind: "backup.create", targets: "all" }, () =>
-          createBackup({ name: options.name }),
+        await withHostTargets(
+          {
+            kind: "backup.create",
+            targets: "all",
+            // An interrupted backup has stopped its dump and removed its partial archive.
+            contained: (error) => error instanceof BackupInterruptedError,
+          },
+          () => createBackup({ name: options.name }),
         );
       } catch (err) {
         log.err((err as Error).message);

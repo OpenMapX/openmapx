@@ -120,6 +120,25 @@ describe("host effects under a lease", () => {
     expect(held()).toEqual(["postgis"]);
   });
 
+  it("releases an effect that undid its own work without asking the Docker daemon", async () => {
+    vi.mocked(dockerDaemonReachable).mockResolvedValue(false);
+    const interrupted = Error("Backup interrupted");
+    await expect(
+      withHostTargets(
+        {
+          kind: "backup.create",
+          targets: ["postgis"],
+          contained: (error) => error === interrupted,
+        },
+        async () => {
+          throw interrupted;
+        },
+      ),
+    ).rejects.toBe(interrupted);
+    expect(held()).toEqual([]);
+    expect(dockerDaemonReachable).not.toHaveBeenCalled();
+  });
+
   it("leases a service the agent has never seen, such as a community service just installed", async () => {
     expect(
       await withHostTargets({ kind: "services.restart", targets: ["community-late"] }, async () =>
