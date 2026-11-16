@@ -39,8 +39,9 @@ const navState = {
 // (e.g. `rerender()` in the 100-update tests below) must not look like the map
 // itself changed.
 const mapRef: { current: unknown } = { current: fake.map };
+let mapReady = true;
 vi.mock("@/integration-api/map/MapContext", () => ({
-  useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
+  useMap: () => ({ mapRef, mapReady, styleVersion: 0 }),
 }));
 vi.mock("@/integration-api/overlay/useMapAttributions", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -416,4 +417,41 @@ it("projects alternative and proposed geometry with the same captured span contr
   view.unmount();
   navState.routes = originalRoutes;
   navState.fasterRoute = null;
+});
+
+describe("NavigationRouteLayer alternative taps", () => {
+  it("binds the alternative tap once the map becomes ready, and unbinds on unmount", () => {
+    const calls = (method: "on" | "off", event: string) =>
+      fake.state.listenerCalls.filter(
+        (c) => c.method === method && c.event === event && c.layerId === "nav-route-alts",
+      );
+    try {
+      mapRef.current = null;
+      mapReady = false;
+      fake.state.listenerCalls.length = 0;
+      navState.selectRoute.mockClear();
+      const view = render(<NavigationRouteLayer />);
+      expect(calls("on", "click")).toHaveLength(0);
+      mapRef.current = fake.map;
+      mapReady = true;
+      view.rerender(<NavigationRouteLayer />);
+      expect(calls("on", "click")).toHaveLength(1);
+      expect(calls("on", "mouseenter")).toHaveLength(1);
+      expect(calls("on", "mouseleave")).toHaveLength(1);
+      const handler = calls("on", "click")[0].handler;
+      act(() =>
+        handler({
+          originalEvent: new MouseEvent("click"),
+          point: { x: 1, y: 1 },
+          features: [{ properties: { routeIndex: 1 } }],
+        }),
+      );
+      expect(navState.selectRoute).toHaveBeenCalledWith(1);
+      view.unmount();
+      expect(calls("off", "click").some((c) => c.handler === handler)).toBe(true);
+    } finally {
+      mapRef.current = fake.map;
+      mapReady = true;
+    }
+  });
 });
