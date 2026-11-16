@@ -226,201 +226,190 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
             operation.expectedConfigurationRevisionId
           )
             throw Error("Pull configuration revision changed");
-          const directory = services.releaseStatePaths(options.infraDir).store;
-          await mkdir(directory, { mode: 0o700, recursive: true });
-          const lock = await services.acquireReleaseStoreLock(directory);
-          try {
-            const registry = await options.loadAuthority();
-            let imageReference: string, releaseSelectionDigest: string | null;
-            if (operation.candidateId) {
-              if (!options.candidateSource) throw Error("Original pull candidate unavailable");
-              const candidate = await readConfigurationCandidate(
-                  options.candidateSource,
-                  operation.candidateId,
-                ),
-                source = renderCoordinatorCandidate(candidate, registry, options.infraDir),
-                fixed = source.fixed,
-                actual = verifyCoordinatorPullAdmissionSource(
-                  admitted.installation.installation,
-                  candidate.record,
-                ),
-                parent = actual.parent;
-              if (
-                fixed.action !== "update" ||
-                !parent ||
-                parent.issuer !== "api" ||
-                canonicalJson(fixed.pull.operation) !== canonicalJson(operation) ||
-                fixed.pull.operationKey !== context.execution.operationKey ||
-                fixed.pull.operationFingerprint !== context.execution.operationFingerprint ||
-                candidate.record.apiJobId !== parent.apiJobId ||
-                fixed.pull.attempt.apiJobId !== parent.apiJobId ||
-                fixed.pull.attempt.apiOwnerVersion !== parent.apiOwnerVersion ||
-                fixed.pull.attempt.attemptId !== parent.attemptId ||
-                fixed.pull.attempt.parentOperationKey !== parent.operationKey ||
-                fixed.pull.attempt.parentFingerprint !== parent.fingerprint ||
-                fixed.pull.attempt.parentDeadlineAt !== parent.deadlineAt ||
-                fixed.pull.requestedDeadlineAt !== actual.requestedDeadlineAt
-              )
-                throw Error("Original coordinator pull submission changed");
-              verifyConfigurationReleaseSourceWitness({
-                installation: admitted.installation.installation,
-                infraDir: options.infraDir,
-                sourceRevision: candidate.record.expectedSourceRevision,
-                expectedCurrentRevisionId: operation.expectedConfigurationRevisionId,
-                authorityRevision: registry.revisionId,
-              });
-              ({ imageReference, releaseSelectionDigest } = source);
-              if (
-                actual.coordinatorPullBaseline.configurationAuthorityRevision !==
-                  registry.revisionId ||
-                actual.coordinatorPullBaseline.policyRevision !==
-                  context.claim.capability.revisionId ||
-                actual.coordinatorPullBaseline.configImageReference !== imageReference
-              )
-                throw Error("Original pull baseline source changed");
-              await confirmCoordinatorPullOwnership(
-                options.ownedServices,
-                operation,
-                context.execution.operationFingerprint,
-                actual.coordinatorPullBaseline,
-                context.signal,
-              );
-              if (
-                (await options.ownedServices.inspectOwnedServices(context.signal)).find(
-                  (s) => s.serviceId === "data-manager",
-                )?.state !== "running"
-              )
-                throw Error("Ready old coordinator required before image pull");
-              await assertConfigurationCoordinatorReady(context.signal);
-              // Same actual current native Compose/release sources plus the full
-              // readonly prospective render/registered manifest sources. Aliases
-              // are a refusal condition; no sibling OLD-image exception exists.
-              const args = services.stackComposeArgs({
-                infraDir: options.infraDir,
-                composePath: services.configurationGenerationComposeFile(
-                  options.infraDir,
-                  operation.expectedConfigurationRevisionId,
-                ),
-                composeReleasePath: services.releaseStatePaths(options.infraDir).overlay,
-              });
-              const config = JSON.parse(
-                (
-                  await (options.execFile ?? runContainedProcess)(
-                    "docker",
-                    [...args, "config", "--format", "json"],
-                    { signal: context.signal, timeout: 15000, maxBuffer: 1024 * 1024 },
-                  )
-                ).stdout,
-              ) as { services?: Record<string, { image?: string }> };
-              if (
-                !config.services ||
-                typeof config.services !== "object" ||
-                Array.isArray(config.services) ||
-                Object.keys(config.services).length > 256
-              )
-                throw Error("Current coordinator image inventory unavailable");
-              const identity = services.coordinatorPullReferenceIdentity(imageReference),
-                enabled = new Set(
-                  source.rendered.resolved.enabled.map((value) => value.manifest.id),
-                );
-              for (const service of registry.services) {
-                if (service.manifest.id === "data-manager") continue;
-                const selected = services.readServiceReleaseImageSelection(
-                    options.infraDir,
-                    service.manifest.id,
-                  ),
-                  prospective =
-                    selected.imageReference ??
-                    (enabled.has(service.manifest.id)
-                      ? services.configurationImageReference(
-                          source.rendered.rendered.composeYaml,
-                          service.manifest.id,
-                        )
-                      : services.serviceContainerImageReference(service.manifest.container));
-                const current =
-                  config.services[service.manifest.id]?.image ??
-                  selected.imageReference ??
-                  services.serviceContainerImageReference(service.manifest.container);
-                if (
-                  [current, prospective].some(
-                    (value) => services.coordinatorPullReferenceIdentity(value) === identity,
-                  )
-                )
-                  throw Error("Coordinator image reference shared by another registered service");
-              }
-            } else {
-              const selected = services.readServiceReleaseImageSelection(
+          const registry = await options.loadAuthority();
+          let imageReference: string, releaseSelectionDigest: string | null;
+          if (operation.candidateId) {
+            if (!options.candidateSource) throw Error("Original pull candidate unavailable");
+            const candidate = await readConfigurationCandidate(
+                options.candidateSource,
+                operation.candidateId,
+              ),
+              source = renderCoordinatorCandidate(candidate, registry, options.infraDir),
+              fixed = source.fixed,
+              actual = verifyCoordinatorPullAdmissionSource(
+                admitted.installation.installation,
+                candidate.record,
+              ),
+              parent = actual.parent;
+            if (
+              fixed.action !== "update" ||
+              !parent ||
+              parent.issuer !== "api" ||
+              canonicalJson(fixed.pull.operation) !== canonicalJson(operation) ||
+              fixed.pull.operationKey !== context.execution.operationKey ||
+              fixed.pull.operationFingerprint !== context.execution.operationFingerprint ||
+              candidate.record.apiJobId !== parent.apiJobId ||
+              fixed.pull.attempt.apiJobId !== parent.apiJobId ||
+              fixed.pull.attempt.apiOwnerVersion !== parent.apiOwnerVersion ||
+              fixed.pull.attempt.attemptId !== parent.attemptId ||
+              fixed.pull.attempt.parentOperationKey !== parent.operationKey ||
+              fixed.pull.attempt.parentFingerprint !== parent.fingerprint ||
+              fixed.pull.attempt.parentDeadlineAt !== parent.deadlineAt ||
+              fixed.pull.requestedDeadlineAt !== actual.requestedDeadlineAt
+            )
+              throw Error("Original coordinator pull submission changed");
+            verifyConfigurationReleaseSourceWitness({
+              installation: admitted.installation.installation,
+              infraDir: options.infraDir,
+              sourceRevision: candidate.record.expectedSourceRevision,
+              expectedCurrentRevisionId: operation.expectedConfigurationRevisionId,
+              authorityRevision: registry.revisionId,
+            });
+            ({ imageReference, releaseSelectionDigest } = source);
+            if (
+              actual.coordinatorPullBaseline.configurationAuthorityRevision !==
+                registry.revisionId ||
+              actual.coordinatorPullBaseline.policyRevision !==
+                context.claim.capability.revisionId ||
+              actual.coordinatorPullBaseline.configImageReference !== imageReference
+            )
+              throw Error("Original pull baseline source changed");
+            await confirmCoordinatorPullOwnership(
+              options.ownedServices,
+              operation,
+              context.execution.operationFingerprint,
+              actual.coordinatorPullBaseline,
+              context.signal,
+            );
+            if (
+              (await options.ownedServices.inspectOwnedServices(context.signal)).find(
+                (s) => s.serviceId === "data-manager",
+              )?.state !== "running"
+            )
+              throw Error("Ready old coordinator required before image pull");
+            await assertConfigurationCoordinatorReady(context.signal);
+            // Same actual current native Compose sources plus the full
+            // readonly prospective render/registered manifest sources. Aliases
+            // are a refusal condition; no sibling OLD-image exception exists.
+            const args = services.stackComposeArgs({
+              infraDir: options.infraDir,
+              composePath: services.configurationGenerationComposeFile(
                 options.infraDir,
+                operation.expectedConfigurationRevisionId,
+              ),
+            });
+            const config = JSON.parse(
+              (
+                await (options.execFile ?? runContainedProcess)(
+                  "docker",
+                  [...args, "config", "--format", "json"],
+                  { signal: context.signal, timeout: 15000, maxBuffer: 1024 * 1024 },
+                )
+              ).stdout,
+            ) as { services?: Record<string, { image?: string }> };
+            if (
+              !config.services ||
+              typeof config.services !== "object" ||
+              Array.isArray(config.services) ||
+              Object.keys(config.services).length > 256
+            )
+              throw Error("Current coordinator image inventory unavailable");
+            const identity = services.coordinatorPullReferenceIdentity(imageReference),
+              enabled = new Set(source.rendered.resolved.enabled.map((value) => value.manifest.id));
+            for (const service of registry.services) {
+              if (service.manifest.id === "data-manager") continue;
+              const selected = services.readServiceReleaseImageSelection(
+                  options.infraDir,
+                  service.manifest.id,
+                ),
+                prospective =
+                  selected.imageReference ??
+                  (enabled.has(service.manifest.id)
+                    ? services.configurationImageReference(
+                        source.rendered.rendered.composeYaml,
+                        service.manifest.id,
+                      )
+                    : services.serviceContainerImageReference(service.manifest.container));
+              const current =
+                config.services[service.manifest.id]?.image ??
+                selected.imageReference ??
+                services.serviceContainerImageReference(service.manifest.container);
+              if (
+                [current, prospective].some(
+                  (value) => services.coordinatorPullReferenceIdentity(value) === identity,
+                )
+              )
+                throw Error("Coordinator image reference shared by another registered service");
+            }
+          } else {
+            const selected = services.readServiceReleaseImageSelection(
+              options.infraDir,
+              operation.serviceId,
+            );
+            imageReference =
+              selected.imageReference ??
+              services.configurationImageReference(
+                readFileSync(
+                  services.configurationGenerationComposeFile(
+                    options.infraDir,
+                    operation.expectedConfigurationRevisionId,
+                  ),
+                  "utf8",
+                ),
                 operation.serviceId,
               );
-              imageReference =
-                selected.imageReference ??
-                services.configurationImageReference(
-                  readFileSync(
-                    services.configurationGenerationComposeFile(
-                      options.infraDir,
-                      operation.expectedConfigurationRevisionId,
-                    ),
-                    "utf8",
-                  ),
-                  operation.serviceId,
-                );
-              releaseSelectionDigest = selected.releaseSelectionDigest;
-            }
-            const remaining = () => {
-              const value = context.execution.deadlineAt - Date.now();
-              if (value <= 0 || context.signal.aborted)
-                throw new OpsExecutionFailure("timeout", {});
-              return value;
-            };
-            if (operation.serviceId === "data-manager") {
-              try {
-                assertCoordinatorPullLeaseCompatibility(authority);
-              } catch {
-                retainConfigurationPreEffectRefusal(authority);
-                throw new OpsExecutionFailure("busy", {});
-              }
-              beginControlEffect(authority);
-            }
-            const pullArgs = ["image", "pull", imageReference];
-            if (options.execFile)
-              await options.execFile("docker", pullArgs, {
-                signal: context.signal,
-                timeout: Math.min(15 * 60000, remaining()),
-                maxBuffer: 1024 * 1024,
-              });
-            else
-              await runContainedStreamingProcess("docker", pullArgs, {
-                signal: context.signal,
-                timeout: Math.min(15 * 60000, remaining()),
-                onLine: context.emitLog,
-                redact: safeProcessDiagnostic,
-              });
-            const imageId = (
-              await (options.execFile ?? runContainedProcess)(
-                "docker",
-                ["image", "inspect", "--format", "{{.Id}}", imageReference],
-                { signal: context.signal, timeout: Math.min(15000, remaining()), maxBuffer: 4096 },
-              )
-            ).stdout.trim();
-            context.signal.throwIfAborted();
-            assertControlExecutionForward(authority);
-            if (
-              (await options.loadAuthority()).revisionId !== registry.revisionId ||
-              services.currentConfigurationGeneration(options.infraDir) !==
-                operation.expectedConfigurationRevisionId
-            )
-              throw Error("Pull source changed");
-            return servicePullResultSchema.parse({
-              changed: true,
-              revisionId: operation.expectedConfigurationRevisionId,
-              imageReference,
-              imageId,
-              releaseSelectionDigest,
-            });
-          } finally {
-            lock.release();
+            releaseSelectionDigest = selected.releaseSelectionDigest;
           }
+          const remaining = () => {
+            const value = context.execution.deadlineAt - Date.now();
+            if (value <= 0 || context.signal.aborted) throw new OpsExecutionFailure("timeout", {});
+            return value;
+          };
+          if (operation.serviceId === "data-manager") {
+            try {
+              assertCoordinatorPullLeaseCompatibility(authority);
+            } catch {
+              retainConfigurationPreEffectRefusal(authority);
+              throw new OpsExecutionFailure("busy", {});
+            }
+            beginControlEffect(authority);
+          }
+          const pullArgs = ["image", "pull", imageReference];
+          if (options.execFile)
+            await options.execFile("docker", pullArgs, {
+              signal: context.signal,
+              timeout: Math.min(15 * 60000, remaining()),
+              maxBuffer: 1024 * 1024,
+            });
+          else
+            await runContainedStreamingProcess("docker", pullArgs, {
+              signal: context.signal,
+              timeout: Math.min(15 * 60000, remaining()),
+              onLine: context.emitLog,
+              redact: safeProcessDiagnostic,
+            });
+          const imageId = (
+            await (options.execFile ?? runContainedProcess)(
+              "docker",
+              ["image", "inspect", "--format", "{{.Id}}", imageReference],
+              { signal: context.signal, timeout: Math.min(15000, remaining()), maxBuffer: 4096 },
+            )
+          ).stdout.trim();
+          context.signal.throwIfAborted();
+          assertControlExecutionForward(authority);
+          if (
+            (await options.loadAuthority()).revisionId !== registry.revisionId ||
+            services.currentConfigurationGeneration(options.infraDir) !==
+              operation.expectedConfigurationRevisionId
+          )
+            throw Error("Pull source changed");
+          return servicePullResultSchema.parse({
+            changed: true,
+            revisionId: operation.expectedConfigurationRevisionId,
+            imageReference,
+            imageId,
+            releaseSelectionDigest,
+          });
         },
         context.signal,
       );

@@ -253,17 +253,24 @@ pnpm openmapx services status                          # container table (all se
 pnpm openmapx services status valhalla                 # one service
 pnpm openmapx compose pull [ids...]                    # pull images without starting containers
 pnpm openmapx compose release --check                  # check candidate without changing release pins
+pnpm openmapx control status                           # held services and unfinished operations
 pnpm openmapx compose rotate-redis-password --confirm-clients-stopped # rotate Redis ACL/secret
 ```
 
 The distinction between `restart` and `start`/`update` matters:
+
+Stop, restart, start, update and `compose up`/`down` claim their services in the
+operations agent's lease store first. While another operation holds one, the
+command exits 1 and names the holding operation; `pnpm openmapx control status`
+shows it, and [Upgrading](./upgrading.md#operations-whose-outcome-is-unknown)
+describes how to resolve one whose outcome is unknown.
 
 - **`restart`** reboots the container in place. It does not re-render, so it
   won't pick up a changed manifest, `.env`, or selection; use it to bounce a
   service whose image and config are unchanged.
 - **`start`** re-renders first, so it picks up compose-file changes.
 - **`update`** re-renders, pulls the selected images, and force-recreates the
-  target containers. An existing release overlay remains pinned. Select a newer
+  target containers. The applied release pins stay. Select a newer
   application release through System → Updates or authenticated `system update` after `compose release --check`; see [Upgrading](./upgrading.md).
   Use `--no-deps` to replace only the named containers when dependencies are already
   healthy.
@@ -496,8 +503,8 @@ that image. Each such agent render says so in its output. Overrides apply to
 both.
 
 The agent's files are the checkout's only when its image is a local build.
-`OPENMAPX_RELEASE=local` does not clear an existing release overlay, which
-keeps pinning the release's images until you clear it with
+`OPENMAPX_RELEASE=local` does not clear the release pins of the applied
+configuration, which keep pinning the release's images until you clear them with
 `pnpm openmapx compose release --clear`. And an ops-agent image pulled by its
 tag, such as `ghcr.io/openmapx/ops-agent:main`, is a published build, not
 yours. In either case the agent renders that release's service files, not your

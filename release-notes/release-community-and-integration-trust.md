@@ -10,7 +10,7 @@ permissions. A checkout written under a umask of `002`, as `git clone` and
 requests without any `chmod`. The checkout must still be writable only by the
 operator's account, because services mount configuration files from it,
 `services build` uses its build contexts, and `infra/docker/.env` and the
-release overlay live in it. A private group per user, the Debian and Ubuntu
+applied configuration generations live in it. A private group per user, the Debian and Ubuntu
 default, meets this with a umask of `002`; where the group has other members,
 clone and pull with umask `022`.
 

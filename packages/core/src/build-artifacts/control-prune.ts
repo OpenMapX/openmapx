@@ -14,25 +14,19 @@
  * missing record as permission: a missing admission, effect or lease is
  * unknown, and an expired root key is refused at admission. An agent
  * execution also needs its sealed canonical terminal commitment. */
-import { readFileSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { rmSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
-import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
+import { executionRefSchema } from "../ops/execution-ref";
 import {
   type ControlInstallation,
   childSettlementState,
   installationState,
   readPrivateRecord,
-  restoreAdmittedControlExecution,
   verifyControlEffectSettlement,
 } from "./control-authority";
 import { controlDigest, controlOriginSchema, type InstallationState } from "./control-records";
 import { AnchoredDirectory } from "./filesystem";
-import {
-  artifactTargetLeaseReleased,
-  removeReleasedArtifactTargetLease,
-  verifyRetainedArtifactTargetRootRelease,
-} from "./target-lease";
 
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
 /** Namespaces swept by name. `executions`, `effects` and the terminal
@@ -108,9 +102,6 @@ const cursors = new WeakMap<InstallationState, number>();
 
 interface Prunable {
   key: string;
-  execution: ExecutionRef;
-  /** The owned lease still exists and is released; the prune removes it. */
-  leased: boolean;
   /** Name fragments of this execution's own records, per namespace ("*" for
    * every swept namespace). */
   identifiers: Map<string, Set<string>>;
@@ -166,8 +157,9 @@ function mtime(dir: AnchoredDirectory, name: string): number | null {
     throw error;
   }
 }
-function leaseDirectory(local: InstallationState, leaseId: string): string {
-  return join(local.dataRoot, ".admin-target-control", "leases", leaseId);
+/** The role's execution witnesses, in its own private state. */
+function witnessDirectory(local: InstallationState): string {
+  return join(local.privateRoot.path, "execution-witnesses", local.installation.role);
 }
 function assertionLeaseId(assertion: string): string {
   return leaseReferenceSchema.parse(
@@ -217,14 +209,14 @@ function borrowedLeases(
   ];
 }
 /** The execution and the identifiers of its own records, when they may go. */
-function prunable(
+async function prunable(
   installation: ControlInstallation,
   local: InstallationState,
   name: string,
   now: number,
   onFull: () => void,
   adoptions: () => Map<string, Borrowed> | null,
-): Prunable | null {
+): Promise<Prunable | null> {
   const admitted = admissionSchema.parse(
     readPrivateRecord(local, "executions", name, 65536),
   ).payload;
@@ -274,24 +266,16 @@ function prunable(
   add(["hardlinks"], admitted.execution.executionId);
   if (admitted.operation?.handoffId) add(["observations"], admitted.operation.handoffId);
   // Fixed children it prepared: their key, spawn and key index records.
-  const fixed = optional(() =>
-    z
-      .array(z.uuid())
-      .parse(
-        JSON.parse(
-          readFileSync(
-            join(
-              local.dataRoot,
-              ".admin-target-control",
-              "executions",
-              local.installation.role,
-              `${key}.keys.json`,
-            ),
-            "utf8",
-          ),
-        ),
-      ),
-  );
+  const fixed = optional(() => {
+    const witnesses = new AnchoredDirectory(witnessDirectory(local));
+    try {
+      return z
+        .array(z.uuid())
+        .parse(JSON.parse(witnesses.read(`${key}.keys.json`, 4096).toString("utf8")));
+    } finally {
+      witnesses.close();
+    }
+  });
   for (const id of fixed ?? []) {
     add(["children", "spawns", "spawn-started"], id);
     const child = optional(() => readPrivateRecord(local, "children", `${id}.key`, 2048)) as
@@ -317,30 +301,17 @@ function prunable(
   // As a borrower: only its own adoption record, once the lease is released.
   const index = adoptions();
   if (!index) return null;
+  // A lease is released once its row is gone from the store.
   for (const lease of borrowedLeases(local, admitted, name, index)) {
-    if (!artifactTargetLeaseReleased(local, lease.leaseId)) return null;
+    if (await local.leases.read(lease.leaseId)) return null;
     add(["adoptions"], lease.delegationId);
   }
   const owned = optional(
     () => leaseReferenceSchema.parse(readPrivateRecord(local, "execution-leases", name)).leaseId,
   );
-  let leased = false;
   if (owned) {
+    if (await local.leases.read(owned)) return null;
     add(issued, owned);
-    const ledger = leaseDirectory(local, owned);
-    // A lease already removed by an earlier interrupted pass has nothing to hold.
-    if (optional(() => statSync(ledger))) {
-      verifyRetainedArtifactTargetRootRelease(
-        restoreAdmittedControlExecution(installation, admitted.execution),
-      );
-      leased = true;
-      const grants = new AnchoredDirectory(join(ledger, "grants"));
-      try {
-        for (const entry of entries(grants, onFull)) add(issued, entry.replace(/\.json$/, ""));
-      } finally {
-        grants.close();
-      }
-    }
   }
   if (ownerRecord && preparation) {
     const source = optional(() =>
@@ -356,8 +327,6 @@ function prunable(
   }
   return {
     key,
-    execution: admitted.execution,
-    leased,
     identifiers,
     ...(ownerRecord && preparation ? { ownerRecord } : {}),
   };
@@ -367,9 +336,14 @@ function prunable(
 function removeShared(local: InstallationState, keys: readonly string[], onFull: () => void): void {
   const role = local.installation.role,
     paths = [
-      { path: join(local.dataRoot, ".admin-target-control", "executions", role), seed: false },
+      { path: witnessDirectory(local), seed: false },
       ...(role === "ops-agent" || role === "host-cli"
-        ? [{ path: join(local.dataRoot, "ops-agent", "lifecycle"), seed: true }]
+        ? [
+            {
+              path: join(dirname(local.dataRoot), "state", "ops-agent", "lifecycle"),
+              seed: true,
+            },
+          ]
         : []),
     ];
   for (const { path, seed } of paths) {
@@ -440,7 +414,7 @@ export async function pruneControlRecords(
   for (const name of batch) {
     if (options.keep?.(name.replace(/\.json$/, ""))) continue;
     try {
-      const value = prunable(installation, local, name, now, onFull, adoptions);
+      const value = await prunable(installation, local, name, now, onFull, adoptions);
       if (value) found.push(value);
     } catch {
       /* An unreadable or unverifiable record is kept. */
@@ -449,9 +423,6 @@ export async function pruneControlRecords(
   const keys = found.map((value) => value.key);
   if (keys.length) {
     await options.beforeRemove?.(keys);
-    for (const { execution, leased } of found)
-      if (leased)
-        removeReleasedArtifactTargetLease(restoreAdmittedControlExecution(installation, execution));
     removeShared(local, keys, onFull);
     const terminals = new Set(keys.map((key) => `terminal-${key}.json`));
     for (const namespace of NAMESPACES) {

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -11,9 +11,16 @@ import {
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { inspectControlChildPublication } from "./child-phase";
+import { installationState } from "./control-authority";
 import * as control from "./index";
 
 afterEach(() => vi.restoreAllMocks());
+/** The leases the agent's store holds for the installation at `root`. */
+function heldLeases(root: string) {
+  return control
+    .openLeaseStore({ directory: control.leaseStoreDirectory(root), purpose: "test" })
+    .list();
+}
 it("admits a120s fixed phase after hours of original-root work without a new root", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-late-phase-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
@@ -81,7 +88,6 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     reservations: [reservation],
   });
   const lease = await control.acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["motis"],
     owner: authority,
   });
@@ -89,7 +95,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     const original = readFileSync(
       join(root, "control-private/data-manager/executions", `${owner.operationKey}.json`),
     );
-    const held = statSync(join(root, "data/.admin-target-control/locks/motis")).ino;
+    const held = heldLeases(root);
     const late = admittedAt + 4 * 3600000;
     vi.spyOn(Date, "now").mockReturnValue(late);
     const normalized = normalizeExecutionAdmission({
@@ -123,7 +129,9 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
         join(root, "control-private/data-manager/executions", `${owner.operationKey}.json`),
       ),
     ).toEqual(original);
-    expect(statSync(join(root, "data/.admin-target-control/locks/motis")).ino).toBe(held);
+    expect(heldLeases(root).map((value) => value.leaseId)).toEqual(
+      held.map((value) => value.leaseId),
+    );
     expect(control.cancelControlExecution(authority)).toEqual([bound.execution]);
     await expect(
       control.issueControlChildPhase(authority, {
@@ -280,14 +288,7 @@ it("keeps an old exact admission's signed bytes when a duplicate supplies empty 
 
 import { AnchoredDirectory } from "./filesystem";
 
-it.each([
-  "reference",
-  "cancellation-index",
-  "lease-outbox",
-  "grant-outbox",
-  "shared-grant",
-  "parent-linkage",
-] as const)(
+it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as const)(
   "retains the exact phase and refuses another dispatch after a crash at %s",
   async (point) => {
     const f = await fixture(),
@@ -297,7 +298,6 @@ it.each([
         serviceIds: ["motis", "motis-staging"],
       }),
       lease = await control.acquireArtifactTargetLease({
-        dataRoot: join(f.root, "data"),
         serviceIds: ["motis", "motis-staging"],
         owner: f.authority,
       });
@@ -325,13 +325,7 @@ it.each([
             (point === "lease-outbox" &&
               path.endsWith("/parent-attempts") &&
               text.includes('"kind":"lease"')) ||
-            (point === "grant-outbox" && path.endsWith("/attempts")) ||
-            (point === "shared-grant" && path.endsWith("/grants")) ||
-            (point === "parent-linkage" &&
-              path.endsWith(`/${lease.leaseId}`) &&
-              name === "owner.json" &&
-              text.includes('"grantDigests":{') &&
-              !text.includes('"grantDigests":{}')));
+            (point === "grant-outbox" && path.endsWith("/attempts")));
         const value = Reflect.apply(original, this, args);
         if (selected) {
           fired = true;
@@ -370,9 +364,7 @@ it.each([
         /* Torn private/shared publication is itself a closed recovery fence. */
       }
       expect(() => control.assertControlExecutionForward(f.authority)).toThrow();
-      expect(statSync(join(f.root, "data/.admin-target-control/locks/motis")).isDirectory()).toBe(
-        true,
-      );
+      expect(heldLeases(f.root).map((value) => value.leaseId)).toEqual([lease.leaseId]);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
     } finally {
       vi.restoreAllMocks();
@@ -436,7 +428,6 @@ it("rechecks durable cancellation inside publication after the outside identity 
       serviceIds: ["motis", "motis-staging"],
     }),
     lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(f.root, "data"),
       serviceIds: ["motis", "motis-staging"],
       owner: f.authority,
     });
@@ -444,16 +435,16 @@ it("rechecks durable cancellation inside publication after the outside identity 
   try {
     const phase = { phase: "stop-primary" as const, ordinal: 0 };
     await control.bindControlChildPhase(f.authority, phase);
-    const original = AnchoredDirectory.prototype.name;
-    vi.spyOn(AnchoredDirectory.prototype, "name").mockImplementation(function (
-      this: AnchoredDirectory,
-      name: string,
-    ) {
-      if (!fired && name === ".journal-writer" && this.path.endsWith(`/${lease.leaseId}`)) {
+    // Cancel right after delegation read the lease from the store.
+    const leases = installationState(f.dm).leases,
+      read = leases.read.bind(leases);
+    vi.spyOn(leases, "read").mockImplementation(async (leaseId) => {
+      const value = await read(leaseId);
+      if (!fired) {
         fired = true;
         control.cancelControlExecution(f.authority);
       }
-      return original.call(this, name);
+      return value;
     });
     await expect(
       control.issueControlChildPhase(f.authority, {
@@ -722,11 +713,7 @@ it.each(["cancel-first", "grant-first"] as const)(
     let fired = false;
     try {
       const bound = await control.bindControlChildPhase(f.cliAuthority, f.slot);
-      expect(
-        (await import("node:fs")).existsSync(
-          join(f.root, "data/.admin-target-control/locks/data-manager"),
-        ),
-      ).toBe(false);
+      expect(heldLeases(f.root)).toEqual([]);
       if (order === "cancel-first") {
         const original = AnchoredDirectory.prototype.name;
         vi.spyOn(AnchoredDirectory.prototype, "name").mockImplementation(function (

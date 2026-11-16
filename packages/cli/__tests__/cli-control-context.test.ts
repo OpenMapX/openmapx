@@ -98,7 +98,6 @@ it.each([0, 1, 130])(
       plan: [plan],
     });
     const lease = await c.acquireArtifactTargetLease({
-      dataRoot: join(infra, "data"),
       serviceIds: ["motis"],
       owner: authority,
     });

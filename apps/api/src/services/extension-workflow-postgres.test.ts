@@ -83,7 +83,10 @@ beforeAll(async () => {
     serviceIds: host.loaded.map((s) => s.manifest.id),
   });
   agent = buildOpsAgentServer({
-    tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+    tokens: {
+      api: host.token,
+      "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+    },
     runtime: host.runtime,
     resourceClaimer: host.claimer,
     journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),

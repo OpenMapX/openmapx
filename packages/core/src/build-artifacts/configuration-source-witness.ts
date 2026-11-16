@@ -15,14 +15,7 @@ import {
   readAppliedPlatformConfiguration,
 } from "../services/configuration-generation";
 import { serviceSelectionPath } from "../services/deployment";
-import { parseReleaseManifest, renderReleaseCompose } from "../services/release-manifest";
-import { releaseStatePaths } from "../services/release-state";
 import type { LoadedService } from "../services/types";
-import {
-  configurationHandoffRecordDomains,
-  configurationHandoffRecordName,
-  configurationHandoffWorkerRecordSchema,
-} from "./configuration-handoff-records";
 import { configurationMaintenanceOwnerRecordSchema } from "./configuration-maintenance-owner-records";
 import {
   assertControlExecutionForward,
@@ -171,34 +164,7 @@ export function assertConfigurationHandoffHostSources(authority: VerifiedExecuti
       timingSafeEqual(Buffer.from(value, "hex"), Buffer.from(intent.sourceDigest, "hex"));
   if (currentConfigurationGeneration(infraDir) !== intent.operation.expectedCurrentRevisionId)
     throw Error("Helper host generation changed");
-  if (matches(keyed())) return;
-  if (!intent.release || intent.previousReleaseOverlay === undefined)
-    throw Error("Helper host sources changed");
-  // The only allowed source transition is this original helper's indexed,
-  // signed publication of its exact frozen renderer output. All other files,
-  // environment values and the original generation remain under the old HMAC.
-  const file = configurationHandoffRecordName(intent.operation.handoffId, "completion"),
-    publication = readPrivateRecord(local, "observations", file),
-    worker = verifyControl(
-      intent.helperPublicKey,
-      configurationHandoffRecordDomains.completion,
-      publication,
-      configurationHandoffWorkerRecordSchema,
-    ),
-    files = currentSources(infraDir, {});
-  if (
-    worker.intentDigest !== controlDigest(intent) ||
-    canonicalJson(worker.execution) !== canonicalJson(intent.helper) ||
-    worker.release?.publication !== "published" ||
-    canonicalJson(worker.release.overlay) !== canonicalJson(files.release) ||
-    !files.release ||
-    Buffer.from(files.release.bytes, "base64").toString("utf8") !==
-      renderReleaseCompose(
-        parseReleaseManifest(intent.release.canonicalManifest, intent.release.imagePrefix),
-      ) ||
-    !matches(keyed({ ...files, release: intent.previousReleaseOverlay }))
-  )
-    throw Error("Original helper release publication changed");
+  if (!matches(keyed())) throw Error("Helper host sources changed");
 }
 function hostEnv(infraDir: string, env: NodeJS.ProcessEnv) {
   const path = join(infraDir, ".env");
@@ -272,57 +238,10 @@ function hostEnv(infraDir: string, env: NodeJS.ProcessEnv) {
   return { env: { ...file, ...env }, identity, selection };
 }
 
-/** Bounded private data only. Callers own their existing writer/target checks. */
-function readHandoffSourceFile(path: string, maximumBytes: number) {
-  let fd: number | undefined;
-  try {
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const before = fstatSync(fd);
-    if (!before.isFile() || before.nlink !== 1 || before.size > maximumBytes)
-      throw Error("Host sources unavailable");
-    const bytes = readFileSync(fd),
-      after = fstatSync(fd),
-      current = lstatSync(path);
-    if (
-      before.dev !== current.dev ||
-      before.ino !== current.ino ||
-      before.size !== after.size ||
-      before.mtimeMs !== after.mtimeMs ||
-      before.ctimeMs !== after.ctimeMs ||
-      current.size !== after.size ||
-      current.mtimeMs !== after.mtimeMs ||
-      current.ctimeMs !== after.ctimeMs
-    )
-      throw Error("Host sources unavailable");
-    return {
-      identity: {
-        dev: before.dev,
-        ino: before.ino,
-        mtime: before.mtimeMs,
-        ctime: before.ctimeMs,
-        size: before.size,
-      },
-      bytes: bytes.toString("base64"),
-    };
-  } catch (error) {
-    if (fd !== undefined || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    return null;
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
-}
-/** Raw values stay exclusively in role-private helper records. */
-export function readConfigurationHandoffReleaseOverlay(infraDir: string) {
-  return readHandoffSourceFile(releaseStatePaths(infraDir).overlay, 128 * 1024);
-}
-export function readConfigurationHandoffReleaseState(infraDir: string) {
-  return readHandoffSourceFile(join(releaseStatePaths(infraDir).store, "current.json"), 4096);
-}
 function currentSources(infraDir: string, env: NodeJS.ProcessEnv) {
   const platform = readAppliedPlatformConfiguration(infraDir);
   return {
     ...hostEnv(infraDir, env),
-    release: readConfigurationHandoffReleaseOverlay(infraDir),
     ...(platform ? { platform } : {}),
   };
 }

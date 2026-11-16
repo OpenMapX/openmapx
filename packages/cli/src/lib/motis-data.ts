@@ -65,21 +65,17 @@ export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
   process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ?? "ghcr.io/openmapx/transitous-tools:main";
 
 /**
- * Resolve the helper image at call time: explicit env wins, then the digest
- * pinned by an existing `docker-compose.release.yml` overlay (so host-side
- * pipeline runs stay on the same release as the data-manager container), and
- * only then the historical `:latest` tag.
+ * Resolve the helper image at call time: the digest the applied generation
+ * pins (so host-side pipeline runs stay on the same release as the
+ * data-manager container), else an explicit env value, and only then the
+ * historical `:latest` tag.
  */
 export function resolveTransitousToolsImage(rootDir?: string): string {
   const fromEnv = process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE;
   const selection = coreServices.readAppliedReleaseSelection(repoPaths(rootDir).infraDir);
-  const overlay = coreServices.readReleaseOverlay(repoPaths(rootDir).infraDir);
-  if (overlay !== null) {
-    const selected = coreServices.parseReleaseComposeSelection(overlay);
-
-    const pinned = selected.images["transitous-tools"];
-    if (!selected.release || !pinned)
-      throw new Error("Release overlay is malformed; explicitly reselect or clear it");
+  const applied = coreServices.readAppliedRelease(repoPaths(rootDir).infraDir);
+  if (applied) {
+    const pinned = applied.manifest.images["transitous-tools"];
     if (fromEnv && fromEnv !== pinned)
       throw new Error("Transitous helper override conflicts with selected release");
     return pinned;

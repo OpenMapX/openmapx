@@ -9,7 +9,7 @@ import {
   openSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { adminPlatformConfigurationSchema } from "@openmapx/core/api-contracts";
 import { atomicWrite, fsyncDirectory } from "@openmapx/core/release-files";
 import { services } from "@openmapx/core/server";
@@ -26,7 +26,7 @@ const identitySchema = z.strictObject({
   origin: z.url(),
   actorId: z.string().min(1),
   release: z.strictObject({
-    releaseId: z.string().regex(services.RELEASE_ID_PATTERN),
+    releaseId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
     manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   configuredSelector: z.string().min(1),
@@ -68,20 +68,15 @@ export class SystemUpdateReceiptStore {
       throw Error("Update receipt unavailable or unsafe; preserve it for inspection");
     }
   }
+  /** One writer at a time; a second update command is refused at once while one runs. */
   private async locked<T>(run: () => T): Promise<T> {
-    const dir = this.parent();
-    const lock = await services.acquireStoreLock(
-      dir,
-      `.${basename(this.path)}.lock`,
-      {},
-      Date.now,
-      true,
+    const lock = join(this.parent(), `.${basename(this.path)}.lock`);
+    // The receipt is wherever the operator put it, so a busy message names the whole path.
+    return services.withRecoverableLock(
+      lock,
+      { purpose: "system-update-receipt", waitMs: 0, name: lock },
+      run,
     );
-    try {
-      return run();
-    } finally {
-      lock.release();
-    }
   }
   async create(identity: z.input<typeof identitySchema>): Promise<SystemUpdateReceipt> {
     return this.locked(() => {

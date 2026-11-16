@@ -494,6 +494,43 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "gbfsCatalogLock.inspect": { kind: "gbfsCatalogLock.inspect" },
   "transitousPin.inspect": { kind: "transitousPin.inspect" },
+  "lease.acquire": {
+    kind: "lease.acquire",
+    owner: {
+      executor: "data-manager",
+      principal: "data-manager",
+      executionId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+      operationKey: "opk1_AAAAAAAAAAAAAAAAAAAA",
+      operationFingerprint: "a".repeat(64),
+      fingerprint: "b".repeat(64),
+      deadlineAt: 1_900_000_000_000,
+    },
+    ownerKind: "data.update",
+    targets: ["motis"],
+  },
+  "lease.read": { kind: "lease.read", leaseId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22" },
+  "lease.update": {
+    kind: "lease.update",
+    leaseId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+    action: { action: "release" },
+  },
+  "lease.settleChild": {
+    kind: "lease.settleChild",
+    settlement: {
+      identity: {
+        executor: "data-manager",
+        principal: "data-manager",
+        executionId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+        operationKey: `opk1_${"a".repeat(32)}`,
+        operationFingerprint: "a".repeat(64),
+        fingerprint: "b".repeat(64),
+        deadlineAt: 2_000_000_000_000,
+      },
+      outcome: "committed",
+      publication: "committed",
+      terminalReceiptDigest: "c".repeat(64),
+    },
+  },
 };
 
 it("compares projections independent of object ordering while preserving array and value identity", () => {

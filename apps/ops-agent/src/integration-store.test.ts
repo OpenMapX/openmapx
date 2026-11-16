@@ -21,6 +21,7 @@ import { createControlRootOperationKey, type OpsResourcePolicy } from "@openmapx
 import { services } from "@openmapx/core/server";
 import { packageIntegration } from "@openmapx/integration-framework/installer";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
 import { createUnavailableRuntime } from "./runtime";
@@ -293,7 +294,10 @@ describe("integration store", () => {
     const runtime = createUnavailableRuntime();
     installIntegrationRuntime(runtime, f.store);
     const app = buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
+      tokens: {
+        api: apiToken,
+        "data-manager": Buffer.alloc(32, 32).toString("base64url"),
+      },
       resourcePolicy: allowAllResources,
       journal,
       controlInstallation: installation,
@@ -381,7 +385,10 @@ describe("integration store", () => {
     const runtime = createUnavailableRuntime();
     installIntegrationRuntime(runtime, f.store);
     const app = buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
+      tokens: {
+        api: apiToken,
+        "data-manager": Buffer.alloc(32, 32).toString("base64url"),
+      },
       resourcePolicy: allowAllResources,
       journal,
       controlInstallation: installation,
@@ -425,7 +432,7 @@ describe("integration store", () => {
         );
       });
       expect(readdirSync(privateRoot, { recursive: true }).sort()).toEqual(before);
-      expect(existsSync(join(infraDir, "data/.admin-target-control"))).toBe(false);
+      expect(heldTargets(infraDir)).toEqual([]);
       expect(record(f, "weather-radar")).toBeUndefined();
     } finally {
       await app.close();

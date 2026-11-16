@@ -29,7 +29,7 @@ import {
   pruneControlRecords,
   readConfigurationHandoffSpawnIntent,
   restoreAdmittedControlExecution,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
@@ -601,15 +601,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             releaseId: manifest.release,
             manifestDigest: createHash("sha256").update(raw).digest("hex"),
           };
-          mkdirSync(services.releaseStatePaths(host.infraDir).store, {
-            recursive: true,
-            mode: 0o700,
-          });
-          writeFileSync(
-            join(services.releaseStatePaths(host.infraDir).store, `${manifest.release}.json`),
-            raw,
-            { mode: 0o600 },
-          );
+          services.cacheReleaseManifest(host.infraDir, manifest);
           releaseReferences = Object.values(manifest.images) as string[];
           // The images reach the host only through the pre-maintenance pull.
           host.setUnpulledImages(releaseReferences);
@@ -653,12 +645,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               version === "launch-native-system-release-killed"
             ) {
               await services.withConfigurationGenerationWriter(host.infraDir, async () => {
-                const lock = await services.acquireReleaseStoreLock(
-                  services.releaseStatePaths(host.infraDir).store,
-                  {},
-                  { failIfBusy: true },
-                );
-                lock.release();
                 writersWereReleased = true;
               });
               helperEffectEntered.resolve();
@@ -698,9 +684,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 Labels: {
                   ...old.Labels,
                   "com.docker.compose.project.working_dir": join(compose, ".."),
-                  "com.docker.compose.project.config_files": checkedRelease
-                    ? `${compose},${host.stack.composeReleasePath}`
-                    : compose,
+                  "com.docker.compose.project.config_files": compose,
                   "com.docker.compose.config-hash": hash,
                 },
               },
@@ -762,7 +746,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           join(host.infraDir, "state/ops-agent/jobs-v1.json"),
         );
         const app = buildOpsAgentServer({
-          tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+          tokens: {
+            api: host.token,
+            "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+          },
           runtime: host.runtime,
           resourceClaimer: host.claimer,
           journal,
@@ -1081,9 +1068,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     args.includes("--force-recreate"),
                 ),
               ).toBe(false);
-              expect(
-                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
-              ).toBe(false);
               return;
             }
             if (version.endsWith("-api-before-save")) {
@@ -1266,9 +1250,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               expect(host.calls.some((args) => args[0] === "compose" && args.includes("up"))).toBe(
                 false,
               );
-              expect(
-                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
-              ).toBe(false);
               return;
             }
             if (version === "launch-native-system-release-agent-restart") {
@@ -1333,18 +1314,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   .filter((args) => args[0] === "compose" && args.includes("up"))
                   .map((args) => args.at(-1)),
               ).toEqual(["data-manager"]);
-              expect(
-                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
-              ).toBe(false);
               return;
             }
             if (version === "launch-native-release-wrong-config") {
               await jobRunner.reconcile();
               expect((await readJob()).status).toBe("running");
               expect(dm.settlePosts).toBe(0);
-              expect(
-                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
-              ).toBe(false);
               expect(
                 host.calls
                   .filter((args) => args[0] === "compose" && args.includes("up"))
@@ -1425,17 +1400,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   )
                   .every((row) => row.Image === `sha256:${"e".repeat(64)}`),
               ).toBe(true);
-              expect(
-                JSON.parse(
-                  readFileSync(
-                    join(services.releaseStatePaths(host.infraDir).store, "current.json"),
-                    "utf8",
-                  ),
-                ),
-              ).toMatchObject({
-                releaseId: checkedRelease.releaseId,
-                digest: checkedRelease.manifestDigest,
-              });
+              expect(services.readAppliedRelease(host.infraDir)?.manifestDigest).toBe(
+                checkedRelease.manifestDigest,
+              );
             }
             expect(dm.settlePosts).toBe(1);
             expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
@@ -1689,44 +1656,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     throw error;
                   }
                   if (version === "launch-native-recovery") {
-                    const { readOwnedConfigurationMaintenance } = await import(
-                        "../../../../ops-agent/src/configuration-maintenance-store"
-                      ),
-                      { inspectMaintenanceDockerRuntime } = await import(
-                        "../../../../ops-agent/src/configuration-maintenance-docker-inspection"
-                      ),
-                      { installationState } = await import(
-                        "../../../../../packages/core/src/build-artifacts/control-authority"
-                      ),
-                      record = prospective.validatedConfigurationCandidateState(candidate).record,
-                      receipt = await prospective.inspectConfigurationMaintenance({
-                        maintenanceId: record.maintenanceId!,
-                        candidateId: candidate.candidateId,
-                      }),
-                      authority = restoreAdmittedControlExecution(installation, receipt.prepare),
-                      owner = readOwnedConfigurationMaintenance(authority),
-                      containers = await host.owned.inspectOwnedServices(
-                        new AbortController().signal,
-                      ),
-                      lock = await services.acquireReleaseStoreLock(
-                        services.releaseStatePaths(host.infraDir).store,
-                      );
-                    const callsBeforeInspection = host.calls.length;
-                    try {
-                      await expect(
-                        inspectMaintenanceDockerRuntime({
-                          stack: repoPaths(host.root),
-                          execFile: host.execFile,
-                          owner,
-                          containers,
-                          privateKey: installationState(installation).privateKey,
-                          signal: new AbortController().signal,
-                        }),
-                      ).rejects.toThrow("Release store is busy");
-                      expect(host.calls).toHaveLength(callsBeforeInspection);
-                    } finally {
-                      lock.release();
-                    }
                     execution.version = 2;
                     ctx.checkpointResult = {
                       ...ctx.checkpointResult,
@@ -1917,7 +1846,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                             expect(dm.settlePosts).toBe(0);
                             await expect(dm.assertDataAdmission()).rejects.toThrow();
                             expect(() =>
-                              verifyRetainedArtifactTargetRootRelease(
+                              verifyLocalArtifactTargetRootRelease(
                                 restoreAdmittedControlExecution(installation, owner.plan.prepare),
                               ),
                             ).toThrow();
@@ -1945,7 +1874,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                             expect(dm.settlePosts).toBe(0);
                             await expect(dm.assertDataAdmission()).rejects.toThrow();
                             expect(() =>
-                              verifyRetainedArtifactTargetRootRelease(
+                              verifyLocalArtifactTargetRootRelease(
                                 restoreAdmittedControlExecution(installation, owner.plan.prepare),
                               ),
                             ).toThrow();
@@ -2026,7 +1955,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                                 owner.plan.handoff!.handoffId,
                               ),
                             };
-                        verifyRetainedArtifactTargetSettlement(
+                        await verifyRetainedArtifactTargetSettlement(
                           actual.installation,
                           {
                             leaseId: actual.intent.leaseId,

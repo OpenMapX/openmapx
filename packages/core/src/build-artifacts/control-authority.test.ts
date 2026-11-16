@@ -193,19 +193,24 @@ it("retains deadline-only attempts separately from execution witnesses", async (
     ...plan,
     childPublicKey: receiver.publicKey,
   });
-  const peer = a.verifyControlPeer(receiver, {
-    rawHeaders: ["x-openmapx-parent-execution", assertion],
+  // data-manager trusts the agent's token and reads the self-contained grant.
+  const verified = a.verifiedRemoteParentExecution(receiver, assertion, {
     transportPrincipal: "ops-agent",
-    execution: child,
+    operationKey: child.operationKey,
+    operationFingerprint: hash,
     kind: body.kind,
+    requestedDeadlineAt: deadlineAt,
   });
-  expect(
-    a.verifyParentExecution(assertion, peer, {
-      execution: child,
+  expect(verified.parent).toMatchObject({ operationKey: parent.operationKey });
+  expect(() =>
+    a.verifiedRemoteParentExecution(receiver, assertion, {
+      transportPrincipal: "host-cli",
+      operationKey: child.operationKey,
+      operationFingerprint: hash,
       kind: body.kind,
       requestedDeadlineAt: deadlineAt,
     }),
-  ).toMatchObject({ operationKey: parent.operationKey });
+  ).toThrow(/mismatch/);
   await expect(
     a.attestParentExecution(authority, { ...plan, childPublicKey: receiver.publicKey }),
   ).rejects.toThrow(/replay/);
@@ -393,28 +398,19 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     ...leaf,
     childPublicKey: dm.publicKey,
   });
-  const dmPeer = c.verifyControlPeer(dm, {
-    rawHeaders: ["x-openmapx-parent-execution", next],
-    transportPrincipal: "ops-agent",
-    execution: child,
-    kind: body.kind,
-  });
-  expect(
-    c.verifyParentExecution(next, dmPeer, {
-      execution: child,
+  const remoteParent = () =>
+    c.verifiedRemoteParentExecution(dm, next, {
+      transportPrincipal: "ops-agent",
+      operationKey: child.operationKey,
+      operationFingerprint: childHash,
       kind: body.kind,
       requestedDeadlineAt: deadlineAt,
-    }),
-  ).toMatchObject({ operationKey: cli.operationKey });
+    }).parent;
+  expect(remoteParent()).toMatchObject({ operationKey: cli.operationKey });
   c.cancelControlExecution(authority);
   expect(() => c.assertControlExecutionForward(cliAuthority)).toThrow(/ancestor|observation/);
-  expect(
-    c.verifyParentExecution(next, dmPeer, {
-      execution: child,
-      kind: body.kind,
-      requestedDeadlineAt: deadlineAt,
-    }),
-  ).toMatchObject({ operationKey: cli.operationKey });
+  // An exact retry of the admitted child stays readable after the cancellation.
+  expect(remoteParent()).toMatchObject({ operationKey: cli.operationKey });
   c.closeControlInstallation(fixed);
   c.closeControlInstallation(dm);
   c.closeControlInstallation(agent);
@@ -482,16 +478,13 @@ async function deadlineFamily() {
   });
   const grant = () => c.attestParentExecution(authority, { ...plan, childPublicKey: dm.publicKey });
   const admit = (assertion: string) =>
-    c.verifyParentExecution(
-      assertion,
-      c.verifyControlPeer(dm, {
-        rawHeaders: ["x-openmapx-parent-execution", assertion],
-        transportPrincipal: "ops-agent",
-        execution: child,
-        kind: plan.kind,
-      }),
-      { execution: child, kind: plan.kind, requestedDeadlineAt: deadlineAt },
-    );
+    c.verifiedRemoteParentExecution(dm, assertion, {
+      transportPrincipal: "ops-agent",
+      operationKey: child.operationKey,
+      operationFingerprint: hash,
+      kind: plan.kind,
+      requestedDeadlineAt: deadlineAt,
+    }).parent;
   return { c, agent, dm, authority, execution, child, grant, admit };
 }
 it("terminal deadline-only parent cannot mint an unattempted child", async () => {
@@ -508,32 +501,16 @@ it("terminal deadline-only parent cannot mint an unattempted child", async () =>
     f.c.closeControlInstallation(f.agent);
   }
 });
-it("terminal deadline-only parent fences a previously attempted unadopted grant", async () => {
-  const f = await deadlineFamily();
-  try {
-    const assertion = await f.grant();
-    f.c.retainControlEffectReceipt(f.authority, {
-      outcome: "failed_without_effect",
-      publication: "not_started",
-      receipt: { kind: "not-started" },
-    });
-    expect(() => f.admit(assertion)).toThrow(/terminal|observation/);
-    expect(existsSync(join(root, "data/.admin-target-control/locks"))).toBe(false);
-  } finally {
-    f.c.closeControlInstallation(f.dm);
-    f.c.closeControlInstallation(f.agent);
-  }
-});
 it.each([false, true])(
-  "canceled deadline-only parent fences unadopted attempts (attempted: %s)",
+  "canceled deadline-only parent returns its attempts and mints no more (attempted: %s)",
   async (attempted) => {
     const f = await deadlineFamily();
     try {
-      const assertion = attempted ? await f.grant() : undefined;
+      if (attempted) await f.grant();
+      // The parent cancels the returned children over data-manager's route.
       const children = f.c.cancelControlExecution(f.authority);
       expect(children).toHaveLength(attempted ? 1 : 0);
-      if (assertion) expect(() => f.admit(assertion)).toThrow(/cancel|forward|observation/);
-      else await expect(f.grant()).rejects.toThrow(/cancel|forward/);
+      await expect(f.grant()).rejects.toThrow(/cancel|forward|replay/);
       expect(() => f.c.beginControlEffect(f.authority)).toThrow(/cancel|forward/);
     } finally {
       f.c.closeControlInstallation(f.dm);
@@ -541,37 +518,6 @@ it.each([false, true])(
     }
   },
 );
-it("retained deadline-only duplicates observe after cancellation but cannot start work", async () => {
-  const f = await deadlineFamily();
-  try {
-    const assertion = await f.grant();
-    const parent = f.admit(assertion);
-    f.c.cancelControlExecution(f.authority);
-    expect(f.admit(assertion)).toEqual(parent);
-    const body = { kind: "download-osm", regionId: "europe/germany" };
-    const authority = f.c.retainAdmittedControlExecution(f.dm, {
-      requestedDeadlineAt: f.child.deadlineAt,
-      execution: f.child,
-      operation: body,
-      kind: body.kind,
-      admittedAt: f.execution.deadlineAt - 60000,
-      parent,
-      serviceIds: ["osrm"],
-    });
-    expect(() => f.c.beginControlEffect(authority)).toThrow(/cancel|forward|observation/);
-    const { acquireArtifactTargetLease } = await import("./target-lease");
-    await expect(
-      acquireArtifactTargetLease({
-        dataRoot: join(root, "data"),
-        serviceIds: ["osrm"],
-        owner: authority,
-      }),
-    ).rejects.toThrow(/cancel|ancestor|observation/);
-  } finally {
-    f.c.closeControlInstallation(f.dm);
-    f.c.closeControlInstallation(f.agent);
-  }
-});
 
 it("expired exact deadline-only adoption stays observable without renewing one-use work", async () => {
   const f = await deadlineFamily();

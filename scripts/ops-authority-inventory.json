@@ -131,6 +131,10 @@
     "data-manager": [
       "feedProxy.validateAndReload",
       "gbfsCatalogLock.inspect",
+      "lease.acquire",
+      "lease.read",
+      "lease.settleChild",
+      "lease.update",
       "motis.primary.promote",
       "motis.primary.restart",
       "motis.primary.stop",
@@ -373,6 +377,15 @@
         "postgis.capacity.inspect",
         "valhalla.traffic.disable"
       ]
+    },
+    {
+      "id": "data-manager.target-leases",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/ops-agent/src/lease-operations.ts#runLeaseOperation",
+        "services/data-manager/src/jobs/execution/runtime.ts#createDataExecutionRuntime"
+      ],
+      "typedKinds": ["lease.acquire", "lease.read", "lease.update", "lease.settleChild"]
     },
     {
       "id": "data-manager.catalog-locks",

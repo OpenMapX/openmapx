@@ -58,9 +58,6 @@ import {
   type OpsRuntime,
 } from "./runtime";
 
-const { acquireStoreLock, acquireReleaseStoreLock } = coreServices;
-type ReleaseStoreLock = coreServices.ReleaseStoreLock;
-
 const MAX_BACKUP_MANIFEST_BYTES = 1024 * 1024;
 const MAX_BACKUP_SERVICES = 256;
 const MAX_BACKUP_VOLUMES = 4_096;
@@ -77,10 +74,7 @@ const INSPECT_RELEASE_SERVICE_IDS = [
   "ops-agent",
   "transitous-runner",
 ] as const;
-const MAX_RELEASE_MANIFEST_BYTES = coreServices.RELEASE_STORE_LIMITS.manifestBytes;
-const MAX_RELEASE_STATE_BYTES = coreServices.RELEASE_STORE_LIMITS.stateBytes;
-const MAX_RELEASE_SELECTIONS_BYTES = coreServices.RELEASE_STORE_LIMITS.selectionsBytes;
-const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
+const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const _REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
@@ -512,50 +506,29 @@ function infraDirectory(rootDir: string): string {
   return join(rootDir, "infra", "docker");
 }
 
-/** The agent's release store, `state/ops-agent/releases/store`. */
-function releaseDirectory(rootDir: string): string {
-  return coreServices.releaseStatePaths(infraDirectory(rootDir)).store;
-}
-
-function releaseManifestPath(rootDir: string, releaseId: string): string {
-  if (!coreServices.RELEASE_ID_PATTERN.test(releaseId)) {
-    throw new Error("Release authority rejected");
-  }
-  return join(releaseDirectory(rootDir), `${releaseId}.json`);
-}
-
 function stateOwner(uid?: number): number | undefined {
   return uid ?? process.geteuid?.();
 }
 
+/** Whether the agent has checked a release with this id, for a release operation's resource. */
 export function inspectReleaseAuthority(rootDir: string, releaseId: string): boolean {
   try {
-    const manifest = coreServices.parseReleaseManifest(
-      strictReadFile(releaseManifestPath(rootDir, releaseId), MAX_RELEASE_MANIFEST_BYTES, {
-        owner: stateOwner(),
-      }),
+    const infraDir = infraDirectory(rootDir);
+    const selection = coreServices.readAppliedReleaseSelection(infraDir);
+    return (
+      selection.kind !== "local" &&
+      coreServices
+        .cachedReleases(infraDir, selection.imagePrefix)
+        .some(({ manifest }) => manifest.release === releaseId)
     );
-    return manifest.release === releaseId;
   } catch {
     return false;
   }
 }
 
-function releaseDigest(contents: string): string {
-  return createHash("sha256").update(contents).digest("hex");
-}
-
-function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
-  const root = backupRoot(rootDir);
-  mkdirSync(root, { recursive: true, mode: 0o700 });
-  return acquireStoreLock(
-    root,
-    BACKUP_STORE_LOCK_NAME,
-    {},
-    Date.now,
-    false,
-    coreServices.BACKUP_STORE_LOCK_TTL_MS,
-  );
+function withBackupStoreLock<T>(rootDir: string, run: () => Promise<T>): Promise<T> {
+  mkdirSync(backupRoot(rootDir), { recursive: true, mode: 0o700 });
+  return coreServices.withBackupStoreLock(infraDirectory(rootDir), run);
 }
 
 export async function pruneBackupRetention(
@@ -566,8 +539,7 @@ export async function pruneBackupRetention(
   if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
     throw new Error("Backup retention days must be an integer between 1 and 36500");
   }
-  const lock = await acquireBackupStoreLock(rootDir);
-  try {
+  await withBackupStoreLock(rootDir, async () => {
     if (
       coreServices.readAppliedPlatformValues(join(rootDir, "infra", "docker"))
         .backupRetentionDays !== retentionDays
@@ -577,9 +549,7 @@ export async function pruneBackupRetention(
       signal: new AbortController().signal,
       emitLog: () => {},
     });
-  } finally {
-    lock.release();
-  }
+  });
 }
 
 /**
@@ -600,7 +570,7 @@ function inspectBackupManifestDigest(rootDir: string, backupId: string): string 
   }
 }
 
-function releaseStoreBindings(rootDir: string, uid: number | undefined) {
+function stackBindings(rootDir: string) {
   const infraDir = infraDirectory(rootDir);
   const repositoryPaths: coreServices.StackPaths = {
     infraDir,
@@ -608,18 +578,10 @@ function releaseStoreBindings(rootDir: string, uid: number | undefined) {
       infraDir,
       coreServices.GENERATED_COMPOSE_FILE,
     ),
-    composeReleasePath: coreServices.releaseStatePaths(infraDir).overlay,
   };
-  const overlay = repositoryPaths.composeReleasePath;
-  // Owner and mode are checked as for the store: an overlay someone else could
-  // write is refused, not read and not passed to Compose.
-  const readOverlay = () => coreServices.readReleaseOverlay(infraDir, { uid });
   return {
     repositoryPaths,
-    stackArgs: () =>
-      coreServices.stackComposeArgs(repositoryPaths, (path) =>
-        path === overlay ? readOverlay() !== null : isRegularComposeFile(path),
-      ),
+    stackArgs: () => coreServices.stackComposeArgs(repositoryPaths, isRegularComposeFile),
   };
 }
 
@@ -629,31 +591,7 @@ export function createDefaultReleaseEffects(
 ): AdministrativeReleaseEffects {
   const infraDir = infraDirectory(rootDir);
   const uid = stateOwner(runtimeOptions.uid);
-  // `releases/`, `store/` and `evidence/`: created owner-only when missing,
-  // refused when they are anyone else's.
-  const { store: directory } = coreServices.ensureReleaseStateDirectories(infraDir, { uid });
-  const paths = {
-    state: join(directory, "current.json"),
-    latest: join(directory, "latest.json"),
-    selections: join(directory, "selections.json"),
-  };
-  const { repositoryPaths, stackArgs } = releaseStoreBindings(rootDir, uid);
-  const manifestNames = () => coreServices.listReleaseStoreManifests(directory, { uid });
-  const loadManifest = (releaseId: string) => {
-    manifestNames();
-    const raw = strictReadFile(
-      releaseManifestPath(rootDir, releaseId),
-      MAX_RELEASE_MANIFEST_BYTES,
-      {
-        owner: uid,
-      },
-    );
-    const manifest = coreServices.parseReleaseManifest(raw);
-    if (manifest.release !== releaseId || raw !== coreServices.canonicalReleaseManifest(manifest)) {
-      throw new Error("Release authority rejected");
-    }
-    return manifest;
-  };
+  const { repositoryPaths, stackArgs } = stackBindings(rootDir);
   const runDocker =
     runtimeOptions.runDocker ??
     (async (args: readonly string[], context: FixedCliOptions) => {
@@ -666,72 +604,35 @@ export function createDefaultReleaseEffects(
       emitLines(context.emitLog, "stderr", result.stderr);
       return args[0] === "pull" ? `${result.stdout}\n${result.stderr}` : result.stdout;
     });
-  const readReleasePointer = (
-    path: string,
-    optional: boolean,
-  ): { releaseId?: string; digest?: string } => {
-    try {
-      const stat = lstatSync(path);
-      if (coreServices.releaseStateFileProblem(stat, MAX_RELEASE_STATE_BYTES, { uid }) !== null) {
-        throw new Error("Release authority rejected");
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && optional) return {};
-      throw new Error("Release authority rejected");
-    }
-    const value = coreServices.parseReleasePointer(
-      strictReadFile(path, MAX_RELEASE_STATE_BYTES, { owner: uid }),
-      path === paths.latest,
-    );
-    const manifest = loadManifest(value.releaseId);
-    const digest = releaseDigest(coreServices.canonicalReleaseManifest(manifest));
-    if (value.digest !== undefined && digest !== value.digest) {
-      throw new Error("Release authority rejected");
-    }
-    return { releaseId: value.releaseId, digest };
-  };
-  const readState = () => readReleasePointer(paths.state, true);
-  const configurationIdentity = () =>
-    releaseDigest(
-      JSON.stringify(coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"))),
-    );
-  const selectionReceipts = (): coreServices.ReleaseSelectionReceipts => {
-    if (!existsSync(paths.selections)) return {};
-    return coreServices.parseReleaseSelectionReceipts(
-      strictReadFile(paths.selections, MAX_RELEASE_SELECTIONS_BYTES, { owner: uid }),
-    );
+  /** The release last checked for the configured channel, which an update can apply. */
+  const available = () => {
+    const configured = coreServices.readAppliedReleaseSelection(infraDir);
+    return configured.kind === "local"
+      ? undefined
+      : coreServices.cachedReleases(infraDir, configured.imagePrefix, { uid })[0];
   };
   const inspectRelease = async (): Promise<OpsResultFor<"release.inspect">> => {
-    const configured = coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"));
-    const state = readState();
-    const latest = readReleasePointer(paths.latest, true);
-    const candidates = manifestNames();
-    const availableReleaseId =
-      latest.releaseId ?? (candidates.length === 1 ? candidates[0] : undefined);
-    const current = state.releaseId ? loadManifest(state.releaseId) : undefined;
-    const available = availableReleaseId ? loadManifest(availableReleaseId) : undefined;
-    const receipt = availableReleaseId ? selectionReceipts()[availableReleaseId] : undefined;
-    let selectedReleaseId: string | undefined;
-    const overlay = coreServices.releaseStatePaths(infraDir).overlay;
-    try {
-      const stats = lstatSync(overlay);
-      if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 64 * 1024)
-        throw Error("Unsafe release selection");
-      selectedReleaseId =
-        coreServices.parseReleaseComposeSelection(strictReadFile(overlay, 64 * 1024)).release ??
-        undefined;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
+    const configured = coreServices.readAppliedReleaseSelection(infraDir);
+    // The applied generation's pins are both the selected and the current release.
+    const applied = coreServices.readAppliedRelease(infraDir)?.manifest;
+    const checked = available();
     return {
       configuredSelector: configured.kind === "local" ? "local" : configured.selector,
-      ...(selectedReleaseId ? { selectedReleaseId } : {}),
-      ...(state.releaseId ? { currentReleaseId: state.releaseId } : {}),
-      ...(current?.product ? { currentVersion: current.product.version } : {}),
-      ...(availableReleaseId ? { availableReleaseId } : {}),
-      ...(available?.product ? { availableVersion: available.product.version } : {}),
-      ...(receipt && receipt.configuration === configurationIdentity()
-        ? { availableDigest: receipt.digest }
+      ...(applied
+        ? {
+            selectedReleaseId: applied.release,
+            currentReleaseId: applied.release,
+            ...(applied.product ? { currentVersion: applied.product.version } : {}),
+          }
+        : {}),
+      ...(checked
+        ? {
+            availableReleaseId: checked.manifest.release,
+            ...(checked.manifest.product
+              ? { availableVersion: checked.manifest.product.version }
+              : {}),
+            availableDigest: checked.manifestDigest,
+          }
         : {}),
     };
   };
@@ -741,7 +642,6 @@ export function createDefaultReleaseEffects(
       await inspectRelease();
     },
     resolve: async (context) => {
-      manifestNames();
       const selection = coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"));
       if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
       const image = selection.manifestImage;
@@ -777,22 +677,7 @@ export function createDefaultReleaseEffects(
         const raw = strictReadFile(temporaryManifest, MAX_RELEASE_MANIFEST_BYTES);
         const manifest = coreServices.parseReleaseManifest(raw, selection.imagePrefix);
         coreServices.validateResolvedSelection(selection, manifest, ociDigest);
-        // Re-read the store under the lock. A snapshot taken before the Docker
-        // pull/create/cp awaits is stale, so two concurrent resolutions could
-        // each observe the same sub-limit count and both publish past it.
-        const lock = await acquireReleaseStoreLock(directory);
-        try {
-          coreServices.cacheCheckedReleaseManifest({
-            infraDir,
-            manifest,
-            ociDigest,
-            configurationIdentity: configurationIdentity(),
-            lock,
-            uid,
-          });
-        } finally {
-          lock.release();
-        }
+        coreServices.cacheReleaseManifest(infraDir, manifest, { uid });
         return manifest.release;
       } finally {
         await runDocker(["rm", "-f", containerId], context).catch(() => undefined);
@@ -804,9 +689,7 @@ export function createDefaultReleaseEffects(
     },
     inspectSystem: async (context) => {
       const release = await inspectRelease();
-      const manifest = release.availableReleaseId
-        ? loadManifest(release.availableReleaseId)
-        : undefined;
+      const manifest = available()?.manifest;
       let dockerReachable = false;
       try {
         await runDocker(["info", "--format", "{{.ServerVersion}}"], context);
@@ -828,16 +711,10 @@ export function createDefaultReleaseEffects(
       } else if (composeReady) {
         composeReady = false;
       }
-      const serviceImages = {
-        "app-api": manifest?.images.api,
-        "app-web": manifest?.images.web,
-        "data-manager": manifest?.images["data-manager"],
-        "ops-agent": manifest?.images["ops-agent"],
-        "transitous-runner": manifest?.images["transitous-runner"],
-      } as const;
+      const serviceImages = manifest ? coreServices.releaseServiceImages(manifest) : undefined;
       const services: OpsResultFor<"system.inspect">["services"] = [];
       for (const serviceId of INSPECT_RELEASE_SERVICE_IDS) {
-        const pinnedImage = serviceImages[serviceId];
+        const pinnedImage = serviceImages?.[serviceId];
         let containerId: string | undefined;
         // A thrown or unparseable `ps -q` is an absent observation, not an
         // observed-absent container. Only an exact empty result proves the
@@ -1110,15 +987,12 @@ export function createAdministrativeRuntime(
   };
   runtime["backup.list"] = async () => inspectBackupInventory(options.rootDir);
   runtime["backup.create"] = async (operation, context) => {
-    const lock = await acquireBackupStoreLock(options.rootDir);
-    try {
-      await runFixedCli(["backup", "create", "--name", operation.backupId], {
+    await withBackupStoreLock(options.rootDir, () =>
+      runFixedCli(["backup", "create", "--name", operation.backupId], {
         ...context,
         operationKind: context.claim.operation.kind,
-      });
-    } finally {
-      lock.release();
-    }
+      }),
+    );
     return { backupId: operation.backupId };
   };
   runtime["backup.restore"] = async (operation, context) => {
@@ -1127,8 +1001,7 @@ export function createAdministrativeRuntime(
     // exact bytes immediately before dispatch, so a manifest replaced between
     // the resource claim and the effect cannot supply different service
     // authority under the same caller-visible backup ID.
-    const lock = await acquireBackupStoreLock(options.rootDir);
-    try {
+    await withBackupStoreLock(options.rootDir, async () => {
       const digest = inspectBackupManifestDigest(options.rootDir, operation.backupId);
       if (digest === null) throw new Error("Backup authority rejected");
       const manifest = parseManifest(options.rootDir, operation.backupId);
@@ -1149,21 +1022,16 @@ export function createAdministrativeRuntime(
       if (inspectBackupManifestDigest(options.rootDir, operation.backupId) !== digest) {
         throw new Error("Backup authority rejected");
       }
-    } finally {
-      lock.release();
-    }
+    });
     return { backupId: operation.backupId };
   };
   runtime["backup.delete"] = async (operation, context) => {
-    const lock = await acquireBackupStoreLock(options.rootDir);
-    try {
-      await runFixedCli(["backup", "delete", operation.backupId], {
+    await withBackupStoreLock(options.rootDir, () =>
+      runFixedCli(["backup", "delete", operation.backupId], {
         ...context,
         operationKind: context.claim.operation.kind,
-      });
-    } finally {
-      lock.release();
-    }
+      }),
+    );
     return { backupId: operation.backupId };
   };
   runtime["data.inspect"] = async (operation) => inspectDataInventory(options.rootDir, operation);

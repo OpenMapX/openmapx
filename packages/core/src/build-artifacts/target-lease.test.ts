@@ -1,13 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmdirSync,
-  rmSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
@@ -23,6 +15,7 @@ import {
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
 } from "./control-authority";
+import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
 
 let root: string;
 let installation: ControlInstallation;
@@ -42,141 +35,39 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-it.each([18, 256])(
-  "recovers release after target17 for %i maximum-length certified targets within the admission byte budget",
-  async (count) => {
-    const c = await import("./control-authority"),
-      a = await api();
-    const { AnchoredDirectory } = await import("./filesystem");
-    const targets = Array.from(
-      { length: count },
-      (_, n) => `svc-${String(n).padStart(3, "0")}${"x".repeat(57)}`,
-    );
-    closeControlInstallation(installation);
-    installation = openControlInstallation({
-      infraDir: root,
-      role: "host-cli",
-      serviceIds: targets,
-    });
-    const serviceId = targets[0];
-    if (!serviceId) throw Error("Missing test target");
-    const operation = { kind: "service.build" as const, serviceId },
-      operationFingerprint = opsOperationFingerprint(operation),
-      deadlineAt = Date.now() + 120000;
-    const execution = {
-      executor: "host-cli" as const,
-      principal: "host-cli" as const,
-      executionId: randomUUID(),
-      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
-      operationFingerprint,
-      fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
-      deadlineAt,
-    };
-    const authority = retainAdmittedControlExecution(installation, {
-      execution,
-      kind: operation.kind,
-      operation,
-      admittedAt: deadlineAt - 120000,
-      requestedDeadlineAt: deadlineAt,
-      serviceIds: targets,
-    });
-    const admissionPath = join(
-        root,
-        `control-private/host-cli/executions/${execution.operationKey}.json`,
-      ),
-      admitted = readFileSync(admissionPath);
-    const lease = await a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
-      serviceIds: targets,
-      owner: authority,
-    });
-    retainControlEffectReceipt(authority, {
-      outcome: "failed_without_effect",
-      publication: "not_started",
-      receipt: { kind: "not-started" },
-    });
-    await a.settleArtifactTargetLeaseChild(
-      lease,
-      verifyControlEffectSettlement(installation, execution),
-    );
-    const original = AnchoredDirectory.prototype.write;
-    let interrupted = false,
-      maximumBytes = 0;
-    const fault = vi.spyOn(AnchoredDirectory.prototype, "write").mockImplementation(function (
-      this: import("./filesystem").AnchoredDirectory,
-      ...args
-    ) {
-      original.apply(this, args);
-      if (args[0] !== "admission.json") return;
-      maximumBytes = Math.max(maximumBytes, Buffer.byteLength(args[1]));
-      const release = JSON.parse(args[1].toString()).payload.release;
-      if (
-        !interrupted &&
-        (release?.completedTargets ?? release?.locks?.length) === 17 &&
-        release.pending === undefined
-      ) {
-        interrupted = true;
-        throw Error("contained stop after target17 publication");
-      }
-    });
-    await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(
-      "contained stop after target17",
-    );
-    expect(interrupted).toBe(true);
-    expect(
-      targets
-        .slice(0, 17)
-        .every((id) => !existsSync(join(root, `data/.admin-target-control/locks/${id}`))),
-    ).toBe(true);
-    expect(existsSync(join(root, `data/.admin-target-control/locks/${targets[17]}`))).toBe(true);
-    a.closeArtifactTargetLeaseHandle(lease);
-    closeControlInstallation(installation);
-    installation = openControlInstallation({
-      infraDir: root,
-      role: "host-cli",
-      serviceIds: targets,
-    });
-    const restored = c.restoreAdmittedControlExecution(installation, execution),
-      recovery = c.verifyControlRecoveryAuthority(restored);
-    const input = { dataRoot: join(root, "data"), leaseId: lease.leaseId, authority: recovery };
-    await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
-    await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
-    fault.mockRestore();
-    expect(maximumBytes).toBeLessThanOrEqual(4096);
-    const journalBytes = readFileSync(
-      join(root, `data/.admin-target-control/leases/${lease.leaseId}/admission.json`),
-    );
-    expect(journalBytes.byteLength).toBeLessThanOrEqual(4096);
-    const finalJournal = JSON.parse(journalBytes.toString()).payload;
-    expect(finalJournal.release).toMatchObject({
-      version: 2,
-      phase: "released",
-      completedTargets: count,
-      active: true,
-    });
-    expect(
-      existsSync(
-        join(
-          root,
-          `data/.admin-target-control/admission-index-v1/active/${finalJournal.active.name}`,
-        ),
-      ),
-    ).toBe(false);
-    expect(
-      targets.every((id) => !existsSync(join(root, `data/.admin-target-control/locks/${id}`))),
-    ).toBe(true);
-    expect(readFileSync(admissionPath)).toEqual(admitted);
-    expect(
-      JSON.parse(
-        readFileSync(
-          join(root, `control-private/host-cli/effect-started/${execution.operationKey}.json`),
-          "utf8",
-        ),
-      ),
-    ).toBeNull();
-  },
-  120000,
-);
+/** The leases the agent's store holds now. */
+function heldLeases() {
+  return openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" }).list();
+}
+it("reconciles a settled root after a crash between settlement and release", async () => {
+  const c = await import("./control-authority"),
+    a = await api();
+  const authority = owner();
+  const lease = await a.acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: authority });
+  retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+  await a.settleArtifactTargetLeaseChild(
+    lease,
+    verifyControlEffectSettlement(installation, authority.execution),
+  );
+  a.closeArtifactTargetLeaseHandle(lease);
+  expect(heldLeases().map((value) => value.leaseId)).toEqual([lease.leaseId]);
+  closeControlInstallation(installation);
+  installation = openControlInstallation({
+    infraDir: root,
+    role: "host-cli",
+    serviceIds: ["osrm", "motis"],
+  });
+  const restored = c.restoreAdmittedControlExecution(installation, authority.execution),
+    recovery = c.verifyControlRecoveryAuthority(restored);
+  const input = { leaseId: lease.leaseId, authority: recovery };
+  await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
+  await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
+  expect(heldLeases()).toEqual([]);
+});
 function owner() {
   const operation = { kind: "service.build" as const, serviceId: "osrm" };
   const operationFingerprint = opsOperationFingerprint(operation);
@@ -209,54 +100,27 @@ function owner() {
 async function api() {
   return import("./target-lease");
 }
-it("distinguishes an occupied original journal guard before running its source check", async () => {
-  const a = await api(),
-    authority = owner(),
-    lease = await a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
-      serviceIds: ["osrm"],
-      owner: authority,
-    });
-  const directory = join(root, "data/.admin-target-control/leases", lease.leaseId),
-    guard = join(directory, ".journal-writer"),
-    before = readFileSync(join(directory, "owner.json"));
-  mkdirSync(guard, { mode: 0o700 });
-  try {
-    expect(() => a.assertArtifactTargetLeaseForward(lease)).toThrow(
-      a.ArtifactTargetJournalBusyError,
-    );
-    expect(readFileSync(join(directory, "owner.json"))).toEqual(before);
-    expect(existsSync(guard)).toBe(true);
-  } finally {
-    rmdirSync(guard);
-  }
-  a.assertArtifactTargetLeaseForward(lease);
-  a.closeArtifactTargetLeaseHandle(lease);
-});
 describe("certified target leases", () => {
   it("requires nominal durable ownership, then fences unknown own effects", async () => {
     const a = await api();
     const authority = owner();
     await expect(
       a.acquireArtifactTargetLease({
-        dataRoot: join(root, "data"),
         serviceIds: ["osrm"],
         owner: { execution: authority.execution } as typeof authority,
       }),
     ).rejects.toThrow(/authority/);
     const lease = await a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["osrm"],
       owner: authority,
     });
-    await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/settlement|effect/);
-    expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
+    await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/settle|effect/);
+    expect(heldLeases().map((value) => value.targets)).toEqual([["osrm"]]);
   });
   it("releases a certified target after durable no-effect settlement", async () => {
     const a = await api();
     const authority = owner();
     const lease = await a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["osrm"],
       owner: authority,
     });
@@ -270,60 +134,45 @@ describe("certified target leases", () => {
       verifyControlEffectSettlement(installation, authority.execution),
     );
     await a.releaseArtifactTargetLease(lease);
-    expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(false);
+    expect(heldLeases()).toEqual([]);
   });
-  it("rejects replacement lock inodes without removing the replacement", async () => {
+  it("refuses a second owner of a held target and names the holder", async () => {
     const a = await api();
-    const authority = owner();
-    const lease = await a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
-      serviceIds: ["osrm"],
-      owner: authority,
-    });
-    const path = join(root, "data/.admin-target-control/locks/osrm");
-    renameSync(path, `${path}.old`);
-    mkdirSync(path, { mode: 0o700 });
-    await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/inode|identity|changed/);
-    expect(existsSync(path)).toBe(true);
+    const first = owner();
+    await a.acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: first });
+    const second = owner();
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    try {
+      const refused = expect(
+        a.acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: second }),
+      ).rejects.toThrow(first.execution.operationKey);
+      await vi.advanceTimersByTimeAsync(6000);
+      await refused;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(heldLeases()).toHaveLength(1);
   });
 });
 it("never reacquires or expands a retained execution's root", async () => {
   const a = await api();
   const authority = owner();
   await a.acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["osrm"],
     owner: authority,
   });
   await expect(
     a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["osrm"],
       owner: authority,
     }),
   ).rejects.toThrow(/already acquired/);
   await expect(
     a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["motis"],
       owner: authority,
     }),
   ).rejects.toThrow(/closure/);
-});
-it("detects rollback of a signed shared journal using private high-water evidence", async () => {
-  const a = await api();
-  const authority = owner();
-  const lease = await a.acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
-    serviceIds: ["osrm"],
-    owner: authority,
-  });
-  const path = join(root, `data/.admin-target-control/leases/${lease.leaseId}/owner.json`);
-  const previous = readFileSync(path);
-  await a.cancelArtifactTargetLease(lease);
-  const { writeFileSync } = await import("node:fs");
-  writeFileSync(path, previous);
-  await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/rollback|replacement/);
 });
 it("rejects arbitrary caller text as effect evidence", async () => {
   const authority = owner();
@@ -409,7 +258,6 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
     plan: [plan],
   });
   const lease = await a.acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["motis"],
     owner: authority,
   });
@@ -462,22 +310,20 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
   a.closeArtifactTargetLeaseHandle(lease);
   c.closeControlInstallation(agent);
 });
-it("holds certified target, configuration writer and release-store locks together", async () => {
-  const { acquireConfigurationOwnership } = await import("../services/configuration-ownership");
-  const { acquireReleaseStoreLock } = await import("../services/release-store-lock");
+it("holds a target lease and the configuration writer together", async () => {
+  const { acquireConfigurationOwnership, configurationWriterLockPath } = await import(
+    "../services/configuration-ownership"
+  );
   const a = await api();
   const c = await import("./control-authority");
   const authority = owner();
   const lease = await a.acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["osrm"],
     owner: authority,
   });
-  expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
+  expect(heldLeases()).toHaveLength(1);
   const releaseWriter = await acquireConfigurationOwnership(root);
-  const store = await acquireReleaseStoreLock(root, {}, { failIfBusy: true });
-  expect(existsSync(join(root, "state/ops-agent/configuration/.writer"))).toBe(true);
-  store.release();
+  expect(existsSync(configurationWriterLockPath(root))).toBe(true);
   releaseWriter();
   c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
@@ -512,55 +358,6 @@ it("does not restart effects after retaining unused-execution evidence", async (
   });
   expect(() => c.beginControlEffect(authority)).toThrow(/cannot restart/);
 });
-
-it("admits from a bounded active index without opening retained terminal ledgers", async () => {
-  const a = await api();
-  const { AnchoredDirectory } = await import("./filesystem");
-  const { vi } = await import("vitest");
-  // Real retained terminal histories, with valid signatures and released locks.
-  for (let i = 0; i < 12; i++) {
-    const authority = owner();
-    const lease = await a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
-      serviceIds: ["osrm"],
-      owner: authority,
-    });
-    retainControlEffectReceipt(authority, {
-      outcome: "failed_without_effect",
-      publication: "not_started",
-      receipt: { kind: "not-started" },
-    });
-    await a.settleArtifactTargetLeaseChild(
-      lease,
-      verifyControlEffectSettlement(installation, authority.execution),
-    );
-    await a.releaseArtifactTargetLease(lease);
-  }
-  const authority = owner();
-  const read = AnchoredDirectory.prototype.read;
-  const historicalReads: string[] = [];
-  const spy = vi.spyOn(AnchoredDirectory.prototype, "read").mockImplementation(function (
-    this: InstanceType<typeof AnchoredDirectory>,
-    name,
-    max,
-    mode,
-  ) {
-    if (name === "owner.json") historicalReads.push(this.path);
-    return read.call(this, name, max, mode);
-  });
-  let lease: import("./target-lease").ArtifactTargetLease | undefined;
-  try {
-    lease = await a.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
-      serviceIds: ["osrm"],
-      owner: authority,
-    });
-  } finally {
-    spy.mockRestore();
-  }
-  expect(new Set(historicalReads).size, "new acquisition must read only its new ledger").toBe(1);
-  if (lease) a.closeArtifactTargetLeaseHandle(lease);
-}, 180000);
 
 it("does not accumulate temporary authority records after failed atomic updates", async () => {
   const { AnchoredDirectory } = await import("./filesystem");

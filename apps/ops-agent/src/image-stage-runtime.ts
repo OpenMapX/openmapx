@@ -80,110 +80,102 @@ export function installImageStageRuntime(
       return await services.withConfigurationGenerationWriter(
         options.infraDir,
         async () => {
-          const directory = services.releaseStatePaths(options.infraDir).store,
-            lock = await services.acquireReleaseStoreLock(directory);
-          try {
-            const source = await (async () => {
-              try {
-                assertControlExecutionForward(authority);
-                if (
-                  services.currentConfigurationGeneration(options.infraDir) !==
-                  operation.expectedConfigurationRevisionId
-                )
-                  throw Error("Image-stage configuration changed");
-                const registry = await options.loadAuthority();
-                if (
-                  !registry.services.some((service) => service.manifest.id === operation.serviceId)
-                )
-                  throw Error("Registered image source required");
-                const selected = services.readServiceReleaseImageSelection(
-                    options.infraDir,
-                    operation.serviceId,
-                  ),
-                  requestedReference =
-                    selected.imageReference ??
-                    services.configurationImageReference(
-                      strictReadFile(
-                        services.configurationGenerationComposeFile(
-                          options.infraDir,
-                          operation.expectedConfigurationRevisionId,
-                        ),
-                        1024 * 1024,
+          const source = await (async () => {
+            try {
+              assertControlExecutionForward(authority);
+              if (
+                services.currentConfigurationGeneration(options.infraDir) !==
+                operation.expectedConfigurationRevisionId
+              )
+                throw Error("Image-stage configuration changed");
+              const registry = await options.loadAuthority();
+              if (!registry.services.some((service) => service.manifest.id === operation.serviceId))
+                throw Error("Registered image source required");
+              const selected = services.readServiceReleaseImageSelection(
+                  options.infraDir,
+                  operation.serviceId,
+                ),
+                requestedReference =
+                  selected.imageReference ??
+                  services.configurationImageReference(
+                    strictReadFile(
+                      services.configurationGenerationComposeFile(
+                        options.infraDir,
+                        operation.expectedConfigurationRevisionId,
                       ),
-                      operation.serviceId,
-                    );
-                const normalized = services.coordinatorPullReferenceIdentity(requestedReference),
-                  floating = !normalized.includes("@");
-                const platform = services.imageStagePlatform(
-                  (await read(["info", "--format", "{{.OSType}}/{{.Architecture}}"])).stdout,
-                );
-                const metadata = floating
-                  ? JSON.parse(
-                      (
-                        await read(
-                          ["manifest", "inspect", "--verbose", requestedReference],
-                          1024 * 1024,
-                        )
-                      ).stdout,
-                    )
-                  : null;
-                const stagedReference = services.immutableImageStageReference(
-                    requestedReference,
-                    metadata,
-                    platform,
-                  ),
-                  before = floating ? await tagIdentity(requestedReference) : null;
-                if (
-                  (await options.loadAuthority()).revisionId !== registry.revisionId ||
-                  services.currentConfigurationGeneration(options.infraDir) !==
-                    operation.expectedConfigurationRevisionId
-                )
-                  throw Error("Image-stage source changed");
-                assertImageStageLeaseCompatibility(authority);
-                assertControlExecutionForward(authority);
-                return {
+                      1024 * 1024,
+                    ),
+                    operation.serviceId,
+                  );
+              const normalized = services.coordinatorPullReferenceIdentity(requestedReference),
+                floating = !normalized.includes("@");
+              const platform = services.imageStagePlatform(
+                (await read(["info", "--format", "{{.OSType}}/{{.Architecture}}"])).stdout,
+              );
+              const metadata = floating
+                ? JSON.parse(
+                    (
+                      await read(
+                        ["manifest", "inspect", "--verbose", requestedReference],
+                        1024 * 1024,
+                      )
+                    ).stdout,
+                  )
+                : null;
+              const stagedReference = services.immutableImageStageReference(
                   requestedReference,
-                  stagedReference,
-                  floating,
-                  before,
-                  releaseSelectionDigest: selected.releaseSelectionDigest,
-                };
-              } catch (error) {
-                retainConfigurationPreEffectRefusal(authority);
-                throw error;
-              }
-            })();
-            beginControlEffect(authority);
-            const args = ["image", "pull", source.stagedReference];
-            if (options.execFile)
-              await run("docker", args, {
-                signal: context.signal,
-                timeout: remaining(),
-                maxBuffer: 1024 * 1024,
-              });
-            else
-              await runContainedStreamingProcess("docker", args, {
-                signal: context.signal,
-                timeout: remaining(),
-                onLine: context.emitLog,
-                redact: safeProcessDiagnostic,
-              });
-            const stagedId = await inspect(source.stagedReference);
-            if (
-              !stagedId ||
-              (source.floating && (await tagIdentity(source.requestedReference)) !== source.before)
-            )
-              throw new OpsExecutionFailure("recovery_required", {});
-            return {
-              revisionId: operation.expectedConfigurationRevisionId,
-              requestedReference: source.requestedReference,
-              stagedReference: source.stagedReference,
-              imageId: stagedId,
-              releaseSelectionDigest: source.releaseSelectionDigest,
-            };
-          } finally {
-            lock.release();
-          }
+                  metadata,
+                  platform,
+                ),
+                before = floating ? await tagIdentity(requestedReference) : null;
+              if (
+                (await options.loadAuthority()).revisionId !== registry.revisionId ||
+                services.currentConfigurationGeneration(options.infraDir) !==
+                  operation.expectedConfigurationRevisionId
+              )
+                throw Error("Image-stage source changed");
+              assertImageStageLeaseCompatibility(authority);
+              assertControlExecutionForward(authority);
+              return {
+                requestedReference,
+                stagedReference,
+                floating,
+                before,
+                releaseSelectionDigest: selected.releaseSelectionDigest,
+              };
+            } catch (error) {
+              retainConfigurationPreEffectRefusal(authority);
+              throw error;
+            }
+          })();
+          beginControlEffect(authority);
+          const args = ["image", "pull", source.stagedReference];
+          if (options.execFile)
+            await run("docker", args, {
+              signal: context.signal,
+              timeout: remaining(),
+              maxBuffer: 1024 * 1024,
+            });
+          else
+            await runContainedStreamingProcess("docker", args, {
+              signal: context.signal,
+              timeout: remaining(),
+              onLine: context.emitLog,
+              redact: safeProcessDiagnostic,
+            });
+          const stagedId = await inspect(source.stagedReference);
+          if (
+            !stagedId ||
+            (source.floating && (await tagIdentity(source.requestedReference)) !== source.before)
+          )
+            throw new OpsExecutionFailure("recovery_required", {});
+          return {
+            revisionId: operation.expectedConfigurationRevisionId,
+            requestedReference: source.requestedReference,
+            stagedReference: source.stagedReference,
+            imageId: stagedId,
+            releaseSelectionDigest: source.releaseSelectionDigest,
+          };
         },
         context.signal,
       );

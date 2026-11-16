@@ -4,6 +4,8 @@ import { setTimeout as waitForDataStatus } from "node:timers/promises";
 import {
   createDataExecutionControlJournal,
   loadControlStartup,
+  opsClientLeaseSender,
+  remoteLeaseBackend,
 } from "@openmapx/core/build-artifacts";
 import { isDataExecutionTerminal } from "@openmapx/core/data-manager-contracts";
 import { createFatalProcessHandler } from "@openmapx/core/server";
@@ -46,7 +48,7 @@ import { OfflinePackageGenerator } from "./offline-packages/generator.js";
 import { PostgresOfflinePackageAccountingStore } from "./offline-packages/postgres-accounting.js";
 import { createOpenMapxPackageSourceFactory } from "./offline-packages/source-catalog.js";
 import { OfflinePackageStorage } from "./offline-packages/storage.js";
-import { observeRetainedHostOperation } from "./ops-client.js";
+import { observeRetainedHostOperation, opsClient } from "./ops-client.js";
 import { DataManagerReadiness } from "./readiness.js";
 import { initializeRequiredSubsystems } from "./startup.js";
 import { StateStore } from "./state.js";
@@ -66,6 +68,8 @@ const controlStartup = loadControlStartup({
   role: "data-manager",
   container: true,
   serviceIds: DATA_MANAGER_CONTROL_SERVICE_IDS,
+  // Data-manager claims its targets through the agent, which keeps every lease.
+  leases: remoteLeaseBackend(opsClientLeaseSender(opsClient)),
 });
 if (controlStartup.reason) app.log.warn(controlStartup.reason);
 

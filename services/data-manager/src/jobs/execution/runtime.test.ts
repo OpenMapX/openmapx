@@ -2,12 +2,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync, statSync } from "node:fs";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
-import { createControlRootOperationKey } from "@openmapx/core/ops";
+import { createControlRootOperationKey, OpsClientError } from "@openmapx/core/ops";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { DataManagerReadiness } from "../../readiness.js";
 import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
@@ -192,6 +193,77 @@ describe.skipIf(
       }
     },
   );
+  it("repeats a lease acquisition whose reply was lost and releases the lease it recorded", async () => {
+    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+    if (!url) throw Error("Owned PostgreSQL required");
+    const sql = postgres(url, { max: 4 });
+    const root = mkdtempSync(join(tmpdir(), "omx-runtime-lost-reply-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const agent = control.agentStoreLeases(root, "ops-agent");
+    // Four lost replies span about four seconds, as an agent restart would.
+    let lostReplies = 4;
+    const installation = control.openControlInstallation({
+        infraDir: root,
+        role: "data-manager",
+        serviceIds: ["data-manager"],
+        leases: {
+          ...agent,
+          // The agent records the lease, and its reply never arrives.
+          async acquire(input) {
+            const lease = await agent.acquire(input);
+            if (lostReplies-- > 0)
+              throw new OpsClientError(lostReplies % 2 ? "runtime" : "timeout");
+            return lease;
+          },
+        },
+      }),
+      journal = control.createDataExecutionControlJournal(installation, sql),
+      store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
+    let effects = 0;
+    const runtime = createDataExecutionRuntime({
+      store,
+      dispatch: async () => {
+        effects++;
+        return { kind: "download-fonts", completed: true };
+      },
+    });
+    let id: string | undefined;
+    try {
+      const deadline = Date.now() + 60000;
+      const key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
+      id = (
+        await runtime.admit(
+          { kind: "download-fonts" },
+          { operationKey: key, requestedDeadlineAt: deadline },
+        )
+      ).id;
+      await expect
+        .poll(async () => (await runtime.inspect(id!))?.status, { timeout: 15000 })
+        .toBe("ok");
+      expect(effects).toBe(1);
+      expect(lostReplies).toBe(-1);
+      await expect
+        .poll(
+          async () =>
+            control
+              .openLeaseStore({
+                directory: control.leaseStoreDirectory(root),
+                purpose: "test",
+              })
+              .list(),
+          { timeout: 15000 },
+        )
+        .toEqual([]);
+    } finally {
+      await runtime.close();
+      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      journal.close();
+      control.closeControlInstallation(installation);
+      await sql.end();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("repairs a worker-completion/publication crash from the original signed completion without redispatch", async () => {
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
@@ -261,14 +333,10 @@ describe.skipIf(
       });
       expect((await store.inspect(id))?.finishedAt).not.toBeNull();
       expect(dispatches).toBe(1);
-      expect(
-        (await import("node:fs")).existsSync(
-          join(root, "data/.admin-target-control/locks/data-manager"),
-        ),
-      ).toBe(false);
+      expect(heldTargets(root).includes("data-manager")).toBe(false);
       const recovered = await store.inspect(id);
       expect(
-        control.verifyDataControlTerminalWitness(installation, recovered!.execution).status,
+        control.readDataControlTerminalObservation(installation, recovered!.execution).status,
       ).toEqual(recovered!.status);
       await runtime.reconcile();
       expect(dispatches).toBe(1);
@@ -497,7 +565,7 @@ describe.skipIf(
       expect(retained?.triggeredBy).toBe("cron");
       expect(retained?.finishedAt).not.toBeNull();
       expect(
-        control.verifyDataControlTerminalWitness(installation, retained!.execution).status,
+        control.readDataControlTerminalObservation(installation, retained!.execution).status,
       ).toEqual(retained!.status);
       expect(dispatches).toBe(1);
     } finally {
@@ -579,9 +647,7 @@ describe.skipIf(
       expect(forwards).toBe(0);
       expect((await store.inspect(id))?.finishedAt).toBeNull();
       expect((await store.inspect(id))?.status.publication).toBe("unknown");
-      expect(
-        (await import("node:fs")).existsSync(join(data, ".admin-target-control/locks/motis")),
-      ).toBe(true);
+      expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
@@ -635,13 +701,9 @@ describe.skipIf(
           .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
           .toBe("ok");
         await expect
-          .poll(
-            async () =>
-              !(await import("node:fs")).existsSync(
-                join(data, ".admin-target-control/locks/data-manager"),
-              ),
-            { timeout: 15000 },
-          )
+          .poll(async () => !heldTargets(dirname(data)).includes("data-manager"), {
+            timeout: 15000,
+          })
           .toBe(true);
         await runtime.close();
         const record = await store.inspect(id);
@@ -816,8 +878,8 @@ describe.skipIf(
         );
         id = admitted.id;
         await readyGate;
-        const lock = join(root, "data/.admin-target-control/locks/data-manager"),
-          inode = statSync(lock).ino;
+        const held = () => heldTargets(root).includes("data-manager");
+        expect(held()).toBe(true);
         if (mode === "consume-after-abort") {
           start();
           await expect.poll(active, { timeout: 5000 }).toBe(1);
@@ -836,7 +898,7 @@ describe.skipIf(
                   cancelPackets: proxy.packets(),
                   status: row?.status.status,
                   finished: row?.finishedAt !== null,
-                  fence: requireExists(lock),
+                  fence: held(),
                 };
               },
               { timeout: 5000 },
@@ -849,7 +911,7 @@ describe.skipIf(
               finished: false,
               fence: true,
             });
-          expect(statSync(lock).ino).toBe(inode);
+          expect(held()).toBe(true);
         }
         proxy.release();
         await expect.poll(() => querySettled, { timeout: 5000 }).toBe(true);
@@ -868,7 +930,7 @@ describe.skipIf(
         expect(callbacks).toBe(0);
         // Durable terminal SQL precedes asynchronous physical lease release.
         // The worker connection's barrier above does not await that release.
-        await expect.poll(() => requireExists(lock), { timeout: 5000 }).toBe(false);
+        await expect.poll(held, { timeout: 5000 }).toBe(false);
       } finally {
         proxy.release();
         start();

@@ -21,42 +21,6 @@ let raw = "";
 for await (const chunk of process.stdin) raw += chunk;
 const input = JSON.parse(raw);
 syncBuiltinESMExports();
-if (["held", "unwound"].includes(input.stopAfterFirstTargetRelease)) {
-  const remove = fs.rmdirSync,
-    locks = join(input.infraDir, "data/.admin-target-control/locks");
-  let stopped = false,
-    acknowledgementLost = false;
-  fs.rmdirSync = (path, ...options) => {
-    let target = false;
-    if (String(path).endsWith("/app-api")) {
-      try {
-        const actual = fs.statSync(dirname(String(path))),
-          expected = fs.statSync(locks);
-        target = actual.dev === expected.dev && actual.ino === expected.ino;
-      } catch {
-        /* Only this original physical lock is the named fault edge. */
-      }
-    }
-    remove(path, ...options);
-    if (target && !stopped && input.stopAfterFirstTargetRelease === "unwound") {
-      acknowledgementLost = true;
-      throw Error("Named target release acknowledgement loss");
-    }
-    if (
-      !stopped &&
-      ((target && input.stopAfterFirstTargetRelease === "held") ||
-        (acknowledgementLost && String(path).endsWith("/.journal-writer")))
-    ) {
-      stopped = true;
-      fs.writeSync(
-        1,
-        `${JSON.stringify({ event: "pre-effect-release-unlinked", guard: input.stopAfterFirstTargetRelease })}\n`,
-      );
-      process.kill(process.pid, "SIGSTOP");
-    }
-  };
-  syncBuiltinESMExports();
-}
 if (
   !Array.isArray(input.serviceIds) ||
   input.serviceIds.length > 256 ||

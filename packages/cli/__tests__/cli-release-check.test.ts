@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
@@ -31,15 +30,25 @@ function manifest(id: string): services.ReleaseManifest {
     ...releaseProvenance(),
   };
 }
-function fixture(onCopy?: (path: string) => void) {
+async function fixture(onCopy?: (path: string) => void) {
   const root = mkdtempSync(join(tmpdir(), "openmapx-cli-check-"));
   roots.push(root);
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
   const infraDir = join(root, "infra", "docker");
-  const paths = services.ensureReleaseStateDirectories(infraDir);
-  services.writeReleaseComposeArtifacts(manifest("running"), infraDir);
-  const before = readFileSync(paths.overlay, "utf8");
-  writeFileSync(join(paths.store, "current.json"), "running-state", { mode: 0o600 });
+  mkdirSync(infraDir, { recursive: true });
+  await services.commitConfigurationGeneration({
+    infraDir,
+    services: [],
+    input: {
+      domain: "maps.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+    release: manifest("running"),
+  });
+  const before = services.currentConfigurationGeneration(infraDir);
   const candidate = manifest("candidate");
   const docker: release.ReleaseDockerRunner = vi.fn(async (args) => {
     const ok = (stdout = "") => ({ stdout, exitCode: 0, stderr: "" });
@@ -59,7 +68,7 @@ function fixture(onCopy?: (path: string) => void) {
     if (args.join(" ") === `rm -f ${"f".repeat(64)}`) return ok();
     throw Error(`Unexpected Docker command in metadata-only check: ${JSON.stringify(args)}`);
   });
-  return { root, infraDir, paths, before, candidate, docker };
+  return { root, infraDir, before, candidate, docker };
 }
 beforeEach(() => vi.stubEnv("OPENMAPX_RELEASE", "main"));
 afterEach(() => {
@@ -69,76 +78,60 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
+/** The pins stay those of the applied generation, which a check never replaces. */
+function expectPinsUnchanged(f: Awaited<ReturnType<typeof fixture>>) {
+  expect(services.currentConfigurationGeneration(f.infraDir)).toBe(f.before);
+  expect(services.readAppliedRelease(f.infraDir)?.manifest.release).toBe("running");
+}
+
 describe("CLI checked candidates without selection", () => {
-  it("caches exact metadata while preserving selected pins and recorded running state", async () => {
-    const f = fixture();
+  it("caches exact metadata by digest while preserving the applied pins", async () => {
+    const f = await fixture();
     const result = await release.checkRelease({ infraDir: f.infraDir, docker: f.docker });
-    const raw = readFileSync(join(f.paths.store, "candidate.json"), "utf8");
+    const digest = services.releaseManifestDigest(f.candidate);
     expect(result).toMatchObject({
       manifest: f.candidate,
       ociDigest: `sha256:${"d".repeat(64)}`,
-      manifestDigest: createHash("sha256").update(raw).digest("hex"),
+      releaseId: "candidate",
+      manifestDigest: digest,
       configuredSelector: "main",
     });
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.before);
-    expect(readFileSync(join(f.paths.store, "current.json"), "utf8")).toBe("running-state");
-  });
-
-  it("normalizes unset and explicit default selectors identically", () => {
-    const f = fixture();
-    vi.stubEnv("OPENMAPX_RELEASE", undefined);
-    const implicit = services.releaseConfigurationIdentity(
-      services.readAppliedReleaseSelection(f.infraDir),
-    );
-    vi.stubEnv("OPENMAPX_RELEASE", "main");
     expect(
-      services.releaseConfigurationIdentity(services.readAppliedReleaseSelection(f.infraDir)),
-    ).toBe(implicit);
+      readFileSync(join(services.releaseCacheDirectory(f.infraDir), `${digest}.json`), "utf8"),
+    ).toBe(services.canonicalReleaseManifest(f.candidate));
+    expectPinsUnchanged(f);
   });
 
   it.each(["oversized", "symlink"])(
-    "rejects %s copied metadata without publication",
+    "rejects %s copied metadata without caching it",
     async (kind) => {
-      const f = fixture((path) => {
-        if (kind === "oversized")
-          writeFileSync(path, "x".repeat(services.RELEASE_STORE_LIMITS.manifestBytes + 1));
+      const f = await fixture((path) => {
+        if (kind === "oversized") writeFileSync(path, "x".repeat(32 * 1024 + 1));
         else {
           rmSync(path);
-          symlinkSync(join(f.paths.store, "current.json"), path);
+          symlinkSync(join(f.root, "pnpm-workspace.yaml"), path);
         }
       });
       await expect(
         release.checkRelease({ infraDir: f.infraDir, docker: f.docker }),
       ).rejects.toThrow();
-      expect(existsSync(join(f.paths.store, "candidate.json"))).toBe(false);
-      expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.before);
+      expect(services.cachedReleases(f.infraDir, "ghcr.io/openmapx")).toEqual([]);
+      expectPinsUnchanged(f);
       expect(f.docker).toHaveBeenLastCalledWith(["rm", "-f", "f".repeat(64)]);
     },
   );
 
-  it("refuses a configured selector that changes during resolution", async () => {
-    const f = fixture(() => vi.stubEnv("OPENMAPX_RELEASE", "preview"));
+  it("refuses a disabled channel before any registry call", async () => {
+    const f = await fixture();
+    vi.stubEnv("OPENMAPX_RELEASE", "local");
     await expect(release.checkRelease({ infraDir: f.infraDir, docker: f.docker })).rejects.toThrow(
-      /configuration|selection.*changed/i,
+      /disabled/,
     );
-    expect(existsSync(join(f.paths.store, "candidate.json"))).toBe(false);
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.before);
-  });
-
-  it("refuses a different store owner before any write or registry call", async () => {
-    const f = fixture();
-    await expect(
-      release.checkRelease({
-        infraDir: f.infraDir,
-        docker: f.docker,
-        uid: (process.geteuid?.() ?? 0) + 1,
-      }),
-    ).rejects.toThrow(/owned|uid|unsafe/i);
     expect(f.docker).not.toHaveBeenCalled();
   });
 
-  it("reports a checked candidate from the command without reporting it selected", async () => {
-    const f = fixture();
+  it("reports a checked candidate from the command without pinning it", async () => {
+    const f = await fixture();
     commandDocker = f.docker;
     vi.stubEnv("OPENMAPX_ROOT_DIR", f.root);
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -149,8 +142,8 @@ describe("CLI checked candidates without selection", () => {
     registerComposeCommands(program);
     await program.parseAsync(["compose", "release", "--check"], { from: "user" });
     expect(log.mock.calls.flat().join("\n")).toContain("Checked release: candidate");
-    expect(log.mock.calls.flat().join("\n")).not.toContain("Atomic release selection candidate");
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.before);
+    expect(log.mock.calls.flat().join("\n")).not.toContain("Pinned release candidate");
+    expectPinsUnchanged(f);
   });
 
   it.each(["--status", "--clear"])(

@@ -13,12 +13,17 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { composePathHost, installedCompose } from "../__fixtures__/compose-path-host";
+import { releaseProvenance } from "../__fixtures__/release-provenance";
 import {
   type ConfigurationInput,
   commitConfigurationGeneration,
   initializeConfigurationGenerations,
   readAppliedConfiguration,
+  readAppliedRelease,
   readAppliedServiceIds,
+  readGenerationConfiguration,
+  readGenerationRelease,
+  readPreviousReleaseGeneration,
   renderConfiguration,
   withConfigurationGenerationWriter,
 } from "../configuration-generation";
@@ -31,6 +36,13 @@ import {
   stackComposeArgs,
   writeServiceSelectionFile,
 } from "../deployment";
+import {
+  canonicalReleaseManifest,
+  RELEASE_IMAGE_NAMES,
+  type ReleaseManifest,
+  releaseManifestDigest,
+  TRANSITOUS_TOOLS_IMAGE_ENV,
+} from "../release-manifest";
 import type { LoadedService } from "../types";
 
 const roots: string[] = [];
@@ -343,7 +355,6 @@ describe("stack compose arguments", () => {
     const paths = {
       infraDir: "/stack",
       composePath: `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
-      composeReleasePath: "/stack/docker-compose.release.yml",
     };
     expect(stackComposeArgs(paths, () => true)).toEqual([
       "compose",
@@ -351,8 +362,6 @@ describe("stack compose arguments", () => {
       "/stack/.env",
       "-f",
       `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
-      "-f",
-      "/stack/docker-compose.release.yml",
     ]);
     expect(stackComposeArgs(paths, () => false)).toEqual([
       "compose",
@@ -437,7 +446,7 @@ it("applied selector and retention follow the current generation and explicit re
   ).toBe(45);
 });
 
-it("reads only frozen generated service IDs even when a release overlay declares disabled services", async () => {
+it("reads only frozen generated service IDs", async () => {
   const { infraDir } = checkout(),
     generation = await commitConfigurationGeneration({
       infraDir,
@@ -445,13 +454,98 @@ it("reads only frozen generated service IDs even when a release overlay declares
       input: input({ selectedRoots: ["alpha"] }),
     });
   const { readAppliedComposeServiceIds } = await import("../configuration-generation");
-  writeFileSync(
-    join(infraDir, "docker-compose.release.yml"),
-    "services:\n  app-api:\n    image: example/api\n  data-manager:\n    image: example/dm\n",
-    { mode: 0o644 },
-  );
   expect(readAppliedComposeServiceIds(infraDir, generation.revisionId)).toEqual(["alpha"]);
   expect(() => readAppliedComposeServiceIds(infraDir, `cfg1_${"x".repeat(43)}`)).toThrow(
     /revision/,
   );
+});
+
+describe("release pins in the generation", () => {
+  const pinned = [service("app-api"), service("data-manager"), service("alpha")];
+  const manifest = (release: string, digit: string): ReleaseManifest => ({
+    schemaVersion: 1,
+    release,
+    images: Object.fromEntries(
+      RELEASE_IMAGE_NAMES.map((name) => [
+        name,
+        `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`,
+      ]),
+    ) as ReleaseManifest["images"],
+    ...releaseProvenance(),
+    databaseMigrationHead: { tag: "0064_example", when: 1794754360788 },
+  });
+  const compose = (infraDir: string) =>
+    parseYaml(
+      readFileSync(join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"), "utf8"),
+    ) as { services: Record<string, { image: string; environment?: Record<string, string> }> };
+  const commit = (infraDir: string, release?: ReleaseManifest | null) =>
+    commitConfigurationGeneration({
+      infraDir,
+      services: pinned,
+      input: input({ selectedRoots: ["app-api", "data-manager", "alpha"] }),
+      ...(release !== undefined ? { release } : {}),
+    });
+
+  it("renders the release's images into the compose file and keeps its manifest", async () => {
+    const { infraDir } = checkout();
+    const first = manifest("release-1", "1");
+    await commit(infraDir, first);
+    const rendered = compose(infraDir);
+    expect(rendered.services["app-api"]?.image).toBe(first.images.api);
+    expect(rendered.services["data-manager"]?.image).toBe(first.images["data-manager"]);
+    expect(rendered.services["data-manager"]?.environment?.[TRANSITOUS_TOOLS_IMAGE_ENV]).toBe(
+      first.images["transitous-tools"],
+    );
+    // A service the release does not cover keeps its manifest's image.
+    expect(rendered.services.alpha?.image).toBe("example/alpha:1");
+    expect(readAppliedRelease(infraDir)).toEqual({
+      manifest: first,
+      manifestDigest: releaseManifestDigest(first),
+    });
+    expect(
+      readFileSync(join(infraDir, CURRENT_CONFIGURATION, "release-manifest.json"), "utf8"),
+    ).toBe(canonicalReleaseManifest(first));
+  });
+
+  it("keeps the applied pins when a render names no release, and drops them on null", async () => {
+    const { infraDir } = checkout();
+    const first = manifest("release-1", "1");
+    await commit(infraDir, first);
+    await commit(infraDir);
+    expect(readAppliedRelease(infraDir)?.manifest.release).toBe("release-1");
+    expect(compose(infraDir).services["app-api"]?.image).toBe(first.images.api);
+    await commit(infraDir, null);
+    expect(readAppliedRelease(infraDir)).toBeNull();
+    expect(compose(infraDir).services["app-api"]?.image).toBe("example/app-api:1");
+    expect(compose(infraDir).services["data-manager"]?.environment).toBeUndefined();
+  });
+
+  it("targets the newest generation applied with another release, and what it was rendered from", async () => {
+    const { infraDir } = checkout();
+    const first = await commit(infraDir, manifest("release-1", "1"));
+    expect(readPreviousReleaseGeneration(infraDir, first.revisionId)).toBeNull();
+    const second = await commit(infraDir, manifest("release-2", "2"));
+    // Any later render keeps the release, so the target stays the first generation.
+    const rendered = await commit(infraDir);
+    expect(readPreviousReleaseGeneration(infraDir, second.revisionId)).toBe(first.revisionId);
+    expect(readPreviousReleaseGeneration(infraDir, rendered.revisionId)).toBe(first.revisionId);
+    expect(readGenerationConfiguration(infraDir, first.revisionId)).toMatchObject({
+      domain: "maps.example.test",
+      selectedRoots: ["app-api", "data-manager", "alpha"],
+      release: manifest("release-1", "1"),
+    });
+    expect(readGenerationRelease(infraDir, first.revisionId)?.manifest.release).toBe("release-1");
+    // A rollback is a release change itself, so the next one goes forward again.
+    const rolledBack = await commit(infraDir, manifest("release-1", "1"));
+    expect(readPreviousReleaseGeneration(infraDir, rolledBack.revisionId)).toBe(
+      rendered.revisionId,
+    );
+  });
+
+  it("finds no target when every retained generation pins the applied release", async () => {
+    const { infraDir } = checkout();
+    await commit(infraDir, manifest("release-1", "1"));
+    const again = await commit(infraDir);
+    expect(readPreviousReleaseGeneration(infraDir, again.revisionId)).toBeNull();
+  });
 });

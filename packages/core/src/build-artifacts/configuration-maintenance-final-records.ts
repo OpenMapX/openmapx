@@ -38,7 +38,7 @@ export const configurationOwnerIdentitySchema = z
     origin: controlOriginSchema,
     ownerPrepare: executionRefSchema,
     admissionDigest: digest,
-    rootCertificateDigest: digest,
+    leaseId: id,
     maintenanceId: id,
     candidateId: id,
     planDigest: digest,
@@ -317,7 +317,7 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     !same(original.identity.origin, owner.origin) ||
     !same(original.identity.ownerPrepare, owner.plan.prepare) ||
     original.identity.admissionDigest !== owner.admissionDigest ||
-    original.identity.rootCertificateDigest !== owner.rootCertificateDigest ||
+    original.identity.leaseId !== owner.leaseId ||
     original.identity.maintenanceId !== owner.plan.operation.maintenanceId ||
     original.identity.candidateId !== owner.plan.operation.candidateId ||
     original.identity.planDigest !== owner.plan.planDigest ||
@@ -508,19 +508,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
     !same(inspection.requiredChecks, requiredChecks) ||
     inspection.observations.length !== requiredChecks.length ||
     !inspection.observations.every((value, index) => value.checkIndex === index && value.passed) ||
-    !same(details[0], {
-      currentRevisionId: inspectedRevision,
-      ...(!contained && owner.plan.release
-        ? {
-            currentRelease: {
-              releaseId: owner.plan.release.releaseId,
-              digest: owner.plan.release.manifestDigest,
-              updateJobId:
-                owner.plan.apiParent.issuer === "api" ? owner.plan.apiParent.apiJobId : null,
-            },
-          }
-        : {}),
-    }) ||
+    !same(details[0], { currentRevisionId: inspectedRevision }) ||
     !same(details[2], { guard: owner.preparedFence }) ||
     !owner.plan.steps.every((step, index) =>
       same(details[index + 3], {
@@ -536,7 +524,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
     !same(original.identity.origin, owner.origin) ||
     !same(original.identity.ownerPrepare, owner.plan.prepare) ||
     original.identity.admissionDigest !== owner.admissionDigest ||
-    original.identity.rootCertificateDigest !== owner.rootCertificateDigest ||
+    original.identity.leaseId !== owner.leaseId ||
     original.identity.maintenanceId !== owner.plan.operation.maintenanceId ||
     original.identity.candidateId !== owner.plan.operation.candidateId ||
     original.identity.planDigest !== owner.plan.planDigest ||

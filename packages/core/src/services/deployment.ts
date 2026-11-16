@@ -70,7 +70,6 @@ export interface StackPaths {
   infraDir: string;
   /** The applied generation's compose file. */
   composePath: string;
-  composeReleasePath: string;
 }
 
 export function currentConfigurationFile(infraDir: string, name: string): string {
@@ -93,7 +92,6 @@ export function stackComposeArgs(
     const inherited = deploymentUserEnvironmentProblem(paths.infraDir);
     if (inherited) throw new Error(inherited);
   }
-  const hasOverlay = (fileExists ?? ownedStateFilePresent)(paths.composeReleasePath);
   // Compose records this path in container provenance. Pin the generation,
   // rather than the movable current symlink, so deselection retains cleanup authority.
   let composePath = paths.composePath;
@@ -123,7 +121,6 @@ export function stackComposeArgs(
     ...(hasEnvFile ? ["--env-file", envFile] : []),
     "-f",
     composePath,
-    ...(hasOverlay ? ["-f", paths.composeReleasePath] : []),
   ];
 }
 
@@ -179,33 +176,6 @@ export function deploymentUserEnvironmentProblem(
     return `${name}=${inherited} in this process's environment differs from ${name}=${value} in infra/docker/.env, and Compose would run the stack's containers with the environment's: unset ${name} in the environment, or set it in infra/docker/.env`;
   }
   return null;
-}
-
-/**
- * Whether a file of the agent's state is there: false when it is missing, and
- * true only for a regular file of this user with one link and no group or
- * other write. Anything else in its place is refused, never passed on.
- */
-export function ownedStateFilePresent(path: string): boolean {
-  let stats: ReturnType<typeof lstatSync>;
-  try {
-    stats = lstatSync(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
-  const owner = process.geteuid?.();
-  if (
-    !stats.isFile() ||
-    stats.nlink !== 1 ||
-    (owner !== undefined && stats.uid !== owner) ||
-    (stats.mode & 0o022) !== 0
-  ) {
-    throw new Error(
-      `${path} must be a regular file owned by uid ${owner}, with one link and no group or other write`,
-    );
-  }
-  return true;
 }
 
 /**

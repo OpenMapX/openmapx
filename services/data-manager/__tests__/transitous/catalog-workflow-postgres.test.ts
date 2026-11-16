@@ -12,7 +12,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { type AddressInfo, createServer } from "node:net";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import * as control from "@openmapx/core/build-artifacts";
@@ -47,6 +48,7 @@ import { createMigratedPostgresFixture } from "../../../../apps/api/src/test/pos
 import { ownedServiceHost } from "../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
 import { runContainedProcess } from "../../../../apps/ops-agent/src/docker-runtime";
 import { buildTransitousRunnerServer } from "../../../../apps/transitous-runner/src/server";
+import { heldTargets } from "../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ensureMotisSlotLayout } from "../../src/jobs/transitous/slot-state";
 import { buildTinyGtfsFeeds } from "./fixtures/build-tiny-gtfs";
 import { BERLIN_TINY_OSM_PBF_BASE64 } from "./fixtures/tiny-osm";
@@ -452,6 +454,20 @@ it
       const dockerBridge = (await bridge.listen({ host: "127.0.0.1", port: 0 })) + "/docker";
       const require = createRequire(import.meta.url),
         loader = require.resolve("tsx/esm");
+      // The agent reads a data-manager execution's terminal status from
+      // data-manager itself, so it learns the port data-manager will listen on.
+      const dmPort = await new Promise<number>((resolvePort, rejectPort) => {
+        const probe = createServer();
+        probe.once("error", rejectPort);
+        probe.listen(0, "127.0.0.1", () => {
+          const { port } = probe.address() as AddressInfo;
+          probe.close(() => resolvePort(port));
+        });
+      });
+      const agentDmTokenFile = join(f.root, "dm-agent-token");
+      writeFileSync(agentDmTokenFile, `${Buffer.alloc(32, 23).toString("base64url")}-agent`, {
+        mode: 0o600,
+      });
       async function startAgent(catalogFault: string, listenPort = 0) {
         const child = spawn(
           process.execPath,
@@ -460,7 +476,14 @@ it
             loader,
             resolve("apps/ops-agent/src/test-fixtures/staged-coordinator-request-process.mjs"),
           ],
-          { stdio: ["pipe", "pipe", "pipe"] },
+          {
+            stdio: ["pipe", "pipe", "pipe"],
+            env: {
+              ...process.env,
+              DATA_MANAGER_URL: `http://127.0.0.1:${dmPort}`,
+              DATA_MANAGER_TOKEN_FILE: agentDmTokenFile,
+            },
+          },
         );
         children.push(child);
         let stderr = "";
@@ -647,7 +670,7 @@ it
         operationsPolicy: policy,
         executionReceiver: receiver,
       });
-      let dmUrl = await dm.listen({ host: "127.0.0.1", port: 0 }),
+      let dmUrl = await dm.listen({ host: "127.0.0.1", port: dmPort }),
         transport = sdk.createDataManagerTransport({ baseUrl: dmUrl, authToken: token });
       async function startNativeDm(listenPort = 0) {
         const child = spawn(
@@ -716,7 +739,11 @@ it
       let nativeDm: Awaited<ReturnType<typeof startNativeDm>> | undefined;
       if (fault === "dm-pointer" || fault === "runner-refusal" || fault === "before-pointer") {
         await runtime.close();
-        nativeDm = await startNativeDm();
+        // The native data-manager takes over the port the agent knows.
+        dm.server.closeAllConnections();
+        await dm.close();
+        dm = undefined;
+        nativeDm = await startNativeDm(dmPort);
         transport = sdk.createDataManagerTransport({ baseUrl: nativeDm.url, authToken: token });
       }
       async function terminal(id: string) {
@@ -765,7 +792,7 @@ it
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${validation.id}`;
         expect(row!.finished_at).toBeNull();
-        expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(true);
+        expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         return;
       }
       expect(
@@ -785,7 +812,7 @@ it
       await vi.waitFor(
         () =>
           expect(() =>
-            control.verifyDataControlTerminalWitness(installation!, proof.sourceExecution),
+            control.readDataControlTerminalObservation(installation!, proof.sourceExecution),
           ).not.toThrow(),
         { timeout: 10000, interval: 100 },
       );
@@ -797,17 +824,15 @@ it
         installation,
         proof.sourceExecution,
       );
+      // The validation released its lease only after every child settled; the
+      // store keeps no released lease, so the settled child is no longer listed.
       expect(
-        control.inspectRetainedOwnedArtifactTargetChildSettlement(originalOwner, child.execution)
-          ?.outcome,
-      ).toBe("committed");
-      expect(() =>
-        control.inspectRetainedOwnedArtifactTargetChildSettlement(originalOwner, {
-          ...child.execution,
-          executionId: randomUUID(),
-        }),
-      ).toThrow(/original child/);
-      expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(false);
+        await control.inspectRetainedOwnedArtifactTargetChildSettlement(
+          originalOwner,
+          child.execution,
+        ),
+      ).toBeNull();
+      expect(heldTargets(dirname(data)).includes("motis")).toBe(false);
       const validationBytes = readFileSync(
         join(data, "motis/proposals", proposalId, `validation-${validation.id}.json`),
       );
@@ -869,7 +894,7 @@ it
           );
           expect(await cancelResponse).toBe(true);
           expect(lostCancellationResponse).toBe(true);
-          expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(true);
+          expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         }
         if (nativeDm) {
           // Freeze between lifecycle writes before injecting the pin-pointer crash.
@@ -886,8 +911,8 @@ it
           expect(
             existsSync(
               join(
-                data,
-                ".admin-target-control/executions/data-manager",
+                dirname(data),
+                "control-private/data-manager/execution-witnesses/data-manager",
                 `${activation.operationKey}.writer`,
               ),
             ),
@@ -935,7 +960,7 @@ it
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${activation.id}`;
         expect(row!.finished_at).toBeNull();
-        expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(true);
+        expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         const next = await sdk.startDataExecution(
           {
             input: { kind: "catalog.validate", proposalId, countries: ["de"] },

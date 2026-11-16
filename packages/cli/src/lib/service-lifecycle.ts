@@ -229,14 +229,11 @@ export async function runCliServiceLifecycle(options: {
   if (inherited && !inherited.lease)
     throw Error("Delegated lifecycle requires its original borrowed lease");
   let owning = false;
-  let releaseStoreLock: services.ReleaseStoreLock | undefined;
   let store: services.ServiceLifecycleReceiptStore | undefined;
   let receipt: services.ServiceLifecycleReceipt | undefined;
   let lease: TargetLeaseAuthority | undefined;
   let finalCommit: ReturnType<typeof services.configurationGenerationWriterCommit>;
   let failureAttempted = false;
-  let releaseSelection: string | null | undefined;
-  let dockerEffectReached = false;
   const checkpoint = async (
     owned: services.VerifiedLifecycleOwnership,
     patch: Partial<services.ServiceLifecycleReceipt>,
@@ -314,7 +311,7 @@ export async function runCliServiceLifecycle(options: {
       warnFailureNotRecorded();
     }
   };
-  /** Holds the writer and release-store lock only for `run`, which must not start a container. */
+  /** Holds the writer only for `run`, which must not start a container. */
   const withWriterStep = async <T>(
     run: (owned: services.VerifiedLifecycleOwnership) => Promise<T>,
     signal?: AbortSignal,
@@ -328,17 +325,6 @@ export async function runCliServiceLifecycle(options: {
           { writer, lease: held, authority },
           async (owned) => {
             assertForward(signal);
-            const releasePaths = services.releaseStatePaths(paths.infraDir);
-            services.ensureReleaseStateDirectory(releasePaths.directory);
-            services.ensureReleaseStateDirectory(releasePaths.store);
-            // A brief holder such as release selection must not fail a lifecycle whose
-            // containers may already be running, so later steps wait for the store.
-            const lock = await services.acquireReleaseStoreLock(
-              releasePaths.store,
-              {},
-              { failIfBusy: !dockerEffectReached },
-            );
-            releaseStoreLock = lock;
             try {
               return await run(owned);
             } catch (error) {
@@ -347,22 +333,16 @@ export async function runCliServiceLifecycle(options: {
             } finally {
               finalCommit =
                 services.configurationGenerationWriterCommit(owned.writer) ?? finalCommit;
-              releaseStoreLock = undefined;
-              lock.release();
             }
           },
         ),
       signal,
     );
   };
-  const readReleaseSelection = () =>
-    services.readReleaseOverlayFile(services.releaseStatePaths(paths.infraDir).overlay);
-  // Selecting a release rewrites the overlay without moving the generation.
+  // The release pins are part of the generation, so its revision covers them.
   const assertConfigurationUnchanged = (revisionId: string, conflict: string) => {
     if (services.currentConfigurationGeneration(paths.infraDir) !== revisionId)
       throw new LifecycleConfigurationConflict(conflict);
-    if (releaseSelection !== undefined && readReleaseSelection() !== releaseSelection)
-      throw new LifecycleConfigurationConflict("Lifecycle release selection changed");
   };
   /**
    * Refuses the Docker effect that follows unless the configuration is still the
@@ -373,7 +353,6 @@ export async function runCliServiceLifecycle(options: {
   const beforeDockerEffect = async (revisionId: string, conflict: string, signal?: AbortSignal) => {
     await withWriterStep(async () => assertConfigurationUnchanged(revisionId, conflict), signal);
     assertForward(signal);
-    dockerEffectReached = true;
   };
   const committedRevisionId = () => {
     if (!receipt?.finalRevisionId) throw Error("Lifecycle generation is not committed");
@@ -400,7 +379,6 @@ export async function runCliServiceLifecycle(options: {
       lease =
         inherited?.lease ??
         (await control.acquireArtifactTargetLease({
-          dataRoot: join(paths.infraDir, "data"),
           owner: authority,
           serviceIds: targets,
           signal: inner.signal,
@@ -439,15 +417,16 @@ export async function runCliServiceLifecycle(options: {
     async validatePins(selected, signal) {
       await withWriterStep(async (owned) => {
         assertConfigurationUnchanged(expected, "Lifecycle configuration revision conflict");
-        if (release.touchesReleasePinnedServices(selected)) {
-          if (!releaseStoreLock) throw Error("Lifecycle release-store ownership unavailable");
-          const overlay = await release.ensureReleaseOverlay({ releaseStoreLock });
-          if (overlay.status === "held") throw new ServiceLifecycleCommandError(1, overlay.reason);
-          if (overlay.status === "unpinned")
-            throw new ServiceLifecycleCommandError(1, "Release selection unavailable");
-        }
+        if (
+          release.touchesReleasePinnedServices(selected) &&
+          !services.readAppliedRelease(paths.infraDir) &&
+          services.readAppliedReleaseSelection(paths.infraDir).kind !== "local"
+        )
+          throw new ServiceLifecycleCommandError(
+            1,
+            "The applied configuration pins no release; select one with `compose release`",
+          );
         await assertNativeCreation();
-        releaseSelection = readReleaseSelection();
         await checkpoint(owned, { phase: "pins_validated" });
       }, signal);
     },
@@ -588,9 +567,7 @@ export async function runCliServiceLifecycle(options: {
           // Recovery accepts only a failure at the hardlink step itself.
           if (attempt !== null)
             log.warn(
-              failed.failure?.reason === "hardlinks" && !failed.hardlinks
-                ? `Operation ${key} keeps its service locks because a hardlink request issued to data-manager may still be running. Inspect infra/docker/data/ops-agent/lifecycle/${key}.json; after its deadline, \`pnpm openmapx services recover-update --operation-key ${key}\` can release an unadopted request.`
-                : `Operation ${key} keeps its service locks because a hardlink child was issued to data-manager. No automated release exists yet for this case, and \`services recover-update\` does not apply. Its record is infra/docker/data/ops-agent/lifecycle/${key}.json.`,
+              `Operation ${key} keeps its service locks because a hardlink request issued to data-manager may still be running. Its record is infra/docker/state/ops-agent/lifecycle/${key}.json. Once data-manager has finished it, \`pnpm openmapx control status\` shows the lease and \`pnpm openmapx control resolve --op ${key} --as committed|failed\` ends it.`,
             );
           return;
         }

@@ -32,6 +32,7 @@ function promote(
   mismatch = false,
   reusedApps: string[] = [],
   planOverrides: Record<string, unknown> = {},
+  journalEntries: unknown[] = [{ idx: 0, tag: "0000_initial", when: 1794754360788 }],
 ) {
   const temp = mkdtempSync(join(tmpdir(), "openmapx-promotion-"));
   try {
@@ -42,6 +43,12 @@ function promote(
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, digests[app].slice(7)), "");
     }
+    // The release's migration journal, as the workflow checks it out beside the plan.
+    mkdirSync(join(temp, "source/apps/api/src/db/migrations/meta"), { recursive: true });
+    writeFileSync(
+      join(temp, "source/apps/api/src/db/migrations/meta/_journal.json"),
+      JSON.stringify({ entries: journalEntries }),
+    );
     mkdirSync(join(temp, "release-plan"));
     writeFileSync(
       join(temp, "release-plan/release-plan.json"),
@@ -146,6 +153,7 @@ describe("aggregate Docker promotion", () => {
       "2026-09-09T12:00:00.000Z",
     );
     expect(Object.keys(manifest.images)).toEqual(apps);
+    expect(manifest.databaseMigrationHead).toEqual({ tag: "0000_initial", when: 1794754360788 });
     expect(manifest.producer).toEqual({
       repository: "OpenMapX/openmapx",
       workflowPath: ".github/workflows/ci.yml",
@@ -215,6 +223,15 @@ describe("aggregate Docker promotion", () => {
       expect(calls.some((args) => destination(args)?.endsWith(":main"))).toBe(false);
     }
   });
+
+  it.each([[[]], [[{ idx: 0, tag: "latest", when: 1 }]], [[{ idx: 0, tag: "0000_initial" }]]])(
+    "refuses a release whose migration journal has no valid newest entry (%j)",
+    (entries) => {
+      const { status, stderr } = promote("", false, [], {}, entries);
+      expect(status).not.toBe(0);
+      expect(stderr).toContain("The migration journal has no valid newest entry");
+    },
+  );
 
   it("rejects a main tag that does not resolve to the approved digest", () => {
     const { calls, status, stderr } = promote("", true);

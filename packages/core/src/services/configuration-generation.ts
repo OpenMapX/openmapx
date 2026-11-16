@@ -61,6 +61,13 @@ import {
   platformConfigurationSchema,
   resolvePlatformConfiguration,
 } from "./platform-configuration";
+import {
+  canonicalReleaseManifest,
+  parseReleaseManifest,
+  type ReleaseManifest,
+  releaseManifestDigest,
+  releaseServiceImages,
+} from "./release-manifest";
 import { normalizeReleaseSelection } from "./release-selection";
 import {
   type ReleaseServiceFiles,
@@ -90,6 +97,8 @@ import { seedMissingWritableCopies, seedWritableCopies } from "./writable-copies
 const MAX_GENERATIONS = 16;
 const MAX_GENERATION_BYTES = 2 * 1024 * 1024;
 const RESOLVED_CONFIG_FILE = "resolved-config.generated.json";
+/** The release whose images the generation pins, as its canonical manifest. */
+const RELEASE_MANIFEST_FILE = "release-manifest.json";
 const REVISION = /^cfg1_[A-Za-z0-9_-]{43}$/;
 
 /**
@@ -131,6 +140,11 @@ export interface CommitConfigurationOptions {
    * bundled, otherwise the checkout's).
    */
   releaseServiceFiles?: ReleaseServiceFiles;
+  /**
+   * The release whose images the generation pins. Omitted, the applied
+   * generation's release is kept; null renders the manifests' own image tags.
+   */
+  release?: ReleaseManifest | null;
   /**
    * The bind mounts of every container, running or stopped: a service-file
    * tree one of them mounts is kept. Omitted (Docker can't tell), no tree is
@@ -762,7 +776,7 @@ export function readAppliedServiceIds(
   return new Set(expanded.enabledIds);
 }
 
-/** Exact service closure of the frozen generated base, excluding release-overlay stubs. */
+/** Exact service closure of the frozen generated base. */
 export function readAppliedComposeServiceIds(
   infraDir: string,
   expectedRevisionId: string,
@@ -800,9 +814,14 @@ function readOwnGenerationFile(path: string, modes: readonly bigint[]): string {
 export function readAppliedConfiguration(
   infraDir: string,
 ): Omit<ConfigurationInput, "domain" | "selectedRoots"> {
-  const empty = { serviceConfigs: [], integrationConfigs: [], serviceSecrets: [] };
   const generation = appliedGenerationDirectory(infraDir);
-  if (!generation) return empty;
+  if (!generation) return { serviceConfigs: [], integrationConfigs: [], serviceSecrets: [] };
+  return readGenerationInputs(generation);
+}
+
+function readGenerationInputs(
+  generation: string,
+): Omit<ConfigurationInput, "domain" | "selectedRoots"> {
   // Each file is opened without following links and must be this user's
   // own, as the generation's tree was checked.
   const resolved = JSON.parse(
@@ -883,6 +902,92 @@ export function readAppliedReleaseSelection(
     field?.source === "database" ? field.value : env.OPENMAPX_RELEASE,
     env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY,
   );
+}
+
+export interface GenerationRelease {
+  manifest: ReleaseManifest;
+  manifestDigest: string;
+}
+
+/** The release a retained generation pins, or null when it runs the manifests' own tags. */
+export function readGenerationRelease(
+  infraDir: string,
+  revisionId: string,
+): GenerationRelease | null {
+  const directory = dirname(configurationGenerationComposeFile(infraDir, revisionId));
+  let raw: string;
+  try {
+    raw = readOwnGenerationFile(join(directory, RELEASE_MANIFEST_FILE), [0o400n, 0o600n]);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  // The pins were checked against the repository configured at commit; they
+  // must still share one image prefix.
+  const api = (JSON.parse(raw) as { images?: { api?: unknown } })?.images?.api;
+  const manifest = parseReleaseManifest(
+    raw,
+    typeof api === "string" ? api.slice(0, Math.max(0, api.lastIndexOf("/api@"))) : "",
+  );
+  if (canonicalReleaseManifest(manifest) !== raw) throw new Error(UNSAFE);
+  return { manifest, manifestDigest: releaseManifestDigest(manifest) };
+}
+
+/** The release the applied generation pins, or null. */
+export function readAppliedRelease(infraDir: string): GenerationRelease | null {
+  const active = currentConfigurationGeneration(infraDir);
+  return active ? readGenerationRelease(infraDir, active) : null;
+}
+
+/**
+ * The newest retained generation, other than `revisionId`, that pins another
+ * release than it does, or null when none is retained or `revisionId` pins
+ * none: the configuration that was applied with the previous release.
+ * Generations without pins, left by clearing the pin, are skipped. A
+ * generation's age is that of its rendered files, which are never written again.
+ */
+export function readPreviousReleaseGeneration(infraDir: string, revisionId: string): string | null {
+  const digest = readGenerationRelease(infraDir, revisionId)?.manifestDigest;
+  if (!digest) return null;
+  const generations = join(infraDir, CONFIGURATION_GENERATIONS);
+  const candidates = readdirSync(generations)
+    .filter((name) => REVISION.test(name) && name !== revisionId)
+    .map((name) => ({
+      name,
+      writtenAt: lstatSync(join(generations, name, RESOLVED_CONFIG_FILE)).mtimeMs,
+    }))
+    .sort((a, b) => b.writtenAt - a.writtenAt || a.name.localeCompare(b.name));
+  for (const { name } of candidates) {
+    const other = readGenerationRelease(infraDir, name)?.manifestDigest;
+    if (other && other !== digest) return name;
+  }
+  return null;
+}
+
+/**
+ * What a retained generation was rendered from: its domain, configuration,
+ * secrets, selection and release, to render it again.
+ */
+export function readGenerationConfiguration(
+  infraDir: string,
+  revisionId: string,
+): ConfigurationInput & { release: ReleaseManifest | null } {
+  const directory = dirname(configurationGenerationComposeFile(infraDir, revisionId));
+  const { domain } = JSON.parse(
+    readOwnGenerationFile(join(directory, RESOLVED_CONFIG_FILE), [0o400n, 0o600n]),
+  ) as { domain?: unknown };
+  if (typeof domain !== "string") throw new Error(UNSAFE);
+  const selection = JSON.parse(
+    readOwnGenerationFile(join(directory, SERVICE_SELECTION_FILE), [0o400n, 0o600n]),
+  ) as { selected?: unknown };
+  if (!Array.isArray(selection.selected) || selection.selected.some((id) => typeof id !== "string"))
+    throw new Error(UNSAFE);
+  return {
+    ...readGenerationInputs(directory),
+    domain,
+    selectedRoots: selection.selected as string[],
+    release: readGenerationRelease(infraDir, revisionId)?.manifest ?? null,
+  };
 }
 
 /** Call under writer ownership so the pointer and its projections are one observation.
@@ -1264,6 +1369,7 @@ export type RenderConfigurationOptions = Pick<
   | "input"
   | "allowMissingSelected"
   | "releaseServiceFiles"
+  | "release"
 >;
 
 /**
@@ -1279,10 +1385,22 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
     input,
     options.allowMissingSelected ?? false,
   );
-  const release = options.releaseServiceFiles ?? releaseServiceFiles(options.services);
-  const overrides = readServiceOverrides(infraDir, release);
-  const serviceFiles = resolveServiceFiles(options.services, release, overrideOverlay(overrides));
+  const files = options.releaseServiceFiles ?? releaseServiceFiles(options.services);
+  const overrides = readServiceOverrides(infraDir, files);
+  const serviceFiles = resolveServiceFiles(options.services, files, overrideOverlay(overrides));
+  const release =
+    options.release === undefined
+      ? (readAppliedRelease(infraDir)?.manifest ?? null)
+      : options.release;
   const context: RenderContext = {
+    ...(release
+      ? {
+          releasePins: {
+            images: releaseServiceImages(release),
+            transitousTools: release.images["transitous-tools"],
+          },
+        }
+      : {}),
     domain: input.domain,
     ...(input.platform
       ? {
@@ -1316,6 +1434,7 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
     rendered: renderCompose(resolved.enabled, context),
     serviceFiles,
     overrides,
+    release,
   };
 }
 
@@ -1379,7 +1498,7 @@ async function commitOwnedConfigurationFiles(
   release: ReleaseServiceFiles,
 ): Promise<CommittedConfiguration> {
   const { infraDir, input } = options;
-  const { resolved, context, rendered, serviceFiles, overrides } = prepared;
+  const { resolved, context, rendered, serviceFiles, overrides, release: pinned } = prepared;
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   await retainConfigurationGenerations(
     infraDir,
@@ -1410,6 +1529,7 @@ async function commitOwnedConfigurationFiles(
     await writeDurable(
       join(temporary, RESOLVED_CONFIG_FILE),
       `${JSON.stringify({
+        domain: input.domain,
         serviceConfigs: input.serviceConfigs,
         integrationConfigs: input.integrationConfigs,
         ...(input.transitCredentialsRevision
@@ -1419,6 +1539,12 @@ async function commitOwnedConfigurationFiles(
       })}\n`,
       0o600,
     );
+    if (pinned)
+      await writeDurable(
+        join(temporary, RELEASE_MANIFEST_FILE),
+        canonicalReleaseManifest(pinned),
+        0o600,
+      );
     // The service files its containers mount, in the store beside the
     // generations; the generation records which trees it uses.
     writeServiceFileTrees(infraDir, serviceFiles.trees.values());

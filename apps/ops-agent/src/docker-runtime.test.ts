@@ -64,14 +64,13 @@ async function preparedStack(ids = ["motis", "postgis", "redis"]) {
     stack: {
       infraDir,
       composePath: services.currentConfigurationFile(infraDir, services.GENERATED_COMPOSE_FILE),
-      composeReleasePath: join(infraDir, "docker-compose.release.yml"),
     },
   };
 }
 
 /** The unit adapter boundary returns Docker's config read from the real generated inputs. */
 function readPreparedDockerConfig(
-  stack: { composePath: string; composeReleasePath: string },
+  stack: { composePath: string },
   file: string,
   args: readonly string[],
 ) {
@@ -81,11 +80,9 @@ function readPreparedDockerConfig(
   for (let index = 0; index < args.length; index++) {
     if (args[index] !== "-f") continue;
     const path = args[++index];
-    expect(
-      [stack.composePath, stack.composeReleasePath]
-        .filter(existsSync)
-        .map((path) => realpathSync(path)),
-    ).toContain(realpathSync(path!));
+    expect([stack.composePath].filter(existsSync).map((path) => realpathSync(path))).toContain(
+      realpathSync(path!),
+    );
     const configuration = parseYaml(readFileSync(path!, "utf8")) as {
       services: Record<string, unknown>;
     };
@@ -167,14 +164,9 @@ describe("fixed Docker runtime adapters", () => {
     );
   });
 
-  it("names only the frozen generated closure when a release overlay declares disabled services", async () => {
+  it("names only the frozen generated closure", async () => {
     const prepared = await preparedStack(),
       calls: string[][] = [];
-    writeFileSync(
-      prepared.stack.composeReleasePath,
-      "services:\n  app-api:\n    image: example/api:1\n  data-manager:\n    image: example/data:1\n",
-      { mode: 0o600 },
-    );
     const runtime = createDockerRuntime({
       stack: prepared.stack,
       fileExists: existsSync,
@@ -268,7 +260,6 @@ describe("fixed Docker runtime adapters", () => {
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -287,7 +278,6 @@ describe("fixed Docker runtime adapters", () => {
 
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
     const prepared = await preparedStack();
-    writeFileSync(prepared.stack.composeReleasePath, "services: {}\n", { mode: 0o644 });
     writeFileSync(join(prepared.stack.infraDir, ".env"), "", { mode: 0o644 });
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     const runtime = createDockerRuntime({
@@ -335,7 +325,6 @@ describe("fixed Docker runtime adapters", () => {
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -387,7 +376,6 @@ describe("fixed Docker runtime adapters", () => {
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -528,7 +516,6 @@ describe("fixed Docker runtime adapters", () => {
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -572,7 +559,6 @@ describe("fixed Docker runtime adapters", () => {
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -588,7 +574,6 @@ describe("fixed Docker runtime adapters", () => {
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           ownedServices,
@@ -687,7 +672,6 @@ describe("fixed Docker runtime adapters", () => {
             stack: {
               infraDir: "/trusted",
               composePath: "/trusted/compose.yml",
-              composeReleasePath: "/trusted/release.yml",
             },
             fileExists: () => false,
             trafficDataRoot: dataRoot,
@@ -740,7 +724,6 @@ describe("fixed Docker runtime adapters", () => {
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           trafficDataRoot: dataRoot,
@@ -774,7 +757,6 @@ describe("fixed Docker runtime adapters", () => {
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           trafficDataRoot: dataRoot,
@@ -809,7 +791,6 @@ describe("fixed Docker runtime adapters", () => {
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           ownedServices,
@@ -861,7 +842,6 @@ describe("fixed Docker runtime adapters", () => {
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           ownedServices,
@@ -944,7 +924,6 @@ describe("fixed Docker runtime adapters", () => {
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -992,7 +971,6 @@ describe("fixed Docker runtime adapters", () => {
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         trafficDataRoot: dataRoot,
@@ -1050,7 +1028,6 @@ describe("fixed Docker runtime adapters", () => {
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1094,7 +1071,6 @@ describe("fixed Docker runtime adapters", () => {
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           execFile: async (_file, args) => {
@@ -1189,7 +1165,6 @@ describe("fixed Docker runtime adapters", () => {
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1270,7 +1245,6 @@ describe("fixed Docker runtime adapters", () => {
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1311,7 +1285,6 @@ describe("fixed Docker runtime adapters", () => {
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -1335,7 +1308,6 @@ describe("fixed Docker runtime adapters", () => {
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1472,7 +1444,6 @@ describe("fixed Docker runtime adapters", () => {
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1632,7 +1603,6 @@ it("streams the actual default fixed Docker human output without the JSON collec
     stack: {
       infraDir: root,
       composePath: join(root, "compose.yml"),
-      composeReleasePath: join(root, "release.yml"),
     },
     fileExists: () => false,
   });

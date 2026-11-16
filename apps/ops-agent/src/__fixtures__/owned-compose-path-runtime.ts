@@ -27,10 +27,7 @@ export async function ownedComposePathRuntime() {
       "com.docker.compose.project": services.STACK_PROJECT,
       "com.docker.compose.service": "alpha",
       "com.docker.compose.project.working_dir": dirname(host.firstCompose),
-      "com.docker.compose.project.config_files": [
-        host.firstCompose,
-        realpathSync(host.stack.composeReleasePath),
-      ].join(","),
+      "com.docker.compose.project.config_files": host.firstCompose,
     },
   };
   const calls: string[][] = [];

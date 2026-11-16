@@ -4,10 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
-import { generationHardlinksNonAdmissionSchema } from "@openmapx/core/data-manager-contracts";
 import { OpsClient } from "@openmapx/core/ops";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
-import { failedServiceLifecycle } from "../../../../../packages/core/src/build-artifacts/test-fixtures/service-lifecycle-recovery";
 import { setupCron } from "../../cron";
 import { db, rawSql } from "../../db";
 import { resetOpsClient, runOpsOperation } from "../../ops-client";
@@ -304,98 +302,6 @@ it.skipIf(!enabled)("leaves rows that carry no operation ledger or are still run
   }
 });
 it.skipIf(!enabled)(
-  "attests non-admission from the original canceled grant and actual locked SQL, never from a missing shared file alone",
-  async () => {
-    const fixture = await failedServiceLifecycle(root);
-    const owner = control.restoreArtifactTargetLeaseForSettlement(fixture.authority);
-    const clock = vi.spyOn(Date, "now").mockReturnValue(fixture.execution.deadlineAt + 1);
-    const request = {
-      operationKey: fixture.child.execution.operationKey,
-      requestedDeadlineAt: fixture.child.execution.deadlineAt,
-      input: {
-        kind: "generation-hardlinks" as const,
-        revisionId: fixture.revisionId,
-        coordinatorMode: "ensure-running" as const,
-        planDigest: control.controlDigest(fixture.plan),
-      },
-      plan: fixture.plan,
-    };
-    const rawHeaders = ["x-openmapx-control-delegation", fixture.assertion];
-    let rowId: string | undefined;
-    try {
-      await expect(fence.attestUnadoptedGenerationHardlinks(request, rawHeaders)).rejects.toThrow();
-      await control.prepareFailedServiceLifecycleRecovery(fixture.authority, owner);
-      const proof = await fence.attestUnadoptedGenerationHardlinks(request, rawHeaders);
-      expect(proof.payload.child).toEqual(fixture.child.execution);
-      expect(proof.payload.parent).toEqual(fixture.execution);
-      expect(proof.payload.kind).toBe("generation-hardlinks-not-admitted");
-      const routed = await legacyFixture();
-      try {
-        const url = "/executions/generation-hardlinks/recovery";
-        expect(
-          (await routed.app.inject({ method: "POST", url, payload: request })).statusCode,
-        ).toBe(401);
-        const response = await routed.app.inject({
-          method: "POST",
-          url,
-          payload: request,
-          headers: { ...headers, "x-openmapx-control-delegation": fixture.assertion },
-        });
-        expect(response.statusCode).toBe(200);
-        expect(generationHardlinksNonAdmissionSchema.parse(response.json())).toEqual(proof);
-        expect(routed.dispatches()).toBe(0);
-      } finally {
-        await routed.close();
-      }
-      await expect(
-        fence.attestUnadoptedGenerationHardlinks(
-          { ...request, requestedDeadlineAt: request.requestedDeadlineAt + 1 },
-          rawHeaders,
-        ),
-      ).rejects.toThrow("Original hardlink request changed");
-      const blocker = await rawSql.reserve();
-      try {
-        await blocker.unsafe("SELECT pg_advisory_lock($1,$2)", [0x4f4d58, 2]);
-        await expect(
-          fence.attestUnadoptedGenerationHardlinks(request, rawHeaders),
-        ).rejects.toMatchObject({ statusCode: 409 });
-      } finally {
-        await blocker.unsafe("SELECT pg_advisory_unlock($1,$2)", [0x4f4d58, 2]);
-        blocker.release();
-      }
-      const privatePath = join(
-        root,
-        "control-private/data-manager/executions",
-        `${request.operationKey}.json`,
-      );
-      mkdirSync(join(root, "control-private/data-manager/executions"), {
-        recursive: true,
-        mode: 0o700,
-      });
-      writeFileSync(privatePath, "{}", { mode: 0o600 });
-      try {
-        await expect(fence.attestUnadoptedGenerationHardlinks(request, rawHeaders)).rejects.toThrow(
-          "Original receiver admission or adoption requires recovery",
-        );
-      } finally {
-        rmSync(privatePath);
-      }
-      const [row] =
-        await rawSql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,finished_at) VALUES(${fixture.child.execution.executionId},'generation-hardlinks','error',${fixture.child.execution.operationKey},now()) RETURNING id`;
-      rowId = String(row!.id);
-      await expect(fence.attestUnadoptedGenerationHardlinks(request, rawHeaders)).rejects.toThrow(
-        /admitted|busy/,
-      );
-    } finally {
-      clock.mockRestore();
-      if (rowId) await rawSql`DELETE FROM data_manager.jobs WHERE id=${rowId}`;
-      control.closeArtifactTargetLeaseHandle(owner);
-      for (const i of fixture.installations) control.closeControlInstallation(i);
-    }
-  },
-  30000,
-);
-it.skipIf(!enabled)(
   "I4 records actual missing-catalog preflight as terminal error and permits the first subsequent admission",
   async () => {
     const before = new Set(
@@ -604,6 +510,7 @@ it.skipIf(!enabled).each(["git", "proposal"] as const)(
 
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { resolveOperationsProfile } from "../transitous/operations-profile";
@@ -1121,7 +1028,10 @@ it.skipIf(!enabled)(
       old = envNames.map((name) => process.env[name]);
     const token = Buffer.alloc(32, 5).toString("base64url");
     const server = buildOpsAgentServer({
-      tokens: { api: Buffer.alloc(32, 6).toString("base64url"), "data-manager": token },
+      tokens: {
+        api: Buffer.alloc(32, 6).toString("base64url"),
+        "data-manager": token,
+      },
       controlInstallation: agent,
       runtime: createTransitousLockRuntime(createUnavailableRuntime(), { rootDir: repository }),
       resourcePolicy: createRegistryResourcePolicy({
@@ -1216,7 +1126,7 @@ it.skipIf(!enabled)(
       expect((await f.runtime.inspect(id))?.publication).toBe("not_started");
       // Terminal status is published before asynchronous lease settlement finishes.
       await expect
-        .poll(() => fs.existsSync(join(root, "data/.admin-target-control/locks/motis")), {
+        .poll(() => heldTargets(root).includes("motis"), {
           timeout: 10000,
         })
         .toBe(false);

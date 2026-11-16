@@ -68,11 +68,11 @@ GitHub authorization errors remain errors. They are never treated as a missing d
 | `OPENMAPX_RELEASE=preview`        | Most recent deliberately published named prerelease. Missing preview fails.                |
 | `OPENMAPX_RELEASE=v0.1.0-alpha.1` | Exact named prerelease; content must match the version.                                    |
 | `OPENMAPX_RELEASE=sha256:<64hex>` | Exact metadata image digest, including an authorized staged candidate.                     |
-| `OPENMAPX_RELEASE=local`          | Explicit local workflow; existing overlays still apply until cleared.                      |
+| `OPENMAPX_RELEASE=local`          | Explicit local workflow; the applied release pins still apply until cleared.               |
 
 The optional trusted repository setting is `OPENMAPX_RELEASE_MANIFEST_REPOSITORY`, default `ghcr.io/openmapx/release-manifest`. No stable/latest channel or main fallback exists. After the first real publication, explicitly choose preview for named prereleases; installation never guesses whether it exists. See [configuration migration](../install/configuration.md#changing-release-selection).
 
-Use `pnpm openmapx compose release --status` to inspect deliberate pins. For existing installations, `compose release --check` caches a candidate without changing selected pins; System → Updates or authenticated `system update` applies the exact checked ID/digest through the coordinated producer. Bare `compose release` refuses to change a running Data Manager's pin and is limited to bootstrap or exact-match recovery. Normal service commands preserve an existing coherent overlay. A configuration change requires a new check. See [Upgrading](../install/upgrading.md).
+Use `pnpm openmapx compose release --status` to inspect deliberate pins. For existing installations, `compose release --check` caches a candidate without changing selected pins; System → Updates or authenticated `system update` applies the exact checked ID/digest through the coordinated producer. Bare `compose release` refuses to change a running Data Manager's pin and is limited to bootstrap or exact-match recovery. Normal service commands keep the applied configuration's release pins. A configuration change requires a new check. See [Upgrading](../install/upgrading.md).
 
 ## Verification boundaries
 

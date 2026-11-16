@@ -111,7 +111,7 @@ async function fixture() {
       requestedDeadlineAt: deadlineAt,
       serviceIds: ["osrm"],
     }),
-    lease = await acquireArtifactTargetLease({ dataRoot, serviceIds: ["osrm"], owner: authority });
+    lease = await acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: authority });
   cleanup.push(() => closeArtifactTargetLeaseHandle(lease));
   return { root, dataRoot, stagingRoot, stageId, bundle, authority, lease, oldRecord };
 }

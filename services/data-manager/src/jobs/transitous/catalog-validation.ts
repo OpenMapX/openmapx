@@ -24,6 +24,7 @@ import { runOpsOperation } from "../../ops-client.js";
 import type { StateStore } from "../../state.js";
 import { dataExecutionDiagnostic } from "../execution/diagnostics.js";
 import { DataOpsObservationPending, runOwnedDataOpsOperation } from "../execution/ops-children.js";
+import { ownedLease } from "../execution/owned-lease.js";
 import type { DataExecutionContext } from "../execution/runtime.js";
 import { DataPublicationUnknown, publishDataChange } from "../execution/worker-scope.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
@@ -96,7 +97,7 @@ export async function runCatalogValidation(options: {
   };
   await child(0);
   await publishDataChange(() =>
-    publishCatalogValidationCurrent(context.authority, context.targetAuthority),
+    publishCatalogValidationCurrent(context.authority, ownedLease(context)),
   );
   await retainPreviousHealthyCatalogSlot(
     context,
@@ -240,7 +241,7 @@ export async function runCatalogValidation(options: {
   );
   if (validation.status === "passed")
     await publishDataChange(() =>
-      publishCatalogValidationCurrent(context.authority, context.targetAuthority, input.proposalId),
+      publishCatalogValidationCurrent(context.authority, ownedLease(context), input.proposalId),
     );
   return validation;
 }

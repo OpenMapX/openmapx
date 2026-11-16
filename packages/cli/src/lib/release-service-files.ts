@@ -1,10 +1,10 @@
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 
-/** The selected release's service files, as its operations-agent image embeds them. */
+/** A release's service files, as its operations-agent image embeds them. */
 export interface SelectedReleaseServiceFiles {
   files: coreServices.ReleaseServiceFiles;
-  release: string | null;
+  release: string;
   image: string;
   /** The source revision the image was built from, from its OCI label. */
   revision: string | null;
@@ -14,27 +14,22 @@ export interface SelectedReleaseServiceFiles {
 export const RELEASE_FILES_COMMAND = ["node", "dist/cli.mjs", "compose", "release-files"];
 
 /**
- * The service files a host render uses: those of the release the overlay
- * selects, read from its pinned operations-agent image (the host CLI runs
+ * The service files a host render uses: those of `release`, the release the
+ * render pins, read from its pinned operations-agent image (the host CLI runs
  * the checkout's code, which is not the release). `null` when this process
  * is the release's own CLI, or under `OPENMAPX_RELEASE=local`, where the
- * checkout's files apply; `"none"` before a release is selected.
+ * checkout's files apply; `"none"` when no release is pinned.
  */
 export async function selectedReleaseServiceFiles(
-  infraDir: string,
+  release: coreServices.ReleaseManifest | null,
 ): Promise<SelectedReleaseServiceFiles | "none" | null> {
   if (coreServices.readEmbeddedReleaseServiceFiles()) return null;
   if (coreServices.releaseChannel().kind === "disabled") return null;
-  const overlay = coreServices.readReleaseOverlayFile(
-    coreServices.releaseStatePaths(infraDir).overlay,
-  );
-  if (overlay === null) return "none";
-  const selection = coreServices.parseReleaseComposeSelection(overlay);
-  const image = selection.images["ops-agent"];
-  if (!image) throw new Error("The release overlay pins no operations-agent image");
+  if (release === null) return "none";
+  const image = release.images["ops-agent"];
   const unreadable = (reason: string) =>
     new Error(
-      `The selected release's service files could not be read from its operations-agent image ${image}: ${reason}. Render uses the release's files, so it stops here. If the selected release predates this checkout, use System → Updates or authenticated system update after compose release --check. Bootstrap can select with compose release.`,
+      `The selected release's service files could not be read from its operations-agent image ${image}: ${reason}. Render uses the release's files, so it stops here.`,
     );
   const run = await execa(
     "docker",
@@ -69,7 +64,7 @@ export async function selectedReleaseServiceFiles(
   const revision = String(inspected.stdout ?? "").trim();
   return {
     files,
-    release: selection.release,
+    release: release.release,
     image,
     revision: inspected.exitCode === 0 && /^[a-f0-9]{40}$/.test(revision) ? revision : null,
   };

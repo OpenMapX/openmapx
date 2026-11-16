@@ -5,6 +5,7 @@ import { canonicalJson } from "../ops/canonical-json";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
 import type { ControlIssuer } from "../ops/execution-identity";
 import type { AnchoredDirectory } from "./filesystem";
+import type { LeaseBackend } from "./target-lease";
 
 declare const installationBrand: unique symbol;
 export type ControlInstallation = Readonly<{
@@ -22,6 +23,8 @@ export interface InstallationState {
   privateRoot: AnchoredDirectory;
   dataRoot: string;
   registeredTargets: ReadonlySet<string>;
+  /** Where this role claims targets: the agent's store, directly or through the agent. */
+  leases: LeaseBackend;
 }
 export const controlOriginSchema = z
   .strictObject({

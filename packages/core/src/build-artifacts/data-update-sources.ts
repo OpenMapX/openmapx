@@ -11,15 +11,13 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { readAppliedRelease } from "../services/configuration-generation";
 import { serviceSelectionPath } from "../services/deployment";
-import { releaseStatePaths } from "../services/release-state";
 export function dataUpdateSourcesDigest(infraDir: string): string {
   const hash = createHash("sha256");
-  for (const name of [
-    ".env",
-    relative(infraDir, serviceSelectionPath(infraDir)),
-    relative(infraDir, releaseStatePaths(infraDir).overlay),
-  ]) {
+  // The release the applied generation pins decides the images a data update runs.
+  hash.update(`release\0${readAppliedRelease(infraDir)?.manifestDigest ?? "absent"}\0`);
+  for (const name of [".env", relative(infraDir, serviceSelectionPath(infraDir))]) {
     hash.update(name);
     let fd: number | undefined;
     try {

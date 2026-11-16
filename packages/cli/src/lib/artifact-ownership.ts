@@ -86,7 +86,6 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
     });
     if (hardlinks) control.retainGenerationHardlinksOwnerPlan(authority, hardlinks);
     lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(paths.infraDir, "data"),
       serviceIds: targets,
       owner: authority,
       signal,

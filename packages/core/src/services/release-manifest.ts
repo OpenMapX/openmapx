@@ -20,31 +20,15 @@ export {
 /**
  * The aggregate OpenMapX release manifest published by
  * `.github/workflows/docker.yml` as `<registry>/<namespace>/release-manifest:main`.
- * Parsing and overlay rendering are shared by the admin system updater
- * (apps/api) and the CLI so both produce byte-identical
- * `docker-compose.release.yml` overlays.
+ * A configuration generation renders its image pins into its compose file and
+ * keeps the manifest beside it, so the generation names its release.
  */
 
-import { createHash, randomBytes } from "node:crypto";
-import {
-  closeSync,
-  constants,
-  fsyncSync,
-  openSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { JSON_SCHEMA, load } from "js-yaml";
+import { createHash } from "node:crypto";
 import z from "zod/v4";
-import {
-  ensureReleaseStateDirectory,
-  type ReleaseStateOptions,
-  releaseStatePaths,
-} from "./release-state";
 
 export const RELEASE_MANIFEST_CONTAINER_PATH = "/release-manifest.json";
-/** Runtime services whose images the release overlay pins as one release. */
+/** Runtime services whose images a generation pins as one release. */
 export const RELEASE_PINNED_SERVICE_IDS = [
   "app-api",
   "app-web",
@@ -161,13 +145,23 @@ export interface ProductReleaseMetadata {
   upgradeOrigins: string[];
   limitations: string[];
 }
+/** The newest database migration the release's API ships, from its migration journal. */
+export interface ReleaseDatabaseMigrationHead {
+  tag: string;
+  /** The journal entry's `when`, which the migrator records as `created_at`. */
+  when: number;
+}
 export interface ReleaseManifest {
   schemaVersion: 1;
   release: string;
   images: Record<(typeof RELEASE_IMAGE_NAMES)[number], string>;
+  /** Display metadata: who built the release. Nothing is authorised from it. */
   producer: ReleaseProducer;
+  /** Display metadata: how each image was built. Nothing is authorised from it. */
   buildMetadata: ReleaseBuildMetadata;
   product?: ProductReleaseMetadata;
+  /** Absent in manifests published before CI recorded it; rollback then refuses. */
+  databaseMigrationHead?: ReleaseDatabaseMigrationHead;
 }
 
 const producerSchema = z.strictObject({
@@ -202,6 +196,10 @@ const productSchema = z.strictObject({
   }),
   upgradeOrigins: z.array(z.string().min(1)).min(1),
   limitations: z.array(z.string().min(1)),
+});
+const databaseMigrationHeadSchema = z.strictObject({
+  tag: z.string().regex(/^\d{4}_[a-z0-9_]{1,120}$/),
+  when: z.number().int().positive().safe(),
 });
 function stableObject(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableObject);
@@ -243,6 +241,7 @@ export function parseReleaseManifest(
     producer?: unknown;
     buildMetadata?: unknown;
     product?: unknown;
+    databaseMigrationHead?: unknown;
   };
   if (candidate.schemaVersion !== 1) throw new Error("Unsupported release lockfile schemaVersion");
   if (typeof candidate.release !== "string" || !RELEASE_ID_PATTERN.test(candidate.release)) {
@@ -270,6 +269,11 @@ export function parseReleaseManifest(
   }
   if (candidate.product !== undefined && !productSchema.safeParse(candidate.product).success)
     throw new Error("Release lockfile product is invalid");
+  if (
+    candidate.databaseMigrationHead !== undefined &&
+    !databaseMigrationHeadSchema.safeParse(candidate.databaseMigrationHead).success
+  )
+    throw new Error("Release lockfile databaseMigrationHead is invalid");
   const product = candidate.product as ProductReleaseMetadata | undefined;
   if (
     product &&
@@ -285,7 +289,7 @@ export function parseReleaseManifest(
   } as ReleaseManifest;
 }
 
-/** Stable bytes used by the ops-agent release store and transaction digest. */
+/** Stable bytes: what the manifest cache and a generation store, and what its digest covers. */
 export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
   return JSON.stringify({
     schemaVersion: 1,
@@ -301,153 +305,31 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
     producer: stableObject(manifest.producer),
     buildMetadata: stableObject(manifest.buildMetadata),
     ...(manifest.product ? { product: stableObject(manifest.product) } : {}),
+    ...(manifest.databaseMigrationHead
+      ? {
+          databaseMigrationHead: {
+            tag: manifest.databaseMigrationHead.tag,
+            when: manifest.databaseMigrationHead.when,
+          },
+        }
+      : {}),
   });
 }
 
-/** What an overlay is rendered from: its release's identity and pins. */
-interface ReleaseOverlaySource {
-  /** The `x-openmapx-release` metadata, as the overlay's first line carries it. */
-  metadata: string;
-  images: ReleaseManifest["images"];
+/** The SHA-256 of the canonical manifest: the release's identity in generations and the cache. */
+export function releaseManifestDigest(manifest: ReleaseManifest): string {
+  return createHash("sha256").update(canonicalReleaseManifest(manifest)).digest("hex");
 }
 
-function overlaySource(manifest: ReleaseManifest): ReleaseOverlaySource {
-  return {
-    metadata: JSON.stringify({
-      release: manifest.release,
-      images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, manifest.images[name]])),
-      ...(manifest.product ? { product: manifest.product } : {}),
-      digest: createHash("sha256").update(canonicalReleaseManifest(manifest)).digest("hex"),
-    }),
-    images: manifest.images,
-  };
-}
-
-function renderOverlay(source: ReleaseOverlaySource): string {
-  const { images } = source;
-  return [
-    `x-openmapx-release: ${source.metadata}`,
-    "services:",
-    "  app-api:",
-    `    image: ${images.api}`,
-    "  app-web:",
-    `    image: ${images.web}`,
-    "  data-manager:",
-    `    image: ${images["data-manager"]}`,
-    "    environment:",
-    `      ${TRANSITOUS_TOOLS_IMAGE_ENV}: ${images["transitous-tools"]}`,
-    "  ops-agent:",
-    `    image: ${images["ops-agent"]}`,
-    "  transitous-runner:",
-    `    image: ${images["transitous-runner"]}`,
-    "",
-  ].join("\n");
-}
-
-/** The overlay of `manifest` as it is written in the release state. */
-export function renderReleaseCompose(manifest: ReleaseManifest): string {
-  return renderOverlay(overlaySource(manifest));
-}
-
-function fsyncDirectory(path: string): void {
-  const descriptor = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY);
-  try {
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-}
-
-/** Atomically switch the Compose overlay in the release state of `infraDir`. */
-export function writeReleaseComposeArtifacts(
+/** The image each pinned service runs in `manifest`. */
+export function releaseServiceImages(
   manifest: ReleaseManifest,
-  infraDir: string,
-  options: ReleaseStateOptions = {},
-): { overlayPath: string } {
-  const { directory, overlay: overlayPath } = releaseStatePaths(infraDir);
-  ensureReleaseStateDirectory(directory, options);
-  fsyncDirectory(directory);
-  const temporaryOverlay = `${overlayPath}.${randomBytes(12).toString("hex")}.partial`;
-  let overlayDescriptor: number | undefined;
-  try {
-    overlayDescriptor = openSync(
-      temporaryOverlay,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      0o600,
-    );
-    writeFileSync(overlayDescriptor, renderReleaseCompose(manifest), { encoding: "utf8" });
-    fsyncSync(overlayDescriptor);
-    closeSync(overlayDescriptor);
-    overlayDescriptor = undefined;
-    renameSync(temporaryOverlay, overlayPath);
-    fsyncDirectory(directory);
-  } finally {
-    if (overlayDescriptor !== undefined) closeSync(overlayDescriptor);
-    rmSync(temporaryOverlay, { force: true });
-  }
-  return { overlayPath };
-}
-
-/**
- * Read the Transitous helper image pinned by an existing release overlay. The
- * overlay is our own rendered output, so a targeted line match is sufficient
- * and avoids a YAML dependency in callers.
- */
-export function transitousToolsImageFromReleaseCompose(overlayYaml: string): string | null {
-  const match = new RegExp(`^\\s*${TRANSITOUS_TOOLS_IMAGE_ENV}:\\s*(\\S+)\\s*$`, "m").exec(
-    overlayYaml,
-  );
-  const image = match?.[1];
-  return image && new RegExp(`^[a-z0-9][a-z0-9._/-]*/transitous-tools@${DIGEST}$`).test(image)
-    ? image
-    : null;
-}
-
-export interface ReleaseComposeSelection {
-  release: string | null;
-  images: Partial<Record<(typeof RELEASE_IMAGE_NAMES)[number], string>>;
-}
-
-/** Read local selection, never infer running container versions from the overlay. */
-export function parseReleaseComposeSelection(raw: string): ReleaseComposeSelection {
-  const object = (value: unknown): Record<string, unknown> =>
-    value !== null && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-  const document = object(load(raw, { schema: JSON_SCHEMA }));
-  if (
-    !document.services ||
-    typeof document.services !== "object" ||
-    Array.isArray(document.services)
-  ) {
-    throw new Error("Release overlay must contain a services mapping");
-  }
-  const services = object(document.services);
-  const images: ReleaseComposeSelection["images"] = {};
-  const pins: Record<string, unknown> = {
-    api: object(services["app-api"]).image,
-    web: object(services["app-web"]).image,
-    "data-manager": object(services["data-manager"]).image,
-    "ops-agent": object(services["ops-agent"]).image,
-    "transitous-runner": object(services["transitous-runner"]).image,
-    "transitous-tools": object(object(services["data-manager"]).environment)[
-      TRANSITOUS_TOOLS_IMAGE_ENV
-    ],
-  };
-  for (const name of RELEASE_IMAGE_NAMES) {
-    const pin = pins[name];
-    if (typeof pin === "string" && new RegExp(`^\\S+@${DIGEST}$`).test(pin)) images[name] = pin;
-  }
-  const metadata = object(document["x-openmapx-release"]);
-  const metadataImages = object(metadata.images);
-  const matches = RELEASE_IMAGE_NAMES.every(
-    (name) => images[name] && metadataImages[name] === images[name],
-  );
+): Readonly<Record<(typeof RELEASE_PINNED_SERVICE_IDS)[number], string>> {
   return {
-    release:
-      matches && typeof metadata.release === "string" && metadata.release.trim()
-        ? metadata.release
-        : null,
-    images,
+    "app-api": manifest.images.api,
+    "app-web": manifest.images.web,
+    "data-manager": manifest.images["data-manager"],
+    "ops-agent": manifest.images["ops-agent"],
+    "transitous-runner": manifest.images["transitous-runner"],
   };
 }

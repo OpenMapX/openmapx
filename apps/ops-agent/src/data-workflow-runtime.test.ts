@@ -8,6 +8,7 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { afterEach, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 
 const roots: string[] = [];
@@ -63,14 +64,11 @@ it("freezes distinct original data/finalization slots and refuses targets before
     expect(control.readDataUpdatePlan(authority)).toEqual(plan);
     await expect(
       control.acquireArtifactTargetLease({
-        dataRoot: join(host.infraDir, "data"),
         owner: authority,
         serviceIds: ids,
       }),
     ).rejects.toThrow("data phase not admitted");
-    expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager"))).toBe(
-      false,
-    );
+    expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
     const child = await control.bindControlChildPhase(authority, plan.dataReservation),
       key = control.prepareFixedControlChild(authority, plan.dataDelegationId);
     control.retainFixedCliSpawnIntent(authority, {
@@ -90,14 +88,11 @@ it("freezes distinct original data/finalization slots and refuses targets before
     // An issued original CLI is still not a completed data prerequisite.
     await expect(
       control.acquireArtifactTargetLease({
-        dataRoot: join(host.infraDir, "data"),
         owner: authority,
         serviceIds: ids,
       }),
     ).rejects.toThrow();
-    expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager"))).toBe(
-      false,
-    );
+    expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
   } finally {
     control.closeControlInstallation(installation);
   }

@@ -52,7 +52,7 @@ import {
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseReceiptOwner,
   type TargetLeaseAuthority,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 export type ArtifactFilePublicationResult =
@@ -863,7 +863,7 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
     journal.executionDigest !== controlDigest(state.execution)
   )
     throw Error("Original restored publication required");
-  verifyRetainedArtifactTargetRootRelease(authority);
+  verifyLocalArtifactTargetRootRelease(authority);
   const root = new AnchoredDirectory(state.installation.dataRoot);
   let source: ReturnType<typeof directoryAt> | undefined, backups: AnchoredDirectory | undefined;
   try {
@@ -905,7 +905,7 @@ export function inspectSettledArtifactImport(
   const journal = readJournal({ ...owner, origin: owner.origin });
   if (!journal || !["committed", "restored"].includes(journal.phase))
     throw Error("Original settled import required");
-  verifyRetainedArtifactTargetRootRelease(authority);
+  verifyLocalArtifactTargetRootRelease(authority);
   const effect = childSettlementState(
     verifyControlEffectSettlement(owner.installation.installation, owner.execution),
   ).evidence;
@@ -956,7 +956,7 @@ export function inspectUnstartedArtifactImport(authority: VerifiedExecutionAutho
     effect.publication !== "not_started"
   )
     throw Error("Unstarted import containment required");
-  verifyRetainedArtifactTargetRootRelease(authority);
+  verifyLocalArtifactTargetRootRelease(authority);
   const admitted = readPrivateRecord(
     owner.installation,
     "executions",
@@ -1088,5 +1088,5 @@ export function assertKnownArtifactStageReceipt(authority: VerifiedExecutionAuth
   ).evidence;
   if (effect.outcome === "unknown" || effect.publication === "unknown")
     throw Error("Prepared purpose remains unknown");
-  if (owner.kind === "artifactTransfer.import") verifyRetainedArtifactTargetRootRelease(authority);
+  if (owner.kind === "artifactTransfer.import") verifyLocalArtifactTargetRootRelease(authority);
 }

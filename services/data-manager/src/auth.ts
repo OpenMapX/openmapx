@@ -108,7 +108,6 @@ function assertDistinct(tokens: DataManagerCallerTokens): void {
     throw new Error("Each data-manager caller needs its own token");
 }
 
-/** The callers a route admits, from its contract; a route without that list admits none. */
 /** Whether a route admits the API's token; the agent and host CLI reach every route. */
 function admitsApi(req: FastifyRequest): boolean {
   const schema = req.routeOptions.schema as { "x-openmapx-api-caller"?: unknown } | undefined;
@@ -153,8 +152,9 @@ export function registerAuth(
           .send({ error: "Too many authentication attempts" });
       return reply.code(401).send({ error: "Unauthorized" });
     }
-    // An unknown path falls through to the not-found reply.
-    if (req.routeOptions.url !== undefined && principal === "api" && !admitsApi(req))
+    // The API's token is checked against its allowlist before routing, so an
+    // unknown path is refused for it as well; other callers get the not-found reply.
+    if (principal === "api" && (req.routeOptions.url === undefined || !admitsApi(req)))
       return reply.code(403).send({ error: "This caller may not use this route" });
     principals.set(req, principal);
     // Durable receiver admission only. Never silently ignore an internal authority header.
@@ -166,7 +166,6 @@ export function registerAuth(
         ([
           "/executions",
           "/executions/generation-hardlinks",
-          "/executions/generation-hardlinks/recovery",
           "/executions/configuration-maintenance/prepare",
           "/executions/configuration-maintenance/recovery",
         ].includes(path) ||

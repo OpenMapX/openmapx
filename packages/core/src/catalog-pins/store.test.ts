@@ -20,6 +20,7 @@ vi.mock("node:fs", async (importOriginal) => {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { heldTargets } from "../build-artifacts/__fixtures__/held-targets";
 import {
   type ControlInstallation,
   closeControlInstallation,
@@ -124,7 +125,6 @@ beforeEach(async () => {
     serviceIds: ["motis"],
   });
   lease = await acquireArtifactTargetLease({
-    dataRoot: join(docker, "data"),
     serviceIds: ["motis"],
     owner: authority,
   });
@@ -348,7 +348,7 @@ it("bootstraps an actual local initialization root and releases its MOTIS owners
     const { initializeManagedCatalogPins } = await import("./bootstrap");
     const pins = await initializeManagedCatalogPins({ rootDir: other, installation: local });
     expect(pins).toEqual(createCatalogPinSet(transitous, gbfs));
-    expect(existsSync(join(infra, "data/.admin-target-control/locks/motis"))).toBe(false);
+    expect(heldTargets(infra).includes("motis")).toBe(false);
     expect(await initializeManagedCatalogPins({ rootDir: other, installation: local })).toEqual(
       pins,
     );
@@ -398,7 +398,7 @@ it("does not acquire a startup target root for a malformed legacy pair", async (
     await expect(
       initializeManagedCatalogPins({ rootDir: other, installation: local }),
     ).rejects.toThrow();
-    expect(existsSync(join(infra, "data/.admin-target-control/locks/motis"))).toBe(false);
+    expect(heldTargets(infra).includes("motis")).toBe(false);
   } finally {
     closeControlInstallation(local);
     rmSync(other, { recursive: true, force: true });

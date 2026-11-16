@@ -35,6 +35,7 @@ import { execa } from "execa";
 import kleur from "kleur";
 import { completeCliCommand } from "../lib/control-context";
 import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
+import { withHostTargets } from "../lib/host-effect";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { failRestoredJobsSql } from "../lib/restored-job-cleanup";
@@ -1742,7 +1743,16 @@ export function registerBackupCommands(program: Command): void {
     .option("--name <name>", "Backup name (default: ISO timestamp)")
     .action(async (options: { name?: string }) => {
       try {
-        await createBackup({ name: options.name });
+        // Backups stop the services they copy, so every service is claimed.
+        await withHostTargets(
+          {
+            kind: "backup.create",
+            targets: "all",
+            // An interrupted backup has stopped its dump and removed its partial archive.
+            contained: (error) => error instanceof BackupInterruptedError,
+          },
+          () => createBackup({ name: options.name }),
+        );
       } catch (err) {
         log.err((err as Error).message);
         completeCliCommand(err instanceof BackupInterruptedError ? 130 : 1);
@@ -1764,11 +1774,13 @@ export function registerBackupCommands(program: Command): void {
     .option("--stop-running", "Stop currently-running target services before restoring")
     .action(async (name: string, options: { services?: string[]; stopRunning?: boolean }) => {
       try {
-        await restoreBackup({
-          name,
-          serviceIds: options.services,
-          stopRunning: options.stopRunning,
-        });
+        await withHostTargets({ kind: "backup.restore", targets: "all" }, () =>
+          restoreBackup({
+            name,
+            serviceIds: options.services,
+            stopRunning: options.stopRunning,
+          }),
+        );
       } catch (err) {
         log.err((err as Error).message);
         process.exit(1);

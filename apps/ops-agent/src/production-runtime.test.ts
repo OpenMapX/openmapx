@@ -108,9 +108,8 @@ describe("assembled production service authority", () => {
     },
   );
 
-  it("clears only the exact selected pin through the production runtime without Docker mutation", async () => {
-    const host = await fixture(),
-      path = services.releaseStatePaths(host.infraDir).overlay;
+  it("clears only the exact pinned release by rendering a generation without it, without Docker mutation", async () => {
+    const host = await fixture();
     const manifest: services.ReleaseManifest = {
       schemaVersion: 1,
       release: "checked-pin",
@@ -122,9 +121,19 @@ describe("assembled production service authority", () => {
       ) as services.ReleaseManifest["images"],
       ...releaseProvenance(),
     };
-    services.writeReleaseComposeArtifacts(manifest, host.infraDir);
+    await services.commitConfigurationGeneration({
+      infraDir: host.infraDir,
+      services: host.loaded,
+      input: {
+        ...services.readAppliedConfiguration(host.infraDir),
+        domain: "example.test",
+        selectedRoots: ["motis"],
+      },
+      release: manifest,
+    });
     expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
       selectedReleaseId: "checked-pin",
+      currentReleaseId: "checked-pin",
     });
     const inspection = await productionReleaseEffects(host.runtime).inspectSystem({
       signal: new AbortController().signal,
@@ -133,19 +142,24 @@ describe("assembled production service authority", () => {
     expect(parseOpsResult("system.inspect", inspection).release.selectedReleaseId).toBe(
       "checked-pin",
     );
-    const before = readFileSync(path, "utf8"),
-      pointer = services.currentConfigurationGeneration(host.infraDir);
+    const pinned = services.currentConfigurationGeneration(host.infraDir);
     const changed = { kind: "release.clear", releaseId: "different-pin" } as OpsOperation;
     await expect(
       dispatchOpsOperation(host.runtime, changed, await host.context(changed)),
     ).rejects.toThrow(/changed/);
-    expect(readFileSync(path, "utf8")).toBe(before);
+    expect(services.currentConfigurationGeneration(host.infraDir)).toBe(pinned);
     const operation = { kind: "release.clear", releaseId: "checked-pin" } as OpsOperation;
     expect(
       await dispatchOpsOperation(host.runtime, operation, await host.context(operation)),
     ).toEqual({ releaseId: "checked-pin", cleared: true });
-    expect(existsSync(path)).toBe(false);
-    expect(services.currentConfigurationGeneration(host.infraDir)).toBe(pointer);
+    const cleared = services.currentConfigurationGeneration(host.infraDir);
+    expect(cleared).not.toBe(pinned);
+    expect(services.readAppliedRelease(host.infraDir)).toBeNull();
+    // A generation without pins has no release to roll back from.
+    expect(services.readPreviousReleaseGeneration(host.infraDir, cleared!)).toBeNull();
+    expect(services.readGenerationRelease(host.infraDir, pinned!)?.manifest.release).toBe(
+      "checked-pin",
+    );
     expect(
       host.calls.some(
         (args) =>
@@ -187,7 +201,10 @@ describe("assembled production service authority", () => {
     });
     const journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal);
     const app = buildOpsAgentServer({
-      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      tokens: {
+        api: host.token,
+        "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+      },
       runtime: host.runtime,
       resourceClaimer: host.claimer,
       journal,
@@ -305,7 +322,10 @@ describe("assembled production service authority", () => {
         serviceIds: host.loaded.map((service) => service.manifest.id),
       }),
       app = buildOpsAgentServer({
-        tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+        tokens: {
+          api: host.token,
+          "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+        },
         runtime: host.runtime,
         resourceClaimer: host.claimer,
         journal: await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
@@ -418,7 +438,10 @@ describe("assembled production service authority", () => {
     });
     const journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal);
     const app = buildOpsAgentServer({
-      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      tokens: {
+        api: host.token,
+        "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+      },
       runtime: host.runtime,
       resourceClaimer: host.claimer,
       journal,
@@ -718,139 +741,6 @@ async function installedCommunity() {
   return { host, start, remove, checkout, record, create };
 }
 const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
-describe("assembled lifecycle/removal exclusion", () => {
-  it("fences selected dependencies created by another service's Compose Start", async () => {
-    const { host, remove, checkout, create } = await installedCommunity();
-    await host.select(["motis", "community-live"]);
-    writeFileSync(
-      host.stack.composeReleasePath,
-      "services:\n  motis:\n    depends_on:\n      community-live:\n        condition: service_started\n",
-      { mode: 0o644 },
-    );
-    const start = {
-      kind: "service.start",
-      serviceId: "motis",
-      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
-    } as const;
-    const entered = Promise.withResolvers<void>(),
-      finish = Promise.withResolvers<void>();
-    host.setCreatingProcess(async () => {
-      entered.resolve();
-      await finish.promise;
-      create();
-    });
-    const starting = dispatchOpsOperation(host.runtime, start, await host.context(start));
-    await entered.promise;
-    const removing = dispatchOpsOperation(host.runtime, remove, await host.context(remove)).then(
-      (value) => ({ value }),
-      (error) => ({ error }),
-    );
-    try {
-      await drain();
-      expect(existsSync(checkout), "Compose can also create the selected dependency").toBe(true);
-      finish.resolve();
-      await starting;
-      expect("error" in (await removing)).toBe(true);
-    } finally {
-      finish.resolve();
-      await starting.catch(() => undefined);
-      await removing;
-    }
-  });
-
-  it("retains authority throughout a community Start process and renewed removal inventory", async () => {
-    const { host, start, remove, checkout, record, create } = await installedCommunity();
-    const entered = Promise.withResolvers<void>(),
-      finish = Promise.withResolvers<void>();
-    host.setCreatingProcess(async () => {
-      entered.resolve();
-      await finish.promise;
-      create();
-    });
-    const starting = dispatchOpsOperation(host.runtime, start, await host.context(start));
-    await entered.promise;
-    let removed = false;
-    const removing = dispatchOpsOperation(host.runtime, remove, await host.context(remove))
-      .then(
-        (value) => ({ value }),
-        (error) => ({ error }),
-      )
-      .finally(() => {
-        removed = true;
-      });
-    try {
-      await drain();
-      expect(
-        existsSync(checkout),
-        "checkout cannot disappear while Start's real process is pending",
-      ).toBe(true);
-      expect(existsSync(record)).toBe(true);
-      expect(removed).toBe(false);
-      finish.resolve();
-      await starting;
-      const outcome = await removing;
-      expect(
-        "error" in outcome &&
-          outcome.error instanceof Error &&
-          outcome.error.message.includes("require cleanup"),
-      ).toBe(true);
-      const stop = { kind: "service.stop", serviceId: "community-live" } as const;
-      await dispatchOpsOperation(host.runtime, stop, await host.context(stop));
-      const logs = { kind: "service.logs", serviceId: "community-live", tail: 20 } as const;
-      await expect(
-        dispatchOpsOperation(host.runtime, logs, await host.context(logs)),
-      ).resolves.toMatchObject({ lines: ["retained log"] });
-    } finally {
-      finish.resolve();
-      await starting.catch(() => undefined);
-      await removing;
-    }
-  });
-
-  it("revalidates a previously admitted Start after removal wins the same boundary", async () => {
-    const { host, start, remove, checkout, create } = await installedCommunity();
-    const startContext = await host.context(start),
-      removeContext = await host.context(remove);
-    const stackStart = {
-      kind: "stack.start",
-      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
-    } as const;
-    const stackContext = await host.context(stackStart);
-    const entered = Promise.withResolvers<void>(),
-      finish = Promise.withResolvers<void>();
-    host.setInventoryProcess(async () => {
-      entered.resolve();
-      await finish.promise;
-    });
-    let starts = 0;
-    host.setCreatingProcess(async () => {
-      starts++;
-      create();
-    });
-    const removing = dispatchOpsOperation(host.runtime, remove, removeContext);
-    await entered.promise;
-    const starting = dispatchOpsOperation(host.runtime, start, startContext).then(
-      (value) => ({ value }),
-      (error) => ({ error }),
-    );
-    try {
-      await drain();
-      expect(starts).toBe(0);
-      finish.resolve();
-      await expect(removing).resolves.toMatchObject({ removed: true });
-      expect(existsSync(checkout)).toBe(false);
-      const outcome = await starting;
-      expect("error" in outcome && outcome.error instanceof Error).toBe(true);
-      await expect(dispatchOpsOperation(host.runtime, stackStart, stackContext)).rejects.toThrow();
-      expect(starts).toBe(0);
-    } finally {
-      finish.resolve();
-      await removing.catch(() => undefined);
-      await starting;
-    }
-  });
-});
-
 it.runIf(installedCompose)(
   "executes assembled retained-generation cleanup after real Compose path qualification",
   async () => {
@@ -870,71 +760,6 @@ it.runIf(installedCompose)(
 );
 
 describe("settlement and cancellation at the installed lifecycle boundary", () => {
-  it("cancels a waiting removal without stealing the still-executing Start guard", async () => {
-    const { host, start, remove, checkout, create } = await installedCommunity();
-    const entered = Promise.withResolvers<void>(),
-      finish = Promise.withResolvers<void>();
-    host.setCreatingProcess(async () => {
-      entered.resolve();
-      await finish.promise;
-      create();
-    });
-    const starting = dispatchOpsOperation(host.runtime, start, await host.context(start));
-    await entered.promise;
-    const controller = new AbortController();
-    const removeContext = await host.context(remove, controller.signal);
-    const removing = dispatchOpsOperation(host.runtime, remove, removeContext).then(
-      (value) => ({ value }),
-      (error) => ({ error }),
-    );
-    await drain();
-    controller.abort(new Error("synthetic waiting cancellation"));
-    try {
-      const result = await removing;
-      expect("error" in result).toBe(true);
-      expect(existsSync(checkout)).toBe(true);
-      expect(host.row.State).toBe("running");
-    } finally {
-      finish.resolve();
-      await starting;
-    }
-    await expect(
-      dispatchOpsOperation(host.runtime, remove, await host.context(remove)),
-    ).rejects.toThrow("require cleanup");
-  });
-
-  it("retains an unknown aborted process fence across production runtime reconstruction", async () => {
-    const { host, start, remove, checkout } = await installedCommunity();
-    const entered = Promise.withResolvers<void>(),
-      finish = Promise.withResolvers<void>();
-    host.setCreatingProcess(async () => {
-      entered.resolve();
-      await finish.promise;
-      throw Error("unknown external process settlement");
-    });
-    const controller = new AbortController(),
-      ctx = await host.context(start, controller.signal);
-    const starting = dispatchOpsOperation(host.runtime, start, ctx).then(
-      (value) => ({ value }),
-      (error) => ({ error }),
-    );
-    await entered.promise;
-    controller.abort();
-    finish.resolve();
-    expect("error" in (await starting)).toBe(true);
-    const restarted = await createProductionOpsRuntime({
-      rootDir: host.root,
-      stack: host.stack,
-      loadAuthority: host.loadAuthority,
-      communityRepositories: host.repositories,
-      docker: { execFile: host.execFile, fileExists: existsSync },
-    });
-    await expect(
-      dispatchOpsOperation(restarted, remove, await host.context(remove)),
-    ).rejects.toThrow("settlement is unresolved");
-    expect(existsSync(checkout)).toBe(true);
-  });
-
   it("releases a known-contained failing process and orders multi-service Start without deadlock", async () => {
     const { host, start, remove, checkout } = await installedCommunity();
     let first = true;

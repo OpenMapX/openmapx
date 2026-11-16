@@ -250,7 +250,6 @@ it.each([false, true])(
           serviceIds: ids,
         });
       lease = await control.acquireArtifactTargetLease({
-        dataRoot,
         serviceIds: ids,
         owner: authority,
       });

@@ -135,7 +135,6 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
       plan: [plan],
     });
     const lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds,
       owner: authority,
     });

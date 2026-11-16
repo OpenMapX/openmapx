@@ -46,6 +46,7 @@ import {
 import { configurationApplyResultSchema } from "./configuration-result-records";
 import { dataInspectionResultSchema } from "./data-inventory-records";
 import { dataWorkflowReceiptSchema } from "./job-evidence";
+import { leaseOperationSchemas, leaseResultSchemas } from "./lease-records";
 import {
   standaloneIntegrationOperationSchemas,
   standaloneIntegrationResultSchemas,
@@ -197,6 +198,10 @@ export const OPS_OPERATION_KINDS = [
   "transitousLock.approve",
   "gbfsCatalogLock.inspect",
   "transitousPin.inspect",
+  "lease.acquire",
+  "lease.read",
+  "lease.update",
+  "lease.settleChild",
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
@@ -343,6 +348,11 @@ export const OPS_KIND_POLICIES = {
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
   // Read-only, for the admin panel: the pins, never a proposal or a change.
   "transitousPin.inspect": sync("api", 30_000),
+  // Data-manager claims targets, and settles the children it ran, through the agent.
+  "lease.acquire": sync("data-manager", 15_000, 256 * 1024),
+  "lease.read": sync("data-manager", 15_000, 256 * 1024),
+  "lease.update": sync("data-manager", 15_000, 256 * 1024),
+  "lease.settleChild": sync("data-manager", 15_000, 256 * 1024),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
 /** Read streams/diagnostics do not acquire control-root authority or a retention dependency. */
@@ -698,6 +708,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   pairedPinApprovalInputSchema,
   kindOnly("gbfsCatalogLock.inspect"),
   kindOnly("transitousPin.inspect"),
+  ...leaseOperationSchemas,
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
 export type TrustedConfigurationApplyOperation = Extract<
@@ -1425,6 +1436,7 @@ export const OPS_RESULT_SCHEMAS = {
     lockedAt: timestampSchema,
     lockedBy: actorLabelSchema,
   }),
+  ...leaseResultSchemas,
 } as const satisfies Record<OpsOperationKind, z.ZodType>;
 
 export type OpsResultFor<K extends OpsOperationKind> = z.infer<(typeof OPS_RESULT_SCHEMAS)[K]>;
@@ -1642,16 +1654,43 @@ export function opsSuccess<TResult>(
 ): OpsSuccessEnvelope<TResult> {
   return { version: 1, requestId, ok: true, result };
 }
+/**
+ * The message of a busy refusal caused by a target lease: it names the holding
+ * operation, which is not secret to any caller, and where an operator looks.
+ */
+export function opsBusyHolderMessage(holder: {
+  target: string;
+  executor: string;
+  operationKey: string;
+  ownerKind: string;
+  state: string;
+}): string {
+  return `Target ${holder.target} is busy: held by ${holder.executor} operation ${holder.operationKey} (${holder.ownerKind}, ${holder.state}). See \`openmapx control status\`.`;
+}
+const BUSY_HOLDER_MESSAGE =
+  /^Target [a-z0-9][a-z0-9-]{0,63} is busy: held by [a-z-]{1,32} operation opk1_[A-Za-z0-9_-]{16,64} \([A-Za-z0-9_.:-]{1,128}, [a-z_]{1,32}\)\. See `openmapx control status`\.$/;
+/** Whether `message` is a holder message a busy error may carry instead of the fixed text. */
+export function isOpsBusyHolderMessage(message: unknown): message is string {
+  return typeof message === "string" && BUSY_HOLDER_MESSAGE.test(message);
+}
+
 export function redactedOpsError(
   requestId: string,
   errorClassValue: OpsErrorClass,
-  _cause?: unknown,
+  cause?: unknown,
 ): OpsErrorEnvelope {
+  const holder = (cause as { busyHolder?: unknown } | undefined)?.busyHolder;
   return {
     version: 1,
     requestId,
     ok: false,
-    error: { class: errorClassValue, message: OPS_PUBLIC_ERROR_MESSAGES[errorClassValue] },
+    error: {
+      class: errorClassValue,
+      message:
+        errorClassValue === "busy" && isOpsBusyHolderMessage(holder)
+          ? holder
+          : OPS_PUBLIC_ERROR_MESSAGES[errorClassValue],
+    },
   };
 }
 

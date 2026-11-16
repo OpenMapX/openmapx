@@ -7,7 +7,11 @@ export {
 export { prepareAgentStores } from "./agent-stores";
 export { type BackupPruneCandidate, backupPruneInventory } from "./backup-prune-plan";
 export { backupRetentionExpiry } from "./backup-retention";
-export { BACKUP_STORE_LOCK_TTL_MS, retainBackupExpiryCeilings } from "./backup-retention-store";
+export {
+  backupStoreLockPath,
+  retainBackupExpiryCeilings,
+  withBackupStoreLock,
+} from "./backup-retention-store";
 export {
   type BuiltInManifestSource,
   type BuiltInServiceManifestSource,
@@ -24,12 +28,6 @@ export {
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
-export * from "./checked-configuration-release";
-export {
-  cacheCheckedReleaseManifest,
-  listReleaseStoreManifests,
-  releaseConfigurationIdentity,
-} from "./checked-release";
 export {
   type CheckoutDifference,
   checkoutDifferencesFromRelease,
@@ -84,6 +82,7 @@ export {
   configurationGenerationComposeFile,
   configurationGenerationWriterCommit,
   currentConfigurationGeneration,
+  type GenerationRelease,
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,
   type RenderConfigurationOptions,
@@ -91,13 +90,20 @@ export {
   readAppliedConfiguration,
   readAppliedPlatformConfiguration,
   readAppliedPlatformValues,
+  readAppliedRelease,
   readAppliedReleaseSelection,
   readAppliedServiceIds,
   readAppliedTransitCredentialsRevision,
+  readGenerationConfiguration,
+  readGenerationRelease,
+  readPreviousReleaseGeneration,
   renderConfiguration,
   withConfigurationGenerationWriter,
 } from "./configuration-generation";
-export { acquireConfigurationOwnership } from "./configuration-ownership";
+export {
+  acquireConfigurationOwnership,
+  configurationWriterLockPath,
+} from "./configuration-ownership";
 export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
@@ -153,7 +159,6 @@ export {
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
   loadIntegrationSchemas,
-  ownedStateFilePresent,
   readDesiredSelection,
   readOwnedStateFile,
   readServiceSelectionFile,
@@ -234,6 +239,12 @@ export {
   type PlatformConfigurationPreview,
 } from "./platform-preview";
 export { expandPresets, PRESETS, type PresetName, UnknownPresetError } from "./presets";
+export {
+  clearRecoverableLock,
+  LockBusyError,
+  readLockHolder,
+  withRecoverableLock,
+} from "./recoverable-lock";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
   type BuiltInServiceReadOptions,
@@ -246,16 +257,22 @@ export {
   validateReleaseServiceAuthority,
 } from "./release-authority-inventory";
 export {
+  type CheckedConfigurationRelease,
+  cachedReleases,
+  cacheReleaseManifest,
+  readCachedReleaseManifest,
+  readCheckedConfigurationRelease,
+  releaseCacheDirectory,
+} from "./release-cache";
+export {
   configurationImageReference,
   readServiceReleaseImageSelection,
-  validateExistingReleaseSelection,
 } from "./release-image-selection";
 export {
   canonicalReleaseManifest,
   DEFAULT_RELEASE_MANIFEST_REPOSITORY,
   normalizeReleaseSelection,
   type ProductReleaseMetadata,
-  parseReleaseComposeSelection,
   parseReleaseManifest,
   RELEASE_IMAGE_NAMES,
   RELEASE_MANIFEST_CONTAINER_PATH,
@@ -264,21 +281,18 @@ export {
   RELEASE_SELECTOR_ENV,
   type ReleaseChannel,
   ReleaseChannelDisabledError,
-  type ReleaseComposeSelection,
   type ReleaseManifest,
   type ReleaseProducer,
   type ReleaseSelection,
   releaseChannel,
   releaseDigestFromPull,
+  releaseManifestDigest,
   releaseManifestImage,
   releaseSelection,
-  renderReleaseCompose,
+  releaseServiceImages,
   TRANSITOUS_TOOLS_IMAGE_ENV,
-  transitousToolsImageFromReleaseCompose,
   validateResolvedSelection,
-  writeReleaseComposeArtifacts,
 } from "./release-manifest";
-export { clearReleaseComposeSelection } from "./release-selection-clear";
 export {
   parseReleaseServiceFiles,
   type ReleaseServiceFile,
@@ -290,37 +304,6 @@ export {
   serializeReleaseServiceFiles,
   serviceFileReferences,
 } from "./release-service-files";
-export {
-  assertReleaseStateDirectory,
-  ensureReleaseStateDirectories,
-  ensureReleaseStateDirectory,
-  parseReleasePointer,
-  parseReleaseSelectionReceipts,
-  RELEASE_ID_PATTERN,
-  RELEASE_MANIFEST_FILE_PATTERN,
-  RELEASE_OVERLAY_FILE,
-  RELEASE_STATE_DIRECTORY,
-  RELEASE_STORE_LIMITS,
-  RELEASE_STORE_POINTER_FILES,
-  type ReleasePointer,
-  type ReleaseSelectionReceipts,
-  type ReleaseStateOptions,
-  type ReleaseStatePaths,
-  readReleaseOverlay,
-  readReleaseOverlayFile,
-  readReleaseStateBytes,
-  readReleaseStateFile,
-  releaseStateFileProblem,
-  releaseStatePaths,
-} from "./release-state";
-export {
-  acquireReleaseStoreLock,
-  acquireStoreLock,
-  assertReleaseStoreLock,
-  RELEASE_STORE_LOCK_NAME,
-  type ReleaseStoreLock,
-  type ReleaseStoreLockHooks,
-} from "./release-store-lock";
 export {
   detectConsumesCycle,
   findByCapability,
@@ -353,6 +336,7 @@ export {
   parseServiceIdList,
   SERVICE_SELECTION_ENV,
 } from "./selection";
+export { selfUpdateServiceOrder } from "./self-update-order";
 export { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
 export { serviceFileStore } from "./service-file-store";
 export * from "./service-lifecycle-receipt";

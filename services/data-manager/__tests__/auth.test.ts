@@ -355,7 +355,6 @@ describe("per-caller route allowlist", () => {
       "inspectDataConfigurationFence",
       "settleDataConfigurationFence",
       "startGenerationHardlinksExecution",
-      "recoverUnadmittedGenerationHardlinks",
     ] as const)
       expect(DATA_MANAGER_API_ROUTES[operationId], operationId).toBe(false);
     const { app } = await contractApp();
@@ -393,7 +392,7 @@ describe("per-caller route allowlist", () => {
     }
   });
 
-  it("refuses the API's token on a route that does not admit it", async () => {
+  it("refuses the API's token on a route that does not admit it, and on an unknown path", async () => {
     const app = Fastify();
     registerAuth(app, TOKENS);
     app.get("/unlisted", async () => ({ ok: true }));
@@ -412,7 +411,16 @@ describe("per-caller route allowlist", () => {
         url: "/missing",
         headers: { authorization: `Bearer ${TOKEN}` },
       });
-      expect(missing.statusCode).toBe(404);
+      expect(missing.statusCode).toBe(403);
+      for (const token of [TOKENS["ops-agent"], TOKENS["host-cli"]]) {
+        const unknown = await app.inject({
+          url: "/missing",
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(unknown.statusCode).toBe(404);
+      }
+      const anonymous = await app.inject({ url: "/missing" });
+      expect(anonymous.statusCode).toBe(401);
     } finally {
       await app.close();
     }

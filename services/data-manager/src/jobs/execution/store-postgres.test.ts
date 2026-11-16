@@ -159,7 +159,6 @@ describe.skipIf(
         reservations: record.reservations.map(dataChildControlReservation),
       });
       const lease = await control.acquireArtifactTargetLease({
-        dataRoot: join(root, "data"),
         serviceIds: services,
         owner: authority,
       });

@@ -103,7 +103,7 @@ const authority = control.retainAdmittedControlExecution(installation, {
     requestedDeadlineAt: deadlineAt,
     serviceIds: ["osrm"],
   }),
-  lease = await acquireArtifactTargetLease({ dataRoot, serviceIds: ["osrm"], owner: authority });
+  lease = await acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: authority });
 const nativeRename = fs.renameSync;
 let stopped = false;
 fs.renameSync = (from, to) => {

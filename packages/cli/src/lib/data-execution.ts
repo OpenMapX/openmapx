@@ -1,5 +1,4 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import {
   bindControlChildPhase,
   cliDataReservation,
@@ -167,19 +166,9 @@ export async function executeDurableDataStep(
   });
   await checkpoints;
   if (checkpointError) throw checkpointError;
-  // The terminal GET precedes final physical target release by a small window.
-  // Wait for the actual DM-signed shared containment witness, never infer it.
-  for (;;) {
-    options.signal?.throwIfAborted();
-    try {
-      verifyCliDataTerminal(context.authority, terminal);
-      break;
-    } catch {
-      if (Date.now() >= options.observerDeadlineAt)
-        throw new DataExecutionObservationPending(identity, "observer_deadline");
-      await delay(100, undefined, { signal: options.signal });
-    }
-  }
+  // Data-manager releases its own lease just after its terminal; a next step
+  // that claims the same targets waits for that in its own acquisition.
+  verifyCliDataTerminal(context.authority, terminal);
   await options.checkpointAttempt({ ...attempt, state: "terminal" });
   return terminal;
 }

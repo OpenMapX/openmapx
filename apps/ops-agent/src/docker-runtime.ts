@@ -36,8 +36,20 @@ import { decideServiceAction } from "./service-action-policy";
 
 const containedProcessFailures = new WeakSet<object>();
 /** Only actual contained-process adapters mint this observation; it is not request authority. */
-export function isContainedProcessFailure(error: unknown): boolean {
+function isContainedProcessFailure(error: unknown): boolean {
   return typeof error === "object" && error !== null && containedProcessFailures.has(error);
+}
+const reportedProcessFailures = new WeakSet<object>();
+/** A Docker client cut off from the daemon cannot say how far its command got. */
+const LOST_DAEMON =
+  /Cannot connect to the Docker daemon|error during connect|connection reset by peer/i;
+/**
+ * A command that ran to its own end and reported a failure with an exit code:
+ * not killed, timed out or cancelled, nothing left running, and the Docker
+ * daemon still answered it. Its outcome is known even though it failed.
+ */
+export function isReportedProcessFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && reportedProcessFailures.has(error);
 }
 
 import { openAnchoredDirectory } from "./anchored-directory";
@@ -183,7 +195,17 @@ export async function runContainedStreamingProcess(
       exit.signal !== null
     ) {
       const error = new OpsExecutionFailure(timedOut ? "timeout" : "runtime", { diagnostics });
-      if (!exit.residualDescendants && !exit.containmentFailed) containedProcessFailures.add(error);
+      if (!exit.residualDescendants && !exit.containmentFailed) {
+        containedProcessFailures.add(error);
+        if (
+          !timedOut &&
+          !options.signal.aborted &&
+          !exit.spawnFailed &&
+          exit.signal === null &&
+          !diagnostics.tail.some((line) => LOST_DAEMON.test(line.message))
+        )
+          reportedProcessFailures.add(error);
+      }
       throw error;
     }
     return diagnostics;
@@ -605,7 +627,6 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   ) => {
     const remaining = context.execution.deadlineAt - Date.now();
     if (remaining <= 0 || context.signal.aborted) throw new OpsExecutionFailure("timeout", {});
-    context.beginServiceCreation?.();
     if (options.execFile) await run(args, context.signal, Math.min(timeout, remaining));
     else
       await runContainedStreamingProcess("docker", args, {
@@ -725,48 +746,39 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
                 },
               },
             });
-          const store = services.releaseStatePaths(options.stack.infraDir).store;
-          await mkdir(store, { mode: 0o700, recursive: true });
-          const release = await services.acquireReleaseStoreLock(store);
-          try {
-            const command = args();
-            // Direct DM Start is fixed --no-recreate; guarded DM recreation is
-            // checked by the actual frozen-step verifier before this adapter.
-            // All implicit coordinator creation stays outside this generic path.
-            if (operation.serviceId !== "data-manager" && !command.includes("--no-deps")) {
-              const configuration = JSON.parse(
-                  (
-                    await run(
-                      [...composePrefix(), "config", "--format", "json"],
-                      context.signal,
-                      15000,
-                    )
-                  ).stdout,
-                ),
-                targets = operation.serviceId
-                  ? [operation.serviceId]
-                  : services.readAppliedComposeServiceIds(
-                      options.stack.infraDir,
-                      operation.expectedConfigurationRevisionId,
-                    );
-              if (
-                services
-                  .composeCreationDependencyIds(configuration, targets)
-                  .includes("data-manager")
-              )
-                throw Error("Coordinator maintenance required before service creation");
-            }
-            const result = await changed(command, context, LIFECYCLE_TIMEOUT_MS);
-            const next = continuation?.();
-            if (next) {
-              if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
-              if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
-              return await changed(next, context, LIFECYCLE_TIMEOUT_MS);
-            }
-            return result;
-          } finally {
-            release.release();
+          const command = args();
+          // Direct DM Start is fixed --no-recreate; guarded DM recreation is
+          // checked by the actual frozen-step verifier before this adapter.
+          // All implicit coordinator creation stays outside this generic path.
+          if (operation.serviceId !== "data-manager" && !command.includes("--no-deps")) {
+            const configuration = JSON.parse(
+                (
+                  await run(
+                    [...composePrefix(), "config", "--format", "json"],
+                    context.signal,
+                    15000,
+                  )
+                ).stdout,
+              ),
+              targets = operation.serviceId
+                ? [operation.serviceId]
+                : services.readAppliedComposeServiceIds(
+                    options.stack.infraDir,
+                    operation.expectedConfigurationRevisionId,
+                  );
+            if (
+              services.composeCreationDependencyIds(configuration, targets).includes("data-manager")
+            )
+              throw Error("Coordinator maintenance required before service creation");
           }
+          const result = await changed(command, context, LIFECYCLE_TIMEOUT_MS);
+          const next = continuation?.();
+          if (next) {
+            if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
+            if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+            return await changed(next, context, LIFECYCLE_TIMEOUT_MS);
+          }
+          return result;
         },
         context.signal,
       );

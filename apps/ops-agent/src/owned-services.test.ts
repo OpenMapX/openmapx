@@ -138,10 +138,7 @@ it.runIf(installedCompose)(
   async () => {
     const fixture = await ownedComposePathRuntime();
     roots.push(fixture.host.root);
-    fixture.row.Labels["com.docker.compose.project.config_files"] = [
-      fixture.host.stack.composePath,
-      fixture.host.stack.composeReleasePath,
-    ].join(",");
+    fixture.row.Labels["com.docker.compose.project.config_files"] = fixture.host.stack.composePath;
     fixture.row.Labels["com.docker.compose.project.working_dir"] = dirname(
       fixture.host.stack.composePath,
     );

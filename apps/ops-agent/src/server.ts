@@ -1,5 +1,6 @@
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 import {
+  abandonUnstartedLease,
   acquireArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseForward,
@@ -20,6 +21,8 @@ import {
   inspectControlAdmission,
   inspectFeedProxyValidationFailure,
   isFixedSingleDataCommand,
+  type LeaseStore,
+  localLeaseBackend,
   markFeedProxyReloadAttempted,
   planFixedSingleDataCommand,
   controlHeaders as readControlHeaders,
@@ -45,10 +48,11 @@ import {
   retainGenerationHardlinksOwnerPlan,
   settleArtifactTargetLeaseChild,
   startControlPrune,
+  TargetBusyError,
   type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -102,6 +106,7 @@ import {
   type VerifiedParentExecution,
   verifyApiJobParentExecution,
 } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import Fastify, { type FastifyInstance } from "fastify";
 import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
 import { ArtifactTransferError } from "./artifact-transfer/errors";
@@ -154,8 +159,10 @@ import {
   type DawarichSubjectExportRouteOptions,
   registerDawarichSubjectExportRoute,
 } from "./dawarich-subject-export";
+import { isReportedProcessFailure } from "./docker-runtime";
 import { registerOpsIngressRateLimit } from "./ingress-rate-limit";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
+import { LeaseRefused, runLeaseOperation } from "./lease-operations";
 import {
   type CoordinatorPullOwnershipObservation,
   consumeCoordinatorPullOwnershipCapture,
@@ -201,7 +208,33 @@ export const OPS_AGENT_RETENTION_LIMITS = {
   maxAggregateJournalBytes: 24 * 1024 * 1024,
   maxAggregateEventBytes: 2 * DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
 } as const;
-// Conservative read-only surface while the release store cannot be read safely.
+// Conservative read-only surface while the release cache cannot be read safely.
+/**
+ * Operations that change containers claim their targets in the lease store
+ * before any effect. Pulls, builds, execs and probes leave running containers
+ * alone and claim nothing.
+ */
+const LEASED_KINDS = new Set<OpsOperationKind>([
+  "configurationMaintenance.prepare",
+  "artifactTransfer.import",
+  "artifactTransfer.export",
+  "stack.start",
+  "stack.stop",
+  "coreService.restart",
+  "service.start",
+  "service.stop",
+  "service.restart",
+  "service.remove",
+  "service.recreate",
+  "service.recreateIsolated",
+  "service.update",
+  "serviceRepository.remove",
+  "backup.create",
+  "backup.restore",
+  "configuration.hardlinks.apply",
+  "valhalla.traffic.maintain",
+  "valhalla.traffic.refreshWaysToEdges",
+]);
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "configurationHandoff.inspect",
   "configurationMaintenance.inspect",
@@ -239,11 +272,15 @@ export interface OpsAuditEvent {
   result: "success" | "denied" | "error" | "timeout" | "terminated" | "late_completion";
   durationMs: number;
   errorClass?: OpsErrorClass;
+  /** The lease that refused a busy operation. */
+  heldBy?: string;
 }
 
 export interface BuildOpsAgentServerOptions {
   artifactTransfers?: ArtifactTransferStore;
   controlInstallation?: ControlInstallation;
+  /** The agent's lease store, for the leases data-manager and the host CLI hold. */
+  leaseStore?: LeaseStore;
   terminalClaimCleanup?: VerifiedTerminalClaimCleanup;
   tokens: Record<OpsRole, string>;
   releaseRecovery?: { ready: boolean; reason?: "recovery_required" };
@@ -271,7 +308,6 @@ export interface BuildOpsAgentServerOptions {
 }
 
 interface JobRecord extends Omit<PersistedOpsJob, "terminalAt"> {
-  role: OpsRole;
   operation: OpsOperation;
   operationId: string;
   operationKey: string;
@@ -329,8 +365,30 @@ class RequestGuardError extends Error {
   constructor(
     readonly errorClass: OpsErrorClass,
     readonly statusCode: number,
+    /** For a busy refusal by a target lease: the holder, as the reply names it. */
+    readonly busyHolder?: string,
   ) {
     super(errorClass);
+  }
+}
+
+/** A held target at the first admission attempt; the admission is tried again after a grace. */
+class BusyAdmission extends Error {
+  constructor(readonly target: string) {
+    super("Target is busy");
+  }
+}
+
+/** Waits until no lease holds `target`, or until `until`. */
+async function waitForTargetRelease(
+  store: LeaseStore,
+  target: string,
+  until: number,
+  signal: AbortSignal,
+): Promise<void> {
+  while (Date.now() < until && store.list().some((lease) => lease.targets.includes(target))) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    signal.throwIfAborted();
   }
 }
 
@@ -428,7 +486,7 @@ function classify(error: unknown): { errorClass: OpsErrorClass; statusCode: numb
 }
 
 export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): FastifyInstance {
-  if (options.tokens.api === options.tokens["data-manager"]) {
+  if (new Set(Object.values(options.tokens)).size !== Object.keys(options.tokens).length) {
     throw new Error("Ops agent caller credentials must be distinct");
   }
   const app = Fastify({
@@ -574,6 +632,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   };
 
   const controlLeases = new Map<string, TargetLeaseAuthority>();
+  /** Jobs whose Docker command ended with a reported failure, so their outcome is known. */
+  const reportedFailures = new Set<string>();
   const controlAuthorities = new Map<string, VerifiedExecutionAuthority>();
   const maintenanceControls = new Map<
     string,
@@ -954,6 +1014,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           committed &&
           job.operation.kind === "artifactTransfer.import" &&
           (updates.result as { outcome?: string })?.outcome === "not_committed";
+        // A command that failed by its own report releases its targets with a
+        // failed result; a crash, timeout or lost daemon stays unknown.
+        const reportedFailure = state === "failed" && reportedFailures.delete(job.operationId);
         if (
           !originalGenerationNonCommit &&
           !unstartedConfiguration &&
@@ -965,12 +1028,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               ? "contained"
               : committed
                 ? "committed"
-                : validationFailure
+                : validationFailure || reportedFailure
                   ? "contained"
                   : "unknown",
             publication: artifactNonCommit
               ? "not_started"
-              : committed
+              : committed || reportedFailure
                 ? "committed"
                 : validationFailure
                   ? "not_started"
@@ -979,7 +1042,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               ? { kind: "ops-result", result: updates.result }
               : validationFailure
                 ? { kind: "feed-proxy-validation-failure", commitmentDigest: validationFailure }
-                : { kind: "unresolved" },
+                : reportedFailure
+                  ? { kind: "reported-failure" }
+                  : { kind: "unresolved" },
           });
         if (lease && job.operation.kind === "configurationMaintenance.prepare" && !committed) {
           try {
@@ -991,7 +1056,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             );
             if (lease.mode === "owner") {
               await releaseArtifactTargetLease(lease);
-              verifyRetainedArtifactTargetRootRelease(authority);
+              verifyLocalArtifactTargetRootRelease(authority);
               // Classify only this freshly proved, fully released never-prepared
               // refusal before the immutable terminal is first committed.
               // An unknown/partial release never takes this branch.
@@ -1010,7 +1075,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             lease,
             verifyControlEffectSettlement(options.controlInstallation, authority.execution),
           );
-          if (lease.mode === "owner" && committed) {
+          if (lease.mode === "owner" && (committed || reportedFailure)) {
             await releaseArtifactTargetLease(lease);
             if (job.operation.kind === "artifactTransfer.import") {
               try {
@@ -1056,7 +1121,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       }
       if (releaseUnstartedRoot && lease?.mode === "owner" && authority) {
         await releaseArtifactTargetLease(lease);
-        verifyRetainedArtifactTargetRootRelease(authority);
+        verifyLocalArtifactTargetRootRelease(authority);
         if (job.operation.kind === "artifactTransfer.import")
           await options.artifactTransfers?.reconcileReleasedPreparedImport(authority);
       }
@@ -1622,6 +1687,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               const classification = timedOut
                 ? { errorClass: "timeout" as const }
                 : classify(error);
+              if (
+                !timedOut &&
+                LEASED_KINDS.has(job.operation.kind) &&
+                (isReportedProcessFailure(error) ||
+                  isReportedProcessFailure((error as { cause?: unknown } | undefined)?.cause))
+              )
+                reportedFailures.add(job.operationId);
               let failureResult: OpsFailureResult | undefined;
               if (error instanceof OpsExecutionFailure) {
                 const safe = opsFailureResultSchema.parse(error.failureResult);
@@ -2200,6 +2272,34 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const nowMs = now().getTime();
         const timing = validateTiming(parsed.issuedAt, parsed.expiresAt, nowMs);
         replay.accept(parsed.requestId, timing.expiresAtMs, nowMs);
+        if (
+          operation.kind === "lease.acquire" ||
+          operation.kind === "lease.read" ||
+          operation.kind === "lease.update" ||
+          operation.kind === "lease.settleChild"
+        ) {
+          if (!options.controlInstallation || !options.leaseStore)
+            throw new RequestGuardError("recovery_required", 409);
+          let value: unknown;
+          try {
+            value = await runLeaseOperation(
+              options.controlInstallation,
+              options.leaseStore,
+              role,
+              operation,
+            );
+          } catch (error) {
+            if (error instanceof LeaseRefused) throw new RequestGuardError("authorization", 403);
+            // A busy store lock or a file system error may come after the store
+            // was written; only a lease rule refusal certainly wrote nothing.
+            if (error instanceof services.LockBusyError || (error as { code?: unknown }).code)
+              throw new RequestGuardError("runtime", 500);
+            throw new RequestGuardError("conflict", 409);
+          }
+          return reply
+            .code(200)
+            .send(opsSuccess(parsed.requestId, { execution: "sync", kind, value }));
+        }
         const policy = OPS_KIND_POLICIES[operation.kind];
         const operationFingerprint = opsOperationFingerprint(operation);
         if (
@@ -2519,7 +2619,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
 
         if (policy.execution === "async") {
           const ownerKey = `${role}:${parsed.operationKey}`;
-          const admission = await withAdmissionLock(async () => {
+          // A held target is retried once, after a short grace spent outside the
+          // admission lock, so a holder that is finishing can release meanwhile.
+          let graceSpent = false;
+          const admit = async () => {
             const retained = jobsByKey.get(ownerKey);
             if (retained) {
               if (!matchesRetained(retained)) {
@@ -2698,17 +2801,24 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 throw new RequestGuardError("authorization", 403);
               }
             }
-            await journal.replace([...jobsById.values()].map(persisted).concat(persisted(job)));
-            jobsById.set(job.operationId, job);
-            jobsByKey.set(ownerKey, job);
-            if (
+            // The target lease is the one admission: a held target refuses the
+            // operation as busy before anything is recorded. Its targets, and a
+            // maintenance plan, are read first; a failure there is raised once the
+            // job is recorded, so the attempt stays visible.
+            const rootAdmission =
               !controlAdmission &&
               !configurationMaintenanceControl &&
-              opsKindRequiresControlAuthority(operation.kind)
-            ) {
+              opsKindRequiresControlAuthority(operation.kind);
+            let admissionFailure: { error: unknown } | undefined;
+            let maintenanceAdmission:
+              | Awaited<ReturnType<typeof prepareConfigurationMaintenanceAdmission>>
+              | undefined;
+            let targets: string[] = [];
+            let admittedLease: string | undefined;
+            if (rootAdmission) {
               try {
                 if (!options.controlInstallation) throw Error("Control trust unavailable");
-                const maintenanceAdmission =
+                maintenanceAdmission =
                   job.operation.kind === "configurationMaintenance.prepare"
                     ? await prepareConfigurationMaintenanceAdmission(runtime, {
                         installation: options.controlInstallation,
@@ -2722,16 +2832,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                         signal: claimController.signal,
                       })
                     : undefined;
-                const maintenancePlan =
-                  maintenanceAdmission &&
-                  configurationMaintenanceAdmissionState(maintenanceAdmission).plan;
                 if (literalProductionRuntime)
                   replaceControlRegisteredServiceIds(
                     options.controlInstallation,
                     await productionRegisteredServiceIds(runtime),
                   );
-                const targets =
-                  maintenancePlan?.serviceIds ??
+                targets =
+                  (maintenanceAdmission &&
+                    configurationMaintenanceAdmissionState(maintenanceAdmission).plan.serviceIds) ??
                   (operation.kind === "artifactTransfer.export"
                     ? [
                         ...new Set([
@@ -2748,6 +2856,52 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                         ].includes(operation.kind)
                       ? [operation.serviceId]
                       : controlRegisteredServiceIds(options.controlInstallation));
+              } catch (error) {
+                admissionFailure = { error };
+              }
+              if (!admissionFailure && LEASED_KINDS.has(operation.kind) && options.leaseStore)
+                try {
+                  admittedLease = (
+                    await localLeaseBackend(options.leaseStore).acquire({
+                      owner: executionFor(job),
+                      ownerKind: operation.kind,
+                      targets: operation.kind.startsWith("valhalla.") ? ["valhalla"] : targets,
+                    })
+                  ).leaseId;
+                } catch (error) {
+                  if (!(error instanceof TargetBusyError)) admissionFailure = { error };
+                  else if (!graceSpent) throw new BusyAdmission(error.target);
+                  else {
+                    options.audit?.({
+                      role,
+                      kind,
+                      resourceId,
+                      result: "denied",
+                      durationMs: Date.now() - startedAt,
+                      errorClass: "busy",
+                      heldBy: error.message,
+                    });
+                    throw new RequestGuardError("busy", 409, error.message);
+                  }
+                }
+            }
+            try {
+              await journal.replace([...jobsById.values()].map(persisted).concat(persisted(job)));
+            } catch (error) {
+              // Nothing was recorded, so nothing ran under the lease.
+              if (admittedLease && options.leaseStore)
+                await abandonUnstartedLease(options.leaseStore, admittedLease, executionFor(job));
+              throw error;
+            }
+            jobsById.set(job.operationId, job);
+            jobsByKey.set(ownerKey, job);
+            if (rootAdmission) {
+              try {
+                if (admissionFailure) throw admissionFailure.error;
+                if (!options.controlInstallation) throw Error("Control trust unavailable");
+                const maintenancePlan =
+                  maintenanceAdmission &&
+                  configurationMaintenanceAdmissionState(maintenanceAdmission).plan;
                 const fixedDataPlan = isFixedSingleDataCommand(job.operation.kind)
                   ? planFixedSingleDataCommand(
                       executionFor(job),
@@ -2813,38 +2967,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
                 reserveControlTerminal(authority);
                 controlAuthorities.set(job.operationId, authority);
-                if (
-                  [
-                    "configurationMaintenance.prepare",
-                    "artifactTransfer.import",
-                    "artifactTransfer.export",
-                    "stack.start",
-                    "coreService.restart",
-                    "service.start",
-                    "service.recreate",
-                    "service.recreateIsolated",
-                    "service.update",
-                    "configuration.hardlinks.apply",
-                    "valhalla.traffic.maintain",
-                    "valhalla.traffic.refreshWaysToEdges",
-                  ].includes(job.operation.kind)
-                ) {
+                if (LEASED_KINDS.has(job.operation.kind)) {
                   const lease = await acquireArtifactTargetLease({
-                    dataRoot: controlInstallationDataRoot(options.controlInstallation),
-                    serviceIds:
-                      maintenancePlan ||
-                      hardlinksPlan ||
-                      lifecyclePlan ||
-                      job.operation.kind === "artifactTransfer.export" ||
-                      [
-                        "stack.start",
-                        "service.start",
-                        "coreService.restart",
-                        "service.recreate",
-                        "service.recreateIsolated",
-                      ].includes(job.operation.kind)
-                        ? targets
-                        : ["valhalla"],
+                    serviceIds: job.operation.kind.startsWith("valhalla.") ? ["valhalla"] : targets,
                     owner: authority,
                   });
                   controlLeases.set(job.operationId, lease);
@@ -2852,6 +2977,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     retainOwnedConfigurationMaintenance(authority, lease, maintenanceAdmission);
                 }
               } catch (error) {
+                // Nothing has started yet, so a lease taken at admission holds nothing.
+                if (admittedLease && options.leaseStore) {
+                  controlLeases.delete(job.operationId);
+                  await abandonUnstartedLease(options.leaseStore, admittedLease, executionFor(job));
+                }
                 forceRecoveryRequired(job);
                 await journal.replace([...jobsById.values()].map(persisted));
                 throw error;
@@ -2914,13 +3044,28 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               }
             }
             return { type: "new", job } as const;
-          }).catch(async (error) => {
-            await claimAdmission?.rollback().catch(() => undefined);
-            active -= 1;
-            throw error instanceof RequestGuardError
-              ? error
-              : new RequestGuardError("runtime", 500);
-          });
+          };
+          const admission = await withAdmissionLock(admit)
+            .catch(async (error) => {
+              if (!(error instanceof BusyAdmission) || !options.leaseStore) throw error;
+              await waitForTargetRelease(
+                options.leaseStore,
+                error.target,
+                Math.min(Date.now() + 5000, normalized.deadlineAt),
+                claimController.signal,
+              );
+              graceSpent = true;
+              return withAdmissionLock(admit);
+            })
+            .catch(async (error) => {
+              await claimAdmission?.rollback().catch(() => undefined);
+              active -= 1;
+              throw error instanceof RequestGuardError
+                ? error
+                : error instanceof TargetBusyError
+                  ? new RequestGuardError("busy", 409, error.message)
+                  : new RequestGuardError("runtime", 500);
+            });
           if (admission.type === "retained") {
             await claimAdmission?.rollback().catch(() => undefined);
             active -= 1;

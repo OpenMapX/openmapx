@@ -137,9 +137,23 @@ describe("build provenance", () => {
     return git("rev-parse", "HEAD");
   }
 
-  it("records the checkout's commit and the selected release for a checkout's CLI", async () => {
+  const pinRelease = () =>
+    services.commitConfigurationGeneration({
+      infraDir: join(buildHost, "infra", "docker"),
+      services: [],
+      input: {
+        domain: "maps.example.test",
+        selectedRoots: [],
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      },
+      release,
+    });
+
+  it("records the checkout's commit and the pinned release for a checkout's CLI", async () => {
     const commit = checkoutAtCommit();
-    services.writeReleaseComposeArtifacts(release, join(buildHost, "infra", "docker"));
+    await pinRelease();
 
     await expect(buildProvenance(buildHost, { bundled: false })).resolves.toEqual({
       revision: commit,
@@ -149,7 +163,7 @@ describe("build provenance", () => {
 
   it("records only the release for the operations agent's CLI, which is not the checkout's code", async () => {
     checkoutAtCommit();
-    services.writeReleaseComposeArtifacts(release, join(buildHost, "infra", "docker"));
+    await pinRelease();
 
     await expect(buildProvenance(buildHost, { bundled: true })).resolves.toEqual({
       release: "abc123-1-1",
@@ -214,7 +228,6 @@ describe("build bundles", () => {
             serviceIds: ["osrm"],
           });
         lease = await control.acquireArtifactTargetLease({
-          dataRoot: dataDir(targetHost),
           serviceIds: ["osrm"],
           owner: authority,
         });

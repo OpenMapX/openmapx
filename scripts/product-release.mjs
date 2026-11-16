@@ -14,19 +14,9 @@ import {
   validateReadiness,
 } from "./product-release-plan.mjs";
 
-const fixedAssets = [
-  "candidate.json",
-  "release-manifest.json",
-  "docker-compose.release.yml",
-  "INSTALL.md",
-  "notes.md",
-];
+const fixedAssets = ["candidate.json", "release-manifest.json", "INSTALL.md", "notes.md"];
 function main(ports) {
   assert(ports.ref === "refs/heads/main", "Named release orchestration must run on main");
-}
-function overlay(manifest) {
-  const images = manifest.images;
-  return `# Exact rehearsal selection; use the matching source checkout.\nx-openmapx-release: ${canonicalCandidate({ release: manifest.release, images, product: manifest.product })}\nservices:\n  app-api:\n    image: ${images.api}\n  app-web:\n    image: ${images.web}\n  data-manager:\n    image: ${images["data-manager"]}\n    environment:\n      OPENMAPX_TRANSITOUS_TOOLS_IMAGE: ${images["transitous-tools"]}\n  ops-agent:\n    image: ${images["ops-agent"]}\n  transitous-runner:\n    image: ${images["transitous-runner"]}\n`;
 }
 function assetsFor(candidate, digest, notes) {
   const envelope = {
@@ -37,9 +27,8 @@ function assetsFor(candidate, digest, notes) {
   const assets = {
     "candidate.json": `${canonicalCandidate(envelope)}\n`,
     "release-manifest.json": `${canonicalCandidate(candidate.manifest)}\n`,
-    "docker-compose.release.yml": overlay(candidate.manifest),
     "notes.md": notes,
-    "INSTALL.md": `# Candidate ${candidate.version}\n\nNot published until the owner approves the protected publishing job.\n\nCheck out ${candidate.repository} at exact source ${candidate.sourceRevision}. Use the installation instructions at that source. Set OPENMAPX_RELEASE=${digest} and OPENMAPX_RELEASE_MANIFEST_REPOSITORY=ghcr.io/${candidate.repository.toLowerCase().split("/")[0]}/release-manifest, then run pnpm openmapx compose release for a clean installation. For an existing installation, use compose release --check and the authenticated system update workflow in the upgrading guide; do not replace its running Data Manager pin with bare compose release. Both resolve the exact staged candidate; no preview fallback is permitted. The accompanying overlay is an auditable six-image summary; use the CLI-generated selection for normal host operations.\n\nRehearse clean installation and ${candidate.manifest.product.upgradeOrigins.join(", ")} upgrade, selected service health and critical flows. Image rollback does not reverse database migrations. Record actual recovery limits and evidence in readiness.json; no backups are created automatically by these instructions.\n`,
+    "INSTALL.md": `# Candidate ${candidate.version}\n\nNot published until the owner approves the protected publishing job.\n\nCheck out ${candidate.repository} at exact source ${candidate.sourceRevision}. Use the installation instructions at that source. Set OPENMAPX_RELEASE=${digest} and OPENMAPX_RELEASE_MANIFEST_REPOSITORY=ghcr.io/${candidate.repository.toLowerCase().split("/")[0]}/release-manifest, then run pnpm openmapx compose release for a clean installation. For an existing installation, use compose release --check and the authenticated system update workflow in the upgrading guide; do not replace its running Data Manager pin with bare compose release. Both resolve the exact staged candidate; no preview fallback is permitted.\n\nRehearse clean installation and ${candidate.manifest.product.upgradeOrigins.join(", ")} upgrade, selected service health and critical flows. openmapx control rollback refuses to return to a release older than the database's newest migration; restore a backup for that. Record actual recovery limits and evidence in readiness.json; no backups are created automatically by these instructions.\n`,
   };
   assets.SHA256SUMS = fixedAssets.map((name) => `${sha256(assets[name])}  ${name}\n`).join("");
   return assets;

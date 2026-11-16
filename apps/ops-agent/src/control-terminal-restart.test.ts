@@ -16,6 +16,7 @@ import {
 import { services as coreServices } from "@openmapx/core/server";
 import { build } from "esbuild";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { openOpsJobJournal, type PersistedOpsJob } from "./journal";
 import { buildOpsAgentServer } from "./server";
 import { initializeTerminalClaimCleanup } from "./trusted-config-source";
@@ -476,7 +477,6 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
       plan: [plan],
     });
     const lease = await c.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["motis"],
       owner: authority,
     });
@@ -498,7 +498,10 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     const journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
     app = buildOpsAgentServer({
-      tokens: { api: Buffer.alloc(32, 7).toString("base64url"), "data-manager": "b".repeat(32) },
+      tokens: {
+        api: Buffer.alloc(32, 7).toString("base64url"),
+        "data-manager": "b".repeat(32),
+      },
       controlInstallation: installation,
       journal,
       dispatch,
@@ -506,7 +509,7 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     await app.ready();
     expect(journal.records()).toEqual([stopped.job]);
-    expect(existsSync(join(root, "data/.admin-target-control/locks/motis"))).toBe(true);
+    expect(heldTargets(root).includes("motis")).toBe(true);
     c.retainControlEffectReceipt(authority, {
       outcome: "failed_without_effect",
       publication: "not_started",

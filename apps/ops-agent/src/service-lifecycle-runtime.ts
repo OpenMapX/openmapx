@@ -6,7 +6,7 @@ import {
   consumeControlChildDispatch,
   type FixedServiceLifecyclePlan,
   fixedCliArguments,
-  inspectArtifactTargetLeaseChildSettlement,
+  inspectLocalLeaseChildSettlement,
   issueControlChildPhase,
   openFixedChildInstallation,
   planFixedServiceUpdate,
@@ -77,7 +77,6 @@ export function installServiceLifecycleRuntime(
     consumeControlChildDispatch(issued.dispatchTicket);
     let failure: unknown;
     try {
-      context.beginServiceCreation?.();
       await options.runFixedCli(args, {
         ...context,
         execution: child.execution,
@@ -121,7 +120,7 @@ export function installServiceLifecycleRuntime(
           { serviceLifecycle: evidence },
         );
       verifyControlEffectSettlement(installation, child.execution);
-      const settled = inspectArtifactTargetLeaseChildSettlement(lease, child.execution);
+      const settled = inspectLocalLeaseChildSettlement(lease, child.execution);
       if (settled?.outcome !== "committed" || settled.publication !== "committed")
         throw new OpsExecutionFailure("recovery_required", { serviceLifecycle: evidence });
       return { changed: true, revisionId: receipt.finalRevisionId };

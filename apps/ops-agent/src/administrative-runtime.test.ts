@@ -29,8 +29,6 @@ import {
 import { createUnavailableRuntime, dispatchOpsOperation, OpsExecutionFailure } from "./runtime";
 
 const temporaryRoots: string[] = [];
-const releaseState = (rootDir: string) =>
-  services.releaseStatePaths(join(rootDir, "infra", "docker"));
 
 function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "openmapx-admin-runtime-"));
@@ -849,18 +847,21 @@ async function appliedInspectionFixture(rootDir: string) {
 }
 
 describe("administrative release runtime", () => {
-  it("stores immutable canonical release IDs with exact-content idempotency and a bounded manifest", async () => {
+  it("caches each resolved manifest by its digest and reports the one checked last", async () => {
     const rootDir = temporaryRoot();
+    const infraDir = join(rootDir, "infra", "docker");
     const release = "immutable-release";
-    const makeManifest = (digit: string) => ({
+    const makeManifest = (digit: string, runAttempt = 1) => ({
       schemaVersion: 1 as const,
       release,
       images: Object.fromEntries(
-        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
-          (name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`],
-        ),
+        services.RELEASE_IMAGE_NAMES.map((name) => [
+          name,
+          `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`,
+        ]),
       ),
       ...releaseProvenance(),
+      producer: { ...releaseProvenance().producer, runAttempt },
     });
     let manifestText = JSON.stringify(makeManifest("4"));
     const docker = async (args: readonly string[]) => {
@@ -870,9 +871,7 @@ describe("administrative release runtime", () => {
         expect(args[1]).toBe(`sha256:${"2".repeat(64)}`);
         return "a".repeat(64);
       }
-      if (args[0] === "cp") {
-        writeFileSync(args.at(-1) as string, manifestText, { mode: 0o600 });
-      }
+      if (args[0] === "cp") writeFileSync(args.at(-1) as string, manifestText, { mode: 0o600 });
       return "";
     };
     const context = {
@@ -880,256 +879,63 @@ describe("administrative release runtime", () => {
       signal: new AbortController().signal,
       emitLog: vi.fn(),
     };
-    const first = createDefaultReleaseEffects(rootDir, {
-      runDocker: docker,
-    });
-    await expect(first.resolve(context)).resolves.toBe(release);
-    await expect(first.resolve(context)).resolves.toBe(release);
-    manifestText = JSON.stringify(makeManifest("5"));
-    await expect(first.resolve(context)).rejects.toThrow("Release authority rejected");
-    expect(readFileSync(join(releaseState(rootDir).store, `${release}.json`), "utf8")).toContain(
-      "4".repeat(64),
-    );
+    const effects = createDefaultReleaseEffects(rootDir, { runDocker: docker });
+    await expect(effects.resolve(context)).resolves.toBe(release);
+    await expect(effects.resolve(context)).resolves.toBe(release);
+    const first = services.parseReleaseManifest(manifestText);
+    expect(services.cachedReleases(infraDir, "ghcr.io/openmapx")).toHaveLength(1);
+    expect(inspectReleaseAuthority(rootDir, release)).toBe(true);
+    expect(inspectReleaseAuthority(rootDir, "other-release")).toBe(false);
+    // Another producer attempt of the same release id is another manifest.
+    manifestText = JSON.stringify(makeManifest("5", 2));
+    await expect(effects.resolve(context)).resolves.toBe(release);
+    const second = services.parseReleaseManifest(manifestText);
     expect(
-      JSON.parse(readFileSync(join(releaseState(rootDir).store, `${release}.json`), "utf8")),
-    ).toMatchObject({
-      images: { "ops-agent": `ghcr.io/openmapx/ops-agent@sha256:${"4".repeat(64)}` },
-    });
-
-    manifestText = services.canonicalReleaseManifest(
-      services.parseReleaseManifest(
-        JSON.stringify({
-          ...makeManifest("4"),
-          release: "oversized-release",
-          producer: {
-            repository: `${"x".repeat(32 * 1024)}/repository`,
-            workflowPath: ".github/workflows/ci.yml",
-            sourceRevision: "c".repeat(40),
-            runId: 1,
-            runAttempt: 1,
-            event: "push",
-          },
-        }),
-      ),
-    );
-    await expect(first.resolve(context)).rejects.toThrow();
-  });
-
-  it("stores distinct canonical identities for two producer attempts of the same run", async () => {
-    const rootDir = temporaryRoot();
-    let attempt = 1;
-    const sourceRevision = "a".repeat(40);
-    const manifest = () => ({
-      schemaVersion: 1,
-      release: `${sourceRevision}-123-${attempt}`,
-      images: Object.fromEntries(
-        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
-          (name) => [name, `ghcr.io/openmapx/${name}@sha256:${String(attempt).repeat(64)}`],
-        ),
-      ),
-      ...releaseProvenance(),
-      producer: {
-        repository: "OpenMapX/openmapx",
-        workflowPath: ".github/workflows/ci.yml",
-        sourceRevision,
-        runId: 123,
-        runAttempt: attempt,
-        event: "push",
-      },
-    });
-    const runtime = createDefaultReleaseEffects(rootDir, {
-      runDocker: async (args) => {
-        if (args[0] === "pull") return `Digest: sha256:${String(attempt).repeat(64)}`;
-        if (args[0] === "image") return `sha256:${"e".repeat(64)}`;
-        if (args[0] === "create") return "a".repeat(64);
-        if (args[0] === "cp")
-          writeFileSync(args.at(-1) as string, JSON.stringify(manifest()), { mode: 0o644 });
-        return "";
-      },
-    });
-    const context = {
-      execution: testExecution(),
-      signal: new AbortController().signal,
-      emitLog: vi.fn(),
-    };
-    expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-1`);
-    attempt = 2;
-    expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-2`);
-    for (const n of [1, 2])
-      expect(
-        JSON.parse(
-          readFileSync(
-            join(releaseState(rootDir).store, `${sourceRevision}-123-${n}.json`),
-            "utf8",
-          ),
-        ).producer.runAttempt,
-      ).toBe(n);
-  });
-
-  it("refuses store entries and an overlay its group or others could write", async () => {
-    const rootDir = temporaryRoot();
-    const { store, overlay } = releaseState(rootDir);
-    mkdirSync(store, { recursive: true, mode: 0o700 });
-    const manifest = JSON.stringify({
-      schemaVersion: 1,
-      release: "release-1",
-      images: Object.fromEntries(
-        services.RELEASE_IMAGE_NAMES.map((name) => [
-          name,
-          `ghcr.io/openmapx/${name}@sha256:${"7".repeat(64)}`,
-        ]),
-      ),
-      ...releaseProvenance(),
-    });
-    writeFileSync(join(store, "release-1.json"), manifest, { mode: 0o600 });
-    chmodSync(join(store, "release-1.json"), 0o660);
-    expect(inspectReleaseAuthority(rootDir, "release-1")).toBe(false);
-    await expect(createDefaultReleaseEffects(rootDir).initialize?.()).rejects.toThrow(
-      "Release store contains an unsafe entry",
-    );
-
-    chmodSync(join(store, "release-1.json"), 0o600);
-    expect(inspectReleaseAuthority(rootDir, "release-1")).toBe(true);
-    writeFileSync(overlay, "services: {}\n", { mode: 0o600 });
-    chmodSync(overlay, 0o620);
-    const runDocker = vi.fn(async () => "");
-    const effects = createDefaultReleaseEffects(rootDir, { runDocker });
-    await expect(
-      effects.inspectSystem({ signal: new AbortController().signal, emitLog: vi.fn() }),
-    ).rejects.toThrow(/group or others/);
-    expect(readFileSync(overlay, "utf8")).toBe("services: {}\n");
-  });
-
-  it("refuses release state directories of another user", () => {
-    const rootDir = temporaryRoot();
-    // Tests cannot chown: inject the uid the state must belong to instead.
-    const uid = (process.geteuid?.() ?? 0) + 1;
-    expect(() => createDefaultReleaseEffects(rootDir, { uid })).toThrow(
-      /Unsafe release state directory/,
-    );
-  });
-
-  it("uses the durable latest pointer instead of lexical release-ID ordering", async () => {
-    const rootDir = temporaryRoot();
-    const directory = releaseState(rootDir).store;
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    const makeManifest = (release: string, digit: string) => ({
-      schemaVersion: 1 as const,
-      release,
-      images: Object.fromEntries(
-        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
-          (name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`],
-        ),
-      ),
-      ...releaseProvenance(),
-    });
-    const latest = makeManifest("a-new", "1");
-    writeFileSync(join(directory, "z-old.json"), JSON.stringify(makeManifest("z-old", "2")), {
-      mode: 0o600,
-    });
-    writeFileSync(join(directory, "a-new.json"), JSON.stringify(latest), { mode: 0o600 });
-    const { createHash } = await import("node:crypto");
-    writeFileSync(
-      join(directory, "latest.json"),
-      JSON.stringify({
-        releaseId: "a-new",
-        digest: createHash("sha256").update(JSON.stringify(latest)).digest("hex"),
-      }),
-      { mode: 0o600 },
-    );
-    const effects = createDefaultReleaseEffects(rootDir);
+      services.cachedReleases(infraDir, "ghcr.io/openmapx").map((entry) => entry.manifestDigest),
+    ).toEqual([services.releaseManifestDigest(second), services.releaseManifestDigest(first)]);
     await expect(effects.inspect()).resolves.toEqual({
       configuredSelector: "main",
-      availableReleaseId: "a-new",
+      availableReleaseId: release,
+      availableDigest: services.releaseManifestDigest(second),
     });
+
+    manifestText = JSON.stringify({
+      ...makeManifest("4"),
+      release: "oversized-release",
+      producer: {
+        ...releaseProvenance().producer,
+        repository: `${"x".repeat(32 * 1024)}/repository`,
+      },
+    });
+    await expect(effects.resolve(context)).rejects.toThrow();
   });
 
-  it("enforces release entry and aggregate bounds before registry reads", async () => {
+  it("refuses a release cache its group or others could reach", async () => {
     const rootDir = temporaryRoot();
-    const directory = releaseState(rootDir).store;
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    for (let index = 0; index < 65; index += 1) {
-      writeFileSync(join(directory, `release-${index}.json`), "{}", { mode: 0o600 });
-    }
-    const effects = createDefaultReleaseEffects(rootDir);
-    await expect(effects.initialize?.()).rejects.toThrow("Release store limit exceeded");
+    const directory = services.releaseCacheDirectory(join(rootDir, "infra", "docker"));
+    mkdirSync(directory, { recursive: true });
+    chmodSync(directory, 0o750);
+    expect(inspectReleaseAuthority(rootDir, "release-1")).toBe(false);
+    await expect(createDefaultReleaseEffects(rootDir).initialize?.()).rejects.toThrow(
+      /Unsafe release cache/,
+    );
   });
 
-  it("holds the entry bound when two resolutions race the same near-full store", async () => {
+  it("refuses a release cache of another user", async () => {
     const rootDir = temporaryRoot();
-    const directory = releaseState(rootDir).store;
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    const stored = (release: string) =>
-      JSON.stringify({
-        schemaVersion: 1,
-        release,
-        images: Object.fromEntries(
-          ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
-            (name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`],
-          ),
-        ),
-        ...releaseProvenance(),
-      });
-    for (let index = 0; index < 63; index += 1) {
-      writeFileSync(join(directory, `release-${index}.json`), stored(`release-${index}`), {
-        mode: 0o600,
-      });
-    }
-
-    // Both resolutions read the store, then both await Docker. Before the lock
-    // each published against its own stale pre-await snapshot of 63.
-    const resolveFor = (release: string) => {
-      let copied = false;
-      return createDefaultReleaseEffects(rootDir, {
-        runDocker: async (args) => {
-          const joined = args.join(" ");
-          if (joined.startsWith("pull")) return `Digest: sha256:${"1".repeat(64)}`;
-          if (joined.startsWith("image inspect")) return `sha256:${"2".repeat(64)}`;
-          if (joined.startsWith("create")) return "c".repeat(64);
-          if (joined.startsWith("cp")) {
-            const destination = args[2] as string;
-            writeFileSync(destination, stored(release), { mode: 0o644 });
-            copied = true;
-            // Yield so the sibling resolution interleaves here.
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            return "";
-          }
-          if (joined.startsWith("rm")) return "";
-          if (!copied) throw new Error("unexpected docker call");
-          return "";
-        },
-      });
-    };
-
-    const results = await Promise.allSettled([
-      resolveFor("release-a").resolve({
-        execution: testExecution(),
-        signal: new AbortController().signal,
-        emitLog: vi.fn(),
-      }),
-      resolveFor("release-b").resolve({
-        execution: testExecution(),
-        signal: new AbortController().signal,
-        emitLog: vi.fn(),
-      }),
-    ]);
-
-    const stayed = readdirSync(directory).filter((name) => name.endsWith(".json")).length;
-    const fulfilled = results.filter((result) => result.status === "fulfilled").length;
-    // 63 stored + latest.json; exactly one new release may land.
-    expect(stayed).toBeLessThanOrEqual(64 + 2);
-    expect(fulfilled).toBeGreaterThanOrEqual(1);
-    for (const result of results) {
-      if (result.status === "rejected") {
-        expect(String(result.reason)).toMatch(/Release store limit exceeded|Release store is busy/);
-      }
-    }
+    mkdirSync(services.releaseCacheDirectory(join(rootDir, "infra", "docker")), {
+      recursive: true,
+      mode: 0o700,
+    });
+    // Tests cannot chown: inject the uid the cache must belong to instead.
+    const uid = (process.geteuid?.() ?? 0) + 1;
+    await expect(createDefaultReleaseEffects(rootDir, { uid }).initialize?.()).rejects.toThrow(
+      /Unsafe release cache/,
+    );
   });
 
   it("inspects old, current, missing, and partial core images from fixed Docker targets", async () => {
     const rootDir = temporaryRoot();
-    const releaseDirectory = releaseState(rootDir).store;
-    mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
     await appliedInspectionFixture(rootDir);
     writeFileSync(
       join(
@@ -1156,9 +962,10 @@ describe("administrative release runtime", () => {
       ),
       ...releaseProvenance(),
     };
-    writeFileSync(join(releaseDirectory, `${releaseId}.json`), JSON.stringify(manifest), {
-      mode: 0o600,
-    });
+    services.cacheReleaseManifest(
+      join(rootDir, "infra", "docker"),
+      services.parseReleaseManifest(JSON.stringify(manifest)),
+    );
     const calls: string[][] = [];
     const effects = createDefaultReleaseEffects(rootDir, {
       runDocker: async (args) => {
@@ -1209,8 +1016,6 @@ describe("administrative release runtime", () => {
       runDocker: (args: readonly string[]) => Promise<string>,
     ) {
       const rootDir = temporaryRoot();
-      const releaseDirectory = releaseState(rootDir).store;
-      mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
       await appliedInspectionFixture(rootDir);
       const composePath = join(
         rootDir,
@@ -1223,27 +1028,28 @@ describe("administrative release runtime", () => {
       if (compose === "file") writeFileSync(composePath, "services:{}\n", { mode: 0o600 });
       if (compose === "directory") mkdirSync(composePath, { mode: 0o700 });
       const releaseId = "release-123";
-      writeFileSync(
-        join(releaseDirectory, `${releaseId}.json`),
-        JSON.stringify({
-          schemaVersion: 1,
-          release: releaseId,
-          images: Object.fromEntries(
-            [
-              "api",
-              "web",
-              "data-manager",
-              "ops-agent",
-              "transitous-runner",
-              "transitous-tools",
-            ].map((name, index) => [
-              name,
-              `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
-            ]),
-          ),
-          ...releaseProvenance(),
-        }),
-        { mode: 0o600 },
+      services.cacheReleaseManifest(
+        join(rootDir, "infra", "docker"),
+        services.parseReleaseManifest(
+          JSON.stringify({
+            schemaVersion: 1,
+            release: releaseId,
+            images: Object.fromEntries(
+              [
+                "api",
+                "web",
+                "data-manager",
+                "ops-agent",
+                "transitous-runner",
+                "transitous-tools",
+              ].map((name, index) => [
+                name,
+                `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
+              ]),
+            ),
+            ...releaseProvenance(),
+          }),
+        ),
       );
       return createDefaultReleaseEffects(rootDir, { runDocker });
     }

@@ -86,7 +86,6 @@ export const configurationFence = dataManager.table(
     operationKey: text("operation_key").notNull().unique(),
     candidateId: uuid("candidate_id").notNull(),
     planDigest: text("plan_digest").notNull(),
-    ownerCertificateDigest: text("owner_certificate_digest").notNull(),
     /** The prepare request body, compared on a repeated prepare. */
     input: jsonb("input").notNull(),
     /** "prepared" | "settled" */

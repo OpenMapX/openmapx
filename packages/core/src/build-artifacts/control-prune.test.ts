@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -18,6 +18,7 @@ import {
   verifyControlEffectSettlement,
 } from "./control-authority";
 import { CONTROL_PRUNE_AFTER_MS, pruneControlRecords } from "./control-prune";
+import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
 import {
   acquireArtifactTargetLease,
   releaseArtifactTargetLease,
@@ -140,10 +141,14 @@ it("refuses an expired root whether or not its records were pruned", async () =>
   expect(existsSync(record("executions", execution.operationKey))).toBe(false);
 });
 
-it("removes a released lease and frees its retained history slot", async () => {
+const heldLeases = () =>
+  openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })
+    .list()
+    .map((value) => value.leaseId);
+
+it("prunes the root's lease record once its released lease left the store", async () => {
   const { execution, authority } = admit();
   const lease = await acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["osrm"],
     owner: authority,
   });
@@ -153,14 +158,10 @@ it("removes a released lease and frees its retained history slot", async () => {
     verifyControlEffectSettlement(installation, execution),
   );
   await releaseArtifactTargetLease(lease);
-  const history = join(root, "data/.admin-target-control/admission-index-v1/history"),
-    leases = join(root, "data/.admin-target-control/leases");
-  expect(readdirSync(history)).toHaveLength(1);
-  expect(readdirSync(leases)).toEqual([lease.leaseId]);
+  expect(heldLeases()).toEqual([]);
+  expect(existsSync(record("execution-leases", execution.operationKey))).toBe(true);
   const later = execution.deadlineAt + CONTROL_PRUNE_AFTER_MS + 60_000;
   expect(await pruneControlRecords(installation, { now: later })).toEqual([execution.operationKey]);
-  expect(readdirSync(history)).toEqual([]);
-  expect(readdirSync(leases)).toEqual([]);
   expect(existsSync(record("execution-leases", execution.operationKey))).toBe(false);
 });
 
@@ -234,7 +235,6 @@ it("refuses a pruned and expired execution to its readers", async () => {
 it("keeps an execution whose effect record is absent, with its lease held", async () => {
   const { execution } = admit(),
     lease = await acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["osrm"],
       owner: restoreAdmittedControlExecution(installation, execution),
     });
@@ -243,14 +243,13 @@ it("keeps an execution whose effect record is absent, with its lease held", asyn
     expect(await pruneControlRecords(installation, { now })).toEqual([]);
   expect(existsSync(record("executions", execution.operationKey))).toBe(true);
   await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
-  expect(readdirSync(join(root, "data/.admin-target-control/leases"))).toEqual([lease.leaseId]);
+  expect(heldLeases()).toEqual([lease.leaseId]);
 });
 
 it("keeps a borrower while the lease it adopted is held, and while any adoption is unreadable", async () => {
   const owner = admit(),
     borrower = admit(),
     lease = await acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["osrm"],
       owner: owner.authority,
     });

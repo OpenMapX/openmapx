@@ -817,7 +817,10 @@ dbDescribe("retained finite maintenance requests", () => {
     });
     const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
     const agent = buildOpsAgentServer({
-      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      tokens: {
+        api: host.token,
+        "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+      },
       runtime: host.runtime,
       resourceClaimer: host.claimer,
       journal,
@@ -836,8 +839,14 @@ dbDescribe("retained finite maintenance requests", () => {
         ...releaseProvenance(),
       }),
     );
-    const overlay = services.releaseStatePaths(host.infraDir).overlay;
-    services.writeReleaseComposeArtifacts(manifest, host.infraDir);
+    await services.commitConfigurationGeneration({
+      infraDir: host.infraDir,
+      services: host.loaded,
+      input: (({ release: _none, ...input }) => input)(
+        services.readGenerationConfiguration(host.infraDir, host.initial.revisionId),
+      ),
+      release: manifest,
+    });
     const tokenFile = join(host.root, "clear-api-token");
     writeFileSync(tokenFile, host.token, { mode: 0o600 });
     const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 });
@@ -869,8 +878,12 @@ dbDescribe("retained finite maintenance requests", () => {
         },
         { timeout: 20000, interval: 100 },
       );
-      expect(existsSync(overlay)).toBe(false);
-      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(pointer);
+      // Clearing renders the applied configuration again without the pin.
+      expect(services.readAppliedRelease(host.infraDir)).toBeNull();
+      expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(pointer);
+      expect(services.readGenerationRelease(host.infraDir, pointer!)?.manifest.release).toBe(
+        "checked-pin",
+      );
       expect(
         journal.records().filter((row) => row.operation.kind === "release.clear"),
       ).toHaveLength(1);
@@ -933,14 +946,33 @@ dbDescribe("retained finite maintenance requests", () => {
         newId = `sha256:${"e".repeat(64)}`,
         digest = `sha256:${"c".repeat(64)}`,
         stageCalls: string[][] = [];
-      const compose = services.configurationGenerationComposeFile(
-          host.infraDir,
-          host.initial.revisionId,
-        ),
+      // A pinned installation's generation names the release whose images are staged.
+      if (pinned)
+        await services.commitConfigurationGeneration({
+          infraDir: host.infraDir,
+          services: host.loaded,
+          input: (({ release: _none, ...input }) => input)(
+            services.readGenerationConfiguration(host.infraDir, host.initial.revisionId),
+          ),
+          release: services.parseReleaseManifest(
+            JSON.stringify({
+              schemaVersion: 1,
+              release: "stage-pin",
+              images: Object.fromEntries(
+                services.RELEASE_IMAGE_NAMES.map((name) => [
+                  name,
+                  `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
+                ]),
+              ),
+              ...releaseProvenance(),
+            }),
+          ),
+        });
+      const applied = services.currentConfigurationGeneration(host.infraDir)!;
+      const compose = services.configurationGenerationComposeFile(host.infraDir, applied),
         args = services.stackComposeArgs({
           infraDir: host.infraDir,
           composePath: compose,
-          composeReleasePath: host.stack.composeReleasePath,
         });
       const rows = await Promise.all(
         ids.map(async (id, index) => ({
@@ -966,25 +998,6 @@ dbDescribe("retained finite maintenance requests", () => {
         })),
       );
       host.setRows(rows);
-      const overlay = services.releaseStatePaths(host.infraDir).overlay;
-      if (pinned)
-        services.writeReleaseComposeArtifacts(
-          services.parseReleaseManifest(
-            JSON.stringify({
-              schemaVersion: 1,
-              release: "stage-pin",
-              images: Object.fromEntries(
-                services.RELEASE_IMAGE_NAMES.map((name) => [
-                  name,
-                  `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
-                ]),
-              ),
-              ...releaseProvenance(),
-            }),
-          ),
-          host.infraDir,
-        );
-      const beforeOverlay = existsSync(overlay) ? readFileSync(overlay, "utf8") : null;
       const execFile: typeof host.execFile = async (file, argv, io) => {
         stageCalls.push([...argv]);
         if (argv[0] === "info") return { stdout: "linux/amd64", stderr: "" };
@@ -1028,7 +1041,10 @@ dbDescribe("retained finite maintenance requests", () => {
         }),
         journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
       const agent = buildOpsAgentServer({
-        tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+        tokens: {
+          api: host.token,
+          "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+        },
         runtime,
         resourceClaimer: host.claimer,
         journal,
@@ -1098,10 +1114,7 @@ dbDescribe("retained finite maintenance requests", () => {
             ),
           }),
         ).toBe(invalidMetadata ? "failed" : "success");
-        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
-          host.initial.revisionId,
-        );
-        expect(existsSync(overlay) ? readFileSync(overlay, "utf8") : null).toBe(beforeOverlay);
+        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(applied);
         const pulls = stageCalls.filter((argv) => argv[0] === "image" && argv[1] === "pull");
         expect(pulls).toHaveLength(invalidMetadata ? 0 : 3);
         expect(pulls.every((argv) => /@sha256:[a-f0-9]{64}$/.test(argv[2] ?? ""))).toBe(true);

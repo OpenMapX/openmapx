@@ -110,7 +110,6 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const stack = {
     infraDir,
     composePath,
-    composeReleasePath: services.releaseStatePaths(infraDir).overlay,
   };
   const imageId = `sha256:${"b".repeat(64)}`;
   const row = {

@@ -12,6 +12,7 @@ import {
   retainAdmittedControlExecution,
 } from "../build-artifacts/control-authority";
 import { AnchoredDirectory } from "../build-artifacts/filesystem";
+import { leaseStoreDirectory, openLeaseStore } from "../build-artifacts/lease-store";
 import {
   acquireArtifactTargetLease,
   closeArtifactTargetLeaseHandle,
@@ -91,7 +92,6 @@ it("signs exact seed and checkpoints only with the live writer and physical targ
   let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
   try {
     lease = await acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       owner: o.authority,
       serviceIds: ["alpha", "beta"],
     });
@@ -112,7 +112,7 @@ it("signs exact seed and checkpoints only with the live writer and physical targ
       ),
     );
     expect((await readServiceLifecycleReceipt(options(o.execution))).phase).toBe("pins_validated");
-    const path = join(root, "data/ops-agent/lifecycle", `${o.execution.operationKey}.json`),
+    const path = join(root, "state/ops-agent/lifecycle", `${o.execution.operationKey}.json`),
       original = readFileSync(path);
     const tampered = JSON.parse(original.toString());
     tampered.current.payload.receipt.finalRevisionId = revision;
@@ -155,7 +155,6 @@ it("refuses a final revision that the owned writer did not commit", async () => 
   let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
   try {
     lease = await acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       owner: o.authority,
       serviceIds: ["alpha", "beta"],
     });
@@ -202,7 +201,6 @@ async function withPinsValidatedReceipt(
   let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
   try {
     const held = await acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       owner: o.authority,
       serviceIds: ["alpha", "beta"],
     });
@@ -342,7 +340,6 @@ it.each([false, true])(
     let restarted: ReturnType<typeof openControlInstallation> | undefined;
     try {
       lease = await acquireArtifactTargetLease({
-        dataRoot: join(root, "data"),
         owner: o.authority,
         serviceIds: ["alpha", "beta"],
       });
@@ -415,7 +412,11 @@ it.each([false, true])(
           sequence: 1,
         });
       } else await expect(recovered).rejects.toThrow();
-      expect(existsSync(join(root, "data/.admin-target-control/locks/alpha"))).toBe(true);
+      expect(
+        openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })
+          .list()
+          .flatMap((value) => value.targets),
+      ).toContain("alpha");
     } finally {
       if (lease) closeArtifactTargetLeaseHandle(lease);
       if (restarted) closeControlInstallation(restarted);

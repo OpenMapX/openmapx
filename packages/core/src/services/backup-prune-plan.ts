@@ -4,6 +4,7 @@ import { lstatSync } from "node:fs";
 import { AnchoredDirectory, type FileIdentity, identity } from "../build-artifacts/filesystem";
 import { canonicalJson } from "../ops/canonical-json";
 import { backupRetentionExpiry } from "./backup-retention";
+import { isBackupStoreLockEntry } from "./backup-retention-store";
 
 export interface BackupPruneCandidate {
   backupId: string;
@@ -31,7 +32,7 @@ export function backupPruneInventory(infraDir: string, retentionDays: number, at
     if (root) {
       records.push({ root: identity(root.stat) });
       for (const name of root.listBounded(129).sort()) {
-        if (name === ".backup-store.lock") continue;
+        if (isBackupStoreLockEntry(name)) continue;
         if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name))
           throw Error("Backup inventory is unsafe");
         const directory = root.directory(name);

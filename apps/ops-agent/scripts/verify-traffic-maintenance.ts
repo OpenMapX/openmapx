@@ -61,7 +61,7 @@ assert.deepEqual(container.NetworkSettings.Ports["8002/tcp"], [
 ]);
 
 const runtime = createDockerRuntime({
-  stack: { infraDir: "/unused", composePath: "/unused", composeReleasePath: "/unused" },
+  stack: { infraDir: "/unused", composePath: "/unused" },
   fileExists: () => false,
   trafficDataRoot: TRAFFIC_DATA_ROOT,
   execFile: async (file, args, options) => {

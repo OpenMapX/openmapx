@@ -13,10 +13,6 @@ import { coordinatorPullSubmissionDigest, parseOpsJobStatus } from "@openmapx/co
 import { services } from "@openmapx/core/server";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
 import {
-  readConfigurationHandoffReleaseOverlay,
-  readConfigurationHandoffReleaseState,
-} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
-import {
   type CoordinatorPullWitness,
   coordinatorPullObservationDomain,
   coordinatorPullWitnessPayloadSchema,
@@ -69,6 +65,7 @@ import {
   cancelArtifactTargetLease,
   cancelControlExecution,
   closeArtifactTargetLeaseHandle,
+  configurationMaintenanceRootReleased,
   configurationMaintenanceTargetOwner,
   consumeControlChildDispatch,
   controlDigest,
@@ -76,7 +73,7 @@ import {
   executionAuthorityState,
   type FixedConfigurationMaintenancePlan,
   inspectArtifactDelegation,
-  inspectArtifactTargetLeaseChildSettlement,
+  inspectLocalLeaseChildSettlement,
   inspectRetainedOwnedArtifactTargetChildSettlement,
   issueControlChildPhase,
   lookupControlChildPhaseBinding,
@@ -94,8 +91,8 @@ import {
   verifyControl,
   verifyControlEffectSettlement,
   verifyControlRecoveryAuthority,
+  verifyLocalArtifactTargetRootRelease,
   verifyMaintenanceCoordinatorPrerequisite,
-  verifyRetainedArtifactTargetRootRelease,
   verifyRetainedLocalControlPeer,
   withConfigurationMaintenanceDecisionPublication,
   withConfigurationMaintenanceOwnerInitialization,
@@ -104,10 +101,14 @@ import {
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import {
+  type ConfigurationPrepareNonAdmission,
+  configurationPrepareNonAdmissionSchema,
+} from "@openmapx/core/data-manager-contracts";
+import {
   DataManagerHttpError,
   inspectDataConfigurationFence,
   prepareDataConfigurationFence,
-  recoverUnadmittedConfigurationPreparation,
+  recoverUnadmittedDataConfigurationFence,
   settleDataConfigurationFence,
 } from "@openmapx/core/data-manager-sdk";
 import {
@@ -169,15 +170,16 @@ import {
   childSettlementState,
   configurationMaintenanceChildState,
   installationState,
-  publishConfigurationMaintenanceForwardWitness,
   readCompletedConfigurationHandoff,
   verifyConfigurationMaintenanceChildTerminal,
   verifyControlPreparedTerminal,
   withPrivateEffectWriter,
 } from "../../../packages/core/src/build-artifacts/control-authority";
 import {
+  inspectLocalLeaseChildSettlement as inspectOwnedChildSettlement,
   observeConfigurationMaintenanceRuntimeTree,
-  readConfigurationPrepareNonAdmission,
+  restoreArtifactTargetLeaseForSettlement as restoreOwnedLease,
+  settleIssuedLeaseChild,
 } from "../../../packages/core/src/build-artifacts/target-lease";
 import type { DataConfigurationFenceReceipt } from "../../../packages/core/src/services/data-manager/contracts/configuration-maintenance";
 
@@ -324,6 +326,14 @@ function assertOwner(
       throw Error("Original coordinator pull/image expectation changed");
   } else if (owner.coordinatorPull) throw Error("Unexpected coordinator pull observation");
 }
+/** The data-manager's fence row for this maintenance, asked with the agent's own token. */
+function inspectOwnedFence(owner: ConfigurationMaintenanceOwnerRecord, signal?: AbortSignal) {
+  return inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
+    transport: configurationDataManagerTransport(),
+    candidateId: owner.plan.operation.candidateId,
+    signal,
+  });
+}
 function read(authority: VerifiedExecutionAuthority): ConfigurationMaintenanceOwnerRecord {
   const state = executionAuthorityState(authority),
     name = ownerName(authority),
@@ -372,7 +382,7 @@ export function retainOwnedConfigurationMaintenance(
     installationId: state.installation.installation.installationId,
     origin: state.origin,
     admissionDigest: state.receiptDigest,
-    rootCertificateDigest: root.certificateDigest,
+    leaseId: root.leaseId,
     apiParentAttestationDigest: plan.apiParent.assertionDigest,
     plan,
     originalContainers: source.originalContainers,
@@ -409,7 +419,6 @@ export function retainOwnedConfigurationMaintenance(
   withConfigurationMaintenanceOwnerInitialization(lease, authority, () =>
     write(authority, owner, true),
   );
-  publishConfigurationMaintenanceForwardWitness(authority);
 }
 export function readOwnedConfigurationMaintenance(
   authority: VerifiedExecutionAuthority,
@@ -423,19 +432,33 @@ export function readPreparedMaintenanceRelease(
   installation: ControlInstallation,
   maintenanceId: string,
 ): ConfigurationReleaseSnapshot | undefined {
-  let raw: unknown;
+  let owner: ConfigurationMaintenanceOwnerRecord;
   try {
-    raw = readPrivateRecord(
-      installationState(installation),
-      "configuration-maintenance",
-      `${maintenanceId}.json`,
-    );
+    owner = readMaintenanceOwner(installation, maintenanceId);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
   }
-  const owner = verifyControl(installation.publicKey, domain, raw, ownerSchema);
   return owner.receipt.dmFence ? owner.plan.release : undefined;
+}
+/** The release a maintenance pins in the generation it commits; undefined when it keeps the
+ * applied release. A maintenance that was never prepared is an error. */
+export function readMaintenanceRelease(
+  installation: ControlInstallation,
+  maintenanceId: string,
+): ConfigurationReleaseSnapshot | undefined {
+  return readMaintenanceOwner(installation, maintenanceId).plan.release;
+}
+function readMaintenanceOwner(
+  installation: ControlInstallation,
+  maintenanceId: string,
+): ConfigurationMaintenanceOwnerRecord {
+  const raw = readPrivateRecord(
+    installationState(installation),
+    "configuration-maintenance",
+    `${maintenanceId}.json`,
+  );
+  return verifyControl(installation.publicKey, domain, raw, ownerSchema);
 }
 /** Observation-only completion of the original prepared handoff. All sources
  * and physical descendants must already be settled; this runs no Docker I/O. */
@@ -671,7 +694,6 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
       throw new ConfigurationMaintenanceControlUnauthorized(
         "Uninstalled frozen maintenance continuation",
       );
-    publishConfigurationMaintenanceForwardWitness(authority);
     const lease = restoreConfigurationMaintenancePhaseIssuer(authority, step.phase);
     try {
       if (lookupControlChildPhaseBinding(authority, reservation))
@@ -758,11 +780,7 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
     throw new ConfigurationMaintenanceControlConflict(
       "Original attempted local phase observation required",
     );
-  const inspected = inspectArtifactDelegation({
-      dataRoot: local.dataRoot,
-      installation,
-      assertion: attempted.assertion,
-    }),
+  const inspected = inspectArtifactDelegation({ installation, assertion: attempted.assertion }),
     roleParent = verifiedParentForArtifactDelegation(
       installation,
       attempted.assertion,
@@ -796,7 +814,6 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
         kind: operation.kind,
       });
       return adoptArtifactTargetLease({
-        dataRoot: local.dataRoot,
         assertion,
         peer,
         execution,
@@ -1534,7 +1551,7 @@ export function completeConfigurationMaintenanceSettleControl(
 function completeOwnedConfigurationMaintenanceSettleControl(
   authority: VerifiedExecutionAuthority,
 ): ConfigurationMaintenanceReceipt {
-  const released = verifyRetainedArtifactTargetRootRelease(authority);
+  const released = verifyLocalArtifactTargetRootRelease(authority);
   restoreOwnedMaintenanceFinal(authority);
   assertConfigurationMaintenanceRootClosure(authority);
   return withPrivateEffectWriter(executionAuthorityState(authority), () => {
@@ -1580,7 +1597,7 @@ export function inspectConfigurationMaintenanceSettleControl(
     throw Error("Original settle canonical source required");
   restoreOwnedMaintenanceFinal(source.authority);
   assertConfigurationMaintenanceRootClosure(source.authority);
-  if (verifyRetainedArtifactTargetRootRelease(source.authority).releasedAt !== retained.completedAt)
+  if (verifyLocalArtifactTargetRootRelease(source.authority).releasedAt !== retained.completedAt)
     throw Error("Original settle completion time changed");
   return {
     receipt: { ...owner.receipt, ...retained.result },
@@ -1659,7 +1676,7 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
     proof = configurationMaintenanceChildState(verified, authority),
     lease = restoreArtifactTargetLeaseForSettlement(authority);
   try {
-    const physical = inspectArtifactTargetLeaseChildSettlement(lease, execution);
+    const physical = inspectLocalLeaseChildSettlement(lease, execution);
     const handoff = owner.plan.steps[source.ordinal]?.phase === "maintenance-handoff";
     if (handoff) verifyControlPreparedTerminal(local, execution);
     else if (!physical || canonicalJson(physical) !== canonicalJson(proof.settlement))
@@ -1780,7 +1797,7 @@ export function restoreConfigurationMaintenanceControlJournal(
       if (source.operation.kind === "configurationMaintenance.settle" && !unresolved) {
         restoreOwnedMaintenanceFinal(authority);
         assertConfigurationMaintenanceRootClosure(authority);
-        verifyRetainedArtifactTargetRootRelease(authority);
+        verifyLocalArtifactTargetRootRelease(authority);
       }
       if (keys.has(source.execution.operationKey) || ids.has(source.execution.executionId))
         throw new ConfigurationMaintenanceControlConflict("Duplicate original control identity");
@@ -1891,7 +1908,7 @@ export function recordOwnedConfigurationMaintenancePrepared(
   child: ExecutionRef,
   receipt: DataConfigurationFenceReceipt,
 ): void {
-  const settled = inspectArtifactTargetLeaseChildSettlement(lease, child);
+  const settled = inspectLocalLeaseChildSettlement(lease, child);
   if (
     settled?.outcome !== "committed" ||
     settled.terminalReceiptDigest !== controlDigest({ kind: "data-configuration-fence", receipt })
@@ -2091,21 +2108,26 @@ export function restoreOwnedMaintenanceFinal(
     const contained = final.ownerFinal.payload.outcome === "contained";
     if (contained) assertContainedConfigurationMaintenanceFinalState(owner);
     else assertAppliedConfigurationMaintenanceFinalState(owner);
-    const actual = readOriginalMaintenanceFinalChildren(
-      authority,
-      observeConfigurationMaintenanceRuntimeTree(authority),
-    );
+    // The children were compared before the root was released; the store
+    // keeps no released tree to compare again.
+    const actual = configurationMaintenanceRootReleased(authority)
+      ? undefined
+      : readOriginalMaintenanceFinalChildren(
+          authority,
+          observeConfigurationMaintenanceRuntimeTree(authority),
+        );
     if (
-      (!contained && !actual.complete) ||
-      (contained &&
-        (actual.generationResult?.outcome !== "not_committed" ||
-          actual.generationResult.cleanupFailed ||
-          actual.children.length !== 1)) ||
-      canonicalJson(actual.children) !== canonicalJson(final.evidence.children) ||
-      final.evidence.generation.commitReceiptDigest !==
-        (contained ? null : actual.generation?.terminalDigest) ||
-      canonicalJson(final.evidence.followUp.receiptDigests) !==
-        canonicalJson(actual.followUpReceiptDigests)
+      actual &&
+      ((!contained && !actual.complete) ||
+        (contained &&
+          (actual.generationResult?.outcome !== "not_committed" ||
+            actual.generationResult.cleanupFailed ||
+            actual.children.length !== 1)) ||
+        canonicalJson(actual.children) !== canonicalJson(final.evidence.children) ||
+        final.evidence.generation.commitReceiptDigest !==
+          (contained ? null : actual.generation?.terminalDigest) ||
+        canonicalJson(final.evidence.followUp.receiptDigests) !==
+          canonicalJson(actual.followUpReceiptDigests))
     )
       throw Error("Original applied final child sources changed");
   } else assertUnusedConfigurationMaintenanceFinalState(owner);
@@ -2143,7 +2165,7 @@ export function restoreOwnedMaintenanceFinal(
     actual.identity.maintenanceId !== owner.plan.operation.maintenanceId ||
     actual.identity.candidateId !== owner.plan.operation.candidateId ||
     actual.identity.planDigest !== owner.plan.planDigest ||
-    actual.identity.rootCertificateDigest !== owner.rootCertificateDigest ||
+    actual.identity.leaseId !== owner.leaseId ||
     canonicalJson(evidence.runtime) !== canonicalJson(inspection.runtime) ||
     inspection.runtime.requiredCheckSetDigest !==
       finalRecordDigest(domains.inspection, inspection.requiredChecks) ||
@@ -2193,7 +2215,7 @@ export async function releaseOwnedConfigurationMaintenanceRoot(
   restoreOwnedMaintenanceFinal(authority);
   assertConfigurationMaintenanceRootClosure(authority);
   if (original.receipt.state === "settled") {
-    verifyRetainedArtifactTargetRootRelease(authority);
+    verifyLocalArtifactTargetRootRelease(authority);
     return original.receipt;
   }
   // Physical release precedes this owner's metadata publication. A lost owner
@@ -2202,7 +2224,7 @@ export async function releaseOwnedConfigurationMaintenanceRoot(
   // original settlement-only reconciliation path, which verifies its sources.
   let physicallyReleased = false;
   try {
-    verifyRetainedArtifactTargetRootRelease(authority);
+    verifyLocalArtifactTargetRootRelease(authority);
     physicallyReleased = true;
   } catch {
     /* A held/partial original release is reconciled below. */
@@ -2212,13 +2234,12 @@ export async function releaseOwnedConfigurationMaintenanceRoot(
       leaseId = lease.leaseId;
     closeArtifactTargetLeaseHandle(lease);
     const released = await reconcileArtifactTargetLease({
-      dataRoot: state.installation.dataRoot,
       leaseId,
       authority: verifyControlRecoveryAuthority(authority),
     });
     if (released !== "released") throw Error("Original prepared maintenance root remains fenced");
   }
-  verifyRetainedArtifactTargetRootRelease(authority);
+  verifyLocalArtifactTargetRootRelease(authority);
   assertConfigurationMaintenanceRootClosure(authority);
   return withPrivateEffectWriter(state, () => {
     const current = read(authority);
@@ -2236,9 +2257,29 @@ export async function releaseOwnedConfigurationMaintenanceRoot(
   });
 }
 
-/** Recovers an expired preparation the data-manager never admitted: the
- * data-manager signs that observation, then the never-prepared root releases. */
-export async function recoverUnadmittedConfigurationMaintenance(
+const unadmittedRecoveries = new Map<
+  string,
+  ReturnType<typeof recoverUnadmittedConfigurationMaintenanceOnce>
+>();
+/**
+ * Recovers an expired preparation the data-manager never admitted: the
+ * data-manager answers that it never admitted it, then the never-prepared root
+ * releases. Concurrent cancellation polls share one recovery.
+ */
+export function recoverUnadmittedConfigurationMaintenance(
+  runtime: OpsRuntime,
+  authority: VerifiedExecutionAuthority,
+) {
+  const key = executionAuthorityState(authority).execution.operationKey;
+  const running = unadmittedRecoveries.get(key);
+  if (running) return running;
+  const next = recoverUnadmittedConfigurationMaintenanceOnce(runtime, authority).finally(() =>
+    unadmittedRecoveries.delete(key),
+  );
+  unadmittedRecoveries.set(key, next);
+  return next;
+}
+async function recoverUnadmittedConfigurationMaintenanceOnce(
   runtime: OpsRuntime,
   authority: VerifiedExecutionAuthority,
 ) {
@@ -2255,8 +2296,8 @@ export async function recoverUnadmittedConfigurationMaintenance(
   )
     throw Error("Original expired never-applied preparation required");
   try {
-    verifyRetainedArtifactTargetRootRelease(authority);
-    assertConfigurationMaintenanceRootClosure(authority);
+    // The store releases a maintenance root only after its closure check.
+    verifyLocalArtifactTargetRootRelease(authority);
     return configurationMaintenanceRecoverySource(authority);
   } catch {
     /* Only original held/partially released recovery follows. */
@@ -2283,33 +2324,42 @@ export async function recoverUnadmittedConfigurationMaintenance(
     // Cancellation closes forward issuance first. A lost response can only
     // repeat this same negative receiver observation, never PREPARE.
     cancelControlExecution(authority);
-    let negative: ReturnType<typeof readConfigurationPrepareNonAdmission> | undefined;
+    await cancelArtifactTargetLease(lease);
+    // The data-manager answers that it never admitted the expired preparation
+    // and can no longer admit it; that answer settles the leaf without effect.
+    // A retry after a later step failed reuses the answer it kept.
+    let negative: ConfigurationPrepareNonAdmission;
     try {
-      negative = readConfigurationPrepareNonAdmission(authority);
-    } catch {
-      /* First recovery. */
+      negative = readFenceNonAdmission(authority, owner);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      negative = retainFenceNonAdmission(
+        authority,
+        owner,
+        await recoverUnadmittedDataConfigurationFence(owner.plan.dmPrepare, {
+          transport: configurationDataManagerTransport(),
+          controlAssertion: attempt.assertion,
+        }),
+      );
     }
-    if (!negative) {
-      await cancelArtifactTargetLease(lease);
-      await recoverUnadmittedConfigurationPreparation(owner.plan.dmPrepare, {
-        transport: configurationDataManagerTransport(),
-        headers: { "x-openmapx-control-delegation": attempt.assertion },
-      });
-      negative = readConfigurationPrepareNonAdmission(authority);
-    }
-    if (canonicalJson(negative.payload.input) !== canonicalJson(owner.plan.dmPrepare))
+    if (
+      canonicalJson(negative.input) !== canonicalJson(owner.plan.dmPrepare) ||
+      canonicalJson(negative.child) !== canonicalJson(attempt.execution)
+    )
       throw Error("Original preparation recovery body changed");
+    await settleIssuedLeaseChild(lease, attempt.execution, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      terminalReceiptDigest: controlDigest(negative),
+    });
     retainConfigurationFenceNotPrepared(authority);
     if (
       (await reconcileArtifactTargetLease({
-        dataRoot: state.installation.dataRoot,
         leaseId: lease.leaseId,
         authority: verifyControlRecoveryAuthority(authority),
       })) !== "released"
     )
       throw Error("Original unadmitted maintenance remains fenced");
-    assertConfigurationMaintenanceRootClosure(authority);
-    verifyRetainedArtifactTargetRootRelease(authority);
     return configurationMaintenanceRecoverySource(authority);
   } finally {
     closeArtifactTargetLeaseHandle(lease);
@@ -2320,22 +2370,44 @@ export async function recoverUnadmittedConfigurationMaintenance(
  * the data-manager settled its fence child with, its signed observation that
  * the prepare was never admitted. */
 function configurationMaintenanceRecoverySource(authority: VerifiedExecutionAuthority) {
-  assertConfigurationMaintenanceRootClosure(authority);
-  const released = verifyRetainedArtifactTargetRootRelease(authority),
+  const released = verifyLocalArtifactTargetRootRelease(authority),
     owner = read(authority),
-    fence = owner.plan.reservations.find((value) => value.phase === "configuration-fence"),
-    binding = fence && lookupControlChildPhaseBinding(authority, fence),
-    settled = binding
-      ? inspectRetainedOwnedArtifactTargetChildSettlement(authority, binding.child.execution)
-      : null;
-  if (settled?.outcome !== "failed_without_effect")
-    throw Error("Data-manager non-admission required");
+    negative = readFenceNonAdmission(authority, owner);
   return {
     maintenanceId: owner.plan.operation.maintenanceId,
     candidateId: owner.plan.operation.candidateId,
-    receiverEvidenceDigest: settled.terminalReceiptDigest,
+    receiverEvidenceDigest: controlDigest(negative),
     releasedAt: released.releasedAt,
   };
+}
+const fenceNonAdmissionName = (owner: ConfigurationMaintenanceOwnerRecord) =>
+  `fence-not-admitted-${owner.plan.operation.maintenanceId}.json`;
+/** The data-manager's answer that it never admitted the preparation, kept once. */
+function retainFenceNonAdmission(
+  authority: VerifiedExecutionAuthority,
+  owner: ConfigurationMaintenanceOwnerRecord,
+  negative: ConfigurationPrepareNonAdmission,
+): ConfigurationPrepareNonAdmission {
+  const local = executionAuthorityState(authority).installation;
+  try {
+    return readFenceNonAdmission(authority, owner);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  writePrivateRecord(local, "observations", fenceNonAdmissionName(owner), negative, true);
+  return negative;
+}
+function readFenceNonAdmission(
+  authority: VerifiedExecutionAuthority,
+  owner: ConfigurationMaintenanceOwnerRecord,
+): ConfigurationPrepareNonAdmission {
+  return configurationPrepareNonAdmissionSchema.parse(
+    readPrivateRecord(
+      executionAuthorityState(authority).installation,
+      "observations",
+      fenceNonAdmissionName(owner),
+    ),
+  );
 }
 /** Records that this maintenance never prepared a fence, so its root can
  * release: the fence child was never issued, or the data-manager settled it
@@ -2578,7 +2650,7 @@ export function configurationHandoffPendingMaintenanceIds(
           const authority = restoreAdmittedControlExecution(installation, owner.plan.prepare);
           restoreOwnedMaintenanceFinal(authority);
           assertConfigurationMaintenanceRootClosure(authority);
-          verifyRetainedArtifactTargetRootRelease(authority);
+          verifyLocalArtifactTargetRootRelease(authority);
           return false;
         } catch {
           return true;
@@ -2664,24 +2736,7 @@ export async function prepareMaintenanceContinueObservation(
       source.candidateSource,
       owner.plan.operation.candidateId,
     ),
-    issuedAt = Date.now(),
-    witness = signControl(
-      state.installation.privateKey,
-      "openmapx-configuration-fence-inspect-v1",
-      {
-        installationId: owner.installationId,
-        maintenanceId: owner.plan.operation.maintenanceId,
-        candidateId: owner.plan.operation.candidateId,
-        ownerCertificateDigest: owner.rootCertificateDigest,
-        issuedAt,
-        expiresAt: Math.min(state.execution.deadlineAt, issuedAt + 15000),
-      },
-    ),
-    actual = await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
-      transport: configurationDataManagerTransport(),
-      witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-      signal,
-    });
+    actual = await inspectOwnedFence(owner, signal);
   if (
     canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     controlDigest(candidate.record) !== owner.plan.candidateRecordDigest ||
@@ -2750,24 +2805,7 @@ export async function verifyFrozenMaintenanceGenerationSource(
     canonicalJson(fresh.originalContainers) !== canonicalJson(owner.originalContainers)
   )
     throw Error("Frozen maintenance generation source drifted");
-  const issuedAt = Date.now(),
-    witness = signControl(
-      state.installation.privateKey,
-      "openmapx-configuration-fence-inspect-v1",
-      {
-        installationId: owner.installationId,
-        maintenanceId: owner.plan.operation.maintenanceId,
-        candidateId: owner.plan.operation.candidateId,
-        ownerCertificateDigest: owner.rootCertificateDigest,
-        issuedAt,
-        expiresAt: Math.min(state.execution.deadlineAt, issuedAt + 15000),
-      },
-    ),
-    actual = await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
-      transport: configurationDataManagerTransport(),
-      witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-      signal,
-    });
+  const actual = await inspectOwnedFence(owner, signal);
   if (
     canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner)
@@ -2806,7 +2844,7 @@ export async function verifyFrozenMaintenanceHardlinksSource(
     proof = configurationMaintenanceChildState(verified, authority),
     lease = restoreArtifactTargetLeaseForSettlement(authority);
   try {
-    const physical = inspectArtifactTargetLeaseChildSettlement(lease, generation.execution);
+    const physical = inspectLocalLeaseChildSettlement(lease, generation.execution);
     if (!physical || canonicalJson(physical) !== canonicalJson(proof.settlement))
       throw Error("Original generation child settlement required");
   } finally {
@@ -2823,24 +2861,7 @@ export async function verifyFrozenMaintenanceHardlinksSource(
   if (containers.find((value) => value.serviceId === "data-manager")?.state !== "running")
     throw Error("Original maintenance coordinator stopped");
   await assertConfigurationCoordinatorReady(signal);
-  const issuedAt = Date.now(),
-    witness = signControl(
-      state.installation.privateKey,
-      "openmapx-configuration-fence-inspect-v1",
-      {
-        installationId: owner.installationId,
-        maintenanceId: owner.plan.operation.maintenanceId,
-        candidateId: owner.plan.operation.candidateId,
-        ownerCertificateDigest: owner.rootCertificateDigest,
-        issuedAt,
-        expiresAt: Math.min(state.execution.deadlineAt, issuedAt + 15000),
-      },
-    ),
-    actual = await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
-      transport: configurationDataManagerTransport(),
-      witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-      signal,
-    });
+  const actual = await inspectOwnedFence(owner, signal);
   if (
     canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner) ||
@@ -2909,7 +2930,7 @@ async function verifyFrozenMaintenanceFollowUpSource(
           ),
           authority,
         ),
-        physical = inspectArtifactTargetLeaseChildSettlement(lease, child.execution);
+        physical = inspectLocalLeaseChildSettlement(lease, child.execution);
       if (!physical || canonicalJson(physical) !== canonicalJson(proof.settlement))
         throw Error("Original recreation prerequisite settlement required");
     }
@@ -2925,24 +2946,7 @@ async function verifyFrozenMaintenanceFollowUpSource(
       throw Error("Original recreation coordinator stopped");
     await assertConfigurationCoordinatorReady(signal);
   }
-  const issuedAt = Date.now(),
-    witness = signControl(
-      state.installation.privateKey,
-      "openmapx-configuration-fence-inspect-v1",
-      {
-        installationId: owner.installationId,
-        maintenanceId: owner.plan.operation.maintenanceId,
-        candidateId: owner.plan.operation.candidateId,
-        ownerCertificateDigest: owner.rootCertificateDigest,
-        issuedAt,
-        expiresAt: Math.min(state.execution.deadlineAt, issuedAt + 15000),
-      },
-    ),
-    actual = await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
-      transport: configurationDataManagerTransport(),
-      witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-      signal,
-    });
+  const actual = await inspectOwnedFence(owner, signal);
   if (
     canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner) ||
@@ -3047,43 +3051,22 @@ export async function inspectFrozenMaintenanceRuntime(
       throw Error("Unchanged original owned runtime differs");
     if (contained && canonicalJson(containers) !== canonicalJson(owner.originalContainers))
       throw Error("Original noncommitted runtime changed");
-    let currentRelease: { releaseId: string; digest: string; updateJobId: string } | undefined;
     if (!contained && owner.plan.release) {
       if (!owner.plan.handoff || owner.plan.apiParent.issuer !== "api")
-        throw Error("Original release helper/current-state owner required");
+        throw Error("Original release helper owner required");
       const original = readCompletedConfigurationHandoff(
-          state.installation.installation,
-          owner.plan.handoff.handoffId,
-        ),
-        published = original.completion.release,
-        overlay = readConfigurationHandoffReleaseOverlay(source.infraDir),
-        pointer = readConfigurationHandoffReleaseState(source.infraDir);
-      currentRelease = {
-        releaseId: owner.plan.release.releaseId,
-        digest: owner.plan.release.manifestDigest,
-        updateJobId: owner.plan.apiParent.apiJobId,
-      };
+        state.installation.installation,
+        owner.plan.handoff.handoffId,
+      );
       if (
         canonicalJson(original.intent.ownerPrepare) !== canonicalJson(owner.plan.prepare) ||
-        original.intent.ownerCertificateDigest !== owner.rootCertificateDigest ||
+        original.intent.leaseId !== owner.leaseId ||
         original.intent.operation.planDigest !== owner.plan.planDigest ||
         canonicalJson(original.intent.release) !== canonicalJson(owner.plan.release) ||
-        published?.publication !== "published" ||
-        published.statePublication !== "published" ||
-        canonicalJson(overlay) !== canonicalJson(published.overlay) ||
-        canonicalJson(pointer) !== canonicalJson(published.state) ||
-        !overlay ||
-        !pointer ||
-        Buffer.from(pointer.bytes, "base64").toString("utf8") !== JSON.stringify(currentRelease) ||
-        Buffer.from(overlay.bytes, "base64").toString("utf8") !==
-          services.renderReleaseCompose(
-            services.parseReleaseManifest(
-              owner.plan.release.canonicalManifest,
-              owner.plan.release.imagePrefix,
-            ),
-          )
+        services.readAppliedRelease(source.infraDir)?.manifestDigest !==
+          owner.plan.release.manifestDigest
       )
-        throw Error("Original helper release publication changed before final inspection");
+        throw Error("The applied generation does not pin the release this update froze");
     }
     const docker = await inspectMaintenanceDockerRuntime({
       stack: source.stack,
@@ -3094,24 +3077,7 @@ export async function inspectFrozenMaintenanceRuntime(
       signal,
     });
     if (owner.plan.hardlinkPlan.plan.length) await assertConfigurationCoordinatorReady(signal);
-    const issuedAt = Date.now(),
-      witness = signControl(
-        state.installation.privateKey,
-        "openmapx-configuration-fence-inspect-v1",
-        {
-          installationId: owner.installationId,
-          maintenanceId: owner.plan.operation.maintenanceId,
-          candidateId: owner.plan.operation.candidateId,
-          ownerCertificateDigest: owner.rootCertificateDigest,
-          issuedAt,
-          expiresAt: issuedAt + 15000,
-        },
-      ),
-      guard = await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
-        transport: configurationDataManagerTransport(),
-        witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-        signal,
-      });
+    const guard = await inspectOwnedFence(owner, signal);
     if (
       canonicalJson(guard) !== canonicalJson(owner.preparedFence) ||
       canonicalJson(containers) !== canonicalJson(await inspectContainers()) ||
@@ -3131,7 +3097,7 @@ export async function inspectFrozenMaintenanceRuntime(
         origin: owner.origin,
         ownerPrepare: owner.plan.prepare,
         admissionDigest: owner.admissionDigest,
-        rootCertificateDigest: owner.rootCertificateDigest,
+        leaseId: owner.leaseId,
         maintenanceId: owner.plan.operation.maintenanceId,
         candidateId: owner.plan.operation.candidateId,
         planDigest: owner.plan.planDigest,
@@ -3156,10 +3122,7 @@ export async function inspectFrozenMaintenanceRuntime(
         ...docker.checks,
       ]),
       details = [
-        {
-          currentRevisionId: services.currentConfigurationGeneration(source.infraDir),
-          ...(currentRelease ? { currentRelease } : {}),
-        },
+        { currentRevisionId: services.currentConfigurationGeneration(source.infraDir) },
         { containers },
         { guard },
         ...owner.plan.steps.map((step) => ({
@@ -3222,7 +3185,7 @@ export async function inspectFrozenMaintenanceRuntime(
       origin: owner.origin,
       ownerPrepare: owner.plan.prepare,
       admissionDigest: owner.admissionDigest,
-      rootCertificateDigest: owner.rootCertificateDigest,
+      leaseId: owner.leaseId,
       maintenanceId: owner.plan.operation.maintenanceId,
       candidateId: owner.plan.operation.candidateId,
       planDigest: owner.plan.planDigest,
@@ -3253,8 +3216,7 @@ export async function inspectFrozenMaintenanceRuntime(
     const fence = owner.plan.reservations.find((value) => value.phase === "configuration-fence"),
       fenceBinding = fence && lookupControlChildPhaseBinding(authority, fence),
       physical =
-        fenceBinding &&
-        inspectArtifactTargetLeaseChildSettlement(lease, fenceBinding.child.execution);
+        fenceBinding && inspectLocalLeaseChildSettlement(lease, fenceBinding.child.execution);
     if (
       physical?.outcome !== "committed" ||
       physical.publication !== "committed" ||
@@ -3320,24 +3282,7 @@ export async function inspectFrozenMaintenanceRuntime(
       canonicalJson(containers) !== canonicalJson(owner.originalContainers)
     )
       throw Error("Unused runtime differs from original owned generation/containers");
-    const issuedAt = Date.now(),
-      witness = signControl(
-        state.installation.privateKey,
-        "openmapx-configuration-fence-inspect-v1",
-        {
-          installationId: owner.installationId,
-          maintenanceId: owner.plan.operation.maintenanceId,
-          candidateId: owner.plan.operation.candidateId,
-          ownerCertificateDigest: owner.rootCertificateDigest,
-          issuedAt,
-          expiresAt: issuedAt + 15000,
-        },
-      ),
-      guard = await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
-        transport: configurationDataManagerTransport(),
-        witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-        signal,
-      });
+    const guard = await inspectOwnedFence(owner, signal);
     if (
       canonicalJson(guard) !== canonicalJson(owner.preparedFence) ||
       canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner)
@@ -3570,12 +3515,12 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
     }
     if (owner.receipt.state === "settled" && !owner.preparedFence) {
       assertConfigurationMaintenanceRootClosure(authority);
-      verifyRetainedArtifactTargetRootRelease(authority);
+      verifyLocalArtifactTargetRootRelease(authority);
     }
     if (owner.receipt.state === "settled" && owner.preparedFence) {
       restoreOwnedMaintenanceFinal(authority);
       assertConfigurationMaintenanceRootClosure(authority);
-      verifyRetainedArtifactTargetRootRelease(authority);
+      verifyLocalArtifactTargetRootRelease(authority);
     }
     let preflight: "current" | "drifted" | "unavailable" = "unavailable";
     try {
@@ -3598,24 +3543,7 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
           : "drifted";
       if (owner.receipt.dmFence) {
         if (!owner.preparedFence) throw Error("Original prepared guard source unavailable");
-        const issuedAt = Date.now(),
-          witness = signControl(
-            state.installation.privateKey,
-            "openmapx-configuration-fence-inspect-v1",
-            {
-              installationId: owner.installationId,
-              maintenanceId: owner.plan.operation.maintenanceId,
-              candidateId: owner.plan.operation.candidateId,
-              ownerCertificateDigest: owner.rootCertificateDigest,
-              issuedAt,
-              expiresAt: Math.min(context.execution.deadlineAt, issuedAt + 15000),
-            },
-          ),
-          actual = await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
-            transport: configurationDataManagerTransport(),
-            witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-            signal: context.signal,
-          });
+        const actual = await inspectOwnedFence(owner, context.signal);
         if (canonicalJson(actual) !== canonicalJson(owner.receipt.dmFence))
           throw Error("Original prepared guard source changed");
       }
@@ -3669,6 +3597,12 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
           ordinal: reserved.ordinal,
           lease,
           childPublicKey: controlRolePublicKey(state.installation.installation, "data-manager"),
+          // What an operator's `openmapx control resolve` needs to settle the fence.
+          evidence: {
+            maintenanceId: plan.dmPrepare.maintenanceId,
+            candidateId: plan.dmPrepare.candidateId,
+            planDigest: plan.dmPrepare.planDigest,
+          },
         });
         consumeControlChildDispatch(issued.dispatchTicket);
         assertion = issued.assertion;
@@ -3678,16 +3612,44 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
         // The data-manager prepares idempotently: a lost reply repeats the same
         // body for a short while. A data-manager that stays unreachable leaves
         // the maintenance held for recovery.
-        const receipt = await retryDataManager(
-          context.signal,
-          Math.min(context.execution.deadlineAt, Date.now() + 15_000),
-          () =>
-            prepareDataConfigurationFence(plan.dmPrepare, {
-              transport: configurationDataManagerTransport(),
-              controlAssertion: assertion,
-              signal: context.signal,
-            }),
-        );
+        let receipt: Awaited<ReturnType<typeof prepareDataConfigurationFence>>;
+        try {
+          receipt = await retryDataManager(
+            context.signal,
+            Math.min(context.execution.deadlineAt, Date.now() + 15_000),
+            () =>
+              prepareDataConfigurationFence(plan.dmPrepare, {
+                transport: configurationDataManagerTransport(),
+                controlAssertion: assertion,
+                signal: context.signal,
+              }),
+          );
+        } catch (error) {
+          // A busy refusal wrote nothing: the fence leaf failed without effect.
+          if (
+            error instanceof DataManagerHttpError &&
+            error.status === 409 &&
+            error.message.includes("configuration_maintenance_busy")
+          )
+            await settleIssuedLeaseChild(lease, child.execution, {
+              outcome: "failed_without_effect",
+              publication: "not_started",
+              terminalReceiptDigest: controlDigest({
+                kind: "data-configuration-fence-refused",
+                maintenanceId: plan.operation.maintenanceId,
+                reason: "busy",
+              }),
+            });
+          throw error;
+        }
+        await settleIssuedLeaseChild(lease, child.execution, {
+          outcome: "committed",
+          publication: "committed",
+          terminalReceiptDigest: controlDigest({
+            kind: "data-configuration-fence",
+            receipt: { ...receipt, sequence: 0, state: "prepared" },
+          }),
+        });
         recordOwnedConfigurationMaintenancePrepared(
           authority,
           lease,
@@ -3784,7 +3746,6 @@ export async function prepareConfigurationMaintenanceAdmission(
   const release = platform?.release
     ? input.frozenRelease
       ? await verifyFrozenConfigurationRelease({
-          infraDir: source.infraDir,
           selection: platform.release,
           frozen: input.frozenRelease,
           execFile: source.execFile,
@@ -3842,6 +3803,9 @@ export async function prepareConfigurationMaintenanceAdmission(
       selectedRoots: candidate.payload.selectedRoots ?? desired.roots,
     },
     allowMissingSelected: !candidate.payload.selectedRoots && desired.source === "default",
+    ...(release
+      ? { release: services.parseReleaseManifest(release.canonicalManifest, release.imagePrefix) }
+      : {}),
   });
   const prospective = new Set(rendered.resolved.enabled.map((service) => service.manifest.id));
   if (!prospective.has("data-manager") || recreateServiceIds.some((id) => !prospective.has(id)))

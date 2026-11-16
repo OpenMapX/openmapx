@@ -366,7 +366,6 @@ export async function generateTransitousApiKeys(
       serviceIds: ["motis"],
     });
     lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(paths.infraDir, "data"),
       serviceIds: ["motis"],
       owner: authority,
     });

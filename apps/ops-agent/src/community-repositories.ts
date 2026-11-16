@@ -21,7 +21,6 @@ import {
   type GitShallowCloneOptions,
   gitShallowCloneSnapshot,
 } from "@openmapx/core/server";
-import type { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import type { OwnedServiceResolver } from "./owned-services";
 import { OpsAgentBusyError, type OpsRuntime } from "./runtime";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
@@ -629,7 +628,6 @@ export function installCommunityRepositoryRuntime(
   runtime: OpsRuntime,
   store: CommunityRepositoryStore,
   owned: OwnedServiceResolver,
-  lifecycle: ServiceLifecycleExclusion,
 ): void {
   runtime["serviceRepository.inspect"] = (operation, context) =>
     store.inspect(operation, context.signal);
@@ -645,9 +643,8 @@ export function installCommunityRepositoryRuntime(
         if (typeof id !== "string") throw new Error("Repository service authority unavailable");
         return id;
       });
-    return lifecycle.run(ids, context.signal, () =>
-      store.remove(operation, context.signal, owned, ids),
-    );
+    // The agent holds the lease on every registered service while this runs.
+    return store.remove(operation, context.signal, owned, ids);
   };
   runtime["communityServices.inspect"] = () => store.list();
 }

@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   type AgentContainerFacts,
   configurationHandoffRunArgs,
-  configurationHandoffServiceOrder,
   inspectAgentContainer,
   inspectConfigurationHandoffPrerequisite,
 } from "./configuration-handoff";
@@ -331,7 +331,7 @@ describe("configuration helper container", () => {
 
 it("orders dependencies and the agent last without silently expanding frozen targets", () => {
   expect(
-    configurationHandoffServiceOrder([
+    services.selfUpdateServiceOrder([
       "ops-agent",
       "traefik",
       "app-api",
@@ -341,9 +341,9 @@ it("orders dependencies and the agent last without silently expanding frozen tar
     ]),
   ).toEqual(["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"]);
   expect(
-    configurationHandoffServiceOrder(["motis", "app-api", "data-manager", "ops-agent"]),
+    services.selfUpdateServiceOrder(["motis", "app-api", "data-manager", "ops-agent"]),
   ).toEqual(["data-manager", "motis", "app-api", "ops-agent"]);
-  expect(() => configurationHandoffServiceOrder(["app-api", "app-api"])).toThrow();
+  expect(() => services.selfUpdateServiceOrder(["app-api", "app-api"])).toThrow();
 });
 it("requires the actual old image's helper version before any launch", async () => {
   const calls: string[][] = [];

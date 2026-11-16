@@ -9,7 +9,6 @@ import { renderComposeForRepo, renderComposeWithWriter } from "../src/commands/c
 import { registerServicesCommands } from "../src/commands/services";
 import { migrateBeforeApiUpdate } from "../src/lib/api-migrations";
 import { dockerComposeStream } from "../src/lib/docker";
-import { ensureReleaseOverlay } from "../src/lib/release";
 
 vi.setConfig({ testTimeout: 60000 });
 
@@ -39,10 +38,6 @@ vi.mock("../src/lib/docker", async (original) => {
 vi.mock("../src/lib/api-migrations", () => ({
   API_SERVICE_ID: "app-api",
   migrateBeforeApiUpdate: vi.fn(async () => 0),
-}));
-vi.mock("../src/lib/release", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/lib/release")>()),
-  ensureReleaseOverlay: vi.fn(),
 }));
 
 let root: string, seed: string;
@@ -78,7 +73,6 @@ beforeEach(async () => {
   services.writeServiceSelectionFile(join(root, "infra/docker"), ids);
   seed = (await renderComposeForRepo({ rootDir: root, domain: "example.test" })).revisionId;
   vi.mocked(dockerComposeStream).mockReset().mockResolvedValue(0);
-  vi.mocked(ensureReleaseOverlay).mockReset();
   vi.mocked(migrateBeforeApiUpdate).mockReset().mockResolvedValue(0);
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -100,24 +94,15 @@ function update(...ids: string[]) {
 }
 
 describe("services update pull failures", () => {
-  it.each(["present", "resolved"] as const)(
-    "stops before recreation when a %s release cannot be pulled",
-    async (status) => {
-      vi.mocked(ensureReleaseOverlay).mockResolvedValue({
-        status,
-        path: "release.yml",
-        release: "abc",
-      });
-      vi.mocked(dockerComposeStream).mockResolvedValueOnce(7);
-      await expect(update("ops-agent", "transitous-runner")).rejects.toThrow("exit:7");
-      expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([
-        [["pull", "ops-agent", "transitous-runner"]],
-      ]);
-    },
-  );
+  it("stops before recreation when a release cannot be pulled", async () => {
+    vi.mocked(dockerComposeStream).mockResolvedValueOnce(7);
+    await expect(update("ops-agent", "transitous-runner")).rejects.toThrow("exit:7");
+    expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([
+      [["pull", "ops-agent", "transitous-runner"]],
+    ]);
+  });
 
   it("recreates a pinned release after a successful pull", async () => {
-    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
     await expect(update("ops-agent")).rejects.toThrow("exit:0");
     expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([
       [["pull", "ops-agent"]],
@@ -126,7 +111,6 @@ describe("services update pull failures", () => {
   });
 
   it("passes --no-deps only to ordinary target recreation", async () => {
-    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
     await expect(update("--no-deps", "app-web", "transitous-runner", "app-api")).rejects.toThrow(
       "exit:0",
     );
@@ -137,17 +121,13 @@ describe("services update pull failures", () => {
   });
 
   it("refuses an explicitly unpinned local image after a failed pull", async () => {
-    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "disabled" });
     vi.mocked(dockerComposeStream).mockResolvedValueOnce(7);
     await expect(update("ops-agent")).rejects.toThrow("exit:7");
     expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "ops-agent"]]]);
   });
 
-  it("does not pull or recreate when release resolution fails", async () => {
-    vi.mocked(ensureReleaseOverlay).mockResolvedValue({
-      status: "unpinned",
-      reason: "unavailable",
-    });
+  it("does not pull or recreate release images the applied configuration does not pin", async () => {
+    vi.stubEnv("OPENMAPX_RELEASE", "main");
     await expect(update("ops-agent")).rejects.toThrow("exit:1");
     expect(dockerComposeStream).not.toHaveBeenCalled();
   });
@@ -155,25 +135,10 @@ describe("services update pull failures", () => {
   it("refuses recreation of a locally built service after a failed pull", async () => {
     vi.mocked(dockerComposeStream).mockResolvedValueOnce(7);
     await expect(update("valhalla")).rejects.toThrow("exit:7");
-    expect(ensureReleaseOverlay).not.toHaveBeenCalled();
     expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "valhalla"]]]);
   });
-  it("validates pins and pulls before full generation preparation, hardlinks and recreation", async () => {
+  it("pulls before full generation preparation, hardlinks and recreation", async () => {
     const events: string[] = [];
-    vi.mocked(ensureReleaseOverlay).mockImplementation(async (options) => {
-      expect(options?.releaseStoreLock).toEqual(
-        expect.objectContaining({ release: expect.any(Function) }),
-      );
-      await expect(
-        services.acquireReleaseStoreLock(
-          services.releaseStatePaths(join(root, "infra/docker")).store,
-          {},
-          { failIfBusy: true },
-        ),
-      ).rejects.toThrow(/busy/);
-      events.push("pins");
-      return { status: "present", path: "release.yml" };
-    });
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       const current = services.currentConfigurationGeneration(join(root, "infra/docker"));
       if (args[0] === "pull") {
@@ -181,7 +146,7 @@ describe("services update pull failures", () => {
         events.push("pull");
       } else {
         expect(current).not.toBe(seed);
-        const directory = join(root, "infra/docker/data/ops-agent/lifecycle");
+        const directory = join(root, "infra/docker/state/ops-agent/lifecycle");
         const raw = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
         const receipt = await services.readServiceLifecycleReceipt({
           dataRoot: join(root, "infra/docker/data"),
@@ -197,13 +162,12 @@ describe("services update pull failures", () => {
       return 0;
     });
     await expect(update("ops-agent")).rejects.toThrow("exit:0");
-    expect(events).toEqual(["pins", "pull", "recreate"]);
+    expect(events).toEqual(["pull", "recreate"]);
   });
 });
 
 describe("services update and the operations agent", () => {
   it("does not recreate when rendering after the pull cannot resolve the deployment user", async () => {
-    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
     vi.mocked(renderComposeWithWriter).mockRejectedValueOnce(
       new Error(
         "The checkout /srv/openmapx is owned by root, so the deployment's user cannot be taken from it: set UID and GID in /srv/openmapx/infra/docker/.env to the account that runs the stack",
@@ -216,10 +180,6 @@ describe("services update and the operations agent", () => {
 });
 
 describe("services update and app-api's database migrations", () => {
-  beforeEach(() => {
-    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
-  });
-
   it("migrates after the pull and before recreation when app-api is replaced", async () => {
     const order: string[] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {

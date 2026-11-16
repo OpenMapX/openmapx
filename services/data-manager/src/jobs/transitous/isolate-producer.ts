@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core/build-artifacts";
 import { isolateArtifactHardlinks } from "../../../../../packages/core/src/build-artifacts/copy-tree";
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
+import { ownedLease } from "../execution/owned-lease";
 import type { DataExecutionContext } from "../execution/runtime";
 import { dataExecutionWorkerContext, publishDataChange } from "../execution/worker-scope";
 
@@ -18,16 +19,16 @@ export async function isolateOwnedTransitProducer(
   context.assertForward();
   const owner = executionAuthorityState(context.authority),
     record = await context.record();
-  assertArtifactTargetLeaseForward(context.targetAuthority);
-  assertArtifactTargetLeaseExecution(context.targetAuthority, context.execution);
+  assertArtifactTargetLeaseForward(ownedLease(context));
+  assertArtifactTargetLeaseExecution(ownedLease(context), context.execution);
   if (
     owner.installation.installation.role !== "data-manager" ||
     !["transit-sync", "catalog.validate"].includes(owner.kind) ||
     controlDigest(record.execution) !== controlDigest(owner.execution) ||
     controlDigest(record.input) !== owner.execution.operationFingerprint ||
-    context.targetAuthority.mode !== "owner" ||
+    ownedLease(context).mode !== "owner" ||
     !["motis", "motis-staging", "motis-feed-proxy"].every((id) =>
-      context.targetAuthority.serviceIds.includes(id),
+      ownedLease(context).serviceIds.includes(id),
     )
   )
     throw Error("Original complete transit target owner required");

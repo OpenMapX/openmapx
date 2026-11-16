@@ -810,12 +810,17 @@ describe("ops-agent async foundation", () => {
         return { changed: true };
       },
     });
+    // A stop that needs recovery keeps its target leased; new work uses another one.
     const submit = (kind: "service.stop" | "service.restart", name: string) =>
       app.inject({
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
-        payload: request({ kind, serviceId: "redis" }, `ops1_${name}`, key(`opk1_${name}`)),
+        payload: request(
+          { kind, serviceId: kind === "service.stop" ? "redis" : "osrm" },
+          `ops1_${name}`,
+          key(`opk1_${name}`),
+        ),
       });
     const finish = async (id: string) =>
       eventually(
@@ -835,5 +840,315 @@ describe("ops-agent async foundation", () => {
     expect((await submit("service.restart", "recoveryCapThird0")).statusCode).toBe(429);
     expect((await finish(stuck)).json().result.errorClass).toBe("recovery_required");
     await app.close();
+  });
+});
+
+describe("one admission path for target effects", () => {
+  it("answers busy for a restart or removal of a held target and audits the holder", async () => {
+    const control = await import("@openmapx/core/build-artifacts");
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "omx-leased-admission-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["redis", "osrm"],
+    });
+    const leaseStore = control.openLeaseStore({
+      directory: control.leaseStoreDirectory(root),
+      purpose: "test",
+    });
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const audit: OpsAuditEvent[] = [];
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      controlInstallation: installation,
+      leaseStore,
+      audit: (event) => audit.push(event),
+      dispatch: async (operation) => {
+        if (operation.kind === "service.stop") await blocked;
+        return { changed: true };
+      },
+    });
+    try {
+      const submit = (operation: OpsOperation, name: string) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(),
+          // Issued now: this test may run long after the module's base time.
+          payload: {
+            ...request(operation, `ops1_${name}Lease`, key(`opk1_${name}Lease`)),
+            issuedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 20_000).toISOString(),
+          },
+        });
+      const stop = await submit({ kind: "service.stop", serviceId: "redis" }, "leasedStop00000");
+      expect(stop.statusCode).toBe(202);
+      await eventually(
+        async () => leaseStore.list(),
+        (leases) => leases.some((lease) => lease.targets.includes("redis")),
+      );
+      const holder = leaseStore.list()[0]!.owner.operationKey;
+      for (const [operation, name] of [
+        [{ kind: "service.restart", serviceId: "redis" }, "leasedRestart00"],
+        [{ kind: "service.remove", serviceId: "redis" }, "leasedRemove000"],
+      ] as const) {
+        const refused = await submit(operation, name);
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json().error).toEqual({
+          class: "busy",
+          message: `Target redis is busy: held by ops-agent operation ${holder} (service.stop, held). See \`openmapx control status\`.`,
+        });
+      }
+      // A refusal records nothing: the leases are unchanged and no job exists.
+      expect(leaseStore.list().map((lease) => lease.owner.operationKey)).toEqual([holder]);
+      expect(
+        audit
+          .filter((event) => event.heldBy?.includes(holder))
+          .map((event) => [event.kind, event.result]),
+      ).toEqual([
+        ["service.restart", "denied"],
+        ["service.remove", "denied"],
+      ]);
+      // Another target is free, and admits while a refusal still spends its grace.
+      const graced = submit({ kind: "service.restart", serviceId: "redis" }, "leasedGrace0000");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const started = Date.now();
+      expect(
+        (await submit({ kind: "service.restart", serviceId: "osrm" }, "leasedOther0000"))
+          .statusCode,
+      ).toBe(202);
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect((await graced).statusCode).toBe(409);
+      release();
+      await eventually(
+        async () => leaseStore.list(),
+        (leases) => !leases.some((lease) => lease.targets.includes("redis")),
+      );
+      expect(
+        (await submit({ kind: "service.restart", serviceId: "redis" }, "leasedAfter0000"))
+          .statusCode,
+      ).toBe(202);
+    } finally {
+      release();
+      await app.close();
+      control.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 40_000);
+
+  it("holds every registered service during a start, so another service cannot be removed", async () => {
+    const control = await import("@openmapx/core/build-artifacts");
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "omx-leased-start-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["redis", "osrm"],
+    });
+    const leaseStore = control.openLeaseStore({
+      directory: control.leaseStoreDirectory(root),
+      purpose: "test",
+    });
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      controlInstallation: installation,
+      leaseStore,
+      dispatch: async (operation) => {
+        if (operation.kind === "service.start") await blocked;
+        return { changed: true };
+      },
+    });
+    try {
+      const submit = (operation: OpsOperation, name: string) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(),
+          payload: {
+            ...request(operation, `ops1_${name}Start`, key(`opk1_${name}Start`)),
+            issuedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 20_000).toISOString(),
+          },
+        });
+      expect(
+        (
+          await submit(
+            {
+              kind: "service.start",
+              serviceId: "redis",
+              expectedConfigurationRevisionId: `cfg1_${"d".repeat(43)}`,
+            },
+            "leasedStart0000",
+          )
+        ).statusCode,
+      ).toBe(202);
+      await eventually(
+        async () => leaseStore.list(),
+        (leases) => leases.some((lease) => lease.targets.includes("osrm")),
+      );
+      const refused = await submit(
+        { kind: "service.remove", serviceId: "osrm" },
+        "leasedRemove000",
+      );
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json().error.message).toContain("Target osrm is busy");
+    } finally {
+      release();
+      await app.close();
+      control.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("drops the lease of an update whose configuration revision is no longer current", async () => {
+    const control = await import("@openmapx/core/build-artifacts");
+    const { installServiceLifecycleRuntime } = await import("./service-lifecycle-runtime");
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "omx-leased-stale-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["redis", "osrm"],
+    });
+    const leaseStore = control.openLeaseStore({
+      directory: control.leaseStoreDirectory(root),
+      purpose: "test",
+    });
+    const runtime = {} as import("./runtime").OpsRuntime;
+    installServiceLifecycleRuntime(runtime, {
+      rootDir: root,
+      infraDir: root,
+      runFixedCli: async () => {
+        throw new Error("no child may start");
+      },
+    });
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      controlInstallation: installation,
+      leaseStore,
+      runtime,
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: {
+          ...request(
+            {
+              kind: "service.update",
+              serviceId: "redis",
+              expectedConfigurationRevisionId: `cfg1_${"c".repeat(43)}`,
+            },
+            "ops1_staleUpdateLease",
+            key("opk1_staleUpdateLease"),
+          ),
+          issuedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 20_000).toISOString(),
+        },
+      });
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      expect(leaseStore.list()).toEqual([]);
+    } finally {
+      await app.close();
+      control.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("releases the targets of a stop that reported a failure, and keeps those of a killed one", async () => {
+    const control = await import("@openmapx/core/build-artifacts");
+    const { runContainedStreamingProcess } = await import("./docker-runtime");
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "omx-leased-failure-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["redis", "osrm"],
+    });
+    const leaseStore = control.openLeaseStore({
+      directory: control.leaseStoreDirectory(root),
+      purpose: "test",
+    });
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      controlInstallation: installation,
+      leaseStore,
+      dispatch: async (operation, _runtime, context) => {
+        // The Docker command exits 3 for redis; for osrm it is killed by a signal.
+        const script =
+          "serviceId" in operation && operation.serviceId === "redis" ? "exit 3" : "kill -9 $$";
+        await runContainedStreamingProcess("sh", ["-c", script], {
+          signal: context.signal,
+          timeout: 10_000,
+          onLine: () => {},
+          redact: (message) => message,
+        });
+        return { changed: true };
+      },
+    });
+    try {
+      const submit = (operation: OpsOperation, name: string) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(),
+          payload: {
+            ...request(operation, `ops1_${name}Fail`, key(`opk1_${name}Fail`)),
+            issuedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 20_000).toISOString(),
+          },
+        });
+      for (const [serviceId, name] of [
+        ["redis", "reportedStop000"],
+        ["osrm", "killedStop00000"],
+      ] as const) {
+        expect((await submit({ kind: "service.stop", serviceId }, name)).statusCode).toBe(202);
+      }
+      let settled = leaseStore.list();
+      for (
+        const endBy = Date.now() + 10_000;
+        Date.now() < endBy &&
+        (settled.some((lease) => lease.targets.includes("redis")) ||
+          !settled.some((lease) => lease.targets.includes("osrm") && lease.state !== "held"));
+        settled = leaseStore.list()
+      )
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(settled.map((lease) => [lease.targets, lease.state])).toEqual([
+        [["osrm"], "recovery_required"],
+      ]);
+    } finally {
+      await app.close();
+      control.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

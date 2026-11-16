@@ -1,7 +1,7 @@
 /** Activate exactly one reviewed candidate under the existing finite root and child reservations. */
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { controlDigest, verifyDataControlTerminalWitness } from "@openmapx/core/build-artifacts";
+import { controlDigest, readDataControlTerminalObservation } from "@openmapx/core/build-artifacts";
 import {
   catalogProposalSchema,
   catalogRuntimeInputsSchema,
@@ -55,7 +55,7 @@ export async function runCatalogActivation(options: {
     currentValidation.selected.validationDigest !== controlDigest(validation)
   )
     throw Error("Validation was invalidated before slot reuse; validate again");
-  const terminal = verifyDataControlTerminalWitness(
+  const terminal = readDataControlTerminalObservation(
     context.installation,
     validation.sourceExecution,
   );

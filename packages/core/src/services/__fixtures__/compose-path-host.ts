@@ -1,5 +1,4 @@
 import { readGenerationServiceFiles, serviceFileTreePath } from "../service-file-store";
-import { ensureReleaseStateDirectories } from "../release-state";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -69,17 +68,10 @@ export async function composePathHost() {
     mode: 0o600,
   });
   writeFileSync(join(infraDir, "public-data.txt"), "public infrastructure fixture\n");
-  writeFileSync(join(infraDir, "overlay-public.txt"), "public overlay fixture\n");
   const stack = {
     infraDir,
     composePath: currentConfigurationFile(infraDir, GENERATED_COMPOSE_FILE),
-    composeReleasePath: ensureReleaseStateDirectories(infraDir).overlay,
   };
-  writeFileSync(
-    stack.composeReleasePath,
-    "services:\n  alpha:\n    image: example/alpha:release\n    volumes:\n      - ../../../../overlay-public.txt:/overlay-public:ro\n",
-    { mode: 0o600 },
-  );
   const dockerConfig = join(root, "docker-config");
   mkdirSync(join(dockerConfig, "cli-plugins"), { recursive: true });
   if (installedCompose)
@@ -156,9 +148,7 @@ export async function composePathHost() {
       ...(noEnvResolution ? ["--no-env-resolution"] : []),
     ]);
   const pathChecks = (model: PathConfig, compose: string) => {
-    const checks: Record<string, boolean> = {
-      releaseImage: model.services.alpha?.image === "example/alpha:release",
-    };
+    const checks: Record<string, boolean> = {};
     for (const service of loaded) {
       const id = service.manifest.id,
         entry = model.services[id];
@@ -182,10 +172,6 @@ export async function composePathHost() {
         checks[`${id}.envFileRead`] =
           entry?.environment?.PUBLIC_FIXTURE_SETTING === "synthetic-public";
     }
-    checks.overlayBind = sameFile(
-      model.services.alpha?.volumes?.find((v) => v.target === "/overlay-public")?.source ?? "",
-      join(infraDir, "overlay-public.txt"),
-    );
     record({
       pathChecks: checks,
       generationFile: compose,

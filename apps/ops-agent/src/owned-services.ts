@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import {
   closeSync,
   constants,
-  existsSync,
   fstatSync,
   lstatSync,
   openSync,
@@ -501,11 +500,7 @@ export function createOwnedServiceResolver(options: {
           !generationFile ||
           first !== files.split(",")[0] ||
           workingDirectory !== dirname(first) ||
-          configFiles.length > 2 ||
-          new Set(configFiles).size !== configFiles.length ||
-          (configFiles[1] !== undefined &&
-            (configFiles[1] !== services.releaseStatePaths(infra).overlay ||
-              configFiles[1] !== canonical(options.stack.composeReleasePath)))
+          configFiles.length !== 1
         )
           continue;
         try {
@@ -534,11 +529,7 @@ export function createOwnedServiceResolver(options: {
         const key = JSON.stringify(configFiles);
         let configuration = configurations.get(key);
         if (!configuration) {
-          const releasePath = services.releaseStatePaths(infra).overlay;
-          const args = services.stackComposeArgs(
-            { infraDir: infra, composePath: first, composeReleasePath: releasePath },
-            (path) => (path === releasePath ? configFiles.includes(releasePath) : existsSync(path)),
-          );
+          const args = services.stackComposeArgs({ infraDir: infra, composePath: first });
           if (!args.includes("--project-name"))
             args.splice(1, 0, "--project-name", services.STACK_PROJECT);
           const config = JSON.parse(await run([...args, "config", "--format", "json"])) as {
@@ -562,8 +553,8 @@ export function createOwnedServiceResolver(options: {
           configurations.set(key, configuration);
         }
         // Deselection removes Compose membership, but the registered manifest
-        // remains authority for its effective image. Release overlays still win
-        // when they provide an explicit image for that service.
+        // remains authority for its effective image. A release pin in the
+        // generation wins when it names an image for that service.
         const registered = registry.get(serviceId);
         const reference =
           configuration[serviceId]?.image ??

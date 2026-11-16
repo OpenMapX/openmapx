@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -27,11 +27,12 @@ import {
   retainControlTerminalCommitment,
   verifyControlEffectSettlement,
 } from "./control-authority";
+import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
 import {
   acquireArtifactTargetLease,
   releaseArtifactTargetLease,
   settleArtifactTargetLeaseChild,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 let root: string, installation: ReturnType<typeof openControlInstallation>;
@@ -104,7 +105,6 @@ function start() {
 it("settles the actual unissued root and consumes only its indexed not-started effect", async () => {
   const owner = start(),
     lease = await acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: targets,
       owner,
     });
@@ -115,7 +115,7 @@ it("settles the actual unissued root and consumes only its indexed not-started e
     verifyControlEffectSettlement(installation, owner.execution),
   );
   await releaseArtifactTargetLease(lease);
-  verifyRetainedArtifactTargetRootRelease(owner);
+  verifyLocalArtifactTargetRootRelease(owner);
   expect(() => beginControlEffect(owner)).toThrow();
 });
 it.each(["begun", "bound", "issued"])(
@@ -133,7 +133,6 @@ it.each(["begun", "bound", "issued"])(
               true,
             ),
       lease = await acquireArtifactTargetLease({
-        dataRoot: join(root, "data"),
         serviceIds: targets,
         owner,
       });
@@ -150,8 +149,12 @@ it.each(["begun", "bound", "issued"])(
     }
     expect(() => retainConfigurationPreEffectRefusal(owner)).toThrow();
     expect(() => inspectConfigurationPreEffectRefusal(owner)).toThrow();
-    expect(() => verifyRetainedArtifactTargetRootRelease(owner)).toThrow();
-    expect(existsSync(join(root, "data/.admin-target-control/locks/data-manager"))).toBe(true);
+    expect(() => verifyLocalArtifactTargetRootRelease(owner)).toThrow();
+    expect(
+      openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })
+        .list()
+        .map((value) => value.leaseId),
+    ).toEqual([lease.leaseId]);
   },
 );
 it.each(["exact", "different error", "missing"] as const)(

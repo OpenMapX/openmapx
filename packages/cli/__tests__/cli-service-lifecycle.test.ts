@@ -14,12 +14,12 @@ import * as control from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../core/src/build-artifacts/__fixtures__/held-targets";
 import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { renderComposeForRepo } from "../src/commands/compose";
 import { registerServicesCommands } from "../src/commands/services";
 import { migrateBeforeApiUpdate } from "../src/lib/api-migrations";
 import { dockerComposeStream } from "../src/lib/docker";
-import { selectRelease } from "../src/lib/release";
 
 // These exercise fsynced cross-process authority/retention stores; concurrent
 // package checks can exceed the generic 15s unit budget on this filesystem.
@@ -86,15 +86,9 @@ afterEach(() => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 function expectConfigurationWriterFree() {
-  expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(false);
-  expect(
-    existsSync(
-      join(
-        services.releaseStatePaths(join(root, "infra/docker")).store,
-        services.RELEASE_STORE_LOCK_NAME,
-      ),
-    ),
-  ).toBe(false);
+  expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
+    false,
+  );
 }
 async function commitCompetingGeneration() {
   services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha"]);
@@ -114,11 +108,11 @@ function command(action: "start" | "update", args: string[] = [], target = "alph
 }
 function lifecycleEnvelope(name: string) {
   return JSON.parse(
-    readFileSync(join(root, "infra/docker/data/ops-agent/lifecycle", name), "utf8"),
+    readFileSync(join(root, "infra/docker/state/ops-agent/lifecycle", name), "utf8"),
   );
 }
 function lifecycleOperationKeys() {
-  return readdirSync(join(root, "infra/docker/data/ops-agent/lifecycle")).map((name) =>
+  return readdirSync(join(root, "infra/docker/state/ops-agent/lifecycle")).map((name) =>
     name.replace(/\.json$/, ""),
   );
 }
@@ -139,8 +133,7 @@ async function retainedReceipt() {
   return receipts[0]!;
 }
 function targetLocks() {
-  const directory = join(root, "infra/docker/data/.admin-target-control/locks");
-  return existsSync(directory) ? readdirSync(directory).sort() : [];
+  return heldTargets(join(root, "infra/docker"));
 }
 /** A selection whose rendered hardlink plan has one entry, so a Start issues a child to data-manager. */
 async function renderWithHardlinkPlan() {
@@ -313,9 +306,7 @@ describe("actual CLI service lifecycle preparation", () => {
   it("holds physical target ownership through target-only Start after full-selection preparation", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       expect(args).toEqual(["up", "-d", "alpha"]);
-      expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
-        true,
-      );
+      expect(targetLocks()).toContain("alpha");
       expect(
         JSON.parse(
           readFileSync(
@@ -331,7 +322,7 @@ describe("actual CLI service lifecycle preparation", () => {
     });
     await expect(command("start")).rejects.toThrow("exit:0");
     expect(dockerComposeStream).toHaveBeenCalledTimes(1);
-    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
       false,
     );
   });
@@ -339,9 +330,7 @@ describe("actual CLI service lifecycle preparation", () => {
     const calls: string[][] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       calls.push([...args]);
-      expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
-        true,
-      );
+      expect(targetLocks()).toContain("alpha");
       if (args[0] === "pull")
         expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(seed);
       else {
@@ -407,7 +396,7 @@ describe("actual CLI service lifecycle preparation", () => {
       failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
   });
-  it("refuses recreation when the release selection changes during pull", async () => {
+  it("refuses recreation when a new release is pinned during pull", async () => {
     const manifest = services.parseReleaseManifest(
       JSON.stringify({
         schemaVersion: 1,
@@ -423,21 +412,19 @@ describe("actual CLI service lifecycle preparation", () => {
       "ghcr.io/openmapx",
     );
     const infraDir = join(root, "infra/docker");
-    const path = services.releaseStatePaths(infraDir).overlay;
+    let pinned: string | undefined;
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      await selectRelease({
-        infraDir,
-        resolve: async () => manifest,
-        docker: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
-      });
+      pinned = (
+        await renderComposeForRepo({ rootDir: root, domain: "example.test", release: manifest })
+      ).revisionId;
       return 0;
     });
     await expect(command("update")).rejects.toThrow("exit:1");
-    expect(existsSync(path)).toBe(true);
     expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
       ["pull", "alpha"],
     ]);
-    expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(seed);
+    expect(services.currentConfigurationGeneration(infraDir)).toBe(pinned);
+    expect(services.readAppliedRelease(infraDir)?.manifest.release).toBe("synthetic-next");
     expect(await retainedReceipt()).toMatchObject({
       phase: "failed",
       finalRevisionId: null,
@@ -478,13 +465,13 @@ describe("actual CLI service lifecycle preparation", () => {
       failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
     expect(targetLocks()).toEqual([]);
-    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
       false,
     );
   });
   it("records failure when the execution deadline passes during pull", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      const directory = join(root, "infra/docker/data/ops-agent/lifecycle"),
+      const directory = join(root, "infra/docker/state/ops-agent/lifecycle"),
         envelope = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
       vi.spyOn(Date, "now").mockReturnValue(envelope.seed.payload.execution.deadlineAt + 1);
       return 0;
@@ -503,7 +490,9 @@ describe("actual CLI service lifecycle preparation", () => {
   });
   it("keeps the original failure and warns when its receipt cannot be recorded", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      mkdirSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"), { mode: 0o700 });
+      mkdirSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"), {
+        mode: 0o700,
+      });
       return 7;
     });
     await expect(command("update")).rejects.toThrow("exit:7");
@@ -532,7 +521,7 @@ describe("actual CLI service lifecycle preparation", () => {
     );
     expect(receipt.finalRevisionId).not.toBe(seed);
     expect(targetLocks()).toEqual([]);
-    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
       false,
     );
   });
@@ -593,11 +582,12 @@ describe("actual CLI service lifecycle preparation", () => {
     });
     const diagnostics = JSON.stringify(vi.mocked(console.error).mock.calls);
     expect(diagnostics).toContain(
-      `recover-update --operation-key ${receipt.execution.operationKey}`,
+      `openmapx control resolve --op ${receipt.execution.operationKey} --as committed|failed`,
     );
-    expect(diagnostics).not.toContain("No automated release exists");
+    expect(diagnostics).toContain("infra/docker/state/ops-agent/lifecycle/");
+    expect(diagnostics).not.toContain("recover-update");
   });
-  it("does not offer recover-update when Start fails after its hardlink child committed", async () => {
+  it("points to control resolve when Start fails after its hardlink child committed", async () => {
     await renderWithHardlinkPlan();
     const stop = await unreachableHardlinkExecutor();
     vi.mocked(control.executeOwnedGenerationHardlinks).mockImplementationOnce(
@@ -630,10 +620,10 @@ describe("actual CLI service lifecycle preparation", () => {
     });
     const diagnostics = JSON.stringify(vi.mocked(console.error).mock.calls);
     expect(diagnostics).toContain(`Operation ${receipt.execution.operationKey} keeps`);
-    expect(diagnostics).toContain("a hardlink child was issued to data-manager");
-    expect(diagnostics).toContain("No automated release exists yet");
-    expect(diagnostics).not.toContain("recover-update --operation-key");
-    expect(diagnostics).not.toContain("may still be running");
+    expect(diagnostics).toContain(
+      `openmapx control resolve --op ${receipt.execution.operationKey} --as committed|failed`,
+    );
+    expect(diagnostics).not.toContain("recover-update");
   });
   it("a lease held by a live operation still refuses a second start", async () => {
     let refusal: unknown;
@@ -647,33 +637,20 @@ describe("actual CLI service lifecycle preparation", () => {
     await expect(command("start")).rejects.toThrow("exit:0");
     expect(String(refusal)).toContain("exit:1");
     expect(String(refusal)).toContain(`operation ${holder}`);
-    expect(String(refusal)).toContain(`ops-agent/lifecycle/${holder}.json`);
+    expect(String(refusal)).toContain("openmapx control status");
     expect(dockerComposeStream).toHaveBeenCalledTimes(1);
     expect(targetLocks()).toEqual([]);
   });
   it("releases every target when the lifecycle fails before its receipt opens", async () => {
-    const paths = services.releaseStatePaths(join(root, "infra/docker"));
-    services.ensureReleaseStateDirectory(paths.directory);
-    services.ensureReleaseStateDirectory(paths.store);
-    const lock = await services.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
+    const release = await services.acquireConfigurationOwnership(join(root, "infra/docker"));
     try {
-      await expect(command("start")).rejects.toThrow("Release store is busy");
+      await expect(command("start")).rejects.toThrow(/Configuration writer is busy/);
     } finally {
-      lock.release();
+      release();
     }
     expect(dockerComposeStream).not.toHaveBeenCalled();
     expect(targetLocks()).toEqual([]);
     await expect(command("start")).rejects.toThrow("exit:0");
-  });
-  it("waits for a momentary release-store holder once containers have started", async () => {
-    vi.mocked(dockerComposeStream).mockImplementationOnce(async () => {
-      const paths = services.releaseStatePaths(join(root, "infra/docker"));
-      const lock = await services.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
-      setTimeout(() => lock.release(), 300);
-      return 0;
-    });
-    await expect(command("start")).rejects.toThrow("exit:0");
-    expect(await retainedReceipt()).toMatchObject({ phase: "complete", followUp: "complete" });
   });
   it("refuses to replace services when the generation moves during the migration", async () => {
     const directory = join(root, "services/app-api");

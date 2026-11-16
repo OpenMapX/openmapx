@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, expect, it } from "vitest";
 import {
-  acquireReleaseStoreLockBriefly,
   awaitAppliedContainerHealth,
   inspectMaintenanceDockerRuntime,
 } from "./configuration-maintenance-docker-inspection";
@@ -23,7 +22,6 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
   const checkout = join(root, "checkout"),
     infra = join(checkout, "infra", "docker");
   mkdirSync(infra, { recursive: true, mode: 0o700 });
-  services.ensureReleaseStateDirectories(infra);
   const revision = `cfg1_${"a".repeat(43)}`;
   const generation = join(infra, services.CONFIGURATION_GENERATIONS, revision);
   mkdirSync(generation, { recursive: true, mode: 0o700 });
@@ -122,7 +120,6 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
       stack: {
         infraDir: infra,
         composePath: join(generation, services.GENERATED_COMPOSE_FILE),
-        composeReleasePath: join(infra, "unused-release.yml"),
       },
       owner,
       containers: [container],
@@ -218,33 +215,6 @@ it.each(["source", "access", "duplicate", "contents"])(
     );
   },
 );
-
-it("waits briefly for another holder of the release store lock", async () => {
-  const store = mkdtempSync(join(tmpdir(), "openmapx-release-store-"));
-  try {
-    const held = await services.acquireReleaseStoreLock(store);
-    setTimeout(() => held.release(), 300);
-    const started = Date.now();
-    const lock = await acquireReleaseStoreLockBriefly(store);
-    lock.release();
-    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
-  } finally {
-    rmSync(store, { recursive: true, force: true });
-  }
-});
-
-it("still refuses the release store lock while another holder keeps it", async () => {
-  const store = mkdtempSync(join(tmpdir(), "openmapx-release-store-"));
-  try {
-    const held = await services.acquireReleaseStoreLock(store);
-    const started = Date.now();
-    await expect(acquireReleaseStoreLockBriefly(store)).rejects.toThrow("Release store is busy");
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1_900);
-    held.release();
-  } finally {
-    rmSync(store, { recursive: true, force: true });
-  }
-});
 
 it("refuses an applied container whose healthcheck has not passed, naming its service", async () => {
   const { inspect, observed } = fixture(1, 0, 0);

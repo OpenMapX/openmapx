@@ -43,10 +43,6 @@ import {
   configurationHandoffRecordName as recordName,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
 import {
-  readConfigurationHandoffReleaseOverlay,
-  readConfigurationHandoffReleaseState,
-} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
-import {
   childSettlementState,
   installationState,
   verifyControlPreparedTerminal,
@@ -195,14 +191,13 @@ async function prepareConfigurationHandoffLaunch(
   )
     throw Error("Original retained helper grant required");
   const observed = inspectArtifactDelegation({
-    dataRoot: local.installation.dataRoot,
     installation: local.installation.installation,
     assertion: attempt.assertion,
   });
   if (
     bytes(observed.execution) !== bytes(bound.execution) ||
     observed.recipient !== "configuration-helper" ||
-    observed.ownerCertificateDigest !== owned.owner.rootCertificateDigest ||
+    observed.leaseId !== owned.owner.leaseId ||
     bytes(observed.owner) !== bytes(owned.owner.plan.prepare)
   )
     throw Error("Original helper target ownership changed");
@@ -233,20 +228,11 @@ async function prepareConfigurationHandoffLaunch(
     sourceDigest,
     environmentNames,
     preparerAdmissionDigest: local.receiptDigest,
-    ownerCertificateDigest: owned.owner.rootCertificateDigest,
     leaseId: observed.leaseId,
     delegationId: observed.delegationId,
     assertion: attempt.assertion,
     helperContainerName: `openmapx-configuration-handoff-${operation.handoffId}`,
-    ...(owned.owner.plan.release
-      ? {
-          release: owned.owner.plan.release,
-          previousReleaseOverlay: readConfigurationHandoffReleaseOverlay(
-            owned.source.stack.infraDir,
-          ),
-          previousReleaseState: readConfigurationHandoffReleaseState(owned.source.stack.infraDir),
-        }
-      : {}),
+    ...(owned.owner.plan.release ? { release: owned.owner.plan.release } : {}),
     preparedAt: Date.now(),
   });
   writePrivateRecord(

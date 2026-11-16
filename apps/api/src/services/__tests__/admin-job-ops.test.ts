@@ -791,7 +791,10 @@ it.each([false, true])(
       return { backupId: "original" };
     });
     let app = buildOpsAgentServer({
-      tokens: { api: token, "data-manager": Buffer.alloc(32, 8).toString("base64url") },
+      tokens: {
+        api: token,
+        "data-manager": Buffer.alloc(32, 8).toString("base64url"),
+      },
       journal,
       controlInstallation: installation,
       dispatch,
@@ -853,7 +856,10 @@ it.each([false, true])(
       await app.close();
       const reloaded = await openOpsJobJournal(path);
       app = buildOpsAgentServer({
-        tokens: { api: token, "data-manager": Buffer.alloc(32, 8).toString("base64url") },
+        tokens: {
+          api: token,
+          "data-manager": Buffer.alloc(32, 8).toString("base64url"),
+        },
         journal: reloaded,
         controlInstallation: installation,
         dispatch,

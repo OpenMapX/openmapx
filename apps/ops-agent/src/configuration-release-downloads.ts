@@ -9,8 +9,8 @@ import {
   configurationReleaseDownloadsSchema,
   configurationReleasePlatformSchema,
 } from "@openmapx/core/ops";
+import type { services } from "@openmapx/core/server";
 import { z } from "zod";
-import type { CheckedConfigurationRelease } from "./configuration-release";
 import type { DockerRuntimeOptions } from "./docker-runtime";
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -51,7 +51,7 @@ const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/),
   });
 
 export async function inspectConfigurationReleaseDownloads(input: {
-  release: CheckedConfigurationRelease;
+  release: services.CheckedConfigurationRelease;
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
   signal: AbortSignal;
 }): Promise<ConfigurationReleaseDownloads> {
@@ -115,8 +115,8 @@ export async function inspectConfigurationReleaseDownloads(input: {
     images = await Promise.all(tasks);
   } catch (error) {
     controller.abort(Error("Release metadata inspection canceled"));
-    // The caller owns the release-store lock until every contained process
-    // has finished, including siblings still shutting down after cancellation.
+    // Every contained process finishes before the error is raised, including
+    // siblings still shutting down after cancellation.
     await Promise.allSettled(tasks);
     throw error;
   }

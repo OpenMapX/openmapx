@@ -13,27 +13,6 @@ import { controlOriginSchema } from "./control-records";
 const digest = z.string().regex(/^[a-f0-9]{64}$/),
   containerId = z.string().regex(/^[a-f0-9]{64}$/),
   time = z.number().int().nonnegative().safe();
-/** Private original overlay bytes; never part of the cross-role public graph. */
-export const configurationHandoffOverlaySourceSchema = z
-  .strictObject({
-    identity: z.strictObject({
-      dev: z.number().int().nonnegative().safe(),
-      ino: z.number().int().nonnegative().safe(),
-      mtime: z.number().finite(),
-      ctime: z.number().finite(),
-      size: z
-        .number()
-        .int()
-        .nonnegative()
-        .max(128 * 1024),
-    }),
-    bytes: z.string().max(174764),
-  })
-  .refine(
-    (value) =>
-      Buffer.from(value.bytes, "base64").toString("base64") === value.bytes &&
-      Buffer.from(value.bytes, "base64").length === value.identity.size,
-  );
 export const configurationHandoffReleaseProgressSchema = z
   .strictObject({
     images: z
@@ -49,18 +28,11 @@ export const configurationHandoffReleaseProgressSchema = z
         }),
       )
       .max(CONFIGURATION_RELEASE_IMAGE_NAMES.length),
-    publication: z.enum(["not_attempted", "attempted", "published"]),
-    overlay: configurationHandoffOverlaySourceSchema.nullable(),
-    statePublication: z.enum(["not_attempted", "attempted", "published"]),
-    state: configurationHandoffOverlaySourceSchema.nullable(),
   })
   .superRefine((value, context) => {
     if (
       new Set(value.images.map((image) => image.image)).size !== value.images.length ||
-      value.images.some((image) => (image.phase === "verified") !== (image.imageId !== null)) ||
-      (value.publication === "published") !== (value.overlay !== null) ||
-      (value.statePublication === "published") !== (value.state !== null) ||
-      (value.statePublication !== "not_attempted" && value.publication !== "published")
+      value.images.some((image) => (image.phase === "verified") !== (image.imageId !== null))
     )
       context.addIssue({ code: "custom", message: "Original verified release progress required" });
   });
@@ -98,23 +70,18 @@ export const configurationHandoffIntentRecordSchema = z
       .refine((names) => Buffer.byteLength(JSON.stringify(names)) <= 8192)
       .refine((names) => names.every((name, index) => index === 0 || names[index - 1]! < name)),
     preparerAdmissionDigest: digest,
-    ownerCertificateDigest: digest,
     leaseId: z.uuid(),
     delegationId: z.uuid(),
     assertion: z.string().min(1).max(4096),
     helperContainerName: z.string().regex(/^openmapx-configuration-handoff-[a-f0-9-]{36}$/),
     preparedAt: time,
     release: configurationReleaseSnapshotSchema.optional(),
-    previousReleaseOverlay: configurationHandoffOverlaySourceSchema.nullable().optional(),
-    previousReleaseState: configurationHandoffOverlaySourceSchema.nullable().optional(),
   })
   .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 65536)
   .superRefine((value, context) => {
     const { mode } = value.operation;
     if (
       (mode.kind === "release") !== (value.release !== undefined) ||
-      (mode.kind === "release") !== (value.previousReleaseOverlay !== undefined) ||
-      (mode.kind === "release") !== (value.previousReleaseState !== undefined) ||
       (mode.kind === "release" &&
         value.release &&
         (mode.releaseId !== value.release.releaseId ||
@@ -214,9 +181,7 @@ export const configurationHandoffWorkerRecordSchema = configurationHandoffProgre
     (value) =>
       !value.release ||
       value.phase !== "applied" ||
-      (value.release.publication === "published" &&
-        value.release.statePublication === "published" &&
-        value.release.images.length === CONFIGURATION_RELEASE_IMAGE_NAMES.length &&
+      (value.release.images.length === CONFIGURATION_RELEASE_IMAGE_NAMES.length &&
         value.release.images.every((image) => image.phase === "verified")),
   )
   .refine(

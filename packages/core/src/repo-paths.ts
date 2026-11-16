@@ -57,7 +57,6 @@ export interface RepoPaths {
   infraDir: string;
   /** The applied configuration generation's compose file. */
   composePath: string;
-  composeReleasePath: string;
 }
 
 export function repoPaths(start?: string): RepoPaths {
@@ -77,7 +76,7 @@ export function repoPaths(start?: string): RepoPaths {
       "custom-integrations",
     ),
     infraDir: join(root, "infra", "docker"),
-    // The operations agent's state: the applied generation and the release overlay.
+    // The operations agent's state: the applied generation.
     composePath: join(
       root,
       "infra",
@@ -87,15 +86,6 @@ export function repoPaths(start?: string): RepoPaths {
       "configuration",
       "current",
       "docker-compose.generated.yml",
-    ),
-    composeReleasePath: join(
-      root,
-      "infra",
-      "docker",
-      "state",
-      "ops-agent",
-      "releases",
-      "docker-compose.release.yml",
     ),
   };
 }

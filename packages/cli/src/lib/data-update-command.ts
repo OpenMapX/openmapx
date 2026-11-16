@@ -140,7 +140,6 @@ export async function runCliDataUpdate(options: {
           control.assertDataUpdateSources(authority);
           if (!lease)
             lease = await control.acquireArtifactTargetLease({
-              dataRoot: join(paths.infraDir, "data"),
               serviceIds: control.controlRegisteredServiceIds(context.installation),
               owner: authority,
               signal: cliAcquisitionOptions().signal,
