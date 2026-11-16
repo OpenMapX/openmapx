@@ -504,12 +504,47 @@ describe("NavigationCoordinator location batches", () => {
     coords: { latitude: 50.11, longitude, accuracy: 5 },
   });
 
-  it("ignores a batch when no session is active", async () => {
+  it("stops a location stream that no session owns", async () => {
     const context = await harness();
+    const run = jest.spyOn(context.deps.effects, "run");
 
     await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
 
-    expect(context.effectLog).toEqual([]);
+    expect(run).toHaveBeenCalledWith([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
+    expect(context.effectLog).toEqual(["driver.stop"]);
+    await context.close();
+  });
+
+  it("stops the stream of a trip whose end was committed without stopping it", async () => {
+    const context = await harness();
+    const { sessionId } = await running(context);
+    // The row is gone but its stop never ran, as when the process dies in between.
+    await context.repository.terminate(sessionId, "stopped", NOW);
+    context.effectLog.length = 0;
+
+    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+
+    expect(context.effectLog).toEqual(["driver.stop"]);
+    expect(await context.repository.loadActive(NOW)).toBeNull();
+    await context.close();
+  });
+
+  it("does not stop the stream a start queued behind the batch then starts", async () => {
+    const context = await harness();
+
+    const early = context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+    const { started } = await running(context);
+    await early;
+    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+
+    expect(code(started)).toBe("session.started");
+    expect(context.effectLog).toEqual([
+      "driver.stop",
+      "driver.start",
+      "publish.snapshot",
+      "publish.snapshot",
+    ]);
+    expect((await context.repository.loadActive(NOW))?.status).toBe("active");
     await context.close();
   });
 
@@ -520,6 +555,7 @@ describe("NavigationCoordinator location batches", () => {
     await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
 
     expect((await context.repository.loadActive(NOW))?.revision).toBe(1);
+    expect(context.effectLog).not.toContain("driver.stop");
     await context.close();
   });
 
