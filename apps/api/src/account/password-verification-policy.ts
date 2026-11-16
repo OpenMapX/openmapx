@@ -3,12 +3,18 @@ import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { configuredTrustedWebOrigins } from "../utils/csrf";
 import { accountRoleSchema } from "./account-mutations";
+import {
+  credentialChangeDepsFor,
+  enforceCredentialChangePolicy,
+  isReservedInvalidAddress,
+} from "./credential-change-policy";
 
 /**
  * Better Auth routes that let a mailbox alone produce a session, or stand in
  * for an enrolled authenticator app. No client uses them. Password reset and
  * email change keep their own email-code routes, and a reset still ends at
- * the ordinary sign-in with its second factor.
+ * the ordinary sign-in with its second factor. Email change also requires a
+ * recent sign-in.
  */
 const EMAIL_ONLY_SIGN_IN_PATHS = new Set([
   "/sign-in/email-otp",
@@ -32,15 +38,6 @@ const NEW_ADDRESS_FIELDS: Readonly<Record<string, string>> = {
   "/email-otp/change-email": "newEmail",
   "/change-email": "newEmail",
 };
-
-export function isReservedInvalidAddress(address: string): boolean {
-  const domain = address
-    .slice(address.lastIndexOf("@") + 1)
-    .trim()
-    .toLowerCase()
-    .replace(/\.+$/, "");
-  return domain === "invalid" || domain.endsWith(".invalid");
-}
 
 /** Paths where Better Auth signs someone in on the strength of their email alone. */
 const EMAIL_PROVEN_SESSION_PATHS = new Set(["/verify-email", ...EMAIL_ONLY_SIGN_IN_PATHS]);
@@ -119,6 +116,10 @@ export function applyPasswordVerificationPolicy(policy: AuthPolicySnapshot) {
         code: "INVALID_PASSWORD",
         message: "Password does not meet the instance policy",
       });
+    await enforceCredentialChangePolicy(
+      { path: ctx.path, body: ctx.body },
+      credentialChangeDepsFor(ctx),
+    );
   });
   return { userHooks, sessionHooks, before };
 }

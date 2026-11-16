@@ -32,4 +32,19 @@ export function assertCliDeploymentSecrets(env: NodeJS.ProcessEnv = process.env)
     if (issue)
       throw new DeploymentSecretPolicyError(issue, { credentialName: "MARTIN_DB_PASSWORD" });
   }
+  // Only Nominatim needs it, and its manifest refuses to render without it.
+  // The geocoder runs a third-party image, so it must never hold the
+  // superuser's password, not even as a copy.
+  if (env.NOMINATIM_DB_PASSWORD) {
+    const issue =
+      env.NOMINATIM_DB_PASSWORD === env.POSTGRES_PASSWORD
+        ? "matches-superuser-password"
+        : deploymentSecretIssue(env.NOMINATIM_DB_PASSWORD, {
+            username: "nominatim",
+            minLength: POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH,
+            urlEncoded: false,
+          });
+    if (issue)
+      throw new DeploymentSecretPolicyError(issue, { credentialName: "NOMINATIM_DB_PASSWORD" });
+  }
 }

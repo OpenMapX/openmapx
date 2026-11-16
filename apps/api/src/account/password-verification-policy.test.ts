@@ -1,9 +1,7 @@
 import { expect, it } from "vitest";
 import { unactivatedAuthPolicy } from "./auth-policy";
-import {
-  applyPasswordVerificationPolicy,
-  isReservedInvalidAddress,
-} from "./password-verification-policy";
+import { isReservedInvalidAddress } from "./credential-change-policy";
+import { applyPasswordVerificationPolicy } from "./password-verification-policy";
 
 it.each([
   ["4242@osm.invalid", true],

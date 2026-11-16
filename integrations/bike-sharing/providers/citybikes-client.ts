@@ -15,6 +15,8 @@ import { type CacheClient, TTL, withCache } from "@openmapx/mobility-core/cache"
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 
 const CITYBIKES_BASE = "https://api.citybik.es";
+const CITYBIKES_ORIGIN = new URL(CITYBIKES_BASE).origin;
+const NETWORK_PATH = /^\/v2\/networks\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const HEADERS = {
   Accept: "application/json",
 };
@@ -68,6 +70,32 @@ async function fetchJson<T>(url: string): Promise<T> {
   });
 }
 
+/**
+ * Resolve a network's `href` from the upstream index to a detail URL. Only a
+ * network detail path on the CityBikes origin is accepted; anything else
+ * returns null so the network is skipped rather than fetched.
+ */
+function cityBikesNetworkUrl(href: unknown): URL | null {
+  if (typeof href !== "string") return null;
+  let url: URL;
+  try {
+    url = new URL(href, CITYBIKES_BASE);
+  } catch {
+    return null;
+  }
+  if (
+    url.origin !== CITYBIKES_ORIGIN ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !NETWORK_PATH.test(url.pathname)
+  ) {
+    return null;
+  }
+  return url;
+}
+
 /** Cached index of all CityBikes networks. */
 async function getNetworkIndex(cache: CacheClient): Promise<CityBikesNetwork[]> {
   return withCache<CityBikesNetwork[]>(
@@ -78,7 +106,20 @@ async function getNetworkIndex(cache: CacheClient): Promise<CityBikesNetwork[]> 
       const data = await fetchJson<{ networks: CityBikesNetwork[] }>(
         `${CITYBIKES_BASE}/v2/networks?fields=id,name,href,company,location`,
       );
-      return data.networks;
+      // Drop entries whose detail link leaves the CityBikes API before they are
+      // cached, so one bad entry cannot be reused for the whole cache lifetime.
+      const skipped: string[] = [];
+      const networks = data.networks.filter((network) => {
+        const usable = typeof network.id === "string" && cityBikesNetworkUrl(network.href) !== null;
+        if (!usable) skipped.push(String(network.id));
+        return usable;
+      });
+      if (skipped.length > 0) {
+        console.warn(
+          `[citybikes] skipped ${skipped.length} network(s) with an unusable detail link: ${skipped.slice(0, 20).join(", ")}`,
+        );
+      }
+      return networks;
     },
   );
 }
@@ -110,13 +151,20 @@ export async function fetchNetworkStations(
   cache: CacheClient,
   contributors?: readonly Attribution[],
 ): Promise<SharedMobilityStation[]> {
+  // Checked again here because an index cached before this check existed may
+  // still hold entries that were never validated.
+  const detailUrl = cityBikesNetworkUrl(network.href);
+  if (!detailUrl) {
+    console.warn(`[citybikes] skipped network ${String(network.id)}: unusable detail link`);
+    return [];
+  }
   const cacheKey = `shared-mobility:citybikes:contributors-v1:${network.id}`;
   const stations = await withCache<SharedMobilityStation[]>(
     cache,
     cacheKey,
     TTL.sharedMobility.stations,
     async () => {
-      const data = await fetchJson<CityBikesNetworkDetail>(`${CITYBIKES_BASE}${network.href}`);
+      const data = await fetchJson<CityBikesNetworkDetail>(detailUrl.href);
       const operator = network.company?.[0] ?? network.name;
 
       return data.network.stations.map(

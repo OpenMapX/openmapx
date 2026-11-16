@@ -507,6 +507,46 @@ export interface ComposeServiceSnippet {
  */
 const COMMUNITY_PIDS_LIMIT = 512;
 
+/**
+ * Built-in services that still run without the privilege lock
+ * (`no-new-privileges`). Every other built-in service gets it, as every
+ * community service does.
+ *
+ * The lock stops a process from gaining privileges through a setuid binary or a
+ * file capability. A service that starts as root and drops to its own user
+ * keeps working; one whose non-root process calls `sudo`, `su` or another
+ * setuid helper does not. The services listed here run third-party images
+ * whose start-up no automated check exercises, so nothing has shown yet that
+ * they start with the lock.
+ *
+ * Remove an id once the service has been started with the lock and found
+ * healthy. Never add an id unless the service is shown to need privilege
+ * escalation, and say why next to it.
+ */
+export const BUILT_IN_SERVICES_WITHOUT_PRIVILEGE_LOCK: ReadonlySet<string> = new Set([
+  "brouter",
+  "dawarich-app",
+  "dawarich-postgis",
+  "dawarich-redis",
+  "dawarich-sidekiq",
+  "elasticsearch",
+  "local-ai",
+  "martin",
+  "motis",
+  "motis-feed-proxy",
+  "motis-staging",
+  "nominatim",
+  "osrm",
+  "otp",
+  "overpass",
+  "pelias",
+  "pelias-pip",
+  "pelias-placeholder",
+  "photon",
+  "tileserver",
+  "valhalla",
+]);
+
 export function escapeComposeInterpolation(value: string): string {
   return value.replaceAll("$", () => "$$");
 }
@@ -947,6 +987,8 @@ export function renderServiceSnippet(
     snippet.deploy = { ...snippet.deploy, resources };
     snippet.security_opt = ["no-new-privileges:true"];
     deepEscapeCommunitySnippet(snippet);
+  } else if (!BUILT_IN_SERVICES_WITHOUT_PRIVILEGE_LOCK.has(m.id)) {
+    snippet.security_opt = ["no-new-privileges:true"];
   }
   writeServiceConfigEnvReferences(snippet, m, ctx.serviceConfigEnvKeys?.get(m.id) ?? []);
 

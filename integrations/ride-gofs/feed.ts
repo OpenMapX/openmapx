@@ -1,4 +1,4 @@
-import { safeFetchJson } from "@openmapx/core/server";
+import { privateFeedHostAllowlist, safeFetchJson } from "@openmapx/core/server";
 import { captureCacheWriter, type IntegrationContext } from "@openmapx/integration-framework";
 import {
   type GofsRealtimeBookingEntry,
@@ -25,10 +25,13 @@ export type GofsFetchJson = (url: string, headers?: Record<string, string>) => P
  * feed's own host: `safeFetchJson` follows redirects, and without
  * `allowedRedirectHosts` a 302 from the feed would hand the API key to whatever
  * host the `Location` names.
+ *
+ * GOFS feeds are feed downloads, so the operator's private feed mirrors apply.
  */
 const defaultFetchJson: GofsFetchJson = (url, headers) =>
   safeFetchJson(url, {
     headers,
+    allowPrivateHosts: privateFeedHostAllowlist(),
     allowedRedirectHosts:
       headers && Object.keys(headers).length > 0 ? [new URL(url).hostname] : undefined,
   });

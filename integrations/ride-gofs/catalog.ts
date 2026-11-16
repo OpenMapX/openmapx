@@ -1,4 +1,4 @@
-import { safeFetchJson } from "@openmapx/core/server";
+import { privateFeedHostAllowlist, safeFetchJson } from "@openmapx/core/server";
 import {
   type CacheWriter,
   captureCacheWriter,
@@ -181,6 +181,8 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
       ? fetchJson(url, headers)
       : safeFetchJson(url, {
           headers,
+          // The catalog and its system feeds are feed downloads.
+          allowPrivateHosts: privateFeedHostAllowlist(),
           allowedRedirectHosts:
             headers && Object.keys(headers).length > 0 ? [new URL(url).hostname] : undefined,
         });

@@ -2300,6 +2300,8 @@
       },
       "downloadExport": "Download my data",
       "exportFailed": "The archive could not be downloaded. Please try again.",
+      "exportInProgress": "A download of your data is already running. Please wait for it to finish, then try again.",
+      "exportUnavailable": "Downloads are temporarily unavailable. Please try again in a few minutes.",
       "secondFactorRequired": "Please sign in again with your password and your account's second factor (authenticator app or recovery code). A passkey or external sign-in is not enough to download your data while two-factor authentication is enabled."
     },
     "mangroveConnectTitle": "Connect to Mangrove",
@@ -2324,7 +2326,18 @@
     "mangroveCallbackFailed": "This Mangrove login could not be verified. Start the connection again from OpenMapX.",
     "mangroveReturn": "Return to OpenMapX",
     "mangroveSharedIntro": "Connect to Mangrove to write reviews with the same identity across apps and devices.",
-    "mangroveLocalTitle": "Encrypted local review key"
+    "mangroveLocalTitle": "Encrypted local review key",
+    "freshSignIn": {
+      "notice": "For your security, sign in again and then repeat this change. If two-factor authentication is on, sign in with your password and second factor.",
+      "signInAgain": "Sign in again",
+      "impersonating": "This change is not available while you are impersonating another account."
+    },
+    "emailChangeNotice": {
+      "subject": "Your email address was changed",
+      "description": "The email address of your OpenMapX account was changed to a different address. Messages for this account, including password resets, now go to the new address.",
+      "unexpected": "If you did not make this change, contact the operator of this OpenMapX instance immediately.",
+      "footer": "You received this security notice because this address was previously linked to an OpenMapX account."
+    }
   },
   "auth": {
     "signIn": "Sign in",

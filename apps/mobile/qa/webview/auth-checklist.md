@@ -92,6 +92,10 @@ a clean failure; the session helper itself returns `failed` for a mismatched URL
 - [ ] Email verification and email OTP run in the WebView.
 - [ ] TOTP entry and backup codes run in the WebView.
 - [ ] Password reset runs in the WebView.
+- [ ] With a sign-in older than ten minutes, deleting the account, changing the
+      email and adding a passkey each ask to sign in again and then repeat the
+      change. A passkey or provider re-sign-in through the system browser
+      returns to the app, and the change succeeds when repeated.
 
 ### Platform-specific offerings
 

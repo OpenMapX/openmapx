@@ -191,6 +191,32 @@ export function privacyRequestEmail(
   };
 }
 
+/**
+ * Security notice for the previous address after an email change. It names
+ * neither the new address nor a link, because the old mailbox may be shared.
+ */
+export function emailChangeNoticeEmail(locale: string = defaultLocale): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const t = createTranslator(locale, "account.emailChangeNotice");
+  const subject = t("subject");
+  const description = t("description");
+  const unexpected = t("unexpected");
+  return {
+    subject: `${subject} — OpenMapX`,
+    text: [subject, description, unexpected].join("\n\n"),
+    html: layout(
+      heading(escapeHtml(subject)) +
+        paragraph(escapeHtml(description)) +
+        paragraph(escapeHtml(unexpected)),
+      locale,
+      escapeHtml(t("footer")),
+    ),
+  };
+}
+
 export function setupPasswordEmail(url: string): { subject: string; text: string; html: string } {
   return {
     subject: "Set your password — OpenMapX",

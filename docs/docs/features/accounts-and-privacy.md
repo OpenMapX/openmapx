@@ -29,6 +29,14 @@ and store the backup codes somewhere safe. Passkeys depend on your browser,
 device, and credential provider. Keep a working recovery method before removing
 an existing sign-in method.
 
+Changing your email, adding or removing a passkey, connecting a new provider,
+disconnecting one, and deleting the account need a recent sign-in. If your last
+sign-in is older than ten minutes, OpenMapX asks you to sign in again and then
+repeat the change. With two-factor authentication on, sign in with your password
+and second factor; a passkey or provider sign-in is not enough for these
+changes. After an email change, the previous address receives a short notice
+that the address was changed.
+
 Account authentication and review-key protection are separate. Resetting your
 OpenMapX password does not recover a forgotten Mangrove signing-key passphrase.
 See [Reviews](./reviews.md) for key export and recovery limits.
@@ -41,6 +49,9 @@ See [Reviews](./reviews.md) for key export and recovery limits.
    and then continues the download.
 3. The archive is created on demand and downloaded straight to your device.
    Nothing is kept on the server, so you can download again at any time.
+   One download per account runs at a time; a second one started while the
+   first is still running is refused until it finishes. A download that
+   stalls is ended and can be started again.
 4. The request stays listed with its status and response deadline. Some
    sources can only be checked by the operator; the archive's report names
    them, and the request is completed once the operator has checked them.
@@ -74,7 +85,8 @@ Before deleting the account:
   Dawarich. Deleting the OpenMapX connection does not delete that source account.
 
 In **Account settings → Danger zone**, choose **Delete account**, read the
-warning, and complete the password or verification flow. Deletion removes the
+warning, and confirm. If your last sign-in is older than ten minutes, sign in
+again when asked and then repeat the deletion. Deletion removes the
 OpenMapX account and its associated sign-in data, saved content, shares,
 vehicles, parking, timeline connection, settings, and review signing key.
 The operation cannot be undone through OpenMapX. Privacy-case records can be

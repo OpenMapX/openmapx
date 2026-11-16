@@ -745,8 +745,15 @@ service:
   that starts as root and drops to its own user, for example with `gosu`, still
   works; an image that relies on `sudo` or a setuid helper does not.
 
-First-party services are unaffected: they keep whatever limits their manifests
-declare, and the renderer adds neither field to them.
+First-party services keep whatever memory and process limits their manifests
+declare; the renderer adds no process limit to them. It does give them the same
+`no-new-privileges` lock, except for the services in
+`BUILT_IN_SERVICES_WITHOUT_PRIVILEGE_LOCK` in
+`packages/core/src/services/compose-renderer.ts`. Those run third-party images
+whose start-up no automated check exercises yet. A service leaves that list once
+it has been started with the lock and found healthy, and a new first-party
+service gets the lock unless it is shown to need privilege escalation. The lock
+has no manifest field.
 
 Community services retain namespaced named-volume persistence and outbound
 internet access through their isolated bridge network. They cannot reach the

@@ -1,4 +1,3 @@
-import { createAuthMiddleware } from "better-auth/api";
 import { currentAccountMutation } from "../account/account-context";
 import { writeAuditLog } from "./audit-log";
 
@@ -43,8 +42,9 @@ function pickString(value: unknown): string | undefined {
 }
 
 // Records an audit log entry for the admin-plugin user-management endpoints.
-// Extracted from the `hooks.after` middleware so it can be tested directly; the
-// middleware below delegates to it with the real better-auth context.
+// The `hooks.after` middleware in auth.ts calls it with the real better-auth
+// context; the plugin handles those endpoints internally, so that hook is the
+// only seam where they can be observed without forking the plugin.
 export async function handleAdminAuditEvent(ctx: AdminAuditCtx): Promise<void> {
   if (ctx.path === "/admin/set-user-password" && currentAccountMutation()?.action === "password")
     return;
@@ -91,11 +91,3 @@ export async function handleAdminAuditEvent(ctx: AdminAuditCtx): Promise<void> {
     request: ctx.request,
   });
 }
-
-// `hooks.after` middleware for better-auth that records audit log entries
-// for the admin-plugin user-management endpoints. The plugin handles those
-// endpoints internally, so this is the only seam where we can observe them
-// without forking the plugin.
-export const auditAdminActionsHook = createAuthMiddleware(async (ctx) => {
-  await handleAdminAuditEvent(ctx as unknown as AdminAuditCtx);
-});

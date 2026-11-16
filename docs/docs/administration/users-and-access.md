@@ -182,6 +182,11 @@ Use **Impersonate** only for authorized support work: it creates access as the
 target user and can expose their personal data. Stop impersonation to return
 to your administrator session. The list prevents impersonating yourself.
 
+An impersonation session cannot change the target's email, passkeys, linked
+providers, password or second factor, cannot delete the account and cannot
+sign the mobile app in as the target. Use the
+dedicated administrator actions for those changes.
+
 ### Delete
 
 Deletion removes live account-owned data and invokes the erasure workflow. It
@@ -212,6 +217,10 @@ Password reset runs over a one-time code sent by email, and so does changing an
 account's email. Whether verification is enforced and the minimum password
 length are set under **Settings → Authentication policy**.
 
+Changing an account's email needs a sign-in from the last ten minutes, including
+the second factor when one is enrolled. After the change, the previous address
+receives a notice, unless it was a provider placeholder.
+
 Addresses in the reserved `.invalid` domain are refused at sign-up, email change
 and administrator account creation. OpenStreetMap and Mapillary sign-ins give
 their accounts placeholder addresses such as `<id>@osm.invalid`, and nobody else
@@ -223,7 +232,8 @@ messages. See **Settings → Email** and
 
 ### Passkeys
 
-Users enroll passkeys in account settings. Configure the relying-party hostname
+Users enroll passkeys in account settings. Adding or removing a passkey needs a
+sign-in from the last ten minutes. Configure the relying-party hostname
 with `PASSKEY_RP_ID`, for example `maps.example.com`, and accepted origins with
 `PASSKEY_ORIGIN`, for example `https://maps.example.com`. The latter accepts a
 comma-separated list. Defaults are `localhost` and `http://localhost:3000` for

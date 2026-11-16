@@ -30,6 +30,8 @@ const ALLOWED: Record<string, string[]> = {
   "app/s/[token]/SharedViewClient.tsx": ["placeAppUrl(place)", "openUrl"],
   "components/admin/AdminSidebar.tsx": ["item.href", "entry.href"],
   "components/admin/AdminTopBar.tsx": ["crumb.href"],
+  // The sign-in page path with a return target that safeReturnPath reduces to a same-site path.
+  "components/auth/freshSignIn.tsx": ["freshSignInHref(returnPath)"],
   "components/menu/MenuRow.tsx": ["href"],
   "components/admin/shared/AdminPageHeader.tsx": ["backHref"],
   "components/admin/shared/CompactAlertList.tsx": ["item.href"],

@@ -192,6 +192,13 @@ source dependencies. Inspect the generated configuration and admin status when
 checking a sovereignty requirement; application checks do not replace firewall
 or DNS policy.
 
+The feed proxy follows one redirect per realtime feed: a relative one or one to
+the feed's own host, or one to another host whose name looks public, with no
+port and without dropping from https to http. It answers any other redirect, and
+any second redirect, with 502, which MOTIS treats as a failed fetch. Hostname
+checks cannot tell where a public name resolves, so keep the egress policy in
+place.
+
 `MOTIS_ROUTE_SHAPES=missing` synthesizes absent route geometry from OSM. `all`
 is more expensive. Both add preparation work and storage; measure candidate
 imports before enabling them.

@@ -108,6 +108,20 @@ describe("AuthDialog in the installed app", () => {
   });
 });
 
+describe("AuthDialog notice", () => {
+  it("renders the notice when provided", async () => {
+    const { AuthDialog } = await import("./AuthDialog");
+    const { unmount } = render(
+      <AuthDialog open onClose={vi.fn()} notice="Sign in again to confirm" />,
+    );
+    expect(screen.getByText("Sign in again to confirm")).not.toBeNull();
+    unmount();
+
+    render(<AuthDialog open onClose={vi.fn()} />);
+    expect(screen.queryByText("Sign in again to confirm")).toBeNull();
+  });
+});
+
 describe("AuthDialog dismissal policy", () => {
   it("passes the hosting contribution return path to social sign-in", async () => {
     const { AuthDialog } = await import("./AuthDialog");

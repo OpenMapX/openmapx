@@ -9,6 +9,8 @@ const deleteCalls: unknown[] = [];
 let deleteResult: { error?: unknown } = {};
 
 vi.mock("@openmapx/core", () => ({
+  FRESH_SIGN_IN_REQUIRED: "FRESH_SIGN_IN_REQUIRED",
+  IMPERSONATION_NOT_ALLOWED: "IMPERSONATION_NOT_ALLOWED",
   useSession: () => sessionState,
   authClient: {
     deleteUser: async (input: unknown) => {
@@ -69,8 +71,39 @@ describe("DeleteAccountActions", () => {
     const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
     fireEvent.click(buttons[buttons.length - 1]);
 
-    await waitFor(() => expect(deleteCalls).toHaveLength(1));
+    await waitFor(() => expect(deleteCalls).toEqual([{}]));
     await view.findByRole("status");
+  });
+
+  it("asks for a new sign-in when the last one is too old, without retrying", async () => {
+    // The same for password, two-factor, passkey-only and provider accounts:
+    // no password field, a recent sign-in is the confirmation.
+    deleteResult = { error: { code: "FRESH_SIGN_IN_REQUIRED", status: 401 } };
+    const view = renderActions();
+    fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
+    expect(view.container.querySelector('input[type="password"]')).toBeNull();
+
+    const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    const signIn = await view.findByText(en.account.freshSignIn.signInAgain);
+    expect(view.getByText(en.account.freshSignIn.notice)).toBeInTheDocument();
+    expect(signIn.closest("a")?.getAttribute("href")).toBe(
+      "/auth/confirm?return=%2Fdelete-account",
+    );
+    expect(view.queryByText(en.account.failedDeleteAccount)).toBeNull();
+    expect(deleteCalls).toHaveLength(1);
+  });
+
+  it("explains that an impersonation session cannot delete the account", async () => {
+    deleteResult = { error: { code: "IMPERSONATION_NOT_ALLOWED", status: 403 } };
+    const view = renderActions();
+    fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
+    const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    expect(await view.findByText(en.account.freshSignIn.impersonating)).toBeInTheDocument();
+    expect(view.queryByText(en.account.freshSignIn.signInAgain)).toBeNull();
   });
 
   it("reports a failure rather than claiming success", async () => {

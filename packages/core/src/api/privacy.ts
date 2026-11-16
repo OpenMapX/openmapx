@@ -35,9 +35,6 @@ export interface PrivacyRequestDetail extends PrivacyRequestView {
   tasks: PrivacyTaskView[];
 }
 
-/** The API refuses an export until the session has a recent interactive sign-in. */
-export const FRESH_SIGN_IN_REQUIRED = "FRESH_SIGN_IN_REQUIRED";
-
 function mutationKey(): string {
   const uuid = globalThis.crypto?.randomUUID?.();
   return `privacy-${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
@@ -63,10 +60,18 @@ export function withdrawPrivacyDataRequest(requestId: string, version: number) {
   );
 }
 
+/** The API refuses an export while another export for the same account is still running. */
+export const EXPORT_IN_PROGRESS = "EXPORT_IN_PROGRESS";
+
+/** The API cannot start an export right now, for example while the server is busy. */
+export const PRIVACY_SERVICE_UNAVAILABLE = "PRIVACY_SERVICE_UNAVAILABLE";
+
 /**
  * Start the self-service export. The response body is the ZIP archive itself,
  * so the caller reads it as a stream or blob. A 401 with the code
- * `FRESH_SIGN_IN_REQUIRED` means the person must sign in again first.
+ * `FRESH_SIGN_IN_REQUIRED` means the person must sign in again first; a 409
+ * with `EXPORT_IN_PROGRESS` means another export for the account is still
+ * running; a 503 with `PRIVACY_SERVICE_UNAVAILABLE` means it can be retried later.
  */
 export function requestPrivacyExport(
   kind: PrivacyRequestKind = "access_and_portability",

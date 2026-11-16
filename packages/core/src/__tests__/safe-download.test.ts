@@ -43,6 +43,7 @@ vi.mock("undici", async (importOriginal) => {
 // mocked module to drive the mock.
 import { lookup as dnsLookup } from "node:dns/promises";
 import { fetch as undiciFetch } from "undici";
+import { mobilityHttpTransport } from "../mobility-http-transport";
 import { createPinnedFetchTransport } from "../utils/pinned-fetch";
 import {
   assertResolvesToPublicIp,
@@ -1025,6 +1026,47 @@ describe("safeFetchJson", () => {
     await expect(safeFetchJson("file:///etc/passwd", { allowPrivateHosts: ["*"] })).rejects.toThrow(
       /HTTP\(S\)/,
     );
+  });
+
+  describe("operator feed mirror allowlist", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    const MIRROR = "https://feeds.example.test/x.json";
+
+    it("is not applied when the caller names no private hosts", async () => {
+      vi.stubEnv("OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS", "feeds.example.test");
+      lookupMock.mockResolvedValue([{ address: "10.0.0.5", family: 4 }]);
+      const fetchMock = stubFetchSequence();
+
+      await expect(safeFetchJson(MIRROR)).rejects.toThrow(/not allowed \(private/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("still applies to mobility feed downloads", async () => {
+      vi.stubEnv("OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS", "feeds.example.test");
+      lookupMock.mockResolvedValue([{ address: "10.0.0.5", family: 4 }]);
+      stubFetchSequence(
+        makeResponse({
+          status: 200,
+          headers: { "content-type": "application/json" },
+          bodyText: JSON.stringify({ ok: true }),
+        }),
+      );
+
+      await expect(mobilityHttpTransport.fetchJson(MIRROR)).resolves.toEqual({ ok: true });
+      expect(undiciFetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets a mobility caller replace the feed list with its own", async () => {
+      vi.stubEnv("OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS", "feeds.example.test");
+      lookupMock.mockResolvedValue([{ address: "10.0.0.5", family: 4 }]);
+      const fetchMock = stubFetchSequence();
+
+      await expect(
+        mobilityHttpTransport.fetchJson(MIRROR, { allowPrivateHosts: [] }),
+      ).rejects.toThrow(/not allowed \(private/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });
 

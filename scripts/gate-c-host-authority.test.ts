@@ -524,6 +524,46 @@ describe("Gate C — host authority", () => {
       (details) => expect(details).toEqual([]),
     );
   });
+
+  it("hands the database superuser's password to PostGIS alone", () => {
+    const environment = (values: Record<string, string>) => ({
+      container: { environment: values },
+    });
+    withManifests(
+      {
+        postgis: environment({ POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?must be set}" }),
+        nominatim: environment({ NOMINATIM_PASSWORD: "${POSTGRES_PASSWORD:?must be set}" }),
+        photon: environment({ SCRIPT: "echo $POSTGRES_PASSWORD" }),
+        // Blanking the variable, and another database's own key, are not references.
+        "app-api": {
+          container: {
+            environment: {
+              DATABASE_URL: "postgresql://openmapx_api@postgis:5432/openmapx",
+              DATABASE_PASSWORD_FILE: "/run/secrets/postgres-api-password",
+              POSTGRES_PASSWORD: "",
+            },
+          },
+          bindMounts: [
+            {
+              source: "@infra:secrets/postgres-api-password",
+              target: "/run/secrets/postgres-api-password",
+            },
+          ],
+        },
+        "dawarich-postgis": {
+          configSchema: { properties: { POSTGRES_PASSWORD: { "x-openmapx-secret": true } } },
+        },
+        martin: environment({ NOMINATIM_PASSWORD: "${NOMINATIM_DB_PASSWORD:?must be set}" }),
+      },
+      (details) =>
+        expect([...details].sort()).toEqual(
+          [
+            'service "nominatim" receives the PostgreSQL superuser password',
+            'service "photon" receives the PostgreSQL superuser password',
+          ].sort(),
+        ),
+    );
+  });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
 
   it("declares no Docker provider anywhere in production service configuration", () => {

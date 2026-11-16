@@ -564,7 +564,9 @@ export interface SafeFetchJsonOptions {
   truncate?: boolean;
   /**
    * Hostnames (exact or "*.suffix") permitted to resolve to a private address.
-   * Defaults to `privateFeedHostAllowlist()` when omitted.
+   * Defaults to none. Transit and mobility feed downloads opt in to the
+   * operator's feed mirrors by passing `privateFeedHostAllowlist()`; other
+   * callers must not, because that setting covers feed mirrors only.
    */
   allowPrivateHosts?: string[];
   /**
@@ -652,6 +654,9 @@ async function resolvePublicHostOrThrow(hostname: string): Promise<FetchConnecti
  * LAN or CGNAT address; a hard public-IP requirement would break them, so the
  * bypass is opt-in and per host rather than global.
  *
+ * Only feed and data downloads pass this list; the `safeFetch*` helpers never
+ * apply it on their own.
+ *
  * Format: comma-separated exact hostnames or "*.suffix" wildcards.
  */
 export function privateFeedHostAllowlist(): string[] {
@@ -717,7 +722,7 @@ async function consumeSafeFetchResponse<T>(
 ): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const maxRedirects = opts.maxRedirects ?? 5;
-  const allowPrivateHosts = opts.allowPrivateHosts ?? privateFeedHostAllowlist();
+  const allowPrivateHosts = opts.allowPrivateHosts ?? [];
   const operationDeadlineAt = Date.now() + timeoutMs;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const operationSignal = opts.signal

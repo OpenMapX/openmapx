@@ -139,6 +139,28 @@ it("retries once and then explains the second-factor requirement instead of redi
   expect(sessionStorage.getItem(PENDING_EXPORT_KEY)).toBeNull();
 });
 
+it("explains that another download for the account is still running", async () => {
+  getPrivacyDataRequests.mockResolvedValue({ requests: [] });
+  requestPrivacyExport.mockResolvedValue(
+    Response.json({ code: "EXPORT_IN_PROGRESS" }, { status: 409 }),
+  );
+  render(<PrivacyDataSection />);
+  await screen.findByText("privacyData.noRequests");
+  fireEvent.click(screen.getByRole("button", { name: "privacyData.downloadExport" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("privacyData.exportInProgress");
+});
+
+it("asks the person to try again later when the server cannot start a download", async () => {
+  getPrivacyDataRequests.mockResolvedValue({ requests: [] });
+  requestPrivacyExport.mockResolvedValue(
+    Response.json({ code: "PRIVACY_SERVICE_UNAVAILABLE" }, { status: 503 }),
+  );
+  render(<PrivacyDataSection />);
+  await screen.findByText("privacyData.noRequests");
+  fireEvent.click(screen.getByRole("button", { name: "privacyData.downloadExport" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("privacyData.exportUnavailable");
+});
+
 it("does not retry an intent that was already retried", async () => {
   getPrivacyDataRequests.mockResolvedValue({ requests: [] });
   sessionStorage.setItem(PENDING_EXPORT_KEY, JSON.stringify({ at: Date.now(), retried: true }));
