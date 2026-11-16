@@ -76,7 +76,17 @@ export function decodePlusCode(code: string): LngLat | null {
   return [lngLow - 180 + res / 2, latLow - 90 + res / 2];
 }
 
-/** Expands a short Plus Code using the reference location's area prefix. */
+/** Wraps a longitude into [-180, 180). */
+function normalizeLongitude(lng: number): number {
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * Expands a short Plus Code to the full code nearest the reference location,
+ * following the Open Location Code "recover nearest" rule: prepend the
+ * reference's prefix, then move one cell towards the reference when the result
+ * is more than half a cell away in latitude or longitude.
+ */
 function recoverShortPlusCode(shortCode: string, refLat: number, refLng: number): string | null {
   const c = shortCode.replace(/\s/g, "").toUpperCase();
   const plusIdx = c.indexOf("+");
@@ -84,11 +94,33 @@ function recoverShortPlusCode(shortCode: string, refLat: number, refLng: number)
 
   const shortPrefix = c.slice(0, plusIdx);
   if (shortPrefix.length !== 4 && shortPrefix.length !== 6) return null;
+  const suffix = c.slice(plusIdx + 1);
 
-  // Prepend the missing chars from the reference location's full code
-  const refCode = computePlusCode([refLng, refLat]);
-  const missingChars = 8 - shortPrefix.length;
-  return `${refCode.slice(0, missingChars) + shortPrefix}+${c.slice(plusIdx + 1)}`;
+  const lat = Math.max(-90, Math.min(90, refLat));
+  const lng = normalizeLongitude(refLng);
+  const paddingLength = 8 - shortPrefix.length; // 4 or 2 characters removed
+  const resolution = 20 ** (2 - paddingLength / 2); // 1° or 20° per prefix cell
+  const halfResolution = resolution / 2;
+
+  const candidate = `${computePlusCode([lng, lat]).slice(0, paddingLength)}${shortPrefix}+${suffix}`;
+  const centre = decodePlusCode(candidate);
+  if (!centre) return null;
+
+  let [centreLng, centreLat] = centre;
+  if (lat + halfResolution < centreLat && centreLat - resolution >= -90) {
+    centreLat -= resolution;
+  } else if (lat - halfResolution > centreLat && centreLat + resolution <= 90) {
+    centreLat += resolution;
+  }
+  if (lng + halfResolution < centreLng) {
+    centreLng -= resolution;
+  } else if (lng - halfResolution > centreLng) {
+    centreLng += resolution;
+  }
+  if (centreLng === centre[0] && centreLat === centre[1]) return candidate;
+
+  // Re-encode the shifted centre and keep the caller's original suffix.
+  return `${computePlusCode([normalizeLongitude(centreLng), centreLat]).slice(0, 9)}${suffix}`;
 }
 
 /**
