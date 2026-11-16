@@ -5,15 +5,7 @@ import { passkey } from "@better-auth/passkey";
 import { envString } from "@openmapx/core/server-env";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import {
-  admin,
-  customSession,
-  emailOTP,
-  genericOAuth,
-  jwt,
-  oneTimeToken,
-  twoFactor,
-} from "better-auth/plugins";
+import { admin, customSession, emailOTP, jwt, oneTimeToken, twoFactor } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import {
@@ -24,6 +16,7 @@ import {
 import { type AuthDatabase, currentAuthDatabase } from "./account/auth-database";
 import { createAuthRuntime } from "./account/auth-runtime";
 import { applyPasswordVerificationPolicy } from "./account/password-verification-policy";
+import { shareGenericOAuthProviders } from "./account/shared-oauth-providers";
 import {
   exchangeMapillaryAuthorizationCode,
   fetchMapillaryUserInfo,
@@ -97,6 +90,75 @@ const providerAvatarSync = createProviderAvatarSync({
   async setUserImage(userId, image) {
     await currentAuthDatabase().update(userTable).set({ image }).where(eq(userTable.id, userId));
   },
+});
+
+// Built once per process: every auth instance shares these providers, so OSM
+// discovery is not repeated for each instance (see shareGenericOAuthProviders).
+const oauthProviders = shareGenericOAuthProviders({
+  config: [
+    {
+      providerId: "openstreetmap",
+      discoveryUrl: getOsmConfig().discoveryUrl,
+      // Keep the core OAuth endpoints available when OSM discovery is
+      // temporarily unreachable. Profile identity is still proven by the
+      // access token against OSM's user-details API.
+      authorizationUrl: getOsmConfig().webUrl("oauth2/authorize"),
+      tokenUrl: getOsmConfig().webUrl("oauth2/token"),
+      // The profile comes from OSM's authenticated user-details endpoint,
+      // not from Better Auth's local user mapping. Pin its immutable OSM
+      // numeric ID explicitly so the 1.7 account subject cannot drift.
+      accountSubject: ({ profile }) => String(profile.id),
+      clientId: envString("OSM_CLIENT_ID", ""),
+      clientSecret: envString("OSM_CLIENT_SECRET", ""),
+      // Ordinary sign-in stays minimal. Contribution write scopes are
+      // requested incrementally, only when someone starts contributing.
+      scopes: ["openid", "read_prefs"],
+      pkce: true,
+      async getUserInfo({ accessToken }) {
+        const osm = await fetchOsmUserDetails(
+          getOsmConfig().apiUrl("api/0.6/user/details.json"),
+          accessToken,
+        );
+        return {
+          id: String(osm.id),
+          name: osm.display_name,
+          email: `${osm.id}@osm.invalid`,
+          emailVerified: false,
+          image: osm.img?.href,
+        };
+      },
+    },
+    {
+      providerId: "mapillary",
+      authorizationUrl: "https://www.mapillary.com/connect",
+      tokenUrl: "https://graph.mapillary.com/token",
+      clientId: envString("MAPILLARY_CLIENT_ID", ""),
+      clientSecret: envString("MAPILLARY_CLIENT_SECRET", ""),
+      scopes: ["read"],
+      async getToken({ code, redirectURI }) {
+        const token = await exchangeMapillaryAuthorizationCode({
+          code,
+          redirectUri: redirectURI,
+          clientId: envString("MAPILLARY_CLIENT_ID", ""),
+          clientSecret: envString("MAPILLARY_CLIENT_SECRET", ""),
+        });
+        return {
+          accessToken: token.accessToken,
+          tokenType: token.tokenType,
+          accessTokenExpiresAt: new Date(Date.now() + token.expiresInSeconds * 1000),
+        };
+      },
+      async getUserInfo({ accessToken }) {
+        const data = await fetchMapillaryUserInfo(accessToken);
+        return {
+          id: data.id,
+          name: data.username,
+          email: `${data.id}@mapillary.invalid`,
+          emailVerified: false,
+        };
+      },
+    },
+  ],
 });
 
 function createPolicyAuth(
@@ -331,72 +393,7 @@ function createPolicyAuth(
           ? process.env.PASSKEY_ORIGIN.split(",").map((o) => o.trim())
           : ["http://localhost:3000"],
       }),
-      genericOAuth({
-        config: [
-          {
-            providerId: "openstreetmap",
-            discoveryUrl: getOsmConfig().discoveryUrl,
-            // Keep the core OAuth endpoints available when OSM discovery is
-            // temporarily unreachable. Profile identity is still proven by the
-            // access token against OSM's user-details API.
-            authorizationUrl: getOsmConfig().webUrl("oauth2/authorize"),
-            tokenUrl: getOsmConfig().webUrl("oauth2/token"),
-            // The profile comes from OSM's authenticated user-details endpoint,
-            // not from Better Auth's local user mapping. Pin its immutable OSM
-            // numeric ID explicitly so the 1.7 account subject cannot drift.
-            accountSubject: ({ profile }) => String(profile.id),
-            clientId: envString("OSM_CLIENT_ID", ""),
-            clientSecret: envString("OSM_CLIENT_SECRET", ""),
-            // Ordinary sign-in stays minimal. Contribution write scopes are
-            // requested incrementally, only when someone starts contributing.
-            scopes: ["openid", "read_prefs"],
-            pkce: true,
-            async getUserInfo({ accessToken }) {
-              const osm = await fetchOsmUserDetails(
-                getOsmConfig().apiUrl("api/0.6/user/details.json"),
-                accessToken,
-              );
-              return {
-                id: String(osm.id),
-                name: osm.display_name,
-                email: `${osm.id}@osm.invalid`,
-                emailVerified: false,
-                image: osm.img?.href,
-              };
-            },
-          },
-          {
-            providerId: "mapillary",
-            authorizationUrl: "https://www.mapillary.com/connect",
-            tokenUrl: "https://graph.mapillary.com/token",
-            clientId: envString("MAPILLARY_CLIENT_ID", ""),
-            clientSecret: envString("MAPILLARY_CLIENT_SECRET", ""),
-            scopes: ["read"],
-            async getToken({ code, redirectURI }) {
-              const token = await exchangeMapillaryAuthorizationCode({
-                code,
-                redirectUri: redirectURI,
-                clientId: envString("MAPILLARY_CLIENT_ID", ""),
-                clientSecret: envString("MAPILLARY_CLIENT_SECRET", ""),
-              });
-              return {
-                accessToken: token.accessToken,
-                tokenType: token.tokenType,
-                accessTokenExpiresAt: new Date(Date.now() + token.expiresInSeconds * 1000),
-              };
-            },
-            async getUserInfo({ accessToken }) {
-              const data = await fetchMapillaryUserInfo(accessToken);
-              return {
-                id: data.id,
-                name: data.username,
-                email: `${data.id}@mapillary.invalid`,
-                emailVerified: false,
-              };
-            },
-          },
-        ],
-      }),
+      oauthProviders,
       // Authenticator apps and backup codes only. Without `otpOptions`, Better
       // Auth also refuses to enroll emailed codes as a second factor.
       twoFactor({ issuer: "OpenMapX" }),
