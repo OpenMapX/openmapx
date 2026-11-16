@@ -219,6 +219,23 @@ describe("GET /api/shares", () => {
     expect(res.json().shares).toHaveLength(1);
     expect(res.payload).not.toMatch(/HASH|tokenHash|snapshot|user-1/);
   });
+
+  it("requests only the owner columns, never the token hash or frozen snapshot", async () => {
+    dbMock.queueSelect([]);
+    const res = await app.inject({ method: "GET", url: "/api/shares" });
+    expect(res.statusCode).toBe(200);
+    const projection = dbMock.db.select.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(Object.keys(projection).sort()).toEqual([
+      "createdAt",
+      "expiresAt",
+      "id",
+      "label",
+      "mode",
+      "targetId",
+      "targetType",
+      "updatedAt",
+    ]);
+  });
 });
 
 describe("POST /api/shares/:id/rotate", () => {

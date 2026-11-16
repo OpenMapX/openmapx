@@ -11,6 +11,7 @@ import {
   listSnapshotFrom,
   MAX_SHARES_PER_USER,
   MAX_SNAPSHOT_PLACES,
+  ownerShareColumns,
   parseStoredListSnapshot,
   routeShareLabel,
   toOwnerShare,
@@ -208,7 +209,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
     registerSharingRoute(authenticated, "listOwnerShares", async (req, _reply) => {
       const userId = getUserId(req);
       const rows = await db
-        .select()
+        .select(ownerShareColumns)
         .from(shareLink)
         .where(eq(shareLink.userId, userId))
         .orderBy(desc(shareLink.createdAt));
