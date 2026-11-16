@@ -115,7 +115,7 @@ async function loadIocStations(
   const raw = await fetchJsonWithTimeout<IocStationRaw[]>(IOC_URL, ua);
   if (!raw) {
     log.warn("IOC station list unavailable");
-    return [];
+    throw new Error("IOC station list unavailable");
   }
   // Active stations only; the catalog includes historic gauges.
   const seenByCode = new Map<string, MergedTideStation>();
@@ -221,7 +221,7 @@ async function loadEmodnetStations(
   const raw = await fetchJsonWithTimeout<{ features: EmodnetFeature[] }>(EMODNET_WFS_URL, ua);
   if (!raw?.features) {
     log.warn("EMODnet station list unavailable");
-    return [];
+    throw new Error("EMODnet station list unavailable");
   }
   const stations: MergedTideStation[] = [];
   const now = Date.now();
@@ -283,7 +283,7 @@ async function loadCanadaStations(
   const raw = await fetchJsonWithTimeout<IwlsStationRaw[]>(IWLS_URL, ua);
   if (!raw) {
     log.warn("IWLS station list unavailable");
-    return [];
+    throw new Error("IWLS station list unavailable");
   }
   const stations: MergedTideStation[] = raw
     .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
@@ -332,10 +332,7 @@ async function loadNorwayStations(
       signal: controller.signal,
     });
     clearTimeout(timer);
-    if (!res.ok) {
-      log.warn("Kartverket station list unavailable");
-      return [];
-    }
+    if (!res.ok) throw new Error(`Kartverket station list HTTP ${res.status}`);
     const xml = await res.text();
     // The XML is small + well-formed; a regex parse keeps us off an XML
     // dependency tree (the document is a flat `<location ... />` list).
@@ -360,8 +357,9 @@ async function loadNorwayStations(
     const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
     await writer.set(cacheKey, captured, CATALOG_TTL);
     return captured;
-  } catch {
-    return [];
+  } catch (error) {
+    log.warn("Kartverket station list unavailable");
+    throw error;
   }
 }
 
@@ -391,7 +389,7 @@ async function loadPegelonlineStations(
   const raw = await fetchJsonWithTimeout<PegelStationRaw[]>(PEGELONLINE_URL, ua);
   if (!raw) {
     log.warn("Pegelonline station list unavailable");
-    return [];
+    throw new Error("Pegelonline station list unavailable");
   }
   // Pre-filter to coastal/estuarine sea-level gauges. The `waters=NORDSEE,OSTSEE`
   // filter on the API already excludes the ~1000 inland river gauges.
@@ -412,19 +410,32 @@ async function loadPegelonlineStations(
 }
 
 // -------- Top-level: load everything in parallel + dedup -----------------
+/** The merged non-NOAA catalogs, and the networks whose catalog could not be loaded. */
+export interface TideStationCatalogs {
+  stations: MergedTideStation[];
+  unavailable: TideNetwork[];
+}
+
 export async function loadAllTideStations(
   cache: CacheClient,
   log: Logger,
   ua: string,
-): Promise<MergedTideStation[]> {
-  const [ioc, emodnet, canada, norway, pegel] = await Promise.all([
-    loadIocStations(cache, log, ua).catch(() => []),
-    loadEmodnetStations(cache, log, ua).catch(() => []),
-    loadCanadaStations(cache, log, ua).catch(() => []),
-    loadNorwayStations(cache, log, ua).catch(() => []),
-    loadPegelonlineStations(cache, log, ua).catch(() => []),
-  ]);
-  return [...ioc, ...emodnet, ...canada, ...norway, ...pegel];
+): Promise<TideStationCatalogs> {
+  const loaders: Array<[TideNetwork, () => Promise<MergedTideStation[]>]> = [
+    ["ioc", () => loadIocStations(cache, log, ua)],
+    ["emodnet", () => loadEmodnetStations(cache, log, ua)],
+    ["ca-iwls", () => loadCanadaStations(cache, log, ua)],
+    ["kartverket", () => loadNorwayStations(cache, log, ua)],
+    ["pegel", () => loadPegelonlineStations(cache, log, ua)],
+  ];
+  const settled = await Promise.allSettled(loaders.map(([, load]) => load()));
+  const stations: MergedTideStation[] = [];
+  const unavailable: TideNetwork[] = [];
+  settled.forEach((result, i) => {
+    if (result.status === "fulfilled") stations.push(...result.value);
+    else unavailable.push(loaders[i][0]);
+  });
+  return { stations, unavailable };
 }
 
 /**

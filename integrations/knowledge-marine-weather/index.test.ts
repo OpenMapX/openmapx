@@ -363,4 +363,45 @@ describe("GET /marine caching", () => {
     });
     expect(cache.values.get("marine:utc-v1:50.78,6.08")).toEqual({ notFound: true });
   });
+
+  it("does not cache a failed upstream call and serves the recovered answer next", async () => {
+    const cache = createFencedMemoryCache();
+    mockFetch.mockResolvedValueOnce(new Response("upstream down", { status: 503 }));
+    mockFetch.mockResolvedValueOnce(mockOk(coastal));
+
+    const failed = await invoke({ lat: "54.0", lng: "8.0" }, cache);
+
+    expect(failed.statusCode).toBe(204);
+    expect(cache.values.size).toBe(0);
+
+    const recovered = await invoke({ lat: "54.0", lng: "8.0" }, cache);
+
+    expect(recovered.statusCode).toBe(200);
+    expect(recovered.payload).toHaveProperty("current");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(cache.ttls.get("marine:utc-v1:54.00,8.00")).toBe(30 * 60);
+  });
+
+  it("does not cache a network error", async () => {
+    const cache = createFencedMemoryCache();
+    mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    const reply = await invoke({ lat: "54.0", lng: "8.0" }, cache);
+
+    expect(reply.statusCode).toBe(204);
+    expect(cache.values.size).toBe(0);
+  });
+
+  it("still caches Open-Meteo's 400 rejection as not found", async () => {
+    const cache = createFencedMemoryCache();
+    mockFetch.mockResolvedValueOnce(
+      Response.json({ error: true, reason: "no marine data" }, { status: 400 }),
+    );
+
+    const reply = await invoke({ lat: "50.78", lng: "6.08" }, cache);
+
+    expect(reply.statusCode).toBe(204);
+    expect(cache.values.get("marine:utc-v1:50.78,6.08")).toEqual({ notFound: true });
+    expect(cache.ttls.get("marine:utc-v1:50.78,6.08")).toBe(60 * 60);
+  });
 });

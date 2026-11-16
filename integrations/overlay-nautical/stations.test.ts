@@ -7,7 +7,11 @@ vi.mock("@openmapx/core", async (importActual) => {
   return { ...actual, fetchJson };
 });
 
-import { createNoopLogger, createPassthroughCache } from "@openmapx/integration-framework/testing";
+import {
+  createFencedMemoryCache,
+  createNoopLogger,
+  createPassthroughCache,
+} from "@openmapx/integration-framework/testing";
 import {
   dedupTideStations,
   iso3to2,
@@ -171,8 +175,9 @@ describe("loadAllTideStations", () => {
       vi.fn(async () => ({ ok: false, status: 503 }) as Response),
     );
 
-    const out = await loadAllTideStations(cache, log, "test-ua");
+    const { stations: out, unavailable } = await loadAllTideStations(cache, log, "test-ua");
     vi.unstubAllGlobals();
+    expect(unavailable).toEqual(["kartverket"]);
 
     const iocRequest = fetchJson.mock.calls.find(([url]) =>
       String(url).includes("ioc-sealevelmonitoring"),
@@ -224,5 +229,32 @@ describe("loadAllTideStations", () => {
       name: "CUXHAVEN STEUBENHOEFT",
       country: "DE",
     });
+  });
+
+  it("reports a failed network and caches only the catalogs that answered", async () => {
+    const cache = createFencedMemoryCache();
+    const log = createNoopLogger();
+    fetchJson.mockImplementation(async (url: string) => {
+      if (url.includes("ioc-sealevelmonitoring")) return null;
+      if (url.includes("emodnet-physics")) return { features: [] };
+      return [];
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('<?xml version="1.0"?><stationlist></stationlist>', { status: 200 }),
+      ),
+    );
+
+    try {
+      const { unavailable } = await loadAllTideStations(cache, log, "test-ua");
+
+      expect(unavailable).toEqual(["ioc"]);
+      expect(cache.values.has("catalog:contributors-v1:ioc")).toBe(false);
+      expect(cache.values.get("catalog:contributors-v1:pegel")).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
