@@ -25,9 +25,9 @@ Only squash merges are allowed. The PR title and body become the default
 squash commit message; review both and preserve attribution and trailers.
 
 Required checks use the loose policy: branches do not need updating after each
-merge to `main`. A [merge queue](#merge-queue) is prepared but not yet required.
-Post-merge CI checks the combined result and gates image publication. Repair a failing `main` before continuing
-unrelated merges.
+merge to `main`. Merges go through the [merge queue](#merge-queue), which tests
+the combined result before `main` moves. Post-merge CI checks it again and gates
+image publication. Repair a failing `main` before continuing unrelated merges.
 
 The required title check also validates current release classification using trusted
 default-branch code and candidate Git objects only. Metadata edits refresh that
@@ -87,26 +87,26 @@ complete validation that main gets; `Validate conventional commit title` and
 `check / record signature` report without repeating work that needs a pull
 request, because every queued pull request already passed them.
 
-Enable it in the `main protection` ruleset with **Require merge queue**:
+The `main protection` ruleset requires the queue since 16 November 2026:
 
 | Setting              | Value      | Reason                                                                  |
 | -------------------- | ---------- | ----------------------------------------------------------------------- |
 | Merge method         | Squash     | The only allowed method.                                                |
 | Build concurrency    | 2          | Two entries fit beside pull-request runs under the hosted-runner limit. |
-| Maximum group size   | 1          | Each pull request passes or fails on its own.                           |
+| Maximum group size   | 3          | Passing entries may land together.                                      |
+| Require all entries  | On         | Each pull request passes or fails on its own.                           |
 | Status check timeout | 90 minutes | The longest database job timeout.                                       |
 
-Then merge with **Merge when ready** or `gh pr merge`. A failing entry leaves
+Merge with **Merge when ready** or `gh pr merge`. A failing entry leaves
 the queue and `main` does not move.
 
-Once the queue is required, pull requests may leave the recovery database groups
-to it. List them in `mergeQueueDatabaseGroups` in `scripts/ci-impact-rollout.json`;
-only the copy on `main` is read. See
+Pull requests leave the recovery database groups to the queue. They are listed
+in `mergeQueueDatabaseGroups` in `scripts/ci-impact-rollout.json`; only the copy
+on `main` is read. See
 [Measuring CI performance](ci-performance.md#merge-queue-and-deferred-database-groups).
 Empty that list before removing the queue requirement, otherwise those groups
 run only after a merge.
 
-The queue's `merge_group` runs have not been observed on this repository yet.
 If a required check stays pending for an entry, remove the queue requirement
 from the ruleset, merge the fix the previous way and enable it again.
 

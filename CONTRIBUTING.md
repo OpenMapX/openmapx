@@ -529,9 +529,11 @@ required checks. While the project has one active maintainer, no independent
 approval is mandatory. Resolve review threads after fixing the finding,
 explaining why it does not apply, or agreeing on a follow-up.
 
-Branches do not have to be updated after every merge to `main`. Post-merge CI
-still checks the combined result; repair a failing `main` before unrelated
-merges continue. Administrator bypass is reserved for documented emergencies
+Branches do not have to be updated after every merge to `main`. Merge with
+**Merge when ready**: the merge queue tests the pull request on top of `main`,
+including the recovery database groups that pull-request runs leave out, and
+merges it when that passes. Post-merge CI checks the result again; repair a
+failing `main` before unrelated merges continue. Administrator bypass is reserved for documented emergencies
 through a PR. See the [protection runbook](docs/docs/developer/repository-governance.md)
 for required checks and recovery.
 

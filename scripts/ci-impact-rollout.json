@@ -1,5 +1,5 @@
 {
   "version": 1,
   "approvedScopes": ["docs", "web", "mobile", "client"],
-  "mergeQueueDatabaseGroups": []
+  "mergeQueueDatabaseGroups": ["crash-points", "configuration-recovery", "coordinator-recovery"]
 }

@@ -356,9 +356,11 @@ those three groups can be listed. The plan records the result as
 the same plan and rejects a deferral on any event other than `pull_request`.
 Merge-queue, `main`, scheduled and manual runs always run every group.
 
-The list is empty until the ruleset requires the merge queue. With the list set
-and no queue, a recovery regression would be found on `main` after the merge
-instead of before it.
+The ruleset requires the merge queue since 16 November 2026 and the list names
+all three groups. A pull request that breaks one of them passes its own run and
+is refused by the queue. Empty the list before removing the queue requirement:
+with the list set and no queue, a recovery regression would be found on `main`
+after the merge instead of before it.
 
 ## Stopping a pull request's run after a lint failure
 
