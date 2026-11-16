@@ -225,6 +225,10 @@ export const dataSubjectRequestNotification = pgTable(
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     lastErrorCode: text("last_error_code"),
+    /** Tells repeated occurrences of one template apart: the request
+     * version a transition or extension produced, or the deadline a
+     * reminder is for. Empty for templates sent once per request. */
+    occurrenceKey: text("occurrence_key").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -234,6 +238,7 @@ export const dataSubjectRequestNotification = pgTable(
       table.template,
       table.channel,
       table.recipientUserId,
+      table.occurrenceKey,
     ),
     index("data_subject_request_notification_state_idx").on(table.state, table.nextAttemptAt),
     index("data_subject_request_notification_recipient_idx").on(

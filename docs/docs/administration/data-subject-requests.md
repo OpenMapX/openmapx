@@ -98,11 +98,12 @@ checks the current server state.
 
 ## Notifications
 
-Requesters with an account receive an acknowledgement and an email when their
-request waits on them, is extended, completed or refused. Each active
-administrator receives an alert for every new request, including assisted
-requests without a subject account, and one reminder per request when its
-deadline is near or past. Emails contain no request identifiers, links or
+Requesters with an account receive an acknowledgement, an email each time their
+request waits on them or its deadline is extended, and an email when it is
+completed or refused. Each active administrator receives an alert for every new
+request, including assisted requests without a subject account, and one
+reminder per deadline when it is near or past; an extension's new deadline gets
+a new reminder. Emails contain no request identifiers, links or
 personal data.
 
 ## Initial setup
