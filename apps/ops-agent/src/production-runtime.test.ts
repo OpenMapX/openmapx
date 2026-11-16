@@ -155,7 +155,8 @@ describe("assembled production service authority", () => {
     const cleared = services.currentConfigurationGeneration(host.infraDir);
     expect(cleared).not.toBe(pinned);
     expect(services.readAppliedRelease(host.infraDir)).toBeNull();
-    expect(services.readPreviousReleaseGeneration(host.infraDir, cleared!)).toBe(pinned);
+    // A generation without pins has no release to roll back from.
+    expect(services.readPreviousReleaseGeneration(host.infraDir, cleared!)).toBeNull();
     expect(services.readGenerationRelease(host.infraDir, pinned!)?.manifest.release).toBe(
       "checked-pin",
     );

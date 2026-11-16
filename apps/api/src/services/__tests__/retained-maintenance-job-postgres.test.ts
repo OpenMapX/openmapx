@@ -881,12 +881,9 @@ dbDescribe("retained finite maintenance requests", () => {
       // Clearing renders the applied configuration again without the pin.
       expect(services.readAppliedRelease(host.infraDir)).toBeNull();
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(pointer);
-      expect(
-        services.readPreviousReleaseGeneration(
-          host.infraDir,
-          services.currentConfigurationGeneration(host.infraDir)!,
-        ),
-      ).toBe(pointer);
+      expect(services.readGenerationRelease(host.infraDir, pointer!)?.manifest.release).toBe(
+        "checked-pin",
+      );
       expect(
         journal.records().filter((row) => row.operation.kind === "release.clear"),
       ).toHaveLength(1);
