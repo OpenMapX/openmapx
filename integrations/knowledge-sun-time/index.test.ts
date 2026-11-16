@@ -122,6 +122,11 @@ function apiBody() {
   };
 }
 
+function apiBodyFor(day: string) {
+  const body = apiBody();
+  return { ...body, results: { ...body.results, sunrise: `${day}T03:13:42+00:00` } };
+}
+
 let mockFetch: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -225,6 +230,82 @@ describe("GET /times sunrise-sunset route", () => {
 
     expect(reply.statusCode).toBe(502);
     expect(reply.payload).toEqual({ message: "Sunrise-Sunset data unavailable" });
+  });
+});
+
+// The date sent upstream and used in the cache key is the place's own calendar
+// date, so an entry cached late in the evening is not served after local
+// midnight. Only Date is faked, so fetchJson's timeout timers stay real.
+describe("GET /times date resolution", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("fetches fresh data when the local date changes inside the cache TTL", async () => {
+    const cache = makeCache();
+    const query = { lat: "52.52", lng: "13.405" };
+
+    vi.setSystemTime(new Date("2026-06-14T20:00:00Z"));
+    mockFetch.mockResolvedValueOnce(mockOk(apiBodyFor("2026-06-14")));
+    await invoke("/times", query, { cache });
+
+    vi.setSystemTime(new Date("2026-06-14T23:00:00Z"));
+    mockFetch.mockResolvedValueOnce(mockOk(apiBodyFor("2026-06-15")));
+    const second = await invoke("/times", query, { cache });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect((second.payload as { sunrise: string }).sunrise).toBe("2026-06-15T03:13:42+00:00");
+  });
+
+  it("serves the same local date from cache", async () => {
+    const cache = makeCache();
+    const query = { lat: "52.52", lng: "13.405" };
+
+    vi.setSystemTime(new Date("2026-06-14T06:00:00Z"));
+    mockFetch.mockResolvedValueOnce(mockOk(apiBody()));
+    const first = await invoke("/times", query, { cache });
+
+    vi.setSystemTime(new Date("2026-06-14T18:00:00Z"));
+    const second = await invoke("/times", query, { cache });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(second.payload).toEqual(first.payload);
+  });
+
+  it.each([
+    { lat: "52.52", lng: "13.405", now: "2026-06-14T22:30:00Z", expected: "2026-06-15" },
+    { lat: "34.05", lng: "-118.25", now: "2026-06-15T03:00:00Z", expected: "2026-06-14" },
+  ])("uses the place's date at $lat,$lng when it is $now", async ({ lat, lng, now, expected }) => {
+    const cache = makeCache();
+    vi.setSystemTime(new Date(now));
+    mockFetch.mockResolvedValueOnce(mockOk(apiBody()));
+
+    await invoke("/times", { lat, lng }, { cache });
+
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain(`date=${expected}`);
+    expect(cache.set).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`:${expected}$`)),
+      expect.anything(),
+      expect.any(Number),
+    );
+  });
+
+  it("passes an explicit date through to the upstream URL and cache key", async () => {
+    const cache = makeCache();
+    mockFetch.mockResolvedValueOnce(mockOk(apiBody()));
+
+    await invoke("/times", { lat: "52.52", lng: "13.405", date: "2026-12-24" }, { cache });
+
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain("date=2026-12-24");
+    expect(cache.set).toHaveBeenCalledWith(
+      expect.stringMatching(/:2026-12-24$/),
+      expect.anything(),
+      expect.any(Number),
+    );
   });
 });
 

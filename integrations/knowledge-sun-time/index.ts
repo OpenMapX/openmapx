@@ -38,6 +38,27 @@ function round4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
+/**
+ * Today's calendar date (YYYY-MM-DD) where the place is, so a result computed
+ * late in the evening is not served as the next day's times.
+ */
+function localDate(timeZone: string, now = new Date()): string {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(now);
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/times", async (req, reply) => {
     const { lat, lng, date } = scalarQueries(req.query) as {
@@ -69,8 +90,10 @@ export function setup(ctx: IntegrationContext): void {
       "sunrise-sunset",
       "timezone-boundary-builder",
     ]);
-    const dateParam = date ?? "today";
     const tzid = findTimezone(latNum, lngNum)[0] ?? "UTC";
+    const requested = date?.trim();
+    const dateParam =
+      !requested || requested.toLowerCase() === "today" ? localDate(tzid) : requested;
     const cacheKey = `sun-times:contributors-v1:${round4(latNum)},${round4(lngNum)}:${dateParam}`;
 
     const cached = await ctx.cache.get<unknown>(cacheKey);
