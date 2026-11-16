@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDbMock } from "../test/db.js";
-import { createPrivacyNotificationWorker } from "./notifications.js";
+import { createPrivacyNotificationWorker, dispatchPrivacyNotifications } from "./notifications.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -25,10 +25,12 @@ describe("privacy notification worker health", () => {
     vi.setSystemTime(new Date("2026-09-05T12:00:00Z"));
     const unhandled = vi.fn();
     process.on("unhandledRejection", unhandled);
+    const connectionTerminated = () => {
+      throw new Error("connection terminated");
+    };
     const database = {
-      select: vi.fn(() => {
-        throw new Error("connection terminated");
-      }),
+      select: vi.fn(connectionTerminated),
+      update: vi.fn(connectionTerminated),
     };
     const worker = createPrivacyNotificationWorker({
       database: database as never,
@@ -42,7 +44,7 @@ describe("privacy notification worker health", () => {
       // One real macrotask turn so Node's unhandled-rejection check runs.
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(database.select).toHaveBeenCalledTimes(3);
+      expect(database.update).toHaveBeenCalledTimes(3);
       expect(unhandled).not.toHaveBeenCalled();
       expect(worker.health()).toEqual({
         healthy: false,
@@ -54,5 +56,16 @@ describe("privacy notification worker health", () => {
       worker.stop();
       process.off("unhandledRejection", unhandled);
     }
+  });
+});
+
+describe("privacy notification dispatcher bounds", () => {
+  it("rejects a stale-claim threshold below one minute or above one day", async () => {
+    const database = createDbMock();
+    for (const staleSendingMs of [59_999, 86_400_001, 1.5])
+      await expect(
+        dispatchPrivacyNotifications({ database: database.db as never, staleSendingMs }),
+      ).rejects.toThrow("invalid notification dispatcher bounds");
+    expect(database.db.update).not.toHaveBeenCalled();
   });
 });
