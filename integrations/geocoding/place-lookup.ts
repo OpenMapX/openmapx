@@ -428,9 +428,10 @@ const MAX_DISTANCE_M = 500;
 const cityNameCache = new Map<string, { city: string | null; expiresAt: number }>();
 const CITY_NAME_TTL_MS = 3_600_000; // 1h
 
-// Country only changes at borders, so a coarse 1° grid (~111 km cell) and a
-// 24h TTL are sufficient. Shared with the nearby-places route so opening-hours
-// public-holiday rules can be evaluated against the right country.
+// The country is cached per 0.01° cell (about 1.1 km north–south) for 24h. A
+// whole-degree cell merged towns on both sides of a border (Aachen and
+// Maastricht share one). The entry bound keeps memory fixed while the finer
+// cell lowers the hit rate.
 // An entry budget for small country-code results, not an estimated heap-byte limit.
 const countryCodeCache = new LRUCache<string, { countryCode: string | null; expiresAt: number }>({
   max: 4096,
@@ -438,6 +439,11 @@ const countryCodeCache = new LRUCache<string, { countryCode: string | null; expi
   perf: { now: () => Date.now() },
 });
 const COUNTRY_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Snap a coordinate to the 0.01° country-cache cell. */
+function countryCell(degrees: number): number {
+  return Math.round(degrees * 100) / 100;
+}
 let lookupGeneration = 0;
 let lookupCacheAvailable = true;
 
@@ -485,21 +491,26 @@ export async function reverseGeocodeCity(
 
 /**
  * Reverse-geocode coordinates to a lowercase ISO 3166-1 alpha-2 country code.
- * Country-level zoom + 1° grid cache: cheap and rarely missed (only when the
- * lookup straddles a small border country boundary). Returns null on
- * unreachable upstream so callers can fall back gracefully.
+ * Returns `null` when the upstream answered without a country (open sea, for
+ * example), which is cached. Returns `undefined` when the lookup failed, which
+ * is not cached so the next request retries.
  */
-export async function reverseGeocodeCountry(lat: number, lng: number): Promise<string | null> {
+export async function reverseGeocodeCountry(
+  lat: number,
+  lng: number,
+): Promise<string | null | undefined> {
   const endpoint = NOMINATIM_URL;
   const generation = lookupGeneration;
-  const key = `${endpoint}:${Math.round(lat)},${Math.round(lng)}`;
+  const cellLat = countryCell(lat);
+  const cellLng = countryCell(lng);
+  const key = `${endpoint}:${cellLat},${cellLng}`;
   const cached = lookupCacheAvailable ? countryCodeCache.get(key) : undefined;
   if (cached && cached.expiresAt > Date.now()) return cached.countryCode;
 
   try {
     const url = new URL(`${endpoint}/reverse`);
-    url.searchParams.set("lat", String(lat));
-    url.searchParams.set("lon", String(lng));
+    url.searchParams.set("lat", String(cellLat));
+    url.searchParams.set("lon", String(cellLng));
     url.searchParams.set("format", "jsonv2");
     url.searchParams.set("addressdetails", "1");
     url.searchParams.set("zoom", "3");
@@ -519,7 +530,7 @@ export async function reverseGeocodeCountry(lat: number, lng: number): Promise<s
     }
     return countryCode;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
