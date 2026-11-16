@@ -30,6 +30,10 @@ export function pumpExport(
   response.once("close", () => {
     if (!response.writableFinished) body.destroy(new Error("export client disconnected"));
   });
+  // A client that left while the export was being prepared closed the
+  // response before the listener above existed; end the archive now.
+  if (response.destroyed && !response.writableFinished)
+    body.destroy(new Error("export client disconnected"));
   const written = prepared.write(body);
   const delivered = Promise.allSettled([written, finished(response)]).then(
     async ([archive, sent]) => {

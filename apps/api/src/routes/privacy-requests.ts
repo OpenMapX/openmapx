@@ -1,3 +1,4 @@
+import type { RollingStreamBudget, RollingStreamBudgetLease } from "@openmapx/core/server";
 import { fromNodeHeaders } from "better-auth/node";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
@@ -6,6 +7,7 @@ import { auth } from "../auth.js";
 import { db } from "../db/index.js";
 import { dataSubjectRequestTask } from "../db/schema.js";
 import { PrivacyRequestError, privacyErrorReply } from "../privacy/errors.js";
+import { acquireExportSlot, privacyExportAdmission } from "../privacy/export-admission.js";
 import { exportResponseHeaders, pumpExport } from "../privacy/export-response.js";
 import { selfServiceExportSchema } from "../privacy/request-contracts.js";
 import { PrivacyRequestService } from "../privacy/request-service.js";
@@ -26,6 +28,8 @@ export interface PrivacyRequestsRouteOptions {
   database?: typeof db;
   /** Collector settings for the export; tests replace the external sources. */
   exportSources?: Pick<PrepareSubjectExportOptions, "openmapx" | "dawarich">;
+  /** Export slots; tests pass their own so cases stay independent. */
+  exportAdmission?: RollingStreamBudget;
 }
 
 function publicRequest(row: Record<string, unknown>): Record<string, unknown> {
@@ -76,6 +80,7 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
   });
   const database = options.database ?? db;
   const serviceForRequest = () => options.service ?? new PrivacyRequestService({ database });
+  const exportAdmission = options.exportAdmission ?? privacyExportAdmission;
 
   /**
    * The self-service export. A recent interactive sign-in is the identity
@@ -89,6 +94,7 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
     let requestId: string | undefined;
     let prepared: PreparedSubjectExport;
     let userId: string;
+    let slot: RollingStreamBudgetLease | undefined;
     try {
       const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
       if (!session || session.user.id !== getUserId(request))
@@ -104,6 +110,8 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
       );
       if (!fresh) throw new PrivacyRequestError("FRESH_SIGN_IN_REQUIRED", 401);
       const body = selfServiceExportSchema.parse(request.body ?? {});
+      // Taken before the request is touched, so a refused export records nothing.
+      slot = acquireExportSlot(exportAdmission, userId);
       const row = await service.beginSelfServiceExport({
         userId,
         sessionId: session.session.id,
@@ -121,12 +129,28 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
         await service
           .recordExportFailure(requestId, "export-preparation-failed")
           .catch(() => undefined);
+      slot?.release();
       return privacyErrorReply(reply, error);
     }
     const exportRequestId = requestId;
-    const { body, delivered } = pumpExport(prepared, reply.raw);
+    const heldSlot = slot;
+    let delivered: Promise<boolean>;
+    let body: ReturnType<typeof pumpExport>["body"];
+    try {
+      ({ body, delivered } = pumpExport(prepared, reply.raw));
+    } catch (error) {
+      // Nothing was sent yet; without this the slot would stay taken.
+      await prepared.dispose().catch(() => undefined);
+      await service
+        .recordExportFailure(exportRequestId, "export-preparation-failed")
+        .catch(() => undefined);
+      heldSlot.release();
+      return privacyErrorReply(reply, error);
+    }
     // After the headers the request stays in progress unless every byte
-    // arrives, so an interrupted download can simply be retried.
+    // arrives, so an interrupted download can simply be retried. The slot is
+    // freed only once the outcome is recorded, so a retry never overlaps the
+    // earlier attempt's bookkeeping.
     void delivered
       .then(async (ok) => {
         if (ok) await service.finishExport(exportRequestId, { kind: "subject", id: userId });
@@ -134,7 +158,8 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
       })
       .catch((error: unknown) =>
         request.log.error({ err: error }, "failed to record the privacy export outcome"),
-      );
+      )
+      .finally(() => heldSlot.release());
     reply.headers(exportResponseHeaders(prepared.filename));
     return reply.send(body);
   });

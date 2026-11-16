@@ -369,6 +369,7 @@ describe("makeRateLimitTierHook", () => {
     app.get("/api/offline/packages/glyphs/:version/:fontstack/:range.pbf", ok);
     app.get("/api/offline/packages/:packageId/archive", ok);
     app.post("/api/offline/packages/prepare", ok);
+    app.post("/api/privacy/export", ok);
     app.get("/api/isochrone", ok);
     app.get("/api/places/:id", ok);
     app.get("/api/timeline/day/:date", ok);
@@ -389,6 +390,7 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/offline/packages/glyphs/glyphs-v1/Noto%20Sans/0-255.pbf", tier: "tile" },
     { url: `/api/offline/packages/omp2-${"a".repeat(64)}/archive`, tier: "public" },
     { method: "POST", url: "/api/offline/packages/prepare", tier: "expensive" },
+    { method: "POST", url: "/api/privacy/export", tier: "expensive" },
     { url: "/api/isochrone?x=1", tier: "expensive" },
     { url: "/api/places/node%2F1", tier: "expensive" },
     {

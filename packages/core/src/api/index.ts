@@ -42,8 +42,10 @@ export {
   type PlaceDetailsRequestInput,
 } from "./placeDetails";
 export {
+  EXPORT_IN_PROGRESS,
   getPrivacyDataRequest,
   getPrivacyDataRequests,
+  PRIVACY_SERVICE_UNAVAILABLE,
   type PrivacyRequestDetail,
   type PrivacyRequestKind,
   type PrivacyRequestState,

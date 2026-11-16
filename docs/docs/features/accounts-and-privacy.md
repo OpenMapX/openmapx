@@ -49,6 +49,8 @@ See [Reviews](./reviews.md) for key export and recovery limits.
    and then continues the download.
 3. The archive is created on demand and downloaded straight to your device.
    Nothing is kept on the server, so you can download again at any time.
+   One download per account runs at a time; a second one started while the
+   first is still running is refused until it finishes.
 4. The request stays listed with its status and response deadline. Some
    sources can only be checked by the operator; the archive's report names
    them, and the request is completed once the operator has checked them.
