@@ -26,7 +26,11 @@ import { decrypt, encrypt } from "../services/secrets.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
-import { findIdempotentEvent, idempotencyFingerprint } from "./idempotency.js";
+import {
+  findIdempotentCreate,
+  findIdempotentEvent,
+  idempotencyFingerprint,
+} from "./idempotency.js";
 import { withPreservationRetentionLock } from "./preservation.js";
 import {
   assertValidRequestTransition,
@@ -203,8 +207,42 @@ export class PrivacyRequestService {
     const applicable = this.catalogue.filter(
       (registration) => registration.strategy !== "not_personal",
     );
+    // A replayed create (same key, same administrator, same request) returns
+    // the case it first made. `receivedAt` enters only as supplied, because an
+    // omitted one defaults to "now" and would differ on every retry. The
+    // subject's locator stays out: it is stored encrypted, and an unsalted
+    // digest of an e-mail address could be confirmed by guessing.
+    const createDigest = parsed.idempotencyKey
+      ? idempotencyFingerprint({
+          action: "create",
+          kind: parsed.kind,
+          channel: parsed.channel,
+          userId: parsed.userId,
+          subject: parsed.subject
+            ? {
+                locatorType: parsed.subject.locatorType,
+                accountState: parsed.subject.accountState,
+              }
+            : null,
+          receivedAt: parsed.receivedAt ? toDate(parsed.receivedAt).toISOString() : null,
+          locale: parsed.locale,
+          timeZone: parsed.timeZone,
+        })
+      : undefined;
+    let resultId: string = id;
     try {
       await withPreservationRetentionLock(this.database, async (tx) => {
+        if (parsed.idempotencyKey && createDigest) {
+          const previous = await findIdempotentCreate(tx as unknown as typeof defaultDb, {
+            idempotencyKey: parsed.idempotencyKey,
+            actorId: parsed.actorUserId ?? null,
+            operationDigest: createDigest,
+          });
+          if (previous) {
+            resultId = previous.requestId;
+            return;
+          }
+        }
         const [created] = await tx
           .insert(dataSubjectRequest)
           .values({
@@ -240,7 +278,11 @@ export class PrivacyRequestService {
           eventType: "received",
           actorKind: selfService ? "subject" : "admin",
           actorId: parsed.actorUserId ?? null,
-          payload: boundedEventPayload({ kind: parsed.kind, channel: parsed.channel }),
+          payload: boundedEventPayload({
+            kind: parsed.kind,
+            channel: parsed.channel,
+            ...(createDigest ? { operationDigest: createDigest } : {}),
+          }),
           payloadVersion: 1,
           ...(parsed.idempotencyKey ? { idempotencyKey: parsed.idempotencyKey } : {}),
           createdAt: now,
@@ -326,7 +368,7 @@ export class PrivacyRequestService {
       }
       throw error;
     }
-    return this.getById(id);
+    return this.getById(resultId);
   }
 
   async getById(requestId: string): Promise<RequestRow> {
