@@ -118,9 +118,46 @@ interface Station extends ContributingRecord {
   allSensors: SensorReading[];
 }
 
-function roundBbox(south: number, west: number, north: number, east: number): string {
-  const r = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
-  return `${r(south)},${r(west)},${r(north)},${r(east)}`;
+/** What one provider returned and whether its requests succeeded. */
+interface ProviderRead {
+  stations: Station[];
+  /** "skipped": provider has no data for this sensor; "partial": some of its requests failed. */
+  outcome: "ok" | "partial" | "failed" | "skipped";
+}
+
+/** Cache cell step in degrees: the key and the upstream request both use this grid. */
+const BBOX_STEP_TENTHS = 10;
+
+interface Bbox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+/**
+ * The 0.1° grid box enclosing the request. The cache key names this box and
+ * the upstream fetch asks for exactly it, so every viewport sharing a key is
+ * served from the same complete area.
+ */
+function snapBboxOutward(south: number, west: number, north: number, east: number): Bbox {
+  const down = (v: number) =>
+    Number((Math.floor(v * BBOX_STEP_TENTHS) / BBOX_STEP_TENTHS).toFixed(1));
+  const up = (v: number) => Number((Math.ceil(v * BBOX_STEP_TENTHS) / BBOX_STEP_TENTHS).toFixed(1));
+  return {
+    south: Math.max(-90, down(south)),
+    west: down(west),
+    north: Math.min(90, up(north)),
+    east: up(east),
+  };
+}
+
+function bboxKey(b: Bbox): string {
+  return `${b.south.toFixed(1)},${b.west.toFixed(1)},${b.north.toFixed(1)},${b.east.toFixed(1)}`;
+}
+
+function inBbox(stations: Station[], s: number, w: number, n: number, e: number): Station[] {
+  return stations.filter((st) => st.lat >= s && st.lat <= n && st.lng >= w && st.lng <= e);
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -146,23 +183,48 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `env:contributors-v1:${sensorType}:${exposure ?? "outdoor"}:${roundBbox(s, w, n, e)}`;
+    const cell = snapBboxOutward(s, w, n, e);
+    // v2: entries now hold the whole snapped cell; v1 entries held one caller's exact bbox.
+    const cacheKey = `env:contributors-v2:${sensorType}:${exposure ?? "outdoor"}:${bboxKey(cell)}`;
     const cached = await ctx.cache.get<Station[]>(cacheKey);
     if (cached) {
-      reply.send(cached);
+      reply.send(inBbox(cached, s, w, n, e));
       return;
     }
 
     try {
       const writer = await captureCacheWriter(ctx.cache);
       const log = ctx.log;
-      const osmStations = await fetchOpenSenseMap(s, w, n, e, sensorType, exposure, log);
-      const scStations = await fetchSensorCommunity(s, w, n, e, sensorType, exposure, log);
+      const osm = await fetchOpenSenseMap(
+        cell.south,
+        cell.west,
+        cell.north,
+        cell.east,
+        sensorType,
+        exposure,
+        log,
+      );
+      const sc = await fetchSensorCommunity(
+        cell.south,
+        cell.west,
+        cell.north,
+        cell.east,
+        sensorType,
+        exposure,
+        log,
+      );
 
-      const stations = deduplicateStations(osmStations, scStations);
-
-      await writer.set(cacheKey, stations, STATION_CACHE_TTL);
-      reply.send(stations);
+      const attempted = [osm, sc].filter((r) => r.outcome !== "skipped");
+      // Nothing back from failed providers is not "no stations": caching it would blank the overlay.
+      if (attempted.every((r) => r.outcome === "failed")) {
+        throw new Error("every sensor data source failed");
+      }
+      const stations = deduplicateStations(osm.stations, sc.stations);
+      // A partial read is served but not shared, so the next request retries the failed provider.
+      if (attempted.every((r) => r.outcome === "ok")) {
+        await writer.set(cacheKey, stations, STATION_CACHE_TTL);
+      }
+      reply.send(inBbox(stations, s, w, n, e));
     } catch (err) {
       ctx.log.error("[overlay-environment] Error fetching stations:", err);
       reply.status(502).send({ message: "Sensor data sources unavailable" });
@@ -178,7 +240,7 @@ async function fetchOpenSenseMap(
   sensorType: SensorType,
   exposure: string | undefined,
   log: Logger,
-): Promise<Station[]> {
+): Promise<ProviderRead> {
   try {
     const dateNow = new Date().toISOString();
     const url =
@@ -192,7 +254,7 @@ async function fetchOpenSenseMap(
     });
     if (!boxes) {
       log.warn("[overlay-environment] openSenseMap request failed");
-      return [];
+      return { stations: [], outcome: "failed" };
     }
 
     const sensorTitles = SENSOR_TITLE_MAP[sensorType];
@@ -237,10 +299,10 @@ async function fetchOpenSenseMap(
       }
     }
 
-    return stations;
+    return { stations, outcome: "ok" };
   } catch (err) {
     log.warn("[overlay-environment] openSenseMap fetch failed: %s", err);
-    return [];
+    return { stations: [], outcome: "failed" };
   }
 }
 
@@ -252,9 +314,9 @@ async function fetchSensorCommunity(
   sensorType: SensorType,
   exposure: string | undefined,
   log: Logger,
-): Promise<Station[]> {
+): Promise<ProviderRead> {
   const hwTypes = SC_TYPE_MAP[sensorType];
-  if (!hwTypes) return [];
+  if (!hwTypes) return { stations: [], outcome: "skipped" };
 
   const stations: Station[] = [];
   const wantOutdoor = (exposure ?? "outdoor") === "outdoor";
@@ -273,21 +335,24 @@ async function fetchSensorCommunity(
       });
       if (!entries) {
         log.warn("[overlay-environment] Sensor.Community request failed for %s", hwType);
-        return [];
+        return null;
       }
       return entries;
     } catch (err) {
       log.warn("[overlay-environment] Sensor.Community fetch failed for %s: %s", hwType, err);
-      return [];
+      return null;
     }
   });
 
   const results = await Promise.all(fetches);
+  const succeeded = results.filter((entries) => entries !== null);
+  const outcome: ProviderRead["outcome"] =
+    succeeded.length === 0 ? "failed" : succeeded.length < results.length ? "partial" : "ok";
 
   // Group entries by location ID — multiple hardware sensors at the same
   // location produce separate entries; we merge them into one station.
   const byLocation = new Map<number, SensorCommunityEntry[]>();
-  for (const entries of results) {
+  for (const entries of succeeded) {
     for (const entry of entries) {
       if (wantOutdoor && entry.location.indoor === 1) continue;
 
@@ -358,7 +423,7 @@ async function fetchSensorCommunity(
     });
   }
 
-  return stations;
+  return { stations, outcome };
 }
 
 function deduplicateStations(osmStations: Station[], scStations: Station[]): Station[] {
