@@ -162,6 +162,167 @@ export function writeFeedProxyVarsFile(outputPath: string, raw: unknown): FeedPr
   return sorted;
 }
 
+/** One rule of an nginx `map`: a regex key and the value it yields. */
+export interface FeedRedirectMapRule {
+  /** PCRE source, also valid as a JavaScript RegExp so tests can evaluate it. */
+  pattern: string;
+  caseInsensitive?: boolean;
+  value: string;
+}
+
+/** An nginx `map` block rendered into the http context. */
+export interface FeedRedirectMap {
+  /** Map source, a string of nginx variables. */
+  source: string;
+  /** Variable the map defines, without the leading `$`. */
+  variable: string;
+  defaultValue: string;
+  /** Checked in order; the first match wins, as nginx does for regex keys. */
+  rules: FeedRedirectMapRule[];
+}
+
+/**
+ * Redirect policy for the primary feed server, as a chain of nginx maps over
+ * the upstream `Location` header (`$orig_loc`) and the feed's own scheme and
+ * authority (`$original_scheme`, `$original_authority`).
+ *
+ * A redirect is followed when it is relative, or absolute to the feed's own
+ * authority, or absolute to another host whose name looks public: dotted,
+ * letters in the last label, no port, no user info, and none of the local,
+ * internal or Compose network suffixes below. An https feed is never followed
+ * onto http. Everything else is answered with 502. Name checks cannot see
+ * where a public name resolves to, so network placement and egress policy
+ * still matter.
+ *
+ * The whole Location must match a strict shape: plain host and optional port,
+ * then nothing, a path or a query, using only URL characters (no fragment,
+ * backslash, whitespace or control characters). The upstream URL is rebuilt
+ * from the matched scheme, authority and path, never from the raw header, so
+ * nginx cannot read a different host out of it than the one checked here.
+ */
+const REDIRECT_PATH_CHARS = "[A-Za-z0-9._~!$&'()*+,;=:@%/?-]";
+const REDIRECT_PATH_FIRST_CHARS = "[A-Za-z0-9._~!$&'()*+,;=:@%?-]";
+const REDIRECT_AUTHORITY = "[a-z0-9.-]+(?::[0-9]+)?";
+// A single leading slash; `//host` would change host without a scheme.
+const RELATIVE_REDIRECT = `/(?:${REDIRECT_PATH_FIRST_CHARS}${REDIRECT_PATH_CHARS}*)?`;
+const ABSOLUTE_REDIRECT_REST = `(?:[/?]${REDIRECT_PATH_CHARS}*)?`;
+
+/**
+ * Last labels that name this stack's Compose networks: the shared `openmapx`
+ * network and the `openmapx-private-*` and `openmapx-community-*` networks.
+ * Docker's DNS also answers `<service>.<network>`. The project-prefixed names
+ * (`openmapx_…`) contain an underscore, which the host shape already refuses.
+ */
+const INTERNAL_NAME_SUFFIXES =
+  "localhost|localdomain|local|internal|lan|home\\.arpa|docker|openmapx(?:-[a-z0-9-]*)?";
+
+export const FEED_REDIRECT_MAPS: readonly FeedRedirectMap[] = [
+  {
+    source: "$orig_loc",
+    variable: "feed_redirect_kind",
+    defaultValue: "refuse",
+    rules: [
+      { pattern: `^${RELATIVE_REDIRECT}$`, value: "relative" },
+      {
+        pattern: `^https://${REDIRECT_AUTHORITY}${ABSOLUTE_REDIRECT_REST}$`,
+        caseInsensitive: true,
+        value: "https",
+      },
+      {
+        pattern: `^http://${REDIRECT_AUTHORITY}${ABSOLUTE_REDIRECT_REST}$`,
+        caseInsensitive: true,
+        value: "http",
+      },
+    ],
+  },
+  {
+    source: "$orig_loc",
+    variable: "feed_redirect_authority",
+    defaultValue: "",
+    rules: [
+      {
+        pattern: `^https?://(${REDIRECT_AUTHORITY})${ABSOLUTE_REDIRECT_REST}$`,
+        caseInsensitive: true,
+        value: "$1",
+      },
+    ],
+  },
+  {
+    source: "$orig_loc",
+    variable: "feed_redirect_path",
+    defaultValue: "",
+    rules: [
+      { pattern: `^(${RELATIVE_REDIRECT})$`, value: "$1" },
+      {
+        pattern: `^https?://${REDIRECT_AUTHORITY}(/${REDIRECT_PATH_CHARS}*)$`,
+        caseInsensitive: true,
+        value: "$1",
+      },
+      // No path: send `/`, since a proxy_pass URL without one would forward
+      // this proxy's own request path instead.
+      {
+        pattern: `^https?://${REDIRECT_AUTHORITY}(\\?${REDIRECT_PATH_CHARS}*)?$`,
+        caseInsensitive: true,
+        value: "/$1",
+      },
+    ],
+  },
+  {
+    source: "$feed_redirect_authority|$original_authority",
+    variable: "feed_redirect_same_host",
+    defaultValue: "0",
+    rules: [{ pattern: "^([^|]+)\\|\\1$", caseInsensitive: true, value: "1" }],
+  },
+  {
+    source: "$feed_redirect_authority",
+    variable: "feed_redirect_host_public",
+    defaultValue: "0",
+    rules: [
+      { pattern: `(?:^|\\.)(?:${INTERNAL_NAME_SUFFIXES})$`, caseInsensitive: true, value: "0" },
+      // At least two labels, and a last label starting with a letter, which
+      // rules out IP literals and numeric host forms. No port allowed.
+      { pattern: "^(?:[a-z0-9-]+\\.)+[a-z][a-z0-9-]*$", caseInsensitive: true, value: "1" },
+    ],
+  },
+  {
+    source:
+      "$feed_redirect_kind:$feed_redirect_same_host:$feed_redirect_host_public:$original_scheme",
+    variable: "feed_redirect_allowed",
+    defaultValue: "0",
+    rules: [
+      { pattern: "^relative:", value: "1" },
+      { pattern: "^https:1:", value: "1" },
+      { pattern: "^https:0:1:", value: "1" },
+      { pattern: "^http:1:[01]:http$", value: "1" },
+      { pattern: "^http:0:1:http$", value: "1" },
+    ],
+  },
+  {
+    // Built only from validated parts; none of them can contain `|`.
+    source:
+      "$feed_redirect_kind|$original_scheme|$original_authority|$feed_redirect_authority|$feed_redirect_path",
+    variable: "feed_redirect_url",
+    defaultValue: "",
+    rules: [
+      { pattern: "^relative\\|([a-z]+)\\|([^|]+)\\|\\|(/[^|]*)$", value: "$1://$2$3" },
+      { pattern: "^(https?)\\|[^|]*\\|[^|]*\\|([^|]+)\\|(/[^|]*)$", value: "$1://$2$3" },
+    ],
+  },
+];
+
+function renderFeedRedirectMaps(): string[] {
+  const out: string[] = [];
+  for (const map of FEED_REDIRECT_MAPS) {
+    out.push(`map "${map.source}" $${map.variable} {`);
+    out.push(`  default "${map.defaultValue}";`);
+    for (const rule of map.rules) {
+      out.push(`  "~${rule.caseInsensitive ? "*" : ""}${rule.pattern}" "${rule.value}";`);
+    }
+    out.push("}");
+  }
+  return out;
+}
+
 function renderPrimaryServer(entries: Array<[string, FeedProxyEntry]>): string[] {
   const out: string[] = [
     "server {",
@@ -183,7 +344,10 @@ function renderPrimaryServer(entries: Array<[string, FeedProxyEntry]>): string[]
     "  proxy_ignore_headers Cache-Control;",
     "  proxy_http_version 1.1;",
     "  proxy_intercept_errors on;",
-    "  error_page 301 302 307 308 = @handle_redirects;",
+    "  error_page 301 302 303 307 308 = @handle_redirects;",
+    // Needed at this level so the error_page inside @handle_redirects can
+    // still answer a second redirect; it is not honoured there alone.
+    "  recursive_error_pages on;",
     "  proxy_cache_valid 200 40s;",
     "  proxy_cache_valid 400 401 403 404 200s;",
     "  proxy_ignore_client_abort on;",
@@ -202,15 +366,21 @@ function renderPrimaryServer(entries: Array<[string, FeedProxyEntry]>): string[]
     const parsed = requireHttpUrl(entry.url);
     out.push(`  location "/feed/${encodeURIComponent(key)}" {`);
     out.push(`    set $feed_upstream "${escapeNginxQuoted(entry.url)}";`);
-    out.push(`    set $original_host "${escapeNginxQuoted(parsed.hostname)}";`);
+    out.push(`    set $original_scheme "${parsed.protocol.slice(0, -1)}";`);
+    out.push(`    set $original_authority "${escapeNginxQuoted(parsed.host)}";`);
     out.push("    proxy_pass $feed_upstream;");
     for (const header of renderHeaderDirectives(entry.headers)) out.push(header);
     out.push("  }", "");
   }
 
   out.push(
+    // No proxy_set_header here: the feed location's headers, which can carry
+    // credentials, must not reach a redirect target.
     "  location @handle_redirects {",
     '    set $original_uri "$request_uri";',
+    // The $feed_redirect_* maps read $orig_loc and nginx caches a map value
+    // the first time it is read, so this set must stay ahead of every
+    // directive that reads one of those variables.
     '    set $orig_loc "$upstream_http_location";',
     "",
     "    proxy_cache feed-proxy;",
@@ -218,15 +388,17 @@ function renderPrimaryServer(entries: Array<[string, FeedProxyEntry]>): string[]
     "    proxy_cache_valid 200 40s;",
     "    proxy_cache_valid 400 401 403 404 200s;",
     "",
-    '    if ($orig_loc ~* "://") {',
-    "      proxy_pass $orig_loc;",
-    "      break;",
-    "    }",
+    // Follow at most one redirect; a further one is refused.
+    "    error_page 301 302 303 307 308 = @feed_redirect_refused;",
     "",
-    '    if ($orig_loc !~* "://") {',
-    "      proxy_pass $scheme://$original_host$orig_loc;",
-    "      break;",
+    "    if ($feed_redirect_allowed = 0) {",
+    '      return 502 "feed redirect target refused\\n";',
     "    }",
+    "    proxy_pass $feed_redirect_url;",
+    "  }",
+    "",
+    "  location @feed_redirect_refused {",
+    '    return 502 "feed redirect chain refused\\n";',
     "  }",
     "}",
   );
@@ -297,6 +469,8 @@ export function renderFeedProxyNginxConfig(
     // Required for the per-GBFS `proxy_pass $feed_upstream` blocks to resolve
     // upstream hostnames at request time (else 502 "no resolver defined").
     ...(resolver.trim() ? [`resolver ${resolver.trim()};`] : []),
+    "",
+    ...renderFeedRedirectMaps(),
     "",
     ...renderPrimaryServer(entries),
   ];

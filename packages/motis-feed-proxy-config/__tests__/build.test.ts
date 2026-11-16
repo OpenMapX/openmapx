@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderFeedProxyNginxConfig as renderFeedProxyNginxConfigCli } from "../../cli/src/lib/motis-feed-proxy";
-import { buildFeedProxyConfig, renderFeedProxyNginxConfig } from "../src/build.js";
+import {
+  buildFeedProxyConfig,
+  FEED_REDIRECT_MAPS,
+  renderFeedProxyNginxConfig,
+} from "../src/build.js";
 
 describe("buildFeedProxyConfig", () => {
   let workDir: string;
@@ -176,5 +180,173 @@ describe("buildFeedProxyConfig", () => {
     expect(written).toContain('location "/feed/good"');
     expect(written).not.toContain("bad1");
     expect(written).not.toContain("bad2");
+  });
+});
+
+/** Evaluate the redirect maps the way nginx does: regex keys in order, first match wins. */
+function evaluateRedirect(location: string, feedUrl: string) {
+  const parsed = new URL(feedUrl);
+  const vars: Record<string, string> = {
+    orig_loc: location,
+    original_scheme: parsed.protocol.slice(0, -1),
+    original_authority: parsed.host,
+  };
+  for (const map of FEED_REDIRECT_MAPS) {
+    const source = map.source.replace(/\$([a-z_]+)/g, (_, name: string) => vars[name] ?? "");
+    let value = map.defaultValue;
+    for (const rule of map.rules) {
+      const match = new RegExp(rule.pattern, rule.caseInsensitive ? "i" : "").exec(source);
+      if (!match) continue;
+      value = rule.value.replace(/\$(\d)/g, (_, index: string) => match[Number(index)] ?? "");
+      break;
+    }
+    vars[map.variable] = value;
+  }
+  return { allowed: vars.feed_redirect_allowed === "1", url: vars.feed_redirect_url };
+}
+
+describe("feed redirect handling", () => {
+  const feed = "https://feeds.example.org/rt/trip-updates.pb";
+  const config = renderFeedProxyNginxConfig({
+    secret: { url: feed, headers: { Authorization: "Bearer abc" } },
+    plain: { url: "http://feeds.example.org:8080/vehicles.pb" },
+  });
+  const namedLocation = config.slice(
+    config.indexOf("location @handle_redirects"),
+    config.indexOf("location @feed_redirect_refused"),
+  );
+
+  it("renders the redirect maps in the http context before the first server", () => {
+    for (const map of FEED_REDIRECT_MAPS) {
+      const index = config.indexOf(`$${map.variable} {`);
+      expect(index).toBeGreaterThan(0);
+      expect(index).toBeLessThan(config.indexOf("server {"));
+      for (const rule of map.rules) expect(rule.pattern).not.toContain('"');
+    }
+    expect(config).toContain('"~*^([^|]+)\\|\\1$" "1";');
+  });
+
+  it("records each feed's scheme and authority for relative redirects", () => {
+    expect(config).toContain('set $original_scheme "https";');
+    expect(config).toContain('set $original_authority "feeds.example.org";');
+    expect(config).toContain('set $original_scheme "http";');
+    expect(config).toContain('set $original_authority "feeds.example.org:8080";');
+    expect(config).not.toContain("$scheme://");
+  });
+
+  it("guards the single proxy_pass and refuses a second redirect", () => {
+    expect(config).toContain("error_page 301 302 303 307 308 = @handle_redirects;");
+    expect(config.indexOf("recursive_error_pages on;")).toBeLessThan(
+      config.indexOf("location @handle_redirects"),
+    );
+    expect(namedLocation).toContain("error_page 301 302 303 307 308 = @feed_redirect_refused;");
+    expect(namedLocation).toMatch(
+      /if \(\$feed_redirect_allowed = 0\) \{\n\s+return 502 "feed redirect target refused\\n";/,
+    );
+    expect(namedLocation.match(/proxy_pass /g)).toEqual(["proxy_pass "]);
+    expect(namedLocation).toContain("proxy_pass $feed_redirect_url;");
+    expect(config).not.toContain("proxy_pass $orig_loc");
+    expect(config).toContain('return 502 "feed redirect chain refused\\n";');
+  });
+
+  it("builds the upstream URL from validated parts only", () => {
+    const urlMap = FEED_REDIRECT_MAPS.find((map) => map.variable === "feed_redirect_url");
+    expect(urlMap?.source).not.toContain("$orig_loc");
+    for (const name of urlMap?.source.match(/\$[a-z_]+/g) ?? []) {
+      expect([
+        "$feed_redirect_kind",
+        "$original_scheme",
+        "$original_authority",
+        "$feed_redirect_authority",
+        "$feed_redirect_path",
+      ]).toContain(name);
+    }
+    for (const rule of urlMap?.rules ?? []) expect(rule.value).toBe("$1://$2$3");
+  });
+
+  it("sets $orig_loc before anything reads a map derived from it", () => {
+    const setIndex = namedLocation.indexOf('set $orig_loc "$upstream_http_location";');
+    expect(setIndex).toBeGreaterThan(0);
+    expect(setIndex).toBeLessThan(namedLocation.indexOf("$feed_redirect_"));
+  });
+
+  it("does not forward per-feed headers to redirect targets", () => {
+    expect(config).toContain('proxy_set_header "Authorization" "Bearer abc";');
+    expect(namedLocation).not.toContain("proxy_set_header");
+  });
+
+  it.each([
+    ["/v2/trip-updates.pb", "https://feeds.example.org/v2/trip-updates.pb"],
+    ["/", "https://feeds.example.org/"],
+    ["/x?u=http://redis/y", "https://feeds.example.org/x?u=http://redis/y"],
+    ["https://feeds.example.org/v2.pb", "https://feeds.example.org/v2.pb"],
+    ["HTTPS://FEEDS.example.org/v2.pb", "https://FEEDS.example.org/v2.pb"],
+    ["https://cdn.example-cdn.net/rt.pb?sig=1", "https://cdn.example-cdn.net/rt.pb?sig=1"],
+    [
+      "https://bucket.s3.eu-central-1.amazonaws.com",
+      "https://bucket.s3.eu-central-1.amazonaws.com/",
+    ],
+    ["https://cdn.example-cdn.net?feed=rt", "https://cdn.example-cdn.net/?feed=rt"],
+    ["https://cdn.example-cdn.net/a@b/c%20d", "https://cdn.example-cdn.net/a@b/c%20d"],
+  ])("follows %s", (location, expected) => {
+    expect(evaluateRedirect(location, feed)).toEqual({ allowed: true, url: expected });
+  });
+
+  it.each([
+    "http://feeds.example.org/v2.pb",
+    "http://cdn.example-cdn.net/rt.pb",
+    "https://redis/x",
+    "https://localhost/x",
+    "https://ops-agent:8080/x",
+    "https://10.0.0.5/x",
+    "https://93.184.216.34/x",
+    "https://0x7f.1/x",
+    "https://[::1]/x",
+    "https://rt.openmapx.local/x",
+    "https://api.internal/x",
+    "https://box.lan/x",
+    "https://nas.home.arpa/x",
+    "https://motis.docker/x",
+    "https://user@cdn.example-cdn.net/x",
+    "https://cdn.example-cdn.net:8443/x",
+    "https://cdn.example-cdn.net./x",
+    "//cdn.example-cdn.net/x",
+    "ftp://cdn.example-cdn.net/x",
+    "rt.pb",
+    "",
+    "https://cdn.example-cdn.net#redis:6379/x",
+    "https://cdn.example-cdn.net#.internal.example:8080/x",
+    "https://cdn.example-cdn.net#:6379/",
+    "https://feeds.example.org#redis:6379/x",
+    "https://cdn.example-cdn.net/x#part",
+    "/x#part",
+    "https://redis.openmapx/x",
+    "https://REDIS.OPENMAPX/x",
+    "https://dawarich-app.openmapx-private-dawarich/x",
+    "https://svc.openmapx-community-example/x",
+    "https://redis.openmapx_openmapx/x",
+    "https://cdn.example-cdn.net\\@redis/x",
+    "https://cdn.example-cdn.net/x\\y",
+    "/x\\y",
+    "\\\\redis/x",
+    "https://cdn.example-cdn.net /x",
+    "https://cdn.example-cdn.net/x y",
+    "/x y",
+    "/x\ty",
+    "/x\u0001y",
+    "https://cdn.example-cdn.net/x|y",
+  ])("refuses %j", (location) => {
+    expect(evaluateRedirect(location, feed).allowed).toBe(false);
+  });
+
+  it("lets an http feed follow http redirects and keeps its port on relative ones", () => {
+    const httpFeed = "http://10.1.2.3:8080/vehicles.pb";
+    expect(evaluateRedirect("/v2.pb", httpFeed)).toEqual({
+      allowed: true,
+      url: "http://10.1.2.3:8080/v2.pb",
+    });
+    expect(evaluateRedirect("http://10.1.2.3:8080/v2.pb", httpFeed).allowed).toBe(true);
+    expect(evaluateRedirect("http://cdn.example-cdn.net/v2.pb", httpFeed).allowed).toBe(true);
+    expect(evaluateRedirect("http://10.1.2.4:8080/v2.pb", httpFeed).allowed).toBe(false);
   });
 });
