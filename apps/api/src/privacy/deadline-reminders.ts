@@ -10,9 +10,10 @@ export const DEADLINE_REMINDER_WINDOW_MS = 72 * 60 * 60 * 1_000;
 
 /**
  * Queue one `admin_deadline` reminder per administrator for each active
- * request that is due soon or overdue. The outbox key includes the recipient,
- * so every administrator gets one reminder per request however often this
- * runs. The payload carries no subject content or identifiers.
+ * request that is due soon or overdue. The outbox key includes the recipient
+ * and the deadline, so every administrator gets one reminder per deadline
+ * however often this runs; an extension sets a new deadline, which gets its
+ * own reminder. The payload carries no subject content or identifiers.
  */
 export async function schedulePrivacyDeadlineReminders(
   input: { database?: typeof defaultDb; now?: Date } = {},
@@ -21,7 +22,7 @@ export async function schedulePrivacyDeadlineReminders(
   const now = input.now ?? new Date();
   const recipients = await privacyAlertRecipients(database, now);
   const requests = await database
-    .select({ id: dataSubjectRequest.id })
+    .select({ id: dataSubjectRequest.id, dueAt: dataSubjectRequest.dueAt })
     .from(dataSubjectRequest)
     .where(
       and(
@@ -46,6 +47,7 @@ export async function schedulePrivacyDeadlineReminders(
           state: "pending" as const,
           attempts: 0,
           nextAttemptAt: now,
+          occurrenceKey: `deadline:${request.dueAt.toISOString()}`,
           createdAt: now,
           updatedAt: now,
         })),
@@ -56,6 +58,7 @@ export async function schedulePrivacyDeadlineReminders(
           dataSubjectRequestNotification.template,
           dataSubjectRequestNotification.channel,
           dataSubjectRequestNotification.recipientUserId,
+          dataSubjectRequestNotification.occurrenceKey,
         ],
       })
       .returning({ id: dataSubjectRequestNotification.id });

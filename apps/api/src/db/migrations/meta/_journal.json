@@ -449,6 +449,13 @@
       "when": 1794669803740,
       "tag": "0063_configuration_fence_table",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1794818193381,
+      "tag": "0064_privacy_notification_occurrence_key",
+      "breakpoints": true
     }
   ]
 }

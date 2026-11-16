@@ -58,6 +58,7 @@ const NOTIFICATION_TARGET = [
   dataSubjectRequestNotification.template,
   dataSubjectRequestNotification.channel,
   dataSubjectRequestNotification.recipientUserId,
+  dataSubjectRequestNotification.occurrenceKey,
 ];
 
 function toDate(value: Date | string | number): Date {
@@ -89,6 +90,7 @@ function notificationValues(input: {
   template: PrivacyNotificationTemplate;
   locale: string;
   at: Date;
+  occurrenceKey?: string;
 }) {
   return {
     requestId: input.requestId,
@@ -100,6 +102,7 @@ function notificationValues(input: {
     state: "pending" as const,
     attempts: 0,
     nextAttemptAt: input.at,
+    occurrenceKey: input.occurrenceKey ?? "",
     createdAt: input.at,
     updatedAt: input.at,
   };
@@ -435,6 +438,10 @@ export class PrivacyRequestService {
             template,
             locale: updated.locale,
             at: now,
+            // A case can enter the same state again (for example wait on the
+            // requester twice); the version this transition produced tells those
+            // emails apart, and a replayed mutation never reaches this insert.
+            occurrenceKey: `version:${updated.version}`,
           }),
         )
         .onConflictDoNothing({ target: NOTIFICATION_TARGET });
@@ -728,6 +735,7 @@ export class PrivacyRequestService {
                 template: "extension",
                 locale: updated.locale,
                 at: now,
+                occurrenceKey: `version:${updated.version}`,
               }),
             )
             .onConflictDoNothing({ target: NOTIFICATION_TARGET });
