@@ -92,6 +92,20 @@ function isGarbageName(name: string): boolean {
   return GARBAGE_NAME_RE.test(name.trim());
 }
 
+/**
+ * The unit written after an amount in a station's pricing summary. The summary
+ * is built once per system for every reader, so it cannot be localized here:
+ * euro keeps its sign, other ISO 4217 codes are written as the code, matching
+ * Entur's summaries ("10.90 NOK"). A missing value is euro, as gbfs-client
+ * already assumes; any other non-code value is written as the feed sent it.
+ */
+function priceUnit(currency: string | undefined): string {
+  const raw = currency?.trim() ?? "";
+  const code = raw.toUpperCase();
+  if (code === "" || code === "EUR") return "€";
+  return /^[A-Z]{3}$/.test(code) ? code : raw;
+}
+
 function bboxOverlaps(a: BoundingBox, b: BoundingBox): boolean {
   return a.south <= b.north && a.north >= b.south && a.west <= b.east && a.east >= b.west;
 }
@@ -383,9 +397,9 @@ async function fetchSystemData(
 
     // Collect pricing details
     const pricingDetails: PricingDetail[] = [];
-    let cheapestUnlock: number | undefined;
-    let cheapestPerKm: number | undefined;
-    let cheapestPerHour: number | undefined;
+    let cheapestUnlock: { amount: number; currency: string } | undefined;
+    let cheapestPerKm: { amount: number; currency: string } | undefined;
+    let cheapestPerHour: { amount: number; currency: string } | undefined;
     for (const pid of pricingPlanIds) {
       const pp = pricingPlans.get(pid);
       if (!pp) continue;
@@ -397,16 +411,22 @@ async function fetchSystemData(
           ? (minPricing.rate / minPricing.interval) * 60
           : undefined;
       const flatRate = pp.price > 0 ? pp.price : undefined;
-      if (flatRate !== undefined && (cheapestUnlock === undefined || flatRate < cheapestUnlock))
-        cheapestUnlock = flatRate;
-      if (perKmRate !== undefined && (cheapestPerKm === undefined || perKmRate < cheapestPerKm))
-        cheapestPerKm = perKmRate;
+      if (
+        flatRate !== undefined &&
+        (cheapestUnlock === undefined || flatRate < cheapestUnlock.amount)
+      )
+        cheapestUnlock = { amount: flatRate, currency: pp.currency };
+      if (
+        perKmRate !== undefined &&
+        (cheapestPerKm === undefined || perKmRate < cheapestPerKm.amount)
+      )
+        cheapestPerKm = { amount: perKmRate, currency: pp.currency };
       if (
         perHourRate !== undefined &&
         perHourRate > 0 &&
-        (cheapestPerHour === undefined || perHourRate < cheapestPerHour)
+        (cheapestPerHour === undefined || perHourRate < cheapestPerHour.amount)
       )
-        cheapestPerHour = perHourRate;
+        cheapestPerHour = { amount: perHourRate, currency: pp.currency };
       pricingDetails.push({
         name: pp.name,
         description: pp.description,
@@ -424,10 +444,12 @@ async function fetchSystemData(
       cheapestPerKm !== undefined ||
       cheapestPerHour !== undefined
     ) {
+      const price = (cheapest: { amount: number; currency: string }, per = "") =>
+        `${cheapest.amount.toFixed(2)} ${priceUnit(cheapest.currency)}${per}`;
       const parts: string[] = [];
-      if (cheapestUnlock !== undefined) parts.push(`${cheapestUnlock.toFixed(2)} €`);
-      if (cheapestPerKm !== undefined) parts.push(`${cheapestPerKm.toFixed(2)} €/km`);
-      if (cheapestPerHour !== undefined) parts.push(`${cheapestPerHour.toFixed(2)} €/h`);
+      if (cheapestUnlock !== undefined) parts.push(price(cheapestUnlock));
+      if (cheapestPerKm !== undefined) parts.push(price(cheapestPerKm, "/km"));
+      if (cheapestPerHour !== undefined) parts.push(price(cheapestPerHour, "/h"));
       pricingSummary = parts.join(" + ");
     }
 
