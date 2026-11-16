@@ -1,5 +1,5 @@
 import { defaultLocale, locales, resolveLocale } from "@openmapx/i18n";
-import { and, asc, eq, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lt, lte, or, sql } from "drizzle-orm";
 import z from "zod/v4";
 import { db as defaultDb } from "../db/index.js";
 import {
@@ -140,6 +140,10 @@ export interface PrivacyNotificationDispatcherOptions {
   batchSize?: number;
   maxAttempts?: number;
   retryDelayMs?: number;
+  /** A `sending` row whose claim (`updatedAt`) is older than this is treated
+   * as interrupted: requeued, or failed once attempts are exhausted.  Keep it
+   * well above the longest possible send (provider timeouts are 30 s). */
+  staleSendingMs?: number;
   send?: typeof sendMail;
 }
 
@@ -156,6 +160,7 @@ export async function dispatchPrivacyNotifications(
   const batchSize = options.batchSize ?? 16;
   const maxAttempts = options.maxAttempts ?? 5;
   const retryDelayMs = options.retryDelayMs ?? 60_000;
+  const staleSendingMs = options.staleSendingMs ?? 15 * 60_000;
   if (
     !Number.isSafeInteger(batchSize) ||
     batchSize < 1 ||
@@ -165,13 +170,53 @@ export async function dispatchPrivacyNotifications(
     maxAttempts > 20 ||
     !Number.isSafeInteger(retryDelayMs) ||
     retryDelayMs < 1 ||
-    retryDelayMs > 86_400_000
+    retryDelayMs > 86_400_000 ||
+    !Number.isSafeInteger(staleSendingMs) ||
+    staleSendingMs < 60_000 ||
+    staleSendingMs > 86_400_000
   )
     throw new Error("invalid notification dispatcher bounds");
   let sent = 0;
   let retried = 0;
   let failed = 0;
   let canceled = 0;
+  // A claim is a durable `sending` row; if the process died or a query threw
+  // before the terminal update, nothing else would ever move it on.  The
+  // `state = 'sending'` guard keeps each update atomic against a live
+  // dispatcher's terminal write and against other instances' sweeps.
+  const staleBefore = new Date(now().getTime() - staleSendingMs);
+  const exhausted = await database
+    .update(dataSubjectRequestNotification)
+    .set({
+      state: "failed",
+      nextAttemptAt: null,
+      lastErrorCode: "delivery-interrupted",
+      updatedAt: now(),
+    })
+    .where(
+      and(
+        eq(dataSubjectRequestNotification.state, "sending"),
+        lt(dataSubjectRequestNotification.updatedAt, staleBefore),
+        gte(dataSubjectRequestNotification.attempts, maxAttempts),
+      ),
+    )
+    .returning({ id: dataSubjectRequestNotification.id });
+  failed += exhausted.length;
+  await database
+    .update(dataSubjectRequestNotification)
+    .set({
+      state: "retryable",
+      nextAttemptAt: now(),
+      lastErrorCode: "delivery-interrupted",
+      updatedAt: now(),
+    })
+    .where(
+      and(
+        eq(dataSubjectRequestNotification.state, "sending"),
+        lt(dataSubjectRequestNotification.updatedAt, staleBefore),
+        lt(dataSubjectRequestNotification.attempts, maxAttempts),
+      ),
+    );
   const candidates = await database
     .select({ id: dataSubjectRequestNotification.id })
     .from(dataSubjectRequestNotification)

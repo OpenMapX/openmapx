@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { dataSubjectRequest, dataSubjectRequestNotification, user } from "../db/schema";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
 import { MAIL_RECIPIENT_HOURLY_LIMIT } from "../utils/mail-recipient-limit";
@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => {
 });
 
 const suite = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
-suite("privacy notifications and the per-recipient auth mail limit", () => {
+suite("privacy notification dispatcher against PostgreSQL", () => {
   let fixture: Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
 
   beforeAll(async () => {
@@ -96,5 +96,164 @@ suite("privacy notifications and the per-recipient auth mail limit", () => {
       .from(dataSubjectRequestNotification)
       .where(eq(dataSubjectRequestNotification.requestId, request.id));
     expect(row?.state).toBe("sent");
+  });
+
+  describe("stale sending claims", () => {
+    const MIN = 60_000;
+    const requestIds: string[] = [];
+
+    afterEach(async () => {
+      for (const requestId of requestIds.splice(0))
+        await fixture.db
+          .delete(dataSubjectRequestNotification)
+          .where(eq(dataSubjectRequestNotification.requestId, requestId));
+    });
+
+    async function insertClaim(attempts: number, claimedAt: Date) {
+      const email = `stale-${randomUUID()}@example.test`;
+      const [subject] = await fixture.db
+        .insert(user)
+        .values({ id: randomUUID(), name: "Data subject", email })
+        .returning();
+      const [request] = await fixture.db
+        .insert(dataSubjectRequest)
+        .values({
+          kind: "access",
+          channel: "email",
+          encryptedLocator: "synthetic",
+          receivedAt: new Date(),
+          dueAt: new Date(Date.now() + 30 * 86_400_000),
+          state: "in_progress",
+          identityMethod: "manual",
+          identityVerifiedAt: new Date(),
+        })
+        .returning();
+      if (!subject || !request) throw new Error("Fixture rows were not created");
+      requestIds.push(request.id);
+      const [row] = await fixture.db
+        .insert(dataSubjectRequestNotification)
+        .values({
+          requestId: request.id,
+          recipientUserId: subject.id,
+          template: "acknowledgement",
+          channel: "email",
+          locale: "en",
+          payload: {},
+          state: "sending",
+          attempts,
+          nextAttemptAt: null,
+          createdAt: new Date(),
+          updatedAt: claimedAt,
+        })
+        .returning();
+      if (!row) throw new Error("Notification row was not created");
+      return { request, subject, email, row };
+    }
+
+    async function readRow(id: string) {
+      const [row] = await fixture.db
+        .select()
+        .from(dataSubjectRequestNotification)
+        .where(eq(dataSubjectRequestNotification.id, id));
+      return row;
+    }
+
+    it("resends a claim abandoned longer than the stale threshold", async () => {
+      const { dispatchPrivacyNotifications } = await import("./notifications");
+      const { email, row } = await insertClaim(1, new Date(Date.now() - 16 * MIN));
+      const send = vi.fn(async () => undefined);
+
+      const result = await dispatchPrivacyNotifications({
+        database: fixture.db,
+        send: send as never,
+      });
+
+      expect(result).toMatchObject({ sent: 1 });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: email }));
+      const stored = await readRow(row.id);
+      expect(stored).toMatchObject({ state: "sent", attempts: 2 });
+      expect(stored?.sentAt).not.toBeNull();
+    });
+
+    it("leaves a recent claim to its live dispatcher", async () => {
+      const { dispatchPrivacyNotifications } = await import("./notifications");
+      const claimedAt = new Date(Date.now() - 1 * MIN);
+      const { row } = await insertClaim(1, claimedAt);
+      const send = vi.fn(async () => undefined);
+
+      await dispatchPrivacyNotifications({ database: fixture.db, send: send as never });
+
+      expect(send).not.toHaveBeenCalled();
+      const stored = await readRow(row.id);
+      expect(stored).toMatchObject({ state: "sending", attempts: 1 });
+      expect(stored?.updatedAt.getTime()).toBe(claimedAt.getTime());
+    });
+
+    it("fails an abandoned claim that already used its last attempt", async () => {
+      const { dispatchPrivacyNotifications } = await import("./notifications");
+      const { row } = await insertClaim(5, new Date(Date.now() - 16 * MIN));
+      const send = vi.fn(async () => undefined);
+
+      const result = await dispatchPrivacyNotifications({
+        database: fixture.db,
+        send: send as never,
+      });
+
+      expect(result).toMatchObject({ failed: 1, sent: 0 });
+      expect(send).not.toHaveBeenCalled();
+      expect(await readRow(row.id)).toMatchObject({
+        state: "failed",
+        lastErrorCode: "delivery-interrupted",
+        nextAttemptAt: null,
+        attempts: 5,
+      });
+    });
+
+    it("honours a custom maxAttempts and threshold", async () => {
+      const { dispatchPrivacyNotifications } = await import("./notifications");
+      const { row } = await insertClaim(2, new Date(Date.now() - 3 * MIN));
+      const send = vi.fn(async () => undefined);
+
+      await dispatchPrivacyNotifications({
+        database: fixture.db,
+        send: send as never,
+        maxAttempts: 2,
+        staleSendingMs: 2 * MIN,
+      });
+
+      expect(send).not.toHaveBeenCalled();
+      expect(await readRow(row.id)).toMatchObject({ state: "failed" });
+    });
+
+    it("sends a recovered claim once when two dispatchers race", async () => {
+      const { dispatchPrivacyNotifications } = await import("./notifications");
+      const { row } = await insertClaim(1, new Date(Date.now() - 16 * MIN));
+      const send = vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      await Promise.all([
+        dispatchPrivacyNotifications({ database: fixture.db, send: send as never }),
+        dispatchPrivacyNotifications({ database: fixture.db, send: send as never }),
+      ]);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(await readRow(row.id)).toMatchObject({ state: "sent", attempts: 2 });
+    });
+
+    it("retries a recovered claim that fails again", async () => {
+      const { dispatchPrivacyNotifications } = await import("./notifications");
+      const { row } = await insertClaim(1, new Date(Date.now() - 16 * MIN));
+      const send = vi.fn(async () => {
+        throw new Error("boom");
+      });
+
+      await dispatchPrivacyNotifications({ database: fixture.db, send: send as never });
+
+      const stored = await readRow(row.id);
+      expect(stored).toMatchObject({ state: "retryable", attempts: 2, lastErrorCode: "error" });
+      expect(stored?.nextAttemptAt?.getTime()).toBeGreaterThan(Date.now());
+    });
   });
 });
