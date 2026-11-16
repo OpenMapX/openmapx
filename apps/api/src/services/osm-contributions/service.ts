@@ -217,6 +217,18 @@ function mapUpstream(error: unknown, operation: OsmOperation): OsmContributionEr
   }
 }
 
+/**
+ * Whether a failed note POST may still have created a public note. A transport
+ * failure after sending is unknown; a 2xx whose body was unusable (malformed,
+ * invalid, oversized or cut off) means OSM accepted it. Only a completed
+ * non-2xx exchange proves nothing was created, so only that stays retryable.
+ */
+function noteMayHaveBeenCreated(error: unknown): boolean {
+  if (!isOsmUpstreamError(error)) return false;
+  if (error.requestMayHaveBeenApplied) return true;
+  return error.status === null || (error.status >= 200 && error.status < 300);
+}
+
 function isNodeCentre(element: OsmElement): { lat: number; lon: number } | null {
   return element.type === "node" ? { lat: element.lat, lon: element.lon } : null;
 }
@@ -531,6 +543,14 @@ export function createOsmContributionService(
     }
   }
 
+  function ambiguousNote(): OsmContributionError {
+    return new OsmContributionError(
+      "AMBIGUOUS_RESULT",
+      502,
+      "OpenMapX could not confirm whether the note was created.",
+    );
+  }
+
   function replayPublish(outcome: StoredOutcome): OsmContributionPublishResult {
     if (outcome.kind === "success") return outcome.result as OsmContributionPublishResult;
     throw new OsmContributionError(
@@ -706,11 +726,7 @@ export function createOsmContributionService(
           { ref: request.ref, operation: "note", idempotencyKey: request.idempotencyKey },
           (outcome) => {
             if (outcome.kind === "success") return outcome.result as OsmNoteResult;
-            throw new OsmContributionError(
-              "AMBIGUOUS_RESULT",
-              502,
-              "OpenMapX could not confirm whether the note was created.",
-            );
+            throw ambiguousNote();
           },
           async (finish) => {
             requireFeature();
@@ -735,6 +751,16 @@ export function createOsmContributionService(
                 state.accessToken,
               );
             } catch (error) {
+              if (noteMayHaveBeenCreated(error)) {
+                // The note may already be public: make this key terminal so a
+                // retry replays the uncertainty instead of posting it twice.
+                await finish({
+                  kind: "terminal",
+                  at: now().toISOString(),
+                  code: "AMBIGUOUS_RESULT",
+                });
+                throw ambiguousNote();
+              }
               throw mapUpstream(error, "note");
             }
             const result: OsmNoteResult = {
