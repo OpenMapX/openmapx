@@ -193,6 +193,24 @@ describe("arriving by transit", () => {
     expect(harness.phone.location.running).toBe(true);
   });
 
+  it("ends as arrived and releases location when the rider alights again after an undo", async () => {
+    const { sessionId } = await alightAtTheEnd();
+    await harness.elapse(60_000);
+    expect((await riderAction(sessionId, "undo", "arrived", "undo-1"))?.type).toBe(
+      "snapshot.update",
+    );
+    await harness.elapse(30_000);
+
+    const again = await riderAction(sessionId, "alight", "riding", "alight-2");
+
+    expect(again?.type).toBe("snapshot.update");
+    expect((await harness.session())?.status).toBe("arrived");
+    expect(harness.phone.location.running).toBe(true);
+    await harness.elapse(TRANSIT_UNDO_WINDOW_MS + 1_000);
+    expect(harness.phone.location.running).toBe(false);
+    expect((await harness.session())?.status).toBe("arrived");
+  });
+
   it("refuses an undo once the window has closed and location has stopped", async () => {
     const { sessionId } = await alightAtTheEnd();
     await harness.elapse(TRANSIT_UNDO_WINDOW_MS + 1_000);

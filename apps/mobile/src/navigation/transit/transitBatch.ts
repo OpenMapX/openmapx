@@ -124,10 +124,10 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
   const effects: SessionEffect[] = [];
   const eventIds: string[] = [];
   const spokenCueIds: string[] = [];
-  let arrived = false;
+  // The engine's phase owns arrival; its arrival event is a one-shot that an undo may already have spent.
+  const arrived = tickState.phase === "arrived" && session.status !== "arrived";
 
   for (const event of allEvents) {
-    if (event.type === "arrival") arrived = true;
     if (session.cueLedger.events.includes(event.id)) continue;
     eventIds.push(event.id);
 
