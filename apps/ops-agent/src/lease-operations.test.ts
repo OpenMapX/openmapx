@@ -154,17 +154,16 @@ describe("lease operations for data-manager", () => {
       settlement,
     });
     expect(store().get(leaseId)?.children[0]).toMatchObject({ state: "settled", settlement });
-    // The issuer's own observation of the same result changes nothing.
-    await runLeaseOperation(installation, store(), "data-manager", {
-      kind: "lease.settleChild",
-      settlement: { ...settlement, terminalReceiptDigest: "d".repeat(64) },
-    });
-    expect(store().get(leaseId)?.children[0]?.settlement).toEqual(settlement);
-    await expect(
-      runLeaseOperation(installation, store(), "data-manager", {
+    // The first known outcome wins: the issuer may have mapped the same result
+    // from data-manager's status differently, and nothing changes.
+    for (const later of [
+      { ...settlement, terminalReceiptDigest: "d".repeat(64) },
+      { ...settlement, outcome: "contained" as const },
+    ])
+      await runLeaseOperation(installation, store(), "data-manager", {
         kind: "lease.settleChild",
-        settlement: { ...settlement, outcome: "contained" },
-      }),
-    ).rejects.toThrow("Original settlement changed");
+        settlement: later,
+      });
+    expect(store().get(leaseId)?.children[0]?.settlement).toEqual(settlement);
   });
 });

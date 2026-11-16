@@ -277,8 +277,9 @@ export const leaseRules = {
   },
   /**
    * Data-manager reports the outcome of a child it ran under another role's
-   * lease. The child is found by its identity; an outcome already recorded with
-   * the same result is kept, and a released lease leaves nothing to settle.
+   * lease. The child is found by its identity; the first known outcome
+   * recorded, by data-manager or by the issuer from its status, is kept, and a
+   * released lease leaves nothing to settle.
    */
   settleChild(leases: LeaseRecord[], settlement: LeaseSettlement) {
     for (const lease of leases) {
@@ -287,12 +288,7 @@ export const leaseRules = {
           value.recipient === "data-manager" && sameExecution(value.execution, settlement.identity),
       );
       if (!child) continue;
-      if (
-        child.state === "settled" &&
-        child.settlement?.outcome === settlement.outcome &&
-        child.settlement.publication === settlement.publication
-      )
-        return lease;
+      if (settledKnown(child)) return lease;
       return leaseRules.settle(leases, { leaseId: lease.leaseId, key: child.key, settlement });
     }
     return undefined;

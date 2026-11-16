@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -161,5 +161,13 @@ describe("the agent's lease store", () => {
     );
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(leases.listSync().map((lease) => lease.targets)).toEqual([["shared"]]);
+  });
+  it("refuses a state directory that its group or others can reach", async () => {
+    const { infraDir, leases } = backend();
+    mkdirSync(leaseStoreDirectory(infraDir), { recursive: true, mode: 0o755 });
+    chmodSync(leaseStoreDirectory(infraDir), 0o755);
+    await expect(
+      leases.acquire({ owner: execution(), ownerKind: "service.stop", targets: ["redis"] }),
+    ).rejects.toThrow(/must be a directory owned by uid/);
   });
 });

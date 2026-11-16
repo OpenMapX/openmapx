@@ -22,7 +22,7 @@ function owner(): number {
  * One of the agent's own directories: a real directory of this user that
  * nobody else can reach. Refused, never repaired.
  */
-function assertOwnDirectory(path: string): void {
+export function assertOwnDirectory(path: string): void {
   const stats = lstatSync(path);
   if (
     !stats.isDirectory() ||

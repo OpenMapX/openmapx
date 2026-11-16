@@ -13,6 +13,7 @@ import {
   leaseTargetsSchema,
 } from "../ops/lease-records";
 import { atomicWrite } from "../release-files";
+import { assertOwnDirectory } from "../services/configuration-ownership";
 import { type ContainerRunning, withRecoverableLock } from "../services/recoverable-lock";
 
 /**
@@ -106,6 +107,8 @@ export function openLeaseStore(options: {
     update<T>(change: (leases: LeaseRecord[]) => T): Promise<T> {
       const run = queue.then(() => {
         mkdirSync(options.directory, { recursive: true, mode: 0o700 });
+        // Another user, such as a CLI run with sudo, would leave a store the agent cannot read.
+        assertOwnDirectory(options.directory);
         return withRecoverableLock(
           lock,
           { purpose: options.purpose, containerRunning: options.containerRunning },
