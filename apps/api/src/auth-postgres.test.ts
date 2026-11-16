@@ -1,4 +1,8 @@
 import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { en } from "@openmapx/i18n";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -27,9 +31,20 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
   let auth: typeof import("./auth")["auth"];
   let server: FastifyInstance;
   const mail: { to: string; text: string }[] = [];
+  let journalDirectory = "";
 
   beforeAll(async () => {
     fixture = await createMigratedPostgresFixture();
+    // Account deletion writes a pseudonymous erasure receipt.
+    journalDirectory = mkdtempSync(join(tmpdir(), "openmapx-auth-postgres-"));
+    const journal = join(journalDirectory, "erasure.jsonl");
+    const keyFile = join(journalDirectory, "journal.key");
+    const journalKey = randomBytes(32);
+    writeFileSync(keyFile, journalKey.toString("base64url"), { mode: 0o444 });
+    (await import("@openmapx/core/erasure-journal")).initializeErasureJournal(journal, journalKey);
+    vi.stubEnv("ERASURE_JOURNAL_KEY_FILE", keyFile);
+    vi.stubEnv("ERASURE_JOURNAL_KEY_UID", String(process.getuid?.() ?? 0));
+    vi.stubEnv("ERASURE_JOURNAL_PATH", journal);
     vi.stubEnv("BETTER_AUTH_URL", BASE_URL);
     vi.stubEnv("BETTER_AUTH_SECRET", SECRET);
     vi.stubEnv("CORS_ORIGIN", "http://localhost:3000");
@@ -93,6 +108,7 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
         vi.doUnmock("./utils/email");
         vi.unstubAllGlobals();
         vi.unstubAllEnvs();
+        if (journalDirectory) rmSync(journalDirectory, { recursive: true, force: true });
       }
     }
   });
@@ -425,6 +441,129 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       email: changedEmail,
       emailVerified: true,
     });
+    const notices = mail.filter(
+      (message) =>
+        message.to === email && message.text.includes(en.account.emailChangeNotice.subject),
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.text).not.toContain(changedEmail);
+  });
+
+  async function ageAssurance(userId: string) {
+    await fixture.db
+      .update(sessionAuthAssurance)
+      .set({ authenticatedAt: new Date(Date.now() - 11 * 60_000) })
+      .where(eq(sessionAuthAssurance.userId, userId));
+  }
+
+  async function osmSignIn() {
+    const started = await request("/api/auth/sign-in/social", {
+      provider: "openstreetmap",
+      callbackURL: "http://localhost:3000/",
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const authorization = new URL(started.json().url as string);
+    const redirect = new URL(authorization.searchParams.get("redirect_uri") ?? "");
+    const callback = await request(
+      `${redirect.pathname}?code=fixture-code&state=${authorization.searchParams.get("state")}`,
+      undefined,
+      cookies(started),
+    );
+    expect(callback.statusCode, callback.body).toBe(302);
+    expect(callback.headers.location).not.toContain("error");
+    const [owner] = await fixture.db.select().from(user).where(eq(user.email, "4242@osm.invalid"));
+    if (!owner) throw new Error("OpenStreetMap sign-in created no account");
+    return { userId: owner.id, cookie: cookies(callback) };
+  }
+
+  function expectRefusal(
+    response: Awaited<ReturnType<typeof request>>,
+    label: string,
+    status: number,
+    code: string,
+  ) {
+    expect(response.statusCode, `${label}: ${response.body}`).toBe(status);
+    expect(response.json(), label).toMatchObject({ code });
+  }
+
+  it("refuses credential changes from a stale session and allows them after a new sign-in", async () => {
+    const email = "stale-session-fixture@example.test";
+    const { userId, cookie } = await verifiedUser(email);
+    await ageAssurance(userId);
+    const mailBefore = mail.length;
+
+    // Every gated path is requested, so a renamed library path shows up here.
+    for (const [path, body] of [
+      ["/api/auth/email-otp/request-email-change", { newEmail: "stale-new@example.test" }],
+      ["/api/auth/email-otp/change-email", { newEmail: "stale-new@example.test", otp: "123456" }],
+      ["/api/auth/change-email", { newEmail: "stale-new@example.test" }],
+      ["/api/auth/delete-user", { password: PASSWORD }],
+      ["/api/auth/delete-user/callback?token=x", undefined],
+      ["/api/auth/passkey/generate-register-options", undefined],
+      ["/api/auth/passkey/verify-registration", { response: {} }],
+      ["/api/auth/passkey/delete-passkey", { id: "missing-passkey" }],
+      ["/api/auth/unlink-account", { providerId: "openstreetmap" }],
+      [
+        "/api/auth/link-social",
+        {
+          provider: "openstreetmap",
+          callbackURL: "http://localhost:3000/",
+          disableRedirect: true,
+        },
+      ],
+    ] as const) {
+      expectRefusal(await request(path, body, cookie), path, 401, "FRESH_SIGN_IN_REQUIRED");
+    }
+    expect(mail.length).toBe(mailBefore);
+    // A password no longer substitutes for a recent sign-in.
+    expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]?.email).toBe(email);
+
+    const signin = await request("/api/auth/sign-in/email", { email, password: PASSWORD });
+    expect(signin.statusCode, signin.body).toBe(200);
+    const options = await request(
+      "/api/auth/passkey/generate-register-options",
+      undefined,
+      cookies(signin),
+    );
+    expect(options.statusCode, options.body).toBe(200);
+  });
+
+  it("refuses impersonation sessions on credential routes", async () => {
+    const admin = await verifiedUser("impersonating-admin@example.test");
+    await fixture.db.update(user).set({ role: "admin" }).where(eq(user.id, admin.userId));
+    const targetEmail = "impersonated-target@example.test";
+    const target = await verifiedUser(targetEmail);
+
+    const impersonated = await request(
+      "/api/auth/admin/impersonate-user",
+      { userId: target.userId },
+      admin.cookie,
+    );
+    expect(impersonated.statusCode, impersonated.body).toBe(200);
+    const cookie = cookies(impersonated);
+
+    for (const [path, body] of [
+      ["/api/auth/email-otp/request-email-change", { newEmail: "taken-over@example.test" }],
+      ["/api/auth/delete-user", {}],
+      ["/api/auth/passkey/generate-register-options", undefined],
+      [
+        "/api/auth/change-password",
+        { currentPassword: PASSWORD, newPassword: "impersonator-password-9999" },
+      ],
+      [
+        "/api/auth/link-social",
+        {
+          provider: "openstreetmap",
+          callbackURL: "http://localhost:3000/",
+          disableRedirect: true,
+        },
+      ],
+    ] as const) {
+      expectRefusal(await request(path, body, cookie), path, 403, "IMPERSONATION_NOT_ALLOWED");
+    }
+    expect(
+      (await fixture.db.select().from(user).where(eq(user.id, target.userId)))[0],
+    ).toMatchObject({ email: targetEmail });
   });
 
   it("refuses reserved .invalid addresses at sign-up without revealing existing placeholders", async () => {
@@ -504,6 +643,41 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       .where(eq(user.email, "4242@osm.invalid"));
     expect(created).toMatchObject({ name: "Fixture Mapper", emailVerified: false });
     expect(await sessions(created?.id ?? "")).toHaveLength(1);
+  });
+
+  // These reuse the OpenStreetMap identity of the test above, so they run after it.
+  it("allows OpenStreetMap scope upgrades of a linked account without a new sign-in", async () => {
+    const { userId, cookie } = await osmSignIn();
+    await ageAssurance(userId);
+    const upgraded = await request(
+      "/api/auth/link-social",
+      {
+        provider: "openstreetmap",
+        callbackURL: "http://localhost:3000/",
+        disableRedirect: true,
+        scopes: ["openid", "read_prefs", "write_api"],
+      },
+      cookie,
+    );
+    expect(upgraded.statusCode, upgraded.body).toBe(200);
+    expect(upgraded.json()).toMatchObject({ url: expect.any(String) });
+  });
+
+  it("lets a federated OpenStreetMap account delete itself after a fresh provider sign-in", async () => {
+    const fresh = await osmSignIn();
+    const deleted = await request("/api/auth/delete-user", {}, fresh.cookie);
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(await fixture.db.select().from(user).where(eq(user.id, fresh.userId))).toHaveLength(0);
+
+    const stale = await osmSignIn();
+    await ageAssurance(stale.userId);
+    expectRefusal(
+      await request("/api/auth/delete-user", {}, stale.cookie),
+      "/api/auth/delete-user",
+      401,
+      "FRESH_SIGN_IN_REQUIRED",
+    );
+    expect(await fixture.db.select().from(user).where(eq(user.id, stale.userId))).toHaveLength(1);
   });
 
   it("persists managed OIDC consent and signed PKCE tokens while rejecting invalid and reused codes", async () => {

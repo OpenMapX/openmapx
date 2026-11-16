@@ -37,6 +37,8 @@ interface AuthDialogProps {
   onAuthenticated?: () => void;
   /** Fixed same-origin return path supplied by the hosting page. */
   callbackPath?: string;
+  /** Why the hosting page asks for this sign-in, shown above the form. */
+  notice?: string;
 }
 
 export function AuthDialog({
@@ -45,6 +47,7 @@ export function AuthDialog({
   onAuthenticated,
   dismissible = true,
   callbackPath,
+  notice,
 }: AuthDialogProps) {
   const t = useTranslations("auth");
   const tMobile = useTranslations("mobileAuth");
@@ -373,6 +376,12 @@ export function AuthDialog({
                     : t("createYourAccount")}
           </Typography>
         </Box>
+
+        {notice && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {notice}
+          </Alert>
+        )}
 
         {successMessage && (
           <Alert severity="success" sx={{ mb: 2 }}>

@@ -35,9 +35,6 @@ export interface PrivacyRequestDetail extends PrivacyRequestView {
   tasks: PrivacyTaskView[];
 }
 
-/** The API refuses an export until the session has a recent interactive sign-in. */
-export const FRESH_SIGN_IN_REQUIRED = "FRESH_SIGN_IN_REQUIRED";
-
 function mutationKey(): string {
   const uuid = globalThis.crypto?.randomUUID?.();
   return `privacy-${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;

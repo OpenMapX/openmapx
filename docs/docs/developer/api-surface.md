@@ -217,6 +217,9 @@ does not replace the mutation guard.
 The inventory is an internal application surface, not a promise of a stable
 versioned public API. Better Auth is mounted as one wildcard handler and appears
 as `/api/auth/{wildcard}`; its individual endpoints remain Better Auth's contract.
+OpenMapX's auth policy hook adds refusals on Better Auth's credential-changing
+endpoints (`401 FRESH_SIGN_IN_REQUIRED`, `403 IMPERSONATION_NOT_ALLOWED`); the
+route list lives in `apps/api/src/account/credential-change-policy.ts`.
 
 Adding schemas changes runtime behavior as well as documentation:
 

@@ -68,7 +68,7 @@ export async function recordSessionAuthAssurance(input: {
 
 export async function getSessionAuthAssurance(
   sessionId: string,
-  database: typeof defaultDb = defaultDb,
+  database: Pick<typeof defaultDb, "select"> = defaultDb,
 ): Promise<{
   sessionId: string;
   userId: string | null;
@@ -109,7 +109,7 @@ export async function recordSessionFromAuthContext(
   return true;
 }
 
-/** How long a sign-in counts as fresh for an export or an admin ceremony. */
+/** How long a sign-in counts as fresh for an export, an admin ceremony or a credential change. */
 export const REAUTH_TTL_MS = 10 * 60_000;
 
 export interface ReauthenticationSession {
@@ -148,7 +148,7 @@ export function isAssuranceSufficient(method: SessionAuthMethod, mfaConfigured: 
  */
 export async function hasFreshAssurance(
   session: { sessionId: string; userId: string; mfaConfigured: boolean },
-  database: typeof defaultDb = defaultDb,
+  database: Pick<typeof defaultDb, "select"> = defaultDb,
   now: Date = new Date(),
   maxAgeMs = REAUTH_TTL_MS,
 ): Promise<boolean> {

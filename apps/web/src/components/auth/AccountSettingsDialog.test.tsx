@@ -51,6 +51,11 @@ const credentials = vi.hoisted(() => ({
   unlink: vi.fn(),
   requestEmail: vi.fn(),
   changeEmail: vi.fn(),
+  deleteUser: vi.fn(),
+  clearDeviceData: vi.fn(),
+}));
+vi.mock("@/lib/accountDeletionCleanup", () => ({
+  clearPrivateDeviceData: credentials.clearDeviceData,
 }));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
@@ -69,6 +74,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
         requestEmailChange: credentials.requestEmail,
         changeEmail: credentials.changeEmail,
       },
+      deleteUser: credentials.deleteUser,
     },
     getInitials: () => "AT",
     oauthProviders: [{ providerId: "openstreetmap", name: "OpenStreetMap", icon: "/osm-logo.svg" }],
@@ -88,6 +94,8 @@ beforeEach(() => {
   credentials.unlink.mockResolvedValue({ data: { status: true }, error: null });
   credentials.requestEmail.mockResolvedValue(emailOk);
   credentials.changeEmail.mockResolvedValue(emailOk);
+  credentials.deleteUser.mockResolvedValue({ data: { success: true }, error: null });
+  credentials.clearDeviceData.mockResolvedValue(undefined);
 });
 
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
@@ -1016,5 +1024,76 @@ describe("AccountSettingsDialog email change", () => {
       expect(await screen.findByText("account.emailUpdated")).toBeInTheDocument();
       expect(addressField()).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("AccountSettingsDialog recent sign-in refusals", () => {
+  const freshRefusal = {
+    data: null,
+    error: { code: "FRESH_SIGN_IN_REQUIRED", status: 401, statusText: "Unauthorized" },
+  };
+  const signInLink = () =>
+    screen.getByText("account.freshSignIn.signInAgain").closest("a")?.getAttribute("href");
+
+  async function confirmDeletion() {
+    await userEvent.click(screen.getByRole("button", { name: "account.deleteAccount" }));
+    await userEvent.click(screen.getByRole("button", { name: "account.confirmDeletion" }));
+  }
+
+  it("deletes after confirmation without asking for a password", async () => {
+    credentials.listAccounts.mockResolvedValue({
+      data: [{ id: "account-c", providerId: "credential" }],
+    });
+    const onClose = vi.fn();
+    render(<AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />, {
+      wrapper: createQueryWrapper(),
+    });
+    await waitFor(() => expect(credentials.listAccounts).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("button", { name: "account.deleteAccount" }));
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "account.confirmDeletion" })).not.toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "account.confirmDeletion" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(credentials.deleteUser).toHaveBeenCalledWith({});
+  });
+
+  it("asks for a new sign-in instead of deleting with an old one", async () => {
+    window.history.replaceState({}, "", "/?place=osm%3Anode%3A12");
+    credentials.deleteUser.mockResolvedValue(freshRefusal);
+    renderAccount();
+    await confirmDeletion();
+    await screen.findByText("account.freshSignIn.notice");
+    expect(signInLink()).toBe(
+      `/auth/confirm?return=${encodeURIComponent("/?place=osm%3Anode%3A12")}`,
+    );
+    expect(screen.queryByText("account.failedDeleteAccount")).not.toBeInTheDocument();
+    expect(credentials.deleteUser).toHaveBeenCalledTimes(1);
+    expect(credentials.clearDeviceData).not.toHaveBeenCalled();
+  });
+
+  it("shows the sign-in prompt for a refused email request and does not retry it", async () => {
+    window.history.replaceState({}, "", "/");
+    credentials.requestEmail.mockResolvedValue(freshRefusal);
+    renderAccount();
+    await openEmailForm();
+    await requestCode("new@example.test");
+    await screen.findByText("account.freshSignIn.notice");
+    expect(signInLink()).toBe("/auth/confirm?return=%2F");
+    expect(codeField()).not.toBeInTheDocument();
+    expect(sendButton()).not.toBeDisabled();
+    expect(credentials.requestEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains an impersonation refusal without offering a sign-in", async () => {
+    credentials.add.mockResolvedValue({
+      data: null,
+      error: { code: "IMPERSONATION_NOT_ALLOWED", status: 403, statusText: "Forbidden" },
+    });
+    renderAccount();
+    await userEvent.click(screen.getByRole("button", { name: "account.addPasskey" }));
+    expect(await screen.findByText("account.freshSignIn.impersonating")).toBeInTheDocument();
+    expect(screen.queryByText("account.freshSignIn.signInAgain")).not.toBeInTheDocument();
+    expect(screen.queryByText("account.failedAddPasskey")).not.toBeInTheDocument();
+    expect(credentials.add).toHaveBeenCalledTimes(1);
   });
 });

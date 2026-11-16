@@ -5,6 +5,7 @@ import { passkey } from "@better-auth/passkey";
 import { envString } from "@openmapx/core/server-env";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAuthMiddleware } from "better-auth/api";
 import { admin, customSession, emailOTP, jwt, oneTimeToken, twoFactor } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
@@ -15,6 +16,11 @@ import {
 } from "./account/account-mail-capture";
 import { type AuthDatabase, currentAuthDatabase } from "./account/auth-database";
 import { createAuthRuntime } from "./account/auth-runtime";
+import {
+  type EmailChangeNoticeCtx,
+  notifyPreviousAddressOfEmailChange,
+  refuseSecondProviderIdentity,
+} from "./account/credential-change-policy";
 import { applyPasswordVerificationPolicy } from "./account/password-verification-policy";
 import { shareGenericOAuthProviders } from "./account/shared-oauth-providers";
 import {
@@ -28,7 +34,7 @@ import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { recordDataDisclosureBestEffort } from "./privacy/disclosures.js";
 import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
 import { userErasureHooks } from "./services/user-erasure";
-import { auditAdminActionsHook } from "./utils/auth-audit-hook";
+import { type AdminAuditCtx, handleAdminAuditEvent } from "./utils/auth-audit-hook";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
 import { sendAuthMail } from "./utils/email";
 import {
@@ -262,6 +268,7 @@ function createPolicyAuth(
       },
       account: {
         create: {
+          before: (account) => refuseSecondProviderIdentity(account),
           after: async (account) => {
             await providerAvatarSync.onAccountCreated(
               account.id,
@@ -305,7 +312,12 @@ function createPolicyAuth(
     },
     hooks: {
       before: passwordPolicy.before,
-      after: auditAdminActionsHook,
+      // The admin plugin and the email-code plugin handle these endpoints
+      // internally, so the after hook is where their results can be observed.
+      after: createAuthMiddleware(async (ctx) => {
+        await handleAdminAuditEvent(ctx as unknown as AdminAuditCtx);
+        await notifyPreviousAddressOfEmailChange(ctx as unknown as EmailChangeNoticeCtx);
+      }),
     },
     plugins: [
       i18n({

@@ -8,6 +8,11 @@ import { authClient, useSession } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
+import {
+  type CredentialRefusal,
+  credentialRefusal,
+  FreshSignInPrompt,
+} from "@/components/auth/freshSignIn";
 import { clearPrivateDeviceData } from "@/lib/accountDeletionCleanup";
 
 /**
@@ -27,12 +32,18 @@ export function DeleteAccountActions() {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
+  // A deletion refused for an old sign-in or an impersonation session explains
+  // that instead of the generic failure. A recent sign-in is the confirmation
+  // for every kind of account, so no password is asked for.
+  const [refusal, setRefusal] = useState<CredentialRefusal | null>(null);
 
   const remove = useCallback(async () => {
     setState("working");
+    setRefusal(null);
     try {
-      const { error } = await authClient.deleteUser({ callbackURL: "/" });
+      const { error } = await authClient.deleteUser({});
       if (error) {
+        setRefusal(credentialRefusal(error));
         setState("error");
         return;
       }
@@ -66,11 +77,16 @@ export function DeleteAccountActions() {
 
   return (
     <Stack spacing={2}>
-      {state === "error" && (
-        <Alert severity="error" role="alert">
-          {tAccount("failedDeleteAccount")}
-        </Alert>
-      )}
+      {state === "error" &&
+        (refusal === "sign-in" ? (
+          <FreshSignInPrompt returnPath="/delete-account" />
+        ) : (
+          <Alert severity="error" role="alert">
+            {refusal === "impersonating"
+              ? tAccount("freshSignIn.impersonating")
+              : tAccount("failedDeleteAccount")}
+          </Alert>
+        ))}
       {confirming ? (
         <Stack spacing={1}>
           {/* The consequences are stated at the moment of the decision, not
