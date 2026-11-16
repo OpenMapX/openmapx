@@ -249,6 +249,21 @@ describe("feed redirect handling", () => {
     expect(config).toContain('return 502 "feed redirect chain refused\\n";');
   });
 
+  it("builds the upstream URL from validated parts only", () => {
+    const urlMap = FEED_REDIRECT_MAPS.find((map) => map.variable === "feed_redirect_url");
+    expect(urlMap?.source).not.toContain("$orig_loc");
+    for (const name of urlMap?.source.match(/\$[a-z_]+/g) ?? []) {
+      expect([
+        "$feed_redirect_kind",
+        "$original_scheme",
+        "$original_authority",
+        "$feed_redirect_authority",
+        "$feed_redirect_path",
+      ]).toContain(name);
+    }
+    for (const rule of urlMap?.rules ?? []) expect(rule.value).toBe("$1://$2$3");
+  });
+
   it("sets $orig_loc before anything reads a map derived from it", () => {
     const setIndex = namedLocation.indexOf('set $orig_loc "$upstream_http_location";');
     expect(setIndex).toBeGreaterThan(0);
@@ -265,12 +280,14 @@ describe("feed redirect handling", () => {
     ["/", "https://feeds.example.org/"],
     ["/x?u=http://redis/y", "https://feeds.example.org/x?u=http://redis/y"],
     ["https://feeds.example.org/v2.pb", "https://feeds.example.org/v2.pb"],
-    ["HTTPS://FEEDS.example.org/v2.pb", "HTTPS://FEEDS.example.org/v2.pb"],
+    ["HTTPS://FEEDS.example.org/v2.pb", "https://FEEDS.example.org/v2.pb"],
     ["https://cdn.example-cdn.net/rt.pb?sig=1", "https://cdn.example-cdn.net/rt.pb?sig=1"],
     [
       "https://bucket.s3.eu-central-1.amazonaws.com",
-      "https://bucket.s3.eu-central-1.amazonaws.com",
+      "https://bucket.s3.eu-central-1.amazonaws.com/",
     ],
+    ["https://cdn.example-cdn.net?feed=rt", "https://cdn.example-cdn.net/?feed=rt"],
+    ["https://cdn.example-cdn.net/a@b/c%20d", "https://cdn.example-cdn.net/a@b/c%20d"],
   ])("follows %s", (location, expected) => {
     expect(evaluateRedirect(location, feed)).toEqual({ allowed: true, url: expected });
   });
@@ -297,6 +314,27 @@ describe("feed redirect handling", () => {
     "ftp://cdn.example-cdn.net/x",
     "rt.pb",
     "",
+    "https://cdn.example-cdn.net#redis:6379/x",
+    "https://cdn.example-cdn.net#.internal.example:8080/x",
+    "https://cdn.example-cdn.net#:6379/",
+    "https://feeds.example.org#redis:6379/x",
+    "https://cdn.example-cdn.net/x#part",
+    "/x#part",
+    "https://redis.openmapx/x",
+    "https://REDIS.OPENMAPX/x",
+    "https://dawarich-app.openmapx-private-dawarich/x",
+    "https://svc.openmapx-community-example/x",
+    "https://redis.openmapx_openmapx/x",
+    "https://cdn.example-cdn.net\\@redis/x",
+    "https://cdn.example-cdn.net/x\\y",
+    "/x\\y",
+    "\\\\redis/x",
+    "https://cdn.example-cdn.net /x",
+    "https://cdn.example-cdn.net/x y",
+    "/x y",
+    "/x\ty",
+    "/x\u0001y",
+    "https://cdn.example-cdn.net/x|y",
   ])("refuses %j", (location) => {
     expect(evaluateRedirect(location, feed).allowed).toBe(false);
   });

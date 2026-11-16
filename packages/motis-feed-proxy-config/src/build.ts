@@ -188,21 +188,51 @@ export interface FeedRedirectMap {
  *
  * A redirect is followed when it is relative, or absolute to the feed's own
  * authority, or absolute to another host whose name looks public: dotted,
- * letters in the last label, no port, no user info, and none of the local or
- * internal suffixes below. An https feed is never followed onto http.
- * Everything else is answered with 502. Name checks cannot see where a public
- * name resolves to, so network placement and egress policy still matter.
+ * letters in the last label, no port, no user info, and none of the local,
+ * internal or Compose network suffixes below. An https feed is never followed
+ * onto http. Everything else is answered with 502. Name checks cannot see
+ * where a public name resolves to, so network placement and egress policy
+ * still matter.
+ *
+ * The whole Location must match a strict shape: plain host and optional port,
+ * then nothing, a path or a query, using only URL characters (no fragment,
+ * backslash, whitespace or control characters). The upstream URL is rebuilt
+ * from the matched scheme, authority and path, never from the raw header, so
+ * nginx cannot read a different host out of it than the one checked here.
  */
+const REDIRECT_PATH_CHARS = "[A-Za-z0-9._~!$&'()*+,;=:@%/?-]";
+const REDIRECT_PATH_FIRST_CHARS = "[A-Za-z0-9._~!$&'()*+,;=:@%?-]";
+const REDIRECT_AUTHORITY = "[a-z0-9.-]+(?::[0-9]+)?";
+// A single leading slash; `//host` would change host without a scheme.
+const RELATIVE_REDIRECT = `/(?:${REDIRECT_PATH_FIRST_CHARS}${REDIRECT_PATH_CHARS}*)?`;
+const ABSOLUTE_REDIRECT_REST = `(?:[/?]${REDIRECT_PATH_CHARS}*)?`;
+
+/**
+ * Last labels that name this stack's Compose networks: the shared `openmapx`
+ * network and the `openmapx-private-*` and `openmapx-community-*` networks.
+ * Docker's DNS also answers `<service>.<network>`. The project-prefixed names
+ * (`openmapx_…`) contain an underscore, which the host shape already refuses.
+ */
+const INTERNAL_NAME_SUFFIXES =
+  "localhost|localdomain|local|internal|lan|home\\.arpa|docker|openmapx(?:-[a-z0-9-]*)?";
+
 export const FEED_REDIRECT_MAPS: readonly FeedRedirectMap[] = [
   {
     source: "$orig_loc",
     variable: "feed_redirect_kind",
     defaultValue: "refuse",
     rules: [
-      // A single leading slash; `//host` would change host without a scheme.
-      { pattern: "^/(?:[^/]|$)", value: "relative" },
-      { pattern: "^https://", caseInsensitive: true, value: "https" },
-      { pattern: "^http://", caseInsensitive: true, value: "http" },
+      { pattern: `^${RELATIVE_REDIRECT}$`, value: "relative" },
+      {
+        pattern: `^https://${REDIRECT_AUTHORITY}${ABSOLUTE_REDIRECT_REST}$`,
+        caseInsensitive: true,
+        value: "https",
+      },
+      {
+        pattern: `^http://${REDIRECT_AUTHORITY}${ABSOLUTE_REDIRECT_REST}$`,
+        caseInsensitive: true,
+        value: "http",
+      },
     ],
   },
   {
@@ -210,12 +240,30 @@ export const FEED_REDIRECT_MAPS: readonly FeedRedirectMap[] = [
     variable: "feed_redirect_authority",
     defaultValue: "",
     rules: [
-      // Plain host with an optional port. User info, IPv6 literals and any
-      // other characters leave this empty, which the later maps refuse.
       {
-        pattern: "^https?://([a-z0-9.-]+(?::[0-9]+)?)(?:[/?#]|$)",
+        pattern: `^https?://(${REDIRECT_AUTHORITY})${ABSOLUTE_REDIRECT_REST}$`,
         caseInsensitive: true,
         value: "$1",
+      },
+    ],
+  },
+  {
+    source: "$orig_loc",
+    variable: "feed_redirect_path",
+    defaultValue: "",
+    rules: [
+      { pattern: `^(${RELATIVE_REDIRECT})$`, value: "$1" },
+      {
+        pattern: `^https?://${REDIRECT_AUTHORITY}(/${REDIRECT_PATH_CHARS}*)$`,
+        caseInsensitive: true,
+        value: "$1",
+      },
+      // No path: send `/`, since a proxy_pass URL without one would forward
+      // this proxy's own request path instead.
+      {
+        pattern: `^https?://${REDIRECT_AUTHORITY}(\\?${REDIRECT_PATH_CHARS}*)?$`,
+        caseInsensitive: true,
+        value: "/$1",
       },
     ],
   },
@@ -230,11 +278,7 @@ export const FEED_REDIRECT_MAPS: readonly FeedRedirectMap[] = [
     variable: "feed_redirect_host_public",
     defaultValue: "0",
     rules: [
-      {
-        pattern: "(?:^|\\.)(?:localhost|localdomain|local|internal|lan|home\\.arpa|docker)$",
-        caseInsensitive: true,
-        value: "0",
-      },
+      { pattern: `(?:^|\\.)(?:${INTERNAL_NAME_SUFFIXES})$`, caseInsensitive: true, value: "0" },
       // At least two labels, and a last label starting with a letter, which
       // rules out IP literals and numeric host forms. No port allowed.
       { pattern: "^(?:[a-z0-9-]+\\.)+[a-z][a-z0-9-]*$", caseInsensitive: true, value: "1" },
@@ -254,12 +298,14 @@ export const FEED_REDIRECT_MAPS: readonly FeedRedirectMap[] = [
     ],
   },
   {
-    source: "$feed_redirect_kind|$original_scheme|$original_authority|$orig_loc",
+    // Built only from validated parts; none of them can contain `|`.
+    source:
+      "$feed_redirect_kind|$original_scheme|$original_authority|$feed_redirect_authority|$feed_redirect_path",
     variable: "feed_redirect_url",
     defaultValue: "",
     rules: [
-      { pattern: "^relative\\|([^|]*)\\|([^|]*)\\|(.*)$", value: "$1://$2$3" },
-      { pattern: "^https?\\|[^|]*\\|[^|]*\\|(.*)$", value: "$1" },
+      { pattern: "^relative\\|([a-z]+)\\|([^|]+)\\|\\|(/[^|]*)$", value: "$1://$2$3" },
+      { pattern: "^(https?)\\|[^|]*\\|[^|]*\\|([^|]+)\\|(/[^|]*)$", value: "$1://$2$3" },
     ],
   },
 ];
