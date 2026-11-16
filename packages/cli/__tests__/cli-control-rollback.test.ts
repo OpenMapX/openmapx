@@ -19,6 +19,8 @@ vi.mock("../src/lib/docker", async (original) => ({
   ...(await original<typeof import("../src/lib/docker")>()),
   dockerCompose: vi.fn(),
   dockerComposeStream: vi.fn(),
+  // A recreation that fails with an exit code reports a known outcome while the daemon answers.
+  dockerDaemonReachable: vi.fn(async () => true),
 }));
 vi.mock("../src/lib/hardlinks", async (original) => ({
   ...(await original<typeof import("../src/lib/hardlinks")>()),
