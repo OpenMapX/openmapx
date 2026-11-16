@@ -1,4 +1,5 @@
 import { useParkingStore, useSidebarStore } from "@openmapx/core";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, userEvent, waitFor, within } from "@/test";
 import { enterDateTime } from "@/test/dateTimeField";
@@ -13,6 +14,12 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("./useSaveParking", () => ({ useParkingAddressBackfill: () => state.backfill }));
+
+const share = vi.hoisted(() => ({ url: vi.fn(async () => "copied" as const) }));
+vi.mock("@/lib/deepLink", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/deepLink")>()),
+  shareUrl: share.url,
+}));
 
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
@@ -61,6 +68,8 @@ beforeEach(() => {
   state.vehicles = [];
   state.update.mockReset();
   state.clear.mockReset();
+  share.url.mockClear();
+  share.url.mockResolvedValue("copied" as const);
   useParkingStore.getState().reset();
   useSidebarStore.setState({ activeSidebarId: "parking", activeDetailId: null });
 });
@@ -148,6 +157,21 @@ describe("ParkingPanelContent", () => {
     render(<ParkingPanelContent />);
     expect(screen.getByText("parking.forVehicle:Blue Golf")).toBeInTheDocument();
   });
+
+  it("says the link was copied when sharing falls back to the clipboard", async () => {
+    render(<ParkingPanelContent />);
+    await userEvent.click(screen.getByRole("button", { name: /parking.share/ }));
+    expect(share.url).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("mapContextMenu.linkCopied")).toBeInTheDocument();
+  });
+
+  it("says sharing failed when neither share nor clipboard is available", async () => {
+    share.url.mockResolvedValue("unavailable" as never);
+    render(<ParkingPanelContent />);
+    await userEvent.click(screen.getByRole("button", { name: /parking.share/ }));
+    expect(await screen.findByText("mapContextMenu.shareFailed")).toBeInTheDocument();
+  });
+
   describe("note", () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
@@ -240,6 +264,75 @@ describe("ParkingPanelContent", () => {
 
       expect(state.clear).toHaveBeenCalledWith("p1");
       expect(state.update).not.toHaveBeenCalled();
+    });
+
+    const noteField = () => screen.getByRole<HTMLInputElement>("textbox", { name: "parking.note" });
+    const serverReturns = (rerender: (ui: ReactElement) => void, note: string | null) =>
+      act(() => {
+        state.parked = [{ ...RECORD, note }];
+        rerender(<ParkingPanelContent />);
+      });
+
+    it("keeps typing that continues while an earlier save is echoed back", () => {
+      const { rerender } = render(<ParkingPanelContent />);
+      act(() => noteField().focus());
+
+      typeNote("a");
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(state.update).toHaveBeenLastCalledWith({ id: "p1", note: "a" });
+      typeNote("ab"); // typed before the "a" refetch lands
+      serverReturns(rerender, "a");
+      expect(noteField().value).toBe("ab");
+
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(state.update).toHaveBeenLastCalledWith({ id: "p1", note: "ab" });
+      typeNote("abc");
+      serverReturns(rerender, "ab");
+      expect(noteField().value).toBe("abc");
+    });
+
+    it("keeps the focused field when a stale echo arrives after the last save", () => {
+      const { rerender } = render(<ParkingPanelContent />);
+      act(() => noteField().focus());
+
+      typeNote("a");
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      typeNote("ab");
+      act(() => {
+        vi.advanceTimersByTime(600);
+      }); // both sent, nothing queued
+      serverReturns(rerender, "a"); // late refetch of the first save
+      expect(noteField().value).toBe("ab");
+    });
+
+    it("shows a note changed elsewhere while the field is not being edited", () => {
+      const { rerender } = render(<ParkingPanelContent />);
+      serverReturns(rerender, "Level 3");
+      expect(noteField().value).toBe("Level 3");
+      serverReturns(rerender, null); // cleared on another device
+      expect(noteField().value).toBe("");
+    });
+
+    it("loads the other record's note when the selection changes", () => {
+      state.parked = [
+        { ...RECORD, note: "Level 3" },
+        { ...RECORD, id: "p2", note: "Street, blue sign" },
+      ];
+      const { rerender } = render(<ParkingPanelContent />);
+      act(() => noteField().focus());
+      typeNote("Level 3, row F");
+
+      act(() => {
+        useParkingStore.getState().select("p2");
+        rerender(<ParkingPanelContent />);
+      });
+      expect(noteField().value).toBe("Street, blue sign");
     });
   });
 });
