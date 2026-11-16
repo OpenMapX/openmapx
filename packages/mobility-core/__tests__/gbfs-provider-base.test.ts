@@ -14,6 +14,7 @@ import {
   fetchSwissSharedMobilityDataForBbox,
 } from "../src/gbfs-provider-base.js";
 import type { MobilityHttpTransport } from "../src/json-transport.js";
+import type { GbfsPricingPlan, GbfsVehicleType } from "../src/types/shared-mobility.js";
 
 const transport: MobilityHttpTransport = {
   userAgent: "OpenMapX/test",
@@ -269,6 +270,87 @@ describe("fetchSwissSharedMobilityData", () => {
       transport,
     });
     expect(logSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("GBFS station pricing summary", () => {
+  const bbox = { south: 46.9, west: 7.3, north: 47.0, east: 7.5 };
+
+  function mockStationWithPlans(bike: GbfsVehicleType, plans: GbfsPricingPlan[]) {
+    vi.mocked(fetchGbfsSystem).mockResolvedValue({
+      systemInfo: { systemId: "sharedmobility.ch", name: "Bikes", timezone: "Europe/Zurich" },
+      stations: [{ stationId: "s1", name: "Bahnhof", lat: 46.95, lon: 7.44 }],
+      stationStatuses: new Map([
+        [
+          "s1",
+          {
+            stationId: "s1",
+            numBikesAvailable: 2,
+            isInstalled: true,
+            isRenting: true,
+            isReturning: true,
+            vehicleTypesAvailable: [{ vehicleTypeId: "bike", count: 2 }],
+          },
+        ],
+      ]),
+      vehicles: [],
+      vehicleTypes: new Map([["bike", bike]]),
+      pricingPlans: new Map(plans.map((plan) => [plan.planId, plan])),
+    });
+  }
+
+  it.each([
+    ["EUR", "3.00 € + 0.25 €/km + 30.00 €/h"],
+    ["CHF", "3.00 CHF + 0.25 CHF/km + 30.00 CHF/h"],
+    ["GBP", "3.00 GBP + 0.25 GBP/km + 30.00 GBP/h"],
+    ["sek", "3.00 SEK + 0.25 SEK/km + 30.00 SEK/h"],
+    ["", "3.00 € + 0.25 €/km + 30.00 €/h"],
+    [undefined as unknown as string, "3.00 € + 0.25 €/km + 30.00 €/h"],
+    ["€", "3.00 € + 0.25 €/km + 30.00 €/h"],
+  ])("writes plan currency %j as %j", async (currency, expected) => {
+    mockStationWithPlans(
+      {
+        vehicleTypeId: "bike",
+        formFactor: "bicycle",
+        propulsionType: "human",
+        defaultPricingPlanId: "plan",
+      },
+      [
+        {
+          planId: "plan",
+          name: "Standard",
+          currency,
+          price: 3,
+          isTaxable: false,
+          perKmPricing: [{ start: 0, rate: 0.25, interval: 1 }],
+          perMinPricing: [{ start: 0, rate: 0.5, interval: 1 }],
+        },
+      ],
+    );
+
+    const result = await fetchSwissSharedMobilityData(bbox, new Set(["bicycle"]), dependencies());
+
+    expect(result.stations[0]?.pricingSummary).toBe(expected);
+  });
+
+  it("keeps the cheapest amount's own plan currency on a mixed-currency station", async () => {
+    mockStationWithPlans(
+      {
+        vehicleTypeId: "bike",
+        formFactor: "bicycle",
+        propulsionType: "human",
+        defaultPricingPlanId: "plan",
+        pricingPlanIds: ["plan2"],
+      },
+      [
+        { planId: "plan", name: "Euro", currency: "EUR", price: 3, isTaxable: false },
+        { planId: "plan2", name: "Franc", currency: "CHF", price: 2, isTaxable: false },
+      ],
+    );
+
+    const result = await fetchSwissSharedMobilityData(bbox, new Set(["bicycle"]), dependencies());
+
+    expect(result.stations[0]?.pricingSummary).toBe("2.00 CHF");
   });
 });
 
