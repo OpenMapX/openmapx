@@ -87,6 +87,24 @@ const progressSchema = z.object({
   durationRemaining: nonnegative,
   speedMps: z.number().finite().optional(),
 });
+/**
+ * Only the container: the session boundary already validated the route, and a car tick
+ * reads at most two steps, so each read step is checked with `stepSchema` on its own.
+ */
+const routeContainerSchema = z.object({
+  steps: z.custom<unknown[]>((value) => Array.isArray(value)),
+  distance: nonnegative.optional(),
+  duration: nonnegative.optional(),
+});
+const rerouteSchema = z.object({ status: z.string() });
+type CarStep = z.infer<typeof stepSchema>;
+
+/** An index past either end reads no step; a malformed step at a real index is a failure. */
+function readStep(steps: unknown[], index: number): { step: CarStep | undefined } | null {
+  if (index < 0 || index >= steps.length) return { step: undefined };
+  const parsed = stepSchema.safeParse(steps[index]);
+  return parsed.success ? { step: parsed.data } : null;
+}
 
 /** The maneuver is at the START of the next step, not the step being driven. */
 export function buildCarTripProjection(
@@ -97,13 +115,7 @@ export function buildCarTripProjection(
   now: number,
 ): CarTripProjection | null {
   if (snapshot.status !== "active") return null;
-  const route = z
-    .object({
-      steps: z.array(stepSchema),
-      distance: nonnegative.optional(),
-      duration: nonnegative.optional(),
-    })
-    .safeParse(snapshot.route);
+  const route = routeContainerSchema.safeParse(snapshot.route);
   const progress = progressSchema.safeParse(snapshot.progress);
   if (!route.success) return null;
   if (!progress.success && snapshot.progress != null) return null;
@@ -115,11 +127,17 @@ export function buildCarTripProjection(
         distanceRemaining: route.data.distance ?? 0,
         durationRemaining: route.data.duration ?? 0,
       };
-  const step = route.data.steps[upcomingManeuverIndex(p.currentStepIndex, route.data.steps.length)];
+  const steps = route.data.steps;
+  const upcomingIndex = upcomingManeuverIndex(p.currentStepIndex, steps.length);
+  const currentIndex = Math.max(0, p.currentStepIndex);
+  const upcoming = readStep(steps, upcomingIndex);
+  const current = currentIndex === upcomingIndex ? upcoming : readStep(steps, currentIndex);
+  if (!upcoming || !current) return null;
+  const step = upcoming.step;
   const m = step?.maneuver;
   const roundabout = m?.type === "roundabout" || m?.type === "rotary";
-  const reroute = z.object({ status: z.string() }).safeParse(snapshot.reroute);
-  const currentStep = route.data.steps[Math.max(0, p.currentStepIndex)];
+  const reroute = rerouteSchema.safeParse(snapshot.reroute);
+  const currentStep = current.step;
   const secondsToManeuver =
     currentStep?.distance && currentStep.duration
       ? Math.max(0, Math.min(1, p.distanceToNextManeuver / currentStep.distance)) *
