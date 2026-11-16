@@ -280,6 +280,27 @@ describe("Gate C — host authority", () => {
     }
   });
 
+  it("refuses the removed shared admission directory anywhere in code, tests or scripts", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      const name = [".admin", "target", "control"].join("-");
+      mkdirSync(join(root, "packages", "core", "src"), { recursive: true });
+      mkdirSync(join(root, "scripts", "node_modules", "dep"), { recursive: true });
+      writeFileSync(join(root, "packages", "core", "src", "lease.ts"), `const dir = "${name}";\n`);
+      writeFileSync(join(root, "scripts", "smoke.sh"), `rmdir "$DATA/${name}"\n`);
+      writeFileSync(join(root, "scripts", "node_modules", "dep", "index.js"), `"${name}"\n`);
+      writeFileSync(join(root, "packages", "core", "src", "notes.md"), `${name}\n`);
+      expect(
+        findAuthorityViolations(root)
+          .filter((violation) => violation.detail.includes(name))
+          .map((violation) => violation.file)
+          .sort(),
+      ).toEqual(["packages/core/src/lease.ts", "scripts/smoke.sh"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a manifest that mounts the operations agent's state", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
     try {

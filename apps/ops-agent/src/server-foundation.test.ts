@@ -945,6 +945,79 @@ describe("one admission path for target effects", () => {
     }
   }, 40_000);
 
+  it("holds every registered service during a start, so another service cannot be removed", async () => {
+    const control = await import("@openmapx/core/build-artifacts");
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "omx-leased-start-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["redis", "osrm"],
+    });
+    const leaseStore = control.openLeaseStore({
+      directory: control.leaseStoreDirectory(root),
+      purpose: "test",
+    });
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      controlInstallation: installation,
+      leaseStore,
+      dispatch: async (operation) => {
+        if (operation.kind === "service.start") await blocked;
+        return { changed: true };
+      },
+    });
+    try {
+      const submit = (operation: OpsOperation, name: string) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(),
+          payload: {
+            ...request(operation, `ops1_${name}Start`, key(`opk1_${name}Start`)),
+            issuedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 20_000).toISOString(),
+          },
+        });
+      expect(
+        (
+          await submit(
+            {
+              kind: "service.start",
+              serviceId: "redis",
+              expectedConfigurationRevisionId: `cfg1_${"d".repeat(43)}`,
+            },
+            "leasedStart0000",
+          )
+        ).statusCode,
+      ).toBe(202);
+      await eventually(
+        async () => leaseStore.list(),
+        (leases) => leases.some((lease) => lease.targets.includes("osrm")),
+      );
+      const refused = await submit(
+        { kind: "service.remove", serviceId: "osrm" },
+        "leasedRemove000",
+      );
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json().error.message).toContain("Target osrm is busy");
+    } finally {
+      release();
+      await app.close();
+      control.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("drops the lease of an update whose configuration revision is no longer current", async () => {
     const control = await import("@openmapx/core/build-artifacts");
     const { installServiceLifecycleRuntime } = await import("./service-lifecycle-runtime");
