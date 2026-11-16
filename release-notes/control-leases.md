@@ -11,9 +11,9 @@ claims over HTTP; the host CLI, the agent's fixed CLI children and the
 configuration helper write the file under its lock. The shared lease directory
 on `/data` is gone.
 
-Stop, restart, start, recreate, update, remove, `compose up` and `compose down`,
-and backup create and restore all take a claim first, from the admin panel and
-from the host CLI alike. While another operation holds one of the services, the
+Stop, restart, start, recreate, update, remove, `compose down`, and backup
+create and restore all take a claim first, from the admin panel and from the
+host CLI alike; the host's `compose up` and `services start` still take none. While another operation holds one of the services, the
 command is refused at once with a message that names the holding operation and
 points to `openmapx control status`; before, `services restart` could run in the
 middle of an update. A failure Docker reports releases the claim. A crash,

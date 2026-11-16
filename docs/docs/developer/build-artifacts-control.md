@@ -338,8 +338,10 @@ path: stop, restart, start, recreate, update, remove, `stack.stop`, repository
 removal, backup create and restore. Pull, build, exec and probes take none. A held
 target refuses the operation before anything is recorded, with a busy error that
 names the holder's executor, operation key, kind and state and points to
-`openmapx control status`. On the host, `services stop|restart`, `compose up|down`
-and `backup create|restore` take the same leases. In the agent, only a Docker
+`openmapx control status`. On the host, `services stop|restart`, `compose down`
+and `backup create|restore` take the same leases; `compose up` and
+`services start` take none, so a running data job does not refuse them. In the
+agent, only a Docker
 command that ran to its own end and reported a failure with an exit code, while
 the daemon still answered, records a contained, known outcome and releases the
 lease; any other error, including every other failure of an agent backup, leaves

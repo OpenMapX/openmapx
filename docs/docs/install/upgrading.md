@@ -302,8 +302,10 @@ stays interrupted until the operation's deadline plus 30 seconds has passed.
 ### Operations whose outcome is unknown
 
 Every command that changes containers (stop, restart, start, recreate, update,
-remove, `compose up` and `compose down`, backup create and restore) first claims
-its services in the operations agent's lease store. While one holds a service,
+remove, `compose down`, backup create and restore) first claims its services in
+the operations agent's lease store. The host's `compose up` and `services start`
+claim nothing, as before, so that they still work while a data job runs; do not
+run them during an update. While one holds a service,
 another waits up to five seconds for it and then refuses with a message that
 names the holder's operation key and points to `openmapx control status`. A
 failure Docker reports with an exit code releases the services; a crash, timeout,

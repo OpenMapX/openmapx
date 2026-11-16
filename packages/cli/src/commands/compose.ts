@@ -531,10 +531,7 @@ export function registerComposeCommands(program: Command): void {
         log.dim("No enabled services to start");
         process.exit(0);
       }
-      // Compose may also start dependencies, so every service is claimed.
-      const code = await leasedHostEffect("compose.up", "all", () =>
-        dockerComposeStream(["up", "-d", ...enabledServiceIds]),
-      );
+      const code = await dockerComposeStream(["up", "-d", ...enabledServiceIds]);
       process.exit(code);
     });
 
