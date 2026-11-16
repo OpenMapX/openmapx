@@ -30,7 +30,7 @@ it("refuses a new admission before any record while the control filesystem is ne
   const root = fs.mkdtempSync(join(tmpdir(), "omx-control-storage-"));
   roots.push(root);
   fs.mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const installation = control.openControlInstallation({
     infraDir: root,
     role: "host-cli",
@@ -70,7 +70,7 @@ it("refuses a new admission before any record while the control filesystem is ne
     );
     const record = join(
       root,
-      "control-private/host-cli/executions",
+      "state/host-cli/control/executions",
       `${execution.operationKey}.json`,
     );
     expect(fs.existsSync(record)).toBe(false);

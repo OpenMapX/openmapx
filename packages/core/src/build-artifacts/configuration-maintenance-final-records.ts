@@ -10,8 +10,6 @@ import { controlDigest, controlOriginSchema } from "./control-records";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/),
   epoch = z.number().int().nonnegative().safe();
-const signed = <T extends z.ZodType>(payload: T) =>
-  z.strictObject({ payload, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) });
 const id = z.uuid();
 const uniqueSorted = <T extends z.ZodType<string>>(schema: T, max: number) =>
   z
@@ -34,7 +32,6 @@ export const finalRecordDigest = (
     .digest("hex");
 export const configurationOwnerIdentitySchema = z
   .strictObject({
-    installationId: id,
     origin: controlOriginSchema,
     ownerPrepare: executionRefSchema,
     admissionDigest: digest,
@@ -182,11 +179,8 @@ export const configurationMaintenanceRuntimeInspectionSchema = z.strictObject({
     .max(1024),
   runtime: z.lazy(() => configurationFinalEvidenceSchema.shape.runtime),
 });
-export const signedConfigurationMaintenanceRuntimeInspectionSchema = signed(
-  configurationMaintenanceRuntimeInspectionSchema,
-);
 export const configurationMaintenanceFinalRecordSchema = z.strictObject({
-  ownerFinal: signed(z.lazy(() => configurationOwnerFinalSchema)),
+  ownerFinal: z.lazy(() => configurationOwnerFinalSchema),
   evidence: z.lazy(() => configurationFinalEvidenceSchema),
   evidenceProjection: z.lazy(() => configurationFinalEvidenceProjectionSchema),
   evidenceDigest: digest,
@@ -221,8 +215,8 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     decision = owner.apiControls.decide;
   if (!final || !signedInspection || !decision || !owner.preparedFence)
     throw Error("Actual unused original final source required");
-  const inspection = signedInspection.payload,
-    original = final.ownerFinal.payload,
+  const inspection = signedInspection,
+    original = final.ownerFinal,
     evidence = final.evidence,
     same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b),
     requiredChecks = configurationMaintenanceRequiredChecksSchema.parse([
@@ -313,7 +307,6 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     !same(inspection.identity, original.identity) ||
     !same(evidence.identity, original.identity) ||
     !same(evidence.runtime, inspection.runtime) ||
-    original.identity.installationId !== owner.installationId ||
     !same(original.identity.origin, owner.origin) ||
     !same(original.identity.ownerPrepare, owner.plan.prepare) ||
     original.identity.admissionDigest !== owner.admissionDigest ||
@@ -362,8 +355,8 @@ function assertExecutedConfigurationMaintenanceFinalState(
     decision = owner.apiControls.decide;
   if (!final || !signedInspection || !decision || !owner.preparedFence)
     throw Error("Actual applied final sources required");
-  const inspection = signedInspection.payload,
-    original = final.ownerFinal.payload,
+  const inspection = signedInspection,
+    original = final.ownerFinal,
     evidence = final.evidence,
     same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b),
     contained = mode === "contained",
@@ -520,7 +513,6 @@ function assertExecutedConfigurationMaintenanceFinalState(
     !same(inspection.identity, original.identity) ||
     !same(evidence.identity, original.identity) ||
     !same(evidence.runtime, inspection.runtime) ||
-    original.identity.installationId !== owner.installationId ||
     !same(original.identity.origin, owner.origin) ||
     !same(original.identity.ownerPrepare, owner.plan.prepare) ||
     original.identity.admissionDigest !== owner.admissionDigest ||

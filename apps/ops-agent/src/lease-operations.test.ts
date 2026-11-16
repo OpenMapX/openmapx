@@ -9,7 +9,7 @@ import {
   leaseStoreDirectory,
   openControlInstallation,
   openLeaseStore,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import type { ExecutionRef } from "@openmapx/core/ops";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -20,7 +20,7 @@ let installation: ControlInstallation;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-lease-operations-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   installation = openControlInstallation({
     infraDir: root,
     role: "ops-agent",

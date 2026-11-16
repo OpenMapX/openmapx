@@ -10,7 +10,7 @@ import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "./control-targets";
 it("admits the application update target closure using the production Data Manager registration", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-dm-startup-targets-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const dm = control.openControlInstallation({
     infraDir: root,
     role: "data-manager",

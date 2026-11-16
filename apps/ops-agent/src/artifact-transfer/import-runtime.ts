@@ -13,9 +13,7 @@ import {
   readGenerationHardlinksOwnerPlan,
   readOwnedGenerationHardlinkPlan,
   readPrivateRecord,
-  signControl,
   type VerifiedExecutionAuthority,
-  verifyControl,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -67,13 +65,12 @@ const planSchema = z.strictObject({
     .default(null),
 });
 type ImportPlan = z.infer<typeof planSchema>;
-const domain = "openmapx-artifact-import-owner-v1";
 const name = (a: VerifiedExecutionAuthority) => `artifact-import-${a.execution.operationKey}.json`;
 function originalImportPlan(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import owner required");
   const raw = readPrivateRecord(owner.installation, "observations", name(authority), 8192);
-  return verifyControl(owner.installation.installation.publicKey, domain, raw, planSchema);
+  return planSchema.parse(raw);
 }
 const configSchema = z.object({
   services: z.record(
@@ -254,7 +251,7 @@ export function retainArtifactImportPlan(authority: VerifiedExecutionAuthority, 
     owner.installation,
     "observations",
     name(authority),
-    signControl(owner.installation.privateKey, domain, planSchema.parse(plan)),
+    planSchema.parse(plan),
     true,
   );
 }

@@ -95,7 +95,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       store = new ArtifactTransferStore({
         dataRoot: join(host.root, "stages"),
         privateRoot: join(host.root, "stage-meta"),
-        token: host.token,
         capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
       });
       installStandaloneIntegrationRuntime(host.runtime, { rootDir: host.root, store });

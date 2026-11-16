@@ -362,7 +362,7 @@ it.skipIf(
           !existsSync(
             join(
               host.infraDir,
-              "control-private/data-manager/executions",
+              "state/data-manager/control/executions",
               `${row.status.operationKey}.json`,
             ),
           )
@@ -391,7 +391,7 @@ it.skipIf(
                 existsSync(
                   join(
                     host.infraDir,
-                    "control-private/data-manager/executions",
+                    "state/data-manager/control/executions",
                     `${row.status.operationKey}.json`,
                   ),
                 ),
@@ -419,7 +419,7 @@ it.skipIf(
           existsSync(
             join(
               host.infraDir,
-              "control-private/data-manager/executions",
+              "state/data-manager/control/executions",
               `${row.status.operationKey}.json`,
             ),
           ) ||

@@ -1189,7 +1189,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           );
           const refusedOwnerPath = join(
               host.infraDir,
-              "control-private/ops-agent/configuration-maintenance",
+              "state/ops-agent/control/configuration-maintenance",
               `${candidate.maintenanceId}.json`,
             ),
             refusedOwnerBytes = refusedPreparation ? readFileSync(refusedOwnerPath) : undefined;
@@ -1201,7 +1201,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 ? readFileSync(
                     join(
                       host.infraDir,
-                      "control-private/ops-agent/executions",
+                      "state/ops-agent/control/executions",
                       `${helper.root.operationKey}.json`,
                     ),
                   )
@@ -1215,7 +1215,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 existsSync(
                   join(
                     host.infraDir,
-                    "control-private/ops-agent/executions",
+                    "state/ops-agent/control/executions",
                     `${helper.root.operationKey}.json`,
                   ),
                 ),
@@ -1325,11 +1325,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               records = await import(
                 "../../../../../packages/core/src/build-artifacts/configuration-maintenance-owner-records"
               ),
-              owner = core.verifyControl(
-                installation.publicKey,
-                "openmapx-configuration-maintenance-owner-v2",
+              owner = records.configurationMaintenanceOwnerRecordSchema.parse(
                 JSON.parse(refusedOwnerBytes!.toString()),
-                records.configurationMaintenanceOwnerRecordSchema,
               ),
               authority = restoreAdmittedControlExecution(installation, owner.plan.prepare);
             core.assertConfigurationMaintenanceRootClosure(authority);
@@ -1474,7 +1471,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 readFileSync(
                   join(
                     host.infraDir,
-                    "control-private/ops-agent/executions",
+                    "state/ops-agent/control/executions",
                     `${helper.root.operationKey}.json`,
                   ),
                 ).equals(helperAdmission!),
@@ -1533,7 +1530,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               readFileSync(
                 join(
                   host.infraDir,
-                  "control-private/ops-agent/executions",
+                  "state/ops-agent/control/executions",
                   `${helper.root.operationKey}.json`,
                 ),
               ).equals(helperAdmission!),
@@ -1691,7 +1688,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 readFileSync(
                   join(
                     host.infraDir,
-                    "control-private/ops-agent/executions",
+                    "state/ops-agent/control/executions",
                     `${helper.root.operationKey}.json`,
                   ),
                 ).equals(helperAdmission!),
@@ -2642,7 +2639,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
         const helperPath = join(
             host.infraDir,
-            "control-private/ops-agent/executions",
+            "state/ops-agent/control/executions",
             `${state.record.coordinatorPrerequisite!.root.operationKey}.json`,
           ),
           admission = readFileSync(helperPath);
@@ -3399,7 +3396,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ownerBytes = ownerRecord(),
           originalAdmissionPath = join(
             host.infraDir,
-            "control-private/ops-agent/executions",
+            "state/ops-agent/control/executions",
             `${prepared.prepare.operationKey}.json`,
           ),
           originalAdmission = readFileSync(originalAdmissionPath);
@@ -3706,13 +3703,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           if (!lost && name === `${prepared.binding.maintenanceId}.json`) {
             const recorded = (
               JSON.parse(String(bytes)) as {
-                payload?: {
-                  apiControls?: {
-                    steps?: { execution: { operationKey: string }; canonical: unknown }[];
-                  };
+                apiControls?: {
+                  steps?: { execution: { operationKey: string }; canonical: unknown }[];
                 };
               }
-            ).payload?.apiControls?.steps?.find(
+            )?.apiControls?.steps?.find(
               (value) => value.execution.operationKey === step.operationKey,
             );
             if (recorded?.canonical) {
@@ -4000,7 +3995,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 existsSync(
                   join(
                     host.infraDir,
-                    "control-private/ops-agent/executions",
+                    "state/ops-agent/control/executions",
                     `${owner.plan.prepare.operationKey}.json`,
                   ),
                 ),
@@ -4226,7 +4221,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               original = shapes.maintenanceDockerContainerSchema.parse(installedDocker[id]),
               path = join(
                 host.infraDir,
-                "control-private/ops-agent/configuration-maintenance",
+                "state/ops-agent/control/configuration-maintenance",
                 `${prepared.binding.maintenanceId}.json`,
               ),
               before = readFileSync(path);
@@ -4303,7 +4298,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             },
           });
           expect(owner.final!.evidence.children).toHaveLength(4);
-          expect(owner.inspection!.payload.requiredChecks.map((check) => check.check)).toEqual(
+          expect(owner.inspection!.requiredChecks.map((check) => check.check)).toEqual(
             expect.arrayContaining(["configuration", "image", "mount", "readiness"]),
           );
           expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
@@ -4464,7 +4459,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ops = await import("@openmapx/core/ops"),
             path = join(
               host.infraDir,
-              "control-private/ops-agent/configuration-maintenance",
+              "state/ops-agent/control/configuration-maintenance",
               `${prepared.binding.maintenanceId}.json`,
             ),
             before = readFileSync(path),
@@ -4613,7 +4608,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         const path = join(
             host.infraDir,
-            "control-private/ops-agent/configuration-maintenance",
+            "state/ops-agent/control/configuration-maintenance",
             `${prepared.binding.maintenanceId}.json`,
           ),
           original = readFileSync(path);
@@ -4743,7 +4738,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               authority = restoreAdmittedControlExecution(installation, prepared.prepare),
               admissionPath = join(
                 host.infraDir,
-                "control-private/ops-agent/executions",
+                "state/ops-agent/control/executions",
                 `${prepared.prepare.operationKey}.json`,
               ),
               originalAdmission = readFileSync(admissionPath);
@@ -4883,7 +4878,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const fault = vi.spyOn(nodeFs, "renameSync").mockImplementation((source, target) => {
           if (
             basename(String(target)) === `${prepared.binding.maintenanceId}.json` &&
-            JSON.parse(readFileSync(source, "utf8")).payload?.apiControls?.settle?.result
+            JSON.parse(readFileSync(source, "utf8"))?.apiControls?.settle?.result
           ) {
             faults++;
             observer.abort();
@@ -4906,20 +4901,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           records = await import(
             "../../../../../packages/core/src/build-artifacts/configuration-maintenance-owner-records"
           ),
-          owner = core.verifyControl(
-            installation.publicKey,
-            "openmapx-configuration-maintenance-owner-v2",
+          owner = records.configurationMaintenanceOwnerRecordSchema.parse(
             JSON.parse(
               readFileSync(
                 join(
                   host.infraDir,
-                  "control-private/ops-agent/configuration-maintenance",
+                  "state/ops-agent/control/configuration-maintenance",
                   `${prepared.binding.maintenanceId}.json`,
                 ),
                 "utf8",
               ),
             ),
-            records.configurationMaintenanceOwnerRecordSchema,
           ),
           released = core.verifyLocalArtifactTargetRootRelease(authority),
           originalFinal = JSON.stringify(owner.final),
@@ -5259,7 +5251,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
             });
             expect(JSON.stringify(row?.result)).not.toContain("synthetic-abandon-credential");
-            const executionsPath = join(host.infraDir, "control-private/ops-agent/executions"),
+            const executionsPath = join(host.infraDir, "state/ops-agent/control/executions"),
               executionsBefore = readdirSync(executionsPath).sort(),
               rootBytes = readFileSync(
                 join(executionsPath, `${prepared.prepare.operationKey}.json`),
@@ -5314,15 +5306,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const actualControl =
                 store.readOwnedConfigurationMaintenance(authority).apiControls.decide!,
               { verifyApiJobParentExecution } = await import("@openmapx/core/ops"),
-              actualParent = verifyApiJobParentExecution(
-                actualControl.parentAssertion,
-                host.token,
-                {
-                  operationKey: actualControl.execution.operationKey,
-                  operationFingerprint: actualControl.execution.operationFingerprint,
-                  requestedDeadlineAt: actualControl.requestedDeadlineAt,
-                },
-              ),
+              actualParent = verifyApiJobParentExecution(actualControl.parentAssertion, {
+                operationKey: actualControl.execution.operationKey,
+                operationFingerprint: actualControl.execution.operationFingerprint,
+                requestedDeadlineAt: actualControl.requestedDeadlineAt,
+              }),
               handle = store.admitConfigurationMaintenanceControlOwner(
                 installation,
                 decision,
@@ -5420,7 +5408,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await app.close();
             const privateOwner = join(
                 host.infraDir,
-                "control-private/ops-agent/configuration-maintenance",
+                "state/ops-agent/control/configuration-maintenance",
                 `${prepared.binding.maintenanceId}.json`,
               ),
               hiddenOwner = join(host.root, "temporarily-unavailable-maintenance-owner.json");
@@ -5667,12 +5655,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             readFileSync(
               join(
                 host.infraDir,
-                "control-private/ops-agent/executions",
+                "state/ops-agent/control/executions",
                 `${operation.operationKey}.json`,
               ),
               "utf8",
             ),
-          ).payload.execution;
+          ).execution;
           const authority = restoreAdmittedControlExecution(installation, execution),
             bound = lookupControlChildPhaseBinding(authority, { phase: "hardlinks", ordinal: 0 });
           let witness: unknown = "no-binding";

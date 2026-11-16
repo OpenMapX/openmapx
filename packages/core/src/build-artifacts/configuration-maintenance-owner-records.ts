@@ -20,8 +20,8 @@ import { ownedServiceSnapshotSchema } from "../ops/owned-service-records";
 import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import {
   configurationMaintenanceFinalRecordSchema,
+  configurationMaintenanceRuntimeInspectionSchema,
   configurationOwnerIdentitySchema,
-  signedConfigurationMaintenanceRuntimeInspectionSchema,
 } from "./configuration-maintenance-final-records";
 import { controlOriginSchema } from "./control-records";
 import {
@@ -45,8 +45,6 @@ export const configurationMaintenanceControlSnapshotSchema = z.strictObject({
   appliedRevisionId: z.lazy(() => configurationMaintenanceReceiptSchema.shape.appliedRevisionId),
   followUp: z.lazy(() => configurationMaintenanceReceiptSchema.shape.followUp),
 });
-export const configurationMaintenanceDecisionCommitmentDomain =
-  "openmapx-configuration-maintenance-decision-v1";
 /** Produced in the actual original-owner authenticated decision CAS. This
  * non-secret attestation is copied verbatim by the fixed shared publisher. */
 export const configurationMaintenanceDecisionCommitmentPayloadSchema = z.strictObject({
@@ -65,10 +63,8 @@ export const configurationMaintenanceDecisionCommitmentPayloadSchema = z.strictO
   result: configurationMaintenanceControlSnapshotSchema,
   canonicalDigest: digest,
 });
-export const configurationMaintenanceDecisionCommitmentSchema = z.strictObject({
-  payload: configurationMaintenanceDecisionCommitmentPayloadSchema,
-  signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
-});
+export const configurationMaintenanceDecisionCommitmentSchema =
+  configurationMaintenanceDecisionCommitmentPayloadSchema;
 /** The original owner's finite metadata control. This ExecutionRef is ONLY
  * journal/receipt correlation; it is never admitted as a forward execution,
  * target owner/borrower or a separate origin. */
@@ -135,7 +131,6 @@ export const configurationMaintenanceSettleControlSourceSchema = z.strictObject(
 });
 export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   version: z.literal(2),
-  installationId: z.uuid(),
   origin: controlOriginSchema,
   admissionDigest: digest,
   leaseId: z.uuid(),
@@ -160,7 +155,7 @@ export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   }),
   // Only the actual fixed final/inspection producers may install these states.
   final: z.lazy(() => configurationMaintenanceFinalRecordSchema).nullable(),
-  inspection: z.lazy(() => signedConfigurationMaintenanceRuntimeInspectionSchema).nullable(),
+  inspection: z.lazy(() => configurationMaintenanceRuntimeInspectionSchema).nullable(),
 });
 export type ConfigurationMaintenanceOwnerRecord = z.infer<
   typeof configurationMaintenanceOwnerRecordSchema
@@ -265,7 +260,6 @@ export function configurationMaintenanceDecisionCommitmentPayload(
   return configurationMaintenanceDecisionCommitmentPayloadSchema.parse({
     version: 1,
     identity: {
-      installationId: owner.installationId,
       origin: owner.origin,
       ownerPrepare: owner.plan.prepare,
       admissionDigest: owner.admissionDigest,
@@ -287,11 +281,11 @@ export function configurationMaintenanceDecisionCommitmentPayload(
   });
 }
 /** Consistency only. Callers MUST first authenticate the actual indexed private
- * owner with its pinned role key; parsing or calling this creates no handle. */
+ * owner; parsing or calling this creates no handle. */
 export function assertConfigurationMaintenanceDecisionSource(
   owner: ConfigurationMaintenanceOwnerRecord,
 ): void {
-  assertFixedConfigurationMaintenancePlan(owner.plan, owner.installationId);
+  assertFixedConfigurationMaintenancePlan(owner.plan);
   const source = owner.apiControls.decide;
   if (!source) {
     if (
@@ -307,7 +301,7 @@ export function assertConfigurationMaintenanceDecisionSource(
     original = owner.plan.apiParent,
     result = source.result;
   if (
-    canonicalJson(source.commitment.payload) !==
+    canonicalJson(source.commitment) !==
     canonicalJson(configurationMaintenanceDecisionCommitmentPayload(owner, source))
   )
     throw Error("Original signed decision commitment preimage changed");

@@ -1,6 +1,6 @@
 /** Fixed configuration helper launch mechanics. These data builders confer no
  * authority: the installed owner/runtime must first join the original frozen
- * step, actual borrowed lease, signed source and one-use helper dispatch. */
+ * step, actual borrowed lease, recorded source and one-use helper dispatch. */
 import { join } from "node:path";
 import {
   type ExecutionRef,
@@ -156,8 +156,8 @@ export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts)
     .refine((names) => Buffer.byteLength(JSON.stringify(names)) <= 8192)
     .parse([...new Set(facts.envNames.filter((name) => !NOT_INHERITED.has(name)))].sort());
 }
-/** Runs the running agent's image with its identity and mounts, sibling role keys
- * and private receipts hidden, no network and confined resources. */
+/** Runs the running agent's image with its identity and mounts, no network and
+ * confined resources. */
 export function configurationHandoffRunArgs(
   facts: AgentContainerFacts,
   rootDir: string,
@@ -189,43 +189,9 @@ export function configurationHandoffRunArgs(
   const inherited = facts.envNames.filter(
     (name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !NOT_INHERITED.has(name),
   );
-  const hostSource = (target: string): string => {
-    const mount = facts.rootMounts
-      .filter((entry) => target === entry.target || target.startsWith(`${entry.target}/`))
-      .at(-1);
-    if (!mount) throw Error("Configuration helper control mounts unavailable");
-    return `${mount.source}${target.slice(mount.target.length)}`;
-  };
-  // The helper's own mounts: the other roles' keys and private directories
-  // hidden, and its control material. The agent masks some of the same
-  // targets itself; Docker refuses two mounts at one target, so the helper
-  // keeps its own and does not inherit the agent's there.
-  const own = [
-    ...["ops-agent", "data-manager", "host-cli"].map((role) => ({
-      source: hostSource(join(rootDir, "infra/docker/control-private/hidden-key")),
-      target: `${rootDir}/infra/docker/secrets/control-${role}.key`,
-      readOnly: true,
-    })),
-    ...["data-manager", "host-cli"].map((role) => ({
-      source: hostSource(join(rootDir, "infra/docker/control-private/empty")),
-      target: `${rootDir}/infra/docker/control-private/${role}`,
-      readOnly: true,
-    })),
-    {
-      source: hostSource(join(rootDir, "infra/docker/control-private/ops-agent")),
-      target: "/var/lib/openmapx/control-private",
-      readOnly: false,
-    },
-    {
-      source: hostSource(join(rootDir, "infra/docker/secrets/control-verifiers.json")),
-      target: "/run/secrets/openmapx-control-verifiers",
-      readOnly: true,
-    },
-  ];
   const mounts = [
     { source: facts.dockerSocketSource, target: "/var/run/docker.sock", readOnly: false },
-    ...facts.rootMounts.filter((mount) => !own.some((entry) => entry.target === mount.target)),
-    ...own,
+    ...facts.rootMounts,
   ];
   if (new Set(mounts.map((mount) => mount.target)).size !== mounts.length)
     throw Error("Configuration helper launch rejected");

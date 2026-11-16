@@ -24,7 +24,7 @@ function heldLeases(root: string) {
 it("admits a120s fixed phase after hours of original-root work without a new root", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-late-phase-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const dm = control.openControlInstallation({
     infraDir: root,
     role: "data-manager",
@@ -93,7 +93,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
   });
   try {
     const original = readFileSync(
-      join(root, "control-private/data-manager/executions", `${owner.operationKey}.json`),
+      join(root, "state/data-manager/control/executions", `${owner.operationKey}.json`),
     );
     const held = heldLeases(root);
     const late = admittedAt + 4 * 3600000;
@@ -118,7 +118,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     const issued = await control.issueControlChildPhase(authority, {
       phase: "stop-primary",
       ordinal: 0,
-      childPublicKey: agent.publicKey,
+      childId: agent.role,
       lease,
     });
     expect(issued.channel).toBe("delegation");
@@ -126,7 +126,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow(/consumed/);
     expect(
       readFileSync(
-        join(root, "control-private/data-manager/executions", `${owner.operationKey}.json`),
+        join(root, "state/data-manager/control/executions", `${owner.operationKey}.json`),
       ),
     ).toEqual(original);
     expect(heldLeases(root).map((value) => value.leaseId)).toEqual(
@@ -137,7 +137,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
       control.issueControlChildPhase(authority, {
         phase: "stop-primary",
         ordinal: 0,
-        childPublicKey: agent.publicKey,
+        childId: agent.role,
         lease,
       }),
     ).rejects.toThrow();
@@ -152,7 +152,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
 async function fixture(exact = false, services = ["motis", "motis-staging"]) {
   const root = mkdtempSync(join(tmpdir(), "omx-phase-state-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const dm = control.openControlInstallation({
     infraDir: root,
     role: "data-manager",
@@ -223,7 +223,7 @@ async function fixture(exact = false, services = ["motis", "motis-staging"]) {
   const authority = control.retainAdmittedControlExecution(dm, input);
   const cell = join(
     root,
-    "control-private/data-manager/observations",
+    "state/data-manager/control/observations",
     `phase-${execution.operationKey}-0.json`,
   );
   return {
@@ -274,7 +274,7 @@ it("keeps an old exact admission's signed bytes when a duplicate supplies empty 
   try {
     const path = join(
         f.root,
-        "control-private/data-manager/executions",
+        "state/data-manager/control/executions",
         `${f.execution.operationKey}.json`,
       ),
       original = readFileSync(path);
@@ -337,7 +337,7 @@ it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as c
         control.issueControlChildPhase(f.authority, {
           ...phase,
           lease,
-          childPublicKey: agent.publicKey,
+          childId: agent.role,
         }),
       ).rejects.toThrow();
       fault.mockRestore();
@@ -355,7 +355,7 @@ it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as c
         control.issueControlChildPhase(f.authority, {
           ...phase,
           lease,
-          childPublicKey: agent.publicKey,
+          childId: agent.role,
         }),
       ).rejects.toThrow();
       try {
@@ -450,7 +450,7 @@ it("rechecks durable cancellation inside publication after the outside identity 
       control.issueControlChildPhase(f.authority, {
         ...phase,
         lease,
-        childPublicKey: agent.publicKey,
+        childId: agent.role,
       }),
     ).rejects.toThrow(/fenced|cancel/i);
     expect(fired).toBe(true);
@@ -559,7 +559,7 @@ it.each(["cell", "aggregate"] as const)(
           : [
               "motis",
               "motis-staging",
-              ...Array.from({ length: 8 }, (_, n) => `svc-${n}-${"a".repeat(50)}`),
+              ...Array.from({ length: 10 }, (_, n) => `svc-${n}-${"a".repeat(50)}`),
             ],
       f = await fixture(false, services);
     try {
@@ -599,7 +599,7 @@ it.each(["cell", "aggregate"] as const)(
         (await import("node:fs")).existsSync(
           join(
             f.root,
-            "control-private/data-manager/observations",
+            "state/data-manager/control/observations",
             `phase-${execution.operationKey}-0.json`,
           ),
         ),
@@ -616,7 +616,7 @@ async function deadlineFixture(
 ) {
   const root = mkdtempSync(join(tmpdir(), "omx-fixed-phase-ancestry-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const services = ["data-manager"],
     agent = control.openControlInstallation({
       infraDir: root,
@@ -651,7 +651,7 @@ async function deadlineFixture(
     });
   control.retainFixedSingleDataPlan(authority, plan);
   const bound = await control.bindControlChildPhase(authority, plan.rootReservation),
-    childPublicKey = control.prepareFixedControlChild(authority, plan.delegationId),
+    childId = control.prepareFixedControlChild(authority, plan.delegationId),
     args = control.fixedCliArguments(operation);
   control.retainFixedCliSpawnIntent(authority, {
     delegationId: plan.delegationId,
@@ -662,7 +662,7 @@ async function deadlineFixture(
   });
   const issued = await control.issueControlChildPhase(authority, {
     ...plan.rootReservation,
-    childPublicKey,
+    childId,
   });
   control.consumeControlChildDispatch(issued.dispatchTicket);
   const cli = control.openFixedChildInstallation({ infraDir: root, assertion: issued.assertion }),
@@ -733,7 +733,7 @@ it.each(["cancel-first", "grant-first"] as const)(
         await expect(
           control.issueControlChildPhase(f.cliAuthority, {
             ...f.slot,
-            childPublicKey: f.dm.publicKey,
+            childId: f.dm.role,
           }),
         ).rejects.toThrow(/cancel|fenced/i);
         expect(fired).toBe(true);
@@ -744,7 +744,7 @@ it.each(["cancel-first", "grant-first"] as const)(
       } else {
         const issued = await control.issueControlChildPhase(f.cliAuthority, {
           ...f.slot,
-          childPublicKey: f.dm.publicKey,
+          childId: f.dm.role,
         });
         control.cancelControlExecution(f.authority);
         expect(control.cancelControlExecution(f.cliAuthority)).toEqual([bound.execution]);
@@ -787,7 +787,7 @@ it.each(["Pull", "Ingest", "Extract"] as const)(
       ).toThrow();
       const issued = await control.issueControlChildPhase(f.cliAuthority, {
         ...f.slot,
-        childPublicKey: f.dm.publicKey,
+        childId: f.dm.role,
       });
       control.consumeControlChildDispatch(issued.dispatchTicket);
       expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow();

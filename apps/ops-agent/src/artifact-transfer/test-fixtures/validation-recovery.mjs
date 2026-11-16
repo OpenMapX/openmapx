@@ -14,8 +14,7 @@ const root = mkdtempSync(join(tmpdir(), "omx-native-validation-")),
   infra = join(root, "infra"),
   options = {
     dataRoot: join(infra, "data/.openmapx-transfers"),
-    privateRoot: join(infra, "control-private/ops-agent/artifact-transfers"),
-    token: "synthetic-native-validation-token",
+    privateRoot: join(infra, "state/ops-agent/artifact-transfers"),
   };
 let child, store, installation;
 try {
@@ -24,7 +23,7 @@ try {
     import fs from 'node:fs'; import {syncBuiltinESMExports} from 'node:module'; import {Writable} from 'node:stream'; import {randomBytes,randomUUID} from 'node:crypto';
     import {ArtifactTransferStore,control,ops} from ${JSON.stringify(moduleUrl)};
     const infra=${JSON.stringify(infra)},root=${JSON.stringify(root)},options=${JSON.stringify(options)};
-    await control.provisionControlInstallation(infra);
+    await control.provisionControlDirectories(infra);
     const installation=control.openControlInstallation({infraDir:infra,role:'ops-agent',serviceIds:['osrm']}), store=new ArtifactTransferStore(options);
     fs.mkdirSync(root+'/source/osrm-graph',{recursive:true,mode:0o755});
     for(const name of ['region.osrm','region.osrm.partition','region.osrm.cells','region.osrm.mldgr'])fs.writeFileSync(root+'/source/osrm-graph/'+name,'synthetic '+name,{mode:0o644});

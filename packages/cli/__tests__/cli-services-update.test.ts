@@ -150,7 +150,7 @@ describe("services update pull failures", () => {
         const raw = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
         const receipt = await services.readServiceLifecycleReceipt({
           dataRoot: join(root, "infra/docker/data"),
-          execution: raw.current.payload.receipt.execution,
+          execution: raw.current.receipt.execution,
         });
         expect(receipt).toMatchObject({
           phase: "hardlinks_applied",

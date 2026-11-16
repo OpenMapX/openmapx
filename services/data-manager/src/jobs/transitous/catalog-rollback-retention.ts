@@ -1,14 +1,12 @@
 /** Preserve the complete inactive healthy generation before validation can reuse it. */
 import { createHash } from "node:crypto";
 import { mkdirSync, statfsSync } from "node:fs";
-import { join } from "node:path";
 import {
   assertArtifactTargetLeaseForward,
   assertControlExecutionForward,
   controlDigest,
   executionAuthorityState,
   inspectArtifactTargetLeaseChildSettlement,
-  signControl,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson } from "@openmapx/core/ops";
 import z from "zod/v4";
@@ -171,19 +169,17 @@ export async function retainPreviousHealthyCatalogSlot(
       base.write(`${basename}.files.json`, bytes, true);
       base.write(
         `${basename}.json`,
-        canonicalJson(
-          signControl(owner.installation.privateKey, "openmapx-catalog-rollback-v1", {
-            version: 1,
-            execution: context.execution,
-            proposalId,
-            slot: inactive,
-            epoch: manifest.epoch,
-            manifestHash,
-            filesDigest,
-            totalBytes: copied.totalBytes,
-            fileCount: copied.files.length,
-          }),
-        ),
+        canonicalJson({
+          version: 1,
+          execution: context.execution,
+          proposalId,
+          slot: inactive,
+          epoch: manifest.epoch,
+          manifestHash,
+          filesDigest,
+          totalBytes: copied.totalBytes,
+          fileCount: copied.files.length,
+        }),
         true,
       );
       context.assertForward();

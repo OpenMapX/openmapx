@@ -1,6 +1,3 @@
-/** Full Update runs its data and target-owning phases through the same real CLI.
- * An attempted invocation is observation-only, including after a lost response. */
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import type { DataWorkflowReceipt, ExecutionRef, OpsOperation } from "@openmapx/core/ops";
@@ -89,7 +86,7 @@ export function installDataWorkflowRuntime(
         const issued = await control.issueControlChildPhase(authority, {
           phase,
           ordinal: slot.ordinal,
-          childPublicKey: key,
+          childId: key,
           ...(lease ? { lease } : {}),
         });
         control.consumeControlChildDispatch(issued.dispatchTicket);
@@ -111,7 +108,6 @@ export function installDataWorkflowRuntime(
       const installation = control.openFixedChildInstallation({
         infraDir,
         assertion: attempted.assertion,
-        container: existsSync("/run/secrets/openmapx-control-verifiers"),
       });
       try {
         const childAuthority = control.restoreAdmittedControlExecution(

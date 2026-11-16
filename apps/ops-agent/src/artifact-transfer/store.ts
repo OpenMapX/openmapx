@@ -1,4 +1,4 @@
-import { createHash, createHmac, hkdfSync, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   constants as C,
   closeSync,
@@ -177,7 +177,6 @@ function same(a: { dev: string; ino: string }, b: { dev: bigint; ino: bigint }) 
 export class ArtifactTransferStore {
   readonly policy: ArtifactTransferPolicy;
   readonly revision: string;
-  private readonly key: Buffer;
   private readonly data: AnchoredDirectory;
   private readonly records: AnchoredDirectory;
   private readonly integrationRecords: AnchoredDirectory;
@@ -200,7 +199,6 @@ export class ArtifactTransferStore {
   constructor(options: {
     dataRoot: string;
     privateRoot: string;
-    token: string;
     policy?: ArtifactTransferPolicy;
     capacity?: () => { bytes: number; inodes: number };
     now?: () => number;
@@ -210,9 +208,6 @@ export class ArtifactTransferStore {
     this.revision = transferPolicyRevision(this.policy);
     this.now = options.now ?? Date.now;
     this.admissionsOpen = options.admissionsOpen ?? (() => true);
-    this.key = Buffer.from(
-      hkdfSync("sha256", options.token, "openmapx-artifact-transfer-v1", "stage-metadata", 32),
-    );
     mkdirSync(options.dataRoot, { recursive: true, mode: 0o700 });
     mkdirSync(options.privateRoot, { recursive: true, mode: 0o700 });
     this.data = new AnchoredDirectory(options.dataRoot, undefined, true);
@@ -243,7 +238,6 @@ export class ArtifactTransferStore {
     this.integrationRecords.close();
     this.records.close();
     this.data.close();
-    this.key.fill(0);
   }
   private admit() {
     if (this.draining || !this.admissionsOpen())
@@ -319,13 +313,9 @@ export class ArtifactTransferStore {
   private load(stageId: string): Meta {
     id.parse(stageId);
     try {
-      const outer = z
-        .strictObject({ body: z.string().max(30000), mac: z.string().regex(/^[a-f0-9]{64}$/) })
-        .parse(JSON.parse(this.records.read(`${stageId}.json`, 65536).toString("utf8")));
-      const actual = createHmac("sha256", this.key).update(outer.body).digest();
-      if (!timingSafeEqual(actual, Buffer.from(outer.mac, "hex")))
-        throw Error("Stage metadata authentication failed");
-      const meta = metaSchema.parse(JSON.parse(outer.body));
+      const meta = metaSchema.parse(
+        JSON.parse(this.records.read(`${stageId}.json`, 30000).toString("utf8")),
+      );
       if (meta.stage.stageId !== stageId) throw Error("Stage identity changed");
       return meta;
     } catch (error) {
@@ -334,11 +324,7 @@ export class ArtifactTransferStore {
     }
   }
   private save(meta: Meta) {
-    const body = canonicalJson(metaSchema.parse(meta));
-    this.records.write(
-      `${meta.stage.stageId}.json`,
-      JSON.stringify({ body, mac: createHmac("sha256", this.key).update(body).digest("hex") }),
-    );
+    this.records.write(`${meta.stage.stageId}.json`, canonicalJson(metaSchema.parse(meta)));
   }
   private all(): Meta[] {
     return this.records
@@ -585,17 +571,9 @@ export class ArtifactTransferStore {
         .sort();
       let after = "";
       try {
-        const cursor = z
-          .strictObject({ body: z.string().max(128), mac: z.string().regex(/^[a-f0-9]{64}$/) })
-          .parse(JSON.parse(this.records.read("sweep-cursor.json", 1024).toString("utf8")));
-        if (
-          !timingSafeEqual(
-            createHmac("sha256", this.key).update(cursor.body).digest(),
-            Buffer.from(cursor.mac, "hex"),
-          )
-        )
-          throw Error("Artifact sweep cursor authentication failed");
-        after = z.strictObject({ after: z.string().max(64) }).parse(JSON.parse(cursor.body)).after;
+        after = z
+          .strictObject({ after: z.string().max(64) })
+          .parse(JSON.parse(this.records.read("sweep-cursor.json", 1024).toString("utf8"))).after;
       } catch (error) {
         if (!absent(error)) throw error;
       }
@@ -604,11 +582,7 @@ export class ArtifactTransferStore {
         ...names.filter((name) => name <= after),
       ].slice(0, 1000);
       const entries = ordered.map((name) => this.load(name.slice(0, -5)));
-      const body = JSON.stringify({ after: ordered.at(-1) ?? "" });
-      this.records.write(
-        "sweep-cursor.json",
-        JSON.stringify({ body, mac: createHmac("sha256", this.key).update(body).digest("hex") }),
-      );
+      this.records.write("sweep-cursor.json", JSON.stringify({ after: ordered.at(-1) ?? "" }));
       return entries.map((meta) => ({
         stageId: meta.stage.stageId,
         ownerId: meta.ownerId,
@@ -1797,50 +1771,24 @@ export class ArtifactTransferStore {
       throw Error("Integration execution authority does not match the retained operation");
     return operation;
   }
-  standaloneInstallationId(context: OpsExecutionContext): string {
+  assertStandaloneContext(context: OpsExecutionContext): void {
     this.integrationContext(context);
-    return executionAuthorityState(context.controlAuthority!).installation.installation
-      .installationId;
   }
   private readIntegrationRecord<T>(name: string, schema: z.ZodType<T>): T {
-    const outer = z
-      .strictObject({ body: z.string().max(65536), mac: z.string().regex(/^[a-f0-9]{64}$/) })
-      .parse(JSON.parse(this.integrationRecords.read(name, 131072).toString("utf8")));
-    const expected = createHmac("sha256", this.key)
-      .update("openmapx-standalone-record-v1\0")
-      .update(name)
-      .update("\0")
-      .update(outer.body)
-      .digest();
-    if (!timingSafeEqual(expected, Buffer.from(outer.mac, "hex")))
-      throw Error("Standalone integration record authentication failed");
-    return schema.parse(JSON.parse(outer.body));
+    return schema.parse(JSON.parse(this.integrationRecords.read(name, 65536).toString("utf8")));
   }
   private writeIntegrationRecord(name: string, value: unknown, exclusive: boolean): void {
     if (exclusive && this.integrationRecords.listBounded(2049).length >= 2048)
       failed(507, "Integration purpose journal capacity reached");
     const body = canonicalJson(value);
     if (Buffer.byteLength(body) > 65536) failed(413, "Standalone integration record is too large");
-    this.integrationRecords.write(
-      name,
-      JSON.stringify({
-        body,
-        mac: createHmac("sha256", this.key)
-          .update("openmapx-standalone-record-v1\0")
-          .update(name)
-          .update("\0")
-          .update(body)
-          .digest("hex"),
-      }),
-      exclusive,
-    );
+    this.integrationRecords.write(name, body, exclusive);
   }
   readStandaloneInspection(
     context: OpsExecutionContext,
     inspectionId: string,
   ): StandaloneInspectionRecord {
-    const installationId = this.standaloneInstallationId(context),
-      operation = this.integrationContext(context);
+    const operation = this.integrationContext(context);
     if (operation.kind !== "integration.install" || operation.inspectionId !== inspectionId)
       throw Error("Standalone inspection read execution mismatch");
     return this.lock(() => {
@@ -1848,8 +1796,7 @@ export class ArtifactTransferStore {
         `inspection-${id.parse(inspectionId)}.json`,
         standaloneInspectionRecordSchema,
       );
-      if (record.installationId !== installationId || record.ownerId !== operation.ownerId)
-        throw Error("Standalone inspection owner mismatch");
+      if (record.ownerId !== operation.ownerId) throw Error("Standalone inspection owner mismatch");
       return record;
     });
   }
@@ -1857,12 +1804,10 @@ export class ArtifactTransferStore {
     context: OpsExecutionContext,
     input: StandaloneInspectionRecord,
   ): void {
-    const installationId = this.standaloneInstallationId(context),
-      operation = this.integrationContext(context),
+    const operation = this.integrationContext(context),
       record = standaloneInspectionRecordSchema.parse(input);
     if (
       operation.kind !== "integration.inspectInstall" ||
-      record.installationId !== installationId ||
       record.ownerId !== operation.ownerId ||
       canonicalJson(record.source) !== canonicalJson(operation.source)
     )
@@ -1879,8 +1824,7 @@ export class ArtifactTransferStore {
     context: OpsExecutionContext,
     transactionId: string,
   ): StandaloneTransactionRecord {
-    const installationId = this.standaloneInstallationId(context),
-      operation = this.integrationContext(context);
+    const operation = this.integrationContext(context);
     if (
       (operation.kind !== "integration.install" || operation.operationId !== transactionId) &&
       (operation.kind !== "integration.settle" || operation.transactionId !== transactionId)
@@ -1891,11 +1835,7 @@ export class ArtifactTransferStore {
         `transaction-${id.parse(transactionId)}.json`,
         standaloneTransactionRecordSchema,
       );
-      if (
-        record.installationId !== installationId ||
-        record.inspection.installationId !== installationId ||
-        (operation.kind === "integration.install" && record.ownerId !== operation.ownerId)
-      )
+      if (operation.kind === "integration.install" && record.ownerId !== operation.ownerId)
         throw Error("Standalone transaction ownership mismatch");
       return record;
     });
@@ -1905,14 +1845,8 @@ export class ArtifactTransferStore {
     input: StandaloneTransactionRecord,
     publication?: IntegrationPublication,
   ): void {
-    const installationId = this.standaloneInstallationId(context),
-      operation = this.integrationContext(context),
+    const operation = this.integrationContext(context),
       record = standaloneTransactionRecordSchema.parse(input);
-    if (
-      record.installationId !== installationId ||
-      record.inspection.installationId !== installationId
-    )
-      throw Error("Standalone transaction installation mismatch");
     if (operation.kind === "integration.install") {
       if (
         operation.operationId !== record.transactionId ||
@@ -1996,8 +1930,7 @@ export class ArtifactTransferStore {
     context: OpsExecutionContext,
     transactionId: string,
   ): StandaloneOwnershipRecord {
-    const installationId = this.standaloneInstallationId(context),
-      op = this.integrationContext(context);
+    const op = this.integrationContext(context);
     if (
       (op.kind !== "integration.inspectOwnership" || op.operationId !== transactionId) &&
       (op.kind !== "integration.remove" || op.transactionId !== transactionId) &&
@@ -2009,19 +1942,14 @@ export class ArtifactTransferStore {
         `ownership-${id.parse(transactionId)}.json`,
         standaloneOwnershipRecordSchema,
       );
-      if (
-        record.installationId !== installationId ||
-        (op.kind === "integration.inspectOwnership" && record.ownerId !== op.ownerId)
-      )
+      if (op.kind === "integration.inspectOwnership" && record.ownerId !== op.ownerId)
         throw Error("Ownership installation or actor mismatch");
       return record;
     });
   }
   retainStandaloneOwnership(context: OpsExecutionContext, input: StandaloneOwnershipRecord): void {
     const record = standaloneOwnershipRecordSchema.parse(input),
-      installationId = this.standaloneInstallationId(context),
       op = this.integrationContext(context);
-    if (record.installationId !== installationId) throw Error("Ownership installation mismatch");
     if (op.kind === "integration.inspectOwnership") {
       if (
         op.operationId !== record.transactionId ||
@@ -2072,7 +2000,6 @@ export class ArtifactTransferStore {
     });
   }
   standalonePublicationJournal(context: OpsExecutionContext): IntegrationPublicationJournal {
-    this.standaloneInstallationId(context);
     const operation = this.integrationContext(context);
     const transactionId =
       operation.kind === "integration.install"
@@ -2086,7 +2013,6 @@ export class ArtifactTransferStore {
       journal = createIntegrationPublicationJournal({
         directory: this.integrationRecords,
         coordination: this.records,
-        key: this.key,
         transactionId,
       });
       this.integrationJournals.set(transactionId, journal);
@@ -2541,8 +2467,6 @@ export class ArtifactTransferStore {
 }
 
 /** Fixed agent-private location; never a browser-selected path. */
-export function artifactTransferPrivateRoot(infraDir: string, container = false): string {
-  return container
-    ? "/var/lib/openmapx/control-private/artifact-transfers"
-    : join(infraDir, "control-private", "ops-agent", "artifact-transfers");
+export function artifactTransferPrivateRoot(infraDir: string): string {
+  return join(infraDir, "state", "ops-agent", "artifact-transfers");
 }

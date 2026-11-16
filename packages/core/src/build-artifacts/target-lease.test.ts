@@ -10,7 +10,7 @@ import {
   type ControlInstallation,
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
@@ -22,7 +22,7 @@ let installation: ControlInstallation;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-target-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   installation = openControlInstallation({
     infraDir: root,
     role: "host-cli",
@@ -262,7 +262,7 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
     owner: authority,
   });
   await expect(
-    a.delegateArtifactTargetLease(lease, { ...plan, childPublicKey: agent.publicKey }),
+    a.delegateArtifactTargetLease(lease, { ...plan, childId: agent.role }),
   ).rejects.toThrow();
   mkdirSync(join(root, "state/ops-agent"), { recursive: true, mode: 0o700 });
   writeFileSync(
@@ -295,13 +295,13 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
     a.delegateArtifactTargetLease(lease, {
       ...plan,
       serviceIds: ["osrm"],
-      childPublicKey: agent.publicKey,
+      childId: agent.role,
     }),
   ).rejects.toThrow();
   // A private journal summary and ordinary own-effect settlement are not
   // the actual fixed candidate/owner/decision/guard closure source.
   await expect(
-    a.delegateArtifactTargetLease(lease, { ...plan, childPublicKey: agent.publicKey }),
+    a.delegateArtifactTargetLease(lease, { ...plan, childId: agent.role }),
   ).rejects.toThrow();
   await expect(
     a.settleArtifactTargetLeaseChild(lease, c.verifyControlEffectSettlement(agent, execution)),

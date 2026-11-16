@@ -22,9 +22,7 @@ import {
   executionAuthorityState,
   readPrivateRecord,
   recordDataControlTerminalObservation,
-  signControl,
   type VerifiedExecutionAuthority,
-  verifyControl,
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
@@ -169,22 +167,19 @@ export function retainFixedSingleDataPlan(
     s.installation,
     "observations",
     `data-plan-${s.execution.operationKey}.json`,
-    signControl(s.installation.privateKey, "openmapx-fixed-data-plan-v1", body),
+    body,
     true,
   );
 }
 export function readFixedSingleDataPlan(authority: VerifiedExecutionAuthority) {
   const s = executionAuthorityState(authority),
-    body = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-fixed-data-plan-v1",
+    body = bundleSchema.parse(
       readPrivateRecord(
         s.installation,
         "observations",
         `data-plan-${s.execution.operationKey}.json`,
         8192,
       ),
-      bundleSchema,
     );
   if (
     controlDigest(body.parent) !== controlDigest(s.execution) ||
@@ -206,12 +201,7 @@ export function readCliDataAttempt(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  return verifyControl(
-    s.installation.installation.publicKey,
-    "openmapx-cli-data-attempt-v1",
-    raw,
-    dataChildAttemptSchema,
-  );
+  return dataChildAttemptSchema.parse(raw);
 }
 export function retainCliDataAttempt(
   authority: VerifiedExecutionAuthority,
@@ -253,7 +243,7 @@ export function retainCliDataAttempt(
       s.installation,
       "observations",
       `data-attempt-${attempt.operationKey}.json`,
-      signControl(s.installation.privateKey, "openmapx-cli-data-attempt-v1", attempt),
+      attempt,
       !prior,
     );
   });

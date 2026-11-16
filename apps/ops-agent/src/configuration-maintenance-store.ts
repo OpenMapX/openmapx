@@ -14,10 +14,8 @@ import { services } from "@openmapx/core/server";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
 import {
   type CoordinatorPullWitness,
-  coordinatorPullObservationDomain,
   coordinatorPullWitnessPayloadSchema,
   type StagedCoordinatorObservation,
-  stagedCoordinatorObservationDomain,
   stagedCoordinatorObservationPayloadSchema,
   stagedCoordinatorObservationSchema,
 } from "../../../packages/core/src/build-artifacts/coordinator-pull-records";
@@ -69,12 +67,10 @@ import {
   configurationMaintenanceTargetOwner,
   consumeControlChildDispatch,
   controlDigest,
-  controlRolePublicKey,
   executionAuthorityState,
   type FixedConfigurationMaintenancePlan,
   inspectArtifactDelegation,
   inspectLocalLeaseChildSettlement,
-  inspectRetainedOwnedArtifactTargetChildSettlement,
   issueControlChildPhase,
   lookupControlChildPhaseBinding,
   readPrivateRecord,
@@ -84,11 +80,9 @@ import {
   restoreConfigurationMaintenancePhaseIssuer,
   retainControlEffectReceipt,
   settlePreparedConfigurationHandoff,
-  signControl,
   type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
   verifyConfigurationSourceWitness,
-  verifyControl,
   verifyControlEffectSettlement,
   verifyControlRecoveryAuthority,
   verifyLocalArtifactTargetRootRelease,
@@ -156,7 +150,6 @@ import {
   assertConfigurationMaintenanceDecisionSource,
   type ConfigurationMaintenanceOwnerRecord,
   configurationMaintenanceControlSnapshotSchema,
-  configurationMaintenanceDecisionCommitmentDomain,
   configurationMaintenanceDecisionCommitmentPayload,
   configurationMaintenanceDecisionCommitmentPayloadSchema,
   configurationMaintenanceDecisionSourceSchema,
@@ -176,9 +169,7 @@ import {
   withPrivateEffectWriter,
 } from "../../../packages/core/src/build-artifacts/control-authority";
 import {
-  inspectLocalLeaseChildSettlement as inspectOwnedChildSettlement,
   observeConfigurationMaintenanceRuntimeTree,
-  restoreArtifactTargetLeaseForSettlement as restoreOwnedLease,
   settleIssuedLeaseChild,
 } from "../../../packages/core/src/build-artifacts/target-lease";
 import type { DataConfigurationFenceReceipt } from "../../../packages/core/src/services/data-manager/contracts/configuration-maintenance";
@@ -188,7 +179,6 @@ import { OpsExecutionFailure, type OpsRuntime } from "./runtime";
 
 export type { ConfigurationMaintenanceOwnerRecord };
 
-const domain = "openmapx-configuration-maintenance-owner-v2";
 function ownerName(authority: VerifiedExecutionAuthority): string {
   const state = executionAuthorityState(authority);
   const admitted = readPrivateRecord(
@@ -196,8 +186,8 @@ function ownerName(authority: VerifiedExecutionAuthority): string {
     "executions",
     `${state.execution.operationKey}.json`,
     65536,
-  ) as { payload?: { operation?: unknown } };
-  return `${configurationMaintenancePrepareSchema.parse(admitted.payload?.operation).maintenanceId}.json`;
+  ) as { operation?: unknown };
+  return `${configurationMaintenancePrepareSchema.parse(admitted.operation).maintenanceId}.json`;
 }
 function assertOwner(
   authority: VerifiedExecutionAuthority,
@@ -210,16 +200,13 @@ function assertOwner(
       "executions",
       `${state.execution.operationKey}.json`,
       65536,
-    ) as { payload?: { operation?: unknown; parent?: unknown } },
+    ) as { operation?: unknown; parent?: unknown },
     { kind: _kind, ...binding } = owner.plan.operation;
-  assertFixedConfigurationMaintenancePlan(owner.plan, owner.installationId);
+  assertFixedConfigurationMaintenancePlan(owner.plan);
   assertConfigurationMaintenanceDecisionSource(owner);
   if (owner.apiControls.decide)
-    verifyControl(
-      state.installation.installation.publicKey,
-      configurationMaintenanceDecisionCommitmentDomain,
+    configurationMaintenanceDecisionCommitmentPayloadSchema.parse(
       owner.apiControls.decide.commitment,
-      configurationMaintenanceDecisionCommitmentPayloadSchema,
     );
   for (const source of owner.apiControls.steps) {
     const step = owner.plan.steps[source.ordinal],
@@ -258,13 +245,12 @@ function assertOwner(
     state.installation.fixedChildId ||
     state.installation.installation.role !== "ops-agent" ||
     state.kind !== "configurationMaintenance.prepare" ||
-    owner.installationId !== state.installation.installation.installationId ||
     controlDigest(owner.origin) !== controlDigest(state.origin) ||
     owner.admissionDigest !== state.receiptDigest ||
     canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution) ||
     controlDigest(admitted) !== state.receiptDigest ||
-    canonicalJson(owner.plan.operation) !== canonicalJson(admitted.payload?.operation) ||
-    canonicalJson(parent) !== canonicalJson(admitted.payload?.parent) ||
+    canonicalJson(owner.plan.operation) !== canonicalJson(admitted.operation) ||
+    canonicalJson(parent) !== canonicalJson(admitted.parent) ||
     canonicalJson(owner.receipt.binding) !== canonicalJson(binding) ||
     canonicalJson(owner.plan.reservations) !== canonicalJson(state.reservations) ||
     canonicalJson(owner.receipt.prepare) !== canonicalJson(state.execution) ||
@@ -284,16 +270,10 @@ function assertOwner(
     throw Error("Original configuration maintenance owner identity changed");
   const expectedImage = owner.plan.coordinatorImage;
   if (owner.stagedCoordinatorProvenance) {
-    const copy = verifyControl(
-      state.installation.installation.publicKey,
-      stagedCoordinatorObservationDomain,
-      owner.stagedCoordinatorProvenance,
-      stagedCoordinatorObservationPayloadSchema,
-    );
+    const copy = stagedCoordinatorObservationPayloadSchema.parse(owner.stagedCoordinatorProvenance);
     if (
       owner.coordinatorPull ||
       expectedImage?.action !== "apply" ||
-      copy.installationId !== owner.installationId ||
       canonicalJson(copy.ownerPrepare) !== canonicalJson(owner.plan.prepare) ||
       copy.candidateId !== binding.candidateId ||
       copy.planDigest !== owner.plan.planDigest ||
@@ -305,14 +285,8 @@ function assertOwner(
   }
   if (expectedImage?.action === "update") {
     if (!owner.coordinatorPull) throw Error("Original copied coordinator pull required");
-    const pull = verifyControl(
-      state.installation.installation.publicKey,
-      coordinatorPullObservationDomain,
-      owner.coordinatorPull,
-      coordinatorPullWitnessPayloadSchema,
-    );
+    const pull = coordinatorPullWitnessPayloadSchema.parse(owner.coordinatorPull);
     if (
-      pull.installationId !== owner.installationId ||
       pull.maintenanceId !== binding.maintenanceId ||
       pull.candidateId !== binding.candidateId ||
       canonicalJson(pull.maintenancePrepare) !== canonicalJson(owner.plan.prepare) ||
@@ -338,7 +312,7 @@ function read(authority: VerifiedExecutionAuthority): ConfigurationMaintenanceOw
   const state = executionAuthorityState(authority),
     name = ownerName(authority),
     raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
-  const owner = verifyControl(state.installation.installation.publicKey, domain, raw, ownerSchema);
+  const owner = ownerSchema.parse(raw);
   assertOwner(authority, owner);
   return owner;
 }
@@ -350,14 +324,13 @@ function write(
   const state = executionAuthorityState(authority),
     owner = ownerSchema.parse(value);
   assertOwner(authority, owner);
-  const signed = signControl(state.installation.privateKey, domain, owner);
-  if (Buffer.byteLength(canonicalJson(signed)) > 128 * 1024)
+  if (Buffer.byteLength(canonicalJson(owner)) > 128 * 1024)
     throw Error("Configuration maintenance owner capacity exceeded");
   writePrivateRecord(
     state.installation,
     "configuration-maintenance",
     ownerName(authority),
-    signed,
+    owner,
     exclusive,
   );
 }
@@ -379,7 +352,6 @@ export function retainOwnedConfigurationMaintenance(
   const { kind: _kind, ...binding } = plan.operation;
   const owner = ownerSchema.parse({
     version: 2,
-    installationId: state.installation.installation.installationId,
     origin: state.origin,
     admissionDigest: state.receiptDigest,
     leaseId: root.leaseId,
@@ -458,7 +430,7 @@ function readMaintenanceOwner(
     "configuration-maintenance",
     `${maintenanceId}.json`,
   );
-  return verifyControl(installation.publicKey, domain, raw, ownerSchema);
+  return ownerSchema.parse(raw);
 }
 /** Observation-only completion of the original prepared handoff. All sources
  * and physical descendants must already be settled; this runs no Docker I/O. */
@@ -550,7 +522,7 @@ export function admitConfigurationMaintenanceControlOwner(
       "configuration-maintenance",
       `${operation.maintenanceId}.json`,
     ),
-    observed = verifyControl(installation.publicKey, domain, raw, ownerSchema),
+    observed = ownerSchema.parse(raw),
     authority = restoreAdmittedControlExecution(installation, observed.plan.prepare),
     owner = read(authority),
     original = owner.plan.apiParent;
@@ -637,11 +609,8 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
     throw new ConfigurationMaintenanceControlUnauthorized(
       "Actual API maintenance phase request required",
     );
-  const observed = verifyControl(
-      installation.publicKey,
-      domain,
+  const observed = ownerSchema.parse(
       readPrivateRecord(local, "configuration-maintenance", `${operation.maintenanceId}.json`),
-      ownerSchema,
     ),
     authority = restoreAdmittedControlExecution(installation, observed.plan.prepare),
     owner = read(authority),
@@ -732,7 +701,7 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
         phase: step.phase,
         ordinal: step.ordinal,
         lease,
-        childPublicKey: controlRolePublicKey(installation, "ops-agent"),
+        childId: "ops-agent",
       });
       freshDispatch = issued.dispatchTicket;
       const attempted = lookupControlChildPhaseAttempt(authority, reservation);
@@ -888,15 +857,12 @@ export async function assertOwnedMaintenanceRecreateRuntime(
   )
     throw Error("Actual original borrowed maintenance recreate required");
   const child = executionAuthorityState(context.controlAuthority),
-    observed = verifyControl(
-      child.installation.installation.publicKey,
-      domain,
+    observed = ownerSchema.parse(
       readPrivateRecord(
         child.installation,
         "configuration-maintenance",
         `${operation.maintenanceId}.json`,
       ),
-      ownerSchema,
     ),
     root = restoreAdmittedControlExecution(child.installation.installation, observed.plan.prepare),
     owner = readOwnedConfigurationMaintenance(root),
@@ -927,15 +893,12 @@ export async function assertOwnedMaintenanceHandoffRuntime(
     throw Error("Actual original borrowed maintenance handoff required");
   assertArtifactTargetLeaseExecution(context.artifactLease, context.execution);
   const child = executionAuthorityState(context.controlAuthority),
-    observed = verifyControl(
-      child.installation.installation.publicKey,
-      domain,
+    observed = ownerSchema.parse(
       readPrivateRecord(
         child.installation,
         "configuration-maintenance",
         `${operation.maintenanceId}.json`,
       ),
-      ownerSchema,
     ),
     root = restoreAdmittedControlExecution(child.installation.installation, observed.plan.prepare),
     owner = readOwnedConfigurationMaintenance(root),
@@ -977,15 +940,12 @@ export async function inspectOwnedMaintenanceGenerationRuntime(
   if (!context.controlAuthority || !context.artifactLease || !operation.maintenanceId)
     throw Error("Actual borrowed generation required");
   const child = executionAuthorityState(context.controlAuthority),
-    observed = verifyControl(
-      child.installation.installation.publicKey,
-      domain,
+    observed = ownerSchema.parse(
       readPrivateRecord(
         child.installation,
         "configuration-maintenance",
         `${operation.maintenanceId}.json`,
       ),
-      ownerSchema,
     ),
     root = restoreAdmittedControlExecution(child.installation.installation, observed.plan.prepare),
     owner = readOwnedConfigurationMaintenance(root),
@@ -1145,15 +1105,12 @@ export async function assertOwnedCoordinatorConfigurationWrite(
   if (!context.controlAuthority || !operation.maintenanceId)
     throw Error("Nominal coordinator generation required");
   const child = executionAuthorityState(context.controlAuthority),
-    observed = verifyControl(
-      child.installation.installation.publicKey,
-      domain,
+    observed = ownerSchema.parse(
       readPrivateRecord(
         child.installation,
         "configuration-maintenance",
         `${operation.maintenanceId}.json`,
       ),
-      ownerSchema,
     ),
     root = restoreAdmittedControlExecution(child.installation.installation, observed.plan.prepare),
     owner = readOwnedConfigurationMaintenance(root);
@@ -1434,11 +1391,10 @@ export function retainConfigurationMaintenanceDecisionControl(
           deploymentBudgetMs: request.deploymentBudgetMs,
         },
         canonicalDigest = controlTerminalReceiptDigest(decisionStatus(owner, pending)),
-        commitment = signControl(
-          executionAuthorityState(authority).installation.privateKey,
-          configurationMaintenanceDecisionCommitmentDomain,
-          configurationMaintenanceDecisionCommitmentPayload(owner, { ...pending, canonicalDigest }),
-        ),
+        commitment = configurationMaintenanceDecisionCommitmentPayload(owner, {
+          ...pending,
+          canonicalDigest,
+        }),
         retained = configurationMaintenanceDecisionSourceSchema.parse({
           ...pending,
           canonicalDigest,
@@ -1647,13 +1603,10 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
     child = restoreAdmittedControlExecution(installation, execution),
     childState = executionAuthorityState(child),
     admission = readPrivateRecord(local, "executions", `${execution.operationKey}.json`, 65536) as {
-      payload?: { operation?: unknown };
+      operation?: unknown;
     },
-    observed = verifyControl(
-      installation.publicKey,
-      domain,
+    observed = ownerSchema.parse(
       readPrivateRecord(local, "configuration-maintenance", `${operation.maintenanceId}.json`),
-      ownerSchema,
     ),
     authority = restoreAdmittedControlExecution(installation, observed.plan.prepare),
     owner = read(authority),
@@ -1662,7 +1615,7 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
     );
   if (
     !source ||
-    canonicalJson(admission.payload?.operation) !== canonicalJson(operation) ||
+    canonicalJson(admission.operation) !== canonicalJson(operation) ||
     canonicalJson(source.execution) !== canonicalJson(execution) ||
     childState.kind !== operation.kind
   )
@@ -1770,12 +1723,7 @@ export function restoreConfigurationMaintenanceControlJournal(
       !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.json$/.test(name)
     )
       throw new ConfigurationMaintenanceControlConflict("Unexpected original owner record");
-    const observed = verifyControl(
-        installation.publicKey,
-        domain,
-        readPrivateRecord(local, "configuration-maintenance", name),
-        ownerSchema,
-      ),
+    const observed = ownerSchema.parse(readPrivateRecord(local, "configuration-maintenance", name)),
       authority = restoreAdmittedControlExecution(installation, observed.plan.prepare);
     let owner = read(authority);
     if (owner.apiControls.settle?.result === null && owner.receipt.state === "settled") {
@@ -1967,7 +1915,7 @@ export function finalizeOwnedMaintenanceState(
 ): VerifiedMaintenanceFinal {
   const actual = maintenanceRuntimeInspectionState(inspection, authority),
     applied =
-      actual.signed.payload.runtime.mode !== "unused"
+      actual.signed.runtime.mode !== "unused"
         ? readOriginalMaintenanceFinalChildren(
             authority,
             observeConfigurationMaintenanceRuntimeTree(authority),
@@ -1977,12 +1925,7 @@ export function finalizeOwnedMaintenanceState(
   try {
     withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
       const owner = read(authority),
-        payload = verifyControl(
-          executionAuthorityState(authority).installation.installation.publicKey,
-          domains.inspection,
-          actual.signed,
-          configurationMaintenanceRuntimeInspectionSchema,
-        );
+        payload = configurationMaintenanceRuntimeInspectionSchema.parse(actual.signed);
       if (owner.final) {
         if (canonicalJson(owner.inspection) !== canonicalJson(actual.signed))
           throw Error("Immutable original maintenance final changed");
@@ -2023,8 +1966,7 @@ export function finalizeOwnedMaintenanceState(
         if (publication.binding !== null || publication.publication.state !== "unissued")
           throw Error("Unused final has attempted frozen work");
       }
-      const state = executionAuthorityState(authority),
-        decision = owner.apiControls.decide,
+      const decision = owner.apiControls.decide,
         prepared = owner.preparedFence,
         evidence = configurationFinalEvidenceSchema.parse({
           identity: payload.identity,
@@ -2071,7 +2013,7 @@ export function finalizeOwnedMaintenanceState(
           privateInspectionId: payload.inspectionId,
         }),
         final = configurationMaintenanceFinalRecordSchema.parse({
-          ownerFinal: signControl(state.installation.privateKey, domains.ownerFinal, finalPayload),
+          ownerFinal: finalPayload,
           evidence,
           evidenceProjection,
           evidenceDigest,
@@ -2101,11 +2043,8 @@ export function restoreOwnedMaintenanceFinal(
     state = executionAuthorityState(authority);
   if (!final || !owner.inspection || !owner.preparedFence || !owner.apiControls.decide)
     throw Error("Actual immutable maintenance final required");
-  if (
-    final.ownerFinal.payload.outcome === "applied" ||
-    final.ownerFinal.payload.outcome === "contained"
-  ) {
-    const contained = final.ownerFinal.payload.outcome === "contained";
+  if (final.ownerFinal.outcome === "applied" || final.ownerFinal.outcome === "contained") {
+    const contained = final.ownerFinal.outcome === "contained";
     if (contained) assertContainedConfigurationMaintenanceFinalState(owner);
     else assertAppliedConfigurationMaintenanceFinalState(owner);
     // The children were compared before the root was released; the store
@@ -2131,18 +2070,8 @@ export function restoreOwnedMaintenanceFinal(
     )
       throw Error("Original applied final child sources changed");
   } else assertUnusedConfigurationMaintenanceFinalState(owner);
-  const inspection = verifyControl(
-      state.installation.installation.publicKey,
-      domains.inspection,
-      owner.inspection,
-      configurationMaintenanceRuntimeInspectionSchema,
-    ),
-    actual = verifyControl(
-      state.installation.installation.publicKey,
-      domains.ownerFinal,
-      final.ownerFinal,
-      configurationOwnerFinalSchema,
-    ),
+  const inspection = configurationMaintenanceRuntimeInspectionSchema.parse(owner.inspection),
+    actual = configurationOwnerFinalSchema.parse(final.ownerFinal),
     evidence = final.evidence,
     { children, ...base } = evidence,
     projection = configurationFinalEvidenceProjectionSchema.parse({
@@ -2492,7 +2421,7 @@ async function settleOwnedConfigurationFence(
         maintenanceId: owner.plan.operation.maintenanceId,
         candidateId: owner.plan.operation.candidateId,
         planDigest: owner.plan.planDigest,
-        outcome: final.record.ownerFinal.payload.outcome,
+        outcome: final.record.ownerFinal.outcome,
       },
       {
         transport: configurationDataManagerTransport(),
@@ -2640,7 +2569,7 @@ export function configurationHandoffPendingMaintenanceIds(
           const local = installationState(installation),
             file = `${job.operation.maintenanceId}.json`,
             raw = readPrivateRecord(local, "configuration-maintenance", file),
-            owner = verifyControl(installation.publicKey, domain, raw, ownerSchema);
+            owner = ownerSchema.parse(raw);
           if (
             owner.receipt.state !== "settled" ||
             !owner.plan.handoff ||
@@ -2822,7 +2751,6 @@ export async function verifyFrozenMaintenanceHardlinksSource(
 ): Promise<void> {
   const source = sources.get(runtime),
     owner = readOwnedConfigurationMaintenance(authority),
-    state = executionAuthorityState(authority),
     generation = owner.apiControls.steps.find((value) => value.ordinal === 0);
   if (
     !source ||
@@ -2896,7 +2824,6 @@ async function verifyFrozenMaintenanceFollowUpSource(
 ): Promise<void> {
   const source = sources.get(runtime),
     owner = readOwnedConfigurationMaintenance(authority),
-    state = executionAuthorityState(authority),
     step = owner.plan.steps[ordinal];
   if (
     !source ||
@@ -2961,9 +2888,7 @@ const runtimeInspections = new WeakMap<
   MaintenanceRuntimeInspection,
   {
     authority: VerifiedExecutionAuthority;
-    signed: ReturnType<
-      typeof signControl<ReturnType<typeof configurationMaintenanceRuntimeInspectionSchema.parse>>
-    >;
+    signed: ReturnType<typeof configurationMaintenanceRuntimeInspectionSchema.parse>;
   }
 >();
 export function maintenanceRuntimeInspectionState(
@@ -3073,7 +2998,6 @@ export async function inspectFrozenMaintenanceRuntime(
       execFile: source.execFile,
       owner,
       containers,
-      privateKey: state.installation.privateKey,
       signal,
     });
     if (owner.plan.hardlinkPlan.plan.length) await assertConfigurationCoordinatorReady(signal);
@@ -3093,7 +3017,6 @@ export async function inspectFrozenMaintenanceRuntime(
       throw Error("Original applied runtime source changed");
     signal.throwIfAborted();
     const identity = configurationOwnerIdentitySchema.parse({
-        installationId: owner.installationId,
         origin: owner.origin,
         ownerPrepare: owner.plan.prepare,
         admissionDigest: owner.admissionDigest,
@@ -3131,30 +3054,26 @@ export async function inspectFrozenMaintenanceRuntime(
         ...docker.details,
       ],
       inspectionId = randomUUID(),
-      signed = signControl(
-        state.installation.privateKey,
-        domains.inspection,
-        configurationMaintenanceRuntimeInspectionSchema.parse({
-          version: 2,
-          identity,
-          inspectionId,
-          ownerSequence: owner.sequence,
-          ownerSourceDigest: controlDigest(owner),
-          requiredChecks,
-          observations: details.map((detail, checkIndex) => ({
-            checkIndex,
-            passed: true,
-            detail: canonicalJson(detail),
-          })),
-          runtime: {
-            verificationId: inspectionId,
-            mode: contained ? "contained" : "applied",
-            requiredCheckSetDigest: finalRecordDigest(domains.inspection, requiredChecks),
-            checkedAt: Date.now(),
-          },
-        }),
-      );
-    if (Buffer.byteLength(canonicalJson(signed)) > 65536)
+      record = configurationMaintenanceRuntimeInspectionSchema.parse({
+        version: 2,
+        identity,
+        inspectionId,
+        ownerSequence: owner.sequence,
+        ownerSourceDigest: controlDigest(owner),
+        requiredChecks,
+        observations: details.map((detail, checkIndex) => ({
+          checkIndex,
+          passed: true,
+          detail: canonicalJson(detail),
+        })),
+        runtime: {
+          verificationId: inspectionId,
+          mode: contained ? "contained" : "applied",
+          requiredCheckSetDigest: finalRecordDigest(domains.inspection, requiredChecks),
+          checkedAt: Date.now(),
+        },
+      });
+    if (Buffer.byteLength(canonicalJson(record)) > 65536)
       throw Error("Private maintenance inspection capacity");
     const freeze = <T>(input: T): T => {
         if (input && typeof input === "object") {
@@ -3164,7 +3083,7 @@ export async function inspectFrozenMaintenanceRuntime(
         return input;
       },
       value = Object.freeze({}) as MaintenanceRuntimeInspection;
-    runtimeInspections.set(value, Object.freeze({ authority, signed: freeze(signed) }));
+    runtimeInspections.set(value, Object.freeze({ authority, signed: freeze(record) }));
     return value;
   }
   if (
@@ -3181,7 +3100,6 @@ export async function inspectFrozenMaintenanceRuntime(
   )
     throw Error("Conclusive unused maintenance runtime source required");
   const identity = configurationOwnerIdentitySchema.parse({
-      installationId: owner.installationId,
       origin: owner.origin,
       ownerPrepare: owner.plan.prepare,
       admissionDigest: owner.admissionDigest,
@@ -3341,8 +3259,8 @@ export async function inspectFrozenMaintenanceRuntime(
           checkedAt,
         },
       }),
-      signed = signControl(state.installation.privateKey, domains.inspection, payload);
-    if (Buffer.byteLength(canonicalJson(signed)) > 65536)
+      record = payload;
+    if (Buffer.byteLength(canonicalJson(record)) > 65536)
       throw Error("Private maintenance inspection capacity");
     const value = Object.freeze({}) as MaintenanceRuntimeInspection;
     const freezeProof = <T>(input: T): T => {
@@ -3352,7 +3270,7 @@ export async function inspectFrozenMaintenanceRuntime(
       }
       return input;
     };
-    runtimeInspections.set(value, Object.freeze({ authority, signed: freezeProof(signed) }));
+    runtimeInspections.set(value, Object.freeze({ authority, signed: freezeProof(record) }));
     return value;
   } finally {
     lock?.release();
@@ -3596,7 +3514,7 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
           phase: reserved.phase,
           ordinal: reserved.ordinal,
           lease,
-          childPublicKey: controlRolePublicKey(state.installation.installation, "data-manager"),
+          childId: "data-manager",
           // What an operator's `openmapx control resolve` needs to settle the fence.
           evidence: {
             maintenanceId: plan.dmPrepare.maintenanceId,
@@ -3905,14 +3823,7 @@ export async function prepareConfigurationMaintenanceAdmission(
         );
         coordinatorBaseline = observedCoordinatorPullBaseline(coordinatorPull);
       }
-      const proof =
-        coordinatorPull &&
-        verifyControl(
-          input.installation.publicKey,
-          coordinatorPullObservationDomain,
-          coordinatorPull,
-          coordinatorPullWitnessPayloadSchema,
-        );
+      const proof = coordinatorPull && coordinatorPullWitnessPayloadSchema.parse(coordinatorPull);
       if (
         !proof ||
         proof.imageReference !== coordinator.imageReference ||
@@ -4042,7 +3953,6 @@ export async function prepareConfigurationMaintenanceAdmission(
         }
       : undefined;
   const frozen = buildFixedConfigurationMaintenancePlan({
-    installationId: input.installation.installationId,
     prepare: input.execution,
     operation: input.operation,
     apiParent: input.apiParent,
@@ -4069,27 +3979,19 @@ export async function prepareConfigurationMaintenanceAdmission(
   if (
     stagedSource &&
     (coordinatorPull ||
-      stagedSource.installationId !== input.installation.installationId ||
       stagedSource.source.baseline.configurationRevisionId !==
         input.operation.expectedCurrentRevisionId)
   )
     throw Error("Original staged maintenance source changed");
   const stagedCoordinatorProvenance = stagedSource
-    ? stagedCoordinatorObservationSchema.parse(
-        signControl(
-          installationState(input.installation).privateKey,
-          stagedCoordinatorObservationDomain,
-          {
-            version: 1,
-            installationId: input.installation.installationId,
-            ownerPrepare: input.execution,
-            candidateId: input.operation.candidateId,
-            planDigest: frozen.planDigest,
-            source: stagedSource.source,
-            capturedAt: Date.now(),
-          },
-        ),
-      )
+    ? stagedCoordinatorObservationSchema.parse({
+        version: 1,
+        ownerPrepare: input.execution,
+        candidateId: input.operation.candidateId,
+        planDigest: frozen.planDigest,
+        source: stagedSource.source,
+        capturedAt: Date.now(),
+      })
     : undefined;
   const value = Object.freeze({}) as ConfigurationMaintenanceAdmission;
   const freeze = <T>(value: T): T => {

@@ -137,7 +137,7 @@ describe.skipIf(
       if (!child) throw Error("Missing original fixed child body");
       const root = mkdtempSync(join(tmpdir(), "omx-data-child-cas-"));
       mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const services = ["motis", "motis-feed-proxy", "motis-staging"];
       const dm = control.openControlInstallation({
         infraDir: root,
@@ -202,7 +202,7 @@ describe.skipIf(
           phase: child.phase,
           ordinal: child.ordinal,
           lease,
-          childPublicKey: agent.publicKey,
+          childId: agent.role,
         });
         const reference = control.lookupControlChildPhaseAttempt(authority, child);
         if (!reference?.leaseId) throw Error("Missing original grant reference");

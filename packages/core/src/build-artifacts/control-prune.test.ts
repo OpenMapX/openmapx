@@ -11,7 +11,7 @@ import {
   type ControlInstallation,
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
@@ -30,7 +30,7 @@ let installation: ControlInstallation;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-control-prune-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   installation = openControlInstallation({
     infraDir: root,
     role: "host-cli",
@@ -91,7 +91,7 @@ function settle(authority: ReturnType<typeof admit>["authority"]) {
   });
 }
 const record = (namespace: string, key: string) =>
-  join(root, "control-private/host-cli", namespace, `${key}.json`);
+  join(root, "state/host-cli/control", namespace, `${key}.json`);
 
 it("prunes a finished execution only after its key expired and 72 hours passed", async () => {
   const { execution, authority } = admit();
@@ -189,7 +189,7 @@ it("keeps an agent execution until its canonical terminal commitment is sealed",
     expect(await pruneControlRecords(target, { now: later })).toEqual([]);
     expect(
       existsSync(
-        join(root, "control-private/ops-agent/executions", `${execution.operationKey}.json`),
+        join(root, "state/ops-agent/control/executions", `${execution.operationKey}.json`),
       ),
     ).toBe(true);
   } finally {

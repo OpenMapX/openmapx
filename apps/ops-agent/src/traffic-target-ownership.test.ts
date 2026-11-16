@@ -22,7 +22,7 @@ it.each(["succeeded", "canceled"] as const)(
     const root = mkdtempSync(join(tmpdir(), "omx-traffic-target-")),
       data = join(root, "data");
     mkdirSync(data, { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
         infraDir: root,
         role: "ops-agent",

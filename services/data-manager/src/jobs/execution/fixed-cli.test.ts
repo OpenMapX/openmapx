@@ -54,7 +54,7 @@ it.skipIf(
       infra = join(root, "infra/docker"),
       data = join(infra, "data");
     mkdirSync(data, { recursive: true, mode: 0o700 });
-    await control.provisionControlInstallation(infra);
+    await control.provisionControlDirectories(infra);
     const envKeys = [
         "OPENMAPX_ROOT_DIR",
         "DATA_MANAGER_URL",
@@ -234,7 +234,7 @@ it.skipIf(
       );
       const rows = (await store.listUnsettled()).filter((row) =>
         existsSync(
-          join(infra, "control-private/data-manager/executions", `${row.status.operationKey}.json`),
+          join(infra, "state/data-manager/control/executions", `${row.status.operationKey}.json`),
         ),
       );
       expect(rows).toHaveLength(1);
@@ -258,11 +258,7 @@ it.skipIf(
       for (const row of await store.listUnsettled())
         if (
           existsSync(
-            join(
-              infra,
-              "control-private/data-manager/executions",
-              `${row.status.operationKey}.json`,
-            ),
+            join(infra, "state/data-manager/control/executions", `${row.status.operationKey}.json`),
           )
         )
           await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id}`;

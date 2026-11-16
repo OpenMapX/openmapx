@@ -18,7 +18,7 @@ import { buildOpsAgentServer } from "./server";
 it("refuses paired approval as a bearer-only root before reserving a worker", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-closed-approval-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const installation = control.openControlInstallation({
     infraDir: root,
     role: "ops-agent",
@@ -73,7 +73,7 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
     const serviceIds = scenario === "wrong-target" ? ["osrm"] : ["motis"];
     const root = mkdtempSync(join(tmpdir(), "omx-control-http-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -140,7 +140,7 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
     });
     const assertion = await control.delegateArtifactTargetLease(lease, {
       ...plan,
-      childPublicKey: agent.publicKey,
+      childId: agent.role,
     });
     let calls = 0;
     let releaseWorker = () => {};

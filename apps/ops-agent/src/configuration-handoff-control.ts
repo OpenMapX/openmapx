@@ -1,6 +1,3 @@
-/** The detached helper adopts only its original fixed child grant. It has an
- * ephemeral signing key, no installation role key and no root acquisition. */
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -14,6 +11,7 @@ import {
   closeArtifactTargetLeaseHandle,
   closeControlInstallation,
   controlDigest,
+  controlIdentity,
   executionAuthorityState,
   openFixedChildInstallation,
   readConfigurationHandoffSpawnIntent,
@@ -25,14 +23,12 @@ import {
   type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
   verifyConfigurationHelperReady,
-  verifyControl,
   verifyFixedCliControlPeer,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson, type ExecutionRef, executionRefSchema } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
   type ConfigurationHandoffIntentRecord,
-  configurationHandoffRecordDomains,
   configurationHandoffRecordName,
   configurationHandoffWorkerRecordSchema,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
@@ -93,7 +89,6 @@ export async function openConfigurationHandoffChild(input: {
     installation = openFixedChildInstallation({
       infraDir,
       assertion: input.assertion,
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
   let lease: BorrowedArtifactTargetLease | undefined;
   try {
@@ -105,10 +100,9 @@ export async function openConfigurationHandoffChild(input: {
       ),
     );
     if (
-      intent.installationId !== installation.installationId ||
       intent.operation.handoffId !== input.handoffId ||
       intent.assertion !== input.assertion ||
-      intent.helperPublicKey !== installation.publicKey ||
+      intent.helperId !== controlIdentity(installation) ||
       canonicalJson(intent.helper) !== canonicalJson(execution)
     )
       throw Error("Original fixed helper launch required");
@@ -180,7 +174,6 @@ export async function reconcileCompletedConfigurationHandoff(input: {
     installation = openFixedChildInstallation({
       infraDir: join(input.rootDir, "infra/docker"),
       assertion: input.assertion,
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
   try {
     const intent = await waitForHandoffContention(
@@ -198,12 +191,7 @@ export async function reconcileCompletedConfigurationHandoff(input: {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
-    const worker = verifyControl(
-      installation.publicKey,
-      configurationHandoffRecordDomains.completion,
-      raw,
-      configurationHandoffWorkerRecordSchema,
-    );
+    const worker = configurationHandoffWorkerRecordSchema.parse(raw);
     if (worker.phase !== "applied" || canonicalJson(worker.execution) !== canonicalJson(execution))
       throw Error("Unfinished original helper remains fenced");
     const authority = restoreAdmittedControlExecution(installation, execution);

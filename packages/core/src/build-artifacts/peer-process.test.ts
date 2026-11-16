@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
@@ -18,7 +18,7 @@ import {
   controlChildOperationKey,
   controlDigest,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   retainedControlParent,
@@ -53,7 +53,7 @@ afterAll(() => rmSync(fixtureRoot, { recursive: true, force: true }));
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-peer-process-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   symlinkSync(root, join(root, "host-alias"));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -164,12 +164,9 @@ describe("separate-process physical-mount delegation", () => {
         serviceIds: ["motis"],
         owner: authority,
       });
-      const verifiers = JSON.parse(
-        readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"),
-      );
       const assertion = await delegateArtifactTargetLease(lease, {
         ...plan,
-        childPublicKey: verifiers.publicKeys[receiver],
+        childId: receiver,
       });
       const input = {
         infraDir: root,
@@ -197,7 +194,7 @@ describe("separate-process physical-mount delegation", () => {
       await expect(
         delegateArtifactTargetLease(lease, {
           ...plan,
-          childPublicKey: verifiers.publicKeys[receiver],
+          childId: receiver,
         }),
       ).rejects.toThrow(/replay/);
       retainControlEffectReceipt(authority, {
@@ -244,12 +241,9 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
     serviceIds: ["motis"],
     owner: authority,
   });
-  const publicKeys = JSON.parse(
-    readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"),
-  ).publicKeys;
   const assertion = await delegateArtifactTargetLease(lease, {
     ...plan,
-    childPublicKey: publicKeys["ops-agent"],
+    childId: "ops-agent",
   });
   const input = {
     infraDir: root,
@@ -323,7 +317,7 @@ it.each([false, true])(
     });
     const id = randomUUID();
     const key = c.prepareFixedControlChild(authority, id);
-    const assertion = await delegateArtifactTargetLease(lease, { ...plan, childPublicKey: key });
+    const assertion = await delegateArtifactTargetLease(lease, { ...plan, childId: key });
     const args = c.fixedCliArguments(operation);
     c.retainFixedCliSpawnIntent(authority, { delegationId: id, execution: cli, operation, args });
     const hardlinks = {
@@ -333,16 +327,14 @@ it.each([false, true])(
       coordinatorMode: "require-running",
     };
     const leaf = ref("data-manager", hardlinks.kind, hardlinks, cli, "hardlinks");
-    const childPublicKey = JSON.parse(
-      readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"),
-    ).publicKeys["data-manager"];
+    const childId = "data-manager";
     const fixed = { mode: "fixed", infraDir: root, assertion, execution: cli, args };
     const leafInput = {
       execution: leaf,
       phase: "hardlinks",
       recipient: "data-manager",
       serviceIds: ["motis"],
-      childPublicKey,
+      childId,
     };
     expect(await child({ ...fixed, child: { ...leafInput, serviceIds: ["osrm"] } })).toMatchObject({
       ok: false,
@@ -422,9 +414,7 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
     serviceIds: ["motis"],
     plan: [plan],
   };
-  const childPublicKey = JSON.parse(
-    readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"),
-  ).publicKeys["ops-agent"];
+  const childId = "ops-agent";
   const p = spawn(process.execPath, [fixture], {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -439,7 +429,7 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
     },
   );
   p.stdin.end(
-    `${JSON.stringify({ mode: "owner", infraDir: root, role: "data-manager", admitted, child: { ...plan, childPublicKey } })}\n`,
+    `${JSON.stringify({ mode: "owner", infraDir: root, role: "data-manager", admitted, child: { ...plan, childId } })}\n`,
   );
   const owned = await response;
   expect(owned.ok).toBe(true);
@@ -555,7 +545,7 @@ it.each([false, true])(
         infraDir: root,
         role: "ops-agent",
         admitted,
-        child: { ...plan, childPublicKey: "" },
+        child: { ...plan, childId: "" },
         fixedId: randomUUID(),
         prepared,
       })}\n`,
@@ -627,9 +617,8 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
     serviceIds: ["motis"],
     owner: authority,
   });
-  const key = JSON.parse(readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"))
-    .publicKeys["ops-agent"];
-  const assertion = await delegateArtifactTargetLease(lease, { ...plan, childPublicKey: key });
+  const key = "ops-agent";
+  const assertion = await delegateArtifactTargetLease(lease, { ...plan, childId: key });
   const input = {
     primitive: true,
     infraDir: root,
@@ -647,9 +636,9 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
   ])
     expect(await child({ ...input, ...patch })).toMatchObject({ ok: false });
   expect(await child({ ...input, settle: true })).toMatchObject({ ok: true });
-  await expect(
-    delegateArtifactTargetLease(lease, { ...plan, childPublicKey: key }),
-  ).rejects.toThrow(/replay/);
+  await expect(delegateArtifactTargetLease(lease, { ...plan, childId: key })).rejects.toThrow(
+    /replay/,
+  );
   c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
@@ -702,15 +691,12 @@ it("rejects a logical configuration-fence delegation without the actual maintena
     serviceIds: ["motis"],
     owner: authority,
   });
-  const key = JSON.parse(readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"))
-    .publicKeys["data-manager"];
+  const key = "data-manager";
   try {
     // A bare root/plan cannot impersonate the actual maintenance producer.
     // Genuine short-leaf/SQL preparation, forged/foreign controls and held-root
     // acceptance run through the owned API/agent/DM PostgreSQL fixture.
-    await expect(
-      delegateArtifactTargetLease(lease, { ...plan, childPublicKey: key }),
-    ).rejects.toThrow();
+    await expect(delegateArtifactTargetLease(lease, { ...plan, childId: key })).rejects.toThrow();
     await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
     expect(
       openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync } from "node:fs";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -88,7 +88,7 @@ describe.skipIf(
       drizzle(sql);
       const root = mkdtempSync(join(tmpdir(), "omx-runtime-"));
       mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
           infraDir: root,
           role: "data-manager",
@@ -199,7 +199,7 @@ describe.skipIf(
     const sql = postgres(url, { max: 4 });
     const root = mkdtempSync(join(tmpdir(), "omx-runtime-lost-reply-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const agent = control.agentStoreLeases(root, "ops-agent");
     // Four lost replies span about four seconds, as an agent restart would.
     let lostReplies = 4;
@@ -270,7 +270,7 @@ describe.skipIf(
     const sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-data-completion-gap-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     let installation = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -359,7 +359,7 @@ describe.skipIf(
         workerSql = withDataSqlCancellation(sql),
         root = mkdtempSync(join(tmpdir(), "omx-data-transaction-"));
       mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
           infraDir: root,
           role: "data-manager",
@@ -497,7 +497,7 @@ describe.skipIf(
     drizzle(sql);
     const root = mkdtempSync(join(tmpdir(), "omx-data-partial-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     let installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
@@ -585,7 +585,7 @@ describe.skipIf(
     const root = mkdtempSync(join(tmpdir(), "omx-transit-publication-")),
       data = join(root, "data");
     mkdirSync(data, { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
@@ -638,7 +638,7 @@ describe.skipIf(
           async () => {
             const { existsSync } = await import("node:fs");
             return existsSync(
-              join(root, "control-private/data-manager/observations", `worker-${key}.json`),
+              join(root, "state/data-manager/control/observations", `worker-${key}.json`),
             );
           },
           { timeout: 15000 },
@@ -667,7 +667,7 @@ describe.skipIf(
       const root = mkdtempSync(join(tmpdir(), "omx-data-prune-")),
         data = join(root, "data");
       mkdirSync(data, { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
           infraDir: root,
           role: "data-manager",
@@ -711,7 +711,7 @@ describe.skipIf(
         const cells = record!.reservations.map((slot) =>
           join(
             root,
-            "control-private/data-manager/observations",
+            "state/data-manager/control/observations",
             `phase-${key}-${slot.ordinal}.json`,
           ),
         );
@@ -789,7 +789,7 @@ describe.skipIf(
       );
       const root = mkdtempSync(join(tmpdir(), "omx-eager-sql-"));
       mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
@@ -986,7 +986,7 @@ describe.skipIf(
       );
       const root = mkdtempSync(join(tmpdir(), "omx-fix1-mapped-"));
       mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",

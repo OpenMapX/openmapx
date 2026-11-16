@@ -191,7 +191,7 @@ describe("build bundles", () => {
         ops = await import("@openmapx/core/ops");
       const targetHost = action === "import" ? serveHost : buildHost;
       const infraDir = join(targetHost, "infra/docker");
-      await control.provisionControlInstallation(infraDir);
+      await control.provisionControlDirectories(infraDir);
       const installation = control.openControlInstallation({
         infraDir,
         role: "host-cli",

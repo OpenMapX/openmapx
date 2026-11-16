@@ -4,6 +4,7 @@ import { z } from "zod";
 // biome-ignore-start lint/suspicious/noImportCycles: Recovery reads original receipts only after initialization; nominal writer/lease checks already depend on this control graph.
 import {
   closeControlInstallation,
+  controlIdentity,
   executionAuthorityState,
   fixedControlChildId,
   installationState,
@@ -13,7 +14,7 @@ import {
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "../build-artifacts/control-authority";
-import { controlDigest, signControl, verifyControl } from "../build-artifacts/control-records";
+import { controlDigest } from "../build-artifacts/control-records";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import {
   assertArtifactTargetLeaseContainmentOwner,
@@ -79,18 +80,18 @@ export type VerifiedLifecycleOwnership = Readonly<{
 const ownerships = new WeakMap<VerifiedLifecycleOwnership, VerifiedExecutionAuthority>();
 const authorities = new AsyncLocalStorage<{
   authority: VerifiedExecutionAuthority;
-  child?: { execution: ExecutionRef; publicKey: string };
+  child?: { execution: ExecutionRef; childId: string };
 }>();
 
 /** Source-only scope: child identity is checked against its existing private spawn challenge. */
 export function withServiceLifecycleReceiptAuthority<T>(
   authority: VerifiedExecutionAuthority,
   run: () => Promise<T>,
-  child?: { execution: ExecutionRef; publicKey: string },
+  child?: { execution: ExecutionRef; childId: string },
 ): Promise<T> {
   const state = executionAuthorityState(authority);
   if (child) {
-    const id = fixedControlChildId(state.installation, child.publicKey, authority.execution);
+    const id = fixedControlChildId(state.installation, child.childId, authority.execution);
     const spawn = z
       .object({ execution: executionRefSchema })
       .parse(readPrivateRecord(state.installation, "spawns", `${id}.json`, 65536));
@@ -143,16 +144,13 @@ const seedSchema = z.strictObject({
   coordinatorMode: z.enum(["ensure-running", "require-running"]),
   expectedRevisionId: revision,
   seedRevisionId: revision,
-  childPublicKey: z.string().min(1).max(256),
+  childId: z.string().min(1).max(256),
 });
 const envelopeSchema = z.strictObject({
-  seed: z.strictObject({ payload: seedSchema, signature: z.string().max(128) }),
+  seed: seedSchema,
   current: z.strictObject({
-    payload: z.strictObject({
-      seedDigest: z.string().regex(/^[a-f0-9]{64}$/),
-      receipt: serviceLifecycleReceiptSchema,
-    }),
-    signature: z.string().max(128),
+    seedDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    receipt: serviceLifecycleReceiptSchema,
   }),
 });
 const highWaterSchema = z.strictObject({
@@ -169,9 +167,6 @@ const highWaterSchema = z.strictObject({
     })
     .nullable(),
 });
-const seedDomain = "openmapx-service-lifecycle-seed-v1",
-  receiptDomain = "openmapx-service-lifecycle-receipt-v1",
-  highWaterDomain = "openmapx-service-lifecycle-high-water-v1";
 const highWaterName = (execution: ExecutionRef) =>
   `lifecycle-${executionRefSchema.parse(execution).operationKey}.json`;
 function assertDataRoot(dataRoot: string, trusted: string) {
@@ -225,38 +220,18 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
     : (() => {
         const installation = openControlInstallation({
           infraDir: dirname(dataRoot),
-          role: envelope.seed.payload.issuer,
+          role: envelope.seed.issuer,
         });
         close = () => closeControlInstallation(installation);
         return installationState(installation);
       })();
   try {
     assertDataRoot(dataRoot, local.dataRoot);
-    const seed = verifyControl(
-      local.publicKeys[envelope.seed.payload.issuer],
-      seedDomain,
-      envelope.seed,
-      seedSchema,
-    );
-    const seedDigest = controlDigest(envelope.seed),
-      publicKey =
-        envelope.current.payload.receipt.sequence === 0
-          ? local.publicKeys[seed.issuer]
-          : seed.childPublicKey;
-    const current = verifyControl(
-      publicKey,
-      receiptDomain,
-      envelope.current,
-      envelopeSchema.shape.current.shape.payload,
-    );
+    const seed = seedSchema.parse(envelope.seed);
+    const seedDigest = controlDigest(envelope.seed);
+    const current = envelopeSchema.shape.current.parse(envelope.current);
     const raw = readPrivateRecord(local, "observations", highWaterName(execution), 8192);
-    const signer = (raw as { payload?: { signer?: string } }).payload?.signer;
-    let water = verifyControl(
-      signer === "child" ? seed.childPublicKey : local.publicKeys[seed.issuer],
-      highWaterDomain,
-      raw,
-      highWaterSchema,
-    );
+    let water = highWaterSchema.parse(raw);
     const receipt = current.receipt;
     if (
       !same(seed.execution, execution) ||
@@ -278,7 +253,7 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
       if (
         !same(owner.execution, execution) ||
         owner.kind !== `service.${seed.action}` ||
-        owner.installation.installation.publicKey !== seed.childPublicKey ||
+        controlIdentity(owner.installation.installation) !== seed.childId ||
         water.signer !== "child" ||
         pending.sequence !== water.sequence + 1 ||
         receipt.sequence !== pending.sequence ||
@@ -299,13 +274,7 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
           controlDigest(readEnvelope(dataRoot, execution)) !== controlDigest(envelope)
         )
           throw Error("Lifecycle publication changed during recovery");
-        writePrivateRecord(
-          local,
-          "observations",
-          highWaterName(execution),
-          signControl(local.privateKey, highWaterDomain, repaired),
-          false,
-        );
+        writePrivateRecord(local, "observations", highWaterName(execution), repaired, false);
       });
       water = repaired;
     }
@@ -364,16 +333,14 @@ export async function openServiceLifecycleReceipt(options: {
     `${state.execution.operationKey}.json`,
     65536,
   ) as {
-    payload: {
-      operation: {
-        kind: string;
-        serviceId?: string;
-        expectedConfigurationRevisionId?: string;
-        noDeps?: boolean;
-      };
+    operation: {
+      kind: string;
+      serviceId?: string;
+      expectedConfigurationRevisionId?: string;
+      noDeps?: boolean;
     };
   };
-  const operation = admitted.payload.operation;
+  const operation = admitted.operation;
   if (
     operation.kind !== `service.${options.action}` ||
     !operation.serviceId ||
@@ -420,25 +387,21 @@ export async function openServiceLifecycleReceipt(options: {
         followUp: "not_started",
         sequence: 0,
       });
-      const seed = signControl(
-        local.privateKey,
-        seedDomain,
-        seedSchema.parse({
-          version: 1,
-          issuer: local.installation.role,
-          root: scope.authority.execution,
-          execution: options.execution,
-          serviceIds,
-          action: options.action,
-          noDeps: options.noDeps,
-          coordinatorMode: options.coordinatorMode,
-          expectedRevisionId: options.expectedRevisionId,
-          seedRevisionId: options.seedRevisionId,
-          childPublicKey: scope.child?.publicKey ?? local.installation.publicKey,
-        }),
-      );
+      const seed = seedSchema.parse({
+        version: 1,
+        issuer: local.installation.role,
+        root: scope.authority.execution,
+        execution: options.execution,
+        serviceIds,
+        action: options.action,
+        noDeps: options.noDeps,
+        coordinatorMode: options.coordinatorMode,
+        expectedRevisionId: options.expectedRevisionId,
+        seedRevisionId: options.seedRevisionId,
+        childId: scope.child?.childId ?? controlIdentity(local.installation),
+      });
       const seedDigest = controlDigest(seed),
-        current = signControl(local.privateKey, receiptDomain, { seedDigest, receipt });
+        current = { seedDigest, receipt };
       const envelope = envelopeSchema.parse({ seed, current }),
         bytes = canonicalJson(envelope);
       if (Buffer.byteLength(bytes) > 65536) throw Error("Lifecycle receipt budget exceeded");
@@ -446,7 +409,7 @@ export async function openServiceLifecycleReceipt(options: {
         local,
         "observations",
         highWaterName(options.execution),
-        signControl(local.privateKey, highWaterDomain, {
+        {
           version: 1,
           execution: options.execution,
           seedDigest,
@@ -454,7 +417,7 @@ export async function openServiceLifecycleReceipt(options: {
           receiptDigest: controlDigest(current),
           signer: "seed",
           pending: null,
-        }),
+        },
         true,
       );
       opened.directory.write(name, bytes, true);
@@ -514,7 +477,7 @@ export async function openServiceLifecycleReceipt(options: {
         assertArtifactTargetLeaseExecution(lease, authority.execution);
       if (
         !same(authority.execution, receipt.execution) ||
-        owner.installation.installation.publicKey !== current.seed.childPublicKey ||
+        controlIdentity(owner.installation.installation) !== current.seed.childId ||
         expectedSequence !== current.receipt.sequence ||
         receipt.sequence !== expectedSequence + 1 ||
         ["complete", "failed", "unknown"].includes(current.receipt.phase) ||
@@ -529,11 +492,11 @@ export async function openServiceLifecycleReceipt(options: {
           current.receipt.finalRevisionId !== receipt.finalRevisionId)
       )
         throw Error("Lifecycle receipt checkpoint conflict");
-      const signed = signControl(owner.installation.privateKey, receiptDomain, {
+      const record = {
         seedDigest: controlDigest(current.envelope.seed),
         receipt,
-      });
-      const envelope = { seed: current.envelope.seed, current: signed },
+      };
+      const envelope = { seed: current.envelope.seed, current: record },
         bytes = canonicalJson(envelope);
       if (Buffer.byteLength(bytes) > 65536) throw Error("Lifecycle receipt budget exceeded");
       const directory = directories(options.dataRoot);
@@ -542,13 +505,13 @@ export async function openServiceLifecycleReceipt(options: {
         const pending = {
           ...current.water,
           signer: "child" as const,
-          pending: { sequence: receipt.sequence, receiptDigest: controlDigest(signed) },
+          pending: { sequence: receipt.sequence, receiptDigest: controlDigest(record) },
         };
         writePrivateRecord(
           owner.installation,
           "observations",
           highWaterName(options.execution),
-          signControl(owner.installation.privateKey, highWaterDomain, pending),
+          pending,
           false,
         );
         directory.directory.write(name, bytes, false, () => {
@@ -560,12 +523,12 @@ export async function openServiceLifecycleReceipt(options: {
           owner.installation,
           "observations",
           highWaterName(options.execution),
-          signControl(owner.installation.privateKey, highWaterDomain, {
+          {
             ...pending,
             sequence: receipt.sequence,
-            receiptDigest: controlDigest(signed),
+            receiptDigest: controlDigest(record),
             pending: null,
-          }),
+          },
           false,
         );
       } finally {

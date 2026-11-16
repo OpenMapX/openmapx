@@ -50,7 +50,7 @@ it.each(["promotion", "reload"] as const)(
   async (kind) => {
     const root = mkdtempSync(join(tmpdir(), "omx-data-http-cancel-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -141,7 +141,7 @@ it.each(["promotion", "reload"] as const)(
     }
     const assertion = await control.delegateArtifactTargetLease(lease, {
       ...plan,
-      childPublicKey: agentVerifier.publicKey,
+      childId: agentVerifier.role,
       evidence: control.publishedDataTransitCandidate(authority, { phase, ordinal: 0 }),
     });
     const token = "b".repeat(43),
@@ -290,7 +290,7 @@ it.skipIf(
     const sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-durable-dm-agent-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -490,7 +490,7 @@ it.skipIf(
             existsSync(
               join(
                 root,
-                "control-private/data-manager/executions",
+                "state/data-manager/control/executions",
                 `${row.status.operationKey}.json`,
               ),
             ),
@@ -508,7 +508,7 @@ it.skipIf(
   60000,
 );
 
-import { readFileSync, renameSync, statSync } from "node:fs";
+import { readFileSync, renameSync } from "node:fs";
 import { startDataExecution } from "@openmapx/core/data-manager-sdk";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
@@ -542,7 +542,7 @@ it
     const root = mkdtempSync(join(tmpdir(), "omx-late-durable-child-")),
       data = join(root, "data");
     mkdirSync(data, { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const services = ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
       dm = control.openControlInstallation({
         infraDir: root,
@@ -818,7 +818,7 @@ it
             .poll(
               () =>
                 existsSync(
-                  join(root, "control-private/data-manager/observations", `worker-${key}.json`),
+                  join(root, "state/data-manager/control/observations", `worker-${key}.json`),
                 ),
               { timeout: 15000 },
             )
@@ -897,7 +897,7 @@ it
       expect(record.status.deadlineAt).toBe(deadline);
       const lease = () => targetLease(data, kind === "promotion" ? "motis" : "motis-feed-proxy"),
         held = lease(),
-        rootReceipt = join(root, "control-private/data-manager/executions", `${key}.json`),
+        rootReceipt = join(root, "state/data-manager/control/executions", `${key}.json`),
         original = readFileSync(rootReceipt);
       await receiver.requestCancel({ id, operationKey: key, fingerprint: admitted.fingerprint });
       expect((await next()).type).toBe("aborted");
@@ -987,7 +987,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
     });
     writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
     linkProxyFixture(data);
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -1051,7 +1051,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       issued = await control.issueControlChildPhase(authority, {
         ...reservation,
         lease,
-        childPublicKey: agentVerifier.publicKey,
+        childId: agentVerifier.role,
         evidence: control.publishedDataTransitCandidate(authority, reservation),
       });
     const token = "e".repeat(43),
@@ -1108,11 +1108,11 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       expect(await first.exited).toBe(86);
       const terminalPath = join(
         root,
-        "control-private/ops-agent/observations",
+        "state/ops-agent/control/observations",
         `terminal-${bound.execution.operationKey}.json`,
       );
       const originalTerminal = existsSync(terminalPath)
-        ? JSON.parse(readFileSync(terminalPath, "utf8"))?.payload
+        ? JSON.parse(readFileSync(terminalPath, "utf8"))
         : undefined;
       restarted = await start();
       const status = await restarted.client.lookup(operation, bound.execution.operationKey, {
@@ -1129,7 +1129,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         await expect(
           control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
         ).resolves.toMatchObject({ outcome: "contained", publication: "not_started" });
-        const repaired = JSON.parse(readFileSync(terminalPath, "utf8")).payload;
+        const repaired = JSON.parse(readFileSync(terminalPath, "utf8"));
         expect(repaired.terminalDigest).toBe(originalTerminal.terminalDigest);
         expect(repaired.terminalAt).toBe(originalTerminal.terminalAt);
       } else {

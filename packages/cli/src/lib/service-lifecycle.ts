@@ -86,7 +86,7 @@ export async function runCliServiceLifecycle(options: {
       "Coordinator Update requires its guarded administrative workflow: use System → Updates or authenticated `pnpm openmapx system update` after `compose release --check`",
     );
   const { randomBytes, randomUUID } = await import("node:crypto");
-  const { existsSync, mkdirSync } = await import("node:fs");
+  const { mkdirSync } = await import("node:fs");
   const { join } = await import("node:path");
   const control = await import("@openmapx/core/build-artifacts");
   const ops = await import("@openmapx/core/ops");
@@ -102,8 +102,7 @@ export async function runCliServiceLifecycle(options: {
   const paths = repoPaths();
   assertCliDeploymentSecrets();
   mkdirSync(join(paths.infraDir, "data"), { recursive: true });
-  if (!existsSync("/run/secrets/openmapx-control-verifiers"))
-    await control.provisionControlInstallation(paths.infraDir);
+  control.provisionControlDirectories(paths.infraDir);
   const ids = [...new Set(options.serviceIds)].sort();
   const registry = new services.ServiceRegistry({ rootDir: paths.root });
   await registry.load();

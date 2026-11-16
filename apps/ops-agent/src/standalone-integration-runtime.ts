@@ -40,8 +40,8 @@ export function installStandaloneIntegrationRuntime(
     return options.store;
   };
   runtime["integration.inspectInstall"] = async (operation, context) => {
-    const installationId = store().standaloneInstallationId(context),
-      preparationContext = createIntegrationArtifactPreparation({ rootDir: options.rootDir });
+    store().assertStandaloneContext(context);
+    const preparationContext = createIntegrationArtifactPreparation({ rootDir: options.rootDir });
     let published = false;
     try {
       let commit: string | null = null,
@@ -83,7 +83,6 @@ export function installStandaloneIntegrationRuntime(
       });
       const record = inspectionRecordSchema.parse({
         version: 1,
-        installationId,
         ownerId: operation.ownerId,
         source: operation.source,
         inspection,
@@ -103,7 +102,7 @@ export function installStandaloneIntegrationRuntime(
     }
   };
   runtime["integration.install"] = async (operation, context) => {
-    const installationId = store().standaloneInstallationId(context);
+    store().assertStandaloneContext(context);
     const inspection = store().readStandaloneInspection(context, operation.inspectionId);
     if (
       inspection.ownerId !== operation.ownerId ||
@@ -160,7 +159,6 @@ export function installStandaloneIntegrationRuntime(
     if (inspection.stage && !claim) throw Error("Integration artifact claim is unavailable");
     const record = transactionRecordSchema.parse({
       version: 1,
-      installationId,
       transactionId: operation.operationId,
       ownerId: operation.ownerId,
       installExecution: context.execution,
@@ -187,7 +185,7 @@ export function installStandaloneIntegrationRuntime(
     };
   };
   runtime["integration.settle"] = async (operation, context) => {
-    store().standaloneInstallationId(context);
+    store().assertStandaloneContext(context);
     const record = store().readStandaloneTransaction(context, operation.transactionId);
     const journal = store().standalonePublicationJournal(context);
     if (record.inspection.inspection.contentDigest !== operation.expectedContentDigest)

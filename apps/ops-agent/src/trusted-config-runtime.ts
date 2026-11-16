@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import {
   closeControlInstallation,
@@ -17,10 +17,7 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
-import {
-  executionAuthorityState,
-  retainConfigurationGenerationNonCommit,
-} from "../../../packages/core/src/build-artifacts/control-authority";
+import { retainConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
 import { configurationGenerationNonCommitForError } from "../../../packages/core/src/services/configuration-generation";
 import {
   type ConfigurationCandidateSource,
@@ -158,7 +155,6 @@ async function commitGeneration(
           infraDir: options.infraDir,
           role: "ops-agent",
           serviceIds: services.map((service) => service.manifest.id),
-          container: existsSync("/run/secrets/openmapx-control-verifiers"),
         });
         try {
           verifyConfigurationSourceWitness({
@@ -243,7 +239,6 @@ async function commitGeneration(
             infraDir: options.infraDir,
             role: "ops-agent",
             serviceIds: services.map((service) => service.manifest.id),
-            container: existsSync("/run/secrets/openmapx-control-verifiers"),
           });
           try {
             const frozen = readMaintenanceRelease(reading, operation.maintenanceId);
@@ -269,10 +264,6 @@ async function commitGeneration(
           revisionId: operation.revisionId,
           expectedCurrentRevisionId: operation.expectedCurrentRevisionId,
           operationKey: executionContext?.execution.operationKey,
-          installationId: executionContext?.controlAuthority
-            ? executionAuthorityState(executionContext.controlAuthority).installation.installation
-                .installationId
-            : undefined,
           beforeCommit: options.beforeCommit,
           afterGenerationRename: options.afterGenerationRename,
           afterCommit: options.afterCommit,
@@ -350,7 +341,6 @@ export function installTrustedConfigurationRuntime(
         infraDir: options.infraDir,
         role: "ops-agent",
         serviceIds: services.map((service) => service.manifest.id),
-        container: existsSync("/run/secrets/openmapx-control-verifiers"),
       });
       try {
         const observed = observeConfigurationSources({
@@ -392,7 +382,6 @@ export function installTrustedConfigurationRuntime(
       infraDir: options.infraDir,
       role: "ops-agent",
       serviceIds: services.map((service) => service.manifest.id),
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
     try {
       verifyConfigurationSourceWitness({
@@ -464,7 +453,6 @@ export function installTrustedConfigurationRuntime(
           infraDir: options.infraDir,
           role: "ops-agent",
           serviceIds: services.map((service) => service.manifest.id),
-          container: existsSync("/run/secrets/openmapx-control-verifiers"),
         });
         try {
           frozenRelease = readPreparedMaintenanceRelease(reading, candidate.record.maintenanceId);

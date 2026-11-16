@@ -768,7 +768,7 @@ it.each([false, true])(
     const root = await mkdtemp(join(tmpdir(), "task022-admission-"));
     const control = await import("@openmapx/core/build-artifacts");
     await mkdir(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -121,7 +121,7 @@ beforeEach(async () => {
     }),
     { mode: 0o600 },
   );
-  await provisionControlInstallation(infraDir);
+  await provisionControlDirectories(infraDir);
   const installation = openControlInstallation({
     infraDir,
     role: "host-cli",

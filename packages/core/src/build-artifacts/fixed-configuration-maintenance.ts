@@ -126,7 +126,6 @@ function freeze<T>(value: T): T {
   return value;
 }
 export function buildFixedConfigurationMaintenancePlan(input: {
-  installationId: string;
   prepare: ExecutionRef;
   operation: ConfigurationMaintenancePrepare;
   apiParent: RetainedParentExecution;
@@ -386,7 +385,6 @@ export function buildFixedConfigurationMaintenancePlan(input: {
  * retained inputs. A schema-valid signed summary is not a frozen graph. */
 export function assertFixedConfigurationMaintenancePlan(
   value: FixedConfigurationMaintenancePlan,
-  installationId: string,
 ): void {
   const plan = fixedConfigurationMaintenancePlanSchema.parse(value),
     first = plan.steps[0];
@@ -398,7 +396,6 @@ export function assertFixedConfigurationMaintenancePlan(
       : [],
   );
   const rebuilt = buildFixedConfigurationMaintenancePlan({
-    installationId,
     prepare: plan.prepare,
     operation: plan.operation,
     apiParent: plan.apiParent,

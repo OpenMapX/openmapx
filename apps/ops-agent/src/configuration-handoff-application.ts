@@ -6,12 +6,9 @@ import {
   assertArtifactTargetLeaseForward,
   beginControlEffect,
   controlDigest,
-  controlRolePublicKey,
   readPrivateRecord,
   retainControlEffectReceipt,
   settleArtifactTargetLeaseChild,
-  signControl,
-  verifyControl,
   verifyControlEffectSettlement,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
@@ -21,7 +18,6 @@ import {
   type ConfigurationHandoffWorkerRecord,
   configurationHandoffProgressSchema,
   configurationHandoffWorkerRecordSchema,
-  configurationHandoffRecordDomains as domains,
   configurationHandoffRecordName as name,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
 import { maintenanceDockerContainerSchema } from "../../../packages/core/src/build-artifacts/configuration-maintenance-docker-records";
@@ -69,12 +65,7 @@ function ownerFor(child: ConfigurationHandoffChild) {
     intent = state.intent,
     file = `${intent.operation.maintenanceId}.json`,
     raw = readPrivateRecord(local, "configuration-maintenance", file),
-    owner = verifyControl(
-      controlRolePublicKey(state.installation, "ops-agent"),
-      "openmapx-configuration-maintenance-owner-v2",
-      raw,
-      configurationMaintenanceOwnerRecordSchema,
-    ),
+    owner = configurationMaintenanceOwnerRecordSchema.parse(raw),
     step = owner.plan.steps.find((value) => value.phase === "maintenance-handoff"),
     source = step && owner.apiControls.steps.find((value) => value.ordinal === step.ordinal);
   if (
@@ -127,13 +118,7 @@ export async function runConfigurationHandoffApplication(input: {
   let worker: ConfigurationHandoffWorkerRecord | undefined;
   const save = (next: ConfigurationHandoffWorkerRecord, exclusive = false) => {
     const value = configurationHandoffWorkerRecordSchema.parse(next);
-    writePrivateRecord(
-      local,
-      "observations",
-      file,
-      signControl(local.privateKey, domains.completion, value),
-      exclusive,
-    );
+    writePrivateRecord(local, "observations", file, value, exclusive);
     worker = value;
   };
   try {
@@ -150,12 +135,7 @@ export async function runConfigurationHandoffApplication(input: {
       owned = createOwnedServiceResolver({ stack, execFile, loadAuthority }),
       parentName = name(intent.operation.handoffId, "progress"),
       parentRaw = readPrivateRecord(local, "observations", parentName),
-      parent = verifyControl(
-        controlRolePublicKey(state.installation, "ops-agent"),
-        domains.progress,
-        parentRaw,
-        configurationHandoffProgressSchema,
-      );
+      parent = configurationHandoffProgressSchema.parse(parentRaw);
     if (
       parent.intentDigest !== controlDigest(intent) ||
       parent.phase !== "launched" ||
@@ -387,7 +367,6 @@ export async function runConfigurationHandoffApplication(input: {
           execFile,
           owner: ownerFor(child),
           containers,
-          privateKey: local.privateKey,
           signal,
           handoffTargetId: id,
         }),
@@ -421,7 +400,6 @@ export async function runConfigurationHandoffApplication(input: {
       execFile,
       owner,
       containers: await owned.inspectOwnedServices(signal),
-      privateKey: local.privateKey,
       signal,
     });
     const completedAt = Date.now(),

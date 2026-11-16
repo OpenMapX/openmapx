@@ -19,7 +19,6 @@ async function fixture(free = 2 * 1024 ** 3, now?: () => number) {
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token: "test-api-token",
     capacity: () => ({ bytes: free, inodes: 100000 }),
     now,
   });
@@ -92,7 +91,7 @@ it("reclaims authenticated completed tombstones after seven days while preservin
     code: "ENOENT",
   });
   expect((await store.createStage(request)).stageId).not.toBe(stage.stageId);
-  expect(await readFile(join(root, "private/sweep-cursor.json"), "utf8")).toContain("mac");
+  expect(await readFile(join(root, "private/sweep-cursor.json"), "utf8")).toContain("after");
 });
 
 it("cleans a conclusively failed upload using its retained original content inode", async () => {
@@ -210,7 +209,6 @@ it("refuses unknown space and reserves actual small uploads, not expansion ceili
   const unavailable = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token: "test-api-token",
     capacity: () => {
       throw Error("unknown");
     },
@@ -400,7 +398,6 @@ it("closes new admissions during the existing drain without dropping the active 
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token: "test-api-token",
     admissionsOpen: () => open,
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
   });
@@ -463,7 +460,6 @@ it("keeps production transfer metadata out of the strict configuration startup q
   const store = new ArtifactTransferStore({
     dataRoot: join(infraDir, "data", ".openmapx-transfers"),
     privateRoot: artifactTransferPrivateRoot(infraDir),
-    token: "t".repeat(43),
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
   });
   stores.push(store);
@@ -476,7 +472,7 @@ it("keeps production transfer metadata out of the strict configuration startup q
       journalRecords: [],
     }),
   ).resolves.toBeDefined();
-  expect(artifactTransferPrivateRoot(infraDir, true)).toBe(
-    "/var/lib/openmapx/control-private/artifact-transfers",
+  expect(artifactTransferPrivateRoot(infraDir)).toBe(
+    join(infraDir, "state", "ops-agent", "artifact-transfers"),
   );
 });

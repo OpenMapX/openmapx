@@ -17,7 +17,7 @@ import {
   type OpsOperation,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { provisionControlInstallation } from "@openmapx/core/build-artifacts";
+import { provisionControlDirectories } from "@openmapx/core/build-artifacts";
 import { CommunityRepositoryStore } from "../community-repositories";
 import type { DockerRuntimeOptions } from "../docker-runtime";
 import { createProductionRegistryResourceClaimer } from "../policy";
@@ -251,7 +251,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   mkdirSync(queue, { mode: 0o700 });
   mkdirSync(join(queue, ".claimed"), { mode: 0o700 });
   mkdirSync(join(infraDir, "data"), { mode: 0o700, recursive: true });
-  await provisionControlInstallation(infraDir);
+  await provisionControlDirectories(infraDir);
   const token = Buffer.alloc(32, 17).toString("base64url");
   let competingRevisionId: string | undefined;
   const defaultCli = options.defaultCliEntry ? createDefaultFixedCli(root, options.defaultCliEntry) : undefined;

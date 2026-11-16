@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   bindControlChildPhase,
@@ -44,7 +43,7 @@ export function installServiceLifecycleRuntime(
     if (!authority || !lease) throw new OpsHostUpdateRequiredError();
     const plan = readFixedServiceLifecyclePlan(authority);
     const child = await bindControlChildPhase(authority, { phase: "lifecycle", ordinal: 0 });
-    const publicKey = prepareFixedControlChild(authority, plan.delegationId),
+    const childId = prepareFixedControlChild(authority, plan.delegationId),
       args = fixedCliArguments(operation);
     retainFixedCliSpawnIntent(authority, {
       delegationId: plan.delegationId,
@@ -56,7 +55,7 @@ export function installServiceLifecycleRuntime(
     const issued = await issueControlChildPhase(authority, {
       phase: "lifecycle",
       ordinal: 0,
-      childPublicKey: publicKey,
+      childId,
       lease,
     });
     await services.withServiceLifecycleReceiptAuthority(
@@ -72,7 +71,7 @@ export function installServiceLifecycleRuntime(
           expectedRevisionId: operation.expectedConfigurationRevisionId,
           seedRevisionId: operation.expectedConfigurationRevisionId,
         }),
-      { execution: child.execution, publicKey },
+      { execution: child.execution, childId },
     );
     consumeControlChildDispatch(issued.dispatchTicket);
     let failure: unknown;
@@ -89,7 +88,6 @@ export function installServiceLifecycleRuntime(
     const installation = openFixedChildInstallation({
       infraDir: options.infraDir,
       assertion: issued.assertion,
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
     try {
       const childAuthority = restoreAdmittedControlExecution(installation, child.execution);

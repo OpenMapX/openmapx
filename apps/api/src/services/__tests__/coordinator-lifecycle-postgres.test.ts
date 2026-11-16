@@ -6,7 +6,6 @@ import filesystem, {
   readdirSync,
   readFileSync,
   renameSync,
-  rmdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -300,12 +299,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             readFileSync(
               join(
                 host.infraDir,
-                "control-private/ops-agent/executions",
+                "state/ops-agent/control/executions",
                 `${helper.root.operationKey}.json`,
               ),
               "utf8",
             ),
-          ).payload;
+          );
           console.info(
             "actual coordinator helper clamp",
             JSON.stringify({
@@ -753,7 +752,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           id,
           pullPath: join(
             host.infraDir,
-            "control-private/ops-agent/executions",
+            "state/ops-agent/control/executions",
             `${pull.operationKey}.json`,
           ),
         };
@@ -941,7 +940,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
           const path = join(
             host.infraDir,
-            "control-private/ops-agent/executions",
+            "state/ops-agent/control/executions",
             `${pull.operationKey}.json`,
           );
           originals.push({ path, bytes: readFileSync(path) });
@@ -1235,13 +1234,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           readFileSync(
             join(
               host.infraDir,
-              "control-private/ops-agent/configuration-maintenance",
+              "state/ops-agent/control/configuration-maintenance",
               `${checkpoint._configurationMaintenance.receipt.binding.maintenanceId}.json`,
             ),
             "utf8",
           ),
-        ).payload;
-      expect(owner.stagedCoordinatorProvenance.payload.ownerPrepare).toEqual(owner.plan.prepare);
+        );
+      expect(owner.stagedCoordinatorProvenance.ownerPrepare).toEqual(owner.plan.prepare);
       expect(owner.coordinatorPull ?? null).toBeNull();
       expect(owner.plan.coordinatorImage).toMatchObject({
         action: "apply",
@@ -1295,7 +1294,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             readFileSync(
               join(
                 host.infraDir,
-                "control-private/ops-agent/execution-leases",
+                "state/ops-agent/control/execution-leases",
                 `${root.operationKey}.json`,
               ),
               "utf8",
@@ -1341,7 +1340,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("observes its genuine pull admission without target metadata writes", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
         bytes = readFileSync(pullPath),
-        actual = JSON.parse(bytes.toString("utf8")).payload,
+        actual = JSON.parse(bytes.toString("utf8")),
         authority = restoreAdmittedControlExecution(installation, actual.execution),
         snapshot = () =>
           Object.fromEntries(
@@ -1356,7 +1355,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 ),
               ],
             ].concat(
-              ["control-private/ops-agent/observations"].flatMap((base) => {
+              ["state/ops-agent/control/observations"].flatMap((base) => {
                 const directory = join(host.infraDir, base);
                 return readdirSync(directory, { recursive: true })
                   .map(String)
@@ -1442,7 +1441,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const snapshot = () =>
         Object.fromEntries(
           [["leases", leases()]].concat(
-            ["control-private/ops-agent/observations"].flatMap((base) => {
+            ["state/ops-agent/control/observations"].flatMap((base) => {
               const directory = join(host.infraDir, base);
               return readdirSync(directory, { recursive: true })
                 .map(String)
@@ -1500,16 +1499,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
         expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
         expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
-        const directory = join(host.infraDir, "control-private/ops-agent/executions"),
+        const directory = join(host.infraDir, "state/ops-agent/control/executions"),
           actualPulls = readdirSync(directory)
             .filter((name) => name.endsWith(".json"))
             .map((name) => JSON.parse(readFileSync(join(directory, name), "utf8")))
-            .filter((raw) => raw.payload?.operation?.kind === "service.pull");
+            .filter((raw) => raw?.operation?.kind === "service.pull");
         expect(actualPulls).toHaveLength(1);
-        const observer = restoreAdmittedControlExecution(
-          installation,
-          actualPulls[0].payload.execution,
-        );
+        const observer = restoreAdmittedControlExecution(installation, actualPulls[0].execution);
         pullObserver = observer;
         const before = snapshot(),
           started = performance.now();
@@ -1698,7 +1694,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
         expect(
           existsSync(
-            join(host.infraDir, "control-private/ops-agent/executions", `${operationKey}.json`),
+            join(host.infraDir, "state/ops-agent/control/executions", `${operationKey}.json`),
           ),
         ).toBe(false);
       },
@@ -1750,13 +1746,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(
         native.filter((args) => args.includes("up") || (args[0] === "image" && args[1] === "pull")),
       ).toHaveLength(0);
-      const privateRoot = join(host.infraDir, "control-private/ops-agent"),
+      const privateRoot = join(host.infraDir, "state/ops-agent/control"),
         admitted = JSON.parse(
           readFileSync(join(privateRoot, "executions", `${operationKey}.json`), "utf8"),
-        ).payload,
+        ),
         effect = JSON.parse(
           readFileSync(join(privateRoot, "effects", `${operationKey}.json`), "utf8"),
-        ).payload;
+        );
       expect(
         JSON.parse(
           readFileSync(join(privateRoot, "effect-started", `${operationKey}.json`), "utf8"),
@@ -1828,18 +1824,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           throw Error("Actual normal managed CLI admission required");
         const source = JSON.parse(
           readFileSync(
-            join(host.infraDir, "control-private/ops-agent/executions", `${operationKey}.json`),
+            join(host.infraDir, "state/ops-agent/control/executions", `${operationKey}.json`),
             "utf8",
           ),
-        ).payload;
+        );
         expect(
           JSON.parse(
             readFileSync(
-              join(
-                host.infraDir,
-                "control-private/ops-agent/effect-started",
-                `${operationKey}.json`,
-              ),
+              join(host.infraDir, "state/ops-agent/control/effect-started", `${operationKey}.json`),
               "utf8",
             ),
           ),
@@ -2178,11 +2170,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
             "utf8",
           ),
-        ).payload;
-      expect(owner.coordinatorPull.payload.imageId).toBe(pulledImageId);
-      expect(owner.coordinatorPull.payload.version).toBe(2);
+        );
+      expect(owner.coordinatorPull.imageId).toBe(pulledImageId);
+      expect(owner.coordinatorPull.version).toBe(2);
       expect(owner.receipt.state).toBe("settled");
-      expect(owner.final.ownerFinal.payload.outcome).toBe("applied");
+      expect(owner.final.ownerFinal.outcome).toBe("applied");
       expect(owner.apiControls.settle.result.state).toBe("settled");
       expect(owner.apiControls.settle.receiptDelivery).not.toBeNull();
       expect(dm.settlePosts).toBe(1);
@@ -2192,7 +2184,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         (s) => s.serviceId === "data-manager",
       );
       expect(actual?.provenance.imageId).toBe(pulledImageId);
-      const baseline = owner.coordinatorPull.payload.baseline;
+      const baseline = owner.coordinatorPull.baseline;
       expect(baseline.policyRevision).not.toBe(baseline.configurationAuthorityRevision);
       expect(baseline.container).toEqual(
         owner.originalContainers.find((s: { serviceId: string }) => s.serviceId === "data-manager"),
@@ -2205,10 +2197,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).not.toBe(pulledImageId);
       expect(owner.plan.coordinatorImage.imageId).toBe(pulledImageId);
       expect(originalPull).toBeDefined();
-      expect(owner.coordinatorPull.payload.pull.operationKey).toBe(originalPull!.operationKey);
-      expect(owner.coordinatorPull.payload.pull.deadlineAt).toBeLessThan(
-        originalPull!.requestedDeadlineAt,
-      );
+      expect(owner.coordinatorPull.pull.operationKey).toBe(originalPull!.operationKey);
+      expect(owner.coordinatorPull.pull.deadlineAt).toBeLessThan(originalPull!.requestedDeadlineAt);
       expect(Object.hasOwn(originalPull!, "executionId")).toBe(false);
       const native = readFileSync(nativeTrace, "utf8")
         .trim()
@@ -2409,7 +2399,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 ? readFileSync(
                     join(
                       host.infraDir,
-                      "control-private/ops-agent/executions",
+                      "state/ops-agent/control/executions",
                       `${inspected.privateCoordinatorLifecycle.pull.operationKey}.json`,
                     ),
                   )
@@ -2506,7 +2496,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               readFileSync(
                 join(
                   host.infraDir,
-                  "control-private/ops-agent/executions",
+                  "state/ops-agent/control/executions",
                   `${inspected.privateCoordinatorLifecycle.pull.operationKey}.json`,
                 ),
               ).equals(originalNormal),
@@ -2630,12 +2620,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
         expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
-        const executions = join(host.infraDir, "control-private/ops-agent/executions");
+        const executions = join(host.infraDir, "state/ops-agent/control/executions");
         expect(
           (existsSync(executions) ? readdirSync(executions) : []).filter(
             (name) =>
-              JSON.parse(readFileSync(join(executions, name), "utf8")).payload?.kind ===
-              "service.pull",
+              JSON.parse(readFileSync(join(executions, name), "utf8"))?.kind === "service.pull",
           ),
         ).toHaveLength(0);
       },
@@ -2665,12 +2654,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         0,
       );
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      const executions = join(host.infraDir, "control-private/ops-agent/executions");
+      const executions = join(host.infraDir, "state/ops-agent/control/executions");
       expect(
         (existsSync(executions) ? readdirSync(executions) : []).filter(
           (name) =>
-            JSON.parse(readFileSync(join(executions, name), "utf8")).payload?.kind ===
-            "service.pull",
+            JSON.parse(readFileSync(join(executions, name), "utf8"))?.kind === "service.pull",
         ),
       ).toHaveLength(0);
     }, 60000);
@@ -2791,14 +2779,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         readFileSync(
           join(
             host.infraDir,
-            "control-private/ops-agent/configuration-maintenance",
+            "state/ops-agent/control/configuration-maintenance",
             `${result._configurationMaintenance.receipt.binding.maintenanceId}.json`,
           ),
           "utf8",
         ),
-      ).payload;
+      );
       expect(owner.receipt.state).toBe("settled");
-      expect(owner.final.ownerFinal.payload.outcome).toBe("unused");
+      expect(owner.final.ownerFinal.outcome).toBe("unused");
       expect(owner.receipt.decision.decision).toBe("abandon");
       expect(owner.receipt.generation).toBe("not_started");
       expect(posts.get("service.pull")).toBe(1);

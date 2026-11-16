@@ -912,7 +912,7 @@ it
             existsSync(
               join(
                 dirname(data),
-                "control-private/data-manager/execution-witnesses/data-manager",
+                "state/data-manager/control/execution-witnesses/data-manager",
                 `${activation.operationKey}.writer`,
               ),
             ),

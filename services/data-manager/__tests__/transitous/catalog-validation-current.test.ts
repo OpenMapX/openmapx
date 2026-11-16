@@ -9,12 +9,10 @@ import {
   closeControlInstallation,
   controlDigest,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
-  signControl,
 } from "@openmapx/core/build-artifacts";
 import {
-  CATALOG_VALIDATION_DOMAIN,
   catalogValidationRecordSchema,
   readCurrentCatalogValidation,
   withCatalogProposalDirectory,
@@ -25,7 +23,6 @@ import {
   executionFingerprint,
 } from "@openmapx/core/ops";
 import { expect, it } from "vitest";
-import { installationState } from "../../../../packages/core/src/build-artifacts/control-authority";
 import { publishCatalogValidationCurrent } from "../../src/jobs/transitous/catalog-validation-current";
 
 async function fixture(kind: "catalog.validate" | "transit-sync" | "download-fonts") {
@@ -34,7 +31,7 @@ async function fixture(kind: "catalog.validate" | "transit-sync" | "download-fon
     proposalId = randomUUID(),
     id = randomUUID();
   mkdirSync(join(dataDir, "motis/proposals", proposalId), { recursive: true, mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   const ids = ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
     installation = openControlInstallation({
       infraDir: root,
@@ -102,7 +99,6 @@ it("selects only original signed validation bytes, then invalidates before reuse
       };
     const record = catalogValidationRecordSchema.parse({
       version: 1,
-      installationId: f.installation.installationId,
       sourceExecution: f.execution,
       proposalDigest: d,
       runtimeInputs: inputs,
@@ -125,16 +121,7 @@ it("selects only original signed validation bytes, then invalidates before reuse
       },
     });
     withCatalogProposalDirectory(f.installation, f.proposalId, (dir) =>
-      dir.write(
-        `validation-${f.execution.executionId}.json`,
-        canonicalJson(
-          signControl(
-            installationState(f.installation).privateKey,
-            CATALOG_VALIDATION_DOMAIN,
-            record,
-          ),
-        ),
-      ),
+      dir.write(`validation-${f.execution.executionId}.json`, canonicalJson(record)),
     );
     publishCatalogValidationCurrent(f.authority, f.lease, f.proposalId);
     expect(readCurrentCatalogValidation(f.installation)?.selected).toEqual({

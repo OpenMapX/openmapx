@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import {
   type OpsOperation,
@@ -390,7 +390,7 @@ describe("authenticated conditional configuration admission", () => {
       const f = fixture();
       const token = Buffer.alloc(32, 7).toString("base64url");
       mkdirSync(join(f.infraDir, "data"), { mode: 0o700 });
-      await provisionControlInstallation(f.infraDir);
+      await provisionControlDirectories(f.infraDir);
       const installation = openControlInstallation({
         infraDir: f.infraDir,
         role: "ops-agent",

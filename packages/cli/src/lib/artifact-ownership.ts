@@ -1,7 +1,5 @@
 /** Standalone host-CLI roots for the two fixed artifact operations. */
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import type { ArtifactPublicationResult, OpsOperation, OpsResultFor } from "@openmapx/core/ops";
 import {
@@ -29,8 +27,7 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
     .list()
     .map((service) => service.manifest.id)
     .sort();
-  if (!existsSync("/run/secrets/openmapx-control-verifiers"))
-    await control.provisionControlInstallation(paths.infraDir);
+  control.provisionControlDirectories(paths.infraDir);
   const installation = control.openControlInstallation({
     infraDir: paths.infraDir,
     role: "host-cli",

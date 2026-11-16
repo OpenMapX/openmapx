@@ -13,6 +13,7 @@ const mock = vi.hoisted(() => ({
   closeArtifactTargetLeaseHandle: vi.fn(),
   closeControlInstallation: vi.fn(),
   executionAuthorityState: vi.fn(),
+  controlIdentity: vi.fn((installation: { childId: string }) => installation.childId),
 }));
 vi.mock("@openmapx/core/build-artifacts", async (original) => ({
   ...(await original<typeof import("@openmapx/core/build-artifacts")>()),
@@ -53,16 +54,15 @@ function fixture() {
       assertion: "original-fixed-child-assertion",
       execution,
     },
-    installation = { installationId: "fixture-installation", publicKey: "original-child-key" },
+    installation = { childId: "original-child-id" },
     preparer = { operationKey: "original-preparer", fingerprint: "c".repeat(64) },
     peer = Object.freeze({ fixture: "original-peer" }),
     lease = Object.freeze({ fixture: "original-lease" });
   mock.openFixedChildInstallation.mockReturnValue(installation);
   mock.readConfigurationHandoffSpawnIntent.mockReturnValue({
-    installationId: installation.installationId,
     operation: { handoffId: input.handoffId, serviceIds: ["motis"] },
     assertion: input.assertion,
-    helperPublicKey: installation.publicKey,
+    helperId: installation.childId,
     helper: execution,
     preparer,
     admittedAt: Date.now(),

@@ -25,7 +25,7 @@ import {
   type ControlInstallation,
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
 } from "../build-artifacts/control-authority";
 import {
@@ -94,7 +94,7 @@ beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-catalog-pair-"));
   docker = join(root, "infra/docker");
   mkdirSync(join(docker, "data"), { recursive: true, mode: 0o700 });
-  await provisionControlInstallation(docker);
+  await provisionControlDirectories(docker);
   installation = openControlInstallation({
     infraDir: docker,
     role: "ops-agent",
@@ -293,7 +293,7 @@ it("recovers rename-before-receipt loss from the exact marker without rewriting 
     if (
       committed &&
       fs.statSync(dirname(String(to))).ino ===
-        fs.statSync(join(docker, "control-private/ops-agent/catalog-commits")).ino
+        fs.statSync(join(docker, "state/ops-agent/control/catalog-commits")).ino
     )
       throw Error("receipt rename lost");
     rename(from, to);
@@ -336,7 +336,7 @@ it("bootstraps an actual local initialization root and releases its MOTIS owners
   const other = mkdtempSync(join(tmpdir(), "omx-catalog-startup-")),
     infra = join(other, "infra/docker");
   mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
-  await provisionControlInstallation(infra);
+  await provisionControlDirectories(infra);
   const local = openControlInstallation({
     infraDir: infra,
     role: "ops-agent",
@@ -385,7 +385,7 @@ it("does not acquire a startup target root for a malformed legacy pair", async (
   const other = mkdtempSync(join(tmpdir(), "omx-catalog-invalid-")),
     infra = join(other, "infra/docker");
   mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
-  await provisionControlInstallation(infra);
+  await provisionControlDirectories(infra);
   const local = openControlInstallation({
     infraDir: infra,
     role: "ops-agent",

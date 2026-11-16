@@ -14,9 +14,7 @@ import {
   controlDigest,
   executionAuthorityState,
   readPrivateRecord,
-  signControl,
   type VerifiedExecutionAuthority,
-  verifyControl,
   writePrivateRecord,
 } from "./control-authority";
 import {
@@ -27,7 +25,6 @@ import {
 import { dataUpdateHostDefaults, dataUpdateSourcesDigest } from "./data-update-sources";
 import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
 
-const domain = "openmapx-data-update-plan-v1";
 export function planDataUpdate(options: {
   infraDir: string;
   parent: ExecutionRef;
@@ -110,7 +107,7 @@ export function retainDataUpdatePlan(
     s.installation,
     "observations",
     `data-update-plan-${s.execution.operationKey}.json`,
-    signControl(s.installation.privateKey, domain, plan),
+    plan,
     true,
   );
 }
@@ -118,12 +115,7 @@ export function readDataUpdatePlan(authority: VerifiedExecutionAuthority): DataU
   const s = executionAuthorityState(authority),
     name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  const plan = verifyControl(
-    s.installation.installation.publicKey,
-    domain,
-    raw,
-    dataUpdatePlanSchema,
-  );
+  const plan = dataUpdatePlanSchema.parse(raw);
   validate(authority, plan);
   return plan;
 }

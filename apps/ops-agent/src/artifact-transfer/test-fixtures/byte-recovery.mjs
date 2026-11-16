@@ -13,7 +13,6 @@ const root = mkdtempSync(join(tmpdir(), "omx-native-byte-"));
 const options = {
   dataRoot: join(root, "stages"),
   privateRoot: join(root, "private"),
-  token: "synthetic-native-byte-token",
 };
 let store;
 let child;

@@ -50,8 +50,7 @@ async function fixture() {
   cleanups.push(() => closeControlInstallation(installation));
   const store = new ArtifactTransferStore({
     dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
-    privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
-    token: host.token,
+    privateRoot: join(host.infraDir, "state/ops-agent/artifact-transfers"),
     capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
   });
   cleanups.push(() => store.close());
@@ -450,8 +449,7 @@ it("reconciles the original prepared publication after exact foreign-inode repai
   });
   const store = new ArtifactTransferStore({
     dataRoot: join(f.infraDir, "data/.openmapx-transfers"),
-    privateRoot: join(f.infraDir, "control-private/ops-agent/artifact-transfers"),
-    token: f.token,
+    privateRoot: join(f.infraDir, "state/ops-agent/artifact-transfers"),
     capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
   });
   cleanups.push(() => store.close());
@@ -653,8 +651,7 @@ async function reassembleCommittedFixture(f: Awaited<ReturnType<typeof fixture>>
   });
   const store = new ArtifactTransferStore({
     dataRoot: join(f.infraDir, "data/.openmapx-transfers"),
-    privateRoot: join(f.infraDir, "control-private/ops-agent/artifact-transfers"),
-    token: f.token,
+    privateRoot: join(f.infraDir, "state/ops-agent/artifact-transfers"),
     capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
   });
   cleanups.push(() => store.close());

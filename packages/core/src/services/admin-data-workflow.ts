@@ -5,9 +5,7 @@ import {
   controlDigest,
   executionAuthorityState,
   readPrivateRecord,
-  signControl,
   type VerifiedExecutionAuthority,
-  verifyControl,
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "../build-artifacts/control-authority";
@@ -15,7 +13,6 @@ import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/files
 import { canonicalJson } from "../ops/canonical-json";
 import { type DataWorkflowReceipt, dataWorkflowReceiptSchema } from "../ops/job-evidence";
 
-const domain = "openmapx-admin-data-workflow-v1";
 const bodySchema = z.strictObject({
   version: z.literal(1),
   operationKey: z.string(),
@@ -57,7 +54,7 @@ export async function openAdminDataWorkflow(options: {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
-    const body = verifyControl(state.installation.installation.publicKey, domain, raw, bodySchema);
+    const body = bodySchema.parse(raw);
     if (
       body.operationKey !== state.execution.operationKey ||
       body.fingerprint !== state.execution.fingerprint
@@ -92,15 +89,15 @@ export async function openAdminDataWorkflow(options: {
             !receipt.revisionId)
         )
           throw Error("Incomplete Full Update cannot be reported complete");
-        const signed = signControl(state.installation.privateKey, domain, {
+        const record = {
           version: 1 as const,
           operationKey: state.execution.operationKey,
           fingerprint: state.execution.fingerprint,
           receipt,
-        });
-        if (Buffer.byteLength(canonicalJson(signed)) > 65536)
+        };
+        if (Buffer.byteLength(canonicalJson(record)) > 65536)
           throw Error("Workflow checkpoint exceeds retention capacity");
-        writePrivateRecord(state.installation, "observations", name, signed, !prior);
+        writePrivateRecord(state.installation, "observations", name, record, !prior);
       });
     },
   };

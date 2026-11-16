@@ -6,7 +6,7 @@ import { afterEach, expect, it } from "vitest";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
 } from "../../build-artifacts/control-authority";
 import {
@@ -24,7 +24,7 @@ async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "omx-update-store-"));
   roots.push(root);
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   const installation = openControlInstallation({
     infraDir: root,
     role: "host-cli",

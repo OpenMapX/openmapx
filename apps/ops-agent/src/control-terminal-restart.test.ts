@@ -121,7 +121,7 @@ it.each(
   async ({ boundary, change }) => {
     const root = mkdtempSync(join(tmpdir(), "omx-terminal-tuple-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await c.provisionControlInstallation(root);
+    await c.provisionControlDirectories(root);
     let app: ReturnType<typeof buildOpsAgentServer> | undefined,
       installation: c.ControlInstallation | undefined;
     const token = Buffer.alloc(32, 7).toString("base64url"),
@@ -138,11 +138,11 @@ it.each(
       const altered = structuredClone(original);
       const commitmentPath = join(
         root,
-        `control-private/ops-agent/observations/terminal-${original.operationKey}.json`,
+        `state/ops-agent/control/observations/terminal-${original.operationKey}.json`,
       );
       const commitment = readFileSync(commitmentPath);
       const admission = readFileSync(
-        join(root, `control-private/ops-agent/executions/${original.operationKey}.json`),
+        join(root, `state/ops-agent/control/executions/${original.operationKey}.json`),
       );
       if (change === "failure-error") altered.errorClass = "timeout";
       else if (change === "failure-result")
@@ -190,7 +190,7 @@ it.each(
       const { journal } = await start(original);
       expect(
         readFileSync(
-          join(root, `control-private/ops-agent/executions/${original.operationKey}.json`),
+          join(root, `state/ops-agent/control/executions/${original.operationKey}.json`),
         ),
       ).toEqual(admission);
       if (!installation) throw Error("Missing restored installation");
@@ -205,9 +205,7 @@ it.each(
         }),
       ).toEqual([original.operationKey]);
       expect(
-        existsSync(
-          join(root, `control-private/ops-agent/executions/${original.operationKey}.json`),
-        ),
+        existsSync(join(root, `state/ops-agent/control/executions/${original.operationKey}.json`)),
       ).toBe(false);
       expect(journal.records()).toEqual([original]);
       expect(dispatch).not.toHaveBeenCalled();
@@ -248,7 +246,7 @@ it.each(
     const { boundary, outcome, known } = scenario;
     const root = mkdtempSync(join(tmpdir(), "omx-terminal-restart-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await c.provisionControlInstallation(root);
+    await c.provisionControlDirectories(root);
     let app: ReturnType<typeof buildOpsAgentServer> | undefined;
     let installation: c.ControlInstallation | undefined;
     const dispatch = vi.fn(async () => {
@@ -259,12 +257,12 @@ it.each(
         original = stopped.job;
       if ("tamper" in scenario) {
         if (scenario.tamper === "missing-proof")
-          rmSync(join(root, `control-private/ops-agent/effects/${original.operationKey}.json`));
+          rmSync(join(root, `state/ops-agent/control/effects/${original.operationKey}.json`));
         else if (scenario.tamper === "missing-terminal-commitment")
           rmSync(
             join(
               root,
-              `control-private/ops-agent/observations/terminal-${original.operationKey}.json`,
+              `state/ops-agent/control/observations/terminal-${original.operationKey}.json`,
             ),
           );
         else if (scenario.tamper === "admission-time") {
@@ -284,7 +282,7 @@ it.each(
         }
       }
       expect(
-        existsSync(join(root, `control-private/ops-agent/effect-writers/${original.operationKey}`)),
+        existsSync(join(root, `state/ops-agent/control/effect-writers/${original.operationKey}`)),
       ).toBe(false);
       if (!original.terminalAt) throw Error("Missing actual terminal journal timestamp");
       const now = vi
@@ -418,7 +416,7 @@ it.each(
 it("repairs a borrowed terminal worker after the actual canonical-digest restart boundary without replay or releasing its parent", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-borrowed-terminal-restart-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await c.provisionControlInstallation(root);
+  await c.provisionControlDirectories(root);
   const dm = c.openControlInstallation({
     infraDir: root,
     role: "data-manager",
@@ -487,7 +485,7 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     const assertion = await c.delegateArtifactTargetLease(lease, {
       ...plan,
-      childPublicKey: peer.publicKey,
+      childId: peer.role,
     });
     c.closeControlInstallation(peer);
     const stopped = await interrupt(root, "digest", "success", { assertion, execution });

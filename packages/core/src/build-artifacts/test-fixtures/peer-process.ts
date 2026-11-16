@@ -60,8 +60,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         serviceIds: input.admitted.serviceIds,
         owner: authority,
       });
-      if (input.fixedId)
-        input.child.childPublicKey = c.prepareFixedControlChild(authority, input.fixedId);
+      if (input.fixedId) input.child.childId = c.prepareFixedControlChild(authority, input.fixedId);
       const assertion = await l.delegateArtifactTargetLease(lease, input.child);
       if (input.prepared) c.retainControlPreparedTerminal(authority);
       c.retainControlEffectReceipt(authority, {

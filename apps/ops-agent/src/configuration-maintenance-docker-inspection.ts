@@ -1,9 +1,9 @@
 /** Fixed production Docker inspector. Only execFile is an external-I/O seam;
  * no injected result/inspector can qualify the original maintenance final. */
-import { createHmac, type KeyObject, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { dirname, isAbsolute, relative, sep } from "node:path";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
@@ -57,7 +57,6 @@ export async function inspectMaintenanceDockerRuntime(options: {
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
   owner: ConfigurationMaintenanceOwnerRecord;
   containers: readonly OwnedServiceSnapshot[];
-  privateKey: KeyObject;
   signal: AbortSignal;
   /** Interim fixed-helper check only; the final producer always checks all targets. */
   handoffTargetId?: string;
@@ -112,7 +111,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
       return response.stdout;
     },
     keyed = (value: string | Buffer) =>
-      createHmac("sha256", options.privateKey.export({ type: "pkcs8", format: "der" }))
+      createHash("sha256")
         .update("openmapx-private-maintenance-runtime-v1\0")
         .update(value)
         .digest("hex");

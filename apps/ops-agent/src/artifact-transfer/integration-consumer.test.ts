@@ -35,7 +35,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
   const infra = join(root, "infra");
   mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
   mkdirSync(join(root, "services"), { mode: 0o755 });
-  await control.provisionControlInstallation(infra);
+  await control.provisionControlDirectories(infra);
   const installation = control.openControlInstallation({
     infraDir: infra,
     role: "ops-agent",
@@ -45,7 +45,6 @@ it("validates real uploaded bytes only under the exact retained integration exec
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "stages"),
     privateRoot: join(root, "stage-meta"),
-    token: "fixture-test-token",
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
   });
   cleanup.push(() => store.close());

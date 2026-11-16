@@ -5,14 +5,12 @@ import {
   assertControlExecutionForward,
   controlDigest,
   executionAuthorityState,
-  signControl,
   type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
 } from "@openmapx/core/build-artifacts";
 import { currentCatalogValidationSchema, readCatalogValidation } from "@openmapx/core/catalog-pins";
 import { canonicalJson } from "@openmapx/core/ops";
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
-import { CURRENT_CATALOG_VALIDATION_DOMAIN } from "../../../../../packages/core/src/catalog-pins/record-files";
 export function publishCatalogValidationCurrent(
   authority: VerifiedExecutionAuthority,
   lease: TargetLeaseAuthority,
@@ -56,7 +54,6 @@ export function publishCatalogValidationCurrent(
   }
   const body = currentCatalogValidationSchema.parse({
     version: 1,
-    installationId: owner.installation.installation.installationId,
     sourceExecution: owner.execution,
     selected,
   });
@@ -64,12 +61,7 @@ export function publishCatalogValidationCurrent(
   let motis: AnchoredDirectory | undefined;
   try {
     motis = data.directory("motis", true);
-    motis.write(
-      "catalog-validation-current.json",
-      canonicalJson(
-        signControl(owner.installation.privateKey, CURRENT_CATALOG_VALIDATION_DOMAIN, body),
-      ),
-    );
+    motis.write("catalog-validation-current.json", canonicalJson(body));
   } finally {
     motis?.close();
     data.close();

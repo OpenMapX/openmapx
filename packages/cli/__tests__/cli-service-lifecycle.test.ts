@@ -122,7 +122,7 @@ function retainedReceipts() {
     lifecycleOperationKeys().map((key) =>
       services.readServiceLifecycleReceipt({
         dataRoot,
-        execution: lifecycleEnvelope(`${key}.json`).seed.payload.execution,
+        execution: lifecycleEnvelope(`${key}.json`).seed.execution,
       }),
     ),
   );
@@ -445,7 +445,7 @@ describe("actual CLI service lifecycle preparation", () => {
         });
       try {
         control.cancelControlExecution(
-          control.restoreAdmittedControlExecution(installation, envelope.seed.payload.execution),
+          control.restoreAdmittedControlExecution(installation, envelope.seed.execution),
         );
       } finally {
         control.closeControlInstallation(installation);
@@ -473,7 +473,7 @@ describe("actual CLI service lifecycle preparation", () => {
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
       const directory = join(root, "infra/docker/state/ops-agent/lifecycle"),
         envelope = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
-      vi.spyOn(Date, "now").mockReturnValue(envelope.seed.payload.execution.deadlineAt + 1);
+      vi.spyOn(Date, "now").mockReturnValue(envelope.seed.execution.deadlineAt + 1);
       return 0;
     });
     await expect(command("update")).rejects.toThrow("exit:1");
@@ -599,7 +599,7 @@ describe("actual CLI service lifecycle preparation", () => {
         await control.issueControlChildPhase(authority, {
           phase: "hardlinks",
           ordinal: reservation.ordinal,
-          childPublicKey: control.controlRolePublicKey(installation, "data-manager"),
+          childId: "data-manager",
           lease,
         });
         return { applied: true, entries: 1, linked: 1, skipped: 0, pruned: 0, via: "data-manager" };

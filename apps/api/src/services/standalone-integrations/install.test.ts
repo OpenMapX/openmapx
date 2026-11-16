@@ -67,7 +67,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       store = new ArtifactTransferStore({
         dataRoot: join(state.host.infraDir, "data/.openmapx-transfers"),
         privateRoot: join(state.host.cleanupRoot, "transfer-metadata"),
-        token: state.host.token,
         capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
       });
       installArtifactTransferRuntime(state.host.runtime, store);

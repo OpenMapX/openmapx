@@ -385,7 +385,6 @@ import {
   assertOwnedDataTransitCandidate,
   bindControlChildPhase,
   consumeControlChildDispatch,
-  controlRolePublicKey,
   inspectArtifactTargetLeaseChildSettlement,
   issueControlChildPhase,
   lookupControlChildPhaseAttempt,
@@ -596,7 +595,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
         phase: slot.phase,
         ordinal: slot.ordinal,
         lease: ownedLease(context),
-        childPublicKey: controlRolePublicKey(context.installation, "ops-agent"),
+        childId: "ops-agent",
         evidence: publishedDataTransitCandidate(context.authority, slot),
       });
       const reference = lookupControlChildPhaseAttempt(context.authority, slot);

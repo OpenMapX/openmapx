@@ -1,5 +1,5 @@
-/** Signed record primitives; contains no admission or retirement constructors. */
-import { createHash, createPublicKey, type KeyObject, sign, verify } from "node:crypto";
+/** Control record primitives; contains no admission or retirement constructors. */
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
@@ -9,17 +9,13 @@ import type { LeaseBackend } from "./target-lease";
 
 declare const installationBrand: unique symbol;
 export type ControlInstallation = Readonly<{
-  installationId: string;
   role: ControlIssuer;
-  publicKey: string;
   [installationBrand]: true;
 }>;
 export interface InstallationState {
   fixedChildId?: string;
   fixedParentAssertion?: string;
   installation: ControlInstallation;
-  privateKey: KeyObject;
-  publicKeys: Record<ControlIssuer, string>;
   privateRoot: AnchoredDirectory;
   dataRoot: string;
   registeredTargets: ReadonlySet<string>;
@@ -56,41 +52,6 @@ export const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export function controlDigest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
-export function signControl<T>(
-  key: KeyObject,
-  domain: string,
-  payload: T,
-): { payload: T; signature: string } {
-  return {
-    payload,
-    signature: sign(null, Buffer.from(`${domain}\0${canonicalJson(payload)}`), key).toString(
-      "base64url",
-    ),
-  };
-}
-export function verifyControl<T>(
-  key: string,
-  domain: string,
-  envelope: unknown,
-  schema: z.ZodType<T>,
-): T {
-  const e = z
-    .strictObject({ payload: schema, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) })
-    .parse(envelope);
-  const k = createPublicKey({ key: Buffer.from(key, "base64url"), format: "der", type: "spki" });
-  if (
-    k.asymmetricKeyType !== "ed25519" ||
-    !verify(
-      null,
-      Buffer.from(`${domain}\0${canonicalJson(e.payload)}`),
-      k,
-      Buffer.from(e.signature, "base64url"),
-    )
-  )
-    throw Error("Invalid control signature");
-  return e.payload;
-}
-
 export const targetSchema = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
   .min(1)

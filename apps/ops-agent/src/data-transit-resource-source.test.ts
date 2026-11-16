@@ -1,13 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import {
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
@@ -50,7 +42,7 @@ async function fixture(
     ],
     { rootDir: data },
   );
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -119,7 +111,7 @@ async function fixture(
     issued = await control.issueControlChildPhase(authority, {
       ...slot,
       lease,
-      childPublicKey: agent.publicKey,
+      childId: agent.role,
       evidence: control.publishedDataTransitCandidate(authority, slot),
     });
   const claimer = createProductionRegistryResourceClaimer({
@@ -258,16 +250,16 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
           readFileSync(
             join(
               f.root,
-              "control-private/ops-agent/observations",
+              "state/ops-agent/control/observations",
               `proxy-validation-${f.bound.execution.operationKey}.json`,
             ),
             "utf8",
           ),
         );
         const input = {
-          candidateDigest: raw.payload.candidateDigest,
-          validationExitCode: raw.payload.validationExitCode,
-          completionDigest: raw.payload.completionDigest,
+          candidateDigest: raw.candidateDigest,
+          validationExitCode: raw.validationExitCode,
+          completionDigest: raw.completionDigest,
         };
         // An original failed invocation remains known after a later legitimate
         // restore replaces the active bytes. Observation grants no new effect.
@@ -284,7 +276,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
           readFileSync(
             join(
               f.root,
-              "control-private/ops-agent/observations",
+              "state/ops-agent/control/observations",
               `terminal-${f.bound.execution.operationKey}.json`,
             ),
             "utf8",
@@ -295,7 +287,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
             f.agent,
             f.bound.execution,
             status,
-            terminal.payload.terminalAt,
+            terminal.terminalAt,
           ),
         ).not.toThrow();
         expect(() =>
@@ -303,14 +295,14 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
             f.agent,
             f.bound.execution,
             status,
-            terminal.payload.terminalAt + 1,
+            terminal.terminalAt + 1,
           ),
         ).toThrow();
-        raw.signature = "a".repeat(86);
+        raw.validationExitCode += 1;
         writeFileSync(
           join(
             f.root,
-            "control-private/ops-agent/observations",
+            "state/ops-agent/control/observations",
             `proxy-validation-${f.bound.execution.operationKey}.json`,
           ),
           JSON.stringify(raw),
@@ -321,7 +313,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
             f.agent,
             f.bound.execution,
             status,
-            terminal.payload.terminalAt,
+            terminal.terminalAt,
           ),
         ).toThrow();
       } else {

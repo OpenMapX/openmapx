@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   apiJobChildAttemptSchema,
   canonicalJson,
@@ -7,9 +7,7 @@ import {
   type OpsOperationKind,
   opsExecutionBudget,
   opsOperationFingerprint,
-  readOpsTokenFile,
 } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
 import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 
@@ -137,15 +135,8 @@ export function prepareApiJobChildAttempt(
     attemptId: randomUUID(),
   });
 }
-export async function issueApiJobChildAssertion(attempt: ApiJobChildAttempt): Promise<string> {
-  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-  // Exact schema order and NUL-terminated domain used by verifyApiJobParentExecution.
-  const payload = Buffer.from(JSON.stringify(apiJobChildAttemptSchema.parse(attempt))).toString(
-    "base64url",
-  );
-  const signature = createHmac("sha256", token)
-    .update("openmapx-api-job-parent-v1\0")
-    .update(payload)
-    .digest("base64url");
-  return `${payload}.${signature}`;
+/** The parent binding the agent checks; the request's bearer token authenticates it. */
+export function issueApiJobChildAssertion(attempt: ApiJobChildAttempt): string {
+  // Exact schema order used by verifyApiJobParentExecution.
+  return Buffer.from(JSON.stringify(apiJobChildAttemptSchema.parse(attempt))).toString("base64url");
 }

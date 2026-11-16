@@ -4,7 +4,7 @@ import { canonicalJson } from "../ops/canonical-json";
 import { executionRefSchema } from "../ops/execution-ref";
 import { ownedServiceSnapshotSchema } from "../ops/owned-service-records";
 import { servicePullResultSchema } from "../ops/service-operation-records";
-export const coordinatorPullObservationDomain = "openmapx-coordinator-pull-observation-v2";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const coordinatorPullBaselineSchema = z
   .strictObject({
@@ -26,7 +26,6 @@ export const coordinatorPullBaselineSchema = z
 export type CoordinatorPullBaseline = z.infer<typeof coordinatorPullBaselineSchema>;
 export const coordinatorPullWitnessPayloadSchema = z.strictObject({
   version: z.literal(2),
-  installationId: z.uuid(),
   maintenanceId: z.uuid(),
   candidateId: z.uuid(),
   maintenancePrepare: executionRefSchema,
@@ -45,12 +44,9 @@ export const coordinatorPullWitnessPayloadSchema = z.strictObject({
   baselineAdmissionDigest: digest,
   verifiedAt: z.number().int().nonnegative().safe(),
 });
-export const coordinatorPullWitnessSchema = z
-  .strictObject({
-    payload: coordinatorPullWitnessPayloadSchema,
-    signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
-  })
-  .refine((v) => Buffer.byteLength(canonicalJson(v)) <= 8192);
+export const coordinatorPullWitnessSchema = coordinatorPullWitnessPayloadSchema.refine(
+  (v) => Buffer.byteLength(canonicalJson(v)) <= 8192,
+);
 export type CoordinatorPullWitness = z.infer<typeof coordinatorPullWitnessSchema>;
 
 /** Historical source facts, distinct from a new owner's pull witness. */
@@ -62,21 +58,15 @@ export const stagedCoordinatorSourceSchema = z.strictObject({
   canonicalDigest: digest,
   effectDigest: digest,
 });
-export const stagedCoordinatorObservationDomain =
-  "openmapx-maintenance-staged-coordinator-observation-v1";
 export const stagedCoordinatorObservationPayloadSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   ownerPrepare: executionRefSchema,
   candidateId: z.uuid(),
   planDigest: digest,
   source: stagedCoordinatorSourceSchema,
   capturedAt: z.number().int().nonnegative().safe(),
 });
-export const stagedCoordinatorObservationSchema = z
-  .strictObject({
-    payload: stagedCoordinatorObservationPayloadSchema,
-    signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
-  })
-  .refine((value) => Buffer.byteLength(canonicalJson(value)) <= 8192);
+export const stagedCoordinatorObservationSchema = stagedCoordinatorObservationPayloadSchema.refine(
+  (value) => Buffer.byteLength(canonicalJson(value)) <= 8192,
+);
 export type StagedCoordinatorObservation = z.infer<typeof stagedCoordinatorObservationSchema>;

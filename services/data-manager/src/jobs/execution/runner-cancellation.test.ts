@@ -6,7 +6,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -130,7 +129,7 @@ it.skipIf(
     const sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-runner-union-crash-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const catalog = join(root, "catalog"),
       ready = join(catalog, "ready"),
       keyFile = join(root, "runner-key"),
@@ -236,7 +235,7 @@ it.skipIf(
       expect(lease).toBeDefined();
       const proof = join(
         root,
-        `control-private/data-manager/observations/worker-${original.operation_key}.json`,
+        `state/data-manager/control/observations/worker-${original.operation_key}.json`,
       );
       await dm!.kill();
       dm = undefined;
@@ -337,7 +336,7 @@ it
     const sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-dm-active-crash-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const token = "b".repeat(43),
       tokenFile = join(root, "token"),
       keyFile = join(root, "runner-key");
@@ -444,7 +443,7 @@ it
       await dm!.kill();
       dm = undefined;
       // SIGKILL occurred while dispatcher awaited the independent child.
-      const observations = join(root, "control-private/data-manager/observations");
+      const observations = join(root, "state/data-manager/control/observations");
       expect(existsSync(join(observations, `worker-${operationKey}.json`))).toBe(false);
       base = await start(true);
       if (mode === "python") {
@@ -557,7 +556,7 @@ it.skipIf(
       released = join(catalog, "release");
     mkdirSync(join(root, "data"), { mode: 0o700 });
     mkdirSync(join(catalog, "src"), { recursive: true });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     writeFileSync(
       join(catalog, "src/garbage-collect.py"),
       "import os,time\nfrom pathlib import Path\nPath('ready').write_text(str(os.getpid()))\nwhile not Path('release').exists(): time.sleep(0.05)\n",

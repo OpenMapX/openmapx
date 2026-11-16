@@ -1,13 +1,8 @@
 /** The admitted validation root owns the inactive slot through proxy restoration and final stop. */
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
+import { controlDigest, executionAuthorityState } from "@openmapx/core/build-artifacts";
 import {
-  controlDigest,
-  executionAuthorityState,
-  signControl,
-} from "@openmapx/core/build-artifacts";
-import {
-  CATALOG_VALIDATION_DOMAIN,
   type CatalogRuntimeInputs,
   type CatalogValidation,
   catalogRuntimeInputsSchema,
@@ -219,22 +214,19 @@ export async function runCatalogValidation(options: {
       imageDigest: runtimeInputs.imageDigest,
     };
   }
-  const owner = executionAuthorityState(context.authority),
-    retained = catalogValidationRecordSchema.parse({
-      version: 1,
-      installationId: context.installation.installationId,
-      sourceExecution: context.execution,
-      proposalDigest: controlDigest(evidence.proposal),
-      runtimeInputs,
-      validation,
-    });
+  executionAuthorityState(context.authority);
+  const retained = catalogValidationRecordSchema.parse({
+    version: 1,
+    sourceExecution: context.execution,
+    proposalDigest: controlDigest(evidence.proposal),
+    runtimeInputs,
+    validation,
+  });
   await publishDataChange(() =>
     withCatalogProposalDirectory(context.installation, input.proposalId, (directory) =>
       directory.write(
         `validation-${context.execution.executionId}.json`,
-        canonicalJson(
-          signControl(owner.installation.privateKey, CATALOG_VALIDATION_DOMAIN, retained),
-        ),
+        canonicalJson(retained),
         true,
       ),
     ),

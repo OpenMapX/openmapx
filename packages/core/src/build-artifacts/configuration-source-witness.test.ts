@@ -13,14 +13,14 @@ import {
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "./control-authority";
 
 let root: string;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-source-witness-"));
   mkdirSync(join(root, "data"), { mode: 0o755 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 it("keeps host values private while detecting a changed persisted full selection", () => {

@@ -77,7 +77,7 @@ it("keeps staged and live bytes unchanged when the retained parent cancels befor
     { withHostDataControlContext } = await import("../src/lib/control-context");
   const ownerRoot = mkdtempSync(join(tmpdir(), "omx-canceled-build-"));
   mkdirSync(join(ownerRoot, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(ownerRoot);
+  await control.provisionControlDirectories(ownerRoot);
   const installation = control.openControlInstallation({
     infraDir: ownerRoot,
     role: "host-cli",

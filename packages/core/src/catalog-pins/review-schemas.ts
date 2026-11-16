@@ -58,7 +58,6 @@ export const catalogValidationSchema = z.discriminatedUnion("status", [
 export const catalogValidationRecordSchema = z
   .strictObject({
     version: z.literal(1),
-    installationId: z.uuid(),
     sourceExecution: executionRefSchema,
     proposalDigest: digest,
     runtimeInputs: catalogRuntimeInputsSchema,
@@ -72,7 +71,6 @@ export const catalogValidationRecordSchema = z
   );
 export const catalogActivationRecordSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   parent: executionRefSchema,
   proposalId: z.uuid(),
   validationId: z.uuid(),
@@ -139,7 +137,6 @@ export const catalogCandidateManifestSchema = z.object({
 });
 export const currentCatalogValidationSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   sourceExecution: executionRefSchema,
   selected: z
     .strictObject({ proposalId: z.uuid(), validationId: z.uuid(), validationDigest: digest })

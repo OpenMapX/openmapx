@@ -24,7 +24,7 @@ async function fixture() {
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const infra = join(root, "infra");
   mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
-  await control.provisionControlInstallation(infra);
+  await control.provisionControlDirectories(infra);
   const installation = control.openControlInstallation({
     infraDir: infra,
     role: "ops-agent",
@@ -35,7 +35,6 @@ async function fixture() {
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "stages"),
     privateRoot: join(root, "private"),
-    token: "fixture-prepared-consumer",
     capacity: () => ({ bytes: available, inodes: 100000 }),
   });
   cleanups.push(() => store.close());

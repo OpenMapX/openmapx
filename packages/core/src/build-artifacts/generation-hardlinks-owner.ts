@@ -37,14 +37,13 @@ import {
 } from "./child-phase";
 import {
   assertControlExecutionForward,
-  controlRolePublicKey,
   executionAuthorityState,
   readDataControlTerminalObservation,
   readPrivateRecord,
   type VerifiedExecutionAuthority,
   writePrivateRecord,
 } from "./control-authority";
-import { controlDigest, signControl, verifyControl } from "./control-records";
+import { controlDigest } from "./control-records";
 import {
   assertArtifactTargetLeaseExecution,
   inspectLocalLeaseChildSettlement,
@@ -93,7 +92,6 @@ export function planGenerationHardlinksOwner(options: {
     reservation,
   });
 }
-const domain = "openmapx-generation-hardlinks-owner-v1";
 const name = (authority: VerifiedExecutionAuthority) =>
   `generation-hardlinks-${authority.execution.operationKey}.json`;
 function validateOwner(
@@ -129,23 +127,14 @@ export function retainGenerationHardlinksOwnerPlan(
   const s = executionAuthorityState(authority),
     plan = schema.parse(value);
   validateOwner(s, plan);
-  writePrivateRecord(
-    s.installation,
-    "observations",
-    name(authority),
-    signControl(s.installation.privateKey, domain, plan),
-    true,
-  );
+  writePrivateRecord(s.installation, "observations", name(authority), plan, true);
 }
 export function readGenerationHardlinksOwnerPlan(
   authority: VerifiedExecutionAuthority,
 ): GenerationHardlinksOwnerPlan {
   const s = executionAuthorityState(authority),
-    plan = verifyControl(
-      s.installation.installation.publicKey,
-      domain,
+    plan = schema.parse(
       readPrivateRecord(s.installation, "observations", name(authority), 128 * 1024),
-      schema,
     );
   validateOwner(s, plan);
   return plan;
@@ -158,7 +147,6 @@ export async function executeOwnedGenerationHardlinks(options: {
   signal?: AbortSignal;
 }) {
   const { authority, lease, transport, signal } = options,
-    s = executionAuthorityState(authority),
     plan = readGenerationHardlinksOwnerPlan(authority);
   assertControlExecutionForward(authority);
   assertArtifactTargetLeaseExecution(lease, authority.execution);
@@ -207,7 +195,7 @@ export async function executeOwnedGenerationHardlinks(options: {
     const issued = await issueControlChildPhase(authority, {
       phase: "hardlinks",
       ordinal: plan.reservation.ordinal,
-      childPublicKey: controlRolePublicKey(s.installation.installation, "data-manager"),
+      childId: "data-manager",
       lease,
     });
     consumeControlChildDispatch(issued.dispatchTicket);

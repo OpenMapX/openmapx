@@ -36,12 +36,7 @@ import {
   writePrivateRecord,
 } from "./control-authority";
 // biome-ignore-end lint/suspicious/noImportCycles: Shared original execution verification described above.
-import {
-  controlOriginSchema,
-  sameControlOrigin,
-  signControl,
-  verifyControl,
-} from "./control-records";
+import { controlOriginSchema, sameControlOrigin } from "./control-records";
 import { AnchoredDirectory, identity, sameInode } from "./filesystem";
 // biome-ignore lint/suspicious/noImportCycles: The candidate reads the agent's store through the same lease module as its issuer.
 import { localLeases } from "./target-lease";
@@ -231,12 +226,7 @@ function proxyConsumer(
   }
 }
 function catalogRecordSource(state: ReturnType<typeof installationState>) {
-  return {
-    dataRoot: state.dataRoot,
-    installationId: state.installation.installationId,
-    dataManagerPublicKey: state.publicKeys["data-manager"],
-    agentPublicKey: state.publicKeys["ops-agent"],
-  };
+  return { dataRoot: state.dataRoot };
 }
 function catalogActivationCandidate(s: ReturnType<typeof executionAuthorityState>) {
   if (s.kind !== "catalog.activate") return undefined;
@@ -246,17 +236,13 @@ function catalogActivationCandidate(s: ReturnType<typeof executionAuthorityState
       `${s.execution.operationKey}.json`,
       65536,
     ),
-    admitted = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-control-execution-v2",
-      raw,
-      z
-        .object({
-          kind: z.literal("catalog.activate"),
-          operation: z.record(z.string(), z.unknown()),
-        })
-        .passthrough(),
-    );
+    admitted = z
+      .object({
+        kind: z.literal("catalog.activate"),
+        operation: z.record(z.string(), z.unknown()),
+      })
+      .passthrough()
+      .parse(raw);
   if (
     controlDigest(raw) !== s.receiptDigest ||
     controlDigest(admitted.operation) !== s.execution.operationFingerprint ||
@@ -407,12 +393,7 @@ export function retainOwnedDataTransitCandidate(
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   if (saved !== null && saved !== undefined) {
-    const prior = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-data-candidate-v1",
-      saved,
-      schema,
-    );
+    const prior = schema.parse(saved);
     if (canonicalJson(prior) !== canonicalJson(value))
       throw Error("Original candidate bytes/owner changed");
     return controlDigest(prior);
@@ -421,13 +402,7 @@ export function retainOwnedDataTransitCandidate(
     throw Error("Attempted candidate cannot be reconstructed");
   assertControlExecutionForward(authority);
   const parsed = schema.parse(value);
-  writePrivateRecord(
-    s.installation,
-    "observations",
-    name(authority, input.ordinal),
-    signControl(s.installation.privateKey, "openmapx-data-candidate-v1", parsed),
-    true,
-  );
+  writePrivateRecord(s.installation, "observations", name(authority, input.ordinal), parsed, true);
   return controlDigest(parsed);
 }
 export function assertOwnedDataTransitCandidate(
@@ -437,11 +412,8 @@ export function assertOwnedDataTransitCandidate(
   const value = snapshot(authority, input.phase, input.ordinal);
   if (!value) return null;
   const s = executionAuthorityState(authority),
-    saved = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-data-candidate-v1",
+    saved = schema.parse(
       readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192),
-      schema,
     );
   if (canonicalJson(saved) !== canonicalJson(value))
     throw Error("Foreign or changed owned transit candidate");
@@ -466,12 +438,7 @@ export function publishedDataTransitCandidate(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
   }
-  const candidate = verifyControl(
-    s.installation.installation.publicKey,
-    "openmapx-data-candidate-v1",
-    saved,
-    schema,
-  );
+  const candidate = schema.parse(saved);
   const slot =
     s.reservations.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal) ??
     s.plan.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal);
@@ -596,12 +563,7 @@ export function verifyDataTransitCandidateForExecution(
       `${s.execution.operationKey}.json`,
       65536,
     ),
-    admission = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-control-execution-v2",
-      raw,
-      z.object({ parent: retainedParentExecutionSchema }).passthrough(),
-    );
+    admission = z.object({ parent: retainedParentExecutionSchema }).passthrough().parse(raw);
   if (
     controlDigest(raw) !== s.receiptDigest ||
     checked.digest !== expectedDigest ||
@@ -633,7 +595,6 @@ export const {
   const schema = z
     .strictObject({
       version: z.literal(2),
-      installationId: z.uuid(),
       origin: controlOriginSchema,
       execution: executionRefSchema,
       admissionDigest: digest,
@@ -655,7 +616,6 @@ export const {
         ctx.addIssue({ code: "custom", message: "Invalid fixed validation phase" });
     });
   type Proof = z.infer<typeof schema>;
-  const domain = "openmapx-feed-proxy-validation-v2";
   const name = (authority: VerifiedExecutionAuthority) =>
     `proxy-validation-${authority.execution.operationKey}.json`;
   function state(authority: VerifiedExecutionAuthority) {
@@ -670,9 +630,8 @@ export const {
   function read(authority: VerifiedExecutionAuthority) {
     const s = state(authority),
       raw = readPrivateRecord(s.installation, "observations", name(authority), 4096);
-    const p = verifyControl(s.installation.installation.publicKey, domain, raw, schema);
+    const p = schema.parse(raw);
     if (
-      p.installationId !== s.installation.installation.installationId ||
       !sameControlOrigin(p.origin, s.origin) ||
       p.admissionDigest !== s.receiptDigest ||
       controlDigest(p.execution) !== controlDigest(s.execution) ||
@@ -687,19 +646,11 @@ export const {
   function write(authority: VerifiedExecutionAuthority, value: Proof, exclusive = false) {
     const s = state(authority),
       p = { ...value, padding: "" };
-    // Account the entire cell up front; transitions allocate no additional space.
-    const signed = signControl(s.installation.privateKey, domain, p);
-    const room = 4096 - Buffer.byteLength(canonicalJson(signed));
+    const room = 4096 - Buffer.byteLength(canonicalJson(p));
     if (room < 0) throw Error("Validation proof capacity exceeded");
     p.padding = " ".repeat(room);
     const parsed = schema.parse(p);
-    writePrivateRecord(
-      s.installation,
-      "observations",
-      name(authority),
-      signControl(s.installation.privateKey, domain, parsed),
-      exclusive,
-    );
+    writePrivateRecord(s.installation, "observations", name(authority), parsed, exclusive);
   }
   function feedProxyValidationCompletionDigest(
     execution: ExecutionRef,
@@ -744,7 +695,6 @@ export const {
         authority,
         schema.parse({
           version: 2,
-          installationId: s.installation.installation.installationId,
           origin: s.origin,
           execution: s.execution,
           admissionDigest: s.receiptDigest,

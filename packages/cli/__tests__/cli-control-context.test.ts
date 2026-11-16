@@ -24,7 +24,7 @@ import {
 it("reclaims an expired host-command family before another standalone command", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-host-retention-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await c.provisionControlInstallation(root);
+  await c.provisionControlDirectories(root);
   const owner = admittedRoot(root);
   terminalWithoutEffect(owner.authority);
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
@@ -44,7 +44,7 @@ it.each([0, 1, 130])(
     const repo = mkdtempSync(join(tmpdir(), "omx-fixed-cli-entry-"));
     const infra = join(repo, "infra/docker");
     mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
-    await c.provisionControlInstallation(infra);
+    await c.provisionControlDirectories(infra);
     const installation = c.openControlInstallation({
       infraDir: infra,
       role: "ops-agent",
@@ -102,10 +102,10 @@ it.each([0, 1, 130])(
       owner: authority,
     });
     const delegationId = randomUUID();
-    const publicKey = c.prepareFixedControlChild(authority, delegationId);
+    const childId = c.prepareFixedControlChild(authority, delegationId);
     const assertion = await c.delegateArtifactTargetLease(lease, {
       ...plan,
-      childPublicKey: publicKey,
+      childId,
     });
     const args = c.fixedCliArguments(operation);
     c.retainFixedCliSpawnIntent(authority, { delegationId, execution: child, operation, args });
@@ -122,7 +122,7 @@ it.each([0, 1, 130])(
     await services.withServiceLifecycleReceiptAuthority(
       authority,
       () => services.openServiceLifecycleReceipt(receiptOptions),
-      { execution: child, publicKey },
+      { execution: child, childId },
     );
     vi.stubEnv("OPENMAPX_ROOT_DIR", repo);
     vi.stubEnv("OPENMAPX_CONTROL_EXECUTION", JSON.stringify(child));

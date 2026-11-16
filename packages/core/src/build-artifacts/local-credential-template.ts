@@ -1,5 +1,5 @@
 /** Fixed host-local template evidence. Not an HTTP operation or delegation edge. */
-import { createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import z from "zod/v4";
 import type { InstallationState } from "./control-records";
@@ -27,13 +27,13 @@ export const localCredentialTemplateOperationSchema = z.strictObject({
               ![...part].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127),
           ),
     ),
-  fileMac: digest,
+  fileDigest: digest,
 });
 export const localCredentialTemplateReceiptSchema = z.strictObject({
   kind: z.literal("feed-credential-template-written"),
-  fileMac: digest,
+  fileDigest: digest,
 });
-export function localCredentialTemplateFileMac(
+export function localCredentialTemplateFileDigest(
   state: InstallationState,
   raw: unknown,
   contents?: string,
@@ -62,10 +62,8 @@ export function localCredentialTemplateFileMac(
       for (const directory of opened.reverse()) directory.close();
     }
   }
-  return createHmac("sha256", state.privateKey.export({ type: "pkcs8", format: "der" }))
+  return createHash("sha256")
     .update("openmapx-local-feed-credential-template-v1\0")
-    .update(state.installation.installationId)
-    .update("\0")
     .update(operation.catalogRevisionId)
     .update("\0")
     .update(operation.outputPath)

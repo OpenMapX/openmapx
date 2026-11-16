@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -159,17 +159,17 @@ AnchoredDirectory.prototype.removeDirectory = function (...args) {
     input.boundary === "digest" &&
     terminal &&
     args[0] === key &&
-    !existsSync(join(input.root, `control-private/ops-agent/effect-writers/${key}`))
+    !existsSync(join(input.root, `state/ops-agent/control/effect-writers/${key}`))
   ) {
     const commitment = JSON.parse(
       readFileSync(
-        join(input.root, `control-private/ops-agent/observations/terminal-${key}.json`),
+        join(input.root, `state/ops-agent/control/observations/terminal-${key}.json`),
         "utf8",
       ),
-    ) as { payload?: { phase?: string; terminalDigest?: string } } | null;
+    ) as { phase?: string; terminalDigest?: string } | null;
     if (
-      commitment?.payload?.phase === "canonical" &&
-      commitment.payload.terminalDigest === controlTerminalReceiptDigest(wire(terminal))
+      commitment?.phase === "canonical" &&
+      commitment.terminalDigest === controlTerminalReceiptDigest(wire(terminal))
     )
       stop(terminal);
   }
@@ -234,8 +234,7 @@ const fields = {
   requestedDeadlineAt: notAfter,
   attemptId,
 };
-const payload = Buffer.from(JSON.stringify(fields)).toString("base64url");
-const parent = `${payload}.${createHmac("sha256", token).update("openmapx-api-job-parent-v1\0").update(payload).digest("base64url")}`;
+const parent = Buffer.from(JSON.stringify(fields)).toString("base64url");
 const admitted = await app.inject({
   method: "POST",
   url: "/v1/operations",

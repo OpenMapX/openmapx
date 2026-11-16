@@ -6,8 +6,6 @@ import {
   type ControlInstallation,
   controlDigest,
   readDataControlTerminalObservation,
-  signControl,
-  verifyControl,
 } from "@openmapx/core/build-artifacts";
 import {
   type CatalogProposal,
@@ -55,11 +53,9 @@ import { resolveTransitOverlayPath } from "./internal.js";
 import { type MotisOperationsPolicy, transitAllowedCountries } from "./operations-profile.js";
 import { readMotisSlotState } from "./slot-state.js";
 
-const DOMAIN = "openmapx-catalog-resolution-v1";
 const MAX_DIFF_BYTES = 64 * 1024 * 1024;
 const resolutionSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   branch: z
     .string()
     .max(215)
@@ -133,17 +129,10 @@ export function createCatalogReviewService(options: {
   function retainedResolution(proposalId: string) {
     try {
       return directory(proposalId, false, (dir) => {
-        const value = verifyControl(
-          state.installation.publicKey,
-          DOMAIN,
+        const value = resolutionSchema.parse(
           JSON.parse(dir.read("resolution.json", 768 * 1024).toString("utf8")),
-          resolutionSchema,
         );
-        if (
-          value.installationId !== options.installation.installationId ||
-          value.proposal.proposalId !== proposalId
-        )
-          throw Error("Foreign catalog resolution");
+        if (value.proposal.proposalId !== proposalId) throw Error("Foreign catalog resolution");
         parseCatalogPinSet(value.proposal.pins);
         const bytes = dir.read("diff.json", MAX_DIFF_BYTES);
         if (createHash("sha256").update(bytes).digest("hex") !== value.proposal.diffDigest)
@@ -272,7 +261,6 @@ export function createCatalogReviewService(options: {
           throw Error("Catalog source policy changed during resolution");
         resolution = resolutionSchema.parse({
           version: 1,
-          installationId: options.installation.installationId,
           branch,
           proposal: {
             proposalId,
@@ -286,7 +274,7 @@ export function createCatalogReviewService(options: {
         });
         directory(proposalId, true, (dir) => {
           dir.write("diff.json", bytes, true);
-          const envelope = canonicalJson(signControl(state.privateKey, DOMAIN, resolution));
+          const envelope = canonicalJson(resolution);
           if (Buffer.byteLength(envelope, "utf8") > 768 * 1024)
             throw Error("Catalog resolution exceeds its byte limit");
           dir.write("resolution.json", envelope, true);

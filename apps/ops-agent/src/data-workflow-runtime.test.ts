@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import {
@@ -82,7 +82,7 @@ it("freezes distinct original data/finalization slots and refuses targets before
     const issued = await control.issueControlChildPhase(authority, {
       phase: "data-workflow",
       ordinal: 0,
-      childPublicKey: key,
+      childId: key,
     });
     control.consumeControlChildDispatch(issued.dispatchTicket);
     // An issued original CLI is still not a completed data prerequisite.

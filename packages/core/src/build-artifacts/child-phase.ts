@@ -37,14 +37,7 @@ import {
   writePrivateRecord,
 } from "./control-authority";
 // biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
-import {
-  controlDigest,
-  controlOriginSchema,
-  digest,
-  signControl,
-  uuid,
-  verifyControl,
-} from "./control-records";
+import { controlDigest, controlOriginSchema, digest, uuid } from "./control-records";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   delegateArtifactTargetLease,
@@ -116,7 +109,6 @@ const publicationSchema = z.discriminatedUnion("state", [
 ]);
 const cellSchema = z.strictObject({
   version: z.literal(2),
-  installationId: uuid,
   origin: controlOriginSchema,
   parent: executionRefSchema,
   admissionDigest: digest,
@@ -155,14 +147,8 @@ function readCell(
     cellName(authority, input.ordinal),
     8192,
   );
-  const cell = verifyControl(
-    state.installation.installation.publicKey,
-    "openmapx-control-phase-binding-v2",
-    raw,
-    cellSchema,
-  );
+  const cell = cellSchema.parse(raw);
   if (
-    cell.installationId !== state.installation.installation.installationId ||
     controlDigest(cell.origin) !== controlDigest(state.origin) ||
     controlDigest(cell.parent) !== controlDigest(state.execution) ||
     cell.admissionDigest !== state.receiptDigest ||
@@ -206,18 +192,14 @@ function writeCell(
   exclusive = false,
 ) {
   const state = executionAuthorityState(authority);
-  const signed = signControl(
-    state.installation.privateKey,
-    "openmapx-control-phase-binding-v2",
-    cellSchema.parse(cell),
-  );
-  if (Buffer.byteLength(canonicalJson(signed)) > 8192)
+  const record = cellSchema.parse(cell);
+  if (Buffer.byteLength(canonicalJson(record)) > 8192)
     throw Error("Phase binding capacity exceeded");
   writePrivateRecord(
     state.installation,
     "observations",
     cellName(authority, ordinal),
-    signed,
+    record,
     exclusive,
   );
 }
@@ -228,7 +210,6 @@ export function initializeControlChildReservations(authority: VerifiedExecutionA
     r,
     cell: cellSchema.parse({
       version: 2,
-      installationId: state.installation.installation.installationId,
       origin: state.origin,
       parent: state.execution,
       admissionDigest: state.receiptDigest,
@@ -238,7 +219,7 @@ export function initializeControlChildReservations(authority: VerifiedExecutionA
     }),
   }));
   // Bound exact identities, decimal epoch lengths and UUID/digest publication
-  // fields have fixed maxima. Budget their complete signed envelopes up front.
+  // fields have fixed maxima. Budget their complete records up front.
   const maximum = cells.reduce((total, { r, cell }) => {
     const largest = {
       ...cell,
@@ -266,7 +247,7 @@ export function initializeControlChildReservations(authority: VerifiedExecutionA
         leaseId: "f".repeat(36),
       },
     };
-    const size = Buffer.byteLength(canonicalJson({ payload: largest, signature: "f".repeat(86) }));
+    const size = Buffer.byteLength(canonicalJson(largest));
     if (size > 8192) throw Error("Phase binding cell capacity exceeded");
     return total + size;
   }, 0);
@@ -400,21 +381,17 @@ export function lookupControlChildPhaseAttempt(
     )
       throw Error("Original phase grant identity changed");
   } else {
-    const observed = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-parent-grant-v2",
-      saved.grant,
-      z
-        .object({
-          version: z.literal(2),
-          origin: controlOriginSchema,
-          parent: executionRefSchema,
-          child: executionRefSchema,
-          kind: z.string(),
-          attemptId: uuid,
-        })
-        .passthrough(),
-    );
+    const observed = z
+      .object({
+        version: z.literal(2),
+        origin: controlOriginSchema,
+        parent: executionRefSchema,
+        child: executionRefSchema,
+        kind: z.string(),
+        attemptId: uuid,
+      })
+      .passthrough()
+      .parse(saved.grant);
     if (
       observed.attemptId !== reference.delegationId ||
       observed.kind !== cell.binding.child.kind ||
@@ -473,7 +450,7 @@ export async function issueControlChildPhase(
   input: {
     phase: ControlChildPhase;
     ordinal: number;
-    childPublicKey: string;
+    childId: string;
     lease?: TargetLeaseAuthority;
     /** What the child acts on, recorded with its grant for the recipient. */
     evidence?: Record<string, unknown>;
@@ -492,10 +469,10 @@ export async function issueControlChildPhase(
   const assertion = input.lease
     ? await delegateArtifactTargetLease(input.lease, {
         ...child,
-        childPublicKey: input.childPublicKey,
+        childId: input.childId,
         ...(input.evidence ? { evidence: input.evidence } : {}),
       })
-    : await attestParentExecution(authority, { ...child, childPublicKey: input.childPublicKey });
+    : await attestParentExecution(authority, { ...child, childId: input.childId });
   const saved = inspectControlChildPublication(authority, input);
   if (saved.publication.state !== "grant_prepared")
     throw Error("Child publication was not retained");

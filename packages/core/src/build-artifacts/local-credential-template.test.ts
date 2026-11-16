@@ -7,9 +7,9 @@ import { createControlRootOperationKey, executionFingerprint, opsOperationSchema
 import {
   closeControlInstallation,
   controlDigest,
-  localFeedCredentialTemplateMac,
+  localFeedCredentialTemplateDigest,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
 } from "./control-authority";
 
@@ -21,13 +21,13 @@ const operation = {
   kind: "transit.credentials.template",
   catalogRevisionId: "a".repeat(64),
   outputPath: "services/motis/tools/transitous/api-keys.json",
-  fileMac: "b".repeat(64),
+  fileDigest: "b".repeat(64),
 };
 async function fixture(role: "host-cli" | "ops-agent" | "data-manager") {
   const root = mkdtempSync(join(tmpdir(), "omx-local-credential-owner-"));
   roots.push(root);
   mkdirSync(join(root, "data"), { mode: 0o755 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   return openControlInstallation({ infraDir: root, role, serviceIds: ["motis", "valhalla"] });
 }
 function input(
@@ -70,7 +70,7 @@ it.each(["ops-agent", "data-manager"] as const)(
           input(role, role === "ops-agent" ? "api" : "data-manager"),
         ),
       ).toThrow(/local/);
-      expect(() => localFeedCredentialTemplateMac(installation, operation, "{}\n")).toThrow(
+      expect(() => localFeedCredentialTemplateDigest(installation, operation, "{}\n")).toThrow(
         /Local host/,
       );
     } finally {

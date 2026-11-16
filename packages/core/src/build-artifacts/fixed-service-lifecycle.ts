@@ -13,7 +13,7 @@ import {
   type VerifiedExecutionAuthority,
   writePrivateRecord,
 } from "./control-authority";
-import { controlDigest, signControl, verifyControl } from "./control-records";
+import { controlDigest } from "./control-records";
 import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
 
 const domain = "openmapx-fixed-service-lifecycle-v1";
@@ -141,7 +141,7 @@ export function retainFixedServiceLifecyclePlan(
     s.installation,
     "observations",
     `service-lifecycle-${s.execution.operationKey}.json`,
-    signControl(s.installation.privateKey, domain, plan),
+    plan,
     true,
   );
 }
@@ -149,16 +149,13 @@ export function readFixedServiceLifecyclePlan(
   authority: VerifiedExecutionAuthority,
 ): FixedServiceLifecyclePlan {
   const s = executionAuthorityState(authority),
-    plan = verifyControl(
-      s.installation.installation.publicKey,
-      domain,
+    plan = schema.parse(
       readPrivateRecord(
         s.installation,
         "observations",
         `service-lifecycle-${s.execution.operationKey}.json`,
         128 * 1024,
       ),
-      schema,
     );
   if (
     s.kind !== "service.update" ||

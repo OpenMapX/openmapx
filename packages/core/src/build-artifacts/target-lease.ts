@@ -24,13 +24,11 @@ import {
   assertContainedConfigurationMaintenanceFinalState,
   assertUnusedConfigurationMaintenanceFinalState,
   configurationChildEvidenceSchema,
-  configurationFinalDomains,
   configurationMaintenanceRuntimeInspectionSchema,
   configurationOwnerFinalSchema,
 } from "./configuration-maintenance-final-records";
 import {
   assertConfigurationMaintenanceDecisionSource,
-  configurationMaintenanceDecisionCommitmentDomain,
   configurationMaintenanceDecisionCommitmentPayloadSchema,
   configurationMaintenanceOwnerRecordSchema,
 } from "./configuration-maintenance-owner-records";
@@ -76,7 +74,7 @@ import {
   writePrivateRecord,
 } from "./control-authority";
 import { controlChildOperationKey } from "./control-child-records";
-import { controlDigest, targetSchema, uuid, verifyControl } from "./control-records";
+import { controlDigest, targetSchema, uuid } from "./control-records";
 import { assertFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
 import {
   knownSettlement,
@@ -569,7 +567,7 @@ export async function delegateArtifactTargetLease(
     phase: ControlChildPhase;
     serviceIds: readonly string[];
     recipient: ControlRecipient;
-    childPublicKey: string;
+    childId: string;
     evidence?: Record<string, unknown>;
   },
 ): Promise<ArtifactDelegationAssertion> {
@@ -611,7 +609,7 @@ export async function delegateArtifactTargetLease(
     verifyControlPreparedTerminal(owner.installation, s.execution);
   const delegationId =
     child.recipient === "fixed-cli" || child.recipient === "configuration-helper"
-      ? fixedControlChildId(owner.installation, child.childPublicKey, s.execution)
+      ? fixedControlChildId(owner.installation, child.childId, s.execution)
       : randomUUID();
   const row = {
     key: delegationId,
@@ -627,7 +625,6 @@ export async function delegateArtifactTargetLease(
   // recipient that needs it reads the store.
   const grantDigest = controlDigest(row);
   const assertion = encodeControlAssertion({
-    installationId: owner.installation.installation.installationId,
     leaseId: s.leaseId,
     delegationId,
     owner: s.owner,
@@ -1032,18 +1029,14 @@ function assertImagePullTargetFree(
       `${state.execution.operationKey}.json`,
       65536,
     ),
-    admitted = verifyControl(
-      state.installation.installation.publicKey,
-      "openmapx-control-execution-v2",
-      raw,
-      z
-        .object({
-          kind: z.literal(kind),
-          execution: executionRefSchema,
-          operation: opsOperationSchema,
-        })
-        .passthrough(),
-    );
+    admitted = z
+      .object({
+        kind: z.literal(kind),
+        execution: executionRefSchema,
+        operation: opsOperationSchema,
+      })
+      .passthrough()
+      .parse(raw);
   if (
     state.installation.fixedChildId ||
     state.kind !== kind ||
@@ -1081,8 +1074,8 @@ export async function settlePreparedConfigurationHandoff(
       "executions",
       `${owner.execution.operationKey}.json`,
       65536,
-    ) as { payload: { operation: unknown } },
-    operation = opsOperationSchema.parse(admitted.payload.operation);
+    ) as { operation: unknown },
+    operation = opsOperationSchema.parse(admitted.operation);
   if (operation.kind !== "configurationHandoff.prepare")
     throw Error("Original handoff operation required");
   const source = readCompletedConfigurationHandoff(
@@ -1138,10 +1131,10 @@ export async function settleRetainedConfigurationHandoffHelper(
       "executions",
       `${owner.execution.operationKey}.json`,
       65536,
-    ) as { payload: { operation: { handoffId?: unknown } } },
+    ) as { operation: { handoffId?: unknown } },
     source = readCompletedConfigurationHandoff(
       owner.installation.installation,
-      uuid.parse(raw.payload.operation.handoffId),
+      uuid.parse(raw.operation.handoffId),
     ),
     adoption = z
       .object({
@@ -1641,15 +1634,10 @@ export function readOriginalMaintenanceFinalChildren(
       "executions",
       `${state.execution.operationKey}.json`,
       65536,
-    ) as { payload?: { operation?: { maintenanceId?: string } } },
-    name = `${admitted.payload?.operation?.maintenanceId}.json`,
+    ) as { operation?: { maintenanceId?: string } },
+    name = `${admitted.operation?.maintenanceId}.json`,
     raw = readPrivateRecord(state.installation, "configuration-maintenance", name),
-    owner = verifyControl(
-      state.installation.installation.publicKey,
-      "openmapx-configuration-maintenance-owner-v2",
-      raw,
-      configurationMaintenanceOwnerRecordSchema,
-    );
+    owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
   assertConfigurationMaintenanceDecisionSource(owner);
   if (
     state.kind !== "configurationMaintenance.prepare" ||
@@ -1803,12 +1791,12 @@ function assertPreparedAndSettledClosure(
   const tree = configurationMaintenanceClosureObservationState(observation, authority),
     state = executionAuthorityState(authority);
   assertConfigurationMaintenanceDecisionSource(owner);
-  assertFixedConfigurationMaintenancePlan(owner.plan, owner.installationId);
+  assertFixedConfigurationMaintenancePlan(owner.plan);
   if (
-    owner.final?.ownerFinal.payload.outcome === "applied" ||
-    owner.final?.ownerFinal.payload.outcome === "contained"
+    owner.final?.ownerFinal.outcome === "applied" ||
+    owner.final?.ownerFinal.outcome === "contained"
   ) {
-    const contained = owner.final.ownerFinal.payload.outcome === "contained";
+    const contained = owner.final.ownerFinal.outcome === "contained";
     if (contained) assertContainedConfigurationMaintenanceFinalState(owner);
     else assertAppliedConfigurationMaintenanceFinalState(owner);
     const actual = readOriginalMaintenanceFinalChildren(authority, observation);
@@ -1834,31 +1822,17 @@ function assertPreparedAndSettledClosure(
     "Actual prepared final, inspection and settled fence required",
   );
   need(
-    owner.installationId === state.installation.installation.installationId &&
-      owner.admissionDigest === state.receiptDigest &&
+    owner.admissionDigest === state.receiptDigest &&
       same(owner.origin, state.origin) &&
       same(owner.plan.prepare, state.execution) &&
       owner.leaseId === tree.leaseId &&
       same(owner.plan.reservations, state.reservations),
     "Original prepared root identity changed",
   );
-  const final = verifyControl(
-      state.installation.installation.publicKey,
-      configurationFinalDomains.ownerFinal,
-      owner.final.ownerFinal,
-      configurationOwnerFinalSchema,
-    ),
-    inspection = verifyControl(
-      state.installation.installation.publicKey,
-      configurationFinalDomains.inspection,
-      owner.inspection,
-      configurationMaintenanceRuntimeInspectionSchema,
-    );
-  verifyControl(
-    state.installation.installation.publicKey,
-    configurationMaintenanceDecisionCommitmentDomain,
+  const final = configurationOwnerFinalSchema.parse(owner.final.ownerFinal),
+    inspection = configurationMaintenanceRuntimeInspectionSchema.parse(owner.inspection);
+  configurationMaintenanceDecisionCommitmentPayloadSchema.parse(
     owner.apiControls.decide.commitment,
-    configurationMaintenanceDecisionCommitmentPayloadSchema,
   );
   need(
     final.privateInspectionId === inspection.inspectionId &&
@@ -1894,15 +1868,10 @@ export function assertConfigurationMaintenanceRootClosure(
       "executions",
       `${state.execution.operationKey}.json`,
       65536,
-    ) as { payload?: { operation?: { maintenanceId?: string } } },
-    name = `${z.uuid().parse(admission.payload?.operation?.maintenanceId)}.json`,
+    ) as { operation?: { maintenanceId?: string } },
+    name = `${z.uuid().parse(admission.operation?.maintenanceId)}.json`,
     raw = readPrivateRecord(state.installation, "configuration-maintenance", name),
-    owner = verifyControl(
-      state.installation.installation.publicKey,
-      "openmapx-configuration-maintenance-owner-v2",
-      raw,
-      configurationMaintenanceOwnerRecordSchema,
-    );
+    owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
   if (owner.preparedFence !== null || owner.final !== null || owner.inspection !== null) {
     assertPreparedAndSettledClosure(authority, observed, owner);
     return;
@@ -1910,7 +1879,6 @@ export function assertConfigurationMaintenanceRootClosure(
   need(
     owner.receipt.dmFence === null &&
       owner.receipt.generation === "not_started" &&
-      owner.installationId === state.installation.installation.installationId &&
       owner.admissionDigest === state.receiptDigest &&
       same(owner.origin, state.origin) &&
       same(owner.plan.prepare, state.execution) &&

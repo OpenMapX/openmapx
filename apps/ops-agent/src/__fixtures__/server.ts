@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { buildOpsAgentServer, type BuildOpsAgentServerOptions } from "../server";
@@ -23,7 +23,7 @@ export async function buildControlTestServer(options: BuildOpsAgentServerOptions
   if (options.controlInstallation) return buildOpsAgentServer(options);
   const root = mkdtempSync(join(tmpdir(), "openmapx-server-control-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   const installation = openControlInstallation({
     infraDir: root,
     role: "ops-agent",

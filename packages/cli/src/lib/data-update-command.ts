@@ -1,6 +1,6 @@
 /** Concrete Full Update adapter shared by standalone and fixed CLI entrypoints. */
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import type { DataManagerTransport } from "@openmapx/core/data-manager-sdk";
@@ -32,8 +32,7 @@ export async function runCliDataUpdate(options: {
     installation: control.ControlInstallation | undefined;
   if (!context) {
     mkdirSync(join(paths.infraDir, "data"), { recursive: true });
-    if (!existsSync("/run/secrets/openmapx-control-verifiers"))
-      await control.provisionControlInstallation(paths.infraDir);
+    control.provisionControlDirectories(paths.infraDir);
     const registry = new services.ServiceRegistry({ rootDir: paths.root });
     await registry.load();
     const targets = registry

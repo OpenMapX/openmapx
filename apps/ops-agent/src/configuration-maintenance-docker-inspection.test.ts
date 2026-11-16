@@ -123,7 +123,6 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
       },
       owner,
       containers: [container],
-      privateKey: key,
       signal: new AbortController().signal,
       execFile: async (_file, args) => {
         if (args[0] === "compose" && args.includes("--format"))

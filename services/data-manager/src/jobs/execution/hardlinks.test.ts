@@ -1,6 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -59,7 +58,7 @@ it
       data = join(root, "data");
     mkdirSync(join(data, "src"), { recursive: true });
     writeFileSync(join(data, "src/fixture"), "public-artifact");
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const services = ["consumer", "data-manager"],
       host = control.openControlInstallation({
         infraDir: root,
@@ -141,7 +140,7 @@ it
       }),
       assertion = await control.delegateArtifactTargetLease(lease, {
         ...slot,
-        childPublicKey: dm.publicKey,
+        childId: dm.role,
       });
     let lifecycle = 0,
       applies = 0;

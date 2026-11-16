@@ -7,7 +7,7 @@ import {
   cancelControlExecution,
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
 } from "../build-artifacts/control-authority";
@@ -37,7 +37,7 @@ const revision = `cfg1_${"a".repeat(43)}`;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-lifecycle-receipt-"));
   mkdirSync(join(root, "data"), { mode: 0o755 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -115,7 +115,7 @@ it("signs exact seed and checkpoints only with the live writer and physical targ
     const path = join(root, "state/ops-agent/lifecycle", `${o.execution.operationKey}.json`),
       original = readFileSync(path);
     const tampered = JSON.parse(original.toString());
-    tampered.current.payload.receipt.finalRevisionId = revision;
+    tampered.current.receipt.finalRevisionId = revision;
     writeFileSync(path, JSON.stringify(tampered), { mode: 0o600 });
     await expect(readServiceLifecycleReceipt(options(o.execution))).rejects.toThrow();
   } finally {
@@ -359,10 +359,10 @@ it.each([false, true])(
           if (
             committed
               ? name === `lifecycle-${o.execution.operationKey}.json` &&
-                value.payload?.sequence === 1 &&
-                value.payload?.pending === null
+                value.sequence === 1 &&
+                value.pending === null
               : name === `${o.execution.operationKey}.json` &&
-                value.current?.payload?.receipt?.sequence === 1
+                value.current?.receipt?.sequence === 1
           ) {
             interrupted = true;
             throw Error("Synthetic lifecycle filesystem interruption");

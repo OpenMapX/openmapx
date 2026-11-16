@@ -117,8 +117,7 @@ dbDescribe("retained finite maintenance requests", () => {
         );
       let store = new ArtifactTransferStore({
         dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
-        privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
-        token: host.token,
+        privateRoot: join(host.infraDir, "state/ops-agent/artifact-transfers"),
         capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
       });
       const stores = [store];
@@ -332,8 +331,7 @@ dbDescribe("retained finite maintenance requests", () => {
           });
           store = new ArtifactTransferStore({
             dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
-            privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
-            token: host.token,
+            privateRoot: join(host.infraDir, "state/ops-agent/artifact-transfers"),
             capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
           });
           stores.push(store);

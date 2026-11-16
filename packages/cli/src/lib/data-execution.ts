@@ -6,7 +6,6 @@ import {
   consumeControlChildDispatch,
   controlChildOperationKey,
   controlRegisteredServiceIds,
-  controlRolePublicKey,
   fixedDataBodyFingerprint,
   issueControlChildPhase,
   openControlInstallation,
@@ -101,7 +100,7 @@ export async function executeDurableDataStep(
       state: "prepared",
     };
     await options.checkpointAttempt(attempt);
-    if (!options.parentAssertion) throw Error("Original signed data parent assertion required");
+    if (!options.parentAssertion) throw Error("Original data parent assertion required");
     attempt = { ...attempt, state: "attempted" };
     await options.checkpointAttempt(attempt);
     try {
@@ -208,7 +207,7 @@ export async function runOwnedDataStep(
     const issued = await issueControlChildPhase(context.authority, {
       phase,
       ordinal: slot.ordinal,
-      childPublicKey: controlRolePublicKey(context.installation, "data-manager"),
+      childId: "data-manager",
     });
     assertion = issued.assertion;
     consumeControlChildDispatch(issued.dispatchTicket);

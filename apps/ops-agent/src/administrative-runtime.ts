@@ -849,7 +849,6 @@ export function createDefaultFixedCli(
         const installation = openFixedChildInstallation({
           infraDir: join(_rootDir, "infra/docker"),
           assertion,
-          container: existsSync("/run/secrets/openmapx-control-verifiers"),
         });
         try {
           readFixedCliSpawnIntent(installation, options.execution, args);
@@ -1043,7 +1042,7 @@ export function createAdministrativeRuntime(
       throw new OpsHostUpdateRequiredError();
     const plan = readFixedSingleDataPlan(context.controlAuthority),
       bound = await bindControlChildPhase(context.controlAuthority, plan.rootReservation);
-    const publicKey = prepareFixedControlChild(context.controlAuthority, plan.delegationId);
+    const childId = prepareFixedControlChild(context.controlAuthority, plan.delegationId);
     retainFixedCliSpawnIntent(context.controlAuthority, {
       delegationId: plan.delegationId,
       execution: bound.execution,
@@ -1054,7 +1053,7 @@ export function createAdministrativeRuntime(
     const issued = await issueControlChildPhase(context.controlAuthority, {
       phase: "data-workflow",
       ordinal: 0,
-      childPublicKey: publicKey,
+      childId,
     });
     consumeControlChildDispatch(issued.dispatchTicket);
     await runFixedCli(coreFixedCliArguments(operation), {
@@ -1066,7 +1065,6 @@ export function createAdministrativeRuntime(
     const child = openFixedChildInstallation({
       infraDir: join(options.rootDir, "infra/docker"),
       assertion: issued.assertion,
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
     try {
       verifyControlEffectSettlement(child, bound.execution);

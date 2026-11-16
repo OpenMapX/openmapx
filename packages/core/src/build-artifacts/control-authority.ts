@@ -2,7 +2,6 @@ import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import {
   configurationHandoffIntentRecordSchema,
   configurationHandoffProgressSchema,
-  configurationHandoffRecordDomains,
   configurationHandoffRecordName,
   configurationHandoffWorkerRecordSchema,
 } from "./configuration-handoff-records";
@@ -16,7 +15,7 @@ import { dataUpdatePlanSchema } from "./data-update-records";
 import { dataUpdateSourcesDigest } from "./data-update-sources";
 import {
   LOCAL_CREDENTIAL_TEMPLATE_KIND,
-  localCredentialTemplateFileMac,
+  localCredentialTemplateFileDigest,
   localCredentialTemplateOperationSchema,
   localCredentialTemplateReceiptSchema,
 } from "./local-credential-template";
@@ -37,10 +36,8 @@ import {
   digest,
   type InstallationState,
   sameControlOrigin,
-  signControl,
   targetSchema,
   uuid,
-  verifyControl,
 } from "./control-records";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
@@ -62,20 +59,12 @@ export {
   digest,
   type InstallationState,
   sameControlOrigin,
-  signControl,
   targetSchema,
   uuid,
-  verifyControl,
 } from "./control-records";
 
-import {
-  createPrivateKey,
-  createPublicKey,
-  generateKeyPairSync,
-  type KeyObject,
-  randomUUID,
-} from "node:crypto";
-import { existsSync, fsyncSync, mkdirSync, realpathSync, statfsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { fsyncSync, mkdirSync, realpathSync, statfsSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { z } from "zod";
 import type { PreparedConfigurationRecord } from "../ops/configuration-preparation";
@@ -108,10 +97,7 @@ import {
   originalConfigurationGenerationNonCommitSource,
 } from "../services/configuration-generation";
 import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
-import {
-  dataExecutionStatusSchema,
-  startGenerationHardlinksExecutionSchema,
-} from "../services/data-manager/contracts/executions";
+import { dataExecutionStatusSchema } from "../services/data-manager/contracts/executions";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   type ControlChildReservation,
@@ -127,18 +113,14 @@ import {
 } from "./child-phase";
 import {
   assertConfigurationMaintenanceDecisionSource,
-  configurationMaintenanceDecisionCommitmentDomain,
-  configurationMaintenanceDecisionCommitmentPayloadSchema,
   configurationMaintenanceOwnerRecordSchema,
 } from "./configuration-maintenance-owner-records";
 // biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
 import {
   type CoordinatorPullBaseline,
   coordinatorPullBaselineSchema,
-  coordinatorPullObservationDomain,
   coordinatorPullWitnessPayloadSchema,
   coordinatorPullWitnessSchema,
-  stagedCoordinatorObservationDomain,
   stagedCoordinatorObservationPayloadSchema,
   stagedCoordinatorSourceSchema,
 } from "./coordinator-pull-records";
@@ -149,7 +131,6 @@ import {
 } from "./data-execution-candidate";
 // biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
 import { AnchoredDirectory, identity } from "./filesystem";
-import { buildFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
 const PRIVATE_RECORD_BYTES = 131072;
 declare const authorityBrand: unique symbol,
@@ -173,117 +154,30 @@ export type ChildSettlement = {
 };
 export type { ControlExecutionOrigin } from "../ops/control-root-key";
 
-const publicKey = z.string().max(256);
-const bundleSchema = z.strictObject({
-  installationId: uuid,
-  publicKeys: z.strictObject({
-    "ops-agent": publicKey,
-    "data-manager": publicKey,
-    "host-cli": publicKey,
-  }),
-});
-const roleKeySchema = z.strictObject({
-  version: z.literal(1),
-  installationId: uuid,
-  role: z.enum(CONTROL_ROLES),
-  privateKey: z.string().max(512),
-});
-
-export function newControlKey() {
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  return {
-    privateKey,
-    publicKey: publicKey.export({ type: "spki", format: "der" }).toString("base64url"),
-  };
+/** Where a role keeps its private control records: its own state directory. */
+export function controlPrivateRoot(infraDir: string, role: ControlIssuer): string {
+  return join(infraDir, "state", role, "control");
 }
-function parsePrivate(encoded: string) {
-  const key = createPrivateKey({
-    key: Buffer.from(encoded, "base64url"),
-    format: "der",
-    type: "pkcs8",
-  });
-  if (key.asymmetricKeyType !== "ed25519") throw Error("Invalid control key kind");
-  return key;
-}
-export const encodePrivate = (key: KeyObject) =>
-  key.export({ type: "pkcs8", format: "der" }).toString("base64url");
-export async function provisionControlInstallation(infraDir: string): Promise<void> {
+/** Data-manager's private records, as its container mounts them. */
+export const DATA_MANAGER_CONTAINER_PRIVATE_ROOT = "/var/lib/openmapx/control";
+/** Creates each role's private record directory; render and host commands call it. */
+export function provisionControlDirectories(infraDir: string): void {
   const infra = new AnchoredDirectory(infraDir);
-  let secrets: AnchoredDirectory | undefined, privateRoot: AnchoredDirectory | undefined;
   try {
-    secrets = infra.directory("secrets", true);
-    const names = secrets.list();
-    const existing = names.filter(
-      (n) =>
-        n === "control-verifiers.json" ||
-        /^control-(ops-agent|data-manager|host-cli)\.key$/.test(n),
-    );
-    if (existing.length && existing.length !== 4)
-      throw Error(
-        "Incomplete control installation trust; stop all writers/helpers and recover existing keys/verifiers, never regenerate",
-      );
-    const newInstallation = existing.length === 0;
-    if (newInstallation) {
-      if (existsSync(join(infraDir, "control-private"))) {
-        const priorPrivate = infra.directory("control-private");
+    const state = infra.directory("state", true);
+    try {
+      for (const role of CONTROL_ROLES) {
+        const roleRoot = state.directory(role, true);
         try {
-          if (priorPrivate.hasEntries())
-            throw Error("Existing private control records require original installation trust");
+          roleRoot.directory("control", true, true).close();
         } finally {
-          priorPrivate.close();
+          roleRoot.close();
         }
       }
-      const installationId = randomUUID();
-      const keys = Object.fromEntries(CONTROL_ROLES.map((role) => [role, newControlKey()]));
-      for (const role of CONTROL_ROLES) {
-        secrets.write(
-          `control-${role}.key`,
-          canonicalJson({
-            version: 1,
-            installationId,
-            role,
-            privateKey: encodePrivate(keys[role]?.privateKey),
-          }),
-          true,
-        );
-      }
-      secrets.write(
-        "control-verifiers.json",
-        canonicalJson({
-          installationId,
-          publicKeys: Object.fromEntries(
-            CONTROL_ROLES.map((role) => [role, keys[role]?.publicKey]),
-          ),
-        }),
-        true,
-      );
-    }
-    const bundle = bundleSchema.parse(
-      JSON.parse(secrets.read("control-verifiers.json", 4096).toString("utf8")),
-    );
-    for (const role of CONTROL_ROLES) {
-      const saved = roleKeySchema.parse(
-        JSON.parse(secrets.read(`control-${role}.key`, 2048).toString("utf8")),
-      );
-      if (
-        saved.role !== role ||
-        saved.installationId !== bundle.installationId ||
-        createPublicKey(parsePrivate(saved.privateKey))
-          .export({ type: "spki", format: "der" })
-          .toString("base64url") !== bundle.publicKeys[role]
-      )
-        throw Error("Control role key does not match fixed trust");
-    }
-    privateRoot = infra.directory("control-private", true, true);
-    privateRoot.directory("empty", true, true).close();
-    if (!privateRoot.list().includes("hidden-key")) privateRoot.write("hidden-key", "", true);
-    for (const role of CONTROL_ROLES) {
-      const roleRoot = privateRoot.directory(role, true, true);
-      roleRoot.close();
+    } finally {
+      state.close();
     }
   } finally {
-    privateRoot?.close();
-    secrets?.close();
     infra.close();
   }
 }
@@ -300,6 +194,10 @@ export function installationState(value: ControlInstallation): InstallationState
   state.privateRoot.check();
   return state;
 }
+/** Who wrote a control record: a fixed child's id, or the role itself. */
+export function controlIdentity(installation: ControlInstallation): string {
+  return installationState(installation).fixedChildId ?? installation.role;
+}
 /** Called only at fixed host/service startup; infraDir is the configured installation, never a request field. */
 export function openControlInstallation(options: {
   infraDir: string;
@@ -310,51 +208,17 @@ export function openControlInstallation(options: {
   leases?: LeaseBackend;
 }): ControlInstallation {
   if (options.serviceIds?.length) targetSchema.parse([...new Set(options.serviceIds)].sort());
-  const infra = options.container ? undefined : new AnchoredDirectory(options.infraDir);
-  const secrets = options.container
-    ? new AnchoredDirectory("/run/secrets", undefined, false, true)
-    : (() => {
-        if (!infra) throw Error("Missing fixed installation root");
-        return infra.directory("secrets");
-      })();
+  const container = options.container === true && options.role === "data-manager";
   let privateRoot: AnchoredDirectory | undefined;
   try {
-    const bundle = bundleSchema.parse(
-      JSON.parse(
-        secrets
-          .read(options.container ? "openmapx-control-verifiers" : "control-verifiers.json", 4096)
-          .toString("utf8"),
-      ),
-    );
-    const saved = roleKeySchema.parse(
-      JSON.parse(
-        secrets
-          .read(
-            options.container ? "openmapx-control-role-key" : `control-${options.role}.key`,
-            2048,
-          )
-          .toString("utf8"),
-      ),
-    );
-    const key = parsePrivate(saved.privateKey);
-    if (
-      saved.role !== options.role ||
-      saved.installationId !== bundle.installationId ||
-      createPublicKey(key).export({ type: "spki", format: "der" }).toString("base64url") !==
-        bundle.publicKeys[options.role]
-    )
-      throw Error("Control role key/trust mismatch");
     privateRoot = new AnchoredDirectory(
-      options.container
-        ? "/var/lib/openmapx/control-private"
-        : join(options.infraDir, "control-private", options.role),
+      container
+        ? DATA_MANAGER_CONTAINER_PRIVATE_ROOT
+        : controlPrivateRoot(options.infraDir, options.role),
       undefined,
       true,
     );
-    const dataRoot =
-      options.container && options.role === "data-manager"
-        ? "/data"
-        : join(options.infraDir, "data");
+    const dataRoot = container ? "/data" : join(options.infraDir, "data");
     const privateRelative = relative(realpathSync(dataRoot), realpathSync(privateRoot.path));
     if (!privateRelative || (!privateRelative.startsWith("../") && privateRelative !== ".."))
       throw Error("Role recovery material is inside the shared data mount");
@@ -368,15 +232,9 @@ export function openControlInstallation(options: {
     } finally {
       data.close();
     }
-    const installation = Object.freeze({
-      installationId: bundle.installationId,
-      role: options.role,
-      publicKey: bundle.publicKeys[options.role],
-    }) as ControlInstallation;
+    const installation = Object.freeze({ role: options.role }) as ControlInstallation;
     installations.set(installation, {
       installation,
-      privateKey: key,
-      publicKeys: bundle.publicKeys,
       privateRoot,
       dataRoot,
       registeredTargets: new Set(options.serviceIds ?? []),
@@ -386,8 +244,6 @@ export function openControlInstallation(options: {
     return installation;
   } finally {
     privateRoot?.close();
-    secrets.close();
-    infra?.close();
   }
 }
 export function closeControlInstallation(installation: ControlInstallation) {
@@ -452,7 +308,6 @@ export function writePrivateRecord(
       ![
         "executions",
         "children",
-        "child-keys",
         "effects",
         "effect-started",
         "observations",
@@ -485,18 +340,14 @@ export function retainedExecutionOrigin(
   execution: ExecutionRef,
 ): ControlExecutionOrigin {
   const raw = readPrivateRecord(state, "executions", `${execution.operationKey}.json`, 65536);
-  const admitted = verifyControl(
-    state.installation.publicKey,
-    "openmapx-control-execution-v2",
-    raw,
-    z
-      .object({
-        version: z.literal(2),
-        execution: executionRefSchema,
-        origin: controlOriginSchema,
-      })
-      .passthrough(),
-  );
+  const admitted = z
+    .object({
+      version: z.literal(2),
+      execution: executionRefSchema,
+      origin: controlOriginSchema,
+    })
+    .passthrough()
+    .parse(raw);
   if (controlDigest(execution) !== controlDigest(admitted.execution))
     throw Error("Execution origin identity mismatch");
   return admitted.origin;
@@ -504,7 +355,6 @@ export function retainedExecutionOrigin(
 const terminalCommitmentSchema = z.strictObject({
   version: z.literal(1),
   phase: z.enum(["prepared", "canonical"]),
-  installationId: uuid,
   origin: controlOriginSchema,
   execution: executionRefSchema,
   admissionDigest: digest,
@@ -522,14 +372,10 @@ function terminalIdentity(s: AuthorityState, status: OpsJobStatus) {
     `${execution.operationKey}.json`,
     65536,
   );
-  const admitted = verifyControl(
-    s.installation.installation.publicKey,
-    "openmapx-control-execution-v2",
-    raw,
-    z
-      .object({ admittedAt: z.number().int().nonnegative().safe(), operation: opsOperationSchema })
-      .passthrough(),
-  );
+  const admitted = z
+    .object({ admittedAt: z.number().int().nonnegative().safe(), operation: opsOperationSchema })
+    .passthrough()
+    .parse(raw);
   if (
     s.installation.installation.role !== "ops-agent" ||
     s.installation.fixedChildId ||
@@ -544,14 +390,10 @@ function terminalIdentity(s: AuthorityState, status: OpsJobStatus) {
   return { terminal, admitted, digest: controlTerminalReceiptDigest(terminal) };
 }
 function readTerminalCommitment(s: AuthorityState) {
-  const proof = verifyControl(
-    s.installation.installation.publicKey,
-    "openmapx-control-terminal-v1",
+  const proof = terminalCommitmentSchema.parse(
     readPrivateRecord(s.installation, "observations", terminalCommitmentName(s.execution), 4096),
-    terminalCommitmentSchema,
   );
   if (
-    proof.installationId !== s.installation.installation.installationId ||
     proof.admissionDigest !== s.receiptDigest ||
     controlDigest(proof.execution) !== controlDigest(s.execution) ||
     !sameControlOrigin(proof.origin, s.origin)
@@ -590,7 +432,6 @@ export function retainControlTerminalCommitment(
     const payload = terminalCommitmentSchema.parse({
       version: 1,
       phase: "prepared",
-      installationId: s.installation.installation.installationId,
       origin,
       execution: s.execution,
       admissionDigest: s.receiptDigest,
@@ -601,7 +442,7 @@ export function retainControlTerminalCommitment(
       s.installation,
       "observations",
       terminalCommitmentName(s.execution),
-      signControl(s.installation.privateKey, "openmapx-control-terminal-v1", payload),
+      payload,
       false,
     );
     return originalTime;
@@ -626,10 +467,10 @@ function verifyAndSealTerminalCommitment(
       s.installation,
       "observations",
       terminalCommitmentName(s.execution),
-      signControl(s.installation.privateKey, "openmapx-control-terminal-v1", {
+      {
         ...proof,
         phase: "canonical" as const,
-      }),
+      },
       false,
     );
   return proof;
@@ -676,20 +517,15 @@ export function repairControlJournalTerminal(
       `${execution.operationKey}.json`,
       65536,
     );
-    const admitted = verifyControl(
-      installation.publicKey,
-      "openmapx-control-execution-v2",
-      admittedRaw,
-      z.object({ admittedAt: z.number().int().nonnegative().safe() }).passthrough(),
-    );
+    const admitted = z
+      .object({ admittedAt: z.number().int().nonnegative().safe() })
+      .passthrough()
+      .parse(admittedRaw);
     if (admitted.admittedAt !== terminal.admittedAt) throw Error("Original admission time changed");
     verifyControlEffectSettlement(installation, execution);
-    const proof = verifyControl(
-      installation.publicKey,
-      "openmapx-control-settlement-v1",
-      readPrivateRecord(s.installation, "effects", `${execution.operationKey}.json`),
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    const proof = settlementSchema
+      .extend({ receipt: effectObservationSchema })
+      .parse(readPrivateRecord(s.installation, "effects", `${execution.operationKey}.json`));
     const succeeded =
       terminal.state === "succeeded" &&
       proof.outcome === "committed" &&
@@ -765,12 +601,6 @@ export function replaceControlRegisteredServiceIds(
 }
 export function controlRegisteredServiceIds(installation: ControlInstallation): string[] {
   return [...installationState(installation).registeredTargets].sort();
-}
-export function controlRolePublicKey(
-  installation: ControlInstallation,
-  role: ControlIssuer,
-): string {
-  return installationState(installation).publicKeys[role];
 }
 export function readPrivateRecord(
   state: InstallationState,
@@ -982,24 +812,14 @@ export function retainAdmittedControlExecution(
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
   if (existing) {
-    const stored = verifyControl(
-      installation.publicKey,
-      "openmapx-control-execution-v2",
-      existing,
-      z
-        .object({
-          version: z.literal(2),
-          installationId: uuid,
-          origin: controlOriginSchema,
-        })
-        .passthrough(),
-    );
-    const {
-      version: _version,
-      installationId: _installationId,
-      origin: _origin,
-      ...oldInput
-    } = stored;
+    const stored = z
+      .object({
+        version: z.literal(2),
+        origin: controlOriginSchema,
+      })
+      .passthrough()
+      .parse(existing);
+    const { version: _version, origin: _origin, ...oldInput } = stored;
     if (
       controlDigest({ ...oldInput, reservations: oldInput.reservations ?? [] }) !==
       controlDigest({ ...input, execution, serviceIds, plan, reservations })
@@ -1030,15 +850,14 @@ export function retainAdmittedControlExecution(
   }
   if (execution.deadlineAt > origin.notAfter)
     throw Error("Control execution widens origin deadline");
-  const receipt = signControl(state.privateKey, "openmapx-control-execution-v2", {
+  const receipt = {
     version: 2,
-    installationId: installation.installationId,
     ...input,
     execution,
     serviceIds,
     plan,
     origin,
-  });
+  };
   if (Buffer.byteLength(canonicalJson(receipt)) > 65536)
     throw Error("Execution authority receipt capacity");
   const name = `${execution.operationKey}.json`;
@@ -1083,8 +902,8 @@ export interface PeerState {
   execution: ExecutionRef;
   kind: string;
   assertion: string;
-  childPrivateKey: KeyObject;
-  childPublicKey: string;
+  /** The recipient: a role name, or a fixed child's id. */
+  childId: string;
 }
 const peers = new WeakMap<object, PeerState>();
 export function controlPeerState(peer: VerifiedControlPeer) {
@@ -1110,7 +929,6 @@ const delegatedRowSchema = z.strictObject({
 const assertionSchema = z
   .strictObject({
     version: z.literal(2),
-    installationId: uuid,
     leaseId: uuid,
     delegationId: uuid,
     grantDigest: digest,
@@ -1211,7 +1029,7 @@ export function controlHeaders(rawHeaders: readonly string[]): {
 }
 /** The caller a receiver authenticated by its own bearer token. */
 export type ControlTransportPrincipal = "data-manager" | "api" | "ops-agent" | "host-cli";
-/** Transport authentication is required by the fixed caller. Signature authentication finishes during anchored adoption. */
+/** Transport authentication is required by the fixed caller. Record checks finish during anchored adoption. */
 export function verifyControlPeer(
   installation: ControlInstallation,
   input: {
@@ -1225,11 +1043,8 @@ export function verifyControlPeer(
   const headers = controlHeaders(input.rawHeaders);
   const assertionText = headers.delegation ?? headers.parent;
   if (!assertionText) throw Error("Missing control assertion");
-  const assertion = headers.delegation
-    ? parseControlAssertion(assertionText)
-    : parseParentAssertion(assertionText);
-  if (assertion.installationId !== installation.installationId)
-    throw Error("Foreign control installation");
+  if (headers.delegation) parseControlAssertion(assertionText);
+  else parseParentAssertion(assertionText);
   if (installation.role === "ops-agent" && input.transportPrincipal !== "data-manager")
     throw Error("Wrong peer transport principal");
   if (installation.role === "host-cli") throw Error("Host CLI is not an HTTP receiver");
@@ -1243,8 +1058,7 @@ export function verifyControlPeer(
     execution: executionRefSchema.parse(input.execution),
     kind: input.kind,
     assertion: assertionText,
-    childPrivateKey: state.privateKey,
-    childPublicKey: installation.publicKey,
+    childId: installation.role,
   });
   return peer;
 }
@@ -1278,8 +1092,7 @@ export function verifyRetainedLocalControlPeer(
     execution: input.execution,
     kind: input.kind,
     assertion: input.assertion,
-    childPrivateKey: state.privateKey,
-    childPublicKey: installation.publicKey,
+    childId: installation.role,
   });
   return peer;
 }
@@ -1306,40 +1119,29 @@ export function prepareFixedControlChild(
       ids.length >= Math.min(64, s.plan.length + s.reservations.length) ||
       ids.includes(delegationId)
     )
-      throw Error("Fixed child key capacity/replay");
+      throw Error("Fixed child capacity/replay");
     dir.write(name, canonicalJson([...ids, delegationId]));
   });
-  const key = newControlKey();
   writePrivateRecord(
     s.installation,
     "children",
-    `${delegationId}.key`,
-    { publicKey: key.publicKey, privateKey: encodePrivate(key.privateKey) },
+    `${delegationId}.json`,
+    { delegationId, execution: s.execution },
     true,
   );
-  writePrivateRecord(
-    s.installation,
-    "child-keys",
-    `${controlDigest(key.publicKey)}.json`,
-    { delegationId, publicKey: key.publicKey, execution: s.execution },
-    true,
-  );
-  return key.publicKey;
+  return delegationId;
 }
+const fixedChildSchema = z.strictObject({ delegationId: uuid, execution: executionRefSchema });
 export function fixedControlChildId(
   state: InstallationState,
-  key: string,
+  childId: string,
   parent: ExecutionRef,
 ): string {
-  const saved = z
-    .strictObject({ delegationId: uuid, publicKey, execution: executionRefSchema })
-    .parse(readPrivateRecord(state, "child-keys", `${controlDigest(key)}.json`, 2048));
-  if (saved.publicKey !== key || controlDigest(saved.execution) !== controlDigest(parent))
-    throw Error("Fixed child key index mismatch");
-  const challenge = z
-    .object({ publicKey })
-    .parse(readPrivateRecord(state, "children", `${saved.delegationId}.key`, 2048));
-  if (challenge.publicKey !== key) throw Error("Fixed child key challenge mismatch");
+  const saved = fixedChildSchema.parse(
+    readPrivateRecord(state, "children", `${uuid.parse(childId)}.json`, 2048),
+  );
+  if (saved.delegationId !== childId || controlDigest(saved.execution) !== controlDigest(parent))
+    throw Error("Fixed child parent mismatch");
   return saved.delegationId;
 }
 export function verifyFixedCliControlPeer(
@@ -1359,17 +1161,8 @@ export function verifyFixedCliControlPeer(
     ? parseControlAssertion(input.assertion)
     : parseParentAssertion(input.assertion);
   const fixedId = "delegationId" in assertion ? assertion.delegationId : assertion.attemptId;
-  if (installation.role !== "ops-agent" || assertion.installationId !== installation.installationId)
-    throw Error("Invalid fixed CLI installation");
-  const saved = z
-    .strictObject({ publicKey, privateKey: z.string().max(512) })
-    .parse(readPrivateRecord(state, "children", `${fixedId}.key`, 2048));
-  const key = parsePrivate(saved.privateKey);
-  if (
-    createPublicKey(key).export({ type: "spki", format: "der" }).toString("base64url") !==
-    saved.publicKey
-  )
-    throw Error("Fixed child challenge mismatch");
+  if (installation.role !== "ops-agent") throw Error("Invalid fixed CLI installation");
+  fixedChildSchema.parse(readPrivateRecord(state, "children", `${uuid.parse(fixedId)}.json`, 2048));
   const peer = Object.freeze({}) as VerifiedControlPeer;
   peers.set(peer, {
     installation: state,
@@ -1378,8 +1171,7 @@ export function verifyFixedCliControlPeer(
     execution: executionRefSchema.parse(input.execution),
     kind: input.kind,
     assertion: input.assertion,
-    childPrivateKey: key,
-    childPublicKey: saved.publicKey,
+    childId: fixedId,
   });
   return peer;
 }
@@ -1492,8 +1284,8 @@ export function retainConfigurationGenerationNonCommit(
       "executions",
       `${state.execution.operationKey}.json`,
       65536,
-    ) as { payload: { operation: unknown } },
-    operation = opsOperationSchema.parse(admitted.payload.operation);
+    ) as { operation: unknown },
+    operation = opsOperationSchema.parse(admitted.operation);
   if (
     state.installation.fixedChildId ||
     state.installation.installation.role !== "ops-agent" ||
@@ -1509,7 +1301,6 @@ export function retainConfigurationGenerationNonCommit(
     state.execution.operationKey !== actual.operationKey ||
     operation.revisionId !== actual.revisionId ||
     operation.expectedCurrentRevisionId !== actual.expectedCurrentRevisionId ||
-    actual.installationId !== state.installation.installation.installationId ||
     controlDigest(admitted) !== state.receiptDigest
   )
     throw Error("Original writer/execution noncommit binding required");
@@ -1530,24 +1321,13 @@ export function retainConfigurationGenerationNonCommit(
       name = `${state.execution.operationKey}.json`;
     const prior = readPrivateRecord(state.installation, "effects", name);
     if (prior !== null) {
-      const retained = verifyControl(
-        state.installation.installation.publicKey,
-        "openmapx-control-settlement-v1",
-        prior,
-        settlementSchema.extend({ receipt: effectObservationSchema }),
-      );
+      const retained = settlementSchema.extend({ receipt: effectObservationSchema }).parse(prior);
       if (canonicalJson(retained) !== canonicalJson(payload))
         throw Error("Original writer noncommit source changed");
       return;
     }
     settleExecutionLifecycle(state);
-    writePrivateRecord(
-      state.installation,
-      "effects",
-      name,
-      signControl(state.installation.privateKey, "openmapx-control-settlement-v1", payload),
-      false,
-    );
+    writePrivateRecord(state.installation, "effects", name, payload, false);
   });
 }
 /** Actual private source, not a caller outcome flag. */
@@ -1559,12 +1339,7 @@ export function inspectConfigurationGenerationNonCommit(
   restoreAdmittedControlExecution(installation, execution);
   const local = installationState(installation),
     raw = readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
-    effect = verifyControl(
-      installation.publicKey,
-      "openmapx-control-settlement-v1",
-      raw,
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(raw);
   if (
     effect.receipt.kind !== "configuration-generation-not-committed" ||
     effect.outcome !== "contained" ||
@@ -1626,9 +1401,7 @@ function configurationPreEffectState(authority: VerifiedExecutionAuthority) {
       `${state.execution.operationKey}.json`,
       65536,
     ),
-    operation = opsOperationSchema.parse(
-      (raw as { payload: { operation: unknown } }).payload.operation,
-    );
+    operation = opsOperationSchema.parse((raw as { operation: unknown }).operation);
   if (
     state.installation.fixedChildId ||
     state.installation.installation.role !== "ops-agent" ||
@@ -1673,12 +1446,7 @@ export function inspectConfigurationPreEffectRefusal(authority: VerifiedExecutio
   const state = configurationPreEffectState(authority),
     name = `${state.execution.operationKey}.json`,
     raw = readPrivateRecord(state.installation, "effects", name),
-    effect = verifyControl(
-      state.installation.installation.publicKey,
-      "openmapx-control-settlement-v1",
-      raw,
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(raw);
   if (
     effect.receipt.kind !== "not-started" ||
     effect.outcome !== "failed_without_effect" ||
@@ -1710,7 +1478,7 @@ export function restoreConfigurationPreEffectTerminal(
     proof = readTerminalCommitment(state),
     proofName = terminalCommitmentName(state.execution),
     rawProof = readPrivateRecord(state.installation, "observations", proofName, 4096);
-  if (controlDigest((rawProof as { payload: unknown }).payload) !== controlDigest(proof))
+  if (controlDigest(rawProof) !== controlDigest(proof))
     throw Error("Original pre-effect terminal changed");
   const rawAdmission = readPrivateRecord(
     state.installation,
@@ -1723,7 +1491,7 @@ export function restoreConfigurationPreEffectTerminal(
   const admitted = z
     .object({ admittedAt: z.number().int().nonnegative().safe(), operation: opsOperationSchema })
     .passthrough()
-    .parse((rawAdmission as { payload: unknown }).payload);
+    .parse(rawAdmission);
   if ("revisionId" in admitted.operation || proof.terminalAt < admitted.admittedAt)
     throw Error("Immutable original pre-effect tuple required");
   // Startup may have added an expiry cancellation projection. Only the
@@ -1761,17 +1529,14 @@ function readDataWorkflowProgress(authority: VerifiedExecutionAuthority) {
   if (s.kind !== "data.update") throw Error("Original Full Update owner required");
   const name = `data-workflow-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 65536);
-  const body = verifyControl(
-    s.installation.installation.publicKey,
-    "openmapx-admin-data-workflow-v1",
-    raw,
-    z.strictObject({
+  const body = z
+    .strictObject({
       version: z.literal(1),
       operationKey: z.string(),
       fingerprint: z.string(),
       receipt: dataWorkflowReceiptSchema,
-    }),
-  );
+    })
+    .parse(raw);
   if (
     body.operationKey !== s.execution.operationKey ||
     body.fingerprint !== s.execution.fingerprint
@@ -1801,22 +1566,21 @@ export function retainControlEffectReceipt(
         !["ops-agent", "host-cli"].includes(s.installation.installation.role)
       )
         throw Error("Original local catalog initialization required");
-      const source = verifyControl(
-        s.installation.installation.publicKey,
-        "openmapx-catalog-pin-initialization-v1",
-        readPrivateRecord(
-          s.installation,
-          "catalog-commits",
-          `initialization-${s.execution.operationKey}.json`,
-          65536,
-        ),
-        z.strictObject({
+      const source = z
+        .strictObject({
           version: z.literal(1),
           execution: executionRefSchema,
           generationId: digest.nullable(),
           pointerDigest: digest.nullable(),
-        }),
-      );
+        })
+        .parse(
+          readPrivateRecord(
+            s.installation,
+            "catalog-commits",
+            `initialization-${s.execution.operationKey}.json`,
+            65536,
+          ),
+        );
       if (
         controlDigest(source.execution) !== controlDigest(s.execution) ||
         source.generationId !== receipt.generationId
@@ -1841,12 +1605,12 @@ export function retainControlEffectReceipt(
       )
         throw Error("Original started credential template required");
       const admitted = readPrivateRecord(s.installation, "executions", name, 65536) as {
-        payload: { operation: unknown };
+        operation: unknown;
       };
-      const operation = localCredentialTemplateOperationSchema.parse(admitted.payload.operation);
+      const operation = localCredentialTemplateOperationSchema.parse(admitted.operation);
       if (
-        receipt.fileMac !== operation.fileMac ||
-        localCredentialTemplateFileMac(s.installation, operation) !== operation.fileMac
+        receipt.fileDigest !== operation.fileDigest ||
+        localCredentialTemplateFileDigest(s.installation, operation) !== operation.fileDigest
       )
         throw Error("Credential template file evidence changed");
       outcome = "committed";
@@ -1946,14 +1710,14 @@ export function retainControlEffectReceipt(
           "executions",
           `${s.execution.operationKey}.json`,
           65536,
-        ) as { payload: { operation: unknown } },
+        ) as { operation: unknown },
         body = z
           .strictObject({
             kind: z.literal("configuration-helper"),
             handoffId: uuid,
             intentDigest: digest,
           })
-          .parse(admitted.payload.operation),
+          .parse(admitted.operation),
         intent = readConfigurationHandoffSpawnIntent(
           s.installation.installation,
           s.execution,
@@ -1961,20 +1725,10 @@ export function retainControlEffectReceipt(
         ),
         progressName = configurationHandoffRecordName(body.handoffId, "progress"),
         progressRaw = readPrivateRecord(s.installation, "observations", progressName),
-        progress = verifyControl(
-          s.installation.publicKeys["ops-agent"],
-          configurationHandoffRecordDomains.progress,
-          progressRaw,
-          configurationHandoffProgressSchema,
-        ),
+        progress = configurationHandoffProgressSchema.parse(progressRaw),
         completionName = configurationHandoffRecordName(body.handoffId, "completion"),
         completionRaw = readPrivateRecord(s.installation, "observations", completionName),
-        completion = verifyControl(
-          s.installation.installation.publicKey,
-          configurationHandoffRecordDomains.completion,
-          completionRaw,
-          configurationHandoffWorkerRecordSchema,
-        ),
+        completion = configurationHandoffWorkerRecordSchema.parse(completionRaw),
         spawnName = `${s.installation.fixedChildId}.json`,
         spawn = readPrivateRecord(s.installation, "spawn-started", spawnName) as {
           execution: unknown;
@@ -2061,8 +1815,8 @@ export function retainControlEffectReceipt(
             "executions",
             `${s.execution.operationKey}.json`,
             65536,
-          ) as { payload?: { operation?: { maintenanceId?: string } } }
-        ).payload?.operation?.maintenanceId !== receipt.maintenanceId
+          ) as { operation?: { maintenanceId?: string } }
+        ).operation?.maintenanceId !== receipt.maintenanceId
       )
         throw Error("Original maintenance owner required");
       verifyConfigurationFenceNotPrepared(authority);
@@ -2095,24 +1849,14 @@ export function retainControlEffectReceipt(
       terminalReceiptDigest: controlDigest(receipt),
       receipt,
     };
-    const signed = signControl(
-      s.installation.privateKey,
-      "openmapx-control-settlement-v1",
-      payload,
-    );
     const name = `${s.execution.operationKey}.json`;
     try {
       const raw = readPrivateRecord(s.installation, "effects", name);
       if (raw === null) {
-        writePrivateRecord(s.installation, "effects", name, signed, false);
+        writePrivateRecord(s.installation, "effects", name, payload, false);
         return;
       }
-      const prior = verifyControl(
-        s.installation.installation.publicKey,
-        "openmapx-control-settlement-v1",
-        raw,
-        settlementSchema.extend({ receipt: effectObservationSchema }),
-      );
+      const prior = settlementSchema.extend({ receipt: effectObservationSchema }).parse(raw);
       if (controlDigest(prior) === controlDigest(payload)) {
         // A completed helper may have lost the write acknowledgement after
         // the signed effect landed but before its terminal record. Repair
@@ -2121,10 +1865,10 @@ export function retainControlEffectReceipt(
       }
       // A later transport/journal failure must never erase proved committed effects.
       if (prior.outcome !== "unknown") return;
-      writePrivateRecord(s.installation, "effects", name, signed, false);
+      writePrivateRecord(s.installation, "effects", name, payload, false);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      writePrivateRecord(s.installation, "effects", name, signed, true);
+      writePrivateRecord(s.installation, "effects", name, payload, true);
     }
   });
 }
@@ -2133,12 +1877,9 @@ export function verifyControlEffectSettlement(
   execution: ExecutionRef,
 ): VerifiedChildSettlement {
   const s = installationState(installation);
-  const evidence = verifyControl(
-    installation.publicKey,
-    "openmapx-control-settlement-v1",
-    readPrivateRecord(s, "effects", `${execution.operationKey}.json`),
-    settlementSchema.extend({ receipt: effectObservationSchema }),
-  );
+  const evidence = settlementSchema
+    .extend({ receipt: effectObservationSchema })
+    .parse(readPrivateRecord(s, "effects", `${execution.operationKey}.json`));
   if (evidence.terminalReceiptDigest !== controlDigest(evidence.receipt))
     throw Error("Effect receipt digest mismatch");
   if (controlDigest(evidence.identity) !== controlDigest(execution))
@@ -2171,21 +1912,17 @@ export function verifyMaintenanceCoordinatorPrerequisite(
   )
     throw Error("Original maintenance coordinator prerequisite required");
   const raw = readPrivateRecord(local, "executions", `${fixed.root.operationKey}.json`, 65536);
-  const admitted = verifyControl(
-    installation.publicKey,
-    "openmapx-control-execution-v2",
-    raw,
-    z
-      .object({
-        execution: executionRefSchema,
-        kind: z.literal("service.start"),
-        operation: opsOperationSchema,
-        admittedAt: z.number().int().nonnegative().safe(),
-        requestedDeadlineAt: z.number().int().nonnegative().safe(),
-        parent: retainedParentExecutionSchema.refine((parent) => parent.issuer === "api"),
-      })
-      .passthrough(),
-  );
+  const admitted = z
+    .object({
+      execution: executionRefSchema,
+      kind: z.literal("service.start"),
+      operation: opsOperationSchema,
+      admittedAt: z.number().int().nonnegative().safe(),
+      requestedDeadlineAt: z.number().int().nonnegative().safe(),
+      parent: retainedParentExecutionSchema.refine((parent) => parent.issuer === "api"),
+    })
+    .passthrough()
+    .parse(raw);
   if (
     admitted.execution.operationKey !== fixed.root.operationKey ||
     admitted.requestedDeadlineAt !== fixed.root.requestedDeadlineAt ||
@@ -2210,12 +1947,9 @@ export function verifyMaintenanceCoordinatorPrerequisite(
     owner = executionAuthorityState(authority),
     canonical = readTerminalCommitment(owner),
     settled = verifyControlEffectSettlement(installation, admitted.execution),
-    effect = verifyControl(
-      installation.publicKey,
-      "openmapx-control-settlement-v1",
-      readPrivateRecord(local, "effects", `${fixed.root.operationKey}.json`),
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    effect = settlementSchema
+      .extend({ receipt: effectObservationSchema })
+      .parse(readPrivateRecord(local, "effects", `${fixed.root.operationKey}.json`));
   if (
     canonical.phase !== "canonical" ||
     effect.outcome !== "committed" ||
@@ -2249,7 +1983,6 @@ export function verifiedStagedCoordinatorOwnershipState(proof: VerifiedStagedCoo
   const value = stagedCoordinatorProofs.get(proof);
   if (!value) throw Error("Actual staged coordinator ownership required");
   return {
-    installationId: value.installation.installationId,
     origin: structuredClone(value.origin),
     source: structuredClone(value.source),
   };
@@ -2266,30 +1999,24 @@ export function readVerifiedStagedCoordinatorOwnership(
   if (installation.role !== "ops-agent" || local.fixedChildId)
     throw Error("Production ops-agent staged source required");
   const raw = readPrivateRecord(local, "executions", `${execution.operationKey}.json`, 65536),
-    admitted = verifyControl(
-      installation.publicKey,
-      "openmapx-control-execution-v2",
-      raw,
-      z
-        .object({
-          version: z.literal(2),
-          installationId: uuid,
-          origin: controlOriginSchema,
-          kind: z.literal("service.pull"),
-          execution: executionRefSchema,
-          operation: opsOperationSchema,
-          admittedAt: z.number().int().nonnegative().safe(),
-          requestedDeadlineAt: z.number().int().nonnegative().safe(),
-          parent: retainedParentExecutionSchema,
-          coordinatorPullBaseline: coordinatorPullBaselineSchema,
-        })
-        .passthrough(),
-    ),
+    admitted = z
+      .object({
+        version: z.literal(2),
+        origin: controlOriginSchema,
+        kind: z.literal("service.pull"),
+        execution: executionRefSchema,
+        operation: opsOperationSchema,
+        admittedAt: z.number().int().nonnegative().safe(),
+        requestedDeadlineAt: z.number().int().nonnegative().safe(),
+        parent: retainedParentExecutionSchema,
+        coordinatorPullBaseline: coordinatorPullBaselineSchema,
+      })
+      .passthrough()
+      .parse(raw),
     baseline = admitted.coordinatorPullBaseline,
     operation = admitted.operation,
     parent = admitted.parent;
   if (
-    admitted.installationId !== installation.installationId ||
     canonicalJson(admitted.execution) !== canonicalJson(execution) ||
     execution.executor !== "ops-agent" ||
     execution.principal !== "api" ||
@@ -2317,12 +2044,7 @@ export function readVerifiedStagedCoordinatorOwnership(
     terminal = terminalIdentity(state, input),
     settlement = verifyControlEffectSettlement(installation, execution),
     effectRecord = readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
-    effect = verifyControl(
-      installation.publicKey,
-      "openmapx-control-settlement-v1",
-      effectRecord,
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(effectRecord);
   if (
     canonicalJson(state.origin) !== canonicalJson(admitted.origin) ||
     canonical.phase !== "canonical" ||
@@ -2392,26 +2114,17 @@ export function ownedStagedCoordinatorBaseline(
     "executions",
     `${state.execution.operationKey}.json`,
     65536,
-  ) as { payload?: { operation?: { maintenanceId?: string } } };
-  const name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+  ) as { operation?: { maintenanceId?: string } };
+  const name = `${uuid.parse(admitted.operation?.maintenanceId)}.json`,
     raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
-  const owner = verifyControl(
-    state.installation.installation.publicKey,
-    "openmapx-configuration-maintenance-owner-v2",
-    raw,
-    configurationMaintenanceOwnerRecordSchema,
-  );
-  const observation = verifyControl(
-      state.installation.installation.publicKey,
-      stagedCoordinatorObservationDomain,
+  const owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
+  const observation = stagedCoordinatorObservationPayloadSchema.parse(
       owner.stagedCoordinatorProvenance,
-      stagedCoordinatorObservationPayloadSchema,
     ),
     baseline = observation.source.baseline;
   if (
     owner.coordinatorPull ||
     owner.plan.coordinatorImage?.action !== "apply" ||
-    observation.installationId !== state.installation.installation.installationId ||
     owner.admissionDigest !== state.receiptDigest ||
     controlDigest(admitted) !== state.receiptDigest ||
     canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution) ||
@@ -2498,28 +2211,17 @@ export function ownedCoordinatorPullBaseline(
     "executions",
     `${state.execution.operationKey}.json`,
     65536,
-  ) as { payload?: { operation?: { maintenanceId?: string } } };
-  const name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+  ) as { operation?: { maintenanceId?: string } };
+  const name = `${uuid.parse(admitted.operation?.maintenanceId)}.json`,
     raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
-  const owner = verifyControl(
-    state.installation.installation.publicKey,
-    "openmapx-configuration-maintenance-owner-v2",
-    raw,
-    configurationMaintenanceOwnerRecordSchema,
-  );
-  const witness = verifyControl(
-    state.installation.installation.publicKey,
-    coordinatorPullObservationDomain,
-    owner.coordinatorPull,
-    coordinatorPullWitnessPayloadSchema,
-  );
+  const owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
+  const witness = coordinatorPullWitnessPayloadSchema.parse(owner.coordinatorPull);
   if (
     owner.admissionDigest !== state.receiptDigest ||
     controlDigest(admitted) !== state.receiptDigest ||
     canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution) ||
     canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
     canonicalJson(witness.maintenancePrepare) !== canonicalJson(state.execution) ||
-    witness.installationId !== state.installation.installation.installationId ||
     witness.candidateId !== owner.plan.operation.candidateId ||
     witness.maintenanceId !== owner.plan.operation.maintenanceId ||
     witness.baseline.candidateId !== witness.candidateId ||
@@ -2563,30 +2265,24 @@ export function verifyCoordinatorPullAdmissionSource(
     throw Error("Original coordinator pull source required");
   const submission = fixed.pull,
     raw = readPrivateRecord(state, "executions", `${submission.operationKey}.json`, 65536),
-    admitted = verifyControl(
-      installation.publicKey,
-      "openmapx-control-execution-v2",
-      raw,
-      z
-        .object({
-          version: z.literal(2),
-          installationId: uuid,
-          origin: controlOriginSchema,
-          kind: z.literal("service.pull"),
-          execution: executionRefSchema,
-          operation: opsOperationSchema,
-          admittedAt: z.number().int().nonnegative().safe(),
-          requestedDeadlineAt: z.number().int().nonnegative().safe(),
-          parent: retainedParentExecutionSchema,
-          coordinatorPullBaseline: coordinatorPullBaselineSchema,
-        })
-        .passthrough(),
-    ),
+    admitted = z
+      .object({
+        version: z.literal(2),
+        origin: controlOriginSchema,
+        kind: z.literal("service.pull"),
+        execution: executionRefSchema,
+        operation: opsOperationSchema,
+        admittedAt: z.number().int().nonnegative().safe(),
+        requestedDeadlineAt: z.number().int().nonnegative().safe(),
+        parent: retainedParentExecutionSchema,
+        coordinatorPullBaseline: coordinatorPullBaselineSchema,
+      })
+      .passthrough()
+      .parse(raw),
     parent = admitted.parent,
     attempt = submission.attempt,
     execution = admitted.execution;
   if (
-    admitted.installationId !== installation.installationId ||
     admitted.coordinatorPullBaseline.candidateId !== record.candidateId ||
     admitted.coordinatorPullBaseline.sourceRevision !== record.expectedSourceRevision ||
     admitted.coordinatorPullBaseline.configurationRevisionId !==
@@ -2639,12 +2335,11 @@ export function observeCoordinatorPullForMaintenance(
     canonical = readTerminalCommitment(state),
     terminal = terminalIdentity(state, status),
     settlement = verifyControlEffectSettlement(installation, admitted.execution),
-    effect = verifyControl(
-      installation.publicKey,
-      "openmapx-control-settlement-v1",
-      readPrivateRecord(state.installation, "effects", `${admitted.execution.operationKey}.json`),
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    effect = settlementSchema
+      .extend({ receipt: effectObservationSchema })
+      .parse(
+        readPrivateRecord(state.installation, "effects", `${admitted.execution.operationKey}.json`),
+      );
   if (
     canonical.phase !== "canonical" ||
     terminal.terminal.state !== "succeeded" ||
@@ -2663,41 +2358,36 @@ export function observeCoordinatorPullForMaintenance(
   )
     throw Error("Original coordinator pull revision changed");
   const witness = coordinatorPullWitnessSchema.parse(
-    signControl(
-      state.installation.privateKey,
-      coordinatorPullObservationDomain,
-      coordinatorPullWitnessPayloadSchema.parse({
-        version: 2,
-        installationId: installation.installationId,
-        maintenanceId: record.maintenanceId,
-        candidateId: record.candidateId,
-        maintenancePrepare,
-        pull: admitted.execution,
-        submissionDigest: coordinatorPullSubmissionDigest(fixed.pull),
-        operationFingerprint: admitted.execution.operationFingerprint,
-        apiParentDigest: controlDigest(admitted.parent),
-        sourceRevision: record.expectedSourceRevision,
-        ...result,
-        terminalReceiptDigest: terminal.digest,
-        effectReceiptDigest: controlDigest(childSettlementState(settlement).evidence),
-        baseline: admitted.coordinatorPullBaseline,
-        baselineAdmissionDigest: controlDigest(
-          readPrivateRecord(
-            state.installation,
-            "executions",
-            `${admitted.execution.operationKey}.json`,
-            65536,
-          ),
+    coordinatorPullWitnessPayloadSchema.parse({
+      version: 2,
+      maintenanceId: record.maintenanceId,
+      candidateId: record.candidateId,
+      maintenancePrepare,
+      pull: admitted.execution,
+      submissionDigest: coordinatorPullSubmissionDigest(fixed.pull),
+      operationFingerprint: admitted.execution.operationFingerprint,
+      apiParentDigest: controlDigest(admitted.parent),
+      sourceRevision: record.expectedSourceRevision,
+      ...result,
+      terminalReceiptDigest: terminal.digest,
+      effectReceiptDigest: controlDigest(childSettlementState(settlement).evidence),
+      baseline: admitted.coordinatorPullBaseline,
+      baselineAdmissionDigest: controlDigest(
+        readPrivateRecord(
+          state.installation,
+          "executions",
+          `${admitted.execution.operationKey}.json`,
+          65536,
         ),
-        verifiedAt: Date.now(),
-      }),
-    ),
+      ),
+      verifiedAt: Date.now(),
+    }),
   );
   const proof = Object.freeze({}) as VerifiedCoordinatorPullBaseline;
   baselineProofs.set(
     proof,
     Object.freeze({
-      ...structuredClone(witness.payload),
+      ...structuredClone(witness),
       expectedCurrentRevisionId: admitted.coordinatorPullBaseline.configurationRevisionId,
     }),
   );
@@ -2740,15 +2430,10 @@ export function verifyConfigurationMaintenanceChildTerminal(
       "executions",
       `${root.execution.operationKey}.json`,
       65536,
-    ) as { payload?: { operation?: { maintenanceId?: string } } },
-    name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+    ) as { operation?: { maintenanceId?: string } },
+    name = `${uuid.parse(admitted.operation?.maintenanceId)}.json`,
     raw = readPrivateRecord(root.installation, "configuration-maintenance", name),
-    owner = verifyControl(
-      root.installation.installation.publicKey,
-      "openmapx-configuration-maintenance-owner-v2",
-      raw,
-      configurationMaintenanceOwnerRecordSchema,
-    );
+    owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
   assertConfigurationMaintenanceDecisionSource(owner);
   const step = owner.plan.steps[ordinal],
     source = owner.apiControls.steps.find((value) => value.ordinal === ordinal),
@@ -2773,18 +2458,17 @@ export function verifyConfigurationMaintenanceChildTerminal(
       "executions",
       `${child.execution.operationKey}.json`,
       65536,
-    ) as { payload?: { operation?: unknown; parent?: unknown } },
+    ) as { operation?: unknown; parent?: unknown },
     canonical = readTerminalCommitment(state),
     status = parseOpsJobStatus(input),
     settlement = childSettlementState(
       verifyControlEffectSettlement(root.installation.installation, child.execution),
     ).evidence,
-    effect = verifyControl(
-      root.installation.installation.publicKey,
-      "openmapx-control-settlement-v1",
-      readPrivateRecord(root.installation, "effects", `${child.execution.operationKey}.json`),
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    effect = settlementSchema
+      .extend({ receipt: effectObservationSchema })
+      .parse(
+        readPrivateRecord(root.installation, "effects", `${child.execution.operationKey}.json`),
+      );
   const nonCommit =
       step.phase === "configuration-commit" &&
       effect.receipt.kind === "configuration-generation-not-committed" &&
@@ -2810,9 +2494,8 @@ export function verifyConfigurationMaintenanceChildTerminal(
     status.operationKey !== child.execution.operationKey ||
     status.fingerprint !== child.execution.fingerprint ||
     status.deadlineAt !== child.execution.deadlineAt ||
-    canonicalJson(admission.payload?.operation) !== canonicalJson(step.operation) ||
-    canonicalJson(admission.payload?.parent) !==
-      canonicalJson(retainedControlParent(root.execution)) ||
+    canonicalJson(admission.operation) !== canonicalJson(step.operation) ||
+    canonicalJson(admission.parent) !== canonicalJson(retainedControlParent(root.execution)) ||
     !(committed || nonCommit)
   )
     throw Error("Actual committed maintenance child canonical/effect source required");
@@ -2924,7 +2607,6 @@ const parentSummarySchema = z.strictObject({
 });
 const parentAssertionSchema = z.strictObject({
   version: z.literal(2),
-  installationId: uuid,
   issuer: z.enum(CONTROL_ROLES),
   operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
   attemptId: uuid,
@@ -2934,13 +2616,12 @@ const parentAssertionSchema = z.strictObject({
 const parentGrantSchema = z.strictObject({
   version: z.literal(2),
   origin: controlOriginSchema,
-  installationId: uuid,
   parent: executionRefSchema,
   child: executionRefSchema,
   kind: z.string().max(128),
   phase: z.enum(["data-workflow", "osm", "transit", "fonts", "data-step"]),
   recipient: z.enum(["fixed-cli", "data-manager"]),
-  childPublicKey: z.string().max(256),
+  childId: z.string().max(256),
   attemptId: uuid,
   parentAssertion: z.string().max(4096).optional(),
   ordinal: z.number().int().min(0).max(63),
@@ -3182,7 +2863,6 @@ export function readOpsControlTerminalObservation(
 }
 const lifecycleSchema = z.strictObject({
   version: z.literal(1),
-  installationId: uuid,
   execution: executionRefSchema,
   sequence: z.number().int().nonnegative().safe(),
   phase: z.enum(["held", "cancel_pending", "recovery_required", "settled"]),
@@ -3231,9 +2911,8 @@ function readLifecycle(
   const raw = JSON.parse(
     dir.read(`${execution.operationKey}.lifecycle.json`, 65536).toString("utf8"),
   );
-  const current = verifyControl(verifier, "openmapx-execution-lifecycle-v1", raw, lifecycleSchema);
+  const current = lifecycleSchema.parse(raw);
   if (
-    current.installationId !== state.installation.installationId ||
     controlDigest(current.execution) !== controlDigest(execution) ||
     Object.keys(current.childIntents).length + Object.keys(current.leaseIntents ?? {}).length > 64
   )
@@ -3246,12 +2925,9 @@ function readLifecycle(
     )
       throw Error("Execution lifecycle rollback or replacement");
   }
-  if (verifier === state.installation.publicKey) {
-    const local = verifyControl(
-      verifier,
-      "openmapx-execution-lifecycle-v1",
+  if (verifier === controlIdentity(state.installation)) {
+    const local = lifecycleSchema.parse(
       readPrivateRecord(state, "execution-lifecycle", `${execution.operationKey}.json`, 65536),
-      lifecycleSchema,
     );
     compare(local);
   }
@@ -3264,7 +2940,7 @@ function readLifecycle(
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
-  readControlExecutionWitness(state, execution, verifier);
+  readControlExecutionWitness(state, execution);
   writePrivateRecord(state, "lifecycle-observations", observationName, current, false);
   return current;
 }
@@ -3274,19 +2950,18 @@ function writeLifecycle(
   lifecycle: ExecutionLifecycle,
   exclusive = false,
 ) {
-  const signed = signControl(state.privateKey, "openmapx-execution-lifecycle-v1", lifecycle);
-  const bytes = canonicalJson(signed);
+  const bytes = canonicalJson(lifecycle);
   if (Buffer.byteLength(bytes) > 65536) throw Error("Execution lifecycle capacity");
   // Persist the private fence first. A crash before shared publication fails closed.
   writePrivateRecord(
     state,
     "execution-lifecycle",
     `${lifecycle.execution.operationKey}.json`,
-    signed,
+    lifecycle,
     exclusive,
   );
   dir.write(`${lifecycle.execution.operationKey}.lifecycle.json`, bytes, exclusive);
-  readLifecycle(state, dir, lifecycle.execution, state.installation.publicKey);
+  readLifecycle(state, dir, lifecycle.execution, controlIdentity(state.installation));
 }
 function initializeLifecycle(
   state: InstallationState,
@@ -3295,7 +2970,7 @@ function initializeLifecycle(
 ) {
   withExecutionWriter(state, execution, (dir) => {
     try {
-      readLifecycle(state, dir, execution, state.installation.publicKey);
+      readLifecycle(state, dir, execution, controlIdentity(state.installation));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       if (!newlyAdmitted)
@@ -3312,7 +2987,6 @@ function initializeLifecycle(
         dir,
         {
           version: 1,
-          installationId: state.installation.installationId,
           execution,
           sequence: 0,
           phase: "held",
@@ -3339,8 +3013,8 @@ function withParentLifecycles<T>(
     const grant = readParentGrant(state, value);
     if (grant.parentAssertion) collect(grant.parentAssertion);
     const verifier = grant.parentAssertion
-      ? readParentGrant(state, grant.parentAssertion).childPublicKey
-      : state.publicKeys[grant.parent.executor];
+      ? readParentGrant(state, grant.parentAssertion).childId
+      : grant.parent.executor;
     chain.push({ assertion: value, grant, verifier });
   }
   collect(assertion);
@@ -3373,7 +3047,7 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
         s.installation,
         dir,
         s.execution,
-        s.installation.installation.publicKey,
+        controlIdentity(s.installation.installation),
       );
       if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
         throw new ControlExecutionFencedError(
@@ -3428,7 +3102,7 @@ export function withControlDelegationPublication<T>(
         s.installation,
         directory,
         s.execution,
-        s.installation.installation.publicKey,
+        controlIdentity(s.installation.installation),
       );
       if (s.kind === "configurationMaintenance.prepare") {
         const admission = readPrivateRecord(
@@ -3436,18 +3110,13 @@ export function withControlDelegationPublication<T>(
             "executions",
             `${s.execution.operationKey}.json`,
             65536,
-          ) as { payload?: { operation?: { maintenanceId?: string } } },
+          ) as { operation?: { maintenanceId?: string } },
           raw = readPrivateRecord(
             s.installation,
             "configuration-maintenance",
-            `${uuid.parse(admission.payload?.operation?.maintenanceId)}.json`,
+            `${uuid.parse(admission.operation?.maintenanceId)}.json`,
           ),
-          owner = verifyControl(
-            s.installation.installation.publicKey,
-            "openmapx-configuration-maintenance-owner-v2",
-            raw,
-            configurationMaintenanceOwnerRecordSchema,
-          );
+          owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
         if (
           owner.admissionDigest !== s.receiptDigest ||
           canonicalJson(owner.plan.prepare) !== canonicalJson(s.execution) ||
@@ -3525,7 +3194,7 @@ export function withControlMaintenanceDecisionPublication<T>(
         s.installation,
         directory,
         s.execution,
-        s.installation.installation.publicKey,
+        controlIdentity(s.installation.installation),
       );
       if (current.phase !== "settled" || Date.now() >= s.execution.deadlineAt)
         throw new ControlExecutionFencedError(
@@ -3574,7 +3243,7 @@ export function cancelControlExecution(
       s.installation,
       dir,
       s.execution,
-      s.installation.installation.publicKey,
+      controlIdentity(s.installation.installation),
     );
     if (lifecycle.phase !== "settled" && lifecycle.phase !== "cancel_pending") {
       lifecycle.phase = "cancel_pending";
@@ -3585,14 +3254,7 @@ export function cancelControlExecution(
       const saved = z
         .object({ grant: z.unknown() })
         .parse(readPrivateRecord(s.installation, "parent-attempts", `${id}.json`));
-      return Object.freeze(
-        verifyControl(
-          s.installation.installation.publicKey,
-          "openmapx-parent-grant-v2",
-          saved.grant,
-          parentGrantSchema,
-        ).child,
-      );
+      return Object.freeze(parentGrantSchema.parse(saved.grant).child);
     });
     for (const [id, intent] of Object.entries(lifecycle.leaseIntents ?? {})) {
       // The signed index is published before its private outbox. A crash in
@@ -3607,14 +3269,8 @@ export function cancelControlExecution(
         const parsed = z
           .strictObject({ kind: z.literal("lease"), attempt: z.unknown() })
           .parse(saved);
-        const value = verifyControl(
-          s.installation.installation.publicKey,
-          "openmapx-lease-execution-attempt-v2",
-          parsed.attempt,
-          leaseExecutionAttemptSchema,
-        );
+        const value = leaseExecutionAttemptSchema.parse(parsed.attempt);
         if (
-          value.installationId !== s.installation.installation.installationId ||
           controlDigest(value.origin) !== controlDigest(s.origin) ||
           controlDigest(value.parent) !== controlDigest(s.execution) ||
           controlDigest(parsed.attempt) !== intent.attemptDigest ||
@@ -3643,7 +3299,6 @@ export function cancelControlExecution(
 }
 const leaseExecutionAttemptSchema = z.strictObject({
   version: z.literal(2),
-  installationId: uuid,
   origin: controlOriginSchema,
   parent: executionRefSchema,
   child: executionRefSchema,
@@ -3663,7 +3318,7 @@ export function recordLeaseControlAttempt(
     s.installation,
     directory,
     s.execution,
-    s.installation.installation.publicKey,
+    controlIdentity(s.installation.installation),
   );
   const leases = lifecycle.leaseIntents ?? {};
   if (
@@ -3671,17 +3326,12 @@ export function recordLeaseControlAttempt(
     leases[input.delegationId]
   )
     throw Error("Execution cancellation intent capacity/replay");
-  const attempt = signControl(
-    s.installation.privateKey,
-    "openmapx-lease-execution-attempt-v2",
-    leaseExecutionAttemptSchema.parse({
-      version: 2,
-      installationId: s.installation.installation.installationId,
-      origin: s.origin,
-      parent: s.execution,
-      ...input,
-    }),
-  );
+  const attempt = leaseExecutionAttemptSchema.parse({
+    version: 2,
+    origin: s.origin,
+    parent: s.execution,
+    ...input,
+  });
   leases[input.delegationId] = {
     child: input.child,
     leaseId: input.leaseId,
@@ -3705,7 +3355,7 @@ export function settleExecutionLifecycle(s: AuthorityState) {
       s.installation,
       dir,
       s.execution,
-      s.installation.installation.publicKey,
+      controlIdentity(s.installation.installation),
     );
     if (lifecycle.phase !== "settled") {
       lifecycle.phase = "settled";
@@ -3721,7 +3371,7 @@ export async function attestParentExecution(
     phase: ControlChildPhase;
     serviceIds: readonly string[];
     recipient: ControlRecipient;
-    childPublicKey: string;
+    childId: string;
   },
 ): Promise<string> {
   const s = executionAuthorityState(authority);
@@ -3744,40 +3394,34 @@ export async function attestParentExecution(
     throw Error("Unauthorized deadline-only edge");
   if (["osm", "transit", "fonts"].includes(child.phase) && s.kind !== "data.update")
     throw Error("Only Full Update may delegate data phases");
-  if (
-    child.recipient === "data-manager" &&
-    child.childPublicKey !== s.installation.publicKeys["data-manager"]
-  )
+  if (child.recipient === "data-manager" && child.childId !== "data-manager")
     throw Error("Wrong child role key");
   verifyDeadlineEdge(s.kind, child.phase, child.recipient, plan.kind);
   let attemptId: string = randomUUID();
   if (child.recipient === "fixed-cli") {
-    attemptId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
+    attemptId = fixedControlChildId(s.installation, child.childId, s.execution);
   }
   const grant = parentGrantSchema.parse({
     version: 2,
     origin: s.origin,
-    installationId: s.installation.installation.installationId,
     parent: s.execution,
     child: child.execution,
     kind: plan.kind,
     phase: child.phase,
     recipient: child.recipient,
-    childPublicKey: child.childPublicKey,
+    childId: child.childId,
     attemptId,
     ordinal: plan.ordinal,
     ...(s.installation.fixedParentAssertion
       ? { parentAssertion: s.installation.fixedParentAssertion }
       : {}),
   });
-  const signed = signControl(s.installation.privateKey, "openmapx-parent-grant-v2", grant);
   const fields = {
     version: 2 as const,
-    installationId: grant.installationId,
     issuer: s.execution.executor,
     operationKey: s.execution.operationKey,
     attemptId,
-    grantDigest: controlDigest(signed),
+    grantDigest: controlDigest(grant),
     grant: parentSummary(grant),
   };
   const assertion = Buffer.from(canonicalJson(parentAssertionSchema.parse(fields))).toString(
@@ -3789,7 +3433,7 @@ export async function attestParentExecution(
       s.installation,
       dir,
       s.execution,
-      s.installation.installation.publicKey,
+      controlIdentity(s.installation.installation),
     );
     if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
       throw Error("Canceled/terminal execution cannot authorize forward children");
@@ -3803,18 +3447,13 @@ export async function attestParentExecution(
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }
     for (const value of Object.values(witness)) {
-      const previous = verifyControl(
-        s.installation.installation.publicKey,
-        "openmapx-parent-grant-v2",
-        value,
-        parentGrantSchema,
-      );
+      const previous = parentGrantSchema.parse(value);
       if (previous.child.operationKey === child.execution.operationKey)
         throw Error("Attempted parent child cannot be replayed");
     }
     if (Object.keys(witness).length + Object.keys(lifecycle.leaseIntents ?? {}).length >= 64)
       throw Error("Parent attempt capacity");
-    witness[attemptId] = signed;
+    witness[attemptId] = grant;
     const bytes = canonicalJson(witness);
     if (Buffer.byteLength(bytes) > 65536) throw Error("Parent witness capacity");
     prepareControlChildPublication(authority, plan, {
@@ -3826,7 +3465,7 @@ export async function attestParentExecution(
       s.installation,
       "parent-attempts",
       `${attemptId}.json`,
-      { grant: signed, assertion },
+      { grant: grant, assertion },
       true,
     );
     lifecycle.childIntents[attemptId] = fields.grantDigest;
@@ -3844,8 +3483,6 @@ export function readParentGrant(
 ): z.infer<typeof parentGrantSchema> {
   if (depth > 1) throw Error("Parent assertion chain limit");
   const parsed = parseParentAssertion(assertion);
-  if (parsed.installationId !== state.installation.installationId)
-    throw Error("Foreign parent installation");
   const d = executionWitnessDirectory(state, parsed.issuer);
   let signed: unknown;
   try {
@@ -3860,20 +3497,17 @@ export function readParentGrant(
   }
   if (!signed || controlDigest(signed) !== parsed.grantDigest)
     throw Error("Missing exact retained parent attempt");
-  const candidate = z.object({ payload: parentGrantSchema }).parse(signed).payload;
-  let verifier = state.publicKeys[parsed.issuer];
-  if (candidate.parentAssertion) {
-    const ancestor = readParentGrant(state, candidate.parentAssertion, depth + 1);
+  const grant = parentGrantSchema.parse(signed);
+  if (grant.parentAssertion) {
+    const ancestor = readParentGrant(state, grant.parentAssertion, depth + 1);
     if (
       ancestor.recipient !== "fixed-cli" ||
-      controlDigest(ancestor.child) !== controlDigest(candidate.parent) ||
-      candidate.recipient !== "data-manager"
+      controlDigest(ancestor.child) !== controlDigest(grant.parent) ||
+      grant.recipient !== "data-manager"
     )
       throw Error("Invalid fixed parent certification");
-    verifier = ancestor.childPublicKey;
   }
-  const grant = verifyControl(verifier, "openmapx-parent-grant-v2", signed, parentGrantSchema);
-  const parent = readControlExecutionWitness(state, grant.parent, verifier);
+  const parent = readControlExecutionWitness(state, grant.parent);
   if (
     canonicalJson(parentSummary(grant)) !== canonicalJson(parsed.grant) ||
     !sameControlOrigin(grant.origin, parent.origin) ||
@@ -3928,16 +3562,12 @@ export function verifyParentExecution(
 ): import("../ops/execution-identity").VerifiedParentExecution {
   const p = controlPeerState(peer);
   const parsed = parseParentAssertion(assertion);
-  if (
-    assertion !== p.assertion ||
-    parsed.installationId !== p.installation.installation.installationId
-  )
-    throw Error("Foreign parent assertion");
+  if (assertion !== p.assertion) throw Error("Foreign parent assertion");
   const grant = readParentGrant(p.installation, assertion);
   if (
     grant.parent.operationKey !== parsed.operationKey ||
     grant.attemptId !== parsed.attemptId ||
-    grant.childPublicKey !== p.childPublicKey ||
+    grant.childId !== p.childId ||
     grant.recipient !== p.recipient ||
     grant.kind !== retainedAttempt.kind ||
     controlDigest(grant.child) !== controlDigest(retainedAttempt.execution) ||
@@ -3986,11 +3616,10 @@ export function verifyParentExecution(
   return parent;
 }
 
-/** The child opens its ephemeral key, never the installation role private key. */
+/** A fixed child shares the agent's private records and is known by its delegation or attempt id. */
 export function openFixedChildInstallation(options: {
   infraDir: string;
   assertion: string;
-  container?: boolean;
 }): ControlInstallation {
   const encoded = JSON.parse(Buffer.from(options.assertion, "base64url").toString("utf8")) as {
     leaseId?: unknown;
@@ -3999,61 +3628,22 @@ export function openFixedChildInstallation(options: {
     ? parseControlAssertion(options.assertion)
     : parseParentAssertion(options.assertion);
   const id = "delegationId" in envelope ? envelope.delegationId : envelope.attemptId;
-  const infra = options.container ? undefined : new AnchoredDirectory(options.infraDir);
-  const secrets = options.container
-    ? new AnchoredDirectory("/run/secrets", undefined, false, true)
-    : (() => {
-        if (!infra) throw Error("Missing fixed installation root");
-        return infra.directory("secrets");
-      })();
   let recovery: AnchoredDirectory | undefined;
   try {
-    const bundle = bundleSchema.parse(
-      JSON.parse(
-        secrets
-          .read(options.container ? "openmapx-control-verifiers" : "control-verifiers.json", 4096)
-          .toString("utf8"),
-      ),
-    );
-    if (bundle.installationId !== envelope.installationId)
-      throw Error("Foreign fixed child installation");
     recovery = new AnchoredDirectory(
-      options.container
-        ? "/var/lib/openmapx/control-private"
-        : join(options.infraDir, "control-private/ops-agent"),
+      controlPrivateRoot(options.infraDir, "ops-agent"),
       undefined,
       true,
     );
-    const privateRelative = relative(
-      realpathSync(join(options.infraDir, "data")),
-      realpathSync(recovery.path),
-    );
-    if (!privateRelative || (!privateRelative.startsWith("../") && privateRelative !== ".."))
-      throw Error("Fixed child recovery material is inside shared data");
     const children = recovery.directory("children");
-    let saved: { publicKey: string; privateKey: string };
     try {
-      saved = z
-        .strictObject({ publicKey, privateKey: z.string().max(512) })
-        .parse(JSON.parse(children.read(`${id}.key`, 2048).toString("utf8")));
+      children.read(`${id}.json`, 2048);
     } finally {
       children.close();
     }
-    const key = parsePrivate(saved.privateKey);
-    if (
-      createPublicKey(key).export({ type: "spki", format: "der" }).toString("base64url") !==
-      saved.publicKey
-    )
-      throw Error("Fixed child key mismatch");
-    const installation = Object.freeze({
-      installationId: bundle.installationId,
-      role: "ops-agent",
-      publicKey: saved.publicKey,
-    }) as ControlInstallation;
+    const installation = Object.freeze({ role: "ops-agent" }) as ControlInstallation;
     installations.set(installation, {
       installation,
-      privateKey: key,
-      publicKeys: bundle.publicKeys,
       privateRoot: recovery,
       dataRoot: join(options.infraDir, "data"),
       registeredTargets: new Set(),
@@ -4066,8 +3656,6 @@ export function openFixedChildInstallation(options: {
     return installation;
   } finally {
     recovery?.close();
-    secrets.close();
-    infra?.close();
   }
 }
 export function retainFixedCliSpawnIntent(
@@ -4247,18 +3835,12 @@ export function readConfigurationHandoffSpawnIntent(
   const s = installationState(installation),
     name = configurationHandoffRecordName(handoffId, "intent"),
     raw = readPrivateRecord(s, "observations", name),
-    saved = verifyControl(
-      s.publicKeys["ops-agent"],
-      configurationHandoffRecordDomains.intent,
-      raw,
-      configurationHandoffIntentRecordSchema,
-    );
+    saved = configurationHandoffIntentRecordSchema.parse(raw);
   if (
     !s.fixedChildId ||
     installation.role !== "ops-agent" ||
     s.fixedChildId !== saved.delegationId ||
-    installation.installationId !== saved.installationId ||
-    installation.publicKey !== saved.helperPublicKey ||
+    controlIdentity(installation) !== saved.helperId ||
     saved.operation.handoffId !== handoffId ||
     canonicalJson(saved.helper) !== canonicalJson(execution) ||
     execution.executor !== "host-cli" ||
@@ -4299,38 +3881,17 @@ export function readCompletedConfigurationHandoff(
   if (installation.role !== "ops-agent") throw Error("Original helper observer required");
   const intentName = configurationHandoffRecordName(handoffId, "intent"),
     intentRaw = readPrivateRecord(state, "observations", intentName),
-    intent = verifyControl(
-      state.publicKeys["ops-agent"],
-      configurationHandoffRecordDomains.intent,
-      intentRaw,
-      configurationHandoffIntentRecordSchema,
-    ),
+    intent = configurationHandoffIntentRecordSchema.parse(intentRaw),
     progressName = configurationHandoffRecordName(handoffId, "progress"),
     progressRaw = readPrivateRecord(state, "observations", progressName),
-    progress = verifyControl(
-      state.publicKeys["ops-agent"],
-      configurationHandoffRecordDomains.progress,
-      progressRaw,
-      configurationHandoffProgressSchema,
-    ),
+    progress = configurationHandoffProgressSchema.parse(progressRaw),
     completionName = configurationHandoffRecordName(handoffId, "completion"),
     completionRaw = readPrivateRecord(state, "observations", completionName),
-    completion = verifyControl(
-      intent.helperPublicKey,
-      configurationHandoffRecordDomains.completion,
-      completionRaw,
-      configurationHandoffWorkerRecordSchema,
-    ),
+    completion = configurationHandoffWorkerRecordSchema.parse(completionRaw),
     effectName = `${intent.helper.operationKey}.json`,
     effectRaw = readPrivateRecord(state, "effects", effectName),
-    effect = verifyControl(
-      intent.helperPublicKey,
-      "openmapx-control-settlement-v1",
-      effectRaw,
-      settlementSchema.extend({ receipt: effectObservationSchema }),
-    );
+    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(effectRaw);
   if (
-    intent.installationId !== installation.installationId ||
     intent.operation.handoffId !== handoffId ||
     progress.intentDigest !== controlDigest(intent) ||
     progress.phase !== "launched" ||
@@ -4375,29 +3936,18 @@ export function readCompletedConfigurationHandoff(
 const executionWitnessSchema = z.strictObject({
   version: z.literal(2),
   origin: controlOriginSchema,
-  installationId: uuid,
   execution: executionRefSchema,
   kind: z.string().max(128),
   serviceIds: targetSchema,
   authorityDigest: digest,
 });
-export function readControlExecutionWitness(
-  state: InstallationState,
-  execution: ExecutionRef,
-  publicVerifier: string,
-) {
+export function readControlExecutionWitness(state: InstallationState, execution: ExecutionRef) {
   const d = executionWitnessDirectory(state, execution.executor);
   try {
-    const witness = verifyControl(
-      publicVerifier,
-      "openmapx-control-execution-witness-v2",
+    const witness = executionWitnessSchema.parse(
       JSON.parse(d.role.read(`${execution.operationKey}.json`, 65536).toString("utf8")),
-      executionWitnessSchema,
     );
-    if (
-      witness.installationId !== state.installation.installationId ||
-      controlDigest(witness.execution) !== controlDigest(execution)
-    )
+    if (controlDigest(witness.execution) !== controlDigest(execution))
       throw Error("Durable parent execution witness mismatch");
     return witness;
   } finally {
@@ -4416,15 +3966,14 @@ function publishControlExecutionWitness(
 ) {
   const d = executionWitnessDirectory(state, input.execution.executor);
   try {
-    const witness = signControl(state.privateKey, "openmapx-control-execution-witness-v2", {
+    const witness = {
       version: 2 as const,
       origin: input.origin,
-      installationId: state.installation.installationId,
       execution: input.execution,
       kind: input.kind,
       serviceIds: [...input.serviceIds],
       authorityDigest,
-    });
+    };
     const name = `${input.execution.operationKey}.json`;
     try {
       const prior = JSON.parse(d.role.read(name, 65536).toString("utf8"));
@@ -4446,27 +3995,19 @@ export function restoreAdmittedControlExecution(
 ): VerifiedExecutionAuthority {
   const state = installationState(installation);
   const raw = readPrivateRecord(state, "executions", `${execution.operationKey}.json`, 65536);
-  const payload = verifyControl(
-    installation.publicKey,
-    "openmapx-control-execution-v2",
-    raw,
-    z
-      .object({
-        version: z.literal(2),
-        installationId: uuid,
-        execution: executionRefSchema,
-        kind: z.string(),
-        serviceIds: targetSchema,
-        origin: controlOriginSchema,
-        plan: z.array(plannedChildSchema).max(64),
-        reservations: z.array(controlChildReservationSchema).max(64).optional(),
-      })
-      .passthrough(),
-  );
-  if (
-    payload.installationId !== installation.installationId ||
-    controlDigest(payload.execution) !== controlDigest(execution)
-  )
+  const payload = z
+    .object({
+      version: z.literal(2),
+      execution: executionRefSchema,
+      kind: z.string(),
+      serviceIds: targetSchema,
+      origin: controlOriginSchema,
+      plan: z.array(plannedChildSchema).max(64),
+      reservations: z.array(controlChildReservationSchema).max(64).optional(),
+    })
+    .passthrough()
+    .parse(raw);
+  if (controlDigest(payload.execution) !== controlDigest(execution))
     throw Error("Recovery execution ownership mismatch");
   const authority = Object.freeze({ execution: payload.execution }) as VerifiedExecutionAuthority;
   authorities.set(authority, {
@@ -4516,7 +4057,6 @@ export function retainedControlAdoptionAssertion(
 
 const preparedTerminalSchema = z.strictObject({
   version: z.literal(1),
-  installationId: uuid,
   execution: executionRefSchema,
   kind: z.enum(["configurationMaintenance.prepare", "configurationHandoff.prepare"]),
   receiptDigest: digest,
@@ -4574,27 +4114,22 @@ export function retainControlPreparedTerminal(authority: VerifiedExecutionAuthor
       !(job.result.phase === "prepared" || job.result.state === "prepared")
     )
       throw Error("Terminal preparation identity mismatch");
-    const signed = signControl(
-      s.installation.privateKey,
-      "openmapx-control-prepared-v1",
-      preparedTerminalSchema.parse({
-        version: 1,
-        installationId: s.installation.installation.installationId,
-        execution: s.execution,
-        kind: s.kind,
-        receiptDigest: controlDigest(job),
-      }),
-    );
+    const record = preparedTerminalSchema.parse({
+      version: 1,
+      execution: s.execution,
+      kind: s.kind,
+      receiptDigest: controlDigest(job),
+    });
     writePrivateRecord(
       s.installation,
       "prepared",
       `${s.execution.operationKey}.json`,
-      signed,
+      record,
       true,
     );
     const d = executionWitnessDirectory(s.installation, "ops-agent");
     try {
-      d.role.write(`${s.execution.operationKey}.prepared.json`, canonicalJson(signed), true);
+      d.role.write(`${s.execution.operationKey}.prepared.json`, canonicalJson(record), true);
     } finally {
       d.close();
     }
@@ -4610,16 +4145,10 @@ export function verifyControlPreparedTerminal(
 ): void {
   const d = executionWitnessDirectory(state, "ops-agent");
   try {
-    const receipt = verifyControl(
-      state.publicKeys["ops-agent"],
-      "openmapx-control-prepared-v1",
+    const receipt = preparedTerminalSchema.parse(
       JSON.parse(d.role.read(`${execution.operationKey}.prepared.json`, 8192).toString("utf8")),
-      preparedTerminalSchema,
     );
-    if (
-      receipt.installationId !== state.installation.installationId ||
-      controlDigest(receipt.execution) !== controlDigest(execution)
-    )
+    if (controlDigest(receipt.execution) !== controlDigest(execution))
       throw Error("Foreign terminal preparation");
   } finally {
     d.close();
@@ -4634,12 +4163,7 @@ export async function verifyDataUpdatePrerequisites(authority: VerifiedExecution
     throw Error("Original Full Update root required");
   const name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  const plan = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-data-update-plan-v1",
-      raw,
-      dataUpdatePlanSchema,
-    ),
+  const plan = dataUpdatePlanSchema.parse(raw),
     infraDir = dirname(s.installation.dataRoot);
   if (
     controlDigest(plan.parent) !== controlDigest(s.execution) ||
@@ -4660,7 +4184,6 @@ export async function verifyDataUpdatePrerequisites(authority: VerifiedExecution
       childInstallation = openFixedChildInstallation({
         infraDir,
         assertion: attempt.assertion,
-        container: existsSync("/run/secrets/openmapx-control-verifiers"),
       });
       dataAuthority = restoreAdmittedControlExecution(childInstallation, attempt.execution);
       const settlement = childSettlementState(
@@ -4712,12 +4235,7 @@ function verifyDataUpdateCompletionSource(
   if (s.installation.fixedChildId) throw Error("Original Full Update root required");
   const name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  const plan = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-data-update-plan-v1",
-      raw,
-      dataUpdatePlanSchema,
-    ),
+  const plan = dataUpdatePlanSchema.parse(raw),
     infraDir = dirname(s.installation.dataRoot);
   if (
     controlDigest(plan.parent) !== controlDigest(s.execution) ||
@@ -4752,7 +4270,6 @@ function verifyDataUpdateCompletionSource(
       const child = openFixedChildInstallation({
         infraDir,
         assertion: attempt.assertion,
-        container: existsSync("/run/secrets/openmapx-control-verifiers"),
       });
       try {
         readFixedCliSpawnIntent(child, attempt.execution, fixedCliArguments(plan.operation));
@@ -4785,10 +4302,10 @@ function verifyDataUpdateCompletionSource(
 }
 
 /** Opaque local file version, never a public hash of a credential value. */
-export function localFeedCredentialTemplateMac(
+export function localFeedCredentialTemplateDigest(
   installation: ControlInstallation,
   operation: unknown,
   contents?: string,
 ) {
-  return localCredentialTemplateFileMac(installationState(installation), operation, contents);
+  return localCredentialTemplateFileDigest(installationState(installation), operation, contents);
 }

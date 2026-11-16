@@ -15,7 +15,6 @@ import {
   cancelControlExecution,
   closeArtifactTargetLeaseHandle,
   commitFeedProxyValidationFailure,
-  controlInstallationDataRoot,
   controlRegisteredServiceIds,
   inspectConfigurationPreEffectRefusal,
   inspectControlAdmission,
@@ -2352,7 +2351,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           if (role !== "api" || typeof parentHeader !== "string")
             throw new RequestGuardError("authorization", 403);
           try {
-            parent = verifyApiJobParentExecution(parentHeader, options.tokens.api, {
+            parent = verifyApiJobParentExecution(parentHeader, {
               operationKey: parsed.operationKey,
               operationFingerprint,
               requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,

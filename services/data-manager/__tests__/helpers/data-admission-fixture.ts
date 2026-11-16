@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import type postgres from "postgres";
 import { installDataMutationAdmission } from "../../src/jobs/execution/admission.js";
@@ -27,7 +27,7 @@ export async function installDisposableDataAdmission(sql: postgres.Sql): Promise
   }
   const root = mkdtempSync(join(tmpdir(), "omx-disposable-admission-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   const installation = openControlInstallation({
       infraDir: root,
       role: "data-manager",

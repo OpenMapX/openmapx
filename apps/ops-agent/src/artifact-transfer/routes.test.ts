@@ -22,7 +22,6 @@ it("authenticates before streaming, preserves binary bytes, refuses purpose and 
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token,
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
   });
   const app = Fastify();

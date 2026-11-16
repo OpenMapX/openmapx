@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import {
@@ -10,7 +9,7 @@ import {
   retainedExecutionOrigin,
   writePrivateRecord,
 } from "../build-artifacts/control-authority";
-import { controlDigest, signControl, verifyControl } from "../build-artifacts/control-records";
+import { controlDigest } from "../build-artifacts/control-records";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import {
   assertArtifactTargetLeaseExecution,
@@ -30,7 +29,6 @@ import {
 } from "./schemas";
 import type { CatalogPinCommitIdentity, CatalogPinCommitReceipt, CatalogPinSet } from "./types";
 
-const DOMAIN = "openmapx-catalog-pin-commit-v1";
 const journalSchema = z.strictObject({
   version: z.literal(1),
   receipt: catalogPinCommitReceiptSchema,
@@ -156,12 +154,12 @@ export async function initializeCatalogPinSet(options: {
         state,
         "catalog-commits",
         `initialization-${owner.execution.operationKey}.json`,
-        signControl(state.privateKey, "openmapx-catalog-pin-initialization-v1", {
+        {
           version: 1,
           execution: owner.execution,
           generationId: pair?.generationId ?? null,
           pointerDigest: marker ? controlDigest(marker) : null,
-        }),
+        },
         false,
       );
       return pair;
@@ -212,7 +210,6 @@ function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
     infraDir: join(rootDir, "infra/docker"),
     role: "ops-agent",
     serviceIds: ["motis"],
-    container: existsSync("/run/secrets/openmapx-control-verifiers"),
   });
   try {
     const state = installationState(installation),
@@ -220,7 +217,7 @@ function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
     if (!origin) throw Error("Retained catalog execution origin required");
     const read = (name: string) => {
       const raw = readPrivateRecord(state, "catalog-commits", name, 65536);
-      const journal = verifyControl(state.installation.publicKey, DOMAIN, raw, journalSchema);
+      const journal = journalSchema.parse(raw);
       if (canonicalJson(journal.receipt.identity) !== canonicalJson(commit))
         throw Error("Catalog commit identity conflict");
       return journal;
@@ -245,7 +242,7 @@ function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
       // terminal receipt is refused; only the indexed, not-yet-published
       // terminal preimage can replace the original prepared cache.
       const raw = readPrivateRecord(state, "catalog-commits", name, 65536);
-      const prior = verifyControl(state.installation.publicKey, DOMAIN, raw, journalSchema);
+      const prior = journalSchema.parse(raw);
       if (canonicalJson(prior) !== canonicalJson(intent)) throw error;
       const marker = directories(rootDir, false, (_docker, pins) => (pins ? pointer(pins) : null));
       if (canonicalJson(marker) !== canonicalJson(intent.next)) throw error;
@@ -257,8 +254,7 @@ function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
           committedAt: intent.next.committedAt,
         },
       };
-      const signed = signControl(state.privateKey, DOMAIN, repaired);
-      writePrivateRecord(state, "catalog-commits", name, signed, false);
+      writePrivateRecord(state, "catalog-commits", name, repaired, false);
       return read(name);
     }
   } finally {
@@ -289,7 +285,6 @@ export async function readCatalogPinCommit(options: {
         infraDir: join(options.rootDir, "infra/docker"),
         role: "ops-agent",
         serviceIds: ["motis"],
-        container: existsSync("/run/secrets/openmapx-control-verifiers"),
       });
       try {
         const state = installationState(installation),
@@ -299,7 +294,7 @@ export async function readCatalogPinCommit(options: {
           state,
           "catalog-commits",
           `${commit.execution.operationKey}.json`,
-          signControl(state.privateKey, DOMAIN, { ...journal, receipt }),
+          { ...journal, receipt },
           false,
         );
       } finally {
@@ -338,14 +333,13 @@ export async function publishCatalogPinSet(options: {
   assertArtifactTargetLeaseExecution(options.lease, commit.execution);
   const state = installationState(owner.installation);
   const save = (journal: z.infer<typeof journalSchema>, intent = false) => {
-    const signed = signControl(state.privateKey, DOMAIN, journal);
-    if (Buffer.byteLength(canonicalJson(signed)) > 65536)
+    if (Buffer.byteLength(canonicalJson(journal)) > 65536)
       throw Error("Catalog commit receipt is too large");
     writePrivateRecord(
       state,
       "catalog-commits",
       `${commit.execution.operationKey}${intent ? ".intent" : ""}.json`,
-      signed,
+      journal,
       intent,
     );
   };

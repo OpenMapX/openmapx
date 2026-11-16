@@ -65,7 +65,6 @@ function input(): Parameters<typeof buildFixedConfigurationMaintenancePlan>[0] {
     }),
   };
   return {
-    installationId: "66666666-6666-4666-8666-666666666666",
     prepare,
     operation,
     apiParent: parent,
@@ -111,10 +110,10 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   const original = JSON.stringify(plan.dmPrepare);
   expect(Reflect.set(plan.dmPrepare, "planDigest", "0".repeat(64))).toBe(false);
   expect(JSON.stringify(plan.dmPrepare)).toBe(original);
-  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const changed = structuredClone(plan);
   changed.steps[1]!.prerequisites = [];
-  expect(() => assertFixedConfigurationMaintenancePlan(changed, source.installationId)).toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(changed)).toThrow();
 });
 it.each(["body", "source", "parent", "foreign-target", "protected-target", "capacity"])(
   "refuses %s before admitting any plan authority",
@@ -250,13 +249,12 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     "maintenance-hardlinks",
     "maintenance-handoff",
   ]);
-  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const { configurationHandoffIntentRecordSchema } = await import(
     "./configuration-handoff-records"
   );
   const intent = {
     version: 1,
-    installationId: source.installationId,
     origin: {
       version: 1,
       rootKey: prepare.operationKey,
@@ -273,7 +271,7 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     operation: plan.steps.at(-1)!.operation,
     admittedAt: Date.now(),
     requestedDeadlineAt: prepare.deadlineAt,
-    helperPublicKey: "a".repeat(43),
+    helperId: "a".repeat(43),
     sourceDigest: "b".repeat(64),
     environmentNames: [],
     preparerAdmissionDigest: "c".repeat(64),
@@ -424,10 +422,10 @@ it("freezes protected handoff after the original generation and ordinary childre
   expect(plan.nestedHandoff?.execution.operationKey).toBe(
     controlChildOperationKey(step.operationKey, "configuration-handoff", 0),
   );
-  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const changed = structuredClone(plan);
   changed.handoff!.expectedImageIdentities["app-api"] = `sha256:${"3".repeat(64)}`;
-  expect(() => assertFixedConfigurationMaintenancePlan(changed, source.installationId)).toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(changed)).toThrow();
 });
 
 import { createHash } from "node:crypto";

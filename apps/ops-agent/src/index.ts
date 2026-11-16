@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   leaseStoreDirectory,
@@ -159,7 +158,6 @@ async function main(): Promise<void> {
       infraDir: paths.infraDir,
       role: "ops-agent",
       serviceIds: [...builtInServices, ...communityServices].map((s) => s.manifest.id),
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
       leases: localLeaseBackend(leaseStore),
     });
     if (controlStartup.reason) console.error(controlStartup.reason);
@@ -230,11 +228,7 @@ async function main(): Promise<void> {
       "policy" in transferPolicy && controlStartup.installation
         ? new ArtifactTransferStore({
             dataRoot: join(paths.infraDir, "data", ".openmapx-transfers"),
-            privateRoot: artifactTransferPrivateRoot(
-              paths.infraDir,
-              existsSync("/run/secrets/openmapx-control-verifiers"),
-            ),
-            token: apiToken,
+            privateRoot: artifactTransferPrivateRoot(paths.infraDir),
             policy: transferPolicy.policy,
             admissionsOpen: () => configurationHandoffPendingMaintenanceIds(runtime).size === 0,
           })

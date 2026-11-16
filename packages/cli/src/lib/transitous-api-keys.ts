@@ -3,7 +3,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import {
   closeSync,
   constants,
-  existsSync,
   fchmodSync,
   fstatSync,
   linkSync,
@@ -325,8 +324,7 @@ export async function generateTransitousApiKeys(
   // Serialize the map by code-unit key order using the shared canonical encoder.
   const { canonicalFeedCredentialMap } = await import("@openmapx/transitous-core");
   const contents = `${canonicalFeedCredentialMap(merged.values).canonicalJson}\n`;
-  if (!existsSync(join(paths.infraDir, "secrets/control-verifiers.json")))
-    await control.provisionControlInstallation(paths.infraDir);
+  control.provisionControlDirectories(paths.infraDir);
   const installation = control.openControlInstallation({
     infraDir: paths.infraDir,
     role: "host-cli",
@@ -342,9 +340,13 @@ export async function generateTransitousApiKeys(
       kind: "transit.credentials.template",
       catalogRevisionId: pins.generationId,
       outputPath: outputRelative,
-      fileMac: "0".repeat(64),
+      fileDigest: "0".repeat(64),
     };
-    operation.fileMac = control.localFeedCredentialTemplateMac(installation, operation, contents);
+    operation.fileDigest = control.localFeedCredentialTemplateDigest(
+      installation,
+      operation,
+      contents,
+    );
     const admittedAt = Date.now(),
       deadlineAt = admittedAt + 300000,
       operationFingerprint = control.controlDigest(operation);
@@ -392,7 +394,7 @@ export async function generateTransitousApiKeys(
     control.retainControlEffectReceipt(authority, {
       outcome: "committed",
       publication: "committed",
-      receipt: { kind: "feed-credential-template-written", fileMac: operation.fileMac },
+      receipt: { kind: "feed-credential-template-written", fileDigest: operation.fileDigest },
     });
     await control.settleArtifactTargetLeaseChild(
       lease,

@@ -7,7 +7,7 @@ import { extractIntegrationArtifactStream } from "./artifact-stream";
 // Community install/package entry points enforce declarative-only artifacts;
 // app-api never builds or executes community bundles at runtime.
 
-import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   constants as C,
   chmodSync,
@@ -1680,26 +1680,22 @@ const publicationJournals = new WeakMap<
   {
     directory: AnchoredDirectory;
     coordination: AnchoredDirectory;
-    key: Buffer;
     transactionId: string;
     closed: boolean;
   }
 >();
-/** Server-local purpose store descriptor. No filesystem path or key is accepted over HTTP. */
+/** Server-local purpose store descriptor. No filesystem path is accepted over HTTP. */
 export function createIntegrationPublicationJournal(input: {
   directory: AnchoredDirectory;
   coordination: AnchoredDirectory;
-  key: Uint8Array;
   transactionId: string;
 }): IntegrationPublicationJournal {
   z.uuid().parse(input.transactionId);
   input.directory.check();
-  if (input.key.byteLength !== 32) throw Error("Invalid integration journal authentication key");
   const handle = Object.freeze({}) as IntegrationPublicationJournal;
   publicationJournals.set(handle, {
     directory: input.directory,
     coordination: input.coordination,
-    key: Buffer.from(input.key),
     transactionId: input.transactionId,
     closed: false,
   });
@@ -1709,7 +1705,6 @@ export function closeIntegrationPublicationJournal(handle: IntegrationPublicatio
   const journal = publicationJournals.get(handle);
   if (!journal) throw Error("Unverified integration publication journal");
   journal.closed = true;
-  journal.key.fill(0);
 }
 function publicationJournal(handle: IntegrationPublicationJournal) {
   const journal = publicationJournals.get(handle);
@@ -1720,22 +1715,11 @@ function publicationJournal(handle: IntegrationPublicationJournal) {
 function readPublicationRecord(state: PreparationState): IntegrationPublicationReceipt {
   if (state.journal) {
     const journal = publicationJournal(state.journal);
-    const saved = z
-      .strictObject({ body: z.string().max(16384), mac: z.string().regex(/^[a-f0-9]{64}$/) })
-      .parse(
-        JSON.parse(
-          journal.directory
-            .read(`publication-${journal.transactionId}.json`, 32768)
-            .toString("utf8"),
-        ),
-      );
-    const expected = createHmac("sha256", journal.key)
-      .update("openmapx-integration-publication-v1\0")
-      .update(saved.body)
-      .digest();
-    if (!timingSafeEqual(expected, Buffer.from(saved.mac, "hex")))
-      throw Error("Integration publication journal authentication failed");
-    const receipt = publicationSchema.parse(JSON.parse(saved.body));
+    const receipt = publicationSchema.parse(
+      JSON.parse(
+        journal.directory.read(`publication-${journal.transactionId}.json`, 16384).toString("utf8"),
+      ),
+    );
     if (receipt.transactionId !== journal.transactionId)
       throw Error("Integration publication journal identity changed");
     return receipt;
@@ -1792,17 +1776,7 @@ function writePublication(
         const name = `publication-${receipt.transactionId}.json`;
         if (exclusive && journal.directory.listBounded(2049).length >= 2048)
           throw Error("Integration purpose journal capacity reached");
-        journal.directory.write(
-          name,
-          JSON.stringify({
-            body,
-            mac: createHmac("sha256", journal.key)
-              .update("openmapx-integration-publication-v1\0")
-              .update(body)
-              .digest("hex"),
-          }),
-          exclusive,
-        );
+        journal.directory.write(name, body, exclusive);
       } finally {
         if (guard) {
           const identity = { dev: String(guard.stat.dev), ino: String(guard.stat.ino) };

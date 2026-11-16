@@ -36,7 +36,6 @@ import {
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
-import { signControl } from "./control-records";
 
 export interface DataFenceSql {
   unsafe(
@@ -168,13 +167,7 @@ export function createDataConfigurationFenceStore(
       };
     withPrivateEffectWriter(state, () => {
       settleExecutionLifecycle(state);
-      writePrivateRecord(
-        local,
-        "effects",
-        `${state.execution.operationKey}.json`,
-        signControl(local.privateKey, "openmapx-control-settlement-v1", effect),
-        false,
-      );
+      writePrivateRecord(local, "effects", `${state.execution.operationKey}.json`, effect, false);
     });
   }
   /** Records the agent's fence leaf as this receiver's execution and runs the

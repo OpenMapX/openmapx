@@ -19,7 +19,7 @@ import {
   inspectConfigurationPreEffectRefusal,
   openControlInstallation,
   prepareFixedControlChild,
-  provisionControlInstallation,
+  provisionControlDirectories,
   reserveControlTerminal,
   restoreConfigurationPreEffectTerminal,
   retainAdmittedControlExecution,
@@ -41,7 +41,7 @@ const targets = ["data-manager", "motis"],
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-configuration-pre-effect-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   installation = openControlInstallation({
     infraDir: root,
     role: "ops-agent",
@@ -144,7 +144,7 @@ it.each(["begun", "bound", "issued"])(
           phase: "lifecycle",
           ordinal: 0,
           lease,
-          childPublicKey: prepareFixedControlChild(owner, randomUUID()),
+          childId: prepareFixedControlChild(owner, randomUUID()),
         });
     }
     expect(() => retainConfigurationPreEffectRefusal(owner)).toThrow();
@@ -165,14 +165,10 @@ it.each(["exact", "different error", "missing"] as const)(
     retainConfigurationPreEffectRefusal(owner);
     const admission = JSON.parse(
         readFileSync(
-          join(
-            root,
-            "control-private/ops-agent/executions",
-            `${owner.execution.operationKey}.json`,
-          ),
+          join(root, "state/ops-agent/control/executions", `${owner.execution.operationKey}.json`),
           "utf8",
         ),
-      ).payload,
+      ),
       terminalAt = Date.now(),
       status = {
         version: 2 as const,

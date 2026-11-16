@@ -128,7 +128,7 @@ describe.skipIf(
           },
           canonicalPath = join(
             f.root,
-            "control-private/ops-agent/observations",
+            "state/ops-agent/control/observations",
             `terminal-${f.owner.operationKey}.json`,
           ),
           canonical = readFileSync(canonicalPath);
@@ -356,7 +356,7 @@ describe.skipIf(
         ["effects", `${f.child.operationKey}.json`],
         ["effect-started", `${f.child.operationKey}.json`],
       ]) {
-        const directory = join(f.root, "control-private/data-manager", namespace!),
+        const directory = join(f.root, "state/data-manager/control", namespace!),
           file = join(directory, name!);
         mkdirSync(directory, { recursive: true, mode: 0o700 });
         writeFileSync(file, "null", { mode: 0o600 });
@@ -498,7 +498,7 @@ describe.skipIf(
         origin = maintenance.readOwnedConfigurationMaintenance(f.authority).origin,
         admission = join(
           f.root,
-          "control-private/ops-agent/executions",
+          "state/ops-agent/control/executions",
           `${f.owner.operationKey}.json`,
         ),
         closedAt = Date.now();
@@ -533,7 +533,7 @@ describe.skipIf(
         await f.failPreparation();
         const canonicalPath = join(
             f.root,
-            "control-private/ops-agent/observations",
+            "state/ops-agent/control/observations",
             `terminal-${f.owner.operationKey}.json`,
           ),
           canonical = readFileSync(canonicalPath),
@@ -587,7 +587,7 @@ describe.skipIf(
       const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
         execution = join(
           f.root,
-          "control-private/data-manager/executions",
+          "state/data-manager/control/executions",
           `${f.child.operationKey}.json`,
         );
       expect(existsSync(execution)).toBe(false);
@@ -1391,7 +1391,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       for (const request of requests) {
         const assertion = await control.delegateArtifactTargetLease(foreignLease, {
           ...request.slot,
-          childPublicKey: f.dm.publicKey,
+          childId: f.dm.role,
         });
         await expect(
           fence.assertGenerationAdmission(

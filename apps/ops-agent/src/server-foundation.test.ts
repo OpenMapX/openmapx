@@ -851,7 +851,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-admission-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -952,7 +952,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-start-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -1026,7 +1026,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-stale-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -1087,7 +1087,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-failure-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",

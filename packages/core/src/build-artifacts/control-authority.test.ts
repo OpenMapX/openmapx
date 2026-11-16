@@ -1,15 +1,5 @@
 import { randomBytes } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  linkSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
@@ -25,7 +15,7 @@ it("renewal refuses an expired timed root after all original identity details we
   const { randomUUID } = await import("node:crypto");
   const { executionFingerprint } = await import("../ops/execution-identity");
   const { opsOperationFingerprint } = await import("../ops/fingerprint");
-  await c.provisionControlInstallation(root);
+  await c.provisionControlDirectories(root);
   const installation = c.openControlInstallation({
     infraDir: root,
     role: "host-cli",
@@ -73,46 +63,13 @@ afterEach(() => rmSync(root, { recursive: true, force: true }));
 async function api() {
   return import("./control-authority");
 }
-it("provisions three distinct role keys durably and reuses the exact installation", async () => {
+it("provisions each role's private records under its own state directory", async () => {
   const a = await api();
-  await a.provisionControlInstallation(root);
-  const before = readFileSync(join(root, "secrets/control-ops-agent.key"));
-  await a.provisionControlInstallation(root);
-  expect(readFileSync(join(root, "secrets/control-ops-agent.key"))).toEqual(before);
-  const bundle = JSON.parse(readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"));
-  expect(new Set(Object.values(bundle.publicKeys)).size).toBe(3);
-  expect(existsSync(join(root, "data/control-private"))).toBe(false);
-});
-it("never silently regenerates missing trust or accepts a linked role key", async () => {
-  const a = await api();
-  await a.provisionControlInstallation(root);
-  rmSync(join(root, "secrets/control-verifiers.json"));
-  await expect(a.provisionControlInstallation(root)).rejects.toThrow(/trust|verifier|installation/);
-});
-it.each(["permissions", "hardlink", "symlink"])("rejects unsafe role key %s", async (mode) => {
-  const a = await api();
-  await a.provisionControlInstallation(root);
-  const path = join(root, "secrets/control-ops-agent.key");
-  if (mode === "permissions") chmodSync(path, 0o644);
-  if (mode === "hardlink") linkSync(path, join(root, "copy"));
-  if (mode === "symlink") {
-    const bytes = readFileSync(path);
-    rmSync(path);
-    writeFileSync(join(root, "copy"), bytes, { mode: 0o600 });
-    symlinkSync(join(root, "copy"), path);
-  }
-  expect(() => a.openControlInstallation({ infraDir: root, role: "ops-agent" })).toThrow();
-});
-it("rejects role-key substitution even with the same UID and valid Ed25519 key", async () => {
-  const a = await api();
-  await a.provisionControlInstallation(root);
-  writeFileSync(
-    join(root, "secrets/control-ops-agent.key"),
-    readFileSync(join(root, "secrets/control-data-manager.key")),
-  );
-  expect(() => a.openControlInstallation({ infraDir: root, role: "ops-agent" })).toThrow(
-    /role|key|trust/,
-  );
+  a.provisionControlDirectories(root);
+  a.provisionControlDirectories(root);
+  for (const role of ["ops-agent", "data-manager", "host-cli"] as const)
+    expect(existsSync(a.controlPrivateRoot(root, role))).toBe(true);
+  expect(existsSync(join(root, "secrets"))).toBe(false);
 });
 it("rejects duplicate control headers and oversized individual headers", async () => {
   const a = await api();
@@ -133,7 +90,7 @@ it("retains deadline-only attempts separately from execution witnesses", async (
   const { randomUUID } = await import("node:crypto");
   const { executionFingerprint } = await import("../ops/execution-identity");
   const { opsOperationFingerprint } = await import("../ops/fingerprint");
-  await a.provisionControlInstallation(root);
+  await a.provisionControlDirectories(root);
   const installation = a.openControlInstallation({
     infraDir: root,
     role: "ops-agent",
@@ -191,7 +148,7 @@ it("retains deadline-only attempts separately from execution witnesses", async (
   });
   const assertion = await a.attestParentExecution(authority, {
     ...plan,
-    childPublicKey: receiver.publicKey,
+    childId: receiver.role,
   });
   // data-manager trusts the agent's token and reads the self-contained grant.
   const verified = a.verifiedRemoteParentExecution(receiver, assertion, {
@@ -212,62 +169,29 @@ it("retains deadline-only attempts separately from execution witnesses", async (
     }),
   ).toThrow(/mismatch/);
   await expect(
-    a.attestParentExecution(authority, { ...plan, childPublicKey: receiver.publicKey }),
+    a.attestParentExecution(authority, { ...plan, childId: receiver.role }),
   ).rejects.toThrow(/replay/);
   a.closeControlInstallation(receiver);
   a.closeControlInstallation(installation);
 });
-it("service mounts keep same-UID sibling role material outside the shared mount", () => {
+it("service manifests mount no control keys and data-manager mounts only its own private records", () => {
   const repo = join(import.meta.dirname, "../../../..");
-  const agent = JSON.parse(readFileSync(join(repo, "services/ops-agent/service.json"), "utf8"));
+  const agent = readFileSync(join(repo, "services/ops-agent/service.json"), "utf8");
   const dm = JSON.parse(readFileSync(join(repo, "services/data-manager/service.json"), "utf8"));
-  for (const [role, manifest] of [
-    ["ops-agent", agent],
-    ["data-manager", dm],
-  ] as const) {
-    expect(manifest.bindMounts).toContainEqual({
-      source: `@infra:secrets/control-${role}.key`,
-      target: "/run/secrets/openmapx-control-role-key",
-      readOnly: true,
-    });
-    expect(manifest.bindMounts).toContainEqual({
-      source: `@infra:control-private/${role}`,
-      target: "/var/lib/openmapx/control-private",
-      readOnly: false,
-    });
-    expect(
-      manifest.bindMounts.some(
-        (m: { source: string }) =>
-          m.source ===
-          `@infra:control-private/${role === "ops-agent" ? "data-manager" : "ops-agent"}`,
-      ),
-    ).toBe(false);
-  }
-  for (const role of ["data-manager", "host-cli"]) {
-    expect(
-      agent.bindMounts.some(
-        (m: { source: string; target: string; readOnly: boolean }) =>
-          m.source === "@infra:control-private/hidden-key" &&
-          m.target.endsWith(`/secrets/control-${role}.key`) &&
-          m.readOnly,
-      ),
-    ).toBe(true);
-    expect(
-      agent.bindMounts.some(
-        (m: { source: string; target: string; readOnly: boolean }) =>
-          m.source === "@infra:control-private/empty" &&
-          m.target.endsWith(`/control-private/${role}`) &&
-          m.readOnly,
-      ),
-    ).toBe(true);
-  }
+  for (const text of [agent, JSON.stringify(dm)])
+    expect(text).not.toMatch(/control-private|control-[a-z-]+\.key|control-verifiers/);
+  expect(dm.bindMounts).toContainEqual({
+    source: "@infra:state/data-manager/control",
+    target: "/var/lib/openmapx/control",
+    readOnly: false,
+  });
 });
 it("verifies the certified ephemeral fixed-CLI deadline chain without exporting a role key", async () => {
   const c = await api();
   const { randomUUID } = await import("node:crypto");
   const { executionFingerprint } = await import("../ops/execution-identity");
   const { opsOperationFingerprint } = await import("../ops/fingerprint");
-  await c.provisionControlInstallation(root);
+  await c.provisionControlDirectories(root);
   const agent = c.openControlInstallation({
     infraDir: root,
     role: "ops-agent",
@@ -350,18 +274,10 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     plan: [planned],
   });
   const id = randomUUID();
-  const publicKey = c.prepareFixedControlChild(authority, id);
-  // Unrelated retained keys must never be enumerated or parsed to find this
-  // exact certified challenge. These unreadable historical fixtures expose a scan.
-  for (let i = 0; i < 128; i++)
-    writeFileSync(
-      join(root, `control-private/ops-agent/children/retained-${i}.key`),
-      "historical",
-      { mode: 0o600 },
-    );
+  const childId = c.prepareFixedControlChild(authority, id);
   const assertion = await c.attestParentExecution(authority, {
     ...planned,
-    childPublicKey: publicKey,
+    childId,
   });
   const args = c.fixedCliArguments(operation);
   c.retainFixedCliSpawnIntent(authority, {
@@ -372,7 +288,7 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     plan: [leaf],
   });
   const fixed = c.openFixedChildInstallation({ infraDir: root, assertion });
-  expect(fixed.publicKey).not.toBe(agent.publicKey);
+  expect(c.controlIdentity(fixed)).toBe(id);
   const intent = c.readFixedCliSpawnIntent(fixed, cli, args);
   const peer = c.verifyFixedCliControlPeer(fixed, {
     assertion,
@@ -396,7 +312,7 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
   });
   const next = await c.attestParentExecution(cliAuthority, {
     ...leaf,
-    childPublicKey: dm.publicKey,
+    childId: dm.role,
   });
   const remoteParent = () =>
     c.verifiedRemoteParentExecution(dm, next, {
@@ -421,7 +337,7 @@ async function deadlineFamily() {
   const { randomUUID } = await import("node:crypto");
   const { executionFingerprint } = await import("../ops/execution-identity");
   const { opsOperationFingerprint } = await import("../ops/fingerprint");
-  await c.provisionControlInstallation(root);
+  await c.provisionControlDirectories(root);
   const agent = c.openControlInstallation({
     infraDir: root,
     role: "ops-agent",
@@ -476,7 +392,7 @@ async function deadlineFamily() {
     serviceIds: ["osrm"],
     plan: [plan],
   });
-  const grant = () => c.attestParentExecution(authority, { ...plan, childPublicKey: dm.publicKey });
+  const grant = () => c.attestParentExecution(authority, { ...plan, childId: dm.role });
   const admit = (assertion: string) =>
     c.verifiedRemoteParentExecution(dm, assertion, {
       transportPrincipal: "ops-agent",
@@ -533,7 +449,7 @@ it("expired exact deadline-only adoption stays observable without renewing one-u
       await expect(f.grant()).rejects.toThrow(/Expired/);
       expect(
         existsSync(
-          join(root, `control-private/ops-agent/executions/${f.execution.operationKey}.json`),
+          join(root, `state/ops-agent/control/executions/${f.execution.operationKey}.json`),
         ),
       ).toBe(true);
     } finally {

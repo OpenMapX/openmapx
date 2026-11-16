@@ -29,11 +29,11 @@ if (fault === "before-effect" || fault === "after-effect") {
     let match = false;
     if (!injected && basename(String(to)) === `${key}.json`) {
       const actual = fs.statSync(dirname(String(to))),
-        expected = fs.statSync(join(root, "infra/docker/control-private/ops-agent/effects"));
+        expected = fs.statSync(join(root, "infra/docker/state/ops-agent/control/effects"));
       match =
         actual.dev === expected.dev &&
         actual.ino === expected.ino &&
-        JSON.parse(fs.readFileSync(from, "utf8"))?.payload?.receipt?.kind ===
+        JSON.parse(fs.readFileSync(from, "utf8"))?.receipt?.kind ===
           "configuration-helper-completion";
     }
     if (!match) return rename(from, to);

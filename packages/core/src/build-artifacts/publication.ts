@@ -28,7 +28,6 @@ import {
   verifyControlEffectSettlement,
   writePrivateRecord,
 } from "./control-authority";
-import { signControl, verifyControl } from "./control-records";
 import { hashArtifactFile, inspectArtifactTree } from "./copy-tree";
 import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
 import { inspectOwnedGenerationHardlinks } from "./generation-hardlinks-owner";
@@ -118,8 +117,7 @@ const journalSchema = z.strictObject({
   cleanupFailed: z.boolean(),
 });
 type Journal = z.infer<typeof journalSchema>;
-const DOMAIN = "openmapx-artifact-publication-v1",
-  MAX_METADATA = 16 * 1024 * 1024;
+const MAX_METADATA = 16 * 1024 * 1024;
 const TREE_LIMITS = {
   maximumEntries: 10000,
   maximumBytes: Number.MAX_SAFE_INTEGER,
@@ -279,20 +277,18 @@ function checkedOwner(input: ArtifactPublicationInput) {
     "executions",
     `${owner.execution.operationKey}.json`,
   ) as {
-    payload: {
-      operation: {
-        kind: string;
-        stageId?: string;
-        expectedSha256?: string;
-        expectedCurrentRevisionId?: string | null;
-      };
+    operation: {
+      kind: string;
+      stageId?: string;
+      expectedSha256?: string;
+      expectedCurrentRevisionId?: string | null;
     };
   };
   if (
     controlDigest(admitted) !== owner.receiptDigest ||
-    admitted.payload.operation.kind !== owner.kind ||
-    admitted.payload.operation.stageId !== input.stageId ||
-    admitted.payload.operation.expectedSha256 !== input.bundle.archiveSha256
+    admitted.operation.kind !== owner.kind ||
+    admitted.operation.stageId !== input.stageId ||
+    admitted.operation.expectedSha256 !== input.bundle.archiveSha256
   )
     throw Error("Artifact stage admission mismatch");
   return { ...owner, origin: owner.origin };
@@ -303,7 +299,7 @@ function journalName(owner: ReturnType<typeof checkedOwner>) {
 function readJournal(owner: ReturnType<typeof checkedOwner>): Journal | null {
   try {
     const raw = readPrivateRecord(owner.installation, "observations", journalName(owner));
-    return verifyControl(owner.installation.installation.publicKey, DOMAIN, raw, journalSchema);
+    return journalSchema.parse(raw);
   } catch (error) {
     if (missing(error)) return null;
     throw error;
@@ -314,7 +310,7 @@ function writeJournal(owner: ReturnType<typeof checkedOwner>, journal: Journal) 
     owner.installation,
     "observations",
     journalName(owner),
-    signControl(owner.installation.privateKey, DOMAIN, journalSchema.parse(journal)),
+    journalSchema.parse(journal),
     false,
   );
 }
@@ -660,10 +656,10 @@ export async function publishValidatedBuild(
         owner.installation,
         "executions",
         `${owner.execution.operationKey}.json`,
-      ) as { payload: { operation: { expectedCurrentRevisionId: string | null } } };
+      ) as { operation: { expectedCurrentRevisionId: string | null } };
       if (
         currentConfigurationGeneration(dirname(resolve(input.dataRoot))) !==
-          original.payload.operation.expectedCurrentRevisionId ||
+          original.operation.expectedCurrentRevisionId ||
         controlDigest(snapshot(root, serviceId)) !== input.expectedFingerprint
       )
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
@@ -962,10 +958,10 @@ export function inspectUnstartedArtifactImport(authority: VerifiedExecutionAutho
     "executions",
     `${owner.execution.operationKey}.json`,
     65536,
-  ) as { payload: { operation: unknown } };
+  ) as { operation: unknown };
   if (controlDigest(admitted) !== owner.receiptDigest)
     throw Error("Original import admission changed");
-  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  const operation = opsOperationSchema.parse(admitted.operation);
   if (
     operation.kind !== "artifactTransfer.import" ||
     opsOperationFingerprint(operation) !== owner.execution.operationFingerprint
@@ -1010,10 +1006,10 @@ export function originalArtifactImportOperation(authority: VerifiedExecutionAuth
     "executions",
     `${owner.execution.operationKey}.json`,
     65536,
-  ) as { payload: { operation: unknown } };
+  ) as { operation: unknown };
   if (controlDigest(admitted) !== owner.receiptDigest)
     throw Error("Original import admission changed");
-  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  const operation = opsOperationSchema.parse(admitted.operation);
   if (
     operation.kind !== "artifactTransfer.import" ||
     opsOperationFingerprint(operation) !== owner.execution.operationFingerprint
@@ -1034,10 +1030,10 @@ export function originalArtifactValidationOperation(authority: VerifiedExecution
     "executions",
     `${owner.execution.operationKey}.json`,
     65536,
-  ) as { payload: { operation: unknown } };
+  ) as { operation: unknown };
   if (controlDigest(admitted) !== owner.receiptDigest)
     throw Error("Original validation admission changed");
-  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  const operation = opsOperationSchema.parse(admitted.operation);
   if (
     operation.kind !== "artifactTransfer.validate" ||
     opsOperationFingerprint(operation) !== owner.execution.operationFingerprint ||

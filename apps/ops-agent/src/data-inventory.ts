@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { listCatalogProposals } from "@openmapx/core/catalog-pins";
@@ -56,7 +56,6 @@ function transitousProposalPending(infraDir: string): boolean {
     infraDir,
     role: "ops-agent",
     serviceIds: [],
-    container: existsSync("/run/secrets/openmapx-control-verifiers"),
   });
   try {
     return listCatalogProposals({ rootDir: join(infraDir, "../.."), installation }).total > 0;

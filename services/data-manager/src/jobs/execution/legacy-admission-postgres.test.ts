@@ -41,7 +41,7 @@ beforeAll(async () => {
   repository = mkdtempSync(join(tmpdir(), "omx-fix1-legacy-"));
   root = join(repository, "infra/docker");
   mkdirSync(join(root, "data"), { recursive: true, mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   installation = control.openControlInstallation({
     infraDir: root,
     role: "data-manager",

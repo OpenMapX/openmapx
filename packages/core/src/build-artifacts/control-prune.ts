@@ -33,7 +33,6 @@ export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
  * commitment go last; `configuration-maintenance` goes with its preparation. */
 const NAMESPACES = [
   "children",
-  "child-keys",
   "effect-started",
   "observations",
   "leases",
@@ -54,23 +53,21 @@ const NAMESPACES = [
 ] as const;
 const MAX_ENTRIES = 65536;
 const childSchema = z.object({ execution: z.object({ operationKey: z.string() }) });
-const admissionSchema = z.object({
-  payload: z
-    .object({
-      execution: executionRefSchema,
-      origin: controlOriginSchema,
-      kind: z.string(),
-      operation: z
-        .object({ maintenanceId: z.uuid().optional(), handoffId: z.uuid().optional() })
-        .passthrough()
-        .optional(),
-      parent: z.record(z.string(), z.unknown()).optional(),
-      plan: z.array(childSchema).optional(),
-      reservations: z.array(childSchema).optional(),
-    })
-    .passthrough(),
-});
-type Admission = z.infer<typeof admissionSchema>["payload"];
+const admissionSchema = z
+  .object({
+    execution: executionRefSchema,
+    origin: controlOriginSchema,
+    kind: z.string(),
+    operation: z
+      .object({ maintenanceId: z.uuid().optional(), handoffId: z.uuid().optional() })
+      .passthrough()
+      .optional(),
+    parent: z.record(z.string(), z.unknown()).optional(),
+    plan: z.array(childSchema).optional(),
+    reservations: z.array(childSchema).optional(),
+  })
+  .passthrough();
+type Admission = z.infer<typeof admissionSchema>;
 const leaseReferenceSchema = z.object({ leaseId: z.uuid() }).passthrough();
 const adoptionReferenceSchema = z
   .object({ leaseId: z.uuid(), delegationId: z.uuid() })
@@ -78,26 +75,22 @@ const adoptionReferenceSchema = z
 const borrowedSchema = z
   .object({ execution: executionRefSchema, assertion: z.string() })
   .passthrough();
-const lifecycleSchema = z.object({
-  payload: z
-    .object({
-      childIntents: z.record(z.string(), z.unknown()).optional(),
-      leaseIntents: z.record(z.string(), z.unknown()).optional(),
-    })
-    .passthrough(),
-});
+const lifecycleSchema = z
+  .object({
+    childIntents: z.record(z.string(), z.unknown()).optional(),
+    leaseIntents: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
 const lifecycleReceiptSchema = z.object({
-  seed: z.object({ payload: z.object({ root: z.object({ operationKey: z.string() }) }) }),
+  seed: z.object({ root: z.object({ operationKey: z.string() }) }),
 });
 const ownerSourceSchema = z.object({
-  payload: z.object({
-    plan: z.object({ operation: z.object({ expectedSourceRevision: z.uuid() }).passthrough() }),
-  }),
+  plan: z.object({ operation: z.object({ expectedSourceRevision: z.uuid() }).passthrough() }),
 });
 const sourceWitness = (revision: string) => `configuration-source-${revision}.json`;
-const terminalCommitmentSchema = z.object({
-  payload: z.object({ phase: z.enum(["prepared", "canonical"]) }).passthrough(),
-});
+const terminalCommitmentSchema = z
+  .object({ phase: z.enum(["prepared", "canonical"]) })
+  .passthrough();
 const cursors = new WeakMap<InstallationState, number>();
 
 interface Prunable {
@@ -198,10 +191,7 @@ function borrowedLeases(
   adoptions: Map<string, Borrowed>,
 ): Borrowed {
   const fence = optional(() =>
-    adoptionReferenceSchema.parse(
-      (readPrivateRecord(local, "execution-adoptions", name, 8192) as { payload?: unknown })
-        .payload,
-    ),
+    adoptionReferenceSchema.parse(readPrivateRecord(local, "execution-adoptions", name, 8192)),
   );
   return [
     ...(fence ? [{ leaseId: fence.leaseId, delegationId: fence.delegationId }] : []),
@@ -217,9 +207,7 @@ async function prunable(
   onFull: () => void,
   adoptions: () => Map<string, Borrowed> | null,
 ): Promise<Prunable | null> {
-  const admitted = admissionSchema.parse(
-    readPrivateRecord(local, "executions", name, 65536),
-  ).payload;
+  const admitted = admissionSchema.parse(readPrivateRecord(local, "executions", name, 65536));
   const key = admitted.execution.operationKey;
   if (admitted.origin.notAfter + CONTROL_PRUNE_AFTER_MS > now) return null;
   // Every agent execution reserves a terminal commitment before its effect;
@@ -228,7 +216,7 @@ async function prunable(
     local.installation.role === "ops-agent" &&
     terminalCommitmentSchema.safeParse(
       readPrivateRecord(local, "observations", `terminal-${name}`, 4096),
-    ).data?.payload.phase !== "canonical"
+    ).data?.phase !== "canonical"
   )
     return null;
   const finishedAt = withNamespace(local, "effects", (dir) => mtime(dir, name)) ?? null;
@@ -278,11 +266,6 @@ async function prunable(
   });
   for (const id of fixed ?? []) {
     add(["children", "spawns", "spawn-started"], id);
-    const child = optional(() => readPrivateRecord(local, "children", `${id}.key`, 2048)) as
-      | { publicKey?: unknown }
-      | undefined;
-    if (typeof child?.publicKey === "string")
-      add(["child-keys"], `${controlDigest(child.publicKey)}.json`);
   }
   // As a child: the parent attempt it adopted.
   for (const field of ["attemptId", "delegationId"])
@@ -294,8 +277,8 @@ async function prunable(
     lifecycleSchema.parse(readPrivateRecord(local, "execution-lifecycle", name, 65536)),
   );
   for (const id of [
-    ...Object.keys(lifecycle?.payload.childIntents ?? {}),
-    ...Object.keys(lifecycle?.payload.leaseIntents ?? {}),
+    ...Object.keys(lifecycle?.childIntents ?? {}),
+    ...Object.keys(lifecycle?.leaseIntents ?? {}),
   ])
     add(issued, id);
   // As a borrower: only its own adoption record, once the lease is released.
@@ -320,10 +303,7 @@ async function prunable(
       ),
     );
     if (source?.success)
-      add(
-        ["observations"],
-        sourceWitness(source.data.payload.plan.operation.expectedSourceRevision),
-      );
+      add(["observations"], sourceWitness(source.data.plan.operation.expectedSourceRevision));
   }
   return {
     key,
@@ -361,7 +341,7 @@ function removeShared(local: InstallationState, keys: readonly string[], onFull:
           try {
             const root = lifecycleReceiptSchema.parse(
               JSON.parse(dir.read(entry, 65536, false).toString("utf8")),
-            ).seed.payload.root.operationKey;
+            ).seed.root.operationKey;
             owned = keys.includes(root);
           } catch {
             /* Unreadable entries are left alone. */
@@ -486,7 +466,7 @@ export async function pruneControlRecords(
           optional(() => readPrivateRecord(local, "configuration-maintenance", entry)),
         );
         if (source.success)
-          referenced.add(sourceWitness(source.data.payload.plan.operation.expectedSourceRevision));
+          referenced.add(sourceWitness(source.data.plan.operation.expectedSourceRevision));
       }
     });
     if (!reported)

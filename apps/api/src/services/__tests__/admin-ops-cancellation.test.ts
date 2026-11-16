@@ -97,7 +97,7 @@ const agentClient = vi.hoisted(() => ({
       },
     ) => {
       if (!options.parentAssertion) throw Error("Original parent assertion required");
-      const parent = verifyApiJobParentExecution(options.parentAssertion, token, {
+      const parent = verifyApiJobParentExecution(options.parentAssertion, {
         operationKey: options.operationKey,
         operationFingerprint: opsOperationFingerprint(operation),
         requestedDeadlineAt: options.execution?.requestedDeadlineAt,

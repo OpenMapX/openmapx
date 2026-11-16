@@ -43,7 +43,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
       const infra = join(root, "infra");
       mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
       mkdirSync(join(root, "services"), { mode: 0o755 });
-      await control.provisionControlInstallation(infra);
+      await control.provisionControlDirectories(infra);
       const installation = control.openControlInstallation({
         infraDir: infra,
         role: "ops-agent",
@@ -53,7 +53,6 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
       let store = new ArtifactTransferStore({
         dataRoot: join(root, "stages"),
         privateRoot: join(root, "stage-meta"),
-        token: "fixture-test-token",
         capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
       });
       cleanup.push(() => store.close());
@@ -173,27 +172,6 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
           makeContext({ ...installing, ownerId: "foreign" }),
         ),
       ).rejects.toThrow(/owner/);
-      const inspectionPath = join(
-        root,
-        "stage-meta/integrations",
-        `inspection-${inspection.inspectionId}.json`,
-      );
-      const originalBytes = readFileSync(inspectionPath),
-        envelope = JSON.parse(originalBytes.toString("utf8")),
-        forgedRecord = JSON.parse(envelope.body);
-      forgedRecord.ownerId = "foreign";
-      writeFileSync(
-        inspectionPath,
-        JSON.stringify({ ...envelope, body: JSON.stringify(forgedRecord) }),
-        { mode: 0o644 },
-      );
-      try {
-        await expect(
-          dispatchOpsOperation(runtime, installing, makeContext(installing)),
-        ).rejects.toThrow(/authentication/);
-      } finally {
-        writeFileSync(inspectionPath, originalBytes, { mode: 0o644 });
-      }
       if (scenario === "upload-mutated") {
         writeFileSync(join(root, "stages", stage.stageId, "content"), Buffer.from("changed"), {
           mode: 0o644,
@@ -252,7 +230,6 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
       store = new ArtifactTransferStore({
         dataRoot: join(root, "stages"),
         privateRoot: join(root, "stage-meta"),
-        token: "fixture-test-token",
         capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
       });
       expect(
@@ -337,7 +314,6 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         store = new ArtifactTransferStore({
           dataRoot: join(root, "stages"),
           privateRoot: join(root, "stage-meta"),
-          token: "fixture-test-token",
           capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
         });
         replacement = createUnavailableRuntime();

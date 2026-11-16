@@ -44,7 +44,6 @@ export const configurationHandoffHelperBodySchema = z.strictObject({
 export const configurationHandoffIntentRecordSchema = z
   .strictObject({
     version: z.literal(1),
-    installationId: z.uuid(),
     origin: controlOriginSchema,
     ownerPrepare: executionRefSchema,
     preparer: executionRefSchema,
@@ -52,7 +51,7 @@ export const configurationHandoffIntentRecordSchema = z
     operation: configurationHandoffPrepareOperationSchema,
     admittedAt: time,
     requestedDeadlineAt: time,
-    helperPublicKey: z
+    helperId: z
       .string()
       .min(32)
       .max(128)
@@ -199,11 +198,6 @@ export const configurationHandoffWorkerRecordSchema = configurationHandoffProgre
 export type ConfigurationHandoffWorkerRecord = z.infer<
   typeof configurationHandoffWorkerRecordSchema
 >;
-export const configurationHandoffRecordDomains = {
-  intent: "openmapx-configuration-handoff-intent-v1",
-  progress: "openmapx-configuration-handoff-progress-v1",
-  completion: "openmapx-configuration-handoff-completion-v1",
-} as const;
 export const configurationHandoffRecordName = (
   id: string,
   kind: "intent" | "progress" | "completion",

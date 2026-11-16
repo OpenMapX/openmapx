@@ -78,18 +78,6 @@ function agentMounts(root: string) {
       target: join(infra, name),
       readOnly: false,
     })),
-    ...["data-manager", "host-cli"].flatMap((role) => [
-      {
-        source: join(infra, "control-private/hidden-key"),
-        target: join(infra, `secrets/control-${role}.key`),
-        readOnly: true,
-      },
-      {
-        source: join(infra, "control-private/empty"),
-        target: join(infra, `control-private/${role}`),
-        readOnly: true,
-      },
-    ]),
   ];
 }
 
@@ -179,7 +167,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       for (const name of readdirSync(join(root, "infra"))) {
         if (name !== "docker") rmSync(join(root, "infra", name), { recursive: true, force: true });
       }
-      const keep = new Set([".env", "overrides", "control-private", ...RUNTIME_DIRECTORIES]);
+      const keep = new Set([".env", "overrides", ...RUNTIME_DIRECTORIES]);
       for (const name of readdirSync(join(root, "infra", "docker"))) {
         if (!keep.has(name))
           rmSync(join(root, "infra", "docker", name), { recursive: true, force: true });
@@ -357,16 +345,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       expect(listing.stdout.split("\n").filter(Boolean)).toEqual([
         "infra",
         "docker",
-        ...[
-          ".env",
-          "backups",
-          "catalog-pins",
-          "control-private",
-          "data",
-          "overrides",
-          "secrets",
-          "state",
-        ],
+        ...[".env", "backups", "catalog-pins", "data", "overrides", "secrets", "state"],
       ]);
       for (const absent of ["services", "packages", "apps", "integrations", ".git"]) {
         const probe = await agent.exec("test", "-e", join(root, absent));

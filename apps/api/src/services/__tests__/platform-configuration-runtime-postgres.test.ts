@@ -4,15 +4,7 @@
 
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +25,7 @@ import {
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
-import { repoPaths, services } from "@openmapx/core/server";
+import { services } from "@openmapx/core/server";
 import { eq, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1217,11 +1209,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             if (version === "launch-native-system-release-image-missing") {
               const file = join(
                   host.infraDir,
-                  "control-private/ops-agent/observations",
+                  "state/ops-agent/control/observations",
                   `configuration-handoff-${env("OPS_CONFIGURATION_HANDOFF_ID")}.completion.json`,
                 ),
                 original = readFileSync(file);
-              expect(JSON.parse(String(original)).payload).toMatchObject({
+              expect(JSON.parse(String(original))).toMatchObject({
                 phase: "recovery_required",
                 completedAt: null,
               });
@@ -1285,7 +1277,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             if (version === "launch-native-system-release-killed") {
               const file = join(
                   host.infraDir,
-                  "control-private/ops-agent/observations",
+                  "state/ops-agent/control/observations",
                   `configuration-handoff-${env("OPS_CONFIGURATION_HANDOFF_ID")}.completion.json`,
                 ),
                 original = readFileSync(file),
@@ -1296,7 +1288,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
                 };
               expect(writersWereReleased).toBe(true);
-              expect(JSON.parse(String(original)).payload).toMatchObject({
+              expect(JSON.parse(String(original))).toMatchObject({
                 phase: "applying",
                 completedAt: null,
               });
@@ -1828,12 +1820,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                               readFileSync(
                                 join(
                                   host.infraDir,
-                                  "control-private/ops-agent/observations",
+                                  "state/ops-agent/control/observations",
                                   `configuration-handoff-${environment.OPS_CONFIGURATION_HANDOFF_ID}.completion.json`,
                                 ),
                                 "utf8",
                               ),
-                            ).payload;
+                            );
                             expect(completion).toMatchObject({
                               phase: "recovery_required",
                               completedAt: null,
@@ -1855,12 +1847,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           if (version === "launch-native-killed") {
                             const file = join(
                                 host.infraDir,
-                                "control-private/ops-agent/observations",
+                                "state/ops-agent/control/observations",
                                 `configuration-handoff-${owner.plan.handoff!.handoffId}.completion.json`,
                               ),
                               original = readFileSync(file);
                             expect(writersWereReleased).toBe(true);
-                            expect(JSON.parse(String(original)).payload).toMatchObject({
+                            expect(JSON.parse(String(original))).toMatchObject({
                               phase: "applying",
                               completedAt: null,
                             });
@@ -1903,7 +1895,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           if (fault) {
                             const file = join(
                                 host.infraDir,
-                                "control-private/ops-agent/observations",
+                                "state/ops-agent/control/observations",
                                 `configuration-handoff-${owner.plan.handoff!.handoffId}.completion.json`,
                               ),
                               before = readFileSync(file);

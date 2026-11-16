@@ -577,7 +577,6 @@ describe("retained execution deadlines", () => {
 
 describe("execution identity at the agent boundary", () => {
   it("clamps an authenticated late API child and keeps a duplicate after expiry immutable", async () => {
-    const { createHmac } = await import("node:crypto");
     const { opsOperationFingerprint } = await import("@openmapx/core/ops");
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     vi.setSystemTime(new Date(nowIso));
@@ -595,14 +594,7 @@ describe("execution identity at the agent boundary", () => {
       requestedDeadlineAt: Date.now() + 12 * 3600_000,
       attemptId: "123e4567-e89b-42d3-a456-426614174001",
     };
-    const payload = Buffer.from(JSON.stringify(fields)).toString("base64url");
-    const assertion =
-      payload +
-      "." +
-      createHmac("sha256", apiToken)
-        .update("openmapx-api-job-parent-v1\0")
-        .update(payload)
-        .digest("base64url");
+    const assertion = Buffer.from(JSON.stringify(fields)).toString("base64url");
     let finish!: (x: unknown) => void;
     let execution: import("@openmapx/core/ops").ExecutionRef | undefined;
     const app = await buildOpsAgentServer({

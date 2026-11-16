@@ -1,6 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseForward,
@@ -80,7 +78,6 @@ export async function withCliControlContext<T>(
   const installation = openFixedChildInstallation({
     infraDir,
     assertion,
-    container: existsSync("/run/secrets/openmapx-control-verifiers"),
   });
   let lease: BorrowedArtifactTargetLease | undefined;
   try {

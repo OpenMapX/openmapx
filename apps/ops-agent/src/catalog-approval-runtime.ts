@@ -15,7 +15,6 @@ import {
   restoreAdmittedControlExecution,
   retainedControlAdoptionAssertion,
   retainedControlParent,
-  verifyControl,
   verifyControlEffectSettlement,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
@@ -194,16 +193,13 @@ export function installCatalogApprovalRuntime(
       validated.status.result.validationId !== passed.validationId
     )
       throw Error("Successful original validation completion required");
-    const admission = verifyControl(
-      installation.publicKey,
-      "openmapx-control-execution-v2",
+    const admission = catalogApprovalAdmissionSchema.parse(
       readPrivateRecord(
         own.installation,
         "executions",
         `${context.execution.operationKey}.json`,
         65536,
       ),
-      catalogApprovalAdmissionSchema,
     );
     if (
       canonicalJson(admission.parent) !== canonicalJson(retainedControlParent(activation.parent)) ||
@@ -243,15 +239,12 @@ export function installCatalogApprovalRuntime(
       settlement.terminalReceiptDigest !== activation.promotion.terminalReceiptDigest
     )
       throw Error("Original successful promotion settlement required");
-    const effect = verifyControl(
-      installation.publicKey,
-      "openmapx-control-settlement-v1",
+    const effect = catalogPromotionEffectSchema.parse(
       readPrivateRecord(
         own.installation,
         "effects",
         `${activation.promotion.execution.operationKey}.json`,
       ),
-      catalogPromotionEffectSchema,
     );
     if (parseOpsResult("motis.primary.promote", effect.receipt.result).activeRunId !== passed.epoch)
       throw Error("Promotion activated a different candidate");

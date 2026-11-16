@@ -12,7 +12,7 @@ import {
   beginControlEffect,
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
@@ -23,7 +23,7 @@ it.each(["commit", "rollback", "release"] as const)(
   async (outcome) => {
     const root = mkdtempSync(join(tmpdir(), "repository-settle-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await provisionControlInstallation(root);
+    await provisionControlDirectories(root);
     const installation = openControlInstallation({
       infraDir: root,
       role: "ops-agent",

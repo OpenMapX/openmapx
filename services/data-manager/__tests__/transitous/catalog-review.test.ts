@@ -7,7 +7,7 @@ import {
   closeControlInstallation,
   createDataExecutionControlJournal,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins, readCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { createControlRootOperationKey, OpsClient } from "@openmapx/core/ops";
@@ -146,7 +146,7 @@ it.skipIf(!enabled)(
     const remote = join(root, "upstream.git");
     git(root, ["clone", "--bare", catalog, remote]);
     git(catalog, ["remote", "add", "origin", remote]);
-    await provisionControlInstallation(infra);
+    await provisionControlDirectories(infra);
     agentInstallation = openControlInstallation({
       infraDir: infra,
       role: "ops-agent",

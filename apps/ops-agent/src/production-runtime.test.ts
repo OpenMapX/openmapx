@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import {
   createControlRootOperationKey,
@@ -430,7 +430,7 @@ describe("assembled production service authority", () => {
     const host = await fixture();
     await host.deselect();
     mkdirSync(join(host.infraDir, "data"), { mode: 0o700, recursive: true });
-    await provisionControlInstallation(host.infraDir);
+    await provisionControlDirectories(host.infraDir);
     const installation = openControlInstallation({
       infraDir: host.infraDir,
       role: "ops-agent",

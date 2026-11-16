@@ -224,28 +224,22 @@ bundle digest separately from the materialized fingerprint.
 
 ## Installation and process boundaries
 
-Host `openmapx compose render` provisions exactly three Ed25519 role keys and one
-public verifier bundle in `infra/docker/secrets`. Existing keys are validated and
-reused; partial trust, changed roles, unsafe owners/modes, links and foreign
-installation records are rejected. Keys and recovery records are never rotated
-implicitly. `infra/docker/control-private/<role>` stays outside shared data mounts.
-The agent mounts `infra/docker` and several of its subtrees; bind mounts over the
-data-manager and host CLI keys and private directories hide those inside the agent
-container. The external helper masks all role keys and uses the agent recovery
-directory plus a fresh certified child key. Docker/host administrators remain
-trusted.
+Each role keeps its control records as plain records in its own state directory:
+the agent (with the fixed CLI children and the configuration helper it runs) in
+`infra/docker/state/ops-agent/control`, data-manager in
+`infra/docker/state/data-manager/control` (mounted at `/var/lib/openmapx/control`,
+and by no other service), and the host CLI in `infra/docker/state/host-cli/control`.
+None of them is on the shared data mount, and records are never signed: a record is
+trusted because only its owner writes that directory. Everything read from disk or
+the network is still schema-checked. Docker and host administrators remain trusted.
 
 Data-manager authenticates each HTTP caller by its own bearer token: `api`,
 `ops-agent` (including the fixed CLI children the agent runs) or `host-cli`. The
 route contract lists the callers each route admits; the configuration fence is
-`ops-agent` only. Signed-control receivers pass that authenticated caller to
-`verifyControlPeer` as the transport principal.
-
-Services read their fixed role key and verifier mounts on startup. Missing or
-conflicting trust disables signed-control admission with a fixed host recovery
-prerequisite, while status/recovery access remains available. Recovery instructions
-require stopping all relevant writers/helpers and inspecting exact retained
-receipts and publication state; age or a missing PID never permits lock removal.
+`ops-agent` only. Control receivers pass that authenticated caller to
+`verifyControlPeer` as the transport principal. The API names the job a child
+operation belongs to in the `x-openmapx-parent-execution` header of its own
+authenticated request; the agent accepts that header only from the API's token.
 
 ## Execution and lease lifecycle
 

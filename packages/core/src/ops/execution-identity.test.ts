@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { OPS_KIND_POLICIES } from "./contract";
 import {
@@ -69,13 +68,8 @@ describe("immutable execution admission", () => {
       requestedDeadlineAt: admittedAt + 1000,
       attemptId: "123e4567-e89b-42d3-a456-426614174001",
     };
-    const payload = Buffer.from(JSON.stringify(fields)).toString("base64url");
-    const signature = createHmac("sha256", "test-token")
-      .update("openmapx-api-job-parent-v1\0")
-      .update(payload)
-      .digest("base64url");
-    const assertion = `${payload}.${signature}`;
-    const parent = verifyApiJobParentExecution(assertion, "test-token", {
+    const assertion = Buffer.from(JSON.stringify(fields)).toString("base64url");
+    const parent = verifyApiJobParentExecution(assertion, {
       operationKey: base.operationKey,
       operationFingerprint: base.operationFingerprint,
       requestedDeadlineAt: fields.requestedDeadlineAt,
@@ -96,10 +90,10 @@ describe("immutable execution admission", () => {
       normalizeExecutionAdmission({ ...base, parent: { deadlineAt: admittedAt + 10 } as never }),
     ).toThrow();
     expect(() =>
-      verifyApiJobParentExecution(assertion, "other-token", {
+      verifyApiJobParentExecution(assertion, {
         operationKey: base.operationKey,
         operationFingerprint: base.operationFingerprint,
-        requestedDeadlineAt: fields.requestedDeadlineAt,
+        requestedDeadlineAt: fields.requestedDeadlineAt + 1,
       }),
     ).toThrow();
   });

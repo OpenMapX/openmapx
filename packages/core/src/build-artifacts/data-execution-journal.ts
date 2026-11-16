@@ -39,12 +39,7 @@ import {
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
-import {
-  controlOriginSchema,
-  sameControlOrigin,
-  signControl,
-  verifyControl,
-} from "./control-records";
+import { controlOriginSchema, sameControlOrigin } from "./control-records";
 import { retainedDataDatabaseTimestamp } from "./data-database-time";
 import { DataExecutionPartialResult } from "./data-execution-outcome";
 import {
@@ -79,7 +74,6 @@ const completions = new WeakMap<
 const workerSchema = z
   .strictObject({
     version: z.literal(1),
-    installationId: z.uuid(),
     origin: controlOriginSchema,
     execution: executionRefSchema,
     admissionDigest: z.string().regex(/^[a-f0-9]{64}$/),
@@ -105,7 +99,6 @@ const runnerJournalSchema = z.strictObject({
 const terminalSchema = z.strictObject({
   version: z.literal(1),
   phase: z.enum(["prepared", "canonical"]),
-  installationId: z.uuid(),
   origin: controlOriginSchema,
   execution: executionRefSchema,
   admissionDigest: z.string().regex(/^[a-f0-9]{64}$/),
@@ -209,16 +202,13 @@ export function createDataExecutionControlJournal(
   function recoveryIntent(authority: VerifiedExecutionAuthority) {
     const s = executionAuthorityState(authority);
     try {
-      const proof = verifyControl(
-        installation.publicKey,
-        "openmapx-data-proxy-recovery-v1",
+      const proof = recoverySchema.parse(
         readPrivateRecord(
           local,
           "observations",
           `proxy-recovery-${s.execution.operationKey}.json`,
           8192,
         ),
-        recoverySchema,
       );
       if (
         proof.admissionDigest !== s.receiptDigest ||
@@ -413,7 +403,6 @@ export function createDataExecutionControlJournal(
       throw Error("Original catalog commit time changed");
     return workerSchema.parse({
       version: 1,
-      installationId: installation.installationId,
       origin: state.origin,
       execution: state.execution,
       admissionDigest: state.receiptDigest,
@@ -435,14 +424,10 @@ export function createDataExecutionControlJournal(
   }
   function readProof(authority: VerifiedExecutionAuthority) {
     const s = executionAuthorityState(authority);
-    const proof = verifyControl(
-      installation.publicKey,
-      "openmapx-data-terminal-v1",
+    const proof = terminalSchema.parse(
       readPrivateRecord(local, "observations", `terminal-${s.execution.operationKey}.json`, 8192),
-      terminalSchema,
     );
     if (
-      proof.installationId !== installation.installationId ||
       proof.admissionDigest !== s.receiptDigest ||
       !sameControlOrigin(proof.origin, s.origin) ||
       controlDigest(proof.execution) !== controlDigest(s.execution)
@@ -553,7 +538,7 @@ export function createDataExecutionControlJournal(
         local,
         "observations",
         `proxy-recovery-${s.execution.operationKey}.json`,
-        signControl(local.privateKey, "openmapx-data-proxy-recovery-v1", payload),
+        payload,
         true,
       );
     },
@@ -565,16 +550,13 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original transit worker required");
       try {
-        const saved = verifyControl(
-          installation.publicKey,
-          "openmapx-data-runner-journal-v1",
+        const saved = runnerJournalSchema.parse(
           readPrivateRecord(
             local,
             "observations",
             `runners-${state.execution.operationKey}.json`,
             65536,
           ),
-          runnerJournalSchema,
         );
         if (controlDigest(saved.execution) !== controlDigest(state.execution))
           throw Error("Original runner owner changed");
@@ -602,12 +584,7 @@ export function createDataExecutionControlJournal(
           attempts: [],
         };
         try {
-          saved = verifyControl(
-            installation.publicKey,
-            "openmapx-data-runner-journal-v1",
-            readPrivateRecord(local, "observations", name, 65536),
-            runnerJournalSchema,
-          );
+          saved = runnerJournalSchema.parse(readPrivateRecord(local, "observations", name, 65536));
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }
@@ -618,13 +595,7 @@ export function createDataExecutionControlJournal(
         )
           throw Error("Runner attempt replay/capacity conflict");
         const next = { ...saved, attempts: [...saved.attempts, body] };
-        writePrivateRecord(
-          local,
-          "observations",
-          name,
-          signControl(local.privateKey, "openmapx-data-runner-journal-v1", next),
-          false,
-        );
+        writePrivateRecord(local, "observations", name, next, false);
       });
     },
     completeRunnerAttempt(
@@ -637,12 +608,7 @@ export function createDataExecutionControlJournal(
         terminal = transitousRunnerResultSchema.parse(result);
       withPrivateEffectWriter(state, () => {
         const name = `runners-${state.execution.operationKey}.json`,
-          saved = verifyControl(
-            installation.publicKey,
-            "openmapx-data-runner-journal-v1",
-            readPrivateRecord(local, "observations", name, 65536),
-            runnerJournalSchema,
-          ),
+          saved = runnerJournalSchema.parse(readPrivateRecord(local, "observations", name, 65536)),
           attempt = saved.attempts.find((attempt) => attempt.capability === body.capability);
         if (
           controlDigest(saved.execution) !== controlDigest(state.execution) ||
@@ -654,7 +620,7 @@ export function createDataExecutionControlJournal(
           local,
           "observations",
           name,
-          signControl(local.privateKey, "openmapx-data-runner-journal-v1", {
+          {
             ...saved,
             completed: saved.completed + 1,
             completedDigest: controlDigest({
@@ -663,7 +629,7 @@ export function createDataExecutionControlJournal(
               result: terminal,
             }),
             attempts: saved.attempts.filter((entry) => entry.capability !== body.capability),
-          }),
+          },
           false,
         );
       });
@@ -701,31 +667,17 @@ export function createDataExecutionControlJournal(
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       if (saved) {
-        const original = verifyControl(
-          installation.publicKey,
-          "openmapx-data-hardlinks-v1",
-          saved,
-          z.unknown(),
-        );
+        const original = z.unknown().parse(saved);
         if (canonicalJson(original) !== canonicalJson(payload))
           throw Error("Original generation plan conflict");
         return;
       }
-      writePrivateRecord(
-        local,
-        "hardlinks",
-        `${s.execution.executionId}.json`,
-        signControl(local.privateKey, "openmapx-data-hardlinks-v1", payload),
-        true,
-      );
+      writePrivateRecord(local, "hardlinks", `${s.execution.executionId}.json`, payload, true);
     },
     async readHardlinksPlan(execution: ExecutionRef) {
       const value = await load(execution),
-        payload = verifyControl(
-          installation.publicKey,
-          "openmapx-data-hardlinks-v1",
-          readPrivateRecord(local, "hardlinks", `${execution.executionId}.json`, 1024 * 1024),
-          z.strictObject({
+        payload = z
+          .strictObject({
             version: z.literal(1),
             execution: executionRefSchema,
             input: z.object({
@@ -735,8 +687,10 @@ export function createDataExecutionControlJournal(
               coordinatorMode: z.string(),
             }),
             plan: generationHardlinksPlanSchema,
-          }),
-        );
+          })
+          .parse(
+            readPrivateRecord(local, "hardlinks", `${execution.executionId}.json`, 1024 * 1024),
+          );
       if (
         controlDigest(payload.execution) !== controlDigest(execution) ||
         controlDigest(payload.input) !== controlDigest(value.row.execution_input) ||
@@ -783,16 +737,13 @@ export function createDataExecutionControlJournal(
       }
       let remotePending = false;
       try {
-        const remote = verifyControl(
-          installation.publicKey,
-          "openmapx-data-runner-journal-v1",
+        const remote = runnerJournalSchema.parse(
           readPrivateRecord(
             local,
             "observations",
             `runners-${state.execution.operationKey}.json`,
             65536,
           ),
-          runnerJournalSchema,
         );
         remotePending = remote.attempts.length > 0;
       } catch (error) {
@@ -824,7 +775,6 @@ export function createDataExecutionControlJournal(
           ? await catalogActivationCompletion(authority)
           : workerSchema.parse({
               version: 1,
-              installationId: installation.installationId,
               origin: state.origin,
               execution: state.execution,
               admissionDigest: state.receiptDigest,
@@ -842,7 +792,7 @@ export function createDataExecutionControlJournal(
         local,
         "observations",
         `worker-${state.execution.operationKey}.json`,
-        signControl(local.privateKey, "openmapx-data-worker-contained-v1", proof),
+        proof,
         true,
       );
       const completion = Object.freeze({ [completionBrand]: true as const });
@@ -868,33 +818,28 @@ export function createDataExecutionControlJournal(
       cancelControlExecution(authority);
       const proof = await catalogActivationCompletion(authority),
         name = `worker-${execution.operationKey}.json`;
-      const signed = signControl(local.privateKey, "openmapx-data-worker-contained-v1", proof);
       try {
         const retained = readPrivateRecord(local, "observations", name, 65536);
-        if (canonicalJson(retained) !== canonicalJson(signed))
+        if (canonicalJson(retained) !== canonicalJson(proof))
           throw Error("Original worker completion already differs");
         return;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
-      writePrivateRecord(local, "observations", name, signed, true);
+      writePrivateRecord(local, "observations", name, proof, true);
     },
     async restoreCompletion(execution: ExecutionRef) {
       const value = await load(execution),
         authority = restoreAdmittedControlExecution(installation, execution),
         state = executionAuthorityState(authority);
-      const proof = verifyControl(
-        installation.publicKey,
-        "openmapx-data-worker-contained-v1",
+      const proof = workerSchema.parse(
         readPrivateRecord(local, "observations", `worker-${execution.operationKey}.json`, 65536),
-        workerSchema,
       );
       if (proof.outcome === "catalog-activation-committed") {
         if (canonicalJson(proof) !== canonicalJson(await catalogActivationCompletion(authority)))
           throw Error("Original final approval completion changed");
       }
       if (
-        proof.installationId !== installation.installationId ||
         proof.admissionDigest !== state.receiptDigest ||
         !sameControlOrigin(proof.origin, state.origin) ||
         controlDigest(proof.execution) !== controlDigest(execution) ||
@@ -1025,7 +970,6 @@ export function createDataExecutionControlJournal(
         const payload = terminalSchema.parse({
           version: 1,
           phase: "prepared",
-          installationId: installation.installationId,
           origin: s.origin,
           execution: s.execution,
           admissionDigest: s.receiptDigest,
@@ -1038,7 +982,7 @@ export function createDataExecutionControlJournal(
           local,
           "observations",
           `terminal-${s.execution.operationKey}.json`,
-          signControl(local.privateKey, "openmapx-data-terminal-v1", payload),
+          payload,
           false,
         );
         const receipt = {
@@ -1057,13 +1001,7 @@ export function createDataExecutionControlJournal(
           receipt,
         };
         settleExecutionLifecycle(s);
-        writePrivateRecord(
-          local,
-          "effects",
-          `${s.execution.operationKey}.json`,
-          signControl(local.privateKey, "openmapx-control-settlement-v1", effect),
-          false,
-        );
+        writePrivateRecord(local, "effects", `${s.execution.operationKey}.json`, effect, false);
         return original;
       });
     },
@@ -1087,10 +1025,10 @@ export function createDataExecutionControlJournal(
             local,
             "observations",
             `terminal-${execution.operationKey}.json`,
-            signControl(local.privateKey, "openmapx-data-terminal-v1", {
+            {
               ...proof,
               phase: "canonical",
-            }),
+            },
             false,
           );
       });

@@ -75,7 +75,7 @@ async function fixture() {
     limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
     signal: new AbortController().signal,
   });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const installation = control.openControlInstallation({
     infraDir: root,
     role: "host-cli",

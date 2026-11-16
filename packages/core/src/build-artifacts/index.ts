@@ -43,15 +43,16 @@ export {
   controlAdoptionSchema,
   controlChildOperationKey,
   controlHeaders,
+  controlIdentity,
   controlInstallationDataRoot,
+  controlPrivateRoot,
   controlRegisteredServiceIds,
-  controlRolePublicKey,
   executionAuthorityState,
   fixedCliArguments,
   inspectConfigurationPreEffectRefusal,
   inspectRemoteDelegation,
   loadControlStartup,
-  localFeedCredentialTemplateMac,
+  localFeedCredentialTemplateDigest,
   markFeedProxyReloadAttempted,
   observeCoordinatorPullForMaintenance,
   observedCoordinatorPullBaseline,
@@ -60,7 +61,7 @@ export {
   ownedCoordinatorPullBaseline,
   ownedStagedCoordinatorBaseline,
   prepareFixedControlChild,
-  provisionControlInstallation,
+  provisionControlDirectories,
   readConfigurationHandoffSpawnIntent,
   readDataControlTerminalObservation,
   readFixedCliSpawnIntent,
@@ -105,7 +106,7 @@ export {
   verifyRetainedLocalControlPeer,
   writePrivateRecord,
 } from "./control-authority";
-export { controlDigest, signControl, verifyControl } from "./control-records";
+export { controlDigest } from "./control-records";
 export {
   type CoordinatorPullBaseline,
   coordinatorPullBaselineSchema,

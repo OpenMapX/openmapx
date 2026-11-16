@@ -44,8 +44,7 @@ it("launches the existing confined old-image helper with only original control r
   expect(args).toContain("dist/configuration-handoff-main.mjs");
   expect(args).toContain(image);
   expect(args).toContain("--read-only");
-  expect(args.join(" ")).toContain("control-private/hidden-key");
-  expect(args.join(" ")).toContain("control-private/empty");
+  expect(args.join(" ")).not.toMatch(/control-private|control-[a-z-]+\.key|control-verifiers/);
   expect(args.filter((a) => a.startsWith("OPENMAPX_CONTROL_DELEGATION="))).toHaveLength(1);
   expect(args.filter((a) => a.startsWith("OPS_CONFIGURATION_HANDOFF_ID="))).toEqual([
     `OPS_CONFIGURATION_HANDOFF_ID=${handoffId}`,
@@ -112,11 +111,7 @@ describe("configuration helper container", () => {
         "PATH",
       ]),
     );
-    expect(args.filter((arg) => arg === "--mount")).toHaveLength(9);
-    for (const role of ["ops-agent", "data-manager", "host-cli"])
-      expect(args).toContain(
-        `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
-      );
+    expect(args.filter((arg) => arg === "--mount")).toHaveLength(2);
     // Only names: Docker copies each value from the agent's own environment.
     const env = args.flatMap((arg, index) => (args[index - 1] === "--env" ? [arg] : []));
     expect(env).toEqual([
@@ -149,16 +144,6 @@ describe("configuration helper container", () => {
       "type=bind,source=/srv/openmapx/infra/docker/data,target=/srv/openmapx/infra/docker/data",
       "type=bind,source=/srv/openmapx/infra/docker/secrets,target=/srv/openmapx/infra/docker/secrets",
       "type=bind,source=/srv/openmapx/infra/docker/backups,target=/srv/openmapx/infra/docker/backups",
-      ...["ops-agent", "data-manager", "host-cli"].map(
-        (role) =>
-          `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
-      ),
-      ...["data-manager", "host-cli"].map(
-        (role) =>
-          `type=bind,source=/srv/openmapx/infra/docker/control-private/empty,target=/srv/openmapx/infra/docker/control-private/${role},readonly`,
-      ),
-      "type=bind,source=/srv/openmapx/infra/docker/control-private/ops-agent,target=/var/lib/openmapx/control-private",
-      "type=bind,source=/srv/openmapx/infra/docker/secrets/control-verifiers.json,target=/run/secrets/openmapx-control-verifiers,readonly",
     ]);
     expect(mounts.join("\n")).not.toContain("target=/srv/openmapx,");
   });
@@ -182,28 +167,12 @@ describe("configuration helper container", () => {
       }))
       .filter((mount) => mount.target === rootDir || mount.target.startsWith(`${rootDir}/`))
       .sort((left, right) => left.target.length - right.target.length);
-    // The agent masks the other roles' keys and private directories itself.
-    expect(rootMounts.map((mount) => mount.target)).toEqual(
-      expect.arrayContaining([
-        `${rootDir}/infra/docker/secrets/control-data-manager.key`,
-        `${rootDir}/infra/docker/control-private/host-cli`,
-      ]),
-    );
     const args = launch({ ...agent, rootMounts }, rootDir);
     const targets = args
       .flatMap((arg, index) => (args[index - 1] === "--mount" ? [arg] : []))
       .map((mount) => /(?:^|,)target=([^,]+)/.exec(mount)?.[1]);
     expect(targets).not.toContain(undefined);
     expect(targets.filter((target, index) => targets.indexOf(target) !== index)).toEqual([]);
-    // Every mask is still in place, read-only.
-    for (const role of ["ops-agent", "data-manager", "host-cli"])
-      expect(args).toContain(
-        `type=bind,source=${rootDir}/infra/docker/control-private/hidden-key,target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
-      );
-    for (const role of ["data-manager", "host-cli"])
-      expect(args).toContain(
-        `type=bind,source=${rootDir}/infra/docker/control-private/empty,target=${rootDir}/infra/docker/control-private/${role},readonly`,
-      );
   });
 
   it("rejects mount paths that would change the mount specification", () => {

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 /** Fixed original-owner helper journal. All cells stay in the role-private
  * observations namespace. */
 import {
@@ -9,7 +8,7 @@ import {
   closeControlInstallation,
   consumeControlChildDispatch,
   controlDigest,
-  controlRolePublicKey,
+  controlIdentity,
   executionAuthorityState,
   inspectArtifactDelegation,
   issueControlChildPhase,
@@ -20,9 +19,7 @@ import {
   prepareFixedControlChild,
   readPrivateRecord,
   restoreAdmittedControlExecution,
-  signControl,
   type VerifiedExecutionAuthority,
-  verifyControl,
   verifyControlEffectSettlement,
   verifyRetainedArtifactTargetSettlement,
   writePrivateRecord,
@@ -39,7 +36,6 @@ import {
   configurationHandoffIntentRecordSchema,
   configurationHandoffProgressSchema,
   configurationHandoffWorkerRecordSchema,
-  configurationHandoffRecordDomains as domains,
   configurationHandoffRecordName as recordName,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
 import {
@@ -79,12 +75,7 @@ function readIntent(authority: VerifiedExecutionAuthority, handoffId: string) {
   const local = executionAuthorityState(authority),
     name = recordName(handoffId, "intent"),
     raw = readPrivateRecord(local.installation, "observations", name),
-    value = verifyControl(
-      controlRolePublicKey(local.installation.installation, "ops-agent"),
-      domains.intent,
-      raw,
-      configurationHandoffIntentRecordSchema,
-    );
+    value = configurationHandoffIntentRecordSchema.parse(raw);
   if (
     value.preparerAdmissionDigest !== local.receiptDigest ||
     bytes(value.preparer) !== bytes(local.execution) ||
@@ -107,7 +98,7 @@ function writeProgress(
     local.installation,
     "observations",
     recordName(intent.operation.handoffId, "progress"),
-    signControl(local.installation.privateKey, domains.progress, progress),
+    progress,
     exclusive,
   );
 }
@@ -174,11 +165,11 @@ async function prepareConfigurationHandoffLaunch(
   if (lookupControlChildPhaseAttempt(authority, reservation))
     throw Error("Attempted helper without original launch intent requires recovery");
   const bound = await bindControlChildPhase(authority, reservation),
-    publicKey = prepareFixedControlChild(authority, randomUUID()),
+    childId = prepareFixedControlChild(authority, randomUUID()),
     issued = await issueControlChildPhase(authority, {
       phase: "configuration-handoff",
       ordinal: 0,
-      childPublicKey: publicKey,
+      childId,
       lease,
     }),
     attempt = lookupControlChildPhaseAttempt(authority, reservation),
@@ -204,19 +195,17 @@ async function prepareConfigurationHandoffLaunch(
   const child = openFixedChildInstallation({
     infraDir: owned.source.stack.infraDir,
     assertion: attempt.assertion,
-    container: existsSync("/run/secrets/openmapx-control-verifiers"),
   });
-  let helperPublicKey: string, sourceDigest: string;
+  let helperId: string, sourceDigest: string;
   const environmentNames = configurationHandoffEnvironmentNames(facts);
   try {
-    helperPublicKey = child.publicKey;
+    helperId = controlIdentity(child);
     sourceDigest = captureConfigurationHandoffHostSources(authority, child, environmentNames);
   } finally {
     closeControlInstallation(child);
   }
   const intent = configurationHandoffIntentRecordSchema.parse({
     version: 1,
-    installationId: local.installation.installation.installationId,
     origin: local.origin,
     ownerPrepare: owned.owner.plan.prepare,
     preparer: local.execution,
@@ -224,7 +213,7 @@ async function prepareConfigurationHandoffLaunch(
     admittedAt: binding.boundAt,
     requestedDeadlineAt: binding.requestedDeadlineAt,
     operation,
-    helperPublicKey,
+    helperId,
     sourceDigest,
     environmentNames,
     preparerAdmissionDigest: local.receiptDigest,
@@ -239,7 +228,7 @@ async function prepareConfigurationHandoffLaunch(
     local.installation,
     "observations",
     recordName(operation.handoffId, "intent"),
-    signControl(local.installation.privateKey, domains.intent, intent),
+    intent,
     true,
   );
 
@@ -312,12 +301,7 @@ function readProgress(
   const local = executionAuthorityState(authority),
     name = recordName(intent.operation.handoffId, "progress"),
     raw = readPrivateRecord(local.installation, "observations", name),
-    value = verifyControl(
-      local.installation.installation.publicKey,
-      domains.progress,
-      raw,
-      configurationHandoffProgressSchema,
-    );
+    value = configurationHandoffProgressSchema.parse(raw);
   if (
     value.intentDigest !== controlDigest(intent) ||
     bytes(value.targets.map((target) => target.serviceId).sort()) !==
@@ -336,17 +320,11 @@ export function inspectConfigurationHandoff(
   const installation = openControlInstallation({
     infraDir,
     role: "ops-agent",
-    container: existsSync("/run/secrets/openmapx-control-verifiers"),
   });
   try {
     const local = installationState(installation),
       raw = readPrivateRecord(local, "observations", recordName(handoffId, "intent")),
-      observed = verifyControl(
-        installation.publicKey,
-        domains.intent,
-        raw,
-        configurationHandoffIntentRecordSchema,
-      ),
+      observed = configurationHandoffIntentRecordSchema.parse(raw),
       authority = restoreAdmittedControlExecution(installation, observed.preparer),
       intent = readIntent(authority, handoffId),
       progress = readProgress(authority, intent),
@@ -372,12 +350,7 @@ export function inspectConfigurationHandoff(
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       if (completionRaw !== undefined) {
-        const worker = verifyControl(
-          intent.helperPublicKey,
-          domains.completion,
-          completionRaw,
-          configurationHandoffWorkerRecordSchema,
-        );
+        const worker = configurationHandoffWorkerRecordSchema.parse(completionRaw);
         if (
           worker.intentDigest !== controlDigest(intent) ||
           worker.preparationDigest !== controlDigest(progress) ||
@@ -391,7 +364,6 @@ export function inspectConfigurationHandoff(
             child = openFixedChildInstallation({
               infraDir,
               assertion: intent.assertion,
-              container: existsSync("/run/secrets/openmapx-control-verifiers"),
             });
             const effect = childSettlementState(
               verifyControlEffectSettlement(child, intent.helper),
