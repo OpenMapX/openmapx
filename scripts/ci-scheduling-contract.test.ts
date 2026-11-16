@@ -137,6 +137,48 @@ describe("CI scheduling and context preservation", () => {
       ci.jobs.types.steps.some((step: { run?: string }) => step.run?.includes("unenforced")),
     ).toBe(false);
   });
+  it("reports every required check for a merge-queue entry", () => {
+    const load = (name: string) =>
+      parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
+    // Job names are the required status checks of the main ruleset.
+    const required = {
+      ci: ["ci", "lint / types / test"],
+      "pr-title": ["validate", "Validate conventional commit title"],
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions expression.
+      codeql: ["analyze", "Analyze (${{ matrix.language }})"],
+      "dependency-review": ["dependency-review", "review dependencies"],
+      cla: ["cla", "check / record signature"],
+    };
+    for (const [name, [id, check]] of Object.entries(required)) {
+      const workflow = load(name);
+      expect(workflow.on.merge_group, name).toEqual({ types: ["checks_requested"] });
+      expect(workflow.jobs[id].name, name).toBe(check);
+    }
+    // Entries queue behind each other, so no two may share a concurrency group.
+    const metadata = load("pr-title").concurrency.group;
+    // Actions reads a missing property as empty; JavaScript needs the object.
+    const queued = (run_id: number) => ({ github: { run_id, event: { pull_request: {} } } });
+    expect(evaluate(metadata, queued(1))).not.toBe(evaluate(metadata, queued(2)));
+    expect(
+      evaluate(metadata, { github: { run_id: 1, event: { pull_request: { number: 7 } } } }),
+    ).toBe(evaluate(metadata, { github: { run_id: 2, event: { pull_request: { number: 7 } } } }));
+    // The pull-request-only work of the two trusted workflows is not repeated.
+    for (const [name, id] of [
+      ["pr-title", "validate"],
+      ["cla", "cla"],
+    ]) {
+      const steps = load(name).jobs[id].steps as { if?: string }[];
+      expect(steps[0].if, name).toBe("github.event_name == 'merge_group'");
+      for (const step of steps.slice(1))
+        expect(step.if, name).toBe("github.event_name != 'merge_group'");
+    }
+    // The aggregate gate checks the shard inventory against the same plan.
+    const inventory = ci.jobs.ci.steps.find(
+      (step: { name?: string }) => step.name === "Require the complete disjoint database inventory",
+    );
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions expression.
+    expect(inventory.env.CI_PLAN).toBe("${{ needs.select.outputs.plan }}");
+  });
   it("checks out only trusted default-branch code for required metadata validation", () => {
     const workflow = parse(
       readFileSync(new URL("../.github/workflows/pr-title.yml", import.meta.url), "utf8"),

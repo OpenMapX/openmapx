@@ -3,6 +3,11 @@ name: PR metadata
 on:
   pull_request_target: # zizmor: ignore[dangerous-triggers] trusted metadata validation; never checks out PR code
     types: [opened, edited, synchronize, reopened]
+  # Required check on main. A merge-queue entry has no title or description of
+  # its own: every pull request in it passed this validation before it was
+  # queued, so the job reports without repeating it.
+  merge_group:
+    types: [checks_requested]
 
 # Least-privilege default; the validate job escalates to what the action needs.
 permissions:
@@ -11,7 +16,7 @@ permissions:
 # Never let a cancelled/out-of-order metadata job replace the newest required
 # result. A later edit waits for the current validator, independently of code CI.
 concurrency:
-  group: pr-metadata-${{ github.event.pull_request.number }}
+  group: pr-metadata-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +35,12 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
+      - name: Report for the merge queue
+        if: github.event_name == 'merge_group'
+        run: echo "Pull request metadata was validated before this entry was queued."
+
       - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
+        if: github.event_name != 'merge_group'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -60,17 +70,22 @@ jobs:
       # Only default-branch code/dependencies execute. Candidate commits are Git
       # objects read by the validator, never a checkout, lifecycle script or import.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name != 'merge_group'
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: github.event_name != 'merge_group'
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name != 'merge_group'
         with:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --filter . --frozen-lockfile --ignore-scripts
+        if: github.event_name != 'merge_group'
       - name: Validate current release classification with trusted code
+        if: github.event_name != 'merge_group'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

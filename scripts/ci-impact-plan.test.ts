@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   createImpactPlan,
+  mergeQueueDatabaseGroups,
+  plannedDatabaseMatrix,
   scopeSkippedJobs,
   selectiveScopes,
   validationJobs,
@@ -173,6 +175,75 @@ describe("CI applicability and required result enforcement", () => {
     expect(rollout.version).toBe(1);
     expect(rollout.approvedScopes).toEqual(["docs", "web", "mobile", "client"]);
     for (const scope of rollout.approvedScopes) expect(selectiveScopes).toContain(scope);
+    for (const group of rollout.mergeQueueDatabaseGroups)
+      expect(mergeQueueDatabaseGroups).toContain(group);
+  });
+  it("leaves approved database groups to the merge queue on pull requests only", () => {
+    const matrix = [
+      { group: "api-privacy", part: 1, total: 1 },
+      { group: "crash-points", part: 1, total: 2 },
+      { group: "crash-points", part: 2, total: 2 },
+      { group: "coordinator-recovery", part: 1, total: 1 },
+    ];
+    const approved = { approvedMergeQueueGroups: ["crash-points", "coordinator-recovery"] };
+    const plan = pr(["packages/core/src/index.ts"], approved);
+    expect(plan.deferredDatabaseGroups).toEqual(["coordinator-recovery", "crash-points"]);
+    expect(plannedDatabaseMatrix(plan, matrix)).toEqual([matrix[0]]);
+    // Without approval on the default branch a pull request runs every group.
+    const unapproved = pr(["packages/core/src/index.ts"]);
+    expect(unapproved.deferredDatabaseGroups).toEqual([]);
+    expect(plannedDatabaseMatrix(unapproved, matrix)).toEqual(matrix);
+    // The merge queue, main and the schedule are never narrowed.
+    for (const event of ["merge_group", "push", "schedule", "workflow_dispatch"]) {
+      const complete = pr(["packages/core/src/index.ts"], { ...approved, event });
+      expect(complete.scope, event).toBe("full");
+      expect(complete.deferredDatabaseGroups, event).toEqual([]);
+      expect(plannedDatabaseMatrix(complete, matrix), event).toEqual(matrix);
+    }
+    // A scope that already skips the database job defers nothing.
+    expect(pr(["docs/docs/page.md"], approved).deferredDatabaseGroups).toEqual([]);
+    // Unknown or repeated groups approve nothing.
+    for (const approvedMergeQueueGroups of [["api-privacy"], ["crash-points", "crash-points"], {}])
+      expect(
+        pr(["packages/core/src/index.ts"], { approvedMergeQueueGroups }).deferredDatabaseGroups,
+      ).toEqual([]);
+  });
+  it("rejects a deferral outside a pull request or of a group that must always run", () => {
+    const results = (plan: ReturnType<typeof pr>) => ({
+      ...Object.fromEntries(
+        Object.entries(plan.jobs).map(([id, selected]) => [
+          id,
+          { result: selected ? "success" : "skipped" },
+        ]),
+      ),
+      "docker-changes": { result: "success", outputs: { apps: "[]" } },
+      "docker-build": { result: "skipped" },
+    });
+    const plan = pr(["packages/core/src/index.ts"], {
+      approvedMergeQueueGroups: ["crash-points"],
+    });
+    expect(() => verifyResults(plan, results(plan), "pull_request")).not.toThrow();
+    for (const deferredDatabaseGroups of [["api-privacy"], ["crash-points", "crash-points"], null])
+      expect(() =>
+        verifyResults({ ...plan, deferredDatabaseGroups }, results(plan), "pull_request"),
+      ).toThrow(/deferred database groups/);
+    expect(() =>
+      plannedDatabaseMatrix({ ...plan, deferredDatabaseGroups: ["api-privacy"] }),
+    ).toThrow();
+    const queued = pr(["packages/core/src/index.ts"], { event: "merge_group" });
+    const queuedResults = {
+      ...results(queued),
+      "docker-changes": { result: "skipped" },
+      "docker-build": { result: "skipped" },
+    };
+    expect(() => verifyResults(queued, queuedResults, "merge_group")).not.toThrow();
+    expect(() =>
+      verifyResults(
+        { ...queued, deferredDatabaseGroups: ["crash-points"] },
+        queuedResults,
+        "merge_group",
+      ),
+    ).toThrow(/merge queue/);
   });
   it("never narrows trusted main reconciliation or incomplete diffs", () => {
     expect(Object.values(pr([], { event: "schedule" }).jobs).every(Boolean)).toBe(true);
