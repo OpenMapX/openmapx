@@ -487,6 +487,139 @@ describe("GET /maptiler/*", () => {
   });
 });
 
+describe("MapTiler key never reaches the client", () => {
+  const FAKE_KEY = "fake-maptiler-key-for-tests";
+
+  function stubJson(document: unknown) {
+    vi.stubEnv("MAPTILER_KEY", FAKE_KEY);
+    vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(document)),
+    );
+  }
+
+  it("rewrites the array form of sprite and keeps each id", async () => {
+    stubJson({
+      version: 8,
+      sprite: [
+        { id: "default", url: `https://api.maptiler.com/maps/bright-v2/sprite?key=${FAKE_KEY}` },
+      ],
+      sources: {},
+      layers: [],
+    });
+
+    const res = await app.inject("/maptiler/maps/bright-v2/style.json");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().sprite).toEqual([
+      { id: "default", url: "https://api.example.test/api/maptiler/maps/bright-v2/sprite" },
+    ]);
+    expect(res.body).not.toContain(FAKE_KEY);
+  });
+
+  it("strips the key from MapTiler URLs in fields the rewrite does not know", async () => {
+    stubJson({
+      version: 8,
+      metadata: { extra: `https://cdn.maptiler.com/x/{z}/y.json?lang=en&key=${FAKE_KEY}#top` },
+      sources: {
+        s: { type: "geojson", data: `https://api.maptiler.com/data/abc.geojson?key=${FAKE_KEY}` },
+      },
+      layers: [],
+    });
+
+    const res = await app.inject("/maptiler/maps/bright-v2/style.json");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toContain("public");
+    const body = res.json();
+    expect(body.metadata.extra).toBe("https://cdn.maptiler.com/x/{z}/y.json?lang=en#top");
+    expect(body.sources.s.data).toBe("https://api.maptiler.com/data/abc.geojson");
+    expect(res.body).not.toContain(FAKE_KEY);
+  });
+
+  it("strips the configured key on other hosts but leaves unrelated key parameters", async () => {
+    stubJson({
+      tiles: [`https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=${FAKE_KEY}`],
+      legend: `https://example.org/l.png?key=${FAKE_KEY}&size=2`,
+      data: ["https://example.org/d.json?key=someone-elses-value"],
+    });
+
+    const res = await app.inject("/maptiler/tiles/v3/tiles.json");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      tiles: ["https://api.example.test/api/maptiler/tiles/v3/{z}/{x}/{y}.pbf"],
+      legend: "https://example.org/l.png?size=2",
+      data: ["https://example.org/d.json?key=someone-elses-value"],
+    });
+    expect(res.body).not.toContain(FAKE_KEY);
+  });
+
+  it("refuses a document that still contains the key, without logging or returning it", async () => {
+    vi.stubEnv("MAPTILER_KEY", FAKE_KEY);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          tiles: ["https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf"],
+          attribution: `<a href="https://api.maptiler.com/copyright?key=${FAKE_KEY}">MapTiler</a>`,
+        }),
+      ),
+    );
+    const chunks: string[] = [];
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(String(chunk));
+        callback();
+      },
+    });
+    const loggerApp = Fastify(
+      controlledRequestLoggingOptions(pino(createSafePinoOptions("info"), stream)),
+    );
+    const { maptilerRoute } = await import("../maptiler.js");
+    await loggerApp.register(maptilerRoute);
+    await loggerApp.ready();
+
+    const res = await loggerApp.inject("/maptiler/tiles/v3/tiles.json");
+    await loggerApp.close();
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.json()).toEqual({ message: "MapTiler provider returned an invalid response" });
+    expect(res.body).not.toContain(FAKE_KEY);
+    const logs = chunks.join("");
+    expect(logs).not.toContain(FAKE_KEY);
+    const warning = logs
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((record) => record.msg === "MapTiler proxy response rejected");
+    expect(warning).toMatchObject({ errorClass: "MaptilerKeyLeakError" });
+  });
+
+  it("refuses sprite JSON that contains the key", async () => {
+    stubJson({ icon: { x: 0, y: 0, width: 1, height: 1, note: FAKE_KEY } });
+
+    const res = await app.inject("/maptiler/maps/bright-v2/sprite.json");
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.body).not.toContain(FAKE_KEY);
+  });
+
+  it("serves ordinary sprite JSON unchanged", async () => {
+    const sprite = { icon: { x: 0, y: 0, width: 16, height: 16, pixelRatio: 1 } };
+    stubJson(sprite);
+
+    const res = await app.inject("/maptiler/maps/bright-v2/sprite@2x.json");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.json()).toEqual(sprite);
+  });
+});
+
 describe("admin-configured MapTiler credentials", () => {
   it("authenticates upstream requests with the effective database key without returning it", async () => {
     vi.stubEnv("MAPTILER_KEY", "");
