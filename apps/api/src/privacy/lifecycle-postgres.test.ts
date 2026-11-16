@@ -136,6 +136,37 @@ suite("privacy request lifecycle on PostgreSQL", () => {
     expect(again.id).toBe(request.id);
   });
 
+  it("returns the winner's case to a concurrent first request of the same kind", async () => {
+    const userId = await subject();
+    const holder = await fixture.sql.reserve();
+    try {
+      await holder`select pg_advisory_lock(1330464848, 1380275027)`;
+      const input = {
+        userId,
+        kind: "access_and_portability",
+        channel: "self_service",
+        locale: "de",
+        timeZone: "UTC",
+      } as const;
+      const racing = [service().create(input), service().create(input)];
+      // Wait until both transactions block on the retention lock (both passed the pre-check).
+      for (let i = 0; ; i++) {
+        const [{ waiting }] = await fixture.sql<{ waiting: number }[]>`
+          select count(*)::int as waiting from pg_locks where locktype = 'advisory' and not granted`;
+        if (waiting >= 2) break;
+        if (i > 200) throw new Error("creates never reached the retention lock");
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      await holder`select pg_advisory_unlock(1330464848, 1380275027)`;
+      const [a, b] = await Promise.all(racing);
+      expect(a.id).toBe(b.id);
+    } finally {
+      // A failure above must not leave the session lock held for later tests.
+      await holder`select pg_advisory_unlock_all()`;
+      holder.release();
+    }
+  });
+
   it("alerts only the administrators for an assisted request without a subject account", async () => {
     const request = await service().create({
       channel: "email",
