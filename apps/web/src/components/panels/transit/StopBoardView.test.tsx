@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@/test";
 import { StopBoardView } from "./StopBoardView";
 
 const departures = [
@@ -18,6 +19,15 @@ const departures = [
     platform: "11",
   },
 ];
+
+const arrival = {
+  ...departures[0],
+  tripId: "entur:2026-04-22|VYG:ServiceJourney:2",
+  route: { ...departures[0].route, id: "entur:VYG:Line:L1", shortName: "L1" },
+  headsign: "Lillestrøm",
+};
+
+const board: { arrivals: (typeof departures)[number][] } = { arrivals: [] };
 
 const alerts = [
   {
@@ -66,7 +76,7 @@ vi.mock("@openmapx/core", () => ({
     attributions: sharedAttributions,
   }),
   useArrivals: () => ({
-    data: [],
+    data: board.arrivals,
     isLoading: false,
     attributions: [{ sourceId: "b", name: "Hidden B" }],
   }),
@@ -96,6 +106,10 @@ vi.mock("./AlertsBanner", () => ({
 }));
 
 describe("StopBoardView", () => {
+  beforeEach(() => {
+    board.arrivals = [];
+  });
+
   it("renders stop alerts and flags severe affected routes", () => {
     const markup = renderToStaticMarkup(
       <StopBoardView
@@ -112,5 +126,28 @@ describe("StopBoardView", () => {
     expect(markup).toContain("Row A");
     expect(markup).not.toContain("Entur");
     expect(markup).not.toContain("Hidden B");
+  });
+
+  it("keeps the way back to departures when arrivals run out", () => {
+    const renderBoard = () => (
+      <StopBoardView
+        stopId="entur:NSR:StopPlace:337"
+        title="Oslo S"
+        onBack={() => {}}
+        onDepartureClick={() => {}}
+      />
+    );
+    board.arrivals = [arrival];
+    const view = render(renderBoard());
+    fireEvent.click(screen.getByRole("button", { name: "Arrivals" }));
+    expect(screen.getByText("Lillestrøm:ok")).toBeTruthy();
+
+    // A refetch returns no arrivals while the Arrivals tab is selected.
+    board.arrivals = [];
+    view.rerender(renderBoard());
+    expect(screen.getByText("No Arrivals found.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Departures" }));
+    expect(screen.getByText("Kongsvinger:alert")).toBeTruthy();
   });
 });
