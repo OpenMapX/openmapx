@@ -60,6 +60,21 @@ function fakeGroundProcessor(): NavigationProcessor<"ground"> {
   };
 }
 
+/** A replacement that, like a transit one, supersedes alerts as well as publishing. */
+function processorReplacingAlerts(): NavigationProcessor<"ground"> {
+  return {
+    ...fakeGroundProcessor(),
+    replace: (session, _replacement, nowMs) => ({
+      session: { ...session, revision: session.revision + 1, updatedAtMs: nowMs },
+      effects: [
+        { kind: "publish-snapshot", immediate: true },
+        { kind: "reconcile-alerts", sessionId: session.sessionId },
+        { kind: "cancel-session-alerts", sessionId: session.sessionId },
+      ],
+    }),
+  };
+}
+
 interface Harness {
   coordinator: NavigationCoordinator;
   repository: SessionRepository;
@@ -306,6 +321,68 @@ describe("NavigationCoordinator commands", () => {
     expect(code(response)).toBe("session.replaced");
     expect(response?.revision).toBe(3);
     expect((await context.repository.loadActive(NOW))?.revision).toBe(3);
+    await context.close();
+  });
+
+  it("runs the replacement's effects after committing it", async () => {
+    const context = await harness({ processor: processorReplacingAlerts() });
+    const { sessionId } = await running(context);
+    context.effectLog.length = 0;
+    const run = context.deps.effects.run.bind(context.deps.effects);
+    const revisionsSeenByEffects: Array<number | undefined> = [];
+    jest.spyOn(context.deps.effects, "run").mockImplementation(async (effects) => {
+      revisionsSeenByEffects.push((await context.repository.loadActive(NOW))?.revision);
+      return run(effects);
+    });
+
+    const response = await context.coordinator.dispatch(
+      cmd("session.replace", { startPackage: START_PACKAGE }, { sessionId, revision: 2 }),
+    );
+
+    expect(code(response)).toBe("session.replaced");
+    expect(revisionsSeenByEffects).toEqual([3]);
+    expect(context.effectLog).toEqual([
+      "alerts.cancelSession",
+      "alerts.reconcile",
+      "publish.snapshot",
+    ]);
+    await context.close();
+  });
+
+  it("keeps a committed replacement when one of its effects fails", async () => {
+    const context = await harness({
+      processor: processorReplacingAlerts(),
+      failEffect: "alerts.reconcile",
+    });
+    const { sessionId, started } = await running(context);
+    expect(code(started)).toBe("session.started");
+    context.effectLog.length = 0;
+
+    const response = await context.coordinator.dispatch(
+      cmd("session.replace", { startPackage: START_PACKAGE }, { sessionId, revision: 2 }),
+    );
+
+    expect(code(response)).toBe("session.replaced");
+    expect((await context.repository.loadActive(NOW))?.revision).toBe(3);
+    expect(context.effectLog).toEqual([
+      "alerts.cancelSession",
+      "alerts.reconcile",
+      "publish.snapshot",
+    ]);
+    await context.close();
+  });
+
+  it("runs no effects for a replacement it refuses", async () => {
+    const context = await harness();
+    await running(context);
+    context.effectLog.length = 0;
+
+    const response = await context.coordinator.dispatch(
+      cmd("session.replace", { startPackage: START_PACKAGE }, { sessionId: "someone-else" }),
+    );
+
+    expect(code(response)).toBe("revision-conflict");
+    expect(context.effectLog).toEqual([]);
     await context.close();
   });
 
