@@ -1,5 +1,5 @@
 import { computePlusCode, type Place } from "@openmapx/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test/query";
@@ -497,8 +497,8 @@ describe("replacing a place's label", () => {
     vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
   });
 
-  it("sends one replacing write and keeps the old label when that write fails", async () => {
-    session.data = { user: { id: "user-1" } };
+  // Answers writes with 503: the assertions only inspect which writes were sent.
+  function stubLabelApi(existing: string) {
     const writes: { method: string; path: string; body: unknown }[] = [];
     const json = (status: number, body: unknown) =>
       new Response(JSON.stringify(body), {
@@ -518,7 +518,7 @@ describe("replacing a place's label", () => {
           labels: [
             {
               id: "label-1",
-              label: "office",
+              label: existing,
               icon: null,
               name: ENRICHED.name,
               address: null,
@@ -534,7 +534,11 @@ describe("replacing a place's label", () => {
       if (path === "/api/saved/check") return json(200, { listIds: [] });
       return json(404, { error: "Not found" });
     });
-    const user = userEvent.setup();
+    return writes;
+  }
+
+  function renderSignedIn() {
+    session.data = { user: { id: "user-1" } };
     render(
       <>
         <PlaceOverviewTab
@@ -548,6 +552,12 @@ describe("replacing a place's label", () => {
       </>,
       { wrapper: createQueryWrapper() },
     );
+  }
+
+  it("sends one replacing write and keeps the old label when that write fails", async () => {
+    const writes = stubLabelApi("office");
+    const user = userEvent.setup();
+    renderSignedIn();
 
     await user.click(await screen.findByText("Office"));
     await user.click(screen.getByRole("button", { name: "home" }));
@@ -561,5 +571,87 @@ describe("replacing a place's label", () => {
       },
     ]);
     expect(screen.getByText("Office")).toBeInTheDocument();
+  });
+
+  it("keeps a custom label when the edit dialog is confirmed unchanged", async () => {
+    const writes = stubLabelApi("office");
+    const user = userEvent.setup();
+    renderSignedIn();
+
+    await user.click(await screen.findByText("Office"));
+    expect(screen.getByRole("textbox", { name: "label" })).toHaveValue("office");
+    await user.click(screen.getByRole("button", { name: "done" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(writes).toEqual([]);
+    expect(screen.getByText("Office")).toBeInTheDocument();
+  });
+
+  it("keeps a custom label when the same text is retyped with surrounding spaces", async () => {
+    const writes = stubLabelApi("office");
+    const user = userEvent.setup();
+    renderSignedIn();
+
+    await user.click(await screen.findByText("Office"));
+    const field = screen.getByRole("textbox", { name: "label" });
+    await user.clear(field);
+    await user.type(field, "  office  {Enter}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(writes).toEqual([]);
+  });
+
+  it("sets the new label when the edit dialog text changes", async () => {
+    const writes = stubLabelApi("office");
+    const user = userEvent.setup();
+    renderSignedIn();
+
+    await user.click(await screen.findByText("Office"));
+    const field = screen.getByRole("textbox", { name: "label" });
+    await user.clear(field);
+    await user.type(field, "studio");
+    await user.click(screen.getByRole("button", { name: "done" }));
+
+    await waitFor(() =>
+      expect(writes).toEqual([
+        {
+          method: "PUT",
+          path: "/api/saved/labels/studio",
+          body: expect.objectContaining({ replaces: "office", placeId: ENRICHED.id }),
+        },
+      ]),
+    );
+  });
+
+  it("removes a custom label when the field is cleared", async () => {
+    const writes = stubLabelApi("office");
+    const user = userEvent.setup();
+    renderSignedIn();
+
+    await user.click(await screen.findByText("Office"));
+    await user.clear(screen.getByRole("textbox", { name: "label" }));
+    await user.click(screen.getByRole("button", { name: "done" }));
+
+    await waitFor(() =>
+      expect(writes).toEqual([{ method: "DELETE", path: "/api/saved/labels/office", body: null }]),
+    );
+  });
+
+  it("pressing Enter on the empty field keeps a Home label", async () => {
+    const writes = stubLabelApi("home");
+    const user = userEvent.setup();
+    renderSignedIn();
+
+    await user.click(await screen.findByText("Home"));
+    const field = screen.getByRole("textbox", { name: "label" });
+    expect(field).toHaveValue("");
+    await user.click(field);
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(writes).toEqual([]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(writes).toEqual([]);
   });
 });

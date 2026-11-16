@@ -383,24 +383,29 @@ export function PlaceOverviewTab({
     setLabelDialogOpen(true);
   };
 
+  const setLabel = (label: string) => {
+    // The server removes the place's previous label in the same write, so a
+    // failure keeps the old label instead of leaving the place unlabelled.
+    updateLabelMutation.mutate({
+      label,
+      ...(existingLabel ? { replaces: existingLabel.label } : {}),
+      name: place.name,
+      address: place.address ?? undefined,
+      lat: place.coordinates[1],
+      lng: place.coordinates[0],
+      placeId: place.id,
+      fieldContributors: captureSavedPlaceContributors(place),
+    });
+    setLabelDialogOpen(false);
+  };
+
   const toggleLabel = (label: string) => {
     if (existingLabel?.label === label) {
       deleteLabelMutation.mutate(label);
-    } else {
-      // The server removes the place's previous label in the same write, so a
-      // failure keeps the old label instead of leaving the place unlabelled.
-      updateLabelMutation.mutate({
-        label,
-        ...(existingLabel ? { replaces: existingLabel.label } : {}),
-        name: place.name,
-        address: place.address ?? undefined,
-        lat: place.coordinates[1],
-        lng: place.coordinates[0],
-        placeId: place.id,
-        fieldContributors: captureSavedPlaceContributors(place),
-      });
+      setLabelDialogOpen(false);
+      return;
     }
-    setLabelDialogOpen(false);
+    setLabel(label);
   };
 
   const isEditingLabel =
@@ -408,13 +413,20 @@ export function PlaceOverviewTab({
 
   const handleLabelSubmit = () => {
     const trimmed = labelName.trim();
-    if (!trimmed && existingLabel) {
-      deleteLabelMutation.mutate(existingLabel.label);
+    if (!trimmed) {
+      // Clearing a custom label removes it; an empty field otherwise has
+      // nothing to submit (the Done button is disabled, but Enter still lands here).
+      if (isEditingLabel && existingLabel) {
+        deleteLabelMutation.mutate(existingLabel.label);
+        setLabelDialogOpen(false);
+      }
+      return;
+    }
+    if (trimmed === existingLabel?.label) {
       setLabelDialogOpen(false);
       return;
     }
-    if (!trimmed) return;
-    toggleLabel(trimmed);
+    setLabel(trimmed);
   };
 
   // Clickable row leading to the Info tab. Suppressed for cities, where the
