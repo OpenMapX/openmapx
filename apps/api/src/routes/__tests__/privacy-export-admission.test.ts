@@ -73,7 +73,34 @@ function fakeService() {
 
 let app: FastifyInstance | undefined;
 
-async function exportApp(maxConcurrent?: number) {
+/** An export far larger than any socket buffer, written with backpressure;
+ * it rejects once the response goes away, like the real archive writer. */
+function endlessExport() {
+  const chunk = Buffer.alloc(64 * 1024, 1);
+  return {
+    filename: "openmapx-data-export.zip",
+    dispose: vi.fn(async () => {}),
+    write: (sink: Writable) =>
+      new Promise<void>((_resolve, reject) => {
+        let stopped = false;
+        sink.once("close", () => {
+          stopped = true;
+          reject(new Error("sink closed"));
+        });
+        const next = () => {
+          if (stopped) return;
+          if (sink.write(chunk)) setImmediate(next);
+          else sink.once("drain", next);
+        };
+        next();
+      }),
+  };
+}
+
+async function exportApp(
+  maxConcurrent?: number,
+  exportStreamLimits?: { idleMs?: number; totalMs?: number },
+) {
   const service = fakeService();
   app = Fastify();
   await app.register(privacyRequestsRoute, {
@@ -81,6 +108,7 @@ async function exportApp(maxConcurrent?: number) {
     // The route only calls the export methods on the service.
     service: service as never,
     exportAdmission: createPrivacyExportAdmission(maxConcurrent),
+    ...(exportStreamLimits ? { exportStreamLimits } : {}),
   });
   await app.listen({ port: 0, host: "127.0.0.1" });
   return { app, service, port: (app.server.address() as AddressInfo).port };
@@ -222,6 +250,44 @@ describe("POST /api/privacy/export admission", () => {
 
     prepareSubjectExport.mockResolvedValueOnce(instantExport());
     await vi.waitFor(async () => expect((await inject("alice")).statusCode).toBe(200));
+  });
+
+  it("ends a download whose client stops reading and frees the slot", async () => {
+    const { service, port } = await exportApp(undefined, { idleMs: 200 });
+    const stalled = endlessExport();
+    prepareSubjectExport.mockResolvedValueOnce(stalled);
+    const { outgoing } = startStreaming(port, "alice");
+    let incoming: import("node:http").IncomingMessage | undefined;
+    outgoing.once("response", (response) => {
+      incoming = response;
+      // The client keeps the connection open but never reads past this point.
+      response.once("data", () => response.pause());
+    });
+    await vi.waitFor(
+      () =>
+        expect(service.recordExportFailure).toHaveBeenCalledWith(
+          "request-alice",
+          "export-interrupted",
+        ),
+      { timeout: 10_000 },
+    );
+    expect(service.finishExport).not.toHaveBeenCalled();
+    expect(stalled.dispose).toHaveBeenCalled();
+    expect(incoming).toBeDefined();
+
+    prepareSubjectExport.mockResolvedValueOnce(instantExport());
+    await vi.waitFor(async () => expect((await inject("alice")).statusCode).toBe(200));
+    outgoing.destroy();
+  });
+
+  it("leaves a normal download alone under short deadlines", async () => {
+    const { service, port } = await exportApp(undefined, { idleMs: 200, totalMs: 5_000 });
+    prepareSubjectExport.mockResolvedValueOnce(instantExport());
+    const first = await startStreaming(port, "alice").firstBytes;
+    expect(first.status).toBe(200);
+    expect(await first.rest).toBe("PK");
+    await vi.waitFor(() => expect(service.finishExport).toHaveBeenCalledTimes(1));
+    expect(service.recordExportFailure).not.toHaveBeenCalled();
   });
 
   it("frees the slot when the client leaves while the export is being prepared", async () => {

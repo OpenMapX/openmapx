@@ -8,7 +8,11 @@ import { db } from "../db/index.js";
 import { dataSubjectRequestTask } from "../db/schema.js";
 import { PrivacyRequestError, privacyErrorReply } from "../privacy/errors.js";
 import { acquireExportSlot, privacyExportAdmission } from "../privacy/export-admission.js";
-import { exportResponseHeaders, pumpExport } from "../privacy/export-response.js";
+import {
+  type ExportStreamLimits,
+  exportResponseHeaders,
+  pumpExport,
+} from "../privacy/export-response.js";
 import { selfServiceExportSchema } from "../privacy/request-contracts.js";
 import { PrivacyRequestService } from "../privacy/request-service.js";
 import { hasFreshAssurance } from "../privacy/session-assurance.js";
@@ -17,6 +21,7 @@ import {
   type PrepareSubjectExportOptions,
   prepareSubjectExport,
 } from "../privacy/subject-export.js";
+import { bindRequestAbort, withDeadline } from "../utils/request-abort.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 
@@ -30,7 +35,16 @@ export interface PrivacyRequestsRouteOptions {
   exportSources?: Pick<PrepareSubjectExportOptions, "openmapx" | "dawarich">;
   /** Export slots; tests pass their own so cases stay independent. */
   exportAdmission?: RollingStreamBudget;
+  /** Download deadlines; tests shorten them. */
+  exportStreamLimits?: ExportStreamLimits;
 }
+
+/**
+ * Longest time collecting an export may take before the managed timeline
+ * transfer is stopped. The operations agent ends its own export after 15
+ * minutes, so this never cuts a transfer the agent still considers healthy.
+ */
+const EXPORT_PREPARATION_DEADLINE_MS = 20 * 60_000;
 
 function publicRequest(row: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -118,12 +132,24 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
         ...body,
       });
       requestId = row.id;
-      prepared = await prepareSubjectExport({
-        request: row,
-        subjectUserId: row.userId,
-        database,
-        ...(options.exportSources ?? {}),
-      });
+      // The managed timeline is fetched through the operations agent, which
+      // takes the cancellation signal. A client that leaves, or a collection
+      // that outlasts the deadline, stops that transfer and fails preparation.
+      const disconnect = bindRequestAbort(request, reply);
+      try {
+        prepared = await prepareSubjectExport({
+          request: row,
+          subjectUserId: row.userId,
+          database,
+          ...(options.exportSources ?? {}),
+          dawarich: {
+            ...(options.exportSources?.dawarich ?? {}),
+            signal: withDeadline(disconnect.signal, EXPORT_PREPARATION_DEADLINE_MS),
+          },
+        });
+      } finally {
+        disconnect.dispose();
+      }
     } catch (error) {
       if (requestId)
         await service
@@ -137,7 +163,7 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
     let delivered: Promise<boolean>;
     let body: ReturnType<typeof pumpExport>["body"];
     try {
-      ({ body, delivered } = pumpExport(prepared, reply.raw));
+      ({ body, delivered } = pumpExport(prepared, reply.raw, options.exportStreamLimits));
     } catch (error) {
       // Nothing was sent yet; without this the slot would stay taken.
       await prepared.dispose().catch(() => undefined);
