@@ -53,6 +53,8 @@ export interface TransitTickState {
       currentWalkStepIndex: number;
       stopCursor: number;
       alongMeters: number;
+      /** Events already emitted before the tap; an undo makes later ones available again. */
+      emittedEventIds?: string[];
     };
   };
 }
@@ -197,7 +199,10 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
         previous.legIndex === action.legIndex &&
         nowMs - previous.atMs <= TRANSIT_UNDO_WINDOW_MS
       ) {
-        Object.assign(state, previous.previous);
+        const { emittedEventIds, ...restored } = previous.previous;
+        Object.assign(state, restored);
+        // What was emitted since the undone tap belongs to the progress it rewinds.
+        if (emittedEventIds) state.emittedEventIds = [...emittedEventIds];
         state.lastAction = undefined;
         state.stopTracking = undefined;
         state.offPlan = false;
@@ -233,6 +238,7 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
             currentWalkStepIndex: state.currentWalkStepIndex,
             stopCursor: state.stopCursor ?? 1,
             alongMeters: state.alongMeters ?? 0,
+            emittedEventIds: [...state.emittedEventIds],
           },
         };
         if (action.type === "board" || action.type === "continue") {

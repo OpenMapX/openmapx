@@ -228,6 +228,58 @@ describe("processTransitBatch events", () => {
     expect(destination.arrived).toBe(true);
     expect(destination.session.status).toBe("arrived");
   });
+
+  it("commits an arrival whose event was already spent", () => {
+    const base = riding();
+    const itinerary = base.payload.startPackage.itinerary as {
+      legs: Array<{ geometry?: { coordinates: [number, number][] }; to?: unknown }>;
+    };
+    itinerary.legs[1].geometry = {
+      coordinates: [
+        [8.68, 50.11],
+        [8.64, 50.11],
+      ],
+    };
+    itinerary.legs[2].geometry = {
+      coordinates: [
+        [8.64, 50.11],
+        [8.63, 50.11],
+      ],
+    };
+    itinerary.legs[2].to = { name: "Office", lng: 8.63, lat: 50.11 };
+    const current = {
+      ...base,
+      payload: {
+        ...base.payload,
+        tickState: {
+          ...base.payload.tickState,
+          phase: "walking",
+          currentLegIndex: 2,
+          emittedEventIds: [`${FIXTURE_FINGERPRINT}:arrival:2`],
+        },
+      },
+    } as TransitMobileSession;
+    const arriveAt = new Date("2026-08-09T08:45:00Z").getTime();
+
+    const outcome = run({
+      session: current,
+      fixes: [fixAt(arriveAt, { coords: [8.63, 50.11] })],
+      nowMs: arriveAt,
+    });
+
+    expect((outcome.session as TransitMobileSession).payload.tickState.phase).toBe("arrived");
+    expect(outcome.events.some((e) => e.type === "arrival")).toBe(false);
+    expect(outcome.arrived).toBe(true);
+    expect(outcome.session.status).toBe("arrived");
+
+    const later = run({
+      session: outcome.session as TransitMobileSession,
+      fixes: [fixAt(arriveAt + 1_000, { coords: [8.63, 50.11] })],
+      nowMs: arriveAt + 1_000,
+    });
+    expect(later.arrived).toBe(false);
+    expect(later.session.status).toBe("arrived");
+  });
 });
 
 describe("processTransitBatch location profile", () => {

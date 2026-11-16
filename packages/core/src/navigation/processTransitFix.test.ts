@@ -160,6 +160,68 @@ describe("rider-owned ride boundaries", () => {
         .actionRejected,
     ).toBe(true);
   });
+  it("lets the trip arrive again after an undone arrival", () => {
+    const alight = tick({
+      state: atRide(),
+      action: { type: "alight", legIndex: 1 },
+      fix: fix(0.02),
+    });
+    const arrived = tick({
+      state: alight.state,
+      fix: fix(0.022, 0, NOW + 10_000),
+      nowMs: NOW + 10_000,
+    });
+    expect(arrived.state.phase).toBe("arrived");
+    expect(arrived.events.map((e) => e.type)).toEqual(["arrival"]);
+    const undone = tick({
+      state: arrived.state,
+      action: { type: "undo", legIndex: 1 },
+      nowMs: NOW + 20_000,
+    });
+    expect(undone.state).toMatchObject({ phase: "riding", currentLegIndex: 1 });
+    const again = tick({
+      state: undone.state,
+      action: { type: "alight", legIndex: 1 },
+      fix: fix(0.02, 0, NOW + 30_000),
+      nowMs: NOW + 30_000,
+    });
+    expect(again.events.map((e) => e.type)).toEqual(["alight", "transfer"]);
+    const arrivedAgain = tick({
+      state: again.state,
+      fix: fix(0.022, 0, NOW + 40_000),
+      nowMs: NOW + 40_000,
+    });
+    expect(arrivedAgain.state.phase).toBe("arrived");
+    expect(arrivedAgain.events.map((e) => e.type)).toEqual(["arrival"]);
+  });
+  it("keeps events from before the undone tap spent", () => {
+    const boarded = tick({ action: { type: "board", legIndex: 1 } });
+    expect(boarded.events.map((e) => e.type).sort()).toEqual(["board", "transfer"]);
+    const alighted = tick({
+      state: boarded.state,
+      action: { type: "alight", legIndex: 1 },
+      nowMs: NOW + 60_000,
+    });
+    const undone = tick({
+      state: alighted.state,
+      action: { type: "undo", legIndex: 1 },
+      nowMs: NOW + 70_000,
+    });
+    expect(undone.state.emittedEventIds).toEqual(boarded.state.emittedEventIds);
+    // Re-boarding after an undone board is announced again.
+    const unboarded = tick({
+      state: boarded.state,
+      action: { type: "undo", legIndex: 1 },
+      nowMs: NOW + 1_000,
+    });
+    expect(
+      tick({
+        state: unboarded.state,
+        action: { type: "board", legIndex: 1 },
+        nowMs: NOW + 2_000,
+      }).events.map((e) => e.type),
+    ).toContain("board");
+  });
   it("does not mutate its input state", () => {
     const s = atRide();
     const original = structuredClone(s);

@@ -156,6 +156,7 @@ const transitTickStateSchema = z
             currentWalkStepIndex: safeInteger,
             stopCursor: z.number().int().min(0).max(2000),
             alongMeters: z.number().finite().nonnegative(),
+            emittedEventIds: z.array(boundedId).max(MOBILE_SESSION_LEDGER_LIMIT).optional(),
           })
           .strict(),
       })

@@ -161,6 +161,28 @@ describe("round trip", () => {
     result.session.cueLedger.spoken.push("b");
     expect((source.cueLedger as { spoken: string[] }).spoken).toEqual(["a"]);
   });
+
+  it("keeps an undoable transit tap's event snapshot", () => {
+    const previous: Record<string, unknown> = {
+      currentLegIndex: 1,
+      phase: "riding",
+      currentWalkStepIndex: 0,
+      stopCursor: 1,
+      alongMeters: 0,
+      emittedEventIds: ["fp-1:board:1"],
+    };
+    const source = transitSession();
+    const payload = source.payload as { tickState: Record<string, unknown> };
+    payload.tickState.lastAction = { type: "alight", legIndex: 1, atMs: NOW, previous };
+    const restored = parseMobileSession(JSON.stringify(source));
+    if (!restored.ok || restored.session.kind !== "transit")
+      throw new Error("expected transit session");
+    expect(restored.session.payload.tickState.lastAction?.previous.emittedEventIds).toEqual([
+      "fp-1:board:1",
+    ]);
+    delete previous.emittedEventIds;
+    expect(parseMobileSession(JSON.stringify(source)).ok).toBe(true);
+  });
 });
 
 describe("expiry", () => {
