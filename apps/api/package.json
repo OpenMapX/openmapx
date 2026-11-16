@@ -24,6 +24,7 @@
     "@better-auth/i18n": "1.7.18",
     "@better-auth/oauth-provider": "1.7.18",
     "@better-auth/passkey": "1.7.18",
+    "@fastify/compress": "^9.3.0",
     "@fastify/cors": "^11.3.1",
     "@fastify/helmet": "^13.2.0",
     "@hey-api/client-fetch": "workspace:*",
