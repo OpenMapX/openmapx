@@ -2279,10 +2279,10 @@ importers:
         version: link:../../packages/presets
       '@openrouter/ai-sdk-provider':
         specifier: ^3.1.0
-        version: 3.1.0(ai@7.0.165(zod@4.6.7))(zod@4.6.7)
+        version: 3.1.0(ai@7.0.166(zod@4.6.7))(zod@4.6.7)
       ai:
         specifier: ^7.0.156
-        version: 7.0.165(zod@4.6.7)
+        version: 7.0.166(zod@4.6.7)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -3001,7 +3001,7 @@ importers:
     dependencies:
       intl-messageformat:
         specifier: ^12.1.4
-        version: 12.1.4
+        version: 12.1.5
     devDependencies:
       tsx:
         specifier: 4.23.15
@@ -3026,7 +3026,7 @@ importers:
         version: link:../place-ids
       intl-messageformat:
         specifier: ^12.1.4
-        version: 12.1.4
+        version: 12.1.5
       p-map:
         specifier: 7.1.1
         version: 7.1.1
@@ -3506,8 +3506,8 @@ packages:
     peerDependencies:
       zod: ^4.6.7
 
-  '@ai-sdk/gateway@4.0.138':
-    resolution: {integrity: sha512-7a/LGqioUyU2CmjRjMwnX4WR5V4vP3+YdPZEAbh7CH9OXf1GcPSsiySsHxNbqiDlDnL+KdqPvWeipIR7u/VFHA==}
+  '@ai-sdk/gateway@4.0.139':
+    resolution: {integrity: sha512-2YEIPm4n59nm4PBhMGjFWH0g+ztPgfybqoeMIjfJYNiB8zLHftUrONgb8P3Ho3Yy5cdoLCjiDE/Hv2Crol0JBw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^4.6.7
@@ -4913,11 +4913,17 @@ packages:
   '@formatjs/icu-messageformat-parser@3.5.22':
     resolution: {integrity: sha512-YuwN+dDKgssfuYwtOyGQD0CSn7K46g9cv1Fp0VgKpjZDDFvv8b8crzP990IcJhRPWHhKzCGsbUSJVIguyyFA5A==}
 
+  '@formatjs/icu-messageformat-parser@3.5.23':
+    resolution: {integrity: sha512-iB1fYfhtSGd8uH9A8b1m01Ujcv6QtQnJasefP3jPApmz72L/zNipzf3BdoinTMd1xuviVChjUJWL60iTwjUQ+w==}
+
   '@formatjs/icu-skeleton-parser@2.1.11':
     resolution: {integrity: sha512-j8cUmOJzVgkHuS0QiQ6ga76UIoLOFSAMWhs7aZJztH3aAdCOAE6vpC8KVvFB4cU10ON0y2/5oOVmPJ43s2lTwA==}
 
   '@formatjs/icu-skeleton-parser@2.1.12':
     resolution: {integrity: sha512-ca7tZMLpfHX3sUD7hP6gE/qr6Iq89EDd3ZLeRhbsB7r0UD55DGJq+tmFLzrGrnx5StahUevQmQQVtbDRHsfDHA==}
+
+  '@formatjs/icu-skeleton-parser@2.1.13':
+    resolution: {integrity: sha512-IdAJ9NrHn7AF0zqncD9UpxQozTYyJtbwwrZnJMEKVxTcOOXtVkUb2XYTpNOGTAv58NCsk0rjRB9G+i2SvBmGAQ==}
 
   '@formatjs/intl-localematcher@0.8.14':
     resolution: {integrity: sha512-8O7V38QmbB11+ryJ3KM/znrzXtiqgpXzqNoqDsndHZZ5/zDKTTL+cf5F0mzXkQEwhx8IlWnqYvEovf2S5EwLTw==}
@@ -7703,8 +7709,8 @@ packages:
     engines: {node: '>=18.18'}
     hasBin: true
 
-  ai@7.0.165:
-    resolution: {integrity: sha512-cEeORsLF+9+fNzvo4nQo9hxgQoEfupjc9Xmq6OM2NGUwQQQdkHxByBdFoqnNfBE0H+qwhGQaZejvbCFFD84tBA==}
+  ai@7.0.166:
+    resolution: {integrity: sha512-bijt5WsdpQXQLB0SHYEoSuvpZ8KdUxl3Iz843uvHFcGpEBSrxlgwXXadR7EBVOHoByEf2PwgOxutWU5dcdjs9Q==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^4.6.7
@@ -9728,8 +9734,8 @@ packages:
   intl-messageformat@11.2.15:
     resolution: {integrity: sha512-W4VNytsXyWgW5lvVchmsb9xgA5rSKqoflu3/IQ9UCtB0z4R+Bx9MoEkwFT/+30RCl/KzUoH0QGGe9lppF5SuvQ==}
 
-  intl-messageformat@12.1.4:
-    resolution: {integrity: sha512-JUkmv3cAEyijN3oiRiV3ctel7yVMuUCgfh7Pu8pj1/z6L1DSEPRyhuMaLjVw3pGmGJ5RDH54WVFxfMHZWTwyHw==}
+  intl-messageformat@12.1.5:
+    resolution: {integrity: sha512-quhcDFAxy4wr/GrgWgmMjuegoedNUIxGNLORfXgDgdjuv8cBM88ClLTLXmfYC1roMSR1PPc55yUEkpJ5m67W2g==}
 
   invariant@2.2.4:
     resolution: {integrity: sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==}
@@ -12763,7 +12769,7 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.76(zod@4.6.7)
       zod: 4.6.7
 
-  '@ai-sdk/gateway@4.0.138(zod@4.6.7)':
+  '@ai-sdk/gateway@4.0.139(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 4.0.37
       '@ai-sdk/provider-utils': 5.0.76(zod@4.6.7)
@@ -14521,9 +14527,15 @@ snapshots:
     dependencies:
       '@formatjs/icu-skeleton-parser': 2.1.12
 
+  '@formatjs/icu-messageformat-parser@3.5.23':
+    dependencies:
+      '@formatjs/icu-skeleton-parser': 2.1.13
+
   '@formatjs/icu-skeleton-parser@2.1.11': {}
 
   '@formatjs/icu-skeleton-parser@2.1.12': {}
+
+  '@formatjs/icu-skeleton-parser@2.1.13': {}
 
   '@formatjs/intl-localematcher@0.8.14':
     dependencies:
@@ -15970,9 +15982,9 @@ snapshots:
 
   '@nodable/entities@3.1.0': {}
 
-  '@openrouter/ai-sdk-provider@3.1.0(ai@7.0.165(zod@4.6.7))(zod@4.6.7)':
+  '@openrouter/ai-sdk-provider@3.1.0(ai@7.0.166(zod@4.6.7))(zod@4.6.7)':
     dependencies:
-      ai: 7.0.165(zod@4.6.7)
+      ai: 7.0.166(zod@4.6.7)
       zod: 4.6.7
 
   '@openstreetmap/id-tagging-schema@7.3.0': {}
@@ -17473,9 +17485,9 @@ snapshots:
 
   agent-cli-detector@0.1.7: {}
 
-  ai@7.0.165(zod@4.6.7):
+  ai@7.0.166(zod@4.6.7):
     dependencies:
-      '@ai-sdk/gateway': 4.0.138(zod@4.6.7)
+      '@ai-sdk/gateway': 4.0.139(zod@4.6.7)
       '@ai-sdk/provider': 4.0.37
       '@ai-sdk/provider-utils': 5.0.76(zod@4.6.7)
       zod: 4.6.7
@@ -19545,10 +19557,10 @@ snapshots:
       '@formatjs/fast-memoize': 3.1.7
       '@formatjs/icu-messageformat-parser': 3.5.18
 
-  intl-messageformat@12.1.4:
+  intl-messageformat@12.1.5:
     dependencies:
       '@formatjs/fast-memoize': 3.1.7
-      '@formatjs/icu-messageformat-parser': 3.5.22
+      '@formatjs/icu-messageformat-parser': 3.5.23
 
   invariant@2.2.4:
     dependencies:
