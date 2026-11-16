@@ -526,8 +526,8 @@ threads (`deploy.resources.limits.pids`) and `no-new-privileges`, which stops a 
 privileges through a setuid binary or file capability. Neither has a manifest
 field. An image that starts as root and drops to its own user, for example with
 `gosu`, keeps working; one that relies on `sudo` or a setuid helper does not, so
-run it as an unprivileged user from the start. First-party services are not
-affected. See the [service manifest](./service-manifest.md#quality-tiers) for
+run it as an unprivileged user from the start. First-party services get no
+process limit, and only some of them get the privilege lock. See the [service manifest](./service-manifest.md#quality-tiers) for
 the full community sandbox.
 
 ### Migrate idempotently on boot
