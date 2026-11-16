@@ -401,6 +401,7 @@ export const EXPENSIVE_ROUTE_PREFIXES = [
   "/api/image-proxy",
   "/api/winter-sports",
   "/api/offline/packages/prepare",
+  "/api/privacy/export",
 ] as const;
 
 export function isTimelineApiRequest(request: FastifyRequest): boolean {
@@ -544,7 +545,8 @@ const BODY_CAPABLE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 //   - `/api/auth/*`              → strict (credential stuffing, email spam)
 //   - exactly `GET /api/status`  → 60/minute (dependency snapshot refresh)
 //   - tile / map asset routes    → generous (bursty, cacheable, CDN-friendly)
-//   - expensive public routes    → tight (Valhalla, Overpass, place and image fan-out)
+//   - expensive public routes    → tight (Valhalla, Overpass, place and image fan-out,
+//                                  offline package preparation, the personal data export)
 //   - every other matched route  → broad floor, including timeline day reads,
 //                                  which add a per-user bucket after sign-in
 export function makeRateLimitTierHook(limits: RateLimitTiers) {

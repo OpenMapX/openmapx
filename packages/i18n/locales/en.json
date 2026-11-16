@@ -2300,6 +2300,8 @@
       },
       "downloadExport": "Download my data",
       "exportFailed": "The archive could not be downloaded. Please try again.",
+      "exportInProgress": "A download of your data is already running. Please wait for it to finish, then try again.",
+      "exportUnavailable": "Downloads are temporarily unavailable. Please try again in a few minutes.",
       "secondFactorRequired": "Please sign in again with your password and your account's second factor (authenticator app or recovery code). A passkey or external sign-in is not enough to download your data while two-factor authentication is enabled."
     },
     "mangroveConnectTitle": "Connect to Mangrove",

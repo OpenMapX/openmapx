@@ -14,8 +14,10 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import {
+  EXPORT_IN_PROGRESS,
   FRESH_SIGN_IN_REQUIRED,
   getPrivacyDataRequests,
+  PRIVACY_SERVICE_UNAVAILABLE,
   type PrivacyRequestView,
   requestPrivacyExport,
   withdrawPrivacyDataRequest,
@@ -152,6 +154,20 @@ export const PrivacyDataSection = forwardRef<
             // continues once when this page loads again.
             writePendingExport({ at: Date.now(), retried: false });
             window.location.assign("/auth/privacy");
+            return;
+          }
+        }
+        if (response.status === 409 || response.status === 503) {
+          const body = (await response.json().catch(() => null)) as { code?: string } | null;
+          const message =
+            body?.code === EXPORT_IN_PROGRESS
+              ? t("privacyData.exportInProgress")
+              : body?.code === PRIVACY_SERVICE_UNAVAILABLE
+                ? t("privacyData.exportUnavailable")
+                : null;
+          if (message) {
+            if (retry) writePendingExport(null);
+            if (mounted.current) setError(message);
             return;
           }
         }
