@@ -241,9 +241,66 @@ integration("PostgreSQL offline-package accounting", () => {
         (index % 2 === 0 ? storeA : storeB).admit(principal, record(index + 2), artifactOptions),
       ),
     );
+    // Every contender must reach the quota decision: none may be turned away
+    // by another contender's admission lock.
+    const refusals = outcomes.flatMap((outcome) =>
+      outcome.status === "rejected" ? [String(outcome.reason)] : [],
+    );
+    expect(refusals).toEqual(
+      Array.from(
+        { length: 48 },
+        () =>
+          "OfflinePackagePrincipalQuotaError: offline package principal quota: queued limit is 2",
+      ),
+    );
     expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(2);
     expect((await storeB.getOwnedJob(principal, first.jobId))?.jobId).toBe(first.jobId);
     expect((await storeB.loadRunnable()).map((job) => job.jobId)).toHaveLength(3);
+  });
+
+  it("refuses admission while configuration maintenance holds the admission lock", async () => {
+    const store = new PostgresOfflinePackageAccountingStore(sql);
+    const maintenance = await sql.reserve();
+    try {
+      await maintenance`SELECT pg_advisory_lock(${0x4f4d58}, 2)`;
+      await expect(store.admit(principal, record(1), artifactOptions)).rejects.toMatchObject({
+        message: "configuration_maintenance_busy",
+        statusCode: 409,
+      });
+    } finally {
+      await maintenance`SELECT pg_advisory_unlock(${0x4f4d58}, 2)`;
+      maintenance.release();
+    }
+    expect((await store.admit(principal, record(1), artifactOptions)).createdJob).toBe(true);
+  });
+
+  it("keeps configuration maintenance out while an admission is in flight", async () => {
+    const store = new PostgresOfflinePackageAccountingStore(sql);
+    let release = () => {};
+    let entered = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const admission = store.admit(principal, record(1), {
+      readManifest: async () => {
+        entered();
+        await gate;
+        return undefined;
+      },
+    });
+    try {
+      await started;
+      const [maintenance] = await sql<
+        { held: boolean }[]
+      >`SELECT pg_try_advisory_lock(${0x4f4d58}, 2) AS held`;
+      expect(maintenance?.held).toBe(false);
+    } finally {
+      release();
+      await admission;
+    }
   });
 
   it("keeps shared physical bytes referenced while charging each opaque principal", async () => {
