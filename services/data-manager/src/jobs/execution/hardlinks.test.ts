@@ -30,6 +30,7 @@ import {
 import Fastify from "fastify";
 import postgres from "postgres";
 import { expect, it } from "vitest";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { resetOpsClient } from "../../ops-client";
@@ -259,7 +260,7 @@ it
             timeout: 15000,
           })
           .toBe("ok");
-        expect(control.heldTargets(dirname(data)).includes("data-manager")).toBe(true);
+        expect(heldTargets(dirname(data)).includes("data-manager")).toBe(true);
       }
       const terminal = await observeDataExecution(
         { id: admitted.id, operationKey: child.operationKey, fingerprint: child.fingerprint },

@@ -20,6 +20,7 @@ vi.mock("node:fs", async (importOriginal) => {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { heldTargets } from "../build-artifacts/__fixtures__/held-targets";
 import {
   type ControlInstallation,
   closeControlInstallation,
@@ -27,7 +28,6 @@ import {
   provisionControlInstallation,
   retainAdmittedControlExecution,
 } from "../build-artifacts/control-authority";
-import { heldTargets } from "../build-artifacts/lease-store";
 import {
   type ArtifactTargetLease,
   acquireArtifactTargetLease,

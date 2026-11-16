@@ -8,6 +8,8 @@ import {
   type VerifiedParentExecution,
 } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
+// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
+import { leaseTargetsSchema } from "../ops/lease-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
@@ -73,12 +75,10 @@ import {
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
-// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
 import { controlChildOperationKey } from "./control-child-records";
 import { controlDigest, targetSchema, uuid, verifyControl } from "./control-records";
 import { assertFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
 import {
-  admitLease,
   knownSettlement,
   type LeaseChild,
   type LeaseRecord,
@@ -207,7 +207,25 @@ export const leaseRules = {
       return existing;
     }
     if (now >= input.owner.deadlineAt) throw Error("Target closure or execution deadline mismatch");
-    return admitLease(leases, { ...input, now });
+    // Another execution with the same key is a conflict, never a second lease.
+    if (leases.some((lease) => lease.owner.operationKey === input.owner.operationKey))
+      throw Error("Execution already acquired a root lease; reconcile its original identity");
+    const targets = leaseTargetsSchema.parse([...new Set(input.targets)].sort());
+    for (const target of targets) {
+      const holder = leases.find((lease) => lease.targets.includes(target));
+      if (holder) throw new TargetBusyError(target, holder);
+    }
+    const record: LeaseRecord = {
+      leaseId: randomUUID(),
+      owner: input.owner,
+      ownerKind: input.ownerKind,
+      targets,
+      state: "held",
+      children: [],
+      createdAt: now,
+    };
+    leases.push(record);
+    return record;
   },
   delegate(leases: LeaseRecord[], input: Parameters<LeaseBackend["delegate"]>[0], now: number) {
     const lease = leases.find((value) => value.leaseId === input.leaseId);
@@ -385,9 +403,6 @@ function current(s: State): LeaseRecord | undefined {
 async function fresh(s: State): Promise<LeaseRecord | undefined> {
   s.seen = await s.backend.read(s.leaseId);
   return s.seen;
-}
-function remember(s: State, record: LeaseRecord | undefined) {
-  s.seen = record;
 }
 
 export function verifyFiniteControlEdge(
@@ -641,13 +656,10 @@ export async function delegateArtifactTargetLease(
       true,
     );
   });
-  remember(
-    s,
-    await s.backend.delegate({
-      leaseId: s.leaseId,
-      child: { ...row, ...(child.evidence ? { evidence: child.evidence } : {}) },
-    }),
-  );
+  s.seen = await s.backend.delegate({
+    leaseId: s.leaseId,
+    child: { ...row, ...(child.evidence ? { evidence: child.evidence } : {}) },
+  });
   return assertion;
 }
 
@@ -806,10 +818,7 @@ export async function settleArtifactTargetLeaseChild(
     if (owner.kind === "configurationMaintenance.prepare")
       assertConfigurationMaintenanceRootClosure(s.authority, await observeClosure(s, s.authority));
   }
-  remember(
-    s,
-    await s.backend.settle({ leaseId: s.leaseId, key: s.node, settlement: proof.evidence }),
-  );
+  s.seen = await s.backend.settle({ leaseId: s.leaseId, key: s.node, settlement: proof.evidence });
 }
 
 export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Promise<void> {
@@ -821,7 +830,7 @@ export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Pr
   )
     assertConfigurationMaintenanceRootClosure(s.authority, await observeClosure(s, s.authority));
   await s.backend.release({ leaseId: s.leaseId });
-  remember(s, undefined);
+  s.seen = undefined;
   if (s.authority) rootReleasedAt(s.authority);
 }
 
@@ -831,7 +840,7 @@ export async function cancelArtifactTargetLease(
   const s = stateOf(lease);
   s.canceled = true;
   const record = await s.backend.cancel({ leaseId: s.leaseId, key: s.node });
-  remember(s, record);
+  s.seen = record;
   // These immutable attempted identities are the adapter's cancellation outbox.
   return Object.freeze(
     (record ? descendantsOf(record, s.node) : []).map((child) =>
@@ -930,19 +939,10 @@ export function restoreArtifactTargetLeaseForSettlement(
     settlementOnly: true,
   }) as ArtifactTargetLease;
 }
-/** Whether the execution's own root lease is gone from the store, after its own effect settled. */
-export async function verifyRetainedArtifactTargetRootRelease(
-  authority: VerifiedExecutionAuthority,
-): Promise<Readonly<{ releasedAt: number }>> {
-  const a = executionAuthorityState(authority);
-  const leaseId = executionLeaseId(authority);
-  childSettlementState(verifyControlEffectSettlement(a.installation.installation, a.execution));
-  if (await a.installation.leases.read(leaseId)) throw Error("Original root release is not proved");
-  return Object.freeze({ releasedAt: rootReleasedAt(authority) });
-}
 /**
- * The same without waiting: from the release this owner recorded after the
- * store dropped its lease, or from the store for a role that reads it.
+ * Whether the execution's own root lease is gone, after its own effect settled:
+ * from the release this owner recorded after the store dropped its lease, or
+ * from the store for a role that reads it.
  */
 export function verifyLocalArtifactTargetRootRelease(
   authority: VerifiedExecutionAuthority,
@@ -1303,7 +1303,7 @@ export async function settleIssuedLeaseChild(
     return child.settlement as ChildSettlement;
   }
   const settlement: ChildSettlement = { identity: execution, ...evidence };
-  remember(s, await s.backend.settle({ leaseId: s.leaseId, key: child.key, settlement }));
+  s.seen = await s.backend.settle({ leaseId: s.leaseId, key: child.key, settlement });
   return settlement;
 }
 /** The settlement of an original owned child, read through the owner's lease reference. */

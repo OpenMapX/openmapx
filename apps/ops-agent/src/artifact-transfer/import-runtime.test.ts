@@ -9,7 +9,7 @@ import {
   openControlInstallation,
   restoreAdmittedControlExecution,
   validateBuildBundle,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
   writeBuildBundle,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -321,9 +321,7 @@ it("imports through the real registered server and original target root after a 
     fingerprint: status.fingerprint,
     deadlineAt: status.deadlineAt,
   });
-  await verifyRetainedArtifactTargetRootRelease(
-    restoreAdmittedControlExecution(f.installation, execution),
-  );
+  verifyLocalArtifactTargetRootRelease(restoreAdmittedControlExecution(f.installation, execution));
   expect(
     f.calls.some((args) => args.includes("up") || args.includes("stop") || args.includes("pull")),
   ).toBe(false);
@@ -500,9 +498,7 @@ it("reconciles the original prepared publication after exact foreign-inode repai
     fingerprint: status.fingerprint,
     deadlineAt: status.deadlineAt,
   });
-  await verifyRetainedArtifactTargetRootRelease(
-    restoreAdmittedControlExecution(installation, execution),
-  );
+  verifyLocalArtifactTargetRootRelease(restoreAdmittedControlExecution(installation, execution));
   expect(
     journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
   ).toHaveLength(1);
@@ -631,7 +627,7 @@ it("observes committed publication after result loss without rewriting its origi
     fingerprint: original.fingerprint,
     deadlineAt: original.deadlineAt,
   });
-  await verifyRetainedArtifactTargetRootRelease(
+  verifyLocalArtifactTargetRootRelease(
     restoreAdmittedControlExecution(next.installation, execution),
   );
   expect(readFileSync(join(f.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(files);

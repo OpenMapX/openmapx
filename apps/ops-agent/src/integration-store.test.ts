@@ -14,7 +14,6 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import {
   closeControlInstallation,
-  heldTargets,
   openControlInstallation,
   provisionControlInstallation,
 } from "@openmapx/core/build-artifacts";
@@ -22,6 +21,7 @@ import { createControlRootOperationKey, type OpsResourcePolicy } from "@openmapx
 import { services } from "@openmapx/core/server";
 import { packageIntegration } from "@openmapx/integration-framework/installer";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
 import { createUnavailableRuntime } from "./runtime";

@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExecutionRef } from "../ops/execution-ref";
+import { heldTargets } from "./__fixtures__/held-targets";
 import {
-  heldTargets,
   type LeaseSettlement,
   leaseStoreDirectory,
   openLeaseStore,

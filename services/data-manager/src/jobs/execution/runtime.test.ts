@@ -8,6 +8,7 @@ import { createControlRootOperationKey, OpsClientError } from "@openmapx/core/op
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { DataManagerReadiness } from "../../readiness.js";
 import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
@@ -330,7 +331,7 @@ describe.skipIf(
       });
       expect((await store.inspect(id))?.finishedAt).not.toBeNull();
       expect(dispatches).toBe(1);
-      expect(control.heldTargets(root).includes("data-manager")).toBe(false);
+      expect(heldTargets(root).includes("data-manager")).toBe(false);
       const recovered = await store.inspect(id);
       expect(
         control.readDataControlTerminalObservation(installation, recovered!.execution).status,
@@ -644,7 +645,7 @@ describe.skipIf(
       expect(forwards).toBe(0);
       expect((await store.inspect(id))?.finishedAt).toBeNull();
       expect((await store.inspect(id))?.status.publication).toBe("unknown");
-      expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
+      expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
@@ -698,7 +699,7 @@ describe.skipIf(
           .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
           .toBe("ok");
         await expect
-          .poll(async () => !control.heldTargets(dirname(data)).includes("data-manager"), {
+          .poll(async () => !heldTargets(dirname(data)).includes("data-manager"), {
             timeout: 15000,
           })
           .toBe(true);
@@ -875,7 +876,7 @@ describe.skipIf(
         );
         id = admitted.id;
         await readyGate;
-        const held = () => control.heldTargets(root).includes("data-manager");
+        const held = () => heldTargets(root).includes("data-manager");
         expect(held()).toBe(true);
         if (mode === "consume-after-abort") {
           start();

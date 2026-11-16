@@ -267,7 +267,7 @@ describe.skipIf(
           existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
         ).toBe(false);
         expect(readFileSync(canonicalPath)).toEqual(canonical);
-        expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+        expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
         expect(f.data.preparePosts).toBe(0);
         expect(f.host.calls.some((args) => args.includes("up") || args.includes("restart"))).toBe(
           false,
@@ -370,7 +370,7 @@ describe.skipIf(
         await tx`SELECT pg_advisory_xact_lock(${0x4f4d58},2)`;
         expect((await request()).status).not.toBe(200);
       });
-      await expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).rejects.toThrow();
+      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
       const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8"));
       expect(storeChild(f.root, assertion.leaseId, assertion.delegationId)?.state).toBe("held");
     } finally {
@@ -403,7 +403,7 @@ describe.skipIf(
           pollIntervalMs: 1,
         }),
       ).toBe("pending");
-      await expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).rejects.toThrow();
+      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
       vi.stubEnv("DATA_MANAGER_URL", f.data.baseUrl);
       const cancel = client.cancel.bind(client),
         legacy = vi.spyOn(client, "cancel").mockImplementation(async (...args) => {
@@ -417,7 +417,7 @@ describe.skipIf(
           pollIntervalMs: 1,
         }),
       ).toBe("pending");
-      await expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).rejects.toThrow();
+      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
       expect(
         await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
           context: f.ctx,
@@ -477,7 +477,7 @@ describe.skipIf(
       expect(finished?.status).toBe("failed");
       expect(finished?.finished_at).not.toBeNull();
       expect(finished?.result._cancelRequestedAt).toBeDefined();
-      expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+      expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
       expect(await client.status("configurationMaintenance.prepare", f.owner.executionId)).toEqual(
         original,
       );
@@ -562,7 +562,7 @@ describe.skipIf(
         fault.mockRestore();
         expect(faulted).toBe(true);
         await maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority);
-        expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+        expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
         expect(readFileSync(canonicalPath)).toEqual(canonical);
         expect(f.data.preparePosts).toBe(0);
         expect(f.data.recoveryPosts).toBe(1);
@@ -627,7 +627,7 @@ describe.skipIf(
       await expect(
         maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority),
       ).resolves.toMatchObject({ maintenanceId: f.input.maintenanceId });
-      expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+      expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
     } finally {
       clock?.mockRestore();
       await f.close();

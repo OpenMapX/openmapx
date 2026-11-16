@@ -29,7 +29,7 @@ import {
   pruneControlRecords,
   readConfigurationHandoffSpawnIntent,
   restoreAdmittedControlExecution,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
@@ -1845,8 +1845,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                             });
                             expect(dm.settlePosts).toBe(0);
                             await expect(dm.assertDataAdmission()).rejects.toThrow();
-                            await expect(
-                              verifyRetainedArtifactTargetRootRelease(
+                            expect(() =>
+                              verifyLocalArtifactTargetRootRelease(
                                 restoreAdmittedControlExecution(installation, owner.plan.prepare),
                               ),
                             ).rejects.toThrow();
@@ -1872,9 +1872,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                               ),
                             ).toHaveLength(1);
                             expect(dm.settlePosts).toBe(0);
-                            await expect(dm.assertDataAdmission()).rejects.toThrow();
-                            await expect(
-                              verifyRetainedArtifactTargetRootRelease(
+                            await expect(dm.assertDataAdmission()).toThrow();
+                            expect(() =>
+                              verifyLocalArtifactTargetRootRelease(
                                 restoreAdmittedControlExecution(installation, owner.plan.prepare),
                               ),
                             ).rejects.toThrow();
@@ -1907,7 +1907,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                                 `configuration-handoff-${owner.plan.handoff!.handoffId}.completion.json`,
                               ),
                               before = readFileSync(file);
-                            await expect(dm.assertDataAdmission()).rejects.toThrow();
+                            await expect(dm.assertDataAdmission()).toThrow();
                             const { inspectConfigurationHandoff } = await import(
                               "../../../../ops-agent/src/configuration-handoff-store"
                             );

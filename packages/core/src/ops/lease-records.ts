@@ -54,7 +54,6 @@ export const leaseRecordSchema = z.strictObject({
   state: nodeStateSchema,
   settlement: leaseSettlementSchema.optional(),
   children: z.array(leaseChildSchema).max(64),
-  reason: z.string().max(512).optional(),
   createdAt: z.number().int().nonnegative().safe(),
 });
 export type LeaseRecord = z.infer<typeof leaseRecordSchema>;

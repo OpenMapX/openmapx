@@ -510,6 +510,7 @@ it.skipIf(!enabled).each(["git", "proposal"] as const)(
 
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { resolveOperationsProfile } from "../transitous/operations-profile";
@@ -1125,7 +1126,7 @@ it.skipIf(!enabled)(
       expect((await f.runtime.inspect(id))?.publication).toBe("not_started");
       // Terminal status is published before asynchronous lease settlement finishes.
       await expect
-        .poll(() => control.heldTargets(root).includes("motis"), {
+        .poll(() => heldTargets(root).includes("motis"), {
           timeout: 10000,
         })
         .toBe(false);

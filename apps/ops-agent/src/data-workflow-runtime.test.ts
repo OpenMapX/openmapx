@@ -8,6 +8,7 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { afterEach, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 
 const roots: string[] = [];
@@ -67,7 +68,7 @@ it("freezes distinct original data/finalization slots and refuses targets before
         serviceIds: ids,
       }),
     ).rejects.toThrow("data phase not admitted");
-    expect(control.heldTargets(host.infraDir).includes("data-manager")).toBe(false);
+    expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
     const child = await control.bindControlChildPhase(authority, plan.dataReservation),
       key = control.prepareFixedControlChild(authority, plan.dataDelegationId);
     control.retainFixedCliSpawnIntent(authority, {
@@ -91,7 +92,7 @@ it("freezes distinct original data/finalization slots and refuses targets before
         serviceIds: ids,
       }),
     ).rejects.toThrow();
-    expect(control.heldTargets(host.infraDir).includes("data-manager")).toBe(false);
+    expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
   } finally {
     control.closeControlInstallation(installation);
   }

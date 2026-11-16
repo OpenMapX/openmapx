@@ -10,6 +10,7 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { expect, it } from "vitest";
+import { heldTargets } from "../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { createDockerRuntime } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
 import { createProductionRegistryResourceClaimer, denyAllTrustedOpsData } from "./policy";
@@ -91,7 +92,7 @@ it.each(["succeeded", "canceled"] as const)(
       if (admitted.execution !== "async") throw Error("Async traffic root required");
       await started;
       expect(effects).toBe(1);
-      expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(true);
+      expect(heldTargets(dirname(data)).includes("valhalla")).toBe(true);
       if (mode === "canceled") {
         const status = await client.status(operation.kind, admitted.operationId),
           lossy = new OpsClient({
@@ -113,7 +114,7 @@ it.each(["succeeded", "canceled"] as const)(
         expect((await client.status(operation.kind, admitted.operationId)).state).toBe(
           "termination_pending",
         );
-        expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(true);
+        expect(heldTargets(dirname(data)).includes("valhalla")).toBe(true);
         if (!status.fingerprint || !status.deadlineAt)
           throw Error("Original dated traffic identity required");
         const authority = control.restoreAdmittedControlExecution(installation, {
@@ -132,7 +133,7 @@ it.each(["succeeded", "canceled"] as const)(
             timeout: 10000,
           })
           .toBe("failed");
-        expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(true);
+        expect(heldTargets(dirname(data)).includes("valhalla")).toBe(true);
       } else {
         release();
         await expect
@@ -140,7 +141,7 @@ it.each(["succeeded", "canceled"] as const)(
             timeout: 10000,
           })
           .toBe("succeeded");
-        expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(false);
+        expect(heldTargets(dirname(data)).includes("valhalla")).toBe(false);
       }
     } finally {
       release();

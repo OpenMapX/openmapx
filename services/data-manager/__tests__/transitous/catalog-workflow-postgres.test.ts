@@ -48,6 +48,7 @@ import { createMigratedPostgresFixture } from "../../../../apps/api/src/test/pos
 import { ownedServiceHost } from "../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
 import { runContainedProcess } from "../../../../apps/ops-agent/src/docker-runtime";
 import { buildTransitousRunnerServer } from "../../../../apps/transitous-runner/src/server";
+import { heldTargets } from "../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ensureMotisSlotLayout } from "../../src/jobs/transitous/slot-state";
 import { buildTinyGtfsFeeds } from "./fixtures/build-tiny-gtfs";
 import { BERLIN_TINY_OSM_PBF_BASE64 } from "./fixtures/tiny-osm";
@@ -791,7 +792,7 @@ it
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${validation.id}`;
         expect(row!.finished_at).toBeNull();
-        expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
+        expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         return;
       }
       expect(
@@ -831,7 +832,7 @@ it
           child.execution,
         ),
       ).toBeNull();
-      expect(control.heldTargets(dirname(data)).includes("motis")).toBe(false);
+      expect(heldTargets(dirname(data)).includes("motis")).toBe(false);
       const validationBytes = readFileSync(
         join(data, "motis/proposals", proposalId, `validation-${validation.id}.json`),
       );
@@ -893,7 +894,7 @@ it
           );
           expect(await cancelResponse).toBe(true);
           expect(lostCancellationResponse).toBe(true);
-          expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
+          expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         }
         if (nativeDm) {
           // Freeze between lifecycle writes before injecting the pin-pointer crash.
@@ -959,7 +960,7 @@ it
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${activation.id}`;
         expect(row!.finished_at).toBeNull();
-        expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
+        expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         const next = await sdk.startDataExecution(
           {
             input: { kind: "catalog.validate", proposalId, countries: ["de"] },

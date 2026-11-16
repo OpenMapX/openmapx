@@ -114,7 +114,7 @@ it.each(["old-directory", "build-record"])(
       outcome: "not_committed",
       reason: "failed",
     });
-    await expect(leases.verifyRetainedArtifactTargetRootRelease(authority)).rejects.toThrow();
+    expect(() => leases.verifyLocalArtifactTargetRootRelease(authority)).toThrow();
     control.retainControlEffectReceipt(authority, {
       outcome: "contained",
       publication: "not_started",
@@ -128,9 +128,7 @@ it.each(["old-directory", "build-record"])(
       control.verifyControlEffectSettlement(installation, authority.execution),
     );
     await leases.releaseArtifactTargetLease(lease);
-    expect(
-      (await leases.verifyRetainedArtifactTargetRootRelease(authority)).releasedAt,
-    ).toBeGreaterThan(0);
+    expect(leases.verifyLocalArtifactTargetRootRelease(authority).releasedAt).toBeGreaterThan(0);
   },
   60000,
 );

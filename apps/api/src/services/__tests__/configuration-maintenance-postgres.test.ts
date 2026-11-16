@@ -19,7 +19,6 @@ import { setTimeout as nativeDelay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   closeControlInstallation,
-  heldTargets,
   leaseStoreDirectory,
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
@@ -33,6 +32,7 @@ import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
@@ -1333,7 +1333,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ),
               authority = restoreAdmittedControlExecution(installation, owner.plan.prepare);
             core.assertConfigurationMaintenanceRootClosure(authority);
-            await core.verifyRetainedArtifactTargetRootRelease(authority);
+            core.verifyLocalArtifactTargetRootRelease(authority);
             expect(existsSync(candidatePath)).toBe(false);
             expect(rootLease()).toBeNull();
             expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
@@ -1418,7 +1418,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ).receipt,
               core = await import("@openmapx/core/build-artifacts");
             expect(final.prepare.operationKey).toBe(candidate.prepareOperationKey);
-            await core.verifyRetainedArtifactTargetRootRelease(
+            core.verifyLocalArtifactTargetRootRelease(
               restoreAdmittedControlExecution(installation, final.prepare),
             );
             expect((await start().exited).code).toBe(2);
@@ -4921,7 +4921,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
             records.configurationMaintenanceOwnerRecordSchema,
           ),
-          released = await core.verifyRetainedArtifactTargetRootRelease(authority),
+          released = core.verifyLocalArtifactTargetRootRelease(authority),
           originalFinal = JSON.stringify(owner.final),
           originalInspection = JSON.stringify(owner.inspection),
           [originalSql] =
@@ -5909,7 +5909,7 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
         expect(calls.filter((args) => args.includes("pull"))).toHaveLength(1);
         expect(calls.filter((args) => args.includes("up"))).toHaveLength(recreated ? 1 : 0);
         expect(heldTargets(host.infraDir).includes("motis")).toBe(true);
-        await expect(core.verifyRetainedArtifactTargetRootRelease(root)).rejects.toThrow();
+        expect(() => core.verifyLocalArtifactTargetRootRelease(root)).toThrow();
         if (mode === "missing-receipt") {
           await expect(receiptRead).rejects.toThrow();
           expect(readdirSync(receiptDirectory)).toEqual([]);

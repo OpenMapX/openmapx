@@ -24,8 +24,8 @@ vi.mock("node:timers/promises", async (original) => ({
     new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
 }));
 
-import { LeaseStoreBusyError } from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import {
   closeConfigurationHandoffChild,
   openConfigurationHandoffChild,
@@ -83,7 +83,7 @@ afterEach(() => vi.useRealTimers());
 it("retries only a nominal pre-adoption refusal with the original identity", async () => {
   const f = fixture();
   mock.adoptArtifactTargetLease.mockRejectedValueOnce(
-    new LeaseStoreBusyError("/state/leases.lock", undefined),
+    new services.LockBusyError("/state/leases.lock", undefined),
   );
   const pending = openConfigurationHandoffChild(f.input);
   void pending.catch(() => {});
@@ -109,7 +109,7 @@ it("retries only a nominal pre-adoption refusal with the original identity", asy
 
 it("stops at the five-second contention budget without adopting or retaining authority", async () => {
   const f = fixture(),
-    error = new LeaseStoreBusyError("/state/leases.lock", undefined);
+    error = new services.LockBusyError("/state/leases.lock", undefined);
   mock.adoptArtifactTargetLease.mockRejectedValue(error);
   const failed = expect(openConfigurationHandoffChild(f.input)).rejects.toBe(error);
   await vi.advanceTimersByTimeAsync(5050);
@@ -122,7 +122,7 @@ it("stops at the five-second contention budget without adopting or retaining aut
 
 it("stops at the original deadline before the five-second wait budget", async () => {
   const f = fixture(),
-    error = new LeaseStoreBusyError("/state/leases.lock", undefined);
+    error = new services.LockBusyError("/state/leases.lock", undefined);
   f.input.execution.deadlineAt = Date.now() + 20;
   mock.adoptArtifactTargetLease.mockRejectedValue(error);
   const failed = expect(openConfigurationHandoffChild(f.input)).rejects.toBe(error);

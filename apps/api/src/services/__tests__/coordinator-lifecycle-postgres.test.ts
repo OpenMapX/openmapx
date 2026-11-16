@@ -19,7 +19,6 @@ import {
   acquireArtifactTargetLease,
   assertCoordinatorPullLeaseCompatibility,
   closeControlInstallation,
-  heldTargets,
   leaseStoreDirectory,
   lookupControlChildPhase,
   openControlInstallation,
@@ -31,7 +30,7 @@ import {
   retainControlEffectReceipt,
   settleArtifactTargetLeaseChild,
   verifyControlEffectSettlement,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
 } from "@openmapx/core/build-artifacts";
 import {
   type CoordinatorPullSubmission,
@@ -44,6 +43,7 @@ import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
@@ -1755,7 +1755,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(effect.outcome).toBe("failed_without_effect");
       const originalRoot = restoreAdmittedControlExecution(installation, admitted.execution);
       expect(lookupControlChildPhase(originalRoot, { phase: "lifecycle", ordinal: 0 })).toBeNull();
-      await verifyRetainedArtifactTargetRootRelease(originalRoot);
+      verifyLocalArtifactTargetRootRelease(originalRoot);
       const repaired = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
@@ -1846,7 +1846,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(state).toMatchObject({ state: "failed", errorClass: "configuration_prerequisite" });
         const authority = restoreAdmittedControlExecution(installation, source.execution);
         expect(lookupControlChildPhase(authority, { phase: "lifecycle", ordinal: 0 })).toBeNull();
-        await verifyRetainedArtifactTargetRootRelease(authority);
+        verifyLocalArtifactTargetRootRelease(authority);
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
         );

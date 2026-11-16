@@ -28,6 +28,7 @@ import { createProductionRegistryResourceClaimer } from "../../../../../apps/ops
 import { dispatchOpsOperation } from "../../../../../apps/ops-agent/src/runtime";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
 import { createFileTrustedOpsDataSource } from "../../../../../apps/ops-agent/src/trusted-config-source";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "../../control-targets";
@@ -322,7 +323,7 @@ it.skipIf(
       expect(existsSync(commands) ? readFileSync(commands, "utf8") : "").not.toContain(
         "osrm-extract",
       );
-      expect(control.heldTargets(dirname(data)).includes("osrm")).toBe(false);
+      expect(heldTargets(dirname(data)).includes("osrm")).toBe(false);
       releaseTransit();
       const until = Date.now() + 90000;
       let terminal = await client.status(operation.kind, operationId!);
@@ -353,7 +354,7 @@ it.skipIf(
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(
         host.initial.revisionId,
       );
-      expect(control.heldTargets(dirname(data)).includes("osrm")).toBe(false);
+      expect(heldTargets(dirname(data)).includes("osrm")).toBe(false);
     } catch (error) {
       const witnessProblems: Record<string, string> = {};
       for (const row of await store.listUnsettled()) {

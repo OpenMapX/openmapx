@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -10,7 +9,6 @@ import {
   type LeaseRecord,
   type LeaseSettlement,
   leaseRecordSchema,
-  leaseTargetsSchema,
 } from "../ops/lease-records";
 import { atomicWrite } from "../release-files";
 import { assertOwnDirectory } from "../services/configuration-ownership";
@@ -33,8 +31,6 @@ export const LEASE_STORE_FILE = "leases.json";
 export const LEASE_STORE_LOCK = "leases.lock";
 const MAX_LEASES = 256;
 
-/** The store's lock is held by another live writer past the wait. */
-export { LockBusyError as LeaseStoreBusyError } from "../services/recoverable-lock";
 export type { LeaseChild, LeaseRecord, LeaseSettlement };
 
 const storeSchema = z.strictObject({
@@ -136,42 +132,6 @@ export function openLeaseStore(options: {
 
 export function leaseStoreDirectory(infraDir: string): string {
   return join(infraDir, "state", "ops-agent");
-}
-
-/** Every target some lease in the installation's store holds, read without the lock. */
-export function heldTargets(infraDir: string): string[] {
-  return [
-    ...new Set(
-      readStore(join(leaseStoreDirectory(infraDir), LEASE_STORE_FILE)).flatMap(
-        (lease) => lease.targets,
-      ),
-    ),
-  ].sort();
-}
-
-/** Creates a held lease for `owner`, or refuses with the first holder named. */
-export function admitLease(
-  leases: LeaseRecord[],
-  input: { owner: ExecutionRef; ownerKind: string; targets: readonly string[]; now: number },
-): LeaseRecord {
-  const targets = leaseTargetsSchema.parse([...new Set(input.targets)].sort());
-  if (leases.some((lease) => lease.owner.operationKey === input.owner.operationKey))
-    throw new Error("Execution already acquired a root lease; reconcile its original identity");
-  for (const target of targets) {
-    const holder = leases.find((lease) => lease.targets.includes(target));
-    if (holder) throw new TargetBusyError(target, holder);
-  }
-  const record: LeaseRecord = {
-    leaseId: randomUUID(),
-    owner: input.owner,
-    ownerKind: input.ownerKind,
-    targets,
-    state: "held",
-    children: [],
-    createdAt: input.now,
-  };
-  leases.push(record);
-  return record;
 }
 
 /**

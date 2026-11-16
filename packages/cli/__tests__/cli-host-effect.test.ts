@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../core/src/build-artifacts/__fixtures__/held-targets";
 import { dockerDaemonReachable } from "../src/lib/docker";
 import { leasedHostEffect, withHostTargets } from "../src/lib/host-effect";
 
@@ -32,7 +33,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   rmSync(root, { recursive: true, force: true });
 });
-const held = () => control.heldTargets(infraDir);
+const held = () => heldTargets(infraDir);
 
 describe("host effects under a lease", () => {
   it("holds the targets while the effect runs and releases them after", async () => {

@@ -14,6 +14,7 @@ import * as control from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { heldTargets } from "../../core/src/build-artifacts/__fixtures__/held-targets";
 import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { renderComposeForRepo } from "../src/commands/compose";
 import { registerServicesCommands } from "../src/commands/services";
@@ -132,7 +133,7 @@ async function retainedReceipt() {
   return receipts[0]!;
 }
 function targetLocks() {
-  return control.heldTargets(join(root, "infra/docker"));
+  return heldTargets(join(root, "infra/docker"));
 }
 /** A selection whose rendered hardlink plan has one entry, so a Start issues a child to data-manager. */
 async function renderWithHardlinkPlan() {

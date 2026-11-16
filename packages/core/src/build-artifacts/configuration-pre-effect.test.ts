@@ -32,7 +32,7 @@ import {
   acquireArtifactTargetLease,
   releaseArtifactTargetLease,
   settleArtifactTargetLeaseChild,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 let root: string, installation: ReturnType<typeof openControlInstallation>;
@@ -115,7 +115,7 @@ it("settles the actual unissued root and consumes only its indexed not-started e
     verifyControlEffectSettlement(installation, owner.execution),
   );
   await releaseArtifactTargetLease(lease);
-  await verifyRetainedArtifactTargetRootRelease(owner);
+  verifyLocalArtifactTargetRootRelease(owner);
   expect(() => beginControlEffect(owner)).toThrow();
 });
 it.each(["begun", "bound", "issued"])(
@@ -149,7 +149,7 @@ it.each(["begun", "bound", "issued"])(
     }
     expect(() => retainConfigurationPreEffectRefusal(owner)).toThrow();
     expect(() => inspectConfigurationPreEffectRefusal(owner)).toThrow();
-    await expect(verifyRetainedArtifactTargetRootRelease(owner)).rejects.toThrow();
+    expect(() => verifyLocalArtifactTargetRootRelease(owner)).toThrow();
     expect(
       openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })
         .list()

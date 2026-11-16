@@ -15,7 +15,6 @@ import {
   closeControlInstallation,
   controlDigest,
   executionAuthorityState,
-  LeaseStoreBusyError,
   openFixedChildInstallation,
   readConfigurationHandoffSpawnIntent,
   readPrivateRecord,
@@ -30,6 +29,7 @@ import {
   verifyFixedCliControlPeer,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson, type ExecutionRef, executionRefSchema } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import {
   type ConfigurationHandoffIntentRecord,
   configurationHandoffRecordDomains,
@@ -50,7 +50,7 @@ const children = new WeakMap<
   }
 >();
 function sourceReadBusy(error: unknown): boolean {
-  return error instanceof LeaseStoreBusyError;
+  return error instanceof services.LockBusyError;
 }
 /** Retry only the caller's certified pre-write contention. The original
  * deadline remains authoritative; no lock is removed or stolen. */
@@ -145,7 +145,7 @@ export async function openConfigurationHandoffChild(input: {
           serviceIds: intent.operation.serviceIds,
         }),
       // Any other error may follow partial adoption and is never retried.
-      (error) => error instanceof LeaseStoreBusyError,
+      (error) => error instanceof services.LockBusyError,
     );
     const authority = retainAdmittedControlExecution(installation, {
       execution,

@@ -446,7 +446,7 @@ it.skipIf(
       const pending = await store.inspect(id);
       expect(pending?.status.status).toBe("cancel_pending");
       expect(pending?.finishedAt).toBeNull();
-      expect(control.heldTargets(root).includes("motis")).toBe(true);
+      expect(heldTargets(root).includes("motis")).toBe(true);
       send({ type: "probe" });
       expect(await next()).toMatchObject({
         forward: false,
@@ -464,7 +464,7 @@ it.skipIf(
         changed: true,
       });
       await expect
-        .poll(() => control.heldTargets(root).includes("motis"), {
+        .poll(() => heldTargets(root).includes("motis"), {
           timeout: 10000,
         })
         .toBe(false);
@@ -511,6 +511,7 @@ it.skipIf(
 import { readFileSync, renameSync, statSync } from "node:fs";
 import { startDataExecution } from "@openmapx/core/data-manager-sdk";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { createCandidateManifest } from "../transitous/candidate.js";
 import { retainTransitPhaseCandidate, runTransitOwnedPhase } from "../transitous/owned-ops.js";
 import { buildJobContext } from "../transitous/pipeline.js";
@@ -1141,7 +1142,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       const jobs = JSON.parse(readFileSync(join(root, "state/ops-agent/jobs-v1.json"), "utf8"));
       expect(JSON.stringify(jobs)).toContain(bound.execution.operationKey);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
-      expect(control.heldTargets(dirname(data)).includes("motis-feed-proxy")).toBe(true);
+      expect(heldTargets(dirname(data)).includes("motis-feed-proxy")).toBe(true);
       // No POST is sent to the restarted process; original admission remains.
     } finally {
       await first?.close();

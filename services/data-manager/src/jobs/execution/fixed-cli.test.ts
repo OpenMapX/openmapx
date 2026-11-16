@@ -30,6 +30,7 @@ import {
 import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
 import { createUnavailableRuntime } from "../../../../../apps/ops-agent/src/runtime";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
+import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { StateStore } from "../../state";
@@ -245,7 +246,7 @@ it.skipIf(
         rows[0]!.execution,
         rows[0]!.status,
       );
-      expect(control.heldTargets(dirname(data)).includes("data-manager")).toBe(false);
+      expect(heldTargets(dirname(data)).includes("data-manager")).toBe(false);
     } finally {
       await runtime.close();
       agent.server.closeAllConnections();
