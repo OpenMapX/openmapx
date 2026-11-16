@@ -162,4 +162,34 @@ describe("assertCliDeploymentSecrets", () => {
       expect((error as Error).message).not.toContain(rejected);
     }
   });
+
+  it("leaves the geocoder's password to deployments that set it", () => {
+    expect(() =>
+      assertCliDeploymentSecrets({
+        ...env,
+        NOMINATIM_DB_PASSWORD: "n".repeat(POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH),
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects a weak geocoder password by name without revealing it", () => {
+    expect.assertions(2);
+    const rejected = "short-geocoder-fixture";
+    try {
+      assertCliDeploymentSecrets({ ...env, NOMINATIM_DB_PASSWORD: rejected });
+    } catch (error) {
+      expect((error as Error).message).toMatch(/NOMINATIM_DB_PASSWORD.*too-short/);
+      expect((error as Error).message).not.toContain(rejected);
+    }
+  });
+
+  it("rejects a geocoder password that repeats the superuser's", () => {
+    expect.assertions(2);
+    try {
+      assertCliDeploymentSecrets({ ...env, NOMINATIM_DB_PASSWORD: env.POSTGRES_PASSWORD });
+    } catch (error) {
+      expect((error as Error).message).toMatch(/NOMINATIM_DB_PASSWORD.*matches-superuser-password/);
+      expect((error as Error).message).not.toContain(env.POSTGRES_PASSWORD);
+    }
+  });
 });

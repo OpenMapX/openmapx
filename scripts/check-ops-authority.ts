@@ -70,6 +70,8 @@ const DATABASE_ROLE_OF_SERVICE: Readonly<Record<string, { role: string; password
   },
 };
 const SUPERUSER_DATABASE_URL = /postgres(?:ql)?:\/\/postgres[:@]/;
+/** A Compose reference to the superuser's password: `$POSTGRES_PASSWORD` or `${POSTGRES_PASSWORD…}`. */
+const SUPERUSER_PASSWORD_REFERENCE = /\$\{?POSTGRES_PASSWORD(?![A-Za-z0-9_])/;
 
 /** `$OPENMAPX_HOST_DIR`, `${OPENMAPX_HOST_DIR}` or `${OPENMAPX_HOST_DIR:?…}`, then the rest of the path. */
 const HOST_DIR_SOURCE =
@@ -307,6 +309,13 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
       violations.push({
         file,
         detail: `service "${serviceId}" connects to PostgreSQL as the superuser`,
+      });
+    // Nor does any other service receive its password, under any name: a
+    // service with its own database (Nominatim) gets its own password.
+    if (serviceId !== "postgis" && SUPERUSER_PASSWORD_REFERENCE.test(text))
+      violations.push({
+        file,
+        detail: `service "${serviceId}" receives the PostgreSQL superuser password`,
       });
     // A missing URL would fall back to the code's superuser default.
     const database = DATABASE_ROLE_OF_SERVICE[serviceId];
