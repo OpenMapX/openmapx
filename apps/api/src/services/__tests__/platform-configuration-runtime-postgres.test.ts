@@ -1849,7 +1849,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                               verifyLocalArtifactTargetRootRelease(
                                 restoreAdmittedControlExecution(installation, owner.plan.prepare),
                               ),
-                            ).rejects.toThrow();
+                            ).toThrow();
                             return;
                           }
                           if (version === "launch-native-killed") {
@@ -1877,7 +1877,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                               verifyLocalArtifactTargetRootRelease(
                                 restoreAdmittedControlExecution(installation, owner.plan.prepare),
                               ),
-                            ).rejects.toThrow();
+                            ).toThrow();
                             const { inspectConfigurationHandoff } = await import(
                                 "../../../../ops-agent/src/configuration-handoff-store"
                               ),
