@@ -1362,12 +1362,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   .map(String)
                   .sort()
                   .map((name) => {
-                    const path = join(directory, name),
-                      stat = statSync(path);
-                    return [
-                      `${base}/${name}`,
-                      `${stat.dev}:${stat.ino}:${stat.mode}:${stat.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : "directory"}`,
-                    ];
+                    const fd = filesystem.openSync(join(directory, name), "r");
+                    try {
+                      const stat = filesystem.fstatSync(fd);
+                      return [
+                        `${base}/${name}`,
+                        `${stat.dev}:${stat.ino}:${stat.mode}:${stat.isFile() ? createHash("sha256").update(readFileSync(fd)).digest("hex") : "directory"}`,
+                      ];
+                    } finally {
+                      filesystem.closeSync(fd);
+                    }
                   });
               }),
             ),
@@ -1444,12 +1448,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .map(String)
                 .sort()
                 .map((name) => {
-                  const path = join(directory, name),
-                    stat = statSync(path);
-                  return [
-                    `${base}/${name}`,
-                    `${stat.dev}:${stat.ino}:${stat.mode}:${stat.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : "directory"}`,
-                  ];
+                  const fd = filesystem.openSync(join(directory, name), "r");
+                  try {
+                    const stat = filesystem.fstatSync(fd);
+                    return [
+                      `${base}/${name}`,
+                      `${stat.dev}:${stat.ino}:${stat.mode}:${stat.isFile() ? createHash("sha256").update(readFileSync(fd)).digest("hex") : "directory"}`,
+                    ];
+                  } finally {
+                    filesystem.closeSync(fd);
+                  }
                 });
             }),
           ),

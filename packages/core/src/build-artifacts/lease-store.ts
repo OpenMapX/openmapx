@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
@@ -78,13 +78,19 @@ export interface LeaseStore {
 
 function readStore(path: string): LeaseRecord[] {
   let text: string;
+  let fd: number | undefined;
   try {
-    const stats = lstatSync(path);
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const stats = fstatSync(fd);
     if (!stats.isFile() || stats.size > 8 * 1024 * 1024) throw new Error("Unsafe lease store file");
-    text = readFileSync(path, "utf8");
+    text = readFileSync(fd, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return [];
+    if (code === "ELOOP") throw new Error("Unsafe lease store file");
     throw error;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
   return storeSchema.parse(JSON.parse(text)).leases;
 }
