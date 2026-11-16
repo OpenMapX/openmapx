@@ -25,6 +25,7 @@ import {
 } from "serwist";
 import { createNavigationRuntimeRoute } from "./lib/serviceWorkerNavigation";
 import {
+  APP_SHELL_CACHE_PREFIX,
   isDirectionsApiPath,
   isMapLibreRuntimeAssetPath,
   isNetworkOnlyApiPath,
@@ -53,7 +54,7 @@ declare const __SW_BUILD_ID__: string;
 declare const __MAPLIBRE_VERSION__: string;
 
 const OFFLINE_URL = STATIC_OFFLINE_FALLBACK_URL;
-const APP_SHELL_CACHE = `app-shell-${__SW_BUILD_ID__}`;
+const APP_SHELL_CACHE = `${APP_SHELL_CACHE_PREFIX}${__SW_BUILD_ID__}`;
 // Map-style assets (style JSON / sprite / TileJSON) are versioned by build id
 // too, so a deploy that changes the self-hosted style serves the new one on the
 // next load instead of the worker's stale copy. Old style caches are pruned on
