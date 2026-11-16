@@ -2,7 +2,6 @@
 
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
-import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
@@ -323,22 +322,6 @@ export function SavedListDetail() {
             }}
           >
             {t("share")}
-          </Button>
-          <Button
-            startIcon={<AddIcon sx={{ fontSize: 18 }} />}
-            sx={{
-              borderRadius: 24,
-              bgcolor: BRAND_LIGHT,
-              color: BRAND,
-              textTransform: "none",
-              fontWeight: 500,
-              fontSize: 13,
-              px: 2,
-              py: 0.75,
-              "&:hover": { bgcolor: BRAND_LIGHT, filter: "brightness(0.95)" },
-            }}
-          >
-            {t("addPlace")}
           </Button>
         </Box>
       </Box>
