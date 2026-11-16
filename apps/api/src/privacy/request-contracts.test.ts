@@ -15,7 +15,11 @@ import {
 } from "@openmapx/core/privacy";
 import { describe, expect, it } from "vitest";
 import { PrivacyRequestError } from "./errors.js";
-import { assertValidRequestTransition, createSubjectRequestSchema } from "./request-contracts.js";
+import {
+  assertValidRequestTransition,
+  createSubjectRequestSchema,
+  selfServiceExportSchema,
+} from "./request-contracts.js";
 
 /** The owner-approved table, written out independently of the implementation. */
 const ALLOWED = new Set([
@@ -114,5 +118,26 @@ describe("subject request intake", () => {
         representative: { contactType: "email", contact: "b@example.test" },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("time zone intake", () => {
+  it.each(["Not/AZone", "UTC; DROP TABLE x", "------"])("rejects %j", (timeZone) => {
+    expect(selfServiceExportSchema.safeParse({ timeZone }).success).toBe(false);
+    expect(
+      createSubjectRequestSchema.safeParse({
+        channel: "self_service",
+        userId: "user-1",
+        timeZone,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each(["UTC", "Europe/Berlin", "America/New_York"])("accepts %s", (timeZone) => {
+    expect(selfServiceExportSchema.parse({ timeZone }).timeZone).toBe(timeZone);
+  });
+
+  it("defaults to UTC", () => {
+    expect(selfServiceExportSchema.parse({}).timeZone).toBe("UTC");
   });
 });

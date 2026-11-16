@@ -1,5 +1,15 @@
 import { Temporal } from "@js-temporal/polyfill";
 
+/** True when Temporal, which computes the deadline, accepts `timeZone`. */
+export function isSupportedTimeZone(timeZone: string): boolean {
+  try {
+    Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timeZone);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Calculate the Article 15 deadline as one calendar month in the controller's
  * timezone. A duration of 30 days is deliberately not used: the statutory
@@ -10,10 +20,7 @@ export function calculateSubjectRequestDueAt(receivedAt: Date, timeZone: string)
     throw new RangeError("receivedAt must be a valid Date");
   }
   const zone = timeZone;
-  try {
-    // Temporal validates the IANA name while converting the instant.
-    Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timeZone);
-  } catch {
+  if (!isSupportedTimeZone(timeZone)) {
     throw new RangeError("timeZone must be a valid IANA time zone");
   }
   const instant = Temporal.Instant.fromEpochMilliseconds(receivedAt.getTime());
