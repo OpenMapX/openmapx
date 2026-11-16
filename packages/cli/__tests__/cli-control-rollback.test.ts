@@ -123,8 +123,8 @@ describe("rollback plan", () => {
     const plan = planRollback(infraDir);
     expect(plan).toMatchObject({ currentRevisionId: third, targetRevisionId: first });
     expect(second).not.toBe(third);
-    expect(plan.current?.manifest.release).toBe("release-2");
-    expect(plan.target?.manifest.release).toBe("release-1");
+    expect(plan.current.manifest.release).toBe("release-2");
+    expect(plan.target.manifest.release).toBe("release-1");
   });
 
   it("refuses when every retained configuration pins the applied release", async () => {
@@ -132,20 +132,29 @@ describe("rollback plan", () => {
     await render(["alpha", "app-api"], manifest("release-1", "1", 100));
     expect(() => planRollback(infraDir)).toThrow(/none is retained/);
   });
+
+  it("skips a configuration left without pins by clearing the pin", async () => {
+    const first = await render(["alpha"], manifest("release-1", "1", 100));
+    await render(["alpha"], manifest("release-2", "2", 200));
+    await render(["alpha"], null);
+    expect(() => planRollback(infraDir)).toThrow(/applied configuration pins no release/);
+    const current = await render(["alpha"], manifest("release-2", "2", 200));
+    expect(planRollback(infraDir)).toMatchObject({
+      currentRevisionId: current,
+      targetRevisionId: first,
+    });
+  });
 });
 
 describe("the database check", () => {
   const plan = (
-    target: services.ReleaseManifest | null,
-    current: services.ReleaseManifest | null = manifest("release-2", "2", 200),
+    target: services.ReleaseManifest,
+    current: services.ReleaseManifest = manifest("release-2", "2", 200),
   ): RollbackPlan => ({
     currentRevisionId: `cfg1_${"b".repeat(43)}`,
     targetRevisionId: `cfg1_${"a".repeat(43)}`,
-    current: current && {
-      manifest: current,
-      manifestDigest: services.releaseManifestDigest(current),
-    },
-    target: target && { manifest: target, manifestDigest: services.releaseManifestDigest(target) },
+    current: { manifest: current, manifestDigest: services.releaseManifestDigest(current) },
+    target: { manifest: target, manifestDigest: services.releaseManifestDigest(target) },
   });
 
   it("refuses when the database has a migration newer than the target release's newest", () => {
@@ -166,8 +175,7 @@ describe("the database check", () => {
     ).not.toThrow();
   });
 
-  it("refuses a target that pins no release or records no migration head", () => {
-    expect(() => assertDatabaseAllowsRollback(plan(null), 1)).toThrow(/pins no release/);
+  it("refuses a target that records no migration head", () => {
     expect(() => assertDatabaseAllowsRollback(plan(manifest("release-1", "1")), 1)).toThrow(
       /records no database migration head/,
     );

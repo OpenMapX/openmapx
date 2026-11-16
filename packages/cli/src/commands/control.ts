@@ -311,10 +311,10 @@ export function registerControlCommands(program: Command): void {
       const infraDir = repoPaths().infraDir;
       const plan = planRollback(infraDir);
       log.info(
-        `Applied configuration: ${plan.currentRevisionId} (release ${plan.current?.manifest.release ?? "none"})`,
+        `Applied configuration: ${plan.currentRevisionId} (release ${plan.current.manifest.release})`,
       );
       log.info(
-        `Configuration applied with the previous release: ${plan.targetRevisionId} (release ${plan.target?.manifest.release ?? "none"})`,
+        `Configuration applied with the previous release: ${plan.targetRevisionId} (release ${plan.target.manifest.release})`,
       );
       log.warn(
         "Rolling back returns to that configuration and reverts every configuration change made since: the release selection, the selected services, service configuration and secrets. Services it does not select keep running; stop them with `pnpm openmapx services stop <id>`.",

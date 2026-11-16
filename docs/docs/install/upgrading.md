@@ -512,9 +512,11 @@ pnpm openmapx control rollback --yes  # roll back
 
 The target is the newest retained configuration generation that pins another
 release than the applied one, so a rollback always changes the release; renders
-and configuration saves made since the update do not move it. The command refuses
-when no such generation is retained: no release update was applied, or its
-generation was pruned (sixteen generations are kept).
+and configuration saves made since the update do not move it. Generations left
+without pins by clearing the release pin are skipped, and the command refuses
+while the applied generation pins no release. It also refuses when no such
+generation is retained: no release update was applied, or its generation was
+pruned (sixteen generations are kept).
 
 Check out the target release's source first (step 2 of the upgrade, in reverse).
 The render compares the checkout's built-in service files with the release's and
@@ -538,8 +540,7 @@ The command refuses when the database has a newer migration than the previous
 release ships. The migrator only applies migrations newer than the newest applied
 one, so an older API would otherwise run against a newer schema without complaint.
 CI records each release's newest migration in its release manifest; a release
-published before that, or a previous configuration without pins, cannot be
-checked and is refused too. In those cases, restore the backup taken before the
+published before that cannot be checked and is refused too. In those cases, restore the backup taken before the
 update. PostGIS must be running so that the command can read the database's
 migrations. A rollback is itself a release change, so a second rollback returns to
 the configuration you rolled back from.

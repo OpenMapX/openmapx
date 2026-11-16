@@ -4,8 +4,8 @@ import { dockerCompose } from "./docker";
 export interface RollbackPlan {
   currentRevisionId: string;
   targetRevisionId: string;
-  current: services.GenerationRelease | null;
-  target: services.GenerationRelease | null;
+  current: services.GenerationRelease;
+  target: services.GenerationRelease;
 }
 
 /**
@@ -16,17 +16,17 @@ export function planRollback(infraDir: string): RollbackPlan {
   const currentRevisionId = services.currentConfigurationGeneration(infraDir);
   if (!currentRevisionId) throw new Error("No configuration has been applied yet");
   const current = services.readGenerationRelease(infraDir, currentRevisionId);
-  const targetRevisionId = services.readPreviousReleaseGeneration(infraDir, currentRevisionId);
-  if (!targetRevisionId)
+  if (!current)
     throw new Error(
-      `No retained configuration pins another release than the applied one (${current?.manifest.release ?? "no release"}). Rollback returns to the configuration applied with the previous release, and none is retained: no release update was applied, or its configuration was pruned.`,
+      "The applied configuration pins no release, and rollback compares releases. Pin one with `openmapx compose release` first.",
     );
-  return {
-    currentRevisionId,
-    targetRevisionId,
-    current,
-    target: services.readGenerationRelease(infraDir, targetRevisionId),
-  };
+  const targetRevisionId = services.readPreviousReleaseGeneration(infraDir, currentRevisionId);
+  const target = targetRevisionId && services.readGenerationRelease(infraDir, targetRevisionId);
+  if (!targetRevisionId || !target)
+    throw new Error(
+      `No retained configuration pins another release than the applied one (${current.manifest.release}). Rollback returns to the configuration applied with the previous release, and none is retained: no release update was applied, or its configuration was pruned.`,
+    );
+  return { currentRevisionId, targetRevisionId, current, target };
 }
 
 /**
@@ -40,10 +40,6 @@ export function assertDatabaseAllowsRollback(
   plan: RollbackPlan,
   newestAppliedMigration: number | null,
 ): void {
-  if (!plan.target)
-    throw new Error(
-      "The previous configuration pins no release, so the database migrations its images expect are unknown. Rollback refuses; restore a backup taken before the update instead.",
-    );
   const head = plan.target.manifest.databaseMigrationHead;
   if (!head)
     throw new Error(

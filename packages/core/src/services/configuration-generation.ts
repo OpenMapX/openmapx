@@ -941,12 +941,14 @@ export function readAppliedRelease(infraDir: string): GenerationRelease | null {
 
 /**
  * The newest retained generation, other than `revisionId`, that pins another
- * release than it does, or null when none is retained: the configuration that
- * was applied with the previous release. A generation's age is that of its
- * rendered files, which are never written again.
+ * release than it does, or null when none is retained or `revisionId` pins
+ * none: the configuration that was applied with the previous release.
+ * Generations without pins, left by clearing the pin, are skipped. A
+ * generation's age is that of its rendered files, which are never written again.
  */
 export function readPreviousReleaseGeneration(infraDir: string, revisionId: string): string | null {
-  const digest = readGenerationRelease(infraDir, revisionId)?.manifestDigest ?? null;
+  const digest = readGenerationRelease(infraDir, revisionId)?.manifestDigest;
+  if (!digest) return null;
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   const candidates = readdirSync(generations)
     .filter((name) => REVISION.test(name) && name !== revisionId)
@@ -955,8 +957,10 @@ export function readPreviousReleaseGeneration(infraDir: string, revisionId: stri
       writtenAt: lstatSync(join(generations, name, RESOLVED_CONFIG_FILE)).mtimeMs,
     }))
     .sort((a, b) => b.writtenAt - a.writtenAt || a.name.localeCompare(b.name));
-  for (const { name } of candidates)
-    if ((readGenerationRelease(infraDir, name)?.manifestDigest ?? null) !== digest) return name;
+  for (const { name } of candidates) {
+    const other = readGenerationRelease(infraDir, name)?.manifestDigest;
+    if (other && other !== digest) return name;
+  }
   return null;
 }
 
