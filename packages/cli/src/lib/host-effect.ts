@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { agentStoreLeases, TargetBusyError } from "@openmapx/core/build-artifacts";
+import { admitRootLease, agentStoreLeases, TargetBusyError } from "@openmapx/core/build-artifacts";
 import {
   canonicalJson,
   createControlRootOperationKey,
@@ -66,7 +66,7 @@ export async function withHostTargets<T>(
   };
   let lease: Awaited<ReturnType<typeof leases.acquire>>;
   try {
-    lease = await leases.acquire({ owner, ownerKind: input.kind, targets: body.targets });
+    lease = await admitRootLease(leases, { owner, ownerKind: input.kind, targets: body.targets });
   } catch (error) {
     if (error instanceof TargetBusyError) throw new HostTargetsBusyError(error.message);
     throw error;

@@ -918,11 +918,16 @@ describe("one admission path for target effects", () => {
         ["service.restart", "denied"],
         ["service.remove", "denied"],
       ]);
-      // Another target is free.
+      // Another target is free, and admits while a refusal still spends its grace.
+      const graced = submit({ kind: "service.restart", serviceId: "redis" }, "leasedGrace0000");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const started = Date.now();
       expect(
         (await submit({ kind: "service.restart", serviceId: "osrm" }, "leasedOther0000"))
           .statusCode,
       ).toBe(202);
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect((await graced).statusCode).toBe(409);
       release();
       await eventually(
         async () => leaseStore.list(),
@@ -938,7 +943,7 @@ describe("one admission path for target effects", () => {
       control.closeControlInstallation(installation);
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 40_000);
 
   it("drops the lease of an update whose configuration revision is no longer current", async () => {
     const control = await import("@openmapx/core/build-artifacts");

@@ -2,7 +2,6 @@ import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "nod
 import {
   abandonUnstartedLease,
   acquireArtifactTargetLease,
-  admitRootLease,
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseForward,
   assertControlStorageAvailable,
@@ -369,6 +368,26 @@ class RequestGuardError extends Error {
     readonly busyHolder?: string,
   ) {
     super(errorClass);
+  }
+}
+
+/** A held target at the first admission attempt; the admission is tried again after a grace. */
+class BusyAdmission extends Error {
+  constructor(readonly target: string) {
+    super("Target is busy");
+  }
+}
+
+/** Waits until no lease holds `target`, or until `until`. */
+async function waitForTargetRelease(
+  store: LeaseStore,
+  target: string,
+  until: number,
+  signal: AbortSignal,
+): Promise<void> {
+  while (Date.now() < until && store.list().some((lease) => lease.targets.includes(target))) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    signal.throwIfAborted();
   }
 }
 
@@ -2595,7 +2614,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
 
         if (policy.execution === "async") {
           const ownerKey = `${role}:${parsed.operationKey}`;
-          const admission = await withAdmissionLock(async () => {
+          // A held target is retried once, after a short grace spent outside the
+          // admission lock, so a holder that is finishing can release meanwhile.
+          let graceSpent = false;
+          const admit = async () => {
             const retained = jobsByKey.get(ownerKey);
             if (retained) {
               if (!matchesRetained(retained)) {
@@ -2835,18 +2857,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               if (!admissionFailure && LEASED_KINDS.has(operation.kind) && options.leaseStore)
                 try {
                   admittedLease = (
-                    await admitRootLease(
-                      localLeaseBackend(options.leaseStore),
-                      {
-                        owner: executionFor(job),
-                        ownerKind: operation.kind,
-                        targets: operation.kind.startsWith("valhalla.") ? ["valhalla"] : targets,
-                      },
-                      claimController.signal,
-                    )
+                    await localLeaseBackend(options.leaseStore).acquire({
+                      owner: executionFor(job),
+                      ownerKind: operation.kind,
+                      targets: operation.kind.startsWith("valhalla.") ? ["valhalla"] : targets,
+                    })
                   ).leaseId;
                 } catch (error) {
                   if (!(error instanceof TargetBusyError)) admissionFailure = { error };
+                  else if (!graceSpent) throw new BusyAdmission(error.target);
                   else {
                     options.audit?.({
                       role,
@@ -3020,15 +3039,28 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               }
             }
             return { type: "new", job } as const;
-          }).catch(async (error) => {
-            await claimAdmission?.rollback().catch(() => undefined);
-            active -= 1;
-            throw error instanceof RequestGuardError
-              ? error
-              : error instanceof TargetBusyError
-                ? new RequestGuardError("busy", 409, error.message)
-                : new RequestGuardError("runtime", 500);
-          });
+          };
+          const admission = await withAdmissionLock(admit)
+            .catch(async (error) => {
+              if (!(error instanceof BusyAdmission) || !options.leaseStore) throw error;
+              await waitForTargetRelease(
+                options.leaseStore,
+                error.target,
+                Math.min(Date.now() + 5000, normalized.deadlineAt),
+                claimController.signal,
+              );
+              graceSpent = true;
+              return withAdmissionLock(admit);
+            })
+            .catch(async (error) => {
+              await claimAdmission?.rollback().catch(() => undefined);
+              active -= 1;
+              throw error instanceof RequestGuardError
+                ? error
+                : error instanceof TargetBusyError
+                  ? new RequestGuardError("busy", 409, error.message)
+                  : new RequestGuardError("runtime", 500);
+            });
           if (admission.type === "retained") {
             await claimAdmission?.rollback().catch(() => undefined);
             active -= 1;
