@@ -45,7 +45,8 @@ function renderGate(
 }
 
 beforeEach(() => {
-  link.mockClear();
+  link.mockReset();
+  link.mockResolvedValue({ data: null, error: null });
 });
 
 describe("linkScopesFor", () => {
@@ -85,6 +86,23 @@ describe("gate states", () => {
         scopes: ["openid", "read_prefs", "write_api"],
       }),
     );
+  });
+
+  it("asks for a new sign-in when the first link is refused for an old sign-in", async () => {
+    window.history.replaceState({}, "", "/place/node%2F12?tab=overview");
+    link.mockResolvedValue({
+      data: null,
+      error: { code: "FRESH_SIGN_IN_REQUIRED", status: 401, statusText: "Unauthorized" },
+    });
+    renderGate({ ...BASE, linked: false, canWriteApi: false, canWriteNotes: false });
+    await userEvent.click(screen.getByText("osmContributions.gateLinkAction"));
+
+    const signIn = await screen.findByText("account.freshSignIn.signInAgain");
+    expect(screen.getByText("account.freshSignIn.notice")).not.toBeNull();
+    expect(signIn.closest("a")?.getAttribute("href")).toBe(
+      `/auth/confirm?return=${encodeURIComponent("/place/node%2F12?tab=overview")}`,
+    );
+    expect(link).toHaveBeenCalledTimes(1);
   });
 
   it("asks for the missing action scope", async () => {

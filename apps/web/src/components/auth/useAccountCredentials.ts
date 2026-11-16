@@ -3,11 +3,9 @@
 import { authClient } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { type AccountMessage, useCredentialRefusalMessage } from "./freshSignIn";
 
-export interface CredentialMessage {
-  type: "success" | "error";
-  text: string;
-}
+export type CredentialMessage = AccountMessage;
 
 interface Passkey {
   id: string;
@@ -30,12 +28,16 @@ function initialState(ownerId: string | null) {
 
 type CredentialState = ReturnType<typeof initialState>;
 
-/** Credential inventory and actions belong to one open-account lifetime, including A→B→A. */
+/**
+ * Credential inventory and actions belong to one open-account lifetime, including A→B→A.
+ * A change the API refuses for an old sign-in asks the person to sign in again and repeat it.
+ */
 export function useAccountCredentials(
   ownerId: string | null,
   onMessage: (message: CredentialMessage | null) => void,
 ) {
   const t = useTranslations("account");
+  const refusalMessage = useCredentialRefusalMessage();
   const loadFailureText = t("unexpectedError");
   const [state, setState] = useState(() => initialState(ownerId));
   if (state.ownerId !== ownerId) setState(initialState(ownerId));
@@ -117,6 +119,9 @@ export function useAccountCredentials(
     lifetime[family]++;
     update((prev) => ({ ...prev, pending: false }));
   };
+  const notifyError = (error: unknown, fallback: string) => {
+    notify(refusalMessage(error) ?? { type: "error", text: fallback });
+  };
 
   const addPasskey = async () => {
     if (state.loadingPasskeys || !begin("passkeysRevision")) return;
@@ -124,7 +129,7 @@ export function useAccountCredentials(
       const { data, error } = await authClient.passkey.addPasskey();
       if (!current()) return;
       if (error || !data) {
-        notify({ type: "error", text: t("failedAddPasskey") });
+        notifyError(error, t("failedAddPasskey"));
         return;
       }
       // The successful plugin response is the new passkey; a failed refetch cannot undo it.
@@ -146,7 +151,7 @@ export function useAccountCredentials(
     try {
       const { error } = await authClient.passkey.deletePasskey({ id });
       if (error) {
-        notify({ type: "error", text: t("failedRemovePasskey") });
+        notifyError(error, t("failedRemovePasskey"));
         return;
       }
       update((prev) => ({ ...prev, passkeys: prev.passkeys.filter((key) => key.id !== id) }));
@@ -168,7 +173,7 @@ export function useAccountCredentials(
       });
       if (!current()) return;
       if (error) {
-        notify({ type: "error", text: t("failedLink", { provider: providerName }) });
+        notifyError(error, t("failedLink", { provider: providerName }));
         return;
       }
       // Keep the server-generated OAuth URL/callback; retire stale responses before navigation.
@@ -186,7 +191,7 @@ export function useAccountCredentials(
     try {
       const { error } = await authClient.unlinkAccount({ accountId: account.id });
       if (error) {
-        notify({ type: "error", text: t("failedUnlink", { provider: providerName }) });
+        notifyError(error, t("failedUnlink", { provider: providerName }));
         return;
       }
       update((prev) => ({

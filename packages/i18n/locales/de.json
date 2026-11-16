@@ -2324,7 +2324,18 @@
     "mangroveCallbackFailed": "Diese Mangrove-Anmeldung konnte nicht verifiziert werden. Starten Sie die Verbindung erneut in OpenMapX.",
     "mangroveReturn": "Zurück zu OpenMapX",
     "mangroveSharedIntro": "Verbinden Sie sich mit Mangrove, um mit derselben Identität auf mehreren Geräten und in mehreren Apps zu bewerten.",
-    "mangroveLocalTitle": "Verschlüsselter lokaler Bewertungsschlüssel"
+    "mangroveLocalTitle": "Verschlüsselter lokaler Bewertungsschlüssel",
+    "freshSignIn": {
+      "notice": "Melden Sie sich zu Ihrer Sicherheit erneut an und wiederholen Sie dann diese Änderung. Ist die Zwei-Faktor-Authentifizierung aktiviert, melden Sie sich mit Ihrem Passwort und dem zweiten Faktor an.",
+      "signInAgain": "Erneut anmelden",
+      "impersonating": "Diese Änderung ist nicht möglich, während Sie als ein anderes Konto angemeldet sind (Identitätswechsel)."
+    },
+    "emailChangeNotice": {
+      "subject": "Ihre E-Mail-Adresse wurde geändert",
+      "description": "Die E-Mail-Adresse Ihres OpenMapX-Kontos wurde auf eine andere Adresse geändert. Nachrichten zu diesem Konto, auch zum Zurücksetzen des Passworts, gehen jetzt an die neue Adresse.",
+      "unexpected": "Falls Sie diese Änderung nicht vorgenommen haben, wenden Sie sich sofort an den Betreiber dieser OpenMapX-Instanz.",
+      "footer": "Sie erhalten diesen Sicherheitshinweis, weil diese Adresse zuvor mit einem OpenMapX-Konto verknüpft war."
+    }
   },
   "auth": {
     "signIn": "Anmelden",

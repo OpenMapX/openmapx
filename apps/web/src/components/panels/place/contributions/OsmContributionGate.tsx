@@ -9,7 +9,12 @@ import Typography from "@mui/material/Typography";
 import type { OsmContributionCapabilities } from "@openmapx/core";
 import { authClient, safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import {
+  type AccountMessage,
+  FreshSignInPrompt,
+  useCredentialRefusalMessage,
+} from "@/components/auth/freshSignIn";
 
 /** The marker the OAuth callback carries back. Deliberately a boolean only. */
 export const OSM_CONTRIBUTE_CALLBACK_PARAM = "osm-contribute";
@@ -58,6 +63,10 @@ export function OsmContributionGate({
   onRetry,
 }: Props) {
   const t = useTranslations("osmContributions");
+  const refusalMessage = useCredentialRefusalMessage();
+  // Linking OpenStreetMap for the first time needs a recent sign-in; more
+  // scopes for an account that is already linked never do.
+  const [refusal, setRefusal] = useState<AccountMessage | null>(null);
 
   if (isLoading) {
     return (
@@ -81,16 +90,26 @@ export function OsmContributionGate({
   }
 
   const authorize = async () => {
-    await authClient.linkSocial({
+    setRefusal(null);
+    const { error } = await authClient.linkSocial({
       provider: "openstreetmap",
       callbackURL: callbackUrlFor(window.location.href),
       scopes: linkScopesFor(intent),
     });
+    if (error) setRefusal(refusalMessage(error));
   };
+
+  const refusalNotice =
+    refusal?.type === "fresh-sign-in" ? (
+      <FreshSignInPrompt returnPath={refusal.returnPath} />
+    ) : refusal ? (
+      <Alert severity="error">{refusal.text}</Alert>
+    ) : null;
 
   if (!capabilities.linked) {
     return (
       <Panel title={t("gateLinkTitle")} body={t("gateLinkBody")}>
+        {refusalNotice}
         {hasUnsentInput && <Alert severity="warning">{t("gateDiscardWarning")}</Alert>}
         <Button variant="contained" onClick={authorize} sx={{ minHeight: 44 }}>
           {t("gateLinkAction")}
@@ -112,6 +131,7 @@ export function OsmContributionGate({
   if (!accountDescribed) {
     return (
       <Panel title={t("gateScopeTitle")} body={t("gateScopeBody")}>
+        {refusalNotice}
         {hasUnsentInput && <Alert severity="warning">{t("gateDiscardWarning")}</Alert>}
         <Button variant="contained" onClick={authorize} sx={{ minHeight: 44 }}>
           {t("gateScopeAction")}
@@ -165,6 +185,7 @@ export function OsmContributionGate({
         title={t("gateScopeTitle")}
         body={intent === "edit" ? t("gateScopeBody") : t("gateScopeNoteBody")}
       >
+        {refusalNotice}
         {hasUnsentInput && <Alert severity="warning">{t("gateDiscardWarning")}</Alert>}
         <Button variant="contained" onClick={authorize} sx={{ minHeight: 44 }}>
           {t("gateScopeAction")}

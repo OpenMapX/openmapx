@@ -42,6 +42,7 @@ import {
 } from "@/integration-api/runtime/useFullScreenOnMobile";
 import { clearPrivateDeviceData } from "@/lib/accountDeletionCleanup";
 import type { AccountSettingsSection } from "@/stores/accountSettingsStore";
+import { type AccountMessage, FreshSignInPrompt, useCredentialRefusalMessage } from "./freshSignIn";
 import { MangroveAccountSection } from "./MangroveAccountSection";
 import { PrivacyDataSection } from "./PrivacyDataSection";
 import { SharedLinksSection } from "./SharedLinksSection";
@@ -74,10 +75,8 @@ export function AccountSettingsDialog({
   const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
   const [name, setName] = useState(user.name);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [message, setMessage] = useState<AccountMessage | null>(null);
+  const refusalMessage = useCredentialRefusalMessage();
   const {
     passkeys,
     linkedAccounts,
@@ -91,7 +90,6 @@ export function AccountSettingsDialog({
     unlinkProvider: handleUnlinkProvider,
   } = useAccountCredentials(open ? user.id : null, setMessage);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deletePassword, setDeletePassword] = useState("");
   const timelineHeadingRef = useRef<HTMLHeadingElement>(null);
   const sharingHeadingRef = useRef<HTMLHeadingElement>(null);
   const privacyHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -160,7 +158,6 @@ export function AccountSettingsDialog({
       setName(user.name);
       setMessage(null);
       setConfirmDelete(false);
-      setDeletePassword("");
       setChangingEmail(false);
       setNewEmail("");
       setEmailOtp("");
@@ -263,10 +260,12 @@ export function AccountSettingsDialog({
       });
       if (!owned()) return;
       if (error) {
-        publishEmailMessage({
-          type: "error",
-          text: String(error.message ?? t("failedEmailChange")),
-        });
+        publishEmailMessage(
+          refusalMessage(error) ?? {
+            type: "error",
+            text: String(error.message ?? t("failedEmailChange")),
+          },
+        );
         return;
       }
       setEmailOtpSent(true);
@@ -288,10 +287,12 @@ export function AccountSettingsDialog({
       });
       if (!owned()) return;
       if (error) {
-        publishEmailMessage({
-          type: "error",
-          text: String(error.message ?? t("failedChangeEmail")),
-        });
+        publishEmailMessage(
+          refusalMessage(error) ?? {
+            type: "error",
+            text: String(error.message ?? t("failedChangeEmail")),
+          },
+        );
         return;
       }
       publishEmailMessage({ type: "success", text: t("emailUpdated") });
@@ -438,15 +439,13 @@ export function AccountSettingsDialog({
     URL.revokeObjectURL(url);
   };
 
-  const hasCredential = linkedAccounts.some((a) => a.providerId === "credential");
-
+  // A recent sign-in confirms the deletion for every kind of account, so no
+  // password is asked for here.
   const handleDeleteAccount = async () => {
     try {
-      const { error } = await authClient.deleteUser(
-        hasCredential ? { password: deletePassword } : { callbackURL: "/" },
-      );
+      const { error } = await authClient.deleteUser({});
       if (error) {
-        setMessage({ type: "error", text: t("failedDeleteAccount") });
+        setMessage(refusalMessage(error) ?? { type: "error", text: t("failedDeleteAccount") });
         return;
       }
       await clearPrivateDeviceData({ queryClient });
@@ -478,10 +477,16 @@ export function AccountSettingsDialog({
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        {message && (
-          <Alert severity={message.type} sx={{ mb: 2 }}>
-            {message.text}
-          </Alert>
+        {message?.type === "fresh-sign-in" ? (
+          <Box sx={{ mb: 2 }}>
+            <FreshSignInPrompt returnPath={message.returnPath} />
+          </Box>
+        ) : (
+          message && (
+            <Alert severity={message.type} sx={{ mb: 2 }}>
+              {message.text}
+            </Alert>
+          )
         )}
 
         {/* Profile Section */}
@@ -1192,35 +1197,11 @@ export function AccountSettingsDialog({
             <Typography variant="body2" color="error" sx={{ mb: 1 }}>
               {t("deleteAccountWarning")}
             </Typography>
-            {hasCredential && (
-              <TextField
-                type="password"
-                size="small"
-                fullWidth
-                placeholder={t("password")}
-                value={deletePassword}
-                onChange={(e) => setDeletePassword(e.target.value)}
-                sx={{ mb: 1 }}
-              />
-            )}
             <Box sx={{ display: "flex", gap: 1 }}>
-              <Button
-                variant="contained"
-                color="error"
-                size="small"
-                disabled={hasCredential && !deletePassword}
-                onClick={handleDeleteAccount}
-              >
+              <Button variant="contained" color="error" size="small" onClick={handleDeleteAccount}>
                 {t("confirmDeletion")}
               </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => {
-                  setConfirmDelete(false);
-                  setDeletePassword("");
-                }}
-              >
+              <Button variant="outlined" size="small" onClick={() => setConfirmDelete(false)}>
                 {tc("cancel")}
               </Button>
             </Box>

@@ -7,7 +7,7 @@ sidebar_position: 8
 # User erasure operations
 
 Use this runbook after an authorized account deletion. For a self-service
-request, the person deletes their account in settings; for an administrator-led
+request, the person deletes their account in settings after a recent sign-in; for an administrator-led
 request, verify identity and scope before using **Users → Delete**. Keep a
 separate record of processor and off-host work that OpenMapX cannot perform.
 
