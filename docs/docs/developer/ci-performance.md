@@ -335,6 +335,31 @@ The dependency review behind `client`, on revision `f86338349`:
   instead of on the pull request. This is the one input of a skipped job that
   `client` admits.
 
+## Merge queue and deferred database groups
+
+CI runs for `merge_group` with the complete plan: scope `full` and every database
+group, exactly as on `main`. The pull-request-only Docker build is skipped, as it
+is on `main`.
+
+`crash-points`, `configuration-recovery` and `coordinator-recovery` are 12 of a
+full run's database jobs and about 144 of its roughly 250 job-minutes (latest
+runs before 16 November 2026). They start the real API, operations agent and
+data-manager, so no path rule can tell when they are unaffected: replayed on the
+last 80 merged pull requests, an import-graph rule would have saved about 12% of
+the database job time.
+
+A pull request may instead leave those groups to the merge queue. The selector
+drops a group from a pull request's database matrix when trusted main's
+`scripts/ci-impact-rollout.json` lists it in `mergeQueueDatabaseGroups`. Only
+those three groups can be listed. The plan records the result as
+`deferredDatabaseGroups`; the aggregate gate checks the shard receipts against
+the same plan and rejects a deferral on any event other than `pull_request`.
+Merge-queue, `main`, scheduled and manual runs always run every group.
+
+The list is empty until the ruleset requires the merge queue. With the list set
+and no queue, a recovery regression would be found on `main` after the merge
+instead of before it.
+
 ## Stopping a pull request's run after a lint failure
 
 When the `lint` job fails on a pull request, the `stop run after lint failure`

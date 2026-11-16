@@ -5,6 +5,10 @@ on:
     branches: [main]
   # Include stacked PRs so each layer is scanned before its parent is merged.
   pull_request:
+  # Required check and code-scanning rule on main: both need a result for the
+  # commit the merge queue is about to land.
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: "23 6 * * 1"
 

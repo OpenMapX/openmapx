@@ -143,15 +143,21 @@ if (import.meta.main) {
     const receipts = readdirSync(directory)
       .filter((name) => name.endsWith(".json"))
       .map((name) => JSON.parse(readFileSync(join(directory, name), "utf8")));
+    // A pull request may leave whole groups to the merge queue. The aggregate
+    // gate separately rejects a plan that defers anything it may not.
+    const deferred = JSON.parse(process.env.CI_PLAN ?? "{}").deferredDatabaseGroups ?? [];
+    if (!Array.isArray(deferred)) throw new Error("Invalid deferred database groups");
     verifyShardReceipts(
       receipts,
       process.argv[2] === "verify-linux"
         ? [1, 2].map((part) => ({ group: "linux-user", part, total: 2 }))
-        : databaseMatrix,
+        : databaseMatrix.filter((entry) => !deferred.includes(entry.group)),
       process.env.GITHUB_SHA,
     );
     console.log(
-      "Complete database scenario/file union: every shard present, no loss or duplication.",
+      deferred.length
+        ? `Complete union for every required shard; left to the merge queue: ${deferred.join(", ")}.`
+        : "Complete database scenario/file union: every shard present, no loss or duplication.",
     );
   } catch (error) {
     console.error(error.message);

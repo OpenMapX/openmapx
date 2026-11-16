@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  # The merge queue tests each pull request on top of main and of the entries
+  # ahead of it. Such a run is never narrowed: it gets the complete validation
+  # that main gets, including the database groups a pull request may defer.
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   # Reconcile main daily, including merges made with GITHUB_TOKEN that do not
@@ -856,6 +861,8 @@ jobs:
           path: ${{ runner.temp }}/database-shards
       - name: Require the complete disjoint database inventory
         if: needs.select.outputs.code == 'true' && needs.select.outputs.database == 'true'
+        env:
+          CI_PLAN: ${{ needs.select.outputs.plan }}
         run: node scripts/database-test-shards.mjs verify "${{ runner.temp }}/database-shards"
       - name: Collect Linux deployment-user receipts
         if: needs.select.outputs.code == 'true' && needs.select.outputs['test-linux-user'] == 'true'

@@ -2,6 +2,9 @@ name: Dependency Review
 
 on:
   pull_request:
+  # Required check on main: review the merge queue's commit against its base.
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -25,7 +28,11 @@ jobs:
         with:
           # Block PRs that introduce known-vulnerable dependencies.
           fail-on-severity: high
-          comment-summary-in-pr: on-failure
+          # A merge-queue run has no pull request to comment on and names the
+          # commits to compare itself.
+          comment-summary-in-pr: ${{ github.event_name == 'pull_request' && 'on-failure' || 'never' }}
+          base-ref: ${{ github.event.merge_group.base_sha || '' }}
+          head-ref: ${{ github.event.merge_group.head_sha || '' }}
           # License policy note: the product is AGPL-3.0-or-later (copyleft deps are
           # fine there) while the packages/* substrate is Apache-2.0. dependency-review
           # cannot scope a policy per package, so we surface licenses for review rather

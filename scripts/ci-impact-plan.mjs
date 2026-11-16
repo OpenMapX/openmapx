@@ -38,6 +38,24 @@ export const scopeSkippedJobs = {
   client: ["database", "test-linux-user", "test-agent-image"],
 };
 export const selectiveScopes = Object.keys(scopeSkippedJobs).filter((scope) => scope !== "full");
+/** Database groups a pull request may leave to the merge queue. They take over
+ * half of a full run's job time and still run on every merge-queue entry, on
+ * main and on the daily schedule, so nothing reaches a release untested. */
+export const mergeQueueDatabaseGroups = [
+  "crash-points",
+  "configuration-recovery",
+  "coordinator-recovery",
+];
+const deferredGroups = (value) =>
+  Array.isArray(value) &&
+  new Set(value).size === value.length &&
+  value.every((group) => mergeQueueDatabaseGroups.includes(group));
+/** The database partitions this plan requires; verification uses the same list. */
+export function plannedDatabaseMatrix(plan, matrix = databaseMatrix) {
+  if (!deferredGroups(plan?.deferredDatabaseGroups))
+    throw new Error("Missing or invalid deferred database groups");
+  return matrix.filter((entry) => !plan.deferredDatabaseGroups.includes(entry.group));
+}
 const docsProse = (path) => /^docs\/(?:docs|blog)\/.*\.md$/.test(path);
 const clientSource = (path) =>
   path.startsWith("apps/web/src/") ||
@@ -68,6 +86,7 @@ export function createImpactPlan({
   pathsComplete = true,
   regularFiles = true,
   approvedScopes = [],
+  approvedMergeQueueGroups = [],
   closedPr = false,
   rolloutCommit = "",
   validationSource = null,
@@ -117,6 +136,11 @@ export function createImpactPlan({
   const proposedScope = scope;
   if (!Array.isArray(approvedScopes) || !approvedScopes.includes(scope)) scope = "full";
   const jobs = jobsForScope(scope);
+  // Approved on the default branch once the merge queue is required there.
+  const deferredDatabaseGroups =
+    event === "pull_request" && jobs.database && deferredGroups(approvedMergeQueueGroups)
+      ? [...approvedMergeQueueGroups].sort()
+      : [];
   return {
     version: 1,
     event,
@@ -141,6 +165,7 @@ export function createImpactPlan({
       .update(JSON.stringify([...(paths ?? [])].sort()))
       .digest("hex"),
     jobs,
+    deferredDatabaseGroups,
   };
 }
 
@@ -190,6 +215,10 @@ export function verifyResults(plan, needs, event) {
   if (unknown.length) throw new Error(`Unknown aggregate dependencies: ${unknown.join(", ")}`);
   if (event !== "pull_request" && plan.scope !== "full")
     throw new Error("Trusted main requires complete validation");
+  if (!deferredGroups(plan.deferredDatabaseGroups))
+    throw new Error("Missing or invalid deferred database groups");
+  if (plan.deferredDatabaseGroups.length && (event !== "pull_request" || !plan.jobs.database))
+    throw new Error("Only a pull request may leave database groups to the merge queue");
   const expected = jobsForScope(plan.scope);
   if (validationJobs.some((id) => plan.jobs[id] !== expected[id]))
     throw new Error("CI job selection does not match its declared scope");
@@ -283,6 +312,7 @@ if (import.meta.main) {
       }
       let metadataGateReady = false;
       let approvedScopes = [];
+      let approvedMergeQueueGroups = [];
       let rolloutCommit = "";
       try {
         // Approval is a reviewed default-branch input, never a PR opt-in.
@@ -294,6 +324,8 @@ if (import.meta.main) {
           rollout.approvedScopes.every((scope) => selectiveScopes.includes(scope))
         )
           approvedScopes = rollout.approvedScopes;
+        if (rollout.version === 1 && deferredGroups(rollout.mergeQueueDatabaseGroups))
+          approvedMergeQueueGroups = rollout.mergeQueueDatabaseGroups;
       } catch {
         /* Missing/unknown rollout policy keeps the complete gate. */
       }
@@ -340,6 +372,7 @@ if (import.meta.main) {
         regularFiles,
         validationSource,
         approvedScopes,
+        approvedMergeQueueGroups,
         rolloutCommit,
         closedPr: pr?.state === "closed",
         baseChanged: !!event.changes?.base,
@@ -367,7 +400,7 @@ if (import.meta.main) {
       const lines = Object.entries({
         plan: JSON.stringify(plan),
         source: JSON.stringify(receipt),
-        "database-matrix": JSON.stringify({ include: databaseMatrix }),
+        "database-matrix": JSON.stringify({ include: plannedDatabaseMatrix(plan) }),
         code: plan.code,
         ...plan.jobs,
         head: plan.head,
