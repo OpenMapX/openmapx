@@ -364,11 +364,14 @@ export function RouteLayer() {
     provider,
   ]);
 
-  // Delegated listeners live on the map, not the style, so they do not need a
-  // style-change trigger.
+  // Delegated listeners live on the map, not the style, and survive a style
+  // swap. They still need the map itself: it is created after this component
+  // mounts, so bind once it is ready, and again if the map instance is
+  // replaced (announced by styleVersion while mapRef keeps its identity).
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapReady) return;
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
       if (getMapClickOwner(e)) return;
       // A pin or label drawn over an alternative (an along-route result, a
@@ -400,7 +403,18 @@ export function RouteLayer() {
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapRef, setActiveRouteIndex]);
+  }, [mapRef, mapReady, styleVersion, setActiveRouteIndex]);
+
+  // A tap on an alternative or a charge-stop pin belongs to it: the plain-map
+  // click handler and base-map POI taps skip interactive layers.
+  useEffect(() => {
+    INTERACTIVE_LAYER_IDS.add(LAYER_ALT_LINE);
+    INTERACTIVE_LAYER_IDS.add(EV_STOPS_LAYER_ID);
+    return () => {
+      INTERACTIVE_LAYER_IDS.delete(LAYER_ALT_LINE);
+      INTERACTIVE_LAYER_IDS.delete(EV_STOPS_LAYER_ID);
+    };
+  }, []);
 
   // Fit the camera to a newly drawn route. This is camera behaviour, so a style
   // change must not re-fit and yank the map away from the user's position.
@@ -521,9 +535,11 @@ export function RouteLayer() {
 
   // Charge-stop pins open the same floating place card as a charger clicked in
   // the data-source layer.
+  // Bound once the map is ready; see the alternative-route effect above.
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapReady) return;
     const onStopClick = (e: MapMouseEvent) => {
       if (getMapClickOwner(e)) return;
       if (!map.getLayer(EV_STOPS_LAYER_ID)) return;
@@ -567,7 +583,7 @@ export function RouteLayer() {
       map.off("mouseenter", EV_STOPS_LAYER_ID, onStopEnter);
       map.off("mouseleave", EV_STOPS_LAYER_ID, onStopLeave);
     };
-  }, [evSourceMeta, mapRef]);
+  }, [evSourceMeta, mapRef, mapReady, styleVersion]);
 
   return null;
 }
