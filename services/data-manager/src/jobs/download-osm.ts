@@ -1,7 +1,9 @@
 import { mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { type DataFileIdentity, hashDataFile } from "@openmapx/core/build-artifacts";
 import { execa } from "execa";
+import { jobChildLogger } from "../logger.js";
 import type { DatasetMetadata, StateStore } from "../state.js";
 import { type OsmPbfHeader, tryReadOsmPbfHeader } from "../utils/osm-pbf-header.js";
 import {
@@ -53,20 +55,57 @@ export function resolveOsmMd5Url(osmUrl: string): string {
   return `${osmUrl}.md5`;
 }
 
-async function fetchExpectedMd5(url: string, signal?: AbortSignal): Promise<string | null> {
-  try {
-    const { stdout } = await execa("curl", ["-fsSL", url], {
-      timeout: 30_000,
-      cancelSignal: signal,
-    });
-    // `<md5>  <filename>` — take the first whitespace-delimited token.
-    const token = stdout.trim().split(/\s+/)[0];
-    if (token && /^[0-9a-f]{32}$/i.test(token)) return token.toLowerCase();
-  } catch {
-    signal?.throwIfAborted();
-    // Sidecar not published or curl failed; treat as "no verification available".
+const MD5_RETRY_DELAYS_MS = [2_000, 5_000] as const;
+
+/**
+ * Fetch the `.md5` sidecar. Returns `null` only when the mirror answers that
+ * the file does not exist: 404, 410, or 403, which object storage returns for
+ * a missing key. Network failures, timeouts and other HTTP statuses are
+ * retried and then thrown, so a transient failure can never disable
+ * verification of the PBF that follows. A 2xx body that is not an MD5 sidecar
+ * throws without retrying.
+ */
+export async function fetchExpectedMd5(
+  url: string,
+  opts: { signal?: AbortSignal; retryDelaysMs?: readonly number[] } = {},
+): Promise<string | null> {
+  const delays = opts.retryDelaysMs ?? MD5_RETRY_DELAYS_MS;
+  let lastFailure = "";
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    if (attempt > 0) await sleep(delays[attempt - 1], undefined, { signal: opts.signal });
+    opts.signal?.throwIfAborted();
+    let stdout: string;
+    try {
+      ({ stdout } = await execa(
+        "curl",
+        ["-sSL", "--connect-timeout", "10", "-w", "\n%{http_code}", url],
+        { timeout: 30_000, cancelSignal: opts.signal },
+      ));
+    } catch (error) {
+      opts.signal?.throwIfAborted();
+      lastError = error;
+      lastFailure = "request failed";
+      continue;
+    }
+    const cut = stdout.lastIndexOf("\n");
+    const status = Number(stdout.slice(cut + 1));
+    if (status === 404 || status === 410 || status === 403) return null;
+    if (status >= 200 && status < 300) {
+      // `<md5>  <filename>` — take the first whitespace-delimited token.
+      const token = stdout.slice(0, cut).trim().split(/\s+/)[0];
+      if (token && /^[0-9a-f]{32}$/i.test(token)) return token.toLowerCase();
+      throw new Error(
+        `OSM PBF checksum file ${url} is not a valid MD5 sidecar; refusing to download unverified data.`,
+      );
+    }
+    lastError = undefined;
+    lastFailure = `HTTP ${status}`;
   }
-  return null;
+  throw new Error(
+    `Could not fetch the OSM PBF checksum from ${url} after ${delays.length + 1} attempts (${lastFailure}); refusing to download unverified data. Re-run to retry.`,
+    lastError === undefined ? undefined : { cause: lastError },
+  );
 }
 
 export interface DownloadOsmOptions {
@@ -89,6 +128,8 @@ export interface DownloadOsmOptions {
     targetPath: string,
     options: CurlAtomicOptions,
   ) => Promise<CurlAtomicResult>;
+  /** Test seam for the `.md5` sidecar fetch. */
+  checksumImpl?: (url: string, signal?: AbortSignal) => Promise<string | null>;
 }
 
 export interface DownloadOsmResult {
@@ -119,10 +160,20 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
   let md5: string | undefined;
   let sha256: string | undefined;
   let source: DataFileIdentity | undefined;
-  const expected =
-    opts.verifyChecksum === false
-      ? null
-      : await fetchExpectedMd5(resolveOsmMd5Url(url), opts.signal);
+  let expected: string | null = null;
+  if (opts.verifyChecksum !== false) {
+    const md5Url = resolveOsmMd5Url(url);
+    expected = await (opts.checksumImpl ?? ((u, signal) => fetchExpectedMd5(u, { signal })))(
+      md5Url,
+      opts.signal,
+    );
+    if (expected === null) {
+      jobChildLogger({ job: "download-osm", region: opts.region }).warn(
+        { md5Url },
+        "download-osm: mirror publishes no .md5 checksum; downloading without integrity verification",
+      );
+    }
+  }
   const download = opts.downloadImpl ?? curlAtomicWithResult;
   const result = await download(url, targetPath, {
     signal: opts.signal,

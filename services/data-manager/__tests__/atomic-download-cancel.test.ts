@@ -1,7 +1,7 @@
-import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { curlAtomicWithResult } from "../src/jobs/atomic-download.js";
@@ -67,6 +67,35 @@ it("rechecks cancellation after validation immediately before publication", asyn
     expect(validated).toBe(true);
     expect(await readFile(target, "utf8")).toBe("previous");
   } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+it("starts every download with connect-timeout and low-speed abort, but no overall time limit", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "omx-download-stall-flags-"));
+  const bin = join(dir, "bin");
+  const argsFile = join(dir, "args.txt");
+  await mkdir(bin);
+  await writeFile(join(bin, "curl"), `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsFile}"\nexit 7\n`, {
+    mode: 0o755,
+  });
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
+  try {
+    await expect(
+      curlAtomicWithResult("http://127.0.0.1:9/fixture", join(dir, "snapshot")),
+    ).rejects.toThrow();
+    const args = (await readFile(argsFile, "utf8")).trim().split("\n");
+    const after = (flag: string) => args[args.indexOf(flag) + 1];
+    expect(after("--connect-timeout")).toBe("30");
+    expect(after("--speed-limit")).toBe("1024");
+    expect(after("--speed-time")).toBe("300");
+    expect(args).not.toContain("--max-time");
+    expect(args).not.toContain("-m");
+    expect(await readdir(dir)).toEqual(
+      expect.not.arrayContaining([expect.stringMatching(/^snapshot\.tmp\./)]),
+    );
+  } finally {
+    process.env.PATH = originalPath;
     await rm(dir, { recursive: true, force: true });
   }
 });
