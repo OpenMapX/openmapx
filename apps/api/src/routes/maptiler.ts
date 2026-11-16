@@ -25,10 +25,10 @@ import {
 const MAPTILER_ORIGIN = "https://api.maptiler.com";
 const MAPTILER_MAX_ZOOM = 22;
 const MAPTILER_TIMEOUT_MS = 15_000;
-const JSON_MEDIA_TYPES = ["application/json"] as const;
 
 const STYLE_RE = /^maps\/[a-z0-9_-]+\/style\.json$/i;
 const SPRITE_RE = /^maps\/[a-z0-9_-]+\/sprite(?:(?:@2x)?\.(?:json|png))?$/i;
+const SPRITE_JSON_RE = /^maps\/[a-z0-9_-]+\/sprite(?:@2x)?\.json$/i;
 const TILEJSON_RE = /^tiles\/[a-z0-9_-]+\/tiles\.json$/i;
 const TILE_RE =
   /^tiles\/[a-z0-9_-]+\/(?<z>\d{1,2})\/(?<x>\d+)\/(?<y>\d+)\.(?<format>pbf|mvt|png|jpe?g|webp)$/i;
@@ -82,13 +82,6 @@ function binaryResponseOptions(path: string): {
       maxBytes: MAX_VECTOR_TILE_BYTES,
       allowedContentTypes: VECTOR_TILE_MEDIA_TYPES,
       label: "MapTiler vector asset",
-    };
-  }
-  if (extension === "json") {
-    return {
-      maxBytes: MAX_VECTOR_TILE_BYTES,
-      allowedContentTypes: JSON_MEDIA_TYPES,
-      label: "MapTiler sprite JSON",
     };
   }
   if (extension === "jpg" || extension === "jpeg") {
@@ -207,6 +200,13 @@ function rewriteStyle(style: JsonRecord, base: string): JsonRecord {
   }
   if (typeof rewritten.sprite === "string") {
     rewritten.sprite = rewriteMaptilerUrl(rewritten.sprite, base);
+  } else if (Array.isArray(rewritten.sprite)) {
+    // The style spec also allows a list of `{ id, url }` sprite sheets.
+    rewritten.sprite = rewritten.sprite.map((entry) =>
+      entry && typeof entry === "object" && typeof (entry as JsonRecord).url === "string"
+        ? { ...entry, url: rewriteMaptilerUrl((entry as JsonRecord).url as string, base) }
+        : entry,
+    );
   }
 
   if (rewritten.sources && typeof rewritten.sources === "object") {
@@ -230,6 +230,91 @@ function rewriteStyle(style: JsonRecord, base: string): JsonRecord {
   }
 
   return rewritten;
+}
+
+const ABSOLUTE_URL_RE = /^(?:https?:)?\/\//i;
+
+function isMaptilerHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "maptiler.com" || host.endsWith(".maptiler.com");
+}
+
+function decodeQueryComponent(value: string): string {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Remove the `key` query parameter from a URL string that either points at a
+ * MapTiler host or carries the configured key. The query is edited as text
+ * because `URL` and `URLSearchParams` re-encode `{z}`-style template
+ * placeholders, which would break tile and glyph templates.
+ */
+function stripKeyParam(value: string, key: string): string {
+  if (!ABSOLUTE_URL_RE.test(value)) return value;
+  let parsed: URL;
+  try {
+    parsed = new URL(value.startsWith("//") ? `https:${value}` : value);
+  } catch {
+    return value;
+  }
+  const onMaptiler = isMaptilerHost(parsed.hostname);
+  const hashIndex = value.indexOf("#");
+  const beforeHash = hashIndex === -1 ? value : value.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : value.slice(hashIndex);
+  const queryIndex = beforeHash.indexOf("?");
+  if (queryIndex === -1) return value;
+
+  const parts = beforeHash.slice(queryIndex + 1).split("&");
+  const kept = parts.filter((part) => {
+    const separator = part.indexOf("=");
+    const name = decodeQueryComponent(separator === -1 ? part : part.slice(0, separator));
+    if (name !== "key") return true;
+    if (onMaptiler) return false;
+    return decodeQueryComponent(separator === -1 ? "" : part.slice(separator + 1)) !== key;
+  });
+  if (kept.length === parts.length) return value;
+  const query = kept.join("&");
+  return `${beforeHash.slice(0, queryIndex)}${query ? `?${query}` : ""}${hash}`;
+}
+
+/**
+ * Walk a whole JSON document and strip the key from every URL string, so
+ * fields the targeted rewrite does not know about cannot pass it through.
+ */
+function stripMaptilerKey(value: unknown, key: string, counter: { stripped: number }): unknown {
+  if (typeof value === "string") {
+    const stripped = stripKeyParam(value, key);
+    if (stripped !== value) counter.stripped += 1;
+    return stripped;
+  }
+  if (Array.isArray(value)) return value.map((item) => stripMaptilerKey(item, key, counter));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([name, item]) => [name, stripMaptilerKey(item, key, counter)]),
+    );
+  }
+  return value;
+}
+
+class MaptilerKeyLeakError extends Error {
+  override name = "MaptilerKeyLeakError";
+}
+
+/**
+ * Serialize a response document and refuse it if the key is still present
+ * anywhere, for example inside HTML or a string that is not a URL.
+ */
+function serializeKeySafe(value: unknown, key: string): string {
+  const serialized = JSON.stringify(value);
+  const forms = [key, encodeURIComponent(key), JSON.stringify(key).slice(1, -1)];
+  if (forms.some((form) => serialized.includes(form))) {
+    throw new MaptilerKeyLeakError("MapTiler response contained the API key");
+  }
+  return serialized;
 }
 
 function getRequestedMaptilerPath(req: FastifyRequest): string | null {
@@ -310,6 +395,20 @@ export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | 
     reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
     reply.header("Cross-Origin-Resource-Policy", "cross-origin");
 
+    // Every JSON body is served through here: strip the key from all URL
+    // strings, then refuse the document if the key survives anywhere.
+    const sendKeySafeJson = (document: unknown) => {
+      const counter = { stripped: 0 };
+      const body = serializeKeySafe(stripMaptilerKey(document, key, counter), key);
+      if (counter.stripped > 0) {
+        req.log.warn(
+          { upstream: summarizeExternalUrl(upstreamUrl.href), strippedCount: counter.stripped },
+          "MapTiler key stripped from URLs the proxy cannot rewrite",
+        );
+      }
+      return reply.type("application/json").send(body);
+    };
+
     try {
       const base = proxyBase(req);
       if (STYLE_RE.test(path)) {
@@ -319,7 +418,7 @@ export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | 
           label: "MapTiler style JSON",
           signal,
         });
-        return reply.type("application/json").send(rewriteStyle(style, base));
+        return sendKeySafeJson(rewriteStyle(style, base));
       }
       if (TILEJSON_RE.test(path)) {
         requireMaptilerJsonContentType(upstream, "MapTiler TileJSON");
@@ -328,7 +427,16 @@ export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | 
           label: "MapTiler TileJSON",
           signal,
         });
-        return reply.type("application/json").send(rewriteTileJson(tileJson, base));
+        return sendKeySafeJson(rewriteTileJson(tileJson, base));
+      }
+      if (SPRITE_JSON_RE.test(path)) {
+        requireMaptilerJsonContentType(upstream, "MapTiler sprite JSON");
+        const sprite = await readBoundedJsonResponse<unknown>(upstream, {
+          maxBytes: MAX_VECTOR_TILE_BYTES,
+          label: "MapTiler sprite JSON",
+          signal,
+        });
+        return sendKeySafeJson(sprite);
       }
 
       const proxy = createBoundedBinaryProxyStream(upstream, binaryResponseOptions(path));
