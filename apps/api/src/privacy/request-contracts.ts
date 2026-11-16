@@ -2,6 +2,7 @@ import { isValidRequestTransition } from "@openmapx/core/privacy";
 import { defaultLocale } from "@openmapx/i18n";
 import z from "zod/v4";
 import { REQUEST_CHANNELS, REQUEST_KINDS, type RequestState } from "../db/privacy-schema.js";
+import { isSupportedTimeZone } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
 
 export const requestKindSchema = z.enum(REQUEST_KINDS);
@@ -27,7 +28,12 @@ const localeSchema = z
     }
   }, "Invalid language tag")
   .default(defaultLocale);
-const timeZoneSchema = z.string().min(1).max(64).default("UTC");
+const timeZoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine(isSupportedTimeZone, "Invalid time zone")
+  .default("UTC");
 
 export const createSubjectRequestSchema = z
   .object({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateSubjectRequestDueAt } from "./deadline.js";
+import { calculateSubjectRequestDueAt, isSupportedTimeZone } from "./deadline.js";
 
 describe("calculateSubjectRequestDueAt", () => {
   it.each([
@@ -19,5 +19,14 @@ describe("calculateSubjectRequestDueAt", () => {
   it("rejects malformed dates and time zones", () => {
     expect(() => calculateSubjectRequestDueAt(new Date("invalid"), "UTC")).toThrow("receivedAt");
     expect(() => calculateSubjectRequestDueAt(new Date(), "Not/AZone")).toThrow("timeZone");
+  });
+});
+
+describe("isSupportedTimeZone", () => {
+  it("agrees with the deadline calculation", () => {
+    expect(isSupportedTimeZone("Europe/Berlin")).toBe(true);
+    expect(isSupportedTimeZone("UTC")).toBe(true);
+    expect(isSupportedTimeZone("Not/AZone")).toBe(false);
+    expect(isSupportedTimeZone("")).toBe(false);
   });
 });
