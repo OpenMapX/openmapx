@@ -95,6 +95,12 @@ describe("saved list name ownership", () => {
   );
 });
 
+it("offers only actions that do something in the list header", () => {
+  renderDetail();
+  expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Add place" })).not.toBeInTheDocument();
+});
+
 it("shows frozen row credits and reconstructs selected details with exact field snapshots", () => {
   const receipt = { sourceId: "original", name: "Original row publisher" };
   const geometry = { sourceId: "coordinate", name: "Coordinate publisher" };
