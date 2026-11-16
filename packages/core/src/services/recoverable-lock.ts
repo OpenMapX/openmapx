@@ -184,9 +184,15 @@ function readHolderFile(path: string): LockFile | undefined {
     // Waiting never turns another kind of file into a lock; leave it to the operator.
     if (!stat.isFile()) throw new Error(`${path} is not a lock file; remove it by hand`);
     if (stat.size > 4096) return { ino: stat.ino, raw: `oversized:${stat.size}` };
+    // A read may return fewer bytes than asked; the holder's bytes identify it.
     const buffer = Buffer.alloc(stat.size);
-    readSync(descriptor, buffer, 0, buffer.length, 0);
-    const raw = buffer.toString("utf8");
+    let length = 0;
+    while (length < buffer.length) {
+      const read = readSync(descriptor, buffer, length, buffer.length - length, length);
+      if (read === 0) break;
+      length += read;
+    }
+    const raw = buffer.subarray(0, length).toString("utf8");
     try {
       return { holder: holderSchema.parse(JSON.parse(raw)), ino: stat.ino, raw };
     } catch {
