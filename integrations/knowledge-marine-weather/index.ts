@@ -1,4 +1,4 @@
-import { fetchJson } from "@openmapx/core";
+import { FetchJsonHttpError, fetchJson } from "@openmapx/core";
 import {
   captureCacheWriter,
   type IntegrationContext,
@@ -184,16 +184,33 @@ export function buildCurrent(hourly: MarineHourlyPoint[]): MarineCurrent | null 
   };
 }
 
-async function fetchMarine(lat: number, lng: number): Promise<OpenMeteoMarineResponse | null> {
+/**
+ * `rejected`: Open-Meteo refused this exact request (HTTP 400, its
+ * `{ error: true }` envelope), so asking again gets the same answer.
+ * `failed`: a timeout, network error, other non-2xx or unreadable body,
+ * which says nothing about the point.
+ */
+type MarineFetch =
+  | { kind: "answered"; data: OpenMeteoMarineResponse }
+  | { kind: "rejected" }
+  | { kind: "failed" };
+
+async function fetchMarine(lat: number, lng: number): Promise<MarineFetch> {
   // GMT, because a local zone can change offset (DST) inside the forecast
   // window while the response states only one `utc_offset_seconds`.
   const url =
     `${BASE}?latitude=${round2(lat)}&longitude=${round2(lng)}` +
     `&hourly=${HOURLY_FIELDS}&forecast_days=3&timezone=GMT`;
-  return fetchJson<OpenMeteoMarineResponse>(url, {
-    timeoutMs: FETCH_TIMEOUT_MS,
-    nullOnError: true,
-  });
+  try {
+    const data = await fetchJson<OpenMeteoMarineResponse>(url, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      label: "Open-Meteo Marine",
+    });
+    return { kind: "answered", data };
+  } catch (error) {
+    if (error instanceof FetchJsonHttpError && error.status === 400) return { kind: "rejected" };
+    return { kind: "failed" };
+  }
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -223,11 +240,19 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const writer = await captureCacheWriter(ctx.cache);
-    const data = await fetchMarine(lat, lng);
+    const fetched = await fetchMarine(lat, lng);
+    if (fetched.kind === "failed") {
+      // A failed request says nothing about this point: answer like "no data"
+      // for now, but keep it out of the cache so the next request asks again.
+      reply.header("Cache-Control", "no-store");
+      reply.status(204).send(null);
+      return;
+    }
+    const data = fetched.kind === "answered" ? fetched.data : null;
     if (!data || data.error || !data.hourly) {
       // Open-Meteo returns `error: true` for inland points outside any
       // marine model grid. Cache that result so we don't pound the upstream
-      // every time the user opens an inland POI.
+      // every time the user opens an inland POI. A 400 is the same answer.
       await writer.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
       reply.status(204).send(null);
       return;

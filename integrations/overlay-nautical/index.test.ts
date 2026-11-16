@@ -274,15 +274,177 @@ describe("nautical routes", () => {
       const body = result.body as { features: Array<{ properties: { id: string } }> };
       expect(body.features.map((f) => f.properties.id)).toEqual(["tide-only"]);
     });
+
+    it("serves but does not cache a merge while a network is unavailable, then caches the recovered one", async () => {
+      const cache = createFencedMemoryCache();
+      ctx = createMockIntegrationContext({ cache });
+      setup(ctx);
+      loadStations.mockResolvedValue([
+        { id: "8443970", name: "Boston", lat: 42.3539, lng: -71.0503, types: ["water-level"] },
+      ]);
+      fetchJson.mockImplementation(async (url: string) =>
+        url.includes("api-iwls.dfo")
+          ? null
+          : url.includes("emodnet-physics")
+            ? { features: [] }
+            : [],
+      );
+      mockFetch.mockImplementation(
+        async () =>
+          new Response('<?xml version="1.0"?><stationlist></stationlist>', { status: 200 }),
+      );
+      const query = { west: "-72", south: "41", east: "-70", north: "43" };
+      const request = async () => {
+        const { reply, result } = makeReply();
+        await getRoute("/stations")(
+          { query, params: {}, body: undefined, headers: {}, clientKey: "c" },
+          reply,
+        );
+        return result as {
+          status: number;
+          body: { features: Array<{ properties: { id: string } }> };
+        };
+      };
+      const stationKeys = () => [...cache.values.keys()].filter((k) => k.startsWith("stations:"));
+
+      const first = await request();
+
+      expect(first.status).toBe(200);
+      expect(first.body.features.map((f) => f.properties.id)).toContain("8443970");
+      expect(stationKeys()).toEqual([]);
+
+      fetchJson.mockImplementation(async (url: string) =>
+        url.includes("api-iwls.dfo")
+          ? [
+              {
+                id: "ca-1",
+                code: "00001",
+                officialName: "Recovered",
+                latitude: 42.5,
+                longitude: -71.5,
+                operating: true,
+                timeSeries: [{ code: "wlo" }],
+              },
+            ]
+          : url.includes("emodnet-physics")
+            ? { features: [] }
+            : [],
+      );
+
+      const second = await request();
+
+      expect(second.body.features.map((f) => f.properties.id)).toContain("ca-1");
+      const keys = stationKeys();
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toMatch(/^stations:bbox-merged-contributors-v1/);
+      expect(cache.ttls.get(keys[0])).toBe(7 * 24 * 60 * 60);
+    });
   });
 });
 
 describe("/harbor/:id", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  const farStation = { id: "far", name: "Far", lat: 0, lng: 0, types: ["tide-predictions"] };
+  const surroundingsKey = "harbor:surroundings-v1:53.55,9.95";
+
+  function harborReader() {
+    const cache = createFencedMemoryCache();
+    const ctx = createMockIntegrationContext({ cache });
+    ctx.getRequiredService = () => ({
+      serviceId: "overpass",
+      url: "https://overpass.test",
+      enabled: true,
+    });
+    setup(ctx);
+    const route = ctx.registered.routes.find((r) => r.path === "/harbor/:id");
+    if (!route) throw new Error("route /harbor/:id not registered");
+    const read = async () => {
+      let body: unknown;
+      const reply = {
+        header: () => reply,
+        status: () => reply,
+        type: () => reply,
+        send: (value: unknown) => {
+          body = value;
+        },
+      };
+      await route.handler(
+        {
+          params: { id: "101" },
+          query: { lat: "53.55", lng: "9.95" },
+          headers: {},
+          body: null,
+          clientKey: "c",
+        },
+        reply,
+      );
+      return body as { facilities: unknown[] };
+    };
+    return { cache, read };
+  }
+
+  beforeEach(() => {
+    fetchJson.mockReset();
+    loadStations.mockReset().mockResolvedValue([farStation]);
+    findNearestStation.mockReset().mockReturnValue(null);
+  });
+
+  it("does not cache surroundings after an Overpass failure, and serves recovered facilities next", async () => {
+    fetchJson.mockResolvedValueOnce(null);
+    fetchJson.mockResolvedValueOnce({
+      elements: [
+        { type: "node", id: 7, lat: 53.5501, lon: 9.9501, tags: { "seamark:type": "berth" } },
+      ],
+    });
+    const { cache, read } = harborReader();
+
+    const first = await read();
+
+    expect(first.facilities).toEqual([]);
+    expect(cache.values.size).toBe(0);
+
+    const second = await read();
+
+    expect(second.facilities).toHaveLength(1);
+    expect(fetchJson).toHaveBeenCalledTimes(2);
+    expect(cache.ttls.get(surroundingsKey)).toBe(24 * 60 * 60);
+  });
+
+  it("treats an Overpass remark as a failed lookup", async () => {
+    fetchJson.mockResolvedValue({
+      elements: [],
+      remark: 'runtime error: Query timed out in "query" at line 3 after 16 seconds.',
+    });
+    const { cache, read } = harborReader();
+
+    await read();
+
+    expect(cache.values.size).toBe(0);
+  });
+
+  it("does not cache surroundings while the NOAA catalog is unavailable", async () => {
+    loadStations.mockResolvedValue([]);
+    fetchJson.mockResolvedValue({ elements: [] });
+    const { cache, read } = harborReader();
+
+    await read();
+
+    expect(cache.values.size).toBe(0);
+  });
+
+  it("caches a genuine empty facilities answer", async () => {
+    fetchJson.mockResolvedValue({ elements: [] });
+    const { cache, read } = harborReader();
+
+    await read();
+
+    expect(cache.values.get(surroundingsKey)).toMatchObject({ facilities: [] });
+  });
+
   it("serves each caller its own harbour fields over one shared upstream lookup", async () => {
     fetchJson.mockReset();
-    loadStations.mockReset().mockResolvedValue([]);
+    loadStations.mockReset().mockResolvedValue([farStation]);
     findNearestStation.mockReset().mockReturnValue(null);
     fetchJson.mockResolvedValue({
       elements: [

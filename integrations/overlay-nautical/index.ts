@@ -276,6 +276,7 @@ interface OverpassResponse {
     center?: { lat: number; lon: number };
     tags?: Record<string, string>;
   }>;
+  remark?: string;
 }
 
 type HarborSurroundings = Pick<HarborDetail, "facilities" | "nearestTideStation">;
@@ -285,36 +286,45 @@ async function fetchHarborSurroundings(
   ctx: IntegrationContext,
   lat: number,
   lng: number,
-): Promise<HarborSurroundings> {
+): Promise<{ surroundings: HarborSurroundings; complete: boolean }> {
   // Facilities + nearest-tide-station lookups run in parallel — the
   // station catalog is Redis-cached for a week so the second leg is cheap.
-  const [facilities, nearestTideStation] = await Promise.all([
+  const [facilities, tide] = await Promise.all([
     fetchHarborFacilities(ctx, lat, lng),
-    (async () => {
+    (async (): Promise<{ station: HarborSurroundings["nearestTideStation"]; ok: boolean }> => {
       try {
         const credits = stationContributors("noaa");
         const stations = await loadNoaaStations(ctx.cache, ctx.log, undefined, credits);
+        // The NOAA loader answers [] when its feeds fail; the real catalog is never empty.
+        if (stations.length === 0) return { station: undefined, ok: false };
         const hit = findNearestStation(stations, lat, lng, 5, "tide-predictions");
-        if (!hit) return undefined;
+        if (!hit) return { station: undefined, ok: true };
         return {
-          id: hit.station.id,
-          name: hit.station.name,
-          distanceKm: Number(hit.distanceKm.toFixed(2)),
-          contributors: snapshotContributors(hit.station.contributors ?? credits),
+          station: {
+            id: hit.station.id,
+            name: hit.station.name,
+            distanceKm: Number(hit.distanceKm.toFixed(2)),
+            contributors: snapshotContributors(hit.station.contributors ?? credits),
+          },
+          ok: true,
         };
       } catch {
-        return undefined;
+        return { station: undefined, ok: false };
       }
     })(),
   ]);
-  return { facilities, nearestTideStation };
+  return {
+    surroundings: { facilities: facilities ?? [], nearestTideStation: tide.station },
+    complete: facilities !== null && tide.ok,
+  };
 }
 
+/** Seamark facilities around a position, or `null` when the Overpass lookup failed. */
 async function fetchHarborFacilities(
   ctx: IntegrationContext,
   lat: number,
   lng: number,
-): Promise<HarborDetail["facilities"]> {
+): Promise<HarborDetail["facilities"] | null> {
   const overpass = ctx.getRequiredService("overpass");
   if (!overpass) return [];
 
@@ -338,7 +348,9 @@ out body;`;
     nullOnError: true,
     init: { method: "POST", body: `data=${encodeURIComponent(query)}` },
   });
-  if (!data) return [];
+  // Overpass reports a timeout or memory limit with a 200 and a `remark`, over
+  // elements that may be cut short: no answer.
+  if (!data || data.remark) return null;
   const facilities: HarborDetail["facilities"] = [];
   for (const el of data.elements) {
     if (el.type !== "node") continue;
@@ -666,10 +678,14 @@ export function setup(ctx: IntegrationContext): void {
     const queryLng = Math.round(lng * 10_000) / 10_000;
     const cacheKey = `harbor:surroundings-v1:${queryLat},${queryLng}`;
     let surroundings = await ctx.cache.get<HarborSurroundings>(cacheKey);
+    let complete = true;
     if (!surroundings) {
       const writer = await captureCacheWriter(ctx.cache);
-      surroundings = await fetchHarborSurroundings(ctx, queryLat, queryLng);
-      await writer.set(cacheKey, surroundings, HARBOR_DETAIL_CACHE_TTL);
+      const fetched = await fetchHarborSurroundings(ctx, queryLat, queryLng);
+      surroundings = fetched.surroundings;
+      complete = fetched.complete;
+      // A failed lookup would hide facilities or the tide station for the whole TTL.
+      if (complete) await writer.set(cacheKey, surroundings, HARBOR_DETAIL_CACHE_TTL);
     }
     const { facilities, nearestTideStation } = structuredClone(surroundings);
 
@@ -693,7 +709,7 @@ export function setup(ctx: IntegrationContext): void {
       ),
     };
 
-    reply.header("Cache-Control", "public, max-age=3600");
+    reply.header("Cache-Control", complete ? "public, max-age=3600" : "no-store");
     reply.send(detail);
   });
 
@@ -753,13 +769,29 @@ export function setup(ctx: IntegrationContext): void {
     const writer = await captureCacheWriter(ctx.cache);
     // Load NOAA via the existing typed loader; load non-NOAA networks via the
     // new merger module. Each catalog is Redis-cached for 7d behind its own key.
-    const [noaaRaw, extraRaw] = await Promise.all([
-      loadNoaaStations(ctx.cache, ctx.log, undefined, stationContributors("noaa")).catch(() => []),
-      loadAllTideStations(ctx.cache, ctx.log, USER_AGENT).catch(() => []),
+    const [noaa, extra] = await Promise.all([
+      loadNoaaStations(ctx.cache, ctx.log, undefined, stationContributors("noaa")).then(
+        // The NOAA loader answers [] when its feeds fail, and the real catalog is
+        // never empty (the package also ignores an empty cached catalog).
+        (stations) => ({ stations, available: stations.length > 0 }),
+        (): { stations: Awaited<ReturnType<typeof loadNoaaStations>>; available: boolean } => ({
+          stations: [],
+          available: false,
+        }),
+      ),
+      loadAllTideStations(ctx.cache, ctx.log, USER_AGENT).catch(
+        (): { stations: MergedTideStation[]; unavailable: TideNetwork[] } => ({
+          stations: [],
+          unavailable: ["ioc", "emodnet", "ca-iwls", "kartverket", "pegel"],
+        }),
+      ),
     ]);
+    // A merge missing a network that failed would hide its stations for the
+    // whole TTL; serve it, but cache only a complete one.
+    const complete = noaa.available && extra.unavailable.length === 0;
 
     // Normalise NOAA into the shared shape, then dedup across all networks.
-    const noaaMerged: MergedTideStation[] = noaaRaw.map((s) => {
+    const noaaMerged: MergedTideStation[] = noaa.stations.map((s) => {
       const types: TideStationCapability[] = [];
       if (s.types.includes("tide-predictions")) types.push("tide-predictions");
       if (s.types.includes("water-level")) types.push("water-level");
@@ -778,7 +810,7 @@ export function setup(ctx: IntegrationContext): void {
       };
     });
 
-    const merged = dedupTideStations([...noaaMerged, ...extraRaw]);
+    const merged = dedupTideStations([...noaaMerged, ...extra.stations]);
     const inBbox = queryMergedInBbox(merged, { west, south, east, north });
 
     // Type filter — applied after dedup so the per-type counts reflect what
@@ -827,8 +859,8 @@ export function setup(ctx: IntegrationContext): void {
       }),
     };
 
-    await writer.set(cacheKey, collection, STATIONS_CACHE_TTL);
-    reply.header("Cache-Control", "public, max-age=3600");
+    if (complete) await writer.set(cacheKey, collection, STATIONS_CACHE_TTL);
+    reply.header("Cache-Control", complete ? "public, max-age=3600" : "no-store");
     reply.send(collection);
   });
 
