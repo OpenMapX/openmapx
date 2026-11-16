@@ -8,6 +8,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import RouteIcon from "@mui/icons-material/Route";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
+import TuneIcon from "@mui/icons-material/Tune";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -17,6 +18,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Snackbar from "@mui/material/Snackbar";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
@@ -61,6 +63,7 @@ import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
 import { EvVehiclePanel } from "@/components/panels/directions/EvVehiclePanel";
 import { FlightPanel } from "@/components/panels/directions/FlightPanel";
 import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
+import { PhoneWaypointCard } from "@/components/panels/directions/PhoneWaypointCard";
 import { RidePanel } from "@/components/panels/directions/RidePanel";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
@@ -77,7 +80,7 @@ import { TransitDetailsView } from "@/components/panels/directions/TransitDetail
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
 import { TripScheduleCard } from "@/components/panels/directions/TripScheduleCard";
 import { useWaypointDrafts } from "@/components/panels/directions/useWaypointDrafts";
-import { WaypointList } from "@/components/panels/directions/WaypointList";
+import { WaypointList, waypointPlaceholder } from "@/components/panels/directions/WaypointList";
 import { WaypointScheduleDialog } from "@/components/panels/directions/WaypointScheduleDialog";
 import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
@@ -98,6 +101,7 @@ import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { servedAttributions } from "@/lib/servedAttributions";
+import { useStopSearchStore } from "@/stores/stopSearchStore";
 import { findTransitItinerary } from "./transitPlanPages";
 import { useRouteImpacts } from "./useRouteImpacts";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
@@ -166,7 +170,7 @@ export function DirectionsPanelContent() {
   const tShare = useTranslations("share");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
-  const { snapTo } = useMobileSheet();
+  const { snapTo, inSheet } = useMobileSheet();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const {
     isOpen,
@@ -781,15 +785,14 @@ export function DirectionsPanelContent() {
     }, 150);
   }, [cancelBlur]);
 
-  // Expand to full so the autocomplete dropdown that opens under the focused
-  // field has room — mid only shows a couple of rows.
+  // On a phone the stop card opens a full-screen search; on desktop the
+  // suggestions open under the field.
   const handleWaypointFocus = useCallback(
     (index: number) => {
       cancelBlur();
       setFocusedField(index);
-      snapTo("full");
     },
-    [cancelBlur, snapTo],
+    [cancelBlur],
   );
 
   const handleInputChange = useCallback(
@@ -1012,6 +1015,102 @@ export function DirectionsPanelContent() {
     }
   };
 
+  // A phone chooses a stop in the main full-screen search, as a search
+  // that fills the stop instead of opening the place.
+  const openStopSearch = (index: number) => {
+    const waypoint = waypoints[index];
+    if (!waypoint) return;
+    useStopSearchStore.getState().open({
+      initialQuery: inputValues[index] ?? "",
+      placeholder: waypointPlaceholder(t, index, waypoints.length),
+      onPick: ({ coordinates, label }) => {
+        clearDraft(waypoint.id);
+        setWaypoint(index, coordinates, label);
+      },
+    });
+  };
+
+  const suggestionList = (
+    <>
+      <AutocompleteDropdown
+        suggestions={wsSuggestions ?? []}
+        onSelect={handleSuggestionSelect}
+        query={activeQuery}
+        distanceReference={
+          userLocation ? { kind: "user_location", coordinates: userLocation } : undefined
+        }
+      />
+      {waypointAttributions.length > 0 && (
+        <Box sx={{ px: 2, py: 0.75 }}>
+          <AttributionStrip attributions={waypointAttributions} variant="plain" />
+        </Box>
+      )}
+    </>
+  );
+
+  const waypointList = (
+    <Box ref={waypointListRef}>
+      <WaypointList
+        waypoints={waypoints}
+        inputValues={inputValues}
+        onInputChange={handleInputChange}
+        onFocus={handleWaypointFocus}
+        onBlur={handleWaypointBlur}
+        onReorder={reorderWaypoints}
+        onAdd={addWaypoint}
+        onRemove={handleRemove}
+        onReverse={reverseWaypoints}
+        onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
+        onEditSchedule={isEvMode || isFlightMode ? undefined : setScheduleEditIndex}
+        isEvMode={isEvMode}
+        onFieldPress={inSheet ? openStopSearch : undefined}
+        t={t}
+      />
+    </Box>
+  );
+
+  // In a phone's sheet the driving switch and the departure time share a row.
+  const timeInModeRow = inSheet && mode === "driving" && showTimePicker && !hidesRouteControls;
+  // Leave now / depart at / arrive by, for transit and timed driving.
+  const timeChip = (
+    <ClickableRow
+      aria-expanded={timePickerOpen}
+      onClick={() => setTimePickerOpen((v) => !v)}
+      sx={{
+        width: "auto",
+        gap: 0.75,
+        px: 1.75,
+        py: 0.75,
+        borderRadius: "12px",
+        bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
+        "&:hover": {
+          bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
+        },
+        transition: "background-color 0.15s",
+      }}
+    >
+      <ScheduleIcon
+        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
+      />
+      <Typography
+        variant="body2"
+        color={activeTimeMode !== "now" ? BRAND : "text.primary"}
+        sx={{
+          fontWeight: 500,
+        }}
+      >
+        {activeTimeMode === "now"
+          ? t("departNow")
+          : activeTimeMode === "depart"
+            ? `${t("departAt")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`
+            : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
+      </Typography>
+      <ExpandMoreIcon
+        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
+      />
+    </ClickableRow>
+  );
+
   return (
     // Tapping the collapsed sheet's background opens it to mid. Keyboard users
     // change the sheet's height from the focusable sheet itself.
@@ -1037,6 +1136,37 @@ export function DirectionsPanelContent() {
         <Typography variant="subtitle2" sx={{ ml: 1, flex: 1, fontWeight: 600 }}>
           {t("routes")}
         </Typography>
+        {/* Route options and sharing live in the title row, not rows of their own. */}
+        {!hidesRouteControls && (
+          <Tooltip title={t("options")}>
+            <IconButton
+              size="small"
+              aria-label={t("options")}
+              aria-expanded={showOptions}
+              onClick={() => setShowOptions((v) => !v)}
+              sx={{
+                width: 44,
+                height: 44,
+                flexShrink: 0,
+                color: showOptions ? "primary.main" : undefined,
+              }}
+            >
+              <TuneIcon sx={{ fontSize: 22 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+        {!hidesRouteControls && allWaypointsFilled && (
+          <Tooltip title={tp("share")}>
+            <IconButton
+              size="small"
+              aria-label={tp("share")}
+              onClick={handleShare}
+              sx={{ width: 44, height: 44, flexShrink: 0 }}
+            >
+              <ShareIcon sx={{ fontSize: 22 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <IconButton
           size="small"
           onClick={() => useSidebarStore.getState().closeSidebar()}
@@ -1085,9 +1215,18 @@ export function DirectionsPanelContent() {
           of driving, not its own top-level mode, so it lives here rather than in
           the mode row. */}
       {mode === "driving" && (
-        // Left-aligned with the waypoint inputs rather than the panel edge:
+        // Beside the panel the fields follow, so it lines up with them:
         // WaypointList's px (12px) + WaypointRow's 24px icon column + its 4px gap.
-        <Box sx={{ pl: 5, pr: 1.5, pt: 1 }}>
+        // In a phone's sheet the fields float above the map; it lines up with
+        // the sheet's content and keeps its distance from the divider below.
+        <Box
+          sx={[
+            inSheet ? { px: 2, pt: 1, pb: 1.5 } : { pl: 5, pr: 1.5, pt: 1 },
+            { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 },
+          ]}
+        >
+          {/* Departure first, where transit has it too. */}
+          {timeInModeRow && timeChip}
           <ToggleButtonGroup
             size="small"
             exclusive
@@ -1112,24 +1251,8 @@ export function DirectionsPanelContent() {
           </ToggleButtonGroup>
         </Box>
       )}
-      {/* Waypoint list with drag-and-drop */}
-      <Box ref={waypointListRef}>
-        <WaypointList
-          waypoints={waypoints}
-          inputValues={inputValues}
-          onInputChange={handleInputChange}
-          onFocus={handleWaypointFocus}
-          onBlur={handleWaypointBlur}
-          onReorder={reorderWaypoints}
-          onAdd={addWaypoint}
-          onRemove={handleRemove}
-          onReverse={reverseWaypoints}
-          onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
-          onEditSchedule={isEvMode || isFlightMode ? undefined : setScheduleEditIndex}
-          isEvMode={isEvMode}
-          t={t}
-        />
-      </Box>
+      {/* Waypoint list with drag-and-drop: in the panel, or above the map on a phone. */}
+      {inSheet ? <PhoneWaypointCard>{waypointList}</PhoneWaypointCard> : waypointList}
       {/* Divider + content below */}
       <Box sx={{ position: "relative" }}>
         <Divider />
@@ -1188,73 +1311,8 @@ export function DirectionsPanelContent() {
 
         {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit).
             Flight mode renders its own form below, so this row is hidden. */}
-        {!hidesRouteControls && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: showTimePicker ? "space-between" : "flex-end",
-              px: 2,
-              py: 1,
-            }}
-          >
-            {showTimePicker && (
-              <ClickableRow
-                aria-expanded={timePickerOpen}
-                onClick={() => setTimePickerOpen((v) => !v)}
-                sx={{
-                  width: "auto",
-                  gap: 0.75,
-                  px: 1.75,
-                  py: 0.75,
-                  borderRadius: "12px",
-                  bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
-                  "&:hover": {
-                    bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
-                  },
-                  transition: "background-color 0.15s",
-                }}
-              >
-                <ScheduleIcon
-                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-                />
-                <Typography
-                  variant="body2"
-                  color={activeTimeMode !== "now" ? BRAND : "text.primary"}
-                  sx={{
-                    fontWeight: 500,
-                  }}
-                >
-                  {activeTimeMode === "now"
-                    ? t("departNow")
-                    : activeTimeMode === "depart"
-                      ? `${t("departAt")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`
-                      : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
-                </Typography>
-                <ExpandMoreIcon
-                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-                />
-              </ClickableRow>
-            )}
-
-            <ClickableRow
-              aria-expanded={showOptions}
-              sx={{
-                width: "auto",
-                typography: "body2",
-                color: showOptions ? BRAND : "text.secondary",
-                fontWeight: 500,
-                px: 1.5,
-                py: 0.75,
-                borderRadius: 99,
-                "&:hover": { bgcolor: `${BRAND}18`, color: BRAND },
-                transition: "background-color 0.15s, color 0.15s",
-              }}
-              onClick={() => setShowOptions((v) => !v)}
-            >
-              {t("options")}
-            </ClickableRow>
-          </Box>
+        {!hidesRouteControls && showTimePicker && !timeInModeRow && (
+          <Box sx={{ display: "flex", alignItems: "center", px: 2, py: 1 }}>{timeChip}</Box>
         )}
 
         {/* Depart-at / arrive-by picker (shared by transit + driving) */}
@@ -1268,47 +1326,6 @@ export function DirectionsPanelContent() {
         )}
 
         {showOptions && !hidesRouteControls && <RouteOptions />}
-
-        {/* Share row — sits between the options row and the offered routes */}
-        {!hidesRouteControls && allWaypointsFilled && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              px: 2,
-              py: 0.75,
-              borderTop: "1px solid",
-              borderColor: "divider",
-              bgcolor: "action.hover",
-            }}
-          >
-            <Box
-              component="button"
-              type="button"
-              onClick={handleShare}
-              sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.75,
-                border: 0,
-                bgcolor: "transparent",
-                color: BRAND,
-                cursor: "pointer",
-                fontWeight: 500,
-                fontFamily: "inherit",
-                fontSize: "0.875rem",
-                px: 1,
-                py: 0.5,
-                borderRadius: 99,
-                "&:hover": { bgcolor: `${BRAND}18` },
-                transition: "background-color 0.15s",
-              }}
-            >
-              <ShareIcon sx={{ fontSize: 18 }} />
-              {tp("share")}
-            </Box>
-          </Box>
-        )}
 
         <Divider />
 
@@ -1716,7 +1733,7 @@ export function DirectionsPanelContent() {
         </AttributionDetailsGroup>
 
         {/* Suggestions overlay */}
-        {showSuggestions && (
+        {showSuggestions && !inSheet && (
           <Box
             sx={{
               position: "absolute",
@@ -1728,15 +1745,7 @@ export function DirectionsPanelContent() {
               boxShadow: "0 4px 12px var(--omx-shadow-soft)",
             }}
           >
-            <AutocompleteDropdown
-              suggestions={wsSuggestions ?? []}
-              onSelect={handleSuggestionSelect}
-            />
-            {waypointAttributions.length > 0 && (
-              <Box sx={{ px: 2, py: 0.75 }}>
-                <AttributionStrip attributions={waypointAttributions} variant="plain" />
-              </Box>
-            )}
+            {suggestionList}
           </Box>
         )}
       </Box>

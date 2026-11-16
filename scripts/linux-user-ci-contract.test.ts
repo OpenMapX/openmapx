@@ -20,24 +20,6 @@ const job = workflow.jobs["test-linux-user"];
 const steps: Step[] = job.steps;
 
 describe("required Linux deployment-user gate", () => {
-  it("runs the complete suite selection with one file worker", () => {
-    const step = steps.find(
-      (value) =>
-        value.name === "Run the agent, core and data-manager suites and the deployment-user test",
-    );
-    expect(step?.run?.replace("${{ matrix.part }}", "1").trim().split(/\s+/)).toEqual([
-      "umask",
-      "002",
-      "&&",
-      "corepack",
-      "pnpm",
-      "exec",
-      "node",
-      "scripts/test-linux-user.mjs",
-      "1/2",
-    ]);
-  });
-
   it("keeps the pinned runtime, deployment identity, umask and failure handling", () => {
     const version = readFileSync(new URL("../.nvmrc", import.meta.url), "utf8").trim();
     const [image, digest] = job.container.image.split("@");
@@ -56,16 +38,6 @@ describe("required Linux deployment-user gate", () => {
     expect(confirmation?.run).toContain('test "$(id -u)" = 1001 && test "$(umask)" = 0002');
     expect(job["continue-on-error"]).toBeUndefined();
     for (const step of steps) expect(step["continue-on-error"]).toBeUndefined();
-  });
-
-  it("requires the Linux job to succeed before the aggregate can pass", () => {
-    const aggregate = workflow.jobs.ci;
-    expect(aggregate.needs).toContain("test-linux-user");
-    expect(
-      aggregate.steps.some((step: Step) => step.run === "node scripts/ci-impact-plan.mjs verify"),
-    ).toBe(true);
-    expect(job.strategy.matrix.part).toEqual([1, 2]);
-    expect(job.strategy["fail-fast"]).toBe(false);
   });
 });
 

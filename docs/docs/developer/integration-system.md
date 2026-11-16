@@ -1155,6 +1155,17 @@ renderer draws it, so an overlay needs no `legend.tsx`. Declare a `kind` of
 `frontend.overlay` also carries `excludes` (sibling overlays that switch off when
 this one switches on) and `minZoom`.
 
+### How the map shows legends
+
+The map shows the legends of all open overlays in one card at its bottom edge,
+one legend at a time behind a tab named by the overlay's
+`layerSelector.labelKey`. The overlay switched on last is shown first. Code
+legends render through the shared `OverlayLegend` shell: inside the card the
+host owns the surface and width, so a legend's `paperSx` applies only where it
+is rendered on its own, and a title that only repeats its tab is left out. The
+measurement and travel-time tools are toolbars with their own close button, not
+legends, and stand above the card.
+
 ### Map layers (shipped components)
 
 For trusted built-ins the layer itself is a shipped component: `map-layer.tsx`, with the

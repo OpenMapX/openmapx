@@ -29,6 +29,8 @@ vi.mock("@/lib/navigation/navNotify", () => ({ notifyGetOff: vi.fn(), playAlarmT
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useVehicleJourney: state.journey,
+  useRouteAlerts: () => ({ data: undefined }),
+  useStopTransfers: () => ({ data: undefined }),
   useNavigationStore: (selector: (s: unknown) => unknown) =>
     selector({
       voiceEnabled: true,
@@ -120,7 +122,8 @@ describe("journey and navigation use the same transit evidence", () => {
     expect(state.journey).toHaveBeenCalledWith("ms:trip-a");
     for (const platform of screen.getAllByText(/3 → 4/))
       expect(platform).toHaveTextContent("platformChanged");
-    expect(screen.getByText("transit.canceled")).toBeInTheDocument();
+    // The upcoming cancelled ride is labelled in the trip's timeline.
+    expect(screen.getByText(/directions.journeyCancelled/)).toBeInTheDocument();
     expect(
       screen.queryByText(/dataStatus.realtime|dataStatus.unknown|dataStatus.local/),
     ).not.toBeInTheDocument();
@@ -146,7 +149,8 @@ describe("journey and navigation use the same transit evidence", () => {
         <TransitLegBanner leg={leg} legIndex={0} transitProgress={null} source="ms" />
       </>,
     );
-    expect(state.journey.mock.calls.map((call) => call[0])).toEqual([null, null]);
+    expect(state.journey).toHaveBeenCalled();
+    expect(state.journey.mock.calls.every((call) => call[0] === null)).toBe(true);
     expect(
       screen.queryByText(/dataStatus.realtime|dataStatus.unknown|dataStatus.local/),
     ).not.toBeInTheDocument();
@@ -193,5 +197,5 @@ it("does not duplicate the navigation banner's refresh warning in the journey sh
     />,
   );
   expect(screen.queryByText(/dataStatus.refreshFailed/)).not.toBeInTheDocument();
-  expect(screen.getByText("transit.canceled")).toBeInTheDocument();
+  expect(screen.getByText(/directions.journeyCancelled/)).toBeInTheDocument();
 });

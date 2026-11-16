@@ -6,7 +6,8 @@ import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
+import { createContext, type ReactNode, useContext } from "react";
 
 export interface OverlayLegendProps {
   /** Resolved title string (already translated by the caller). */
@@ -19,7 +20,7 @@ export interface OverlayLegendProps {
   loading: boolean;
   /** Header toggle handler. */
   setLayerVisible: (visible: boolean) => void;
-  /** Translated aria-label for the header toggle (e.g. t("toggleOverlay")). */
+  /** Translated aria-label for the header toggle, such as the overlay's own "Toggle …" string. */
   toggleAriaLabel: string;
   /** Per-overlay swatch / control content rendered below the header. */
   children: ReactNode;
@@ -37,6 +38,18 @@ export interface OverlayLegendProps {
    */
   titleSx?: SxProps<Theme>;
 }
+
+/**
+ * Set by the map's legend host when it frames the legends itself (one card,
+ * one legend at a time, chosen by a tab named `label`). A legend then renders
+ * flat inside that card, with no surface, shadow or width of its own, leaves
+ * out a title that only repeats its tab, and ends its header with the card's
+ * own `action` when there is no tab row to carry it.
+ */
+export const EmbeddedLegendContext = createContext<{
+  label: string | null;
+  action?: ReactNode;
+} | null>(null);
 
 /**
  * Shared shell for every overlay legend: the <Paper> wrapper,
@@ -66,20 +79,25 @@ export function OverlayLegend({
   headerSx,
   titleSx,
 }: OverlayLegendProps) {
+  const t = useTranslations("map");
+  const embedded = useContext(EmbeddedLegendContext);
   if (!panelOpen) return null;
+  const titleShown = !embedded?.label || embedded.label !== title;
 
   return (
     <Paper
-      elevation={3}
+      elevation={embedded ? 0 : 3}
       sx={[
         {
           position: "relative",
           px: 2,
           py: 1.5,
-          borderRadius: "12px",
+          borderRadius: embedded ? 0 : "12px",
           overflow: "hidden",
+          bgcolor: embedded ? "transparent" : undefined,
         },
-        ...(Array.isArray(paperSx) ? paperSx : [paperSx]),
+        // The host's card sets the width a framed legend fills.
+        ...(embedded ? [] : Array.isArray(paperSx) ? paperSx : [paperSx]),
       ]}
     >
       {loading && (
@@ -103,14 +121,20 @@ export function OverlayLegend({
           ...(Array.isArray(headerSx) ? headerSx : [headerSx]),
         ]}
       >
-        <Typography
-          sx={[
-            { fontWeight: 600, fontSize: 14 },
-            ...(Array.isArray(titleSx) ? titleSx : [titleSx]),
-          ]}
-        >
-          {title}
-        </Typography>
+        {titleShown ? (
+          <Typography
+            sx={[
+              { fontWeight: 600, fontSize: 14 },
+              ...(Array.isArray(titleSx) ? titleSx : [titleSx]),
+            ]}
+          >
+            {title}
+          </Typography>
+        ) : (
+          <Typography sx={{ fontSize: 14, color: "text.secondary" }}>
+            {t("legendShowOnMap")}
+          </Typography>
+        )}
         <Switch
           size="small"
           checked={layerVisible}
@@ -118,6 +142,7 @@ export function OverlayLegend({
           slotProps={{ input: { "aria-label": toggleAriaLabel } }}
           sx={{ ml: 2 }}
         />
+        {embedded?.action}
       </Box>
       {children}
     </Paper>

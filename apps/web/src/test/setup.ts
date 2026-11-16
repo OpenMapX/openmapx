@@ -3,6 +3,8 @@
 // @testing-library/react auto-cleans the DOM after each test when Vitest globals
 // are enabled, so no explicit afterEach(cleanup) is needed here.
 import "@testing-library/jest-dom/vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, vi } from "vitest";
 import { isBackNavigationIdle, resetBackNavigationForTests } from "@/lib/backNavigation";
 import { resetMapTouchForTests } from "@/lib/mapTouch";
@@ -16,6 +18,61 @@ import { settleHistory } from "./history";
 if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// jsdom resolves var() in computed styles the way a browser does: a reference
+// to an undefined custom property makes the declaration fall back to its
+// inherited or initial value. Components style themselves with the --omx-*
+// design tokens, so give the document the same :root tokens the app loads from
+// globals.css (the light theme, as on first paint).
+if (typeof document !== "undefined") {
+  const css = readFileSync(join(import.meta.dirname, "../app/globals.css"), "utf8");
+  const rootRules = css.match(/^:root\s*\{[\s\S]*?^\}/gm);
+  if (!rootRules) throw new Error("globals.css no longer declares top-level :root tokens");
+  const tokens = document.createElement("style");
+  tokens.dataset.testTokens = "globals.css";
+  tokens.textContent = rootRules.join("\n");
+  document.head.prepend(tokens);
+}
+
+// A request nobody mocked must not reach the network or pass unnoticed. Node's
+// real fetch would reject a relative URL with a vague TypeError and send an
+// absolute one to the real host, and the test would usually still pass. This
+// stand-in records the URL, rejects, and the afterEach below fails the test.
+// It is a plain function rather than vi.fn so restoreAllMocks/resetAllMocks
+// cannot change it; vi.stubGlobal, vi.spyOn and tests that save and restore
+// globalThis.fetch all put it back after their test.
+const unmockedFetchCalls: string[] = [];
+
+function requestUrl(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  if (typeof Request !== "undefined" && input instanceof Request) return input.url;
+  return String(input);
+}
+
+export function unmockedFetch(input: unknown): Promise<Response> {
+  const url = requestUrl(input);
+  unmockedFetchCalls.push(url);
+  return Promise.reject(
+    new TypeError(`Unmocked fetch in a web test: ${url}. Mock the request in the test.`),
+  );
+}
+
+/** Returns the URLs fetched without a mock since the last call, and forgets them. */
+export function takeUnmockedFetchCalls(): string[] {
+  return unmockedFetchCalls.splice(0);
+}
+
+globalThis.fetch = unmockedFetch as typeof fetch;
+
+afterEach(() => {
+  const urls = takeUnmockedFetchCalls();
+  if (urls.length > 0) {
+    throw new Error(
+      `Unmocked fetch in a web test. Mock these requests in the test:\n${urls.map((url) => `  ${url}`).join("\n")}`,
+    );
+  }
+});
 
 // Dialogs, menus, sheets and panels write history entries, and a Back that
 // crossed only leftovers steps on by itself. jsdom's history lives for the

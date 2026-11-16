@@ -2,6 +2,7 @@
 
 import PersonIcon from "@mui/icons-material/Person";
 import Avatar from "@mui/material/Avatar";
+import Button from "@mui/material/Button";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, proxyImageUrl } from "@openmapx/core";
@@ -20,10 +21,25 @@ interface Props {
   size?: number;
   /** Optional sx merged onto the Avatar (e.g. omit boxShadow when inline). */
   sx?: SxProps<Theme>;
+  /** Signed out, show a labelled "Sign in" button instead of a blank avatar. */
+  labelledSignIn?: boolean;
+  /**
+   * Opens something else instead of the account popover or sign-in, such as
+   * the phone's menu, which carries the account itself.
+   */
+  onOpen?: () => void;
+  /** The button's name when `onOpen` makes it open more than the account. */
+  openLabel?: string;
 }
 
 /** Avatar button with auth flow: opens AuthDialog when signed-out, AccountMenu when signed-in. */
-export function AccountAvatarButton({ size = 36, sx }: Props) {
+export function AccountAvatarButton({
+  size = 36,
+  sx,
+  labelledSignIn = false,
+  onOpen,
+  openLabel,
+}: Props) {
   const t = useTranslations("map");
   const { authorityKey, data: session, isPending } = useSettledSessionAuthority();
   const [authOpen, setAuthOpen] = useState(false);
@@ -46,7 +62,9 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
   const avatarSrc = user?.image ? proxyImageUrl(user.image) : undefined;
 
   const handleAvatarClick = () => {
-    if (user) {
+    if (onOpen) {
+      onOpen();
+    } else if (user) {
       setMenuAnchor(avatarRef.current);
     } else {
       setAuthOpen(true);
@@ -55,14 +73,22 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
 
   const initials = user ? getInitials(user.name, user.email) : null;
 
-  return (
-    <>
+  const trigger =
+    labelledSignIn && !user ? (
+      <Button
+        variant="contained"
+        onClick={handleAvatarClick}
+        sx={{ height: size, borderRadius: size / 2, px: 2.5, opacity: pending ? 0.5 : 1 }}
+      >
+        {t("signIn")}
+      </Button>
+    ) : (
       <Tooltip title={user ? (user.name ?? t("account")) : t("signIn")} placement="bottom">
         <Avatar
           ref={avatarRef}
           component="button"
           type="button"
-          aria-label={t("account")}
+          aria-label={openLabel ?? t("account")}
           src={avatarSrc}
           onClick={handleAvatarClick}
           sx={[
@@ -83,6 +109,11 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
           {initials ?? <PersonIcon sx={{ fontSize: Math.round(size * 0.55) }} />}
         </Avatar>
       </Tooltip>
+    );
+
+  return (
+    <>
+      {trigger}
 
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
       <ResetPasswordDialog />

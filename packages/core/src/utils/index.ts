@@ -59,6 +59,12 @@ export { connectorStandardOf } from "./connector-standard";
 export { haversineDistance } from "./coordinates";
 export { applyClientSideFilters, splitFilters } from "./dataSourceFilters";
 export {
+  DATA_SOURCE_MATCH_METERS,
+  type DataSourceMatchCandidate,
+  type DataSourceMatchTarget,
+  matchDataSourceResults,
+} from "./dataSourceMatch";
+export {
   type CalendarDateOptions,
   type ClockTimeOptions,
   type DateFormat,

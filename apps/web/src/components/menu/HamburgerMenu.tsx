@@ -1,63 +1,82 @@
 "use client";
 
+import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import CloseIcon from "@mui/icons-material/Close";
-import DownloadForOfflineIcon from "@mui/icons-material/DownloadForOffline";
-import HistoryIcon from "@mui/icons-material/History";
-import ImageIcon from "@mui/icons-material/Image";
+import DownloadForOfflineOutlinedIcon from "@mui/icons-material/DownloadForOfflineOutlined";
+import KeyboardOutlinedIcon from "@mui/icons-material/KeyboardOutlined";
 import LinkIcon from "@mui/icons-material/Link";
-import LocalParkingIcon from "@mui/icons-material/LocalParking";
-import PrintIcon from "@mui/icons-material/Print";
-import SettingsIcon from "@mui/icons-material/Settings";
-import StorageIcon from "@mui/icons-material/Storage";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
+import LocalParkingOutlinedIcon from "@mui/icons-material/LocalParkingOutlined";
+import LogoutIcon from "@mui/icons-material/Logout";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
+import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
+import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
+import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
 import {
   PANEL,
+  useCommandPaletteStore,
   useMenuStore,
   useParkedLocations,
   useParkingStore,
   useSession,
   useSidebarStore,
 } from "@openmapx/core";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { useSignOut } from "@/components/auth/useSignOut";
 import { InstallEntry, IosInstallHintDialog } from "@/components/pwa/InstallEntry";
 import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { StorageDialog } from "@/components/settings/StorageDialog";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { IMPORT_ACCEPT, importGeoFromFile } from "@/lib/importGeoFile";
 import { useBackDismiss } from "@/lib/useBackDismiss";
+import { useFinePointer } from "@/lib/useFinePointer";
+import { useAccountSettingsStore } from "@/stores/accountSettingsStore";
+import { MenuAccountHeader } from "./MenuAccountHeader";
+import { MenuRow } from "./MenuRow";
+
+const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
 const DRAWER_WIDTH = 280;
 
 export function HamburgerMenu() {
   const t = useTranslations("menu");
   const tCommon = useTranslations("common");
+  const tFooter = useTranslations("footer");
+  const tAccount = useTranslations("account");
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
   useBackDismiss(isOpen, close);
   const { data: session, isPending: sessionPending } = useSession();
   const { data: parked } = useParkedLocations();
   const isSignedIn = !sessionPending && !!session?.user?.id;
+  const user = isSignedIn ? (session?.user ?? null) : null;
+  // On a phone the avatar opens this menu, so it carries the account too and
+  // slides in from the avatar's side across the screen.
+  const theme = useTheme();
+  const isPhone = useMediaQuery(theme.breakpoints.down("sm"));
+  const signOut = useSignOut();
+  const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
   const [iosHintOpen, setIosHintOpen] = useState(false);
   const [importFailed, setImportFailed] = useState(false);
+  // The command palette is a keyboard tool; touch screens don't list it.
+  const finePointer = useFinePointer();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -94,6 +113,11 @@ export function HamburgerMenu() {
     useSidebarStore.getState().openSidebar(PANEL.PARKING);
   };
 
+  const handleCommandPalette = () => {
+    close();
+    useCommandPaletteStore.getState().open();
+  };
+
   const handleShareMap = async () => {
     const result = await shareCurrentUrl({ title: "OpenMapX" });
     close();
@@ -104,189 +128,151 @@ export function HamburgerMenu() {
     <>
       <Drawer
         variant="temporary"
-        anchor="left"
+        anchor={isPhone ? "right" : "left"}
         open={isOpen}
         onClose={close}
         slotProps={{
           paper: {
-            sx: { width: DRAWER_WIDTH },
+            sx: { width: isPhone ? "100%" : DRAWER_WIDTH },
           },
         }}
       >
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            px: 2,
-            py: 1.5,
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <Box
-              component="img"
-              src="/icons/app/icon-192.png"
-              alt=""
-              sx={{ width: 32, height: 32, borderRadius: "22%", flexShrink: 0 }}
-            />
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              OpenMapX
-            </Typography>
+        {isPhone ? (
+          <MenuAccountHeader
+            user={user}
+            onClose={close}
+            onSignIn={() => {
+              close();
+              setAuthOpen(true);
+            }}
+            onAccountSettings={() => {
+              close();
+              useAccountSettingsStore.getState().show();
+            }}
+          />
+        ) : (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              px: 2,
+              py: 1.5,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Box
+                component="img"
+                src="/icons/app/icon-192.png"
+                alt=""
+                sx={{ width: 32, height: 32, borderRadius: "22%", flexShrink: 0 }}
+              />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                OpenMapX
+              </Typography>
+            </Box>
+            <IconButton onClick={close} aria-label={tCommon("close")} size="small">
+              <CloseIcon />
+            </IconButton>
           </Box>
-          <IconButton onClick={close} aria-label={tCommon("close")} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
+        )}
 
         <Divider />
 
-        <List disablePadding>
-          <ListItemButton sx={{ height: 48 }} onClick={handleSaved}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <BookmarkBorderIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("saved")} />
-          </ListItemButton>
-
+        <List disablePadding sx={{ py: 1 }}>
+          <MenuRow icon={<BookmarkBorderIcon />} label={t("saved")} onClick={handleSaved} />
           {isSignedIn && (
-            <ListItemButton sx={{ height: 48 }} onClick={handleTimeline}>
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                <TimelineIcon />
-              </ListItemIcon>
-              <ListItemText primary={t("timeline")} />
-            </ListItemButton>
+            <MenuRow
+              icon={<TimelineOutlinedIcon />}
+              label={t("timeline")}
+              onClick={handleTimeline}
+            />
           )}
-
           {/* Conditional rather than disabled: an always-present "Parking" that
               does nothing teaches the user the entry is broken. */}
           {parked && parked.length > 0 && (
-            <ListItemButton sx={{ height: 48 }} onClick={handleParking}>
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                <LocalParkingIcon />
-              </ListItemIcon>
-              <ListItemText primary={t("parking")} />
-            </ListItemButton>
+            <MenuRow
+              icon={<LocalParkingOutlinedIcon />}
+              label={t("parking")}
+              onClick={handleParking}
+            />
           )}
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <HistoryIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("recent")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <ImageIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("contributions")} />
-          </ListItemButton>
         </List>
 
         <Divider />
 
-        <List disablePadding>
+        <List disablePadding sx={{ py: 1 }}>
           <InstallEntry onClick={close} onIosHintNeeded={() => setIosHintOpen(true)} />
-
-          <ListItemButton
-            component={Link}
+          <MenuRow
+            icon={<DownloadForOfflineOutlinedIcon />}
+            label={t("offlineMaps")}
             href="/settings/offline"
-            sx={{ height: 48 }}
             onClick={close}
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <DownloadForOfflineIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("offlineMaps")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48 }}
+          />
+          <MenuRow
+            icon={<StorageOutlinedIcon />}
+            label={t("storage")}
             onClick={() => {
               close();
               setStorageOpen(true);
             }}
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <StorageIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("storage")} />
-          </ListItemButton>
-
-          <ListItemButton sx={{ height: 48 }} onClick={handleShareMap}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <LinkIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("shareMap")} />
-          </ListItemButton>
-
-          <ListItemButton sx={{ height: 48 }} onClick={() => fileInputRef.current?.click()}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <UploadFileIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("importFile")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <PrintIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("print")} />
-          </ListItemButton>
+          />
+          <MenuRow icon={<LinkIcon />} label={t("shareMap")} onClick={handleShareMap} />
+          <MenuRow
+            icon={<UploadFileOutlinedIcon />}
+            label={t("importFile")}
+            onClick={() => fileInputRef.current?.click()}
+          />
         </List>
 
         <Divider />
 
-        <List disablePadding>
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemText primary={t("tips")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemText primary={t("help")} />
-          </ListItemButton>
+        <List disablePadding sx={{ py: 1 }}>
+          {finePointer && (
+            <MenuRow
+              icon={<KeyboardOutlinedIcon />}
+              label={t("commandPalette")}
+              hint={formatShortcut(PALETTE_SHORTCUT, getPlatform())}
+              onClick={handleCommandPalette}
+            />
+          )}
+          <MenuRow
+            icon={<SettingsOutlinedIcon />}
+            label={t("settings")}
+            onClick={() => {
+              close();
+              setSettingsOpen(true);
+            }}
+          />
+          {isPhone && user?.role === "admin" && (
+            <MenuRow
+              icon={<AdminPanelSettingsOutlinedIcon />}
+              label={tAccount("adminPanel")}
+              onClick={() => {
+                close();
+                router.push("/admin");
+              }}
+            />
+          )}
+          {isPhone && user && (
+            <MenuRow
+              icon={<LogoutIcon />}
+              label={tAccount("signOut")}
+              onClick={() => {
+                close();
+                void signOut();
+              }}
+            />
+          )}
         </List>
 
         <Divider />
 
-        <List disablePadding>
-          <ListItemButton sx={{ height: 48 }} onClick={() => setSettingsOpen(true)}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <SettingsIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("settings")} />
-          </ListItemButton>
-        </List>
-
-        <Divider />
-
-        <List disablePadding>
-          <ListItemButton component={Link} href="/privacy" sx={{ height: 48 }} onClick={close}>
-            <ListItemText primary={t("privacy")} />
-          </ListItemButton>
-
-          <ListItemButton component={Link} href="/terms" sx={{ height: 48 }} onClick={close}>
-            <ListItemText primary={t("terms")} />
-          </ListItemButton>
-
-          <ListItemButton component={Link} href="/imprint" sx={{ height: 48 }} onClick={close}>
-            <ListItemText primary={t("imprint")} />
-          </ListItemButton>
+        <List disablePadding sx={{ py: 1 }}>
+          <MenuRow label={t("privacy")} href="/privacy" onClick={close} />
+          <MenuRow label={t("terms")} href="/terms" onClick={close} />
+          <MenuRow label={t("imprint")} href="/imprint" onClick={close} />
+          <MenuRow label={tFooter("licenses")} href="/licenses" onClick={close} />
         </List>
       </Drawer>
       <input

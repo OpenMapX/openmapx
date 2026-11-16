@@ -3,11 +3,9 @@
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
-import NavigationIcon from "@mui/icons-material/Navigation";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type {
   PersonalVehicle,
@@ -43,8 +41,10 @@ import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { requestHeadingPermission } from "@/lib/useHeading";
 import { useNow } from "@/lib/useNow";
 import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
+import { RouteCardActions, routeCardFrameSx } from "./routeCardChrome";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
 
@@ -131,7 +131,7 @@ export function RouteCard({
   arrivalContext,
 }: RouteCardProps) {
   const t = useTranslations("directions");
-  const tc = useTranslations("common");
+  const _tc = useTranslations("common");
   const tNav = useTranslations("navigation");
   const tTraffic = useTranslations("trafficStatus");
   const locale = useLocale();
@@ -318,7 +318,9 @@ export function RouteCard({
           {ascentLabel}
         </Typography>
       )}
-      {roadConditionNotice && (
+      {/* Route-level notes belong to the chosen route; alternatives stay a
+          compact comparison of time, way and distance. */}
+      {active && roadConditionNotice && (
         <Typography
           variant="caption"
           data-testid="road-condition-route-status"
@@ -366,17 +368,7 @@ export function RouteCard({
         if (!(event.target as Element).closest("button, input, label, a, [role='button']"))
           onSelect();
       }}
-      sx={{
-        display: "flex",
-        gap: 1.5,
-        px: 2,
-        py: 1.5,
-        cursor: "pointer",
-        borderLeft: active ? `4px solid ${BRAND}` : "4px solid transparent",
-        bgcolor: active ? "rgba(0,123,139,0.04)" : "transparent",
-        "&:hover": { bgcolor: active ? "rgba(0,123,139,0.07)" : "action.hover" },
-        transition: "background-color 0.15s",
-      }}
+      sx={{ ...routeCardFrameSx(active), display: "flex", gap: 1.5 }}
     >
       <Box
         sx={{
@@ -430,22 +422,12 @@ export function RouteCard({
               id={trafficCaptionId}
               component="span"
               data-testid="route-traffic-status"
-              sx={{
-                border: 0,
-                clip: "rect(0 0 0 0)",
-                height: "1px",
-                margin: "-1px",
-                overflow: "hidden",
-                padding: 0,
-                position: "absolute",
-                whiteSpace: "nowrap",
-                width: "1px",
-              }}
+              sx={VISUALLY_HIDDEN}
             >
               {tTraffic("summary")}
             </Box>
           )}
-        {impact ? (
+        {!active ? null : impact ? (
           // biome-ignore lint/plugin/noClickableLayoutElement: keeps the badge's click from selecting the route
           <Box
             sx={{ mt: 0.5 }}
@@ -485,58 +467,13 @@ export function RouteCard({
           </Typography>
         )}
         {active && (
-          <Box sx={{ mt: 0.5, ml: -1.5, display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography
-              component="button"
-              type="button"
-              variant="caption"
-              sx={{
-                color: BRAND,
-                cursor: "pointer",
-                fontWeight: 500,
-                px: 1.5,
-                py: 0.75,
-                borderRadius: 99,
-                border: 0,
-                bgcolor: "transparent",
-                "&:hover": { bgcolor: `${BRAND}18` },
-                "&:focus-visible": {
-                  outline: "2px solid",
-                  outlineColor: "primary.main",
-                  outlineOffset: 2,
-                },
-                transition: "background-color 0.15s",
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDetails();
-              }}
-            >
-              {tc("details")}
-            </Typography>
-            {GROUND_MODES.has(route.mode) && (
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<NavigationIcon />}
-                // A second tap while the shell is still preparing would start a
-                // second session nobody is watching.
-                disabled={starting}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleStart();
-                }}
-                sx={{
-                  bgcolor: BRAND,
-                  textTransform: "none",
-                  borderRadius: 99,
-                  "&:hover": { bgcolor: BRAND },
-                }}
-              >
-                {tNav("start")}
-              </Button>
-            )}
-          </Box>
+          <RouteCardActions
+            onDetails={onDetails}
+            onStart={GROUND_MODES.has(route.mode) ? () => void handleStart() : undefined}
+            // A second tap while the shell is still preparing would start a
+            // second session nobody is watching.
+            startDisabled={starting}
+          />
         )}
         {startError && (
           <Typography role="alert" sx={{ fontSize: 12, color: "error.main", mt: 0.5 }}>

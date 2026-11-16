@@ -36,6 +36,7 @@ const initialWaypoints = useDirectionsStore.getState().waypoints;
 
 afterEach(() => {
   useDirectionsStore.setState({ waypoints: initialWaypoints });
+  vi.unstubAllGlobals();
 });
 
 beforeEach(() => {
@@ -136,6 +137,19 @@ describe("accessible names", () => {
 
   it("names the flight date and cabin fields and exposes the toggles' state", async () => {
     const user = userEvent.setup();
+    // The panel loads the flight providers and the airports nearest each end.
+    // The airport lookup fails, so the airport fields stay empty.
+    const unmocked = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/integrations/flights/providers")) {
+        return Response.json({ providers: [], defaultProvider: "" });
+      }
+      if (url.includes("/api/integrations/knowledge-ourairports/nearest")) {
+        return new Response(null, { status: 503 });
+      }
+      return unmocked(input);
+    });
     act(() =>
       useDirectionsStore.setState({
         waypoints: [

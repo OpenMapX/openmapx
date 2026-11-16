@@ -1,9 +1,9 @@
 "use client";
 
 import EditLocationAltOutlinedIcon from "@mui/icons-material/EditLocationAltOutlined";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Tooltip from "@mui/material/Tooltip";
 import { parseOsmElementId, useCapabilities, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -29,7 +29,7 @@ export function OsmContributionEntry({ osmId }: Props) {
   const { data: session } = useSession();
   const [authOpen, setAuthOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
-  const entryRef = useRef<HTMLDivElement>(null);
+  const entryRef = useRef<HTMLButtonElement>(null);
   const [pendingRef, setPendingRef] = useState<string | null>(null);
   const [callbackPath, setCallbackPath] = useState<string>();
 
@@ -84,17 +84,19 @@ export function OsmContributionEntry({ osmId }: Props) {
 
   return (
     <>
-      <ListItemButton
-        ref={entryRef}
-        onClick={handleClick}
-        sx={{ minHeight: 44, borderRadius: 1 }}
-        data-testid="osm-contribution-entry"
-      >
-        <ListItemIcon sx={{ minWidth: 40 }}>
-          <EditLocationAltOutlinedIcon fontSize="small" />
-        </ListItemIcon>
-        <ListItemText primary={t("entry")} secondary={t("entryDescription")} />
-      </ListItemButton>
+      <Box sx={{ display: "flex", justifyContent: "center", py: 1.5 }}>
+        <Tooltip title={t("entryDescription")}>
+          <Button
+            ref={entryRef}
+            variant="tonal"
+            onClick={handleClick}
+            startIcon={<EditLocationAltOutlinedIcon />}
+            data-testid="osm-contribution-entry"
+          >
+            {t("entry")}
+          </Button>
+        </Tooltip>
+      </Box>
 
       <AuthDialog
         open={authOpen}

@@ -23,6 +23,7 @@ import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { useAlignToStreets } from "@/lib/useAlignToStreets";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { AlignToStreetsIcon, gridScreenTilt } from "./AlignToStreetsIcon";
 import { gridCeiling, resolveControlPlacement } from "./controlPlacement";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
@@ -31,24 +32,14 @@ import { Pegman } from "./Pegman";
 const BASE_BOTTOM = 48;
 const PANEL_GAP = 12;
 
-/** Off-screen but readable by assistive technology. `sx` treats a bare 1 as 100%, so the sizes are explicit. */
-const SR_ONLY = {
-  border: 0,
-  clip: "rect(0 0 0 0)",
-  height: "1px",
-  margin: "-1px",
-  overflow: "hidden",
-  padding: 0,
-  position: "absolute",
-  whiteSpace: "nowrap",
-  width: "1px",
-} as const;
-
 export function MapControls() {
   const t = useTranslations("map");
   const tNav = useTranslations("navigation");
   const { zoomIn, zoomOut, resetBearing } = useMap();
   const navigating = useNavigationStore((s) => s.status !== "idle");
+  // On arrival a phone's sheet covers the bottom edge and voice and reporting
+  // no longer apply, so the stack steps aside until the trip is closed.
+  const arrived = useNavigationStore((s) => s.status === "arrived");
   const navKind = useNavigationStore((s) => s.kind);
   const navCameraMode = useNavigationStore((s) => s.cameraMode);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
@@ -179,6 +170,7 @@ export function MapControls() {
           alignItems: "center",
           gap: 1,
           zIndex: 10,
+          ...(arrived && { visibility: { xs: "hidden", sm: "visible" } }),
           // No `bottom` transition: the sheet republishes its height on every
           // frame it moves, and an eased transition restarted per frame would
           // trail the sheet by a few hundred pixels instead of riding on it.
@@ -190,6 +182,14 @@ export function MapControls() {
             outlineColor: "primary.main",
             outlineOffset: -3,
           },
+          // While navigating the few remaining controls are larger, round
+          // buttons a driver can hit at a glance.
+          ...(navigating && {
+            gap: 1.5,
+            "& .MuiPaper-root": { borderRadius: "50%" },
+            "&& .MuiIconButton-root": { width: 48, height: 48, borderRadius: "50%" },
+            "& .MuiIconButton-root svg": { fontSize: 24 },
+          }),
         }}
       >
         <Box
@@ -356,7 +356,7 @@ export function MapControls() {
       />
       {/* The region itself stays mounted — screen readers ignore one that
         appears with its text already in place — and only the child is swapped. */}
-      <Box role="status" aria-live="polite" sx={SR_ONLY}>
+      <Box role="status" aria-live="polite" sx={VISUALLY_HIDDEN}>
         <span key={alignMessage?.seq}>{alignMessage?.text}</span>
       </Box>
     </>

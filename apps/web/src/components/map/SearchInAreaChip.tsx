@@ -10,6 +10,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { CHIP_ROW_END } from "@/components/search/floatingChipSx";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { PANEL_WIDTH, SEARCH_BAR_INSET, topInset } from "@/lib/layout";
@@ -82,12 +83,10 @@ export function SearchInAreaChip() {
       onClick={handleClick}
       sx={{
         position: "absolute",
-        // Below the category chips row:
-        // Desktop: chips 6px below the bar's top, 40px tall, then 8px → 54px;
-        // mobile: chips 60px below it → 108px.
+        // 8px below the category chips row.
         top: {
-          xs: topInset(SEARCH_BAR_INSET, 108),
-          sm: topInset(SEARCH_BAR_INSET, 54),
+          xs: topInset(SEARCH_BAR_INSET, CHIP_ROW_END.xs + 8),
+          sm: topInset(SEARCH_BAR_INSET, CHIP_ROW_END.sm + 8),
         },
         // When the floating card is open, center in the remaining map area to its right.
         // Remaining area: FLOATING_CARD_RIGHT_EDGE → 100vw, center = (edge + 100%) / 2

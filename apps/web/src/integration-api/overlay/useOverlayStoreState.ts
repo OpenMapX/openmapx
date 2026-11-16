@@ -71,3 +71,19 @@ export function useAnyOverlayPanelOpen(overlayIds: string[]): boolean {
   );
   return useSyncExternalStore(subscribeOverlayStoreChanges, getSnapshot, () => false);
 }
+
+/**
+ * The given overlays whose panel is open, in the order given — the legends the
+ * map is showing. Reported as a stable list that only changes when the open
+ * set does.
+ */
+export function useOpenOverlayIds(overlayIds: string[]): string[] {
+  const key = overlayIds.join(",");
+  const ids = useMemo(() => key.split(",").filter(Boolean), [key]);
+  const getSnapshot = useCallback(
+    () => ids.filter((id) => getRegisteredOverlayStore(id)?.getState().panelOpen).join(","),
+    [ids],
+  );
+  const open = useSyncExternalStore(subscribeOverlayStoreChanges, getSnapshot, () => "");
+  return useMemo(() => open.split(",").filter(Boolean), [open]);
+}

@@ -2,7 +2,7 @@ import { apiClient, type FixInput, useNavigationStore } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { onlineManager } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 let handler: ((fix: FixInput) => void) | null = null;
 vi.mock("../useWatchPosition", () => ({
@@ -53,6 +53,12 @@ const trip = () =>
       },
     ],
   }) as TripItinerary;
+// The engine looks up each boarding and alighting stop's platform area. None is
+// known here, so stops stay circles around their points.
+beforeEach(() => {
+  vi.spyOn(apiClient, "getOptional").mockResolvedValue(null);
+});
+
 afterEach(() => {
   useNavigationStore.getState().stopNavigation();
   useNavigationStore.getState().setConnectivity("online");

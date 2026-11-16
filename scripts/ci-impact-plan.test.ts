@@ -1,5 +1,13 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createImpactPlan, verifyMetadataResults, verifyResults } from "./ci-impact-plan.mjs";
+import {
+  createImpactPlan,
+  scopeSkippedJobs,
+  selectiveScopes,
+  validationJobs,
+  verifyMetadataResults,
+  verifyResults,
+} from "./ci-impact-plan.mjs";
 
 const sha = "a".repeat(40);
 const base = "b".repeat(40);
@@ -21,7 +29,7 @@ const pr = (paths: string[], extra = {}) =>
     },
     metadataGateReady: true,
     metadataEditKnown: true,
-    approvedScopes: ["docs", "web", "mobile"],
+    approvedScopes: ["docs", "web", "mobile", "client"],
     ...extra,
   });
 
@@ -86,6 +94,85 @@ describe("CI applicability and required result enforcement", () => {
     expect(plan.jobs["test-node"]).toBe(true);
     expect(plan.jobs.database).toBe(false);
     expect(plan.jobs["test-web"]).toBe(false);
+  });
+  it("runs client source, translations and docs prose without the database and host jobs", () => {
+    const skipped = ["database", "test-linux-user", "test-agent-image"];
+    for (const paths of [
+      ["apps/web/src/lib/navigation/useNavigationVoice.ts", "apps/web/src/app/page.tsx"],
+      ["apps/web/src/components/map/HostMapProvider.tsx"],
+      ["apps/web/src/components/example.tsx", "packages/i18n/locales/de.json"],
+      ["apps/web/src/styles/global.css", "docs/docs/features/search.md"],
+      ["apps/mobile/src/example.ts", "apps/web/src/components/example.tsx"],
+      ["packages/i18n/locales/en.json"],
+    ]) {
+      const plan = pr(paths);
+      expect(plan.scope, paths.join()).toBe("client");
+      for (const id of validationJobs) expect(plan.jobs[id], id).toBe(!skipped.includes(id));
+    }
+  });
+  it.each([
+    "apps/web/package.json",
+    "apps/web/next.config.ts",
+    "apps/web/public/runtime/importmap.json",
+    "apps/web/scripts/build-runtime-modules.mjs",
+    "apps/mobile/package.json",
+    "apps/mobile/app.config.ts",
+    "packages/i18n/index.ts",
+    "packages/i18n/locales/nested/de.json",
+    "packages/core/src/index.ts",
+    "apps/api/src/privacy/notifications.ts",
+    "integrations/fuel/FuelLayer.tsx",
+  ])("runs every job when client source arrives with %s", (path) => {
+    const plan = pr(["apps/web/src/components/example.tsx", path]);
+    expect(plan.scope).toBe("full");
+    expect(Object.values(plan.jobs).every(Boolean)).toBe(true);
+  });
+  it("keeps the client scope in shadow mode until trusted main approves it", () => {
+    const plan = pr(["apps/web/src/lib/example.ts"], { approvedScopes: ["docs", "web", "mobile"] });
+    expect(plan.proposedScope).toBe("client");
+    expect(plan.scope).toBe("full");
+    expect(Object.values(plan.jobs).every(Boolean)).toBe(true);
+  });
+  it("accepts a client run only with the database and host jobs skipped", () => {
+    const plan = pr(["apps/web/src/lib/example.ts"]);
+    const results = Object.fromEntries(
+      Object.entries(plan.jobs).map(([id, selected]) => [
+        id,
+        { result: selected ? "success" : "skipped" },
+      ]),
+    );
+    results["docker-changes"] = { result: "success", outputs: { apps: '["web"]' } } as never;
+    results["docker-build"] = { result: "success" };
+    expect(() => verifyResults(plan, results, "pull_request")).not.toThrow();
+    expect(() =>
+      verifyResults(plan, { ...results, database: { result: "success" } }, "pull_request"),
+    ).toThrow();
+    expect(() =>
+      verifyResults(plan, { ...results, mobile: { result: "skipped" } }, "pull_request"),
+    ).toThrow();
+    expect(() => verifyResults({ ...plan, scope: "docs" }, results, "pull_request")).toThrow(
+      /declared scope/,
+    );
+    expect(() => verifyResults({ ...plan, scope: "other" }, results, "pull_request")).toThrow();
+  });
+  it("never lets a scope skip lint, the portable node tests or an unknown job", () => {
+    expect(selectiveScopes).toEqual(["docs", "web", "mobile", "client"]);
+    for (const scope of selectiveScopes) {
+      expect(scopeSkippedJobs[scope].length, scope).toBeGreaterThan(0);
+      expect(scopeSkippedJobs[scope], scope).not.toContain("lint");
+      expect(scopeSkippedJobs[scope], scope).not.toContain("test-node");
+      for (const id of scopeSkippedJobs[scope]) expect(validationJobs, scope).toContain(id);
+    }
+    for (const scope of ["web", "mobile", "client"])
+      for (const id of ["types", "build"]) expect(scopeSkippedJobs[scope]).not.toContain(id);
+  });
+  it("approves only scopes the selector knows on trusted main", () => {
+    const rollout = JSON.parse(
+      readFileSync(new URL("./ci-impact-rollout.json", import.meta.url), "utf8"),
+    );
+    expect(rollout.version).toBe(1);
+    expect(rollout.approvedScopes).toEqual(["docs", "web", "mobile", "client"]);
+    for (const scope of rollout.approvedScopes) expect(selectiveScopes).toContain(scope);
   });
   it("never narrows trusted main reconciliation or incomplete diffs", () => {
     expect(Object.values(pr([], { event: "schedule" }).jobs).every(Boolean)).toBe(true);

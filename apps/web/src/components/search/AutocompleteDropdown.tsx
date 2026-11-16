@@ -16,6 +16,7 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DistanceReference } from "@openmapx/core";
 import {
   formatMeasurementDistance,
@@ -28,6 +29,7 @@ import {
 import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useRef } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { BrandLogo } from "./BrandLogo";
 import { PresetIcon } from "./PresetIcon";
 
@@ -147,7 +149,8 @@ function conciseAddress(label: string, sublabel?: string): string | undefined {
 }
 
 function resultDescription(s: AutocompleteResult, t: (key: string) => string): string | undefined {
-  if (s.type === "category") return s.sublabel ?? t("searchCategory");
+  // A category's icon and name say what it is; only a specific sublabel adds anything.
+  if (s.type === "category") return s.sublabel;
   if (s.type === "brand") {
     const action = t("searchBrand");
     return s.sublabel && s.sublabel !== action ? `${action} · ${s.sublabel}` : action;
@@ -171,8 +174,15 @@ function resultDescription(s: AutocompleteResult, t: (key: string) => string): s
   if (!typeKey) return s.sublabel;
 
   const address = conciseAddress(s.label, s.sublabel);
+  // "Place" says nothing a place's own address doesn't; other types still name themselves.
+  if (typeKey === "resultTypePlace" && address) return address;
   return address ? `${t(typeKey)} · ${address}` : t(typeKey);
 }
+
+/** Diameter of the circle behind each suggestion's icon. */
+const ICON_SIZE = 36;
+/** Where suggestion text starts: the row's 16px padding, the icon and its 12px gap. */
+const TEXT_INSET = 16 + ICON_SIZE + 12;
 
 export function AutocompleteDropdown({
   suggestions,
@@ -210,15 +220,11 @@ export function AutocompleteDropdown({
           normalizeSearchTerm(matchedValue ?? "") !== normalizeSearchTerm(s.label);
         const description = resultDescription(s, t);
         const distance = resultDistanceMetres(distanceReference ?? null, s.coordinates);
-        const distanceText =
+        const showDistance =
           distance !== null &&
           s.type !== "category" &&
           s.type !== "brand" &&
-          s.type !== "nlp_search"
-            ? `${formatMeasurementDistance(distance, units)} ${t(
-                distanceReference?.kind === "user_location" ? "fromYou" : "fromMapCenter",
-              )}`
-            : null;
+          s.type !== "nlp_search";
         const renderSuggestion = (mark: ReactNode, credits?: ReactNode) => (
           <li
             key={`${s.type}:${s.id}`}
@@ -226,7 +232,8 @@ export function AutocompleteDropdown({
             role="presentation"
             style={{ listStyle: "none" }}
           >
-            {i > 0 && <Divider aria-hidden />}
+            {/* Inset to the text column, so the icons read as one column. */}
+            {i > 0 && <Divider aria-hidden sx={{ ml: `${TEXT_INSET}px` }} />}
             <ListItemButton
               role="option"
               id={idPrefix ? suggestionOptionId(idPrefix, i) : undefined}
@@ -236,9 +243,53 @@ export function AutocompleteDropdown({
               onClick={() => onSelect(s)}
               onMouseEnter={onHighlight ? () => onHighlight(i) : undefined}
               selected={i === highlightedIndex}
-              sx={{ px: 2, py: 1 }}
+              sx={{ px: 2, py: 1, alignItems: "flex-start" }}
             >
-              <ListItemIcon sx={{ minWidth: 36 }}>{mark}</ListItemIcon>
+              <ListItemIcon
+                sx={{
+                  width: ICON_SIZE,
+                  minWidth: ICON_SIZE,
+                  mr: 1.5,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 0.25,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: ICON_SIZE,
+                    height: ICON_SIZE,
+                    borderRadius: "50%",
+                    bgcolor: "var(--omx-hover-bg)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    "& svg": { fontSize: 20 },
+                  }}
+                >
+                  {mark}
+                </Box>
+                {showDistance && distance !== null && (
+                  <Typography
+                    component="span"
+                    // Read after the name instead (below); here it only shows.
+                    aria-hidden
+                    sx={{
+                      fontSize: 11,
+                      lineHeight: 1.2,
+                      color: "text.secondary",
+                      whiteSpace: "nowrap",
+                      // Centred under the circle; a long reading spills into the
+                      // gap instead of widening the column and shifting the text.
+                      width: ICON_SIZE + 12,
+                      textAlign: "center",
+                    }}
+                  >
+                    {formatMeasurementDistance(distance, units)}
+                  </Typography>
+                )}
+              </ListItemIcon>
               <ListItemText
                 primary={
                   <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
@@ -265,7 +316,18 @@ export function AutocompleteDropdown({
                     )}
                   </Box>
                 }
-                secondary={[description, distanceText].filter(Boolean).join(" · ")}
+                secondary={
+                  <>
+                    {description}
+                    {showDistance && distance !== null && (
+                      <Box component="span" sx={VISUALLY_HIDDEN}>
+                        {`, ${formatMeasurementDistance(distance, units)} ${t(
+                          distanceReference?.kind === "user_location" ? "fromYou" : "fromMapCenter",
+                        )}`}
+                      </Box>
+                    )}
+                  </>
+                }
                 slotProps={{
                   primary: { sx: { fontSize: 14, fontWeight: 400 } },
                   secondary: { sx: { fontSize: 12 } },

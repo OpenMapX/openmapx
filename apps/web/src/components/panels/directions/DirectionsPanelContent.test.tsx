@@ -147,7 +147,6 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
       </div>
     );
   },
-  LegBadge: () => <span />,
   LegRemarks: () => null,
   LiveStopTime: ({ time }: { time: { scheduledAt?: string; expectedAt?: string } }) => (
     <span>{time.expectedAt ?? time.scheduledAt}</span>
@@ -167,6 +166,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
+import { useStopSearchStore } from "@/stores/stopSearchStore";
 import { DirectionsPanelContent } from "./DirectionsPanelContent";
 
 const timerCount = () => (vi as typeof vi & { getTimerCount(): number }).getTimerCount();
@@ -211,6 +211,22 @@ beforeEach(() => {
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
   useAutocompleteMock.mockReset().mockReturnValue({ data: [] });
   optimizeMutate.mockReset();
+  // Background loads the panel makes on its own: the transit planners' features,
+  // the destination's country and the fuel prices around it. None is known here.
+  const unmocked = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const { pathname } = new URL(String(input), "http://localhost");
+    if (pathname === "/api/integrations/transit/planning-capabilities") {
+      return Response.json({ providers: [] });
+    }
+    if (pathname === "/api/integrations/geocoding/geocode/country") {
+      return Response.json({ countryCode: null });
+    }
+    if (pathname === "/api/integrations/data-source/fuel/search") {
+      return Response.json({ data: [], attributions: [] });
+    }
+    return unmocked(input, init);
+  });
   act(() => {
     useDirectionsStore.getState().close();
     useDirectionsStore.getState().setMode("driving");
@@ -396,7 +412,7 @@ describe("DirectionsPanelContent", () => {
     fireEvent.focus(middleInput);
     fireEvent.change(middleInput, { target: { value: "l" } });
 
-    fireEvent.click(await screen.findByText("Leipzig"));
+    fireEvent.click(await screen.findByRole("option", { name: /Leipzig/ }));
 
     expect(lastArg<DirectionsCallArgs>(useDirectionsMock).waypoints).toEqual([
       [13.3, 52.5],
@@ -913,10 +929,22 @@ describe("DirectionsPanelContent", () => {
       expect(snapTo).not.toHaveBeenCalledWith("mid");
     });
 
-    it("focusing a waypoint field expands the sheet to full", () => {
-      const { snapTo } = renderAtPeek();
-      fireEvent.focus(screen.getByPlaceholderText("directions.chooseOrigin"));
-      expect(snapTo).toHaveBeenCalledWith("full");
+    it("chooses a stop in the main search instead of typing in the trip card", () => {
+      const { snapTo, container } = renderAtPeek();
+      const origin = screen.getByPlaceholderText("directions.chooseOrigin");
+      // The stops float over the map, outside the sheet's own content, and
+      // take no typing there.
+      expect(container.contains(origin)).toBe(false);
+      expect(origin).toHaveAttribute("readonly");
+
+      fireEvent.click(origin);
+      const request = useStopSearchStore.getState().request;
+      expect(request?.placeholder).toBe("directions.chooseOrigin");
+      expect(snapTo).not.toHaveBeenCalledWith("full");
+
+      act(() => request?.onPick({ coordinates: [13.4, 52.52], label: "Alexanderplatz" }));
+      expect(useDirectionsStore.getState().waypoints[0].coords).toEqual([13.4, 52.52]);
+      act(() => useStopSearchStore.getState().close());
     });
 
     it("selecting a route collapses the sheet to peek", () => {
@@ -2000,7 +2028,7 @@ describe("directions input behaviour", () => {
         fireEvent.focus(destination);
         fireEvent.change(destination, { target: { value: "Mun" } });
 
-        fireEvent.click(await screen.findByText("Munich", { selector: "li *, li" }));
+        fireEvent.click(await screen.findByRole("option", { name: /Munich/ }));
 
         expect(inputValues()).toEqual(["Berlin", "Munich"]);
         expect(useDirectionsStore.getState().waypoints[1].coords).toEqual([11.6, 48.2]);

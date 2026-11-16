@@ -13,6 +13,7 @@ import { isApproachingTransitAlight, selectLegPlatform } from "@openmapx/core/na
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { tripPlaceName } from "@/components/panels/directions/transitSummary";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
@@ -25,6 +26,7 @@ import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { notifyGetOff, playAlarmTone } from "@/lib/navigation/navNotify";
 import { claimBrowserTransitCue } from "@/lib/navigation/transitCueLedger";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
+import { useTripEndLabels } from "@/lib/navigation/useTripEndLabels";
 import { useNow } from "@/lib/useNow";
 import { NavBannerShell } from "./NavBannerShell";
 import { TransitTransferCard } from "./TransitTransferCard";
@@ -58,6 +60,7 @@ export function TransitLegBanner({
   const speak = useNavigationVoice(locale);
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const isTransitLeg = leg.mode !== "walking" && !!leg.route;
+  const endLabels = useTripEndLabels();
   // The shell captured this leg's stops before the trip started and keeps them
   // in the session. Querying again would be a second live-data owner, and the
   // one that stops working underground.
@@ -166,25 +169,35 @@ export function TransitLegBanner({
       />
     );
 
+  // Aboard, what matters is where to get off and how long until then; the
+  // next stop moves to the sub-row, where driving shows its "Then" line.
+  const riding = departed && isTransitLeg && !leg.cancelled && legStops.length > 0;
+  const alightStop = legStops[legStops.length - 1];
+  const alightIso = alightStop?.expectedArrival ?? leg.endTime;
+  const minutesToAlight = alightIso
+    ? Math.max(0, Math.round((new Date(alightIso).getTime() - now) / 60_000))
+    : null;
+
   const title =
     leg.mode === "walking"
-      ? t("walkTo", { place: leg.to.name })
+      ? t("walkTo", { place: tripPlaceName(leg.to, endLabels.destination) })
       : leg.cancelled
         ? `${leg.route?.shortName ?? leg.route?.longName ?? ""} · ${tt("canceled")}`
-        : departed && nextStopName
-          ? nextStopName
+        : riding
+          ? t("alightAt", { place: leg.to.name })
           : t(departed ? "ride" : "boardSelectedLine", {
               line: leg.route?.shortName ?? leg.route?.longName ?? "",
               to: !departed ? (leg.headsign ?? leg.to.name) : leg.to.name,
             });
 
   // Sub-row: the live next-stop / alight preview for transit legs. Hidden while
-  // `alightSoon`, since the prominent card below carries that message instead.
+  // `alightSoon`, since the prominent card below carries that message instead,
+  // and aboard once the next stop is the one to get off at.
   const secondary =
-    isTransitLeg && !leg.cancelled && !alightSoon ? (
+    isTransitLeg && !leg.cancelled && !alightSoon && !(riding && stopsRemaining <= 1) ? (
       <Typography variant="body2" sx={{ opacity: 0.9, lineHeight: 1.45 }}>
-        {departed && nextStopName
-          ? t("stopsRemaining", { count: stopsRemaining })
+        {riding && nextStopName
+          ? t("nextStop", { stop: nextStopName })
           : !departed && legStops.length > 1
             ? // Still at the boarding stop: the whole ride lies ahead.
               t("alightAtCount", { place: leg.to.name, count: legStops.length - 1 })
@@ -217,17 +230,19 @@ export function TransitLegBanner({
           ) : undefined
         }
       >
-        {departed && nextStopName && (
-          <Typography variant="caption" sx={{ opacity: 0.9, display: "block", mb: 0.25 }}>
-            {t("nextStopLabel")}
-          </Typography>
-        )}
         <Typography
           variant="h6"
           sx={{ lineHeight: 1.25, fontWeight: 600, overflowWrap: "anywhere" }}
         >
           {title}
         </Typography>
+        {riding && stopsRemaining > 0 && (
+          <Typography variant="body2" sx={{ fontWeight: 500, mt: 0.25 }}>
+            {minutesToAlight === null
+              ? t("stopsToGo", { count: stopsRemaining })
+              : t("rideRemaining", { count: stopsRemaining, minutes: minutesToAlight })}
+          </Typography>
+        )}
         {isTransitLeg && (
           <TransitDataStatus
             now={now}
@@ -266,7 +281,8 @@ export function TransitLegBanner({
               )}
             </Box>
           )}
-        {isTransitLeg && identity && (
+        {/* Which train to look for: moot once aboard. */}
+        {isTransitLeg && identity && !riding && (
           <Typography variant="caption" sx={{ opacity: 0.8, display: "block", mt: 0.25 }} noWrap>
             {identity}
           </Typography>

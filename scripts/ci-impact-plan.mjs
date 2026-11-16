@@ -24,7 +24,31 @@ export const validationJobs = [
   "build",
 ];
 const shaPattern = /^[a-f0-9]{40}$/;
-const full = () => Object.fromEntries(validationJobs.map((id) => [id, true]));
+
+/** The jobs each applicability scope leaves out. Every other job stays required. */
+export const scopeSkippedJobs = {
+  full: [],
+  docs: validationJobs.filter((id) => !["lint", "test-node"].includes(id)),
+  web: ["database", "mobile", "test-linux-user", "test-agent-image"],
+  mobile: ["database", "test-web", "test-linux-user", "test-agent-image"],
+  // Web and mobile client source, translations and docs prose. The mobile job
+  // stays because it reads web sources and translations. The API's privacy
+  // module imports the translations: its unit tests run in test-node, and its
+  // database partitions run on main before publication.
+  client: ["database", "test-linux-user", "test-agent-image"],
+};
+export const selectiveScopes = Object.keys(scopeSkippedJobs).filter((scope) => scope !== "full");
+const docsProse = (path) => /^docs\/(?:docs|blog)\/.*\.md$/.test(path);
+const clientSource = (path) =>
+  path.startsWith("apps/web/src/") ||
+  path.startsWith("apps/mobile/src/") ||
+  /^packages\/i18n\/locales\/[^/]+\.json$/.test(path);
+function jobsForScope(scope) {
+  if (!Object.hasOwn(scopeSkippedJobs, scope)) throw new Error("Unknown CI applicability scope");
+  return Object.fromEntries(
+    validationJobs.map((id) => [id, !scopeSkippedJobs[scope].includes(id)]),
+  );
+}
 const safePath = (path) =>
   typeof path === "string" &&
   !path.startsWith("/") &&
@@ -50,7 +74,6 @@ export function createImpactPlan({
 }) {
   if (!shaPattern.test(head) || (event === "pull_request" && !shaPattern.test(base)))
     throw new Error("CI selection requires immutable head/base commit identities");
-  const jobs = full();
   // Unknown lifecycle fields run full validation, never infer a metadata edit.
   const metadataCandidate =
     event === "pull_request" &&
@@ -72,9 +95,8 @@ export function createImpactPlan({
     paths.length > 0 &&
     paths.every(safePath)
   ) {
-    if (paths.every((path) => /^docs\/(?:docs|blog)\/.*\.md$/.test(path))) {
+    if (paths.every(docsProse)) {
       scope = "docs";
-      for (const id of validationJobs) jobs[id] = ["lint", "test-node"].includes(id);
     } else if (
       paths.every((path) => /^apps\/web\/src\/components\/.*\.[jt]sx?$/.test(path)) &&
       !paths.some((path) =>
@@ -86,19 +108,15 @@ export function createImpactPlan({
     ) {
       // Keep node-side source/build contracts, all types and the actual web build.
       scope = "web";
-      for (const id of ["database", "mobile", "test-linux-user", "test-agent-image"])
-        jobs[id] = false;
     } else if (paths.every((path) => /^apps\/mobile\/src\/.*\.[jt]sx?$/.test(path))) {
       scope = "mobile";
-      for (const id of ["database", "test-web", "test-linux-user", "test-agent-image"])
-        jobs[id] = false;
+    } else if (paths.every((path) => clientSource(path) || docsProse(path))) {
+      scope = "client";
     }
   }
   const proposedScope = scope;
-  if (!Array.isArray(approvedScopes) || !approvedScopes.includes(scope)) {
-    scope = "full";
-    Object.assign(jobs, full());
-  }
+  if (!Array.isArray(approvedScopes) || !approvedScopes.includes(scope)) scope = "full";
+  const jobs = jobsForScope(scope);
   return {
     version: 1,
     event,
@@ -170,18 +188,9 @@ export function verifyResults(plan, needs, event) {
     (id) => !["select", ...validationJobs, "docker-changes", "docker-build"].includes(id),
   );
   if (unknown.length) throw new Error(`Unknown aggregate dependencies: ${unknown.join(", ")}`);
-  const expected = full();
   if (event !== "pull_request" && plan.scope !== "full")
     throw new Error("Trusted main requires complete validation");
-  if (plan.scope === "docs")
-    for (const id of validationJobs) expected[id] = ["lint", "test-node"].includes(id);
-  else if (plan.scope === "web")
-    for (const id of ["database", "mobile", "test-linux-user", "test-agent-image"])
-      expected[id] = false;
-  else if (plan.scope === "mobile")
-    for (const id of ["database", "test-web", "test-linux-user", "test-agent-image"])
-      expected[id] = false;
-  else if (plan.scope !== "full") throw new Error("Unknown CI applicability scope");
+  const expected = jobsForScope(plan.scope);
   if (validationJobs.some((id) => plan.jobs[id] !== expected[id]))
     throw new Error("CI job selection does not match its declared scope");
   for (const id of validationJobs) {
@@ -282,7 +291,7 @@ if (import.meta.main) {
         if (
           rollout.version === 1 &&
           Array.isArray(rollout.approvedScopes) &&
-          rollout.approvedScopes.every((scope) => ["docs", "web", "mobile"].includes(scope))
+          rollout.approvedScopes.every((scope) => selectiveScopes.includes(scope))
         )
           approvedScopes = rollout.approvedScopes;
       } catch {

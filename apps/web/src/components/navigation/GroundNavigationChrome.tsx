@@ -162,18 +162,23 @@ export function GroundNavigationChrome({ coverage }: Props) {
       {/* Both self-gate on their URL flag and render nothing in normal use. */}
       <NavPerfControl />
       {status === "arrived" ? (
+        // On a phone the arrival rests as a sheet on the bottom edge, leaving
+        // the destination in view above it; wider screens keep a centred card.
         <Box
           sx={{
             pointerEvents: "auto",
-            m: "auto",
+            mt: "auto",
+            mx: { xs: 0, sm: "auto" },
+            mb: { xs: 0, sm: "auto" },
             width: "100%",
-            maxWidth: { xs: "calc(100% - 32px)", sm: 440 },
-            maxHeight: { xs: "calc(100dvh - 96px)", sm: "calc(100dvh - 64px)" },
+            maxWidth: { xs: "100%", sm: 440 },
+            maxHeight: { xs: "70dvh", sm: "calc(100dvh - 64px)" },
             overflowY: "auto",
             bgcolor: "background.paper",
-            borderRadius: 3,
+            borderRadius: { xs: "16px 16px 0 0", sm: 3 },
             boxShadow: 6,
             overflowX: "hidden",
+            pb: { xs: "var(--omx-safe-bottom)", sm: 0 },
           }}
         >
           <ArrivalCard onClose={() => void completeArrival()} destinationName={destinationName} />

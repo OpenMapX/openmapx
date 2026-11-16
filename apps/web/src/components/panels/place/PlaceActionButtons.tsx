@@ -6,6 +6,7 @@ import DirectionsIcon from "@mui/icons-material/Directions";
 import SearchIcon from "@mui/icons-material/Search";
 import ShareIcon from "@mui/icons-material/Share";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
@@ -91,9 +92,15 @@ function ActionButton({ icon, label, filled = false, onClick }: ActionButtonProp
 
 interface Props {
   place: Place;
+  /**
+   * `circles`: icon circles with a label under each, spread across the panel.
+   * `pills`: one scrollable row of labelled pills, the compact form a phone's
+   * place sheet uses.
+   */
+  layout?: "circles" | "pills";
 }
 
-export function PlaceActionButtons({ place }: Props) {
+export function PlaceActionButtons({ place, layout = "circles" }: Props) {
   const t = useTranslations("place");
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -125,30 +132,68 @@ export function PlaceActionButtons({ place }: Props) {
     if (result === "copied") setSnackbar(t("linkCopied"));
   };
 
+  const actions: Array<ActionButtonProps & { key: string }> = [
+    {
+      key: "directions",
+      icon: <DirectionsIcon />,
+      label: t("directions"),
+      filled: true,
+      onClick: handleDirections,
+    },
+    {
+      key: "save",
+      icon: isSaved ? <BookmarkIcon /> : <BookmarkBorderIcon />,
+      label: isSaved ? t("savedPlace") : t("savePlace"),
+      filled: isSaved,
+      onClick: () => (session?.user ? setSaveOpen(true) : setAuthOpen(true)),
+    },
+    { key: "nearby", icon: <SearchIcon />, label: t("nearby"), onClick: handleNearby },
+    {
+      key: "share",
+      icon: <ShareIcon />,
+      label: t("share"),
+      onClick: () => void handleShare(),
+    },
+  ];
+
   return (
     <>
-      <Box sx={{ display: "flex", justifyContent: "space-around", py: 1 }}>
-        <ActionButton
-          icon={<DirectionsIcon />}
-          label={t("directions")}
-          filled
-          onClick={handleDirections}
-        />
-        <ActionButton
-          icon={isSaved ? <BookmarkIcon /> : <BookmarkBorderIcon />}
-          label={isSaved ? t("savedPlace") : t("savePlace")}
-          filled={isSaved}
-          onClick={() => {
-            if (!session?.user) {
-              setAuthOpen(true);
-            } else {
-              setSaveOpen(true);
-            }
+      {layout === "pills" ? (
+        <Box
+          sx={{
+            display: "flex",
+            gap: 1,
+            py: 1,
+            overflowX: "auto",
+            scrollbarWidth: "none",
+            "&::-webkit-scrollbar": { display: "none" },
           }}
-        />
-        <ActionButton icon={<SearchIcon />} label={t("nearby")} onClick={handleNearby} />
-        <ActionButton icon={<ShareIcon />} label={t("share")} onClick={handleShare} />
-      </Box>
+        >
+          {actions.map((action) => (
+            <Button
+              key={action.key}
+              variant={action.filled ? "contained" : "tonal"}
+              startIcon={action.icon}
+              onClick={action.onClick}
+              sx={{ flexShrink: 0, height: 36, whiteSpace: "nowrap" }}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </Box>
+      ) : (
+        <Box sx={{ display: "flex", justifyContent: "space-around", py: 1 }}>
+          {actions.map((action) => (
+            <ActionButton
+              key={action.key}
+              icon={action.icon}
+              label={action.label}
+              filled={action.filled}
+              onClick={action.onClick}
+            />
+          ))}
+        </Box>
+      )}
 
       <Snackbar
         open={snackbar !== null}

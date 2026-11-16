@@ -30,6 +30,7 @@ const ALLOWED: Record<string, string[]> = {
   "app/s/[token]/SharedViewClient.tsx": ["placeAppUrl(place)", "openUrl"],
   "components/admin/AdminSidebar.tsx": ["item.href", "entry.href"],
   "components/admin/AdminTopBar.tsx": ["crumb.href"],
+  "components/menu/MenuRow.tsx": ["href"],
   "components/admin/shared/AdminPageHeader.tsx": ["backHref"],
   "components/admin/shared/CompactAlertList.tsx": ["item.href"],
   "components/admin/overview/AdminOverview.tsx": [
@@ -93,6 +94,8 @@ const ALLOWED: Record<string, string[]> = {
   "components/panels/place/DataSourceSections.tsx": ["rentalUri"],
   "components/admin/integrations/IntegrationDetail.tsx": ["href", "privacyHref"],
   "components/ui/AttributionStrip.tsx": ["link.href"],
+  // A `safeHref(...)` result held in a const so the Website pill can be conditional.
+  "components/ui/PlaceResultRow.tsx": ["website"],
 };
 
 function collectTsxFiles(dir: string): string[] {

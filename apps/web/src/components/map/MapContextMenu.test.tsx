@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, fireEvent, render, screen, userEvent, waitFor, within } from "@/test";
@@ -44,6 +45,7 @@ import * as coreModule from "@openmapx/core";
 import {
   createPlace,
   PANEL,
+  useCategorySearchStore,
   useDirectionsStore,
   useMapClickStore,
   useNavigationStore,
@@ -793,7 +795,7 @@ describe("MapContextMenu dismissal and semantics", () => {
     expect(removeKeyListener.mock.calls.some(([event]) => event === "keydown")).toBe(true);
   });
 
-  it("exposes six named top-level menu items with 44px minimum targets", () => {
+  it("exposes the named top-level menu items with 44px minimum targets", () => {
     render(<MapContextMenu />);
     openAtMapPoint();
 
@@ -804,10 +806,37 @@ describe("MapContextMenu dismissal and semantics", () => {
       "mapContextMenu.toHere",
       "mapContextMenu.copyLocation",
       "mapContextMenu.openPlaceDetails",
+      "mapContextMenu.searchNearby",
+      "mapContextMenu.measureDistance",
       "parking.saveHere",
       "mapContextMenu.shareLocation",
     ]);
     for (const item of items) expect(getComputedStyle(item).minHeight).toBe("44px");
+  });
+
+  it("searches around the right-clicked spot", async () => {
+    render(<MapContextMenu />);
+    openAtMapPoint();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.searchNearby" }));
+
+    const anchor = useCategorySearchStore.getState().anchor;
+    expect(anchor?.coordinates).toEqual([-77.02573, 38.88859]);
+    expect(useCategorySearchStore.getState().exploreBoxOpen).toBe(true);
+    act(() => useCategorySearchStore.getState().closeExploreBox());
+  });
+
+  it("starts measuring a distance from the right-clicked spot", async () => {
+    render(<MapContextMenu />);
+    openAtMapPoint();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.measureDistance" }));
+
+    const measurement = useMeasurementStore.getState();
+    expect(measurement.isActive).toBe(true);
+    expect(measurement.mode).toBe("line");
+    expect(measurement.points).toEqual([[-77.02573, 38.88859]]);
+    act(() => useMeasurementStore.getState().deactivate());
   });
 
   it("hands the right-clicked coordinate to the shared save action", async () => {

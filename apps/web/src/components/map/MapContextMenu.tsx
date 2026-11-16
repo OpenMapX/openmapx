@@ -1,12 +1,16 @@
 "use client";
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CopyAllIcon from "@mui/icons-material/CopyAll";
 import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
+import PinDropOutlinedIcon from "@mui/icons-material/PinDropOutlined";
 import PlaceIcon from "@mui/icons-material/Place";
+import SearchIcon from "@mui/icons-material/Search";
 import ShareIcon from "@mui/icons-material/Share";
+import StraightenIcon from "@mui/icons-material/Straighten";
 import {
   Box,
   ButtonBase,
@@ -22,9 +26,12 @@ import {
 import {
   isLiveNavigationStatus,
   type Place,
+  useCategorySearchStore,
   useMapClickStore,
   useNavigationStore,
+  usePlaceStore,
   useReverseGeocoding,
+  useSidebarStore,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -41,10 +48,16 @@ import Menu from "@/components/ui/Menu";
 import Popover from "@/components/ui/Popover";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { openLocationDetails, routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
+import {
+  measureFrom,
+  openLocationDetails,
+  routeFromOrTo,
+  shareLocationLink,
+} from "@/lib/locationActions";
 import { cameFromTouch } from "@/lib/mapTouch";
 import {
   describeMapLocation,
+  formatMapCoordinates,
   type MapLocation,
   mapLocationCopyRows,
   mapLocationPlace,
@@ -55,8 +68,27 @@ interface MapContextTarget extends MapLocation {
   anchorPosition: { top: number; left: number };
 }
 
-type ActionId = "from" | "to" | "copy" | "details" | "parking" | "share";
-const ACTION_ORDER: ActionId[] = ["from", "to", "copy", "details", "parking", "share"];
+type ActionId =
+  | "from"
+  | "to"
+  | "coords"
+  | "copy"
+  | "details"
+  | "nearby"
+  | "measure"
+  | "parking"
+  | "share";
+const ALL_ACTIONS: ActionId[] = [
+  "from",
+  "to",
+  "coords",
+  "copy",
+  "details",
+  "nearby",
+  "measure",
+  "parking",
+  "share",
+];
 
 export function MapContextMenu(): React.ReactNode {
   const t = useTranslations("mapContextMenu");
@@ -78,8 +110,11 @@ export function MapContextMenu(): React.ReactNode {
   const actionRefs = useRef<Record<ActionId, HTMLElement | null>>({
     from: null,
     to: null,
+    coords: null,
     copy: null,
     details: null,
+    nearby: null,
+    measure: null,
     parking: null,
     share: null,
   });
@@ -100,6 +135,7 @@ export function MapContextMenu(): React.ReactNode {
   const title = text?.title ?? "";
   const address = text?.address ?? "";
   const actionLabel = text?.routeLabel ?? "";
+  const showCoordinates = target !== null && title !== formatMapCoordinates(target.coordinates);
 
   const place = useMemo<Place | null>(
     () => (target ? mapLocationPlace(target, reverseGeo) : null),
@@ -261,9 +297,11 @@ export function MapContextMenu(): React.ReactNode {
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      const index = ACTION_ORDER.indexOf(current);
+      // Arrow keys skip a row that isn't shown.
+      const order = showCoordinates ? ALL_ACTIONS : ALL_ACTIONS.filter((a) => a !== "coords");
+      const index = order.indexOf(current);
       const delta = event.key === "ArrowDown" ? 1 : -1;
-      focusAction(ACTION_ORDER[(index + delta + ACTION_ORDER.length) % ACTION_ORDER.length]);
+      focusAction(order[(index + delta + order.length) % order.length]);
     }
   };
 
@@ -276,6 +314,21 @@ export function MapContextMenu(): React.ReactNode {
   const openPlaceDetails = () => {
     if (!place) return;
     openLocationDetails(place);
+    closeMenu();
+  };
+
+  // Explore around the spot, as a place's own Nearby action does.
+  const searchNearby = () => {
+    if (!place) return;
+    usePlaceStore.getState().setSelectedPlace(null);
+    useSidebarStore.getState().closeDetail();
+    useCategorySearchStore.getState().openExploreBox(place);
+    closeMenu();
+  };
+
+  const measureFromHere = () => {
+    if (!target) return;
+    measureFrom(target.coordinates);
     closeMenu();
   };
 
@@ -478,6 +531,26 @@ export function MapContextMenu(): React.ReactNode {
                 </Box>
                 <Divider />
                 <MenuList component="div" role="presentation" disablePadding>
+                  {/* The coordinates, copied in one tap; the most asked-for value.
+                      An unnamed spot already shows them as its title. */}
+                  {showCoordinates && (
+                    <MenuItem
+                      {...commonActionProps("coords")}
+                      aria-label={`${t("copyCoordinates")}: ${formatMapCoordinates(target.coordinates)}`}
+                      onClick={() => void copyValue(formatMapCoordinates(target.coordinates))}
+                      sx={{ minHeight: "44px !important" }}
+                    >
+                      <ListItemIcon>
+                        <PinDropOutlinedIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText
+                        slotProps={{ primary: { sx: { fontVariantNumeric: "tabular-nums" } } }}
+                      >
+                        {formatMapCoordinates(target.coordinates)}
+                      </ListItemText>
+                      <ContentCopyIcon fontSize="small" sx={{ color: "text.secondary" }} />
+                    </MenuItem>
+                  )}
                   <MenuItem
                     {...commonActionProps("copy")}
                     aria-haspopup="menu"
@@ -501,6 +574,26 @@ export function MapContextMenu(): React.ReactNode {
                       <PlaceIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>{t("openPlaceDetails")}</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    {...commonActionProps("nearby")}
+                    onClick={searchNearby}
+                    sx={{ minHeight: "44px !important" }}
+                  >
+                    <ListItemIcon>
+                      <SearchIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>{t("searchNearby")}</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    {...commonActionProps("measure")}
+                    onClick={measureFromHere}
+                    sx={{ minHeight: "44px !important" }}
+                  >
+                    <ListItemIcon>
+                      <StraightenIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>{t("measureDistance")}</ListItemText>
                   </MenuItem>
                   <MenuItem
                     {...commonActionProps("parking")}

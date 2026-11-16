@@ -5,7 +5,6 @@ import {
   arrivalCueId,
   groundCueEffect,
   groundCueId,
-  MAX_CUE_AGE_MS,
   offRouteEpisodeId,
   statusCueEffect,
 } from "./groundCue";
@@ -146,11 +145,5 @@ describe("cue exactly-once behaviour", () => {
     const afterReplacement = groundCueEffect(session(), "route-xyz", cue());
 
     expect(afterReplacement?.cueId).not.toBe(built?.cueId);
-  });
-
-  it("declares an age past which a cue is no longer worth speaking", () => {
-    // A ten-second-old maneuver is behind the user; announcing it would send
-    // them the wrong way.
-    expect(MAX_CUE_AGE_MS).toBe(10_000);
   });
 });

@@ -101,9 +101,6 @@ export function TransitJourneyControls({
       {!riding && canBoard && (
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="caption" color="text.secondary">
-              {t("selectedConnection")}
-            </Typography>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
               {ride.from.name}
             </Typography>
@@ -151,11 +148,6 @@ export function TransitJourneyControls({
             </Typography>
           </Box>
         </Box>
-      )}
-      {riding && !alightNudge && (
-        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-          {t("alightAt", { place: leg.to.name })}
-        </Typography>
       )}
       {walkRepair && walkRepair !== "idle" && (
         <Typography variant="caption" color="text.secondary" role="status">
@@ -232,7 +224,6 @@ export function TransitJourneyControls({
         {!arrived && (riding || canBoard) && (
           <Button
             variant={!walking && (!riding || alightNudge) ? "contained" : "outlined"}
-            disableElevation
             startIcon={riding ? <DirectionsWalkIcon /> : <DirectionsTransitIcon />}
             loading={pending}
             disabled={pending || !supported}
@@ -246,7 +237,6 @@ export function TransitJourneyControls({
           <Button
             startIcon={<AltRouteIcon />}
             variant={recovering ? "contained" : "text"}
-            disableElevation
             aria-label={t("findTransitAlternatives")}
             onClick={onAlternatives}
             disabled={pending}

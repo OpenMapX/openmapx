@@ -12,7 +12,10 @@
     "copied": "Copied",
     "copyFailed": "Couldn’t copy",
     "linkCopied": "Link copied to clipboard",
-    "shareFailed": "Couldn’t share"
+    "shareFailed": "Couldn’t share",
+    "copyCoordinates": "Copy coordinates",
+    "searchNearby": "Search nearby",
+    "measureDistance": "Measure distance"
   },
   "crowdReports": {
     "reportButton": "Report a condition",
@@ -84,12 +87,13 @@
     "bikesAllowed": "Bikes allowed",
     "wheelchairAccessible": "Wheelchair accessible",
     "nextStop": "Next: {stop}",
-    "alightAt": "Alight at {place}",
-    "alightAtCount": "Alight at {place} · {count, plural, one {# stop} other {# stops}}",
+    "alightAt": "Get off at {place}",
+    "alightAtCount": "Get off at {place} · {count, plural, one {# stop} other {# stops}}",
     "alightSoon": "Get off at the next stop",
     "changeAt": "Change at {stop}",
     "transferWalk": "{minutes} min to transfer",
-    "restOfJourney": "Rest of journey",
+    "showPreviousSteps": "Show previous steps",
+    "hidePreviousSteps": "Hide previous steps",
     "stopSkipped": "Does not stop",
     "departuresAt": "Departures · {stop}",
     "boardAt": "Board at {place}",
@@ -107,6 +111,10 @@
     "connectionAlternative": "Next option {time}",
     "walkOnStreet": "{action} onto {street}",
     "walkToLevel": "{action} to level {level}",
+    "walkStayOnStreet": "{action} to stay on {street}",
+    "walkHead": "Head {direction, select, n {north} ne {northeast} e {east} se {southeast} s {south} sw {southwest} w {west} other {northwest}}",
+    "walkHeadOnStreet": "Head {direction, select, n {north} ne {northeast} e {east} se {southeast} s {south} sw {southwest} w {west} other {northwest}} on {street}",
+    "walkCrossStreet": "Cross {street}",
     "walkDir": {
       "depart": "Head out",
       "continue": "Continue",
@@ -117,6 +125,7 @@
       "sharpLeft": "Sharp left",
       "sharpRight": "Sharp right",
       "uturn": "Make a U-turn",
+      "cross": "Cross the street",
       "stairs": "Take the stairs",
       "elevator": "Take the elevator",
       "arrive": "Arrive at {place}"
@@ -217,6 +226,7 @@
     "rsDetourDistance": "+{kilometers} km",
     "rsDetourCoordinate": "Routing to place coordinates; entrance unknown",
     "rsDetourEntrance": "Routing to known entrance",
+    "rsFuelPriceUnknown": "Price unknown",
     "rsPinNetwork": "+{minutes} min · road",
     "rsPinApproximate": "~+{minutes} min",
     "rsPinChecking": "Checking…",
@@ -266,7 +276,6 @@
     "alightedElsewhere": "You may be away from the planned stop. Check the next boarding point or find alternatives.",
     "transitActionsUpdateRequired": "Update the installed app to confirm boarding and alighting.",
     "transitActionFailed": "Could not confirm this action. Your journey has been kept. Please try again.",
-    "nextStopLabel": "Next stop",
     "transitAlternativesShort": "Alternatives",
     "findTransitAlternatives": "Find alternatives",
     "findingTransitAlternatives": "Finding alternatives",
@@ -284,6 +293,8 @@
     "stopCountUnavailable": "Stop count unavailable. Follow the stops on your service and confirm when you get off.",
     "stayOnBoard": "Stay on board",
     "stopsRemaining": "{count, plural, one {# stop left} other {# stops left}}",
+    "rideRemaining": "{count, plural, one {# stop} other {# stops}} · {minutes} min",
+    "stopsToGo": "{count, plural, one {# stop} other {# stops}}",
     "transitWalkRepair": {
       "repairing": "Updating walking directions to your selected stop…",
       "unavailable": "Walking directions could not be updated. Your selected connection is kept. Find alternatives if needed.",
@@ -443,6 +454,8 @@
     "themeLight": "Light mode (click for dark)",
     "themeDark": "Dark mode (click for system)",
     "themeSystem": "System theme (click for light)",
+    "legend": "Map key",
+    "legendShowOnMap": "Show on map",
     "showLegend": "Show overlay legend",
     "hideLegend": "Hide overlay legend"
   },
@@ -468,8 +481,8 @@
     "openAdvancedMenu": "Open advanced layer menu",
     "more": "More",
     "mapType": "Map type",
-    "mapDetails": "Map Details",
-    "mapTools": "Map Tools",
+    "mapDetails": "Map details",
+    "mapTools": "Map tools",
     "transport": "Transport",
     "outdoors": "Outdoors",
     "weatherEnvironment": "Weather & environment",
@@ -483,9 +496,9 @@
     "trafficTomtom": "TomTom traffic flow",
     "transit": "Transit",
     "streetLevelImagery": "Street-level imagery",
-    "airQuality": "Air Quality",
+    "airQuality": "Air quality",
     "cycling": "Cycling",
-    "winterSports": "Winter Sports",
+    "winterSports": "Winter sports",
     "hiking": "Hiking",
     "roadConditions": "Road conditions",
     "wildfires": "Wildfires",
@@ -497,16 +510,16 @@
     "globeView": "Globe view",
     "3dBuildings": "3D view",
     "earthquakes": "Earthquakes",
-    "naturalEvents": "Natural Events",
-    "weatherAlerts": "Weather Alerts",
+    "naturalEvents": "Natural events",
+    "weatherAlerts": "Weather alerts",
     "satelliteImagery": "Satellite imagery overlay",
-    "liveTransit": "Live Transit",
+    "liveTransit": "Live transit",
     "cyclingMap": "Cycling",
     "airports": "Airports",
     "nautical": "Nautical",
     "sunTime": "Daylight & time zones",
     "schematicTransit": "Schematic transit map",
-    "closeMorePanel": "Close more panel placeholder"
+    "closeMorePanel": "Close"
   },
   "schematicTransit": {
     "title": "Schematic transit map",
@@ -1080,9 +1093,9 @@
     "miles": "Miles",
     "transfers": "{count} transfer{count, plural, one {} other {s}}",
     "walkDistance": "{distance} walk",
-    "walkDuration": "Walk — ~{duration}",
-    "bikeDuration": "Bike — ~{duration}",
-    "driveDuration": "Drive — ~{duration}",
+    "walkDuration": "Walk {duration}",
+    "bikeDuration": "Bike {duration}",
+    "driveDuration": "Drive {duration}",
     "rentalVehicle": "Shared vehicle",
     "book": "Book",
     "regionalLocal": "Regional/local",
@@ -1535,7 +1548,10 @@
     "minAge": "Min. age {age}",
     "source": "Source",
     "dataSources": "Data sources",
-    "removeReviewPhoto": "Remove photo"
+    "removeReviewPhoto": "Remove photo",
+    "directionsTo": "Directions to {name}",
+    "call": "Call",
+    "website": "Website"
   },
   "airportsOverlay": {
     "title": "Airports",
@@ -2595,6 +2611,8 @@
     "removeAreaDescription": "This will delete the cached map data for \"{name}\" ({size}).",
     "storageTitle": "Storage",
     "storageDescription": "Cached map tiles, optional recent map data, and offline map packages.",
+    "storageUsage": "Usage",
+    "storageMapData": "Map data",
     "totalUsed": "Used: {used} of {total} ({percent}%)",
     "appShell": "App shell",
     "preferences": "Preferences",
@@ -3139,16 +3157,12 @@
   "menu": {
     "saved": "Saved",
     "timeline": "Your timeline",
-    "recent": "Recent",
-    "contributions": "My contributions",
-    "shareMap": "Share or embed map",
+    "shareMap": "Share map",
     "importFile": "Import file (GPX, GeoJSON, KML)",
     "importFailed": "Couldn't read that file. Supported: GPX, GeoJSON, KML.",
     "offlineMaps": "Offline maps",
     "storage": "Storage",
-    "print": "Print",
-    "tips": "Tips and tricks",
-    "help": "Help",
+    "commandPalette": "Command palette",
     "language": "Language",
     "theme": "Theme",
     "themeLight": "Light",
@@ -3170,7 +3184,8 @@
     "privacy": "Privacy",
     "terms": "Terms",
     "imprint": "Imprint",
-    "parking": "Parking"
+    "parking": "Parking",
+    "signInHint": "Sign in to save places, keep your parking spot and see your timeline."
   },
   "timeline": {
     "onboardingTitle": "Your timeline",
@@ -3191,10 +3206,6 @@
     "replaceConnection": "Replace credentials",
     "visitFallback": "Unnamed visit",
     "journeyFallback": "Journey",
-    "selected": "Selected",
-    "pointCount": "Points",
-    "elevationGain": "Ascent",
-    "elevationLoss": "Descent",
     "entriesAriaLabel": "Timeline entries",
     "summary": {
       "distance": "Distance",
@@ -3220,6 +3231,19 @@
       "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich cannot be reached right now. Try again later.",
       "TIMELINE_RESPONSE_INVALID": "Dawarich returned data OpenMapX could not safely read.",
       "unknown": "Your timeline could not be loaded. Try again."
+    },
+    "elevationGain": "Ascent",
+    "elevationLoss": "Descent",
+    "modes": {
+      "walking": "Walking",
+      "running": "Running",
+      "cycling": "Cycling",
+      "driving": "Driving",
+      "bus": "Bus",
+      "train": "Train",
+      "flying": "Flying",
+      "boat": "Boat",
+      "motorcycle": "Motorcycle"
     }
   },
   "saved": {
@@ -3293,7 +3317,8 @@
     "importListLimit": "This list was not created because you already have {count, number} lists. Places already imported have been kept.",
     "importPlaceLimit": "Import stopped at the limit of {count, number} saved places. Places already imported have been kept.",
     "itemOptions": "Options for {name}",
-    "changeIcon": "Change list icon"
+    "changeIcon": "Change list icon",
+    "addNote": "Add note"
   },
   "share": {
     "sharedList": "Shared list",
@@ -3339,14 +3364,19 @@
   "measurement": {
     "lineMode": "Measure distance",
     "polygonMode": "Measure area",
-    "clickToStart": "Click on the map to start measuring",
+    "clickToStart": "Click the map to add points",
     "clickToClose": "Click first point or double-click to close",
     "total": "Total",
     "perimeter": "Perimeter",
     "undo": "Undo",
     "redo": "Redo",
     "clearMeasurement": "Clear",
-    "closeTool": "Close measurement tool"
+    "closeTool": "Close measurement tool",
+    "distance": "Distance",
+    "area": "Area",
+    "tapToStart": "Tap the map to add points",
+    "tapToClose": "Tap the first point to close the area",
+    "perimeterValue": "Perimeter {distance}"
   },
   "travelTime": {
     "driving": "Driving",

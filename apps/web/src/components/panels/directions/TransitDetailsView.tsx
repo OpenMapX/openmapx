@@ -1,200 +1,41 @@
 "use client";
 
-import type { SvgIconComponent } from "@mui/icons-material";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import CommuteIcon from "@mui/icons-material/Commute";
 import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
-import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
-import DirectionsBoatIcon from "@mui/icons-material/DirectionsBoat";
-import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
-import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
-import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import SubwayIcon from "@mui/icons-material/Subway";
-import TrainIcon from "@mui/icons-material/Train";
-import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
   formatDuration,
-  formatMeasurementDistance,
   formatOverviewDistance,
   geocodeStopAsPlace,
   makeSyntheticStopPlace,
   PANEL,
   parseId,
   resolveStopAsPlace,
-  safeHref,
   tzOffsetLabel,
   usePlaceStore,
   useSettingsStore,
   useSidebarStore,
 } from "@openmapx/core";
-import {
-  changedFromPlatform,
-  composeWalkInstruction,
-  nextTransferFor,
-  walkStepInfo,
-} from "@openmapx/core/navigation";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import {
-  captureResultContributors,
-  contributorKey,
-  snapshotContributors,
-} from "@openmapx/mobility-core/contributors";
-import type {
-  MergedDeparture,
-  TransitStop,
-  TransportMode,
-  TripItinerary,
-  TripLeg,
-} from "@openmapx/mobility-core/transit";
-import { composeTransitAlternative } from "@openmapx/mobility-core/transit-alternative";
+import type { MergedDeparture, TransitStop, TripItinerary } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
+import { TransitLegChain } from "@/components/panels/directions/TransitLegChain";
 import {
-  LegBadge,
-  LegRemarks,
-  LiveStopTime,
-  TransitEmissionsBadge,
-  TransitLiveBadge,
-} from "@/components/panels/directions/TransitRouteView";
-import { TransitTransferSummary } from "@/components/panels/directions/TransitTransferSummary";
-import { LegAlerts } from "@/components/panels/transit/LegAlerts";
-import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
-import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
-import { RouteBadge } from "@/components/panels/transit/RouteBadge";
-import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
+  itineraryContributors,
+  TransitLegTimeline,
+} from "@/components/panels/directions/TransitLegTimeline";
+import { TransitEmissionsBadge } from "@/components/panels/directions/TransitRouteView";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { ClickableRow } from "@/components/ui/ClickableRow";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
-import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
-import { legTransitTime } from "@/lib/transitTime";
 import { legToMergedDeparture } from "./legDeparture";
-import { getWheelchairStatus } from "./transitAccessibility";
-
-/**
- * Per-mode rendering for non-transit street legs (walk + intermodal bike/car
- * access): line colour, glyph, and the i18n duration key. One table instead of
- * three parallel ternaries so a new street mode is added in a single place.
- */
-const STREET_LEG: Partial<
-  Record<TransportMode, { color: string; Icon: SvgIconComponent; durationKey: string }>
-> = {
-  walking: { color: "#757575", Icon: DirectionsWalkIcon, durationKey: "walkDuration" },
-  cycling: { color: "#34A853", Icon: DirectionsBikeIcon, durationKey: "bikeDuration" },
-  driving: { color: "#5F6368", Icon: DirectionsCarIcon, durationKey: "driveDuration" },
-};
-
-/**
- * A leg's per-leg attribution set is redundant when it carries no entries or
- * exactly mirrors the trip-level union; in either case we suppress the inline
- * strip so the panel-level credits remain the single source of truth.
- */
-function isPerLegRedundant(
-  legAttrs: Attribution[] | undefined,
-  tripAttrs: Attribution[] | undefined,
-): boolean {
-  if (!legAttrs || legAttrs.length === 0) return true;
-  const trip = tripAttrs ?? [];
-  if (legAttrs.length !== trip.length) return false;
-  const legIds = new Set(legAttrs.map(contributorKey));
-  return trip.every((a) => legIds.has(contributorKey(a)));
-}
-
-function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripItinerary }) {
-  const t = useTranslations("directions");
-  const units = useSettingsStore((s) => s.units);
-  const tNav = useTranslations("navigation");
-  const [stepsExpanded, setStepsExpanded] = useState(false);
-  const statuses: string[] = [];
-  if (leg.cancelled) statuses.push(t("journeyCancelled"));
-  if (leg.realtime === true) statuses.push(t("realtimeSupported"));
-  if (leg.bikesAllowed === true) statuses.push(t("bikesSupported"));
-  if (leg.bikesAllowed === false) statuses.push(t("bikesNotSupported"));
-  const wheelchairStatus = getWheelchairStatus(leg, itinerary);
-  if (wheelchairStatus === "accessible") statuses.push(t("wheelchairSupported"));
-  if (wheelchairStatus === "inaccessible") statuses.push(t("wheelchairNotSupported"));
-  if (wheelchairStatus === "unconfirmed") statuses.push(t("wheelchairUnconfirmed"));
-  if (leg.rental?.returnConstraint === "ANY_STATION") statuses.push(t("returnAnyStation"));
-  if (leg.rental?.returnConstraint === "ROUNDTRIP_STATION") {
-    statuses.push(t("returnSameStation"));
-  }
-  if (leg.ascentMeters) statuses.push(t("ascent", { meters: Math.round(leg.ascentMeters) }));
-
-  return (
-    <>
-      {statuses.length > 0 && (
-        <Typography
-          variant="caption"
-          sx={{ color: leg.cancelled ? "error.main" : "text.secondary", display: "block", mt: 0.5 }}
-        >
-          {statuses.join(" · ")}
-        </Typography>
-      )}
-      {leg.steps && leg.steps.length > 0 && (
-        <Box sx={{ mt: 0.5 }}>
-          {/* Collapsed by default: show the total walking distance, expand for the
-              turn-by-turn steps — mirrors the intermediate-stops toggle on rides. */}
-          <ClickableRow
-            aria-expanded={stepsExpanded}
-            onClick={() => setStepsExpanded((e) => !e)}
-            sx={{
-              width: "auto",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 0.25,
-              color: "text.secondary",
-              userSelect: "none",
-              "&:hover": { color: "text.primary" },
-            }}
-          >
-            {stepsExpanded ? (
-              <ExpandLessIcon sx={{ fontSize: 14 }} />
-            ) : (
-              <ExpandMoreIcon sx={{ fontSize: 14 }} />
-            )}
-            <Typography variant="caption">
-              {t("walkDistance", {
-                distance: formatMeasurementDistance(
-                  leg.steps.reduce((sum, step) => sum + (step.distanceMeters ?? 0), 0),
-                  units,
-                ),
-              })}
-            </Typography>
-          </ClickableRow>
-          <Collapse in={stepsExpanded}>
-            <Box component="ol" sx={{ pl: 2.5, my: 0.75 }} aria-label={t("routeInstructions")}>
-              {leg.steps.map((step, stepIndex) => (
-                <Typography
-                  component="li"
-                  variant="caption"
-                  // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id and identical steps repeat within a leg; the index disambiguates them
-                  key={`${stepIndex}-${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
-                >
-                  {composeWalkInstruction(walkStepInfo(step), tNav)} ·{" "}
-                  {formatMeasurementDistance(step.distanceMeters, units)}
-                  {step.accessRestriction ? ` · ${t("accessRestricted")}` : ""}
-                </Typography>
-              ))}
-            </Box>
-          </Collapse>
-        </Box>
-      )}
-    </>
-  );
-}
 
 export function TransitDetailsView({
   itinerary,
@@ -228,17 +69,9 @@ export function TransitDetailsView({
   onBack: () => void;
   onSelectItinerary?: (parent: TripItinerary, candidate: TripItinerary) => void;
 }) {
-  const selectedAttributions =
-    itinerary.contributors !== undefined
-      ? snapshotContributors(itinerary.contributors)
-      : snapshotContributors(
-          captureResultContributors(itinerary, attributions ?? []),
-          ...itinerary.legs.map((leg) => leg.contributors ?? leg.attributions ?? []),
-          itinerary.fare?.contributors ?? [],
-        );
+  const selectedAttributions = itineraryContributors(itinerary, attributions);
   const t = useTranslations("directions");
   const tc = useTranslations("common");
-  const tNav = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
   const units = useSettingsStore((s) => s.units);
@@ -360,15 +193,7 @@ export function TransitDetailsView({
           </Typography>
         )}
         {/* Leg badges summary */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.75, flexWrap: "wrap" }}>
-          {itinerary.legs.map((leg, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-            <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-              {i > 0 && <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />}
-              <LegBadge leg={leg} />
-            </Box>
-          ))}
-        </Box>
+        <TransitLegChain legs={itinerary.legs} sx={{ mt: 0.75 }} />
         {summaryBits.length > 0 && (
           <Typography
             variant="caption"
@@ -395,399 +220,17 @@ export function TransitDetailsView({
         )}
       </Box>
       <Divider />
-      {/* Timeline */}
-      <Box sx={{ pl: 1, pr: 2, py: 1 }}>
-        {itinerary.legs.map((leg, i) => {
-          const isWalk = leg.mode === "walking";
-          // Non-transit street legs (walk + intermodal bike/car access) share the
-          // compact dashed-line rendering; `street` is set only for those.
-          const street = STREET_LEG[leg.mode];
-          const legColor = street
-            ? street.color
-            : leg.route?.color
-              ? `#${leg.route.color.replace("#", "")}`
-              : BRAND;
-          const duration =
-            (new Date(leg.endTime).getTime() - new Date(leg.startTime).getTime()) / 60000;
-
-          return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-            <Box key={i}>
-              {/* Departure point */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
-                <Box sx={{ width: 62, textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
-                  <LiveStopTime
-                    time={legTransitTime(leg)}
-                    event={isWalk && i > 0 ? "arrival" : "departure"}
-                    tripId={
-                      !isWalk
-                        ? leg.tripId
-                        : i > 0 && itinerary.legs[i - 1].tripId
-                          ? itinerary.legs[i - 1].tripId
-                          : undefined
-                    }
-                    stopId={leg.from.stopId}
-                  />
-                </Box>
-                <Box
-                  sx={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: "50%",
-                    border: `3px solid ${legColor}`,
-                    bgcolor: i === 0 ? legColor : "background.paper",
-                    flexShrink: 0,
-                  }}
-                />
-                <ClickableRow
-                  sx={{
-                    flex: 1,
-                    minWidth: 0,
-                    "&:hover": { opacity: 0.7 },
-                  }}
-                  onClick={() =>
-                    handleStopClick(leg.from.name, leg.from.lat, leg.from.lng, leg.from.stopId)
-                  }
-                >
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {leg.from.name}
-                    </Typography>
-                    {!isWalk && leg.from.platformCode && (
-                      <PlatformBadge
-                        code={leg.from.platformCode}
-                        changed={!!changedFromPlatform(leg.from)}
-                      />
-                    )}
-                    {!isWalk && leg.from.level != null && leg.from.level !== 0 && (
-                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                        {tNav("levelShort", { level: leg.from.level })}
-                      </Typography>
-                    )}
-                  </Box>
-                </ClickableRow>
-              </Box>
-              {/* Leg details */}
-              <Box sx={{ display: "flex", gap: 1.5, py: 0.25 }}>
-                <Box sx={{ width: 40, flexShrink: 0 }} />
-                <Box
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    width: 12,
-                    flexShrink: 0,
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 3,
-                      flex: 1,
-                      minHeight: 32,
-                      bgcolor: legColor,
-                      borderRadius: 1,
-                      ...(street
-                        ? {
-                            backgroundImage: `repeating-linear-gradient(to bottom, ${legColor} 0px, ${legColor} 4px, transparent 4px, transparent 8px)`,
-                            bgcolor: "transparent",
-                          }
-                        : {}),
-                    }}
-                  />
-                </Box>
-                <Box sx={{ flex: 1, py: 0.5, minWidth: 0 }}>
-                  {street ? (
-                    <Box>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                        <street.Icon sx={{ fontSize: 16, color: "text.secondary" }} />
-                        <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                          {t(street.durationKey, {
-                            duration: formatDuration(Math.round(duration) * 60, locale),
-                          })}
-                        </Typography>
-                      </Box>
-                      {leg.rental && (
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.75,
-                            mt: 0.25,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          {leg.rental.color && (
-                            <Box
-                              sx={{
-                                width: 10,
-                                height: 10,
-                                borderRadius: "2px",
-                                bgcolor: `#${leg.rental.color}`,
-                                flexShrink: 0,
-                              }}
-                            />
-                          )}
-                          <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                            {leg.rental.providerName ?? leg.rental.systemName ?? t("rentalVehicle")}
-                          </Typography>
-                          {leg.rental.bookingUrl && (
-                            <Link
-                              href={safeHref(leg.rental.bookingUrl)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              variant="caption"
-                              sx={{ color: BRAND }}
-                            >
-                              {t("book")}
-                            </Link>
-                          )}
-                        </Box>
-                      )}
-                    </Box>
-                  ) : (
-                    <Box>
-                      <Box
-                        sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}
-                      >
-                        {(() => {
-                          const ModeIcon =
-                            leg.mode === "rail"
-                              ? TrainIcon
-                              : leg.mode === "subway"
-                                ? SubwayIcon
-                                : leg.mode === "tram"
-                                  ? TramIcon
-                                  : leg.mode === "ferry"
-                                    ? DirectionsBoatIcon
-                                    : leg.mode === "other"
-                                      ? CommuteIcon
-                                      : DirectionsBusIcon;
-                          return <ModeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
-                        })()}
-                        <LegLineLabel
-                          onOpen={
-                            leg.tripId
-                              ? () => setActiveLegDep(legToMergedDeparture(leg, provider))
-                              : undefined
-                          }
-                        >
-                          {leg.route && (
-                            <RouteBadge
-                              shortName={leg.route.shortName}
-                              color={leg.route.color}
-                              textColor={leg.route.textColor}
-                              mode={leg.mode}
-                              size="small"
-                            />
-                          )}
-                          <Typography variant="body2" sx={{ minWidth: 0, wordBreak: "break-word" }}>
-                            {leg.route?.longName ?? leg.to.name}
-                          </Typography>
-                        </LegLineLabel>
-                        {leg.tripId && <TransitLiveBadge tripId={leg.tripId} />}
-                        {leg.occupancy && <OccupancyIndicator level={leg.occupancy} size={14} />}
-                      </Box>
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: "text.secondary",
-                          mt: 0.25,
-                          display: "block",
-                        }}
-                      >
-                        {t("transitDuration", {
-                          duration: formatDuration(Math.round(duration) * 60, locale),
-                        })}
-                      </Typography>
-                      {(() => {
-                        const headsign =
-                          leg.headsign && leg.headsign !== leg.to.name ? leg.headsign : undefined;
-                        const identity = [
-                          [leg.category, leg.tripShortName].filter(Boolean).join(" ").trim(),
-                          leg.operatorName,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ");
-                        if (!headsign && !identity) return null;
-                        return (
-                          <Typography
-                            variant="caption"
-                            noWrap
-                            sx={{ color: "text.secondary", display: "block" }}
-                          >
-                            {[headsign ? tNav("towards", { headsign }) : null, identity || null]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </Typography>
-                        );
-                      })()}
-                      {leg.flex && (
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.75,
-                            mt: 0.25,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <Typography
-                            variant="caption"
-                            sx={{ color: "warning.main", fontWeight: 600 }}
-                          >
-                            {t("onDemandBookAhead")}
-                          </Typography>
-                          {leg.flex.bookingUrl && (
-                            <Link
-                              href={safeHref(leg.flex.bookingUrl)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              variant="caption"
-                              sx={{ color: BRAND }}
-                            >
-                              {t("book")}
-                            </Link>
-                          )}
-                        </Box>
-                      )}
-                      {leg.alternatives && leg.alternatives.length > 0 && (
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                            mt: 0.25,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                            {t("transitAlternatives")}
-                          </Typography>
-                          {leg.alternatives.map((alt, alternativeIndex) => {
-                            const candidate = composeTransitAlternative(
-                              itinerary,
-                              i,
-                              alternativeIndex,
-                            );
-                            const label = `${alt.routeShortName ? `${alt.routeShortName} · ` : ""}${fmt.time(alt.startTime, originTimeZone && tzOffsetLabel(new Date(alt.startTime), originTimeZone) ? { timeZone: originTimeZone } : undefined)} – ${fmt.time(alt.endTime, destinationTimeZone && tzOffsetLabel(new Date(alt.endTime), destinationTimeZone) ? { timeZone: destinationTimeZone } : undefined)}`;
-                            return candidate && onSelectItinerary ? (
-                              <Button
-                                key={`${alt.tripId}:${alt.routeShortName}:${alt.startTime}:${alt.endTime}`}
-                                size="small"
-                                variant="outlined"
-                                onClick={() => onSelectItinerary(itinerary, candidate)}
-                              >
-                                {label}
-                              </Button>
-                            ) : (
-                              <Typography
-                                key={`${alt.tripId}:${alt.routeShortName}:${alt.startTime}:${alt.endTime}`}
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {label}
-                              </Typography>
-                            );
-                          })}
-                        </Box>
-                      )}
-                      <TransitLegStops
-                        tripId={leg.tripId}
-                        stopCount={leg._intermediateStopCount}
-                        fromStopId={leg.from.stopId}
-                        toStopId={leg.to.stopId}
-                      />
-                      <LegAlerts routeId={leg.routeId} legAlerts={leg.alerts} />
-                      {leg.tripId && <LegRemarks tripId={leg.tripId} />}
-                      {!isPerLegRedundant(
-                        snapshotContributors(leg.contributors ?? leg.attributions ?? []),
-                        selectedAttributions,
-                      ) && (
-                        <Box sx={{ mt: 0.5 }}>
-                          <AttributionStrip
-                            attributions={snapshotContributors(
-                              leg.contributors ?? leg.attributions ?? [],
-                            )}
-                            variant="inline"
-                          />
-                        </Box>
-                      )}
-                    </Box>
-                  )}
-                  <LegStatusDetails leg={leg} itinerary={itinerary} />
-                </Box>
-              </Box>
-              {/* Interchange summary after a ride that changes onto another. When a
-                  walk leg follows, its own row shows the walk, so suppress it here. */}
-              {leg.route &&
-                (() => {
-                  const transfer = nextTransferFor(itinerary.legs, i);
-                  if (!transfer) return null;
-                  const walk = itinerary.legs[i + 1]?.mode === "walking" ? 0 : transfer.walkSeconds;
-                  return (
-                    <TransitTransferSummary
-                      fromLeg={leg}
-                      nextLeg={transfer.nextLeg}
-                      walkSeconds={walk}
-                    />
-                  );
-                })()}
-              {/* Arrival point (only for last leg) */}
-              {i === itinerary.legs.length - 1 && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
-                  <Box sx={{ width: 62, textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
-                    <LiveStopTime
-                      time={legTransitTime(leg, "arrival")}
-                      event="arrival"
-                      tripId={!isWalk ? leg.tripId : undefined}
-                      stopId={leg.to.stopId}
-                    />
-                  </Box>
-                  <Box
-                    sx={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: "50%",
-                      border: `3px solid ${legColor}`,
-                      bgcolor: legColor,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <ClickableRow
-                    sx={{
-                      flex: 1,
-                      minWidth: 0,
-                      "&:hover": { opacity: 0.7 },
-                    }}
-                    onClick={() =>
-                      handleStopClick(leg.to.name, leg.to.lat, leg.to.lng, leg.to.stopId)
-                    }
-                  >
-                    <Box
-                      sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {leg.to.name}
-                      </Typography>
-                      {!isWalk && leg.to.platformCode && (
-                        <PlatformBadge
-                          code={leg.to.platformCode}
-                          changed={!!changedFromPlatform(leg.to)}
-                        />
-                      )}
-                      {!isWalk && leg.to.level != null && leg.to.level !== 0 && (
-                        <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                          {tNav("levelShort", { level: leg.to.level })}
-                        </Typography>
-                      )}
-                    </Box>
-                  </ClickableRow>
-                </Box>
-              )}
-            </Box>
-          );
-        })}
-      </Box>
+      <TransitLegTimeline
+        itinerary={itinerary}
+        originLabel={originLabel}
+        destinationLabel={destinationLabel}
+        selectedAttributions={selectedAttributions}
+        originTimeZone={originTimeZone}
+        destinationTimeZone={destinationTimeZone}
+        onStopClick={(place) => handleStopClick(place.name, place.lat, place.lng, place.stopId)}
+        onOpenLeg={(leg) => setActiveLegDep(legToMergedDeparture(leg, provider))}
+        onSelectItinerary={onSelectItinerary}
+      />
       {/* Fare */}
       {(() => {
         const fareSummary = extractFareSummary(itinerary.fare);
@@ -870,17 +313,5 @@ export function TransitDetailsView({
         label={tc("dataSources")}
       />
     </Box>
-  );
-}
-
-/** A transit leg's line name, which opens the trip's departures when it has a known trip. */
-function LegLineLabel({ onOpen, children }: { onOpen?: () => void; children: ReactNode }) {
-  const sx = { display: "inline-flex", alignItems: "center", gap: 0.5 } as const;
-  return onOpen ? (
-    <ClickableRow onClick={onOpen} sx={{ ...sx, width: "auto", "&:hover": { opacity: 0.75 } }}>
-      {children}
-    </ClickableRow>
-  ) : (
-    <Box sx={sx}>{children}</Box>
   );
 }

@@ -1,4 +1,4 @@
 {
   "version": 1,
-  "approvedScopes": []
+  "approvedScopes": ["docs", "web", "mobile", "client"]
 }

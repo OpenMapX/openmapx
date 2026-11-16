@@ -80,14 +80,11 @@ function CompactTitleBar({ placeName, onClose }: { placeName: string; onClose?: 
 // out of view at full expansion, so Directions/Save/Nearby/Share stay one tap
 // away without scrolling back up.
 function DockedActionBar({ place }: { place: Place }) {
-  // Only the panel's own side padding, so the buttons land on exactly the same
-  // x positions as the inline row. The wrapper must not be a flex container:
-  // PlaceActionButtons already spreads its buttons across the width it is
-  // given, and as a flex item it would shrink to its content instead, leaving
-  // that spread nothing to distribute and bunching the buttons to the left.
+  // Only the panel's own side padding, so the pills land on exactly the same
+  // x positions as the inline row.
   return (
     <Box sx={{ px: 2 }}>
-      <PlaceActionButtons place={place} />
+      <PlaceActionButtons place={place} layout="pills" />
     </Box>
   );
 }
@@ -359,11 +356,17 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
   // target for `noWrap`'s ellipsis to kick in at peek.
   const titleProps = {
     ref: titleRef,
+    component: "h1" as const,
     variant: "h6" as const,
-    gutterBottom: true,
     noWrap: detent === "peek",
   };
-  const titleSx = { fontWeight: 600, pr: onClose && !showHeaderWeather ? 4 : 0 };
+  const titleSx = {
+    fontSize: 22,
+    fontWeight: 500,
+    lineHeight: 1.3,
+    mb: 0.5,
+    pr: onClose && !showHeaderWeather ? 4 : 0,
+  };
 
   return (
     <AttributionDetailsGroup placement="footer">
@@ -532,7 +535,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
           // above the icons — so equal padding reads as bottom-heavy. Nudge the
           // box gaps apart to bring the visible gaps level.
           <Box ref={chipsRef} inert={dockedActionsShown} sx={{ pt: 0.5, mb: -0.25 }}>
-            <PlaceActionButtons place={place} />
+            <PlaceActionButtons place={place} layout="pills" />
           </Box>
         )}
       </Box>

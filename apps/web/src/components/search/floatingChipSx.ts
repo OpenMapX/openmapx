@@ -16,19 +16,21 @@ import { SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET, topInset } from "@/lib/layout";
  * use the theme-aware `--omx-chip-hover` so the inactive hover stays dark in
  * dark mode.
  */
-/** Height of a floating chip; controls placed beside chips match it. */
-export const FLOATING_CHIP_HEIGHT = 36;
+/** Height of a floating chip on wider screens; controls placed beside chips match it. */
+export const FLOATING_CHIP_HEIGHT = 32;
+/** A phone's chips are taller, for the touch target. */
+const PHONE_CHIP_HEIGHT = 36;
 
 export function floatingChipSx(active: boolean, variant: "category" | "toggle"): SxProps<Theme> {
   const base = {
-    height: FLOATING_CHIP_HEIGHT,
-    borderRadius: `${FLOATING_CHIP_HEIGHT / 2}px`,
+    height: { xs: PHONE_CHIP_HEIGHT, sm: FLOATING_CHIP_HEIGHT },
+    borderRadius: 999,
     fontWeight: 500,
-    fontSize: 13,
+    fontSize: 14,
     bgcolor: active ? BRAND : "background.paper",
     color: active ? "#fff" : "text.primary",
-    borderColor: active ? BRAND : "var(--omx-border)",
-    boxShadow: active ? "none" : "0 1px 3px var(--omx-shadow-soft)",
+    borderColor: active ? BRAND : "var(--omx-chip-border)",
+    boxShadow: 1,
     cursor: "pointer",
     userSelect: "none",
     "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
@@ -53,6 +55,19 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
 }
 
 /**
+ * Where the floating chip row ends, measured from the search bar's top: below
+ * the bar on a phone, beside it on desktop. Chrome stacked under the chips
+ * starts from here.
+ */
+export const CHIP_ROW_END = {
+  xs: SEARCH_BAR_HEIGHT + 8 + PHONE_CHIP_HEIGHT,
+  sm: (SEARCH_BAR_HEIGHT + FLOATING_CHIP_HEIGHT) / 2,
+} as const;
+
+/** Vertical padding of a floating toolbar row, enough for its chips' shadows. */
+const TOOLBAR_PADDING_Y = 4;
+
+/**
  * Shared positioning core for the floating toolbar rows that sit over the map
  * (top-anchored, offset for the desktop sidebar). Spread into the row's `sx`
  * and add per-row extras (gap, flexWrap, pointerEvents, mask, etc.).
@@ -60,9 +75,13 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
 export const floatingToolbarSx = {
   position: "absolute",
   top: {
-    // Below the search bar on a phone; level with its centre beside it.
-    xs: topInset(SEARCH_BAR_INSET, SEARCH_BAR_HEIGHT + SEARCH_BAR_INSET),
-    sm: topInset(SEARCH_BAR_INSET, 6),
+    // 8px below the search bar on a phone; level with its centre beside it.
+    // The row's vertical padding leaves room for the chips' shadows.
+    xs: topInset(SEARCH_BAR_INSET, SEARCH_BAR_HEIGHT + 8 - TOOLBAR_PADDING_Y),
+    sm: topInset(
+      SEARCH_BAR_INSET,
+      (SEARCH_BAR_HEIGHT - FLOATING_CHIP_HEIGHT) / 2 - TOOLBAR_PADDING_Y,
+    ),
   },
   left: { xs: "var(--omx-safe-left)", sm: "calc(420px + var(--omx-safe-left))" },
   right: { xs: "var(--omx-safe-right)", sm: "calc(108px + var(--omx-safe-right))" },
@@ -70,5 +89,5 @@ export const floatingToolbarSx = {
   display: "flex",
   alignItems: "center",
   px: { xs: 1, sm: 0 },
-  py: "2px",
+  py: `${TOOLBAR_PADDING_Y}px`,
 } as const;

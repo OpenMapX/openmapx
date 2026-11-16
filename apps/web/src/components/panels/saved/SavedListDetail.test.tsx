@@ -176,7 +176,7 @@ it("adds and edits notes without opening the place, and opens rows through openS
   state.places = [place];
   const open = vi.spyOn(savedPlaceActions, "openSavedPlace");
   const view = renderDetail();
-  fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add note" }));
   expect(open).not.toHaveBeenCalled();
   const note = screen.getByPlaceholderText("Note");
   fireEvent.change(note, { target: { value: "Visit in daylight" } });
@@ -198,7 +198,7 @@ it("adds and edits notes without opening the place, and opens rows through openS
   expect(screen.getByPlaceholderText("Note")).toHaveValue("Visit in daylight");
   expect(open).not.toHaveBeenCalled();
   fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
-  fireEvent.click(screen.getByRole("button", { name: /Public landmark/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Public landmark/ }));
   expect(open).toHaveBeenCalledWith(state.places[0], expect.any(Function));
 });
 
@@ -226,7 +226,7 @@ describe("saved note editor ownership", () => {
   it("keeps a different place's editor open when an earlier save succeeds", () => {
     state.places = [notePlace("a"), notePlace("b", "Existing")];
     renderDetail();
-    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
     draft("Saved A");
     fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
     fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
@@ -238,10 +238,10 @@ describe("saved note editor ownership", () => {
   it("keeps a second place's editor opened from a blurred save", () => {
     state.places = [notePlace("a"), notePlace("b")];
     renderDetail();
-    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
     draft("Saved A");
     fireEvent.blur(screen.getByPlaceholderText("Note"));
-    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
     draft("Unsaved B draft");
     settle(0);
     expect(screen.getByPlaceholderText("Note")).toHaveValue("Unsaved B draft");
@@ -250,11 +250,11 @@ describe("saved note editor ownership", () => {
   it("keeps a reopened editor for the same place after cancelling a pending save", () => {
     state.places = [notePlace("a")];
     renderDetail();
-    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
     draft("Same text");
     fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
     fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
-    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
     draft("Same text");
     settle(0);
     expect(screen.getByPlaceholderText("Note")).toHaveValue("Same text");
@@ -263,7 +263,7 @@ describe("saved note editor ownership", () => {
   it("keeps text typed after a save was submitted and sends the earlier trimmed snapshot", () => {
     state.places = [notePlace("a")];
     renderDetail();
-    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
     draft("  First  ");
     fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
     draft("First and more");
@@ -275,10 +275,10 @@ describe("saved note editor ownership", () => {
   it("lets only the matching save close its editor and ignores a late duplicate completion", () => {
     state.places = [notePlace("a"), notePlace("b")];
     renderDetail();
-    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
     draft("Saved A");
     fireEvent.blur(screen.getByPlaceholderText("Note"));
-    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
     draft("Saved B");
     fireEvent.blur(screen.getByPlaceholderText("Note"));
     settle(0);
@@ -286,13 +286,13 @@ describe("saved note editor ownership", () => {
     settle(1);
     expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
     draft("Again");
     fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
     fireEvent.blur(screen.getByPlaceholderText("Note"));
     settle(2);
     expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
     draft("Reopened");
     settle(3);
     expect(screen.getByPlaceholderText("Note")).toHaveValue("Reopened");

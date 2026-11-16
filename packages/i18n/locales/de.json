@@ -12,7 +12,10 @@
     "copied": "Kopiert",
     "copyFailed": "Kopieren fehlgeschlagen",
     "linkCopied": "Link in die Zwischenablage kopiert",
-    "shareFailed": "Teilen fehlgeschlagen"
+    "shareFailed": "Teilen fehlgeschlagen",
+    "copyCoordinates": "Koordinaten kopieren",
+    "searchNearby": "In der Nähe suchen",
+    "measureDistance": "Entfernung messen"
   },
   "crowdReports": {
     "reportButton": "Zustand melden",
@@ -89,7 +92,8 @@
     "alightSoon": "Am nächsten Halt aussteigen",
     "changeAt": "Umsteigen an {stop}",
     "transferWalk": "{minutes} Min. zum Umstieg",
-    "restOfJourney": "Restliche Fahrt",
+    "showPreviousSteps": "Vorherige Schritte anzeigen",
+    "hidePreviousSteps": "Vorherige Schritte ausblenden",
     "stopSkipped": "Hält nicht",
     "departuresAt": "Abfahrten · {stop}",
     "boardAt": "Einsteigen an {place}",
@@ -107,6 +111,10 @@
     "connectionAlternative": "Nächste Option {time}",
     "walkOnStreet": "{action} auf {street}",
     "walkToLevel": "{action} zu Ebene {level}",
+    "walkStayOnStreet": "{action}, weiter auf {street}",
+    "walkHead": "Richtung {direction, select, n {Norden} ne {Nordosten} e {Osten} se {Südosten} s {Süden} sw {Südwesten} w {Westen} other {Nordwesten}} losgehen",
+    "walkHeadOnStreet": "Auf {street} Richtung {direction, select, n {Norden} ne {Nordosten} e {Osten} se {Südosten} s {Süden} sw {Südwesten} w {Westen} other {Nordwesten}} losgehen",
+    "walkCrossStreet": "{street} überqueren",
     "walkDir": {
       "depart": "Losgehen",
       "continue": "Geradeaus",
@@ -117,6 +125,7 @@
       "sharpLeft": "Scharf links",
       "sharpRight": "Scharf rechts",
       "uturn": "Wenden",
+      "cross": "Straße überqueren",
       "stairs": "Treppe nehmen",
       "elevator": "Aufzug nehmen",
       "arrive": "Ankunft an {place}"
@@ -217,6 +226,7 @@
     "rsDetourDistance": "+{kilometers} km",
     "rsDetourCoordinate": "Route zu den Ortskoordinaten; Eingang unbekannt",
     "rsDetourEntrance": "Route zum bekannten Eingang",
+    "rsFuelPriceUnknown": "Preis unbekannt",
     "rsPinNetwork": "+{minutes} Min. · Straße",
     "rsPinApproximate": "~+{minutes} Min.",
     "rsPinChecking": "Wird geprüft…",
@@ -266,7 +276,6 @@
     "alightedElsewhere": "Du bist möglicherweise nicht am geplanten Halt. Prüfe den nächsten Einstieg oder suche Alternativen.",
     "transitActionsUpdateRequired": "Aktualisiere die installierte App, um Ein- und Ausstieg zu bestätigen.",
     "transitActionFailed": "Die Aktion konnte nicht bestätigt werden. Deine Verbindung bleibt erhalten. Versuche es erneut.",
-    "nextStopLabel": "Nächster Halt",
     "transitAlternativesShort": "Alternativen",
     "findTransitAlternatives": "Alternativen suchen",
     "findingTransitAlternatives": "Alternativen werden gesucht",
@@ -284,6 +293,8 @@
     "stopCountUnavailable": "Haltestellenanzahl nicht verfügbar. Beachte die Haltestellen deiner Verbindung und bestätige den Ausstieg.",
     "stayOnBoard": "Sitzen bleiben",
     "stopsRemaining": "{count, plural, one {Noch # Halt} other {Noch # Halte}}",
+    "rideRemaining": "{count, plural, one {# Halt} other {# Halte}} · {minutes} Min.",
+    "stopsToGo": "{count, plural, one {# Halt} other {# Halte}}",
     "transitWalkRepair": {
       "repairing": "Gehweg zum gewählten Halt wird aktualisiert…",
       "unavailable": "Der Gehweg konnte nicht aktualisiert werden. Deine Verbindung bleibt bestehen. Suche bei Bedarf Alternativen.",
@@ -443,6 +454,8 @@
     "themeLight": "Hellmodus (Klick für Dunkelmodus)",
     "themeDark": "Dunkelmodus (Klick für Systemmodus)",
     "themeSystem": "Systemmodus (Klick für Hellmodus)",
+    "legend": "Legende",
+    "legendShowOnMap": "Auf der Karte zeigen",
     "showLegend": "Legende anzeigen",
     "hideLegend": "Legende ausblenden"
   },
@@ -506,7 +519,7 @@
     "nautical": "Seekarten",
     "sunTime": "Tageslicht & Zeitzonen",
     "schematicTransit": "Schematischer Liniennetzplan",
-    "closeMorePanel": "Erweitertes Menü schließen"
+    "closeMorePanel": "Schließen"
   },
   "schematicTransit": {
     "title": "Schematischer Liniennetzplan",
@@ -1080,9 +1093,9 @@
     "miles": "Meilen",
     "transfers": "{count} Umstieg{count, plural, one {} other {e}}",
     "walkDistance": "{distance} Fußweg",
-    "walkDuration": "Fußweg — ~{duration}",
-    "bikeDuration": "Fahrrad — ~{duration}",
-    "driveDuration": "Auto — ~{duration}",
+    "walkDuration": "Fußweg {duration}",
+    "bikeDuration": "Fahrrad {duration}",
+    "driveDuration": "Auto {duration}",
     "rentalVehicle": "Leihfahrzeug",
     "book": "Buchen",
     "regionalLocal": "Regional- und Nahverkehr",
@@ -1535,7 +1548,10 @@
     "minAge": "Mindestalter {age}",
     "source": "Quelle",
     "dataSources": "Datenquellen",
-    "removeReviewPhoto": "Foto entfernen"
+    "removeReviewPhoto": "Foto entfernen",
+    "directionsTo": "Route zu {name}",
+    "call": "Anrufen",
+    "website": "Website"
   },
   "airportsOverlay": {
     "title": "Flughäfen",
@@ -2595,6 +2611,8 @@
     "removeAreaDescription": "Dies löscht die gecachten Kartendaten für \"{name}\" ({size}).",
     "storageTitle": "Speicher",
     "storageDescription": "Zwischengespeicherte Kartenkacheln, optionale kürzliche Kartendaten und Offline-Kartenpakete.",
+    "storageUsage": "Belegung",
+    "storageMapData": "Kartendaten",
     "totalUsed": "Belegt: {used} von {total} ({percent}%)",
     "appShell": "App-Shell",
     "preferences": "Einstellungen",
@@ -3139,16 +3157,12 @@
   "menu": {
     "saved": "Gespeichert",
     "timeline": "Ihre Zeitleiste",
-    "recent": "Zuletzt verwendet",
-    "contributions": "Meine Beiträge",
-    "shareMap": "Karte teilen oder einbetten",
+    "shareMap": "Karte teilen",
     "importFile": "Datei importieren (GPX, GeoJSON, KML)",
     "importFailed": "Datei konnte nicht gelesen werden. Unterstützt: GPX, GeoJSON, KML.",
     "offlineMaps": "Offline-Karten",
     "storage": "Speicher",
-    "print": "Drucken",
-    "tips": "Tipps und Tricks",
-    "help": "Hilfe",
+    "commandPalette": "Befehlspalette",
     "language": "Sprache",
     "theme": "Design",
     "themeLight": "Hell",
@@ -3170,7 +3184,8 @@
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
     "imprint": "Impressum",
-    "parking": "Parken"
+    "parking": "Parken",
+    "signInHint": "Melden Sie sich an, um Orte zu speichern, Ihren Parkplatz zu merken und Ihre Zeitleiste zu sehen."
   },
   "timeline": {
     "onboardingTitle": "Ihre Zeitleiste",
@@ -3191,10 +3206,6 @@
     "replaceConnection": "Zugangsdaten ersetzen",
     "visitFallback": "Unbenannter Besuch",
     "journeyFallback": "Weg",
-    "selected": "Ausgewählt",
-    "pointCount": "Punkte",
-    "elevationGain": "Anstieg",
-    "elevationLoss": "Abstieg",
     "entriesAriaLabel": "Zeitleisteneinträge",
     "summary": {
       "distance": "Entfernung",
@@ -3220,6 +3231,19 @@
       "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich ist derzeit nicht erreichbar. Versuchen Sie es später erneut.",
       "TIMELINE_RESPONSE_INVALID": "Dawarich hat Daten zurückgegeben, die OpenMapX nicht sicher lesen konnte.",
       "unknown": "Ihre Zeitleiste konnte nicht geladen werden. Versuchen Sie es erneut."
+    },
+    "elevationGain": "Anstieg",
+    "elevationLoss": "Abstieg",
+    "modes": {
+      "walking": "Zu Fuß",
+      "running": "Laufen",
+      "cycling": "Fahrrad",
+      "driving": "Auto",
+      "bus": "Bus",
+      "train": "Bahn",
+      "flying": "Flug",
+      "boat": "Schiff",
+      "motorcycle": "Motorrad"
     }
   },
   "saved": {
@@ -3293,7 +3317,8 @@
     "importListLimit": "Diese Liste wurde nicht angelegt, weil du bereits {count, number} Listen hast. Bereits importierte Orte bleiben erhalten.",
     "importPlaceLimit": "Der Import wurde am Limit von {count, number} gespeicherten Orten angehalten. Bereits importierte Orte bleiben erhalten.",
     "itemOptions": "Optionen für {name}",
-    "changeIcon": "Listensymbol ändern"
+    "changeIcon": "Listensymbol ändern",
+    "addNote": "Notiz hinzufügen"
   },
   "share": {
     "sharedList": "Geteilte Liste",
@@ -3339,14 +3364,19 @@
   "measurement": {
     "lineMode": "Entfernung messen",
     "polygonMode": "Fläche messen",
-    "clickToStart": "Klicke auf die Karte, um zu messen",
+    "clickToStart": "Klicke auf die Karte, um Punkte zu setzen",
     "clickToClose": "Klicke den ersten Punkt oder doppelklicke zum Schließen",
     "total": "Gesamt",
     "perimeter": "Umfang",
     "undo": "Rückgängig",
     "redo": "Wiederherstellen",
     "clearMeasurement": "Löschen",
-    "closeTool": "Messwerkzeug schließen"
+    "closeTool": "Messwerkzeug schließen",
+    "distance": "Entfernung",
+    "area": "Fläche",
+    "tapToStart": "Tippe auf die Karte, um Punkte zu setzen",
+    "tapToClose": "Tippe auf den ersten Punkt, um die Fläche zu schließen",
+    "perimeterValue": "Umfang {distance}"
   },
   "travelTime": {
     "driving": "Auto",

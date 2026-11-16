@@ -1,0 +1,1210 @@
+{
+ "trip": {
+  "summary": {
+   "length": 1.257,
+   "time": 959.573
+  },
+  "units": "kilometers",
+  "legs": [
+   {
+    "shape": "qqtdcBs_uqXlEdKvKlUz@qA`I_MvF`O|@zJz@~JD|AzCxGdDlHv@uAlFpLTh@^|@v@lBb@fAxApD|@wAv[|z@hShi@zB`GfLrZlTrk@NrBf@`HRbC|HnT`@dAv@zBjBtKzA`ExJ`XjFrN^z@bAbCh@pAl@xAl@xAjApCj@rA~@{@~a@xqAj\\ldArBkC~BlH^lAbLz^hBhG~AhFrHbVbJhZp@xBhBvGz@nElAfGp@~BZhAlC~IlBx@nBzF?dEhF~Q|@tCj@rCJbBI`B]hAs@vA_InK[mA{@eDq[}~@gA`BCFGF_GjH",
+    "summary": {
+     "length": 1.257,
+     "time": 959.573
+    },
+    "maneuvers": [
+     {
+      "type": 2,
+      "instruction": "Walk southwest on the walkway.",
+      "verbal_pre_transition_instruction": "Walk southwest on the walkway. Then, in 50 meters, Turn left onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 50 meters.",
+      "verbal_succinct_transition_instruction": "Walk southwest. Then, in 50 meters, Turn left onto the walkway.",
+      "bearing_after": 229,
+      "time": 46.048,
+      "length": 0.05,
+      "begin_shape_index": 0,
+      "end_shape_index": 2
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn left onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn left onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 30 meters.",
+      "verbal_succinct_transition_instruction": "Turn left.",
+      "bearing_before": 227,
+      "bearing_after": 140,
+      "time": 23.717,
+      "length": 0.028,
+      "begin_shape_index": 2,
+      "end_shape_index": 4
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn right onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn right onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 80 meters.",
+      "verbal_succinct_transition_instruction": "Turn right.",
+      "bearing_before": 140,
+      "bearing_after": 232,
+      "time": 59.152,
+      "length": 0.078,
+      "begin_shape_index": 4,
+      "end_shape_index": 10
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn left onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn left onto the walkway. Then Turn right onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for less than 10 meters.",
+      "verbal_succinct_transition_instruction": "Turn left. Then Turn right onto the walkway.",
+      "bearing_before": 228,
+      "bearing_after": 137,
+      "time": 2.823,
+      "length": 0.004,
+      "begin_shape_index": 10,
+      "end_shape_index": 11
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn right onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn right onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 40 meters.",
+      "verbal_succinct_transition_instruction": "Turn right.",
+      "bearing_before": 137,
+      "bearing_after": 228,
+      "time": 27.811,
+      "length": 0.041,
+      "begin_shape_index": 11,
+      "end_shape_index": 17
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto Gontardstraße.",
+      "verbal_transition_alert_instruction": "Turn left onto Gontardstraße.",
+      "verbal_pre_transition_instruction": "Turn left onto Gontardstraße. Then Turn right onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for less than 10 meters.",
+      "verbal_succinct_transition_instruction": "Turn left. Then Turn right onto the walkway.",
+      "bearing_before": 230,
+      "bearing_after": 139,
+      "time": 3.529,
+      "length": 0.005,
+      "begin_shape_index": 17,
+      "end_shape_index": 18,
+      "street_names": [
+       "Gontardstraße"
+      ]
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn right onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn right onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 400 meters.",
+      "verbal_succinct_transition_instruction": "Turn right.",
+      "bearing_before": 139,
+      "bearing_after": 232,
+      "time": 319.623,
+      "length": 0.418,
+      "begin_shape_index": 18,
+      "end_shape_index": 40
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn left onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn left onto the walkway. Then Turn right onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for less than 10 meters.",
+      "verbal_succinct_transition_instruction": "Turn left. Then Turn right onto the walkway.",
+      "bearing_before": 229,
+      "bearing_after": 150,
+      "time": 2.823,
+      "length": 0.004,
+      "begin_shape_index": 40,
+      "end_shape_index": 41
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn right onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn right onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 200 meters.",
+      "verbal_succinct_transition_instruction": "Turn right.",
+      "bearing_before": 150,
+      "bearing_after": 235,
+      "time": 130.531,
+      "length": 0.201,
+      "begin_shape_index": 41,
+      "end_shape_index": 43
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn left onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn left onto the walkway. Then Turn right onto Rathausstraße.",
+      "verbal_post_transition_instruction": "Continue for less than 10 meters.",
+      "verbal_succinct_transition_instruction": "Turn left. Then Turn right onto Rathausstraße.",
+      "bearing_before": 235,
+      "bearing_after": 144,
+      "time": 5.647,
+      "length": 0.008,
+      "begin_shape_index": 43,
+      "end_shape_index": 44
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right onto Rathausstraße.",
+      "verbal_transition_alert_instruction": "Turn right onto Rathausstraße.",
+      "verbal_pre_transition_instruction": "Turn right onto Rathausstraße.",
+      "verbal_post_transition_instruction": "Continue for 200 meters.",
+      "verbal_succinct_transition_instruction": "Turn right.",
+      "bearing_before": 144,
+      "bearing_after": 235,
+      "time": 162.31,
+      "length": 0.219,
+      "begin_shape_index": 44,
+      "end_shape_index": 60,
+      "street_names": [
+       "Rathausstraße"
+      ]
+     },
+     {
+      "type": 23,
+      "instruction": "Keep right to take Schloßplatz.",
+      "verbal_transition_alert_instruction": "Keep right to take Schloßplatz.",
+      "verbal_pre_transition_instruction": "Keep right to take Schloßplatz.",
+      "verbal_post_transition_instruction": "Continue for 50 meters.",
+      "bearing_before": 234,
+      "bearing_after": 248,
+      "time": 35.294,
+      "length": 0.05,
+      "begin_shape_index": 60,
+      "end_shape_index": 66,
+      "street_names": [
+       "Schloßplatz"
+      ]
+     },
+     {
+      "type": 12,
+      "instruction": "Make a right U-turn onto the walkway.",
+      "verbal_transition_alert_instruction": "Make a right U-turn onto the walkway.",
+      "verbal_pre_transition_instruction": "Make a right U-turn onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 100 meters.",
+      "verbal_succinct_transition_instruction": "Make a right U-turn.",
+      "bearing_before": 249,
+      "bearing_after": 59,
+      "time": 93.317,
+      "length": 0.126,
+      "begin_shape_index": 66,
+      "end_shape_index": 72
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto the walkway.",
+      "verbal_transition_alert_instruction": "Turn left onto the walkway.",
+      "verbal_pre_transition_instruction": "Turn left onto the walkway.",
+      "verbal_post_transition_instruction": "Continue for 20 meters.",
+      "verbal_succinct_transition_instruction": "Turn left.",
+      "bearing_before": 54,
+      "bearing_after": 320,
+      "time": 46.941,
+      "length": 0.024,
+      "begin_shape_index": 72,
+      "end_shape_index": 76
+     },
+     {
+      "type": 4,
+      "instruction": "You have arrived at your destination.",
+      "verbal_transition_alert_instruction": "You will arrive at your destination.",
+      "verbal_pre_transition_instruction": "You have arrived at your destination.",
+      "bearing_before": 325,
+      "time": 0.0,
+      "length": 0.0,
+      "begin_shape_index": 76,
+      "end_shape_index": 76
+     }
+    ]
+   }
+  ]
+ },
+ "edges": [
+  {
+   "use": "footway",
+   "begin_shape_index": 0,
+   "end_shape_index": 1
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 1,
+   "end_shape_index": 2
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 2,
+   "end_shape_index": 4
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 4,
+   "end_shape_index": 6
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 6,
+   "end_shape_index": 8
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 8,
+   "end_shape_index": 9
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 9,
+   "end_shape_index": 10
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 10,
+   "end_shape_index": 11
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 11,
+   "end_shape_index": 12
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 12,
+   "end_shape_index": 13
+  },
+  {
+   "use": "pedestrian_crossing",
+   "begin_shape_index": 13,
+   "end_shape_index": 16
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 16,
+   "end_shape_index": 17
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 17,
+   "end_shape_index": 18
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 18,
+   "end_shape_index": 19
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 19,
+   "end_shape_index": 20
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 20,
+   "end_shape_index": 21
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 21,
+   "end_shape_index": 22
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 22,
+   "end_shape_index": 24
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 24,
+   "end_shape_index": 25
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 25,
+   "end_shape_index": 27
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 27,
+   "end_shape_index": 31
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 31,
+   "end_shape_index": 32
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 32,
+   "end_shape_index": 33
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 33,
+   "end_shape_index": 34
+  },
+  {
+   "use": "pedestrian_crossing",
+   "begin_shape_index": 34,
+   "end_shape_index": 35
+  },
+  {
+   "use": "pedestrian_crossing",
+   "begin_shape_index": 35,
+   "end_shape_index": 36
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 36,
+   "end_shape_index": 37
+  },
+  {
+   "use": "pedestrian_crossing",
+   "begin_shape_index": 37,
+   "end_shape_index": 38
+  },
+  {
+   "use": "pedestrian_crossing",
+   "begin_shape_index": 38,
+   "end_shape_index": 39
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 39,
+   "end_shape_index": 40
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 40,
+   "end_shape_index": 41
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 41,
+   "end_shape_index": 42
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 42,
+   "end_shape_index": 43
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 43,
+   "end_shape_index": 44
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 44,
+   "end_shape_index": 46
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 46,
+   "end_shape_index": 47
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 47,
+   "end_shape_index": 48
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 48,
+   "end_shape_index": 49
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 49,
+   "end_shape_index": 50
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 50,
+   "end_shape_index": 52
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 52,
+   "end_shape_index": 53
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 53,
+   "end_shape_index": 54
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 54,
+   "end_shape_index": 56
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 56,
+   "end_shape_index": 59
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 59,
+   "end_shape_index": 60
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 60,
+   "end_shape_index": 66
+  },
+  {
+   "use": "road",
+   "begin_shape_index": 66,
+   "end_shape_index": 69
+  },
+  {
+   "use": "pedestrian_crossing",
+   "begin_shape_index": 69,
+   "end_shape_index": 70
+  },
+  {
+   "use": "pedestrian_crossing",
+   "begin_shape_index": 70,
+   "end_shape_index": 71
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 71,
+   "end_shape_index": 72
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 72,
+   "end_shape_index": 73
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 73,
+   "end_shape_index": 74
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 74,
+   "end_shape_index": 75
+  },
+  {
+   "use": "footway",
+   "begin_shape_index": 75,
+   "end_shape_index": 76
+  }
+ ],
+ "locate": [
+  {
+   "edges": [
+    {
+     "distance": 0.0,
+     "edge_info": {
+      "names": []
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 5.8,
+     "edge_info": {
+      "names": [
+       "Alexanderplatz"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 5.8,
+     "edge_info": {
+      "names": [
+       "Alexanderplatz"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "edges": [
+    {
+     "distance": 0.0,
+     "edge_info": {
+      "names": []
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 5.0,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 5.0,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 6.0,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 6.0,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 9.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 9.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 9.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 9.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 9.9,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 9.9,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 10.6,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 10.6,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 22.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 22.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 22.3,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 22.3,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 23.0,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 23.0,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 24.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 24.2,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 24.7,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 24.7,
+     "edge_info": {
+      "names": [
+       "Dircksenstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 24.7,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 24.7,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "edges": [
+    {
+     "distance": 0.0,
+     "edge_info": {
+      "names": []
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "edges": [
+    {
+     "distance": 4.6,
+     "edge_info": {
+      "names": []
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 21.8,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 21.8,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 23.3,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 23.3,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "edges": [
+    {
+     "distance": 1.4,
+     "edge_info": {
+      "names": []
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 5.4,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    },
+    {
+     "distance": 5.4,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 5.4,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 5.4,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    },
+    {
+     "distance": 6.1,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    },
+    {
+     "distance": 6.1,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 6.1,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 6.1,
+     "edge_info": {
+      "names": [
+       "Spandauer Straße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "edges": [
+    {
+     "distance": 4.8,
+     "edge_info": {
+      "names": []
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 8.0,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    },
+    {
+     "distance": 8.0,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    },
+    {
+     "distance": 17.3,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    },
+    {
+     "distance": 17.3,
+     "edge_info": {
+      "names": [
+       "Rathausstraße"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "edges": [
+    {
+     "distance": 1.7,
+     "edge_info": {
+      "names": []
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 4.7,
+     "edge_info": {
+      "names": [
+       "Schloßplatz"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    },
+    {
+     "distance": 4.7,
+     "edge_info": {
+      "names": [
+       "Schloßplatz"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 4.7,
+     "edge_info": {
+      "names": [
+       "Schloßplatz"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": false
+      }
+     }
+    },
+    {
+     "distance": 4.7,
+     "edge_info": {
+      "names": [
+       "Schloßplatz"
+      ]
+     },
+     "edge": {
+      "access": {
+       "car": true
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

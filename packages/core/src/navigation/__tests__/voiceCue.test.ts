@@ -38,6 +38,14 @@ describe("nextVoiceCue", () => {
     expect(nextVoiceCue(step, 0, 400, REF, config, 1, ["0:far"])).toBeNull();
   });
 
+  it("never announces a farther tier after a nearer one for the same maneuver", () => {
+    expect(nextVoiceCue(step, 0, 400, REF, config, 1, ["0:now"])).toBeNull();
+    expect(nextVoiceCue(step, 0, 200, REF, config, 1, ["0:now"])).toBeNull();
+    expect(nextVoiceCue(step, 0, 400, REF, config, 1, ["0:near"])).toBeNull();
+    // Another maneuver's tiers are unaffected.
+    expect(nextVoiceCue(step, 1, 400, REF, config, 1, ["0:now"])?.tier).toBe("far");
+  });
+
   it("escalates to 'now' close to the maneuver", () => {
     const cue = nextVoiceCue(step, 0, 20, REF, config, 1, ["0:far", "0:near"]);
     expect(cue?.tier).toBe("now");

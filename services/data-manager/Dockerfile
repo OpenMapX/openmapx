@@ -14,14 +14,14 @@
 # The GitHub Actions workflow at .github/workflows/docker.yml builds this
 # image with `context: .` for the same reason.
 
-FROM docker.io/golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b AS build-gtfsclean
+FROM docker.io/golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS base
+FROM node:24.22.2-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -87,31 +87,34 @@ COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/services/data-manager/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
-FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS runner
+FROM node:24.22.2-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Explicitly upgrade libraries already satisfied by the pinned base image:
-# Require at least Expat's 2.5.0-1+deb12u4 security update; Debian may replace
-# older revisions in its repositories. libpcre2-8-0 fixes CVE-2026-86145,
-# CVE-2026-89157 and CVE-2026-89161. libbrotli1 1.0.9-2+deb12u1 fixes
-# CVE-2026-111497. libssl3 and openssl 3.0.22-1~deb12u2 fix CVE-2026-84782;
-# curl, git, Python and ca-certificates pull them in, and a release build can
-# restore this layer from the registry build cache with the versions it held
-# then. Raising a version check here changes the instruction, so that layer is
-# not reused.
-# apt and libapt-pkg6.0 2.6.2 fix CVE-2026-109518 (Debian DLA-4880-1).
+# Expat 2.9.0-1~deb13u1 fixes CVE-2026-77214 (DSA-6566-1); Debian may replace
+# older revisions in its repositories. Trixie's libpcre2-8-0 10.46-1~deb13u2
+# point release already fixes CVE-2026-86145, CVE-2026-89157 and
+# CVE-2026-89161, so it needs no floor. libbrotli1 1.1.0-2+deb13u1 fixes
+# CVE-2026-111497 (DSA-6582-1). libssl3t64 and openssl 3.5.7-1~deb13u3 fix
+# CVE-2026-84782 (DSA-6531-1); curl, git, Python and ca-certificates pull them
+# in, and a release build can restore this layer from the registry build cache
+# with the versions it held then. Raising a version check here changes the
+# instruction, so that layer is not reused.
+# apt and libapt-pkg7.0 3.0.4 fix CVE-2026-109518 (Debian DSA-6607-1).
+# zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1 fixes CVE-2026-76844 and CVE-2026-85091.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       osmium-tool curl unzip bzip2 lbzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
-      apt libapt-pkg6.0 libexpat1 libpcre2-8-0 libbrotli1 libssl3 openssl \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge '2.6.2' \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg6.0)" ge '2.6.2' \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge '2.5.0-1+deb12u4' \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.0.9-2+deb12u1' \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge '3.0.22-1~deb12u2' \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.0.22-1~deb12u2' \
+      apt libapt-pkg7.0 libexpat1 libpcre2-8-0 libbrotli1 libssl3t64 openssl zlib1g \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge '3.0.4' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge '3.0.4' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge '2.9.0-1~deb13u1' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.1.0-2+deb13u1' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u3' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.5.7-1~deb13u3' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
 
 ARG DUCKDB_VERSION=2.0.0

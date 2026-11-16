@@ -1,17 +1,10 @@
 "use client";
 
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CloseIcon from "@mui/icons-material/Close";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
-import Switch from "@mui/material/Switch";
 import { useColorScheme } from "@mui/material/styles";
-import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   type DateFormat,
@@ -31,7 +24,7 @@ import {
 } from "@/integration-api/runtime/useFullScreenOnMobile";
 import { setLocaleAndReload } from "@/lib/setLocale";
 import { NavigationSettingsDialog } from "./NavigationSettingsDialog";
-import { Section, SettingRow } from "./settingsPrimitives";
+import { ChoiceRow, LinkRow, Section, SwitchRow } from "./settingsPrimitives";
 import { VehiclesDialog } from "./VehiclesDialog";
 
 // Fixed sample instant (Dec 31, 2025, 13:05 local) used to preview each
@@ -93,151 +86,100 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent dividers>
+      <DialogContent dividers sx={{ px: 0, pt: 0 }}>
         <Section title={ts("appearance")}>
-          <SettingRow label={t("theme")}>
-            <Select
-              size="small"
-              fullWidth
-              value={mode ?? "system"}
-              onChange={(e) => setMode(e.target.value as "light" | "dark" | "system")}
-            >
-              <MenuItem value="system">{t("themeSystem")}</MenuItem>
-              <MenuItem value="light">{t("themeLight")}</MenuItem>
-              <MenuItem value="dark">{t("themeDark")}</MenuItem>
-            </Select>
-          </SettingRow>
+          <ChoiceRow
+            label={t("theme")}
+            value={(mode ?? "system") as "light" | "dark" | "system"}
+            choices={[
+              { value: "system", label: t("themeSystem") },
+              { value: "light", label: t("themeLight") },
+              { value: "dark", label: t("themeDark") },
+            ]}
+            onChange={setMode}
+          />
           {/* Zoom buttons are always shown with a mouse; only touch screens hide them. */}
           {coarsePointer && (
-            <>
-              <SettingRow label={ts("touchZoomButtons")}>
-                <Switch
-                  checked={touchZoomButtons}
-                  onChange={(e) => setTouchZoomButtons(e.target.checked)}
-                  slotProps={{ input: { "aria-label": ts("touchZoomButtons") } }}
-                />
-              </SettingRow>
-              <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-                {ts("touchZoomButtonsHint")}
-              </Typography>
-            </>
+            <SwitchRow
+              label={ts("touchZoomButtons")}
+              description={ts("touchZoomButtonsHint")}
+              checked={touchZoomButtons}
+              onChange={setTouchZoomButtons}
+            />
           )}
         </Section>
 
         <Section title={ts("mapSection")}>
-          <SettingRow label={ts("rememberMapView")}>
-            <Switch
-              checked={rememberMapView}
-              onChange={(e) => setRememberMapView(e.target.checked)}
-              slotProps={{ input: { "aria-label": ts("rememberMapView") } }}
-            />
-          </SettingRow>
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {ts("rememberMapViewHint")}
-          </Typography>
+          <SwitchRow
+            label={ts("rememberMapView")}
+            description={ts("rememberMapViewHint")}
+            checked={rememberMapView}
+            onChange={setRememberMapView}
+          />
         </Section>
 
         <Section title={ts("languageAndRegion")}>
-          <SettingRow label={t("language")}>
-            <Select
-              size="small"
-              fullWidth
-              value={locale}
-              onChange={(e) => {
-                if (e.target.value !== locale) void setLocaleAndReload(e.target.value);
-              }}
-            >
-              {locales.map((l) => (
-                <MenuItem key={l} value={l}>
-                  {localeNames[l] ?? l}
-                </MenuItem>
-              ))}
-            </Select>
-          </SettingRow>
-
-          <SettingRow label={t("units")}>
-            <Select
-              size="small"
-              fullWidth
-              value={units}
-              onChange={(e) => setUnits(e.target.value as UnitSystem)}
-            >
-              <MenuItem value="metric">{t("unitsMetric")}</MenuItem>
-              <MenuItem value="imperial">{t("unitsImperial")}</MenuItem>
-            </Select>
-          </SettingRow>
-
-          <SettingRow label={t("timeFormat")}>
-            <Select
-              size="small"
-              fullWidth
-              value={timeFormat}
-              onChange={(e) => setTimeFormat(e.target.value as TimeFormat)}
-            >
-              {TIME_FORMAT_OPTIONS.map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {`${t(o.labelKey)} · ${formatClockTime(SAMPLE_DATETIME, {
-                    locale,
-                    timeFormat: o.value,
-                  })}`}
-                </MenuItem>
-              ))}
-            </Select>
-          </SettingRow>
-
-          <SettingRow label={t("dateFormat")}>
-            <Select
-              size="small"
-              fullWidth
-              value={dateFormat}
-              onChange={(e) => setDateFormat(e.target.value as DateFormat)}
-            >
-              {DATE_FORMAT_OPTIONS.map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {`${t(o.labelKey)} · ${formatCalendarDate(SAMPLE_DATETIME, {
-                    locale,
-                    dateFormat: o.value,
-                  })}`}
-                </MenuItem>
-              ))}
-            </Select>
-          </SettingRow>
+          <ChoiceRow
+            label={t("language")}
+            value={locale}
+            choices={locales.map((l) => ({ value: l, label: localeNames[l] ?? l }))}
+            onChange={(next) => {
+              if (next !== locale) void setLocaleAndReload(next);
+            }}
+          />
+          <ChoiceRow
+            label={t("units")}
+            value={units}
+            choices={[
+              { value: "metric", label: t("unitsMetric") },
+              { value: "imperial", label: t("unitsImperial") },
+            ]}
+            onChange={(next) => setUnits(next as UnitSystem)}
+          />
+          <ChoiceRow
+            label={t("timeFormat")}
+            value={timeFormat}
+            choices={TIME_FORMAT_OPTIONS.map((o) => ({
+              value: o.value,
+              label: `${t(o.labelKey)} · ${formatClockTime(SAMPLE_DATETIME, {
+                locale,
+                timeFormat: o.value,
+              })}`,
+            }))}
+            onChange={(next) => setTimeFormat(next as TimeFormat)}
+          />
+          <ChoiceRow
+            label={t("dateFormat")}
+            value={dateFormat}
+            choices={DATE_FORMAT_OPTIONS.map((o) => ({
+              value: o.value,
+              label: `${t(o.labelKey)} · ${formatCalendarDate(SAMPLE_DATETIME, {
+                locale,
+                dateFormat: o.value,
+              })}`,
+            }))}
+            onChange={(next) => setDateFormat(next as DateFormat)}
+          />
         </Section>
 
         <Section title={ts("navigation")}>
-          <ListItemButton onClick={() => setNavSettingsOpen(true)} sx={{ borderRadius: 1, px: 1 }}>
-            <ListItemText primary={tn("title")} />
-            <ChevronRightIcon sx={{ color: "text.secondary" }} />
-          </ListItemButton>
-        </Section>
-
-        <Section title={tv("sectionTitle")}>
-          <ListItemButton onClick={() => setVehiclesOpen(true)} sx={{ borderRadius: 1, px: 1 }}>
-            <ListItemText primary={tv("title")} />
-            <ChevronRightIcon sx={{ color: "text.secondary" }} />
-          </ListItemButton>
+          <LinkRow label={tn("title")} onClick={() => setNavSettingsOpen(true)} />
+          <LinkRow label={tv("title")} onClick={() => setVehiclesOpen(true)} />
         </Section>
 
         <Section title={ts("search")}>
-          <SettingRow label={ts("aiSearch")}>
-            <Switch
-              checked={aiSearchEnabled}
-              onChange={(e) => setAiSearchEnabled(e.target.checked)}
-            />
-          </SettingRow>
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {ts("aiSearchHint")}
-          </Typography>
-          <SettingRow label={ts("searchHistory")}>
-            <Switch
-              checked={searchHistoryEnabled}
-              onChange={(e) => setSearchHistoryEnabled(e.target.checked)}
-              slotProps={{ input: { "aria-label": ts("searchHistory") } }}
-            />
-          </SettingRow>
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {ts("searchHistoryHint")}
-          </Typography>
+          <SwitchRow
+            label={ts("aiSearch")}
+            description={ts("aiSearchHint")}
+            checked={aiSearchEnabled}
+            onChange={setAiSearchEnabled}
+          />
+          <SwitchRow
+            label={ts("searchHistory")}
+            description={ts("searchHistoryHint")}
+            checked={searchHistoryEnabled}
+            onChange={setSearchHistoryEnabled}
+          />
         </Section>
       </DialogContent>
       <NavigationSettingsDialog open={navSettingsOpen} onClose={() => setNavSettingsOpen(false)} />

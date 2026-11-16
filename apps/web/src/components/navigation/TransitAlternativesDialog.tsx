@@ -1,6 +1,5 @@
 "use client";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -23,7 +22,7 @@ import { transitAlternativeOrigin, transitItineraryFingerprint } from "@openmapx
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
-import { LegBadge } from "@/components/panels/transit/LegBadge";
+import { TransitLegChain } from "@/components/panels/directions/TransitLegChain";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import Dialog from "@/components/ui/Dialog";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
@@ -241,15 +240,7 @@ export function TransitAlternativesDialog({
               <Box
                 sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 1 }}
               >
-                {trip.legs.map((leg, i) => (
-                  <Box
-                    key={`${leg.tripId ?? leg.mode}:${leg.startTime}:${leg.from.stopId ?? leg.from.name}:${leg.to.stopId ?? leg.to.name}`}
-                    sx={{ display: "flex", alignItems: "center", gap: 0.75 }}
-                  >
-                    {i > 0 && <ChevronRightIcon sx={{ fontSize: 16, color: "text.disabled" }} />}
-                    <LegBadge leg={leg} />
-                  </Box>
-                ))}
+                <TransitLegChain legs={trip.legs} />
                 <Typography variant="caption" color="text.secondary">
                   {t("alternativeTransfers", { count: trip.transfers })}
                 </Typography>

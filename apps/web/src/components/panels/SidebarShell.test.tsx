@@ -3,7 +3,7 @@ import { act, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SEARCH_BAR_CLEARANCE } from "@/lib/layout";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
-import { render, screen } from "@/test";
+import { render, resolvedStyle, screen } from "@/test";
 
 const isMobileRef = { current: true };
 vi.mock("@mui/material/useMediaQuery", () => ({ default: () => isMobileRef.current }));
@@ -93,7 +93,9 @@ describe("SidebarShell on desktop", () => {
       );
       const probe = screen.getByTestId("probe");
       expect(probe.textContent).toBe("none");
-      expect(probe.previousElementSibling).toHaveStyle({ height: SEARCH_BAR_CLEARANCE });
+      expect(probe.previousElementSibling).toHaveStyle({
+        height: resolvedStyle("height", SEARCH_BAR_CLEARANCE),
+      });
     });
 
     it("hands the inset to content that lays itself out under the bar", () => {

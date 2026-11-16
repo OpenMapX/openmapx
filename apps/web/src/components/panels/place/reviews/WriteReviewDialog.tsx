@@ -249,20 +249,33 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
         id="write-review-title"
         sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pr: 1 }}
       >
-        <Box component="span">
-          {t.rich(initial ? "editReviewOn" : "writeReviewOn", {
-            m: (chunks) => (
-              <Box
-                component="a"
-                href={MANGROVE_HOME_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={linkSx}
-              >
-                {chunks}
-              </Box>
-            ),
-          })}
+        {/* The place leads, as the thing being reviewed; where the review goes
+            reads underneath it. */}
+        <Box component="span" sx={{ minWidth: 0 }}>
+          <Box
+            component="span"
+            sx={{ display: "block", fontSize: 22, fontWeight: 500, lineHeight: 1.3 }}
+          >
+            {subject.name}
+          </Box>
+          <Box
+            component="span"
+            sx={{ display: "block", fontSize: 14, fontWeight: 400, color: "text.secondary" }}
+          >
+            {t.rich(initial ? "editReviewOn" : "writeReviewOn", {
+              m: (chunks) => (
+                <Box
+                  component="a"
+                  href={MANGROVE_HOME_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={linkSx}
+                >
+                  {chunks}
+                </Box>
+              ),
+            })}
+          </Box>
         </Box>
         <IconButton onClick={onClose} aria-label="Close" size="small">
           <CloseIcon />
@@ -303,10 +316,6 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
             {ta("mangroveConnectionExpired")}
           </Alert>
         )}
-        <Typography variant="subtitle2" gutterBottom>
-          {subject.name}
-        </Typography>
-
         {publishingAsName && fingerprint && (
           <Typography
             variant="caption"
@@ -339,16 +348,21 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
           </Typography>
         )}
 
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" gutterBottom>
-            {t("yourRating")}
-          </Typography>
+        {/* The rating is the review's first answer: large, centred stars. */}
+        <Box
+          role="group"
+          aria-label={t("yourRating")}
+          sx={{ display: "flex", justifyContent: "center", mb: 2 }}
+        >
           <Rating
             value={stars}
             precision={1}
-            size="large"
             onChange={(_, v) => setStars(v)}
-            sx={{ "& .MuiRating-iconFilled": { color: "#FBBC04" } }}
+            sx={{
+              fontSize: 44,
+              gap: 1,
+              "& .MuiRating-iconFilled": { color: "#FBBC04" },
+            }}
           />
         </Box>
 
@@ -607,12 +621,18 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 1.5 }}>
-        <Button onClick={onClose} color="inherit">
-          {tc("cancel")}
-        </Button>
+        {/* Full screen, the title's close button is the way out and the
+            submit spans the bottom edge. */}
+        {!fullScreen && (
+          <Button onClick={onClose} color="inherit">
+            {tc("cancel")}
+          </Button>
+        )}
         <Button
           onClick={handleSubmit}
           variant="contained"
+          fullWidth={fullScreen}
+          size={fullScreen ? "large" : "medium"}
           disabled={!canSubmit || isBusy}
           startIcon={isBusy ? <CircularProgress size={16} /> : null}
         >

@@ -18,7 +18,6 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
 import type {
   AutocompleteResult,
   CategoryId,
@@ -55,7 +54,6 @@ import {
   useBrandSuggest,
   useCategorySearchStore,
   useChipTranslations,
-  useCommandPaletteStore,
   useCountryFromCoordinates,
   useDataSourceStore,
   useDataSources,
@@ -102,8 +100,8 @@ import {
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { servedAttributions } from "@/lib/servedAttributions";
 import { useBackDismiss } from "@/lib/useBackDismiss";
-import { useHydrated } from "@/lib/useHydrated";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
+import { useStopSearchStore } from "@/stores/stopSearchStore";
 import {
   AutocompleteDropdown,
   suggestionListboxId,
@@ -118,10 +116,6 @@ import {
 } from "./searchSubmission";
 import { useSearchSubmission } from "./useSearchSubmission";
 import { VoiceSearchButton } from "./VoiceSearchButton";
-
-/** Pre-parsed once at module load — the shortcut never changes, no need to
- *  re-parse it on every SearchBar render. */
-const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
 export type { SearchBarSurface } from "./searchSubmission";
 
@@ -181,7 +175,6 @@ function searchSelectionContributors(
 export function SearchBar({ surface = "map" }: SearchBarProps) {
   const t = useTranslations("search");
   const tSaved = useTranslations("saved");
-  const tCmd = useTranslations("commandPalette");
   const tCommon = useTranslations("common");
   const locale = useLocale();
   const muiTheme = useTheme();
@@ -190,7 +183,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const { setSelectedPlace } = usePlaceStore();
   const { selectWithEnrichment, cancelEnrichment } = usePlaceEnrichment();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
+  const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
+  const docked = !isMobile && hasSidePanel && !sidebarCollapsed && !isFocused;
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
+  // Phone directions borrow this search to choose a trip stop.
+  const stopSearch = useStopSearchStore((s) => s.request);
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const setActiveCategory = useCategorySearchStore((s) => s.setActiveCategory);
   const clearCategory = useCategorySearchStore((s) => s.clearCategory);
@@ -213,7 +210,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // different place under the highlight.
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
-  const shortcutPlatform = useHydrated() ? getPlatform() : "other";
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
   const {
@@ -558,10 +554,17 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // just a different layout.
   const fullScreen = isMobile && isFocused;
 
+  const finishStopSearch = () => {
+    setQuery("");
+    setIsFocused(false);
+    useStopSearchStore.getState().close();
+  };
+
   const handleBack = () => {
     cancelSubmission();
     setIsFocused(false);
     inputRef.current?.blur();
+    if (stopSearch) finishStopSearch();
   };
   // The full-screen search is a screen of its own on a phone; Back leaves it.
   useBackDismiss(fullScreen, handleBack);
@@ -576,7 +579,12 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     surface === "map" && isMobile && !fullScreen ? barEl : null,
   );
 
-  const effectiveSuggestions = nearbyMode ? nearbySuggestions : displaySuggestions;
+  // A stop needs a position: category, brand and AI rows have none to give.
+  const effectiveSuggestions = nearbyMode
+    ? nearbySuggestions
+    : stopSearch
+      ? displaySuggestions.filter((row) => row.coordinates)
+      : displaySuggestions;
   const listIdPrefix = OBSTRUCTION_ID[surface];
   const highlightedIndex =
     highlightedKey === null
@@ -600,12 +608,29 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     if (directionsOpen) cancelEnrichment();
   }, [directionsOpen, cancelEnrichment]);
 
-  if (directionsOpen) return null;
+  // A stop search starts from the stop's text in the full-screen search, and
+  // ends whenever that search closes, however it is left.
+  const stopSearchShownRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: starts once per request
+  useEffect(() => {
+    stopSearchShownRef.current = false;
+    if (!stopSearch) return;
+    setQuery(stopSearch.initialQuery);
+    setIsFocused(true);
+    inputRef.current?.focus();
+  }, [stopSearch]);
+  useEffect(() => {
+    if (!stopSearch) return;
+    if (isFocused) stopSearchShownRef.current = true;
+    else if (stopSearchShownRef.current) useStopSearchStore.getState().close();
+  }, [stopSearch, isFocused]);
+
+  if (directionsOpen && !stopSearch) return null;
 
   // Attribution follows the visible ranked rows, not the response envelope.
   const visibleAttributions = servedAttributions(registry, effectiveSuggestions);
   const nlpData = nlp.data;
-  const showNlpCard = !nearbyMode && nlp.showCard;
+  const showNlpCard = !nearbyMode && !stopSearch && nlp.showCard;
   const showConsentDialog = !nearbyMode && nlp.showConsent;
   const nlpCard =
     showNlpCard && nlpData ? (
@@ -618,14 +643,15 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // While a submitted NL query is parsing, show a loading row so the user gets
   // feedback during the (slow) inference instead of a frozen-looking bar.
   const nlpPending = nlp.pending;
-  const nlpLoadingCard = nlpPending ? (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.5 }}>
-      <CircularProgress size={18} />
-      <Typography variant="body2" sx={{ color: "text.secondary" }}>
-        {t("aiUnderstanding")}
-      </Typography>
-    </Box>
-  ) : null;
+  const nlpLoadingCard =
+    nlpPending && !stopSearch ? (
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.5 }}>
+        <CircularProgress size={18} />
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
+          {t("aiUnderstanding")}
+        </Typography>
+      </Box>
+    ) : null;
   // While the first results load, the area-search row alone would stand in
   // for a list; the loading skeleton shows instead until real rows arrive.
   const awaitingFirstRows =
@@ -738,7 +764,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     updateQuery(recent);
     setIsFocused(true);
     inputRef.current?.focus();
-    setSubmitAfterFlush(true);
+    // Choosing a stop lists the matches to pick from instead of running the search.
+    if (!stopSearch) setSubmitAfterFlush(true);
   };
 
   const handleClearRecent = () => {
@@ -755,6 +782,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     if (e.target !== e.currentTarget) return;
     e.preventDefault();
     if (isComposingRef.current || !q) return;
+    if (stopSearch) {
+      const first = effectiveSuggestions[0];
+      if (first) handleSelect(first);
+      return;
+    }
     const nlpContext = beginSubmission();
     if (nearbyMode) {
       inputRef.current?.blur();
@@ -839,6 +871,15 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   const handleSelect = (result: AutocompleteResult, recordHistory = true) => {
     cancelSubmission();
+    if (stopSearch) {
+      if (result.type === "recent_search") {
+        handleSelectRecent(result.label);
+      } else if (result.coordinates) {
+        stopSearch.onPick({ coordinates: result.coordinates, label: result.label });
+        finishStopSearch();
+      }
+      return;
+    }
     if (result.type === "recent_search") {
       handleSelectRecent(result.label);
       return;
@@ -995,6 +1036,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   const handleSelectLabeledPlace = (place: LabeledPlace) => {
     cancelSubmission();
+    if (stopSearch) {
+      stopSearch.onPick({ coordinates: [place.lng, place.lat], label: place.name });
+      finishStopSearch();
+      return;
+    }
     setQuery(place.label);
     setIsFocused(false);
     flyTo([place.lng, place.lat], 15);
@@ -1056,9 +1102,13 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         }}
       >
         <Paper
-          elevation={fullScreen ? 0 : isFocused ? 4 : 2}
+          elevation={fullScreen || docked ? 0 : isFocused ? 4 : 2}
           sx={{
             width: { xs: "100%", sm: 376 },
+            // Over the open side panel the bar is part of the panel: an outline
+            // instead of a shadow, which would float it above its own surface.
+            outline: docked ? "1px solid var(--omx-border-light)" : "none",
+            outlineOffset: -1,
             borderRadius:
               !fullScreen && (showDropdown || showEmptySearch) ? "24px 24px 16px 16px" : "24px",
             overflow: "hidden",
@@ -1103,6 +1153,13 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               >
                 <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
               </IconButton>
+            ) : isMobile ? (
+              // On a phone the avatar opens the one menu, so the field
+              // starts with its own glyph instead of a second menu button.
+              <SearchIcon
+                aria-hidden
+                sx={{ fontSize: 22, color: "text.secondary", ml: 1.25, mr: 0.75, flexShrink: 0 }}
+              />
             ) : (
               <IconButton
                 size="small"
@@ -1127,9 +1184,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               }}
               onFocus={() => setIsFocused(true)}
               placeholder={
-                nearbyMode && anchor
-                  ? t("searchNearbyName", { name: anchor.name })
-                  : t("placeholder")
+                stopSearch
+                  ? stopSearch.placeholder
+                  : nearbyMode && anchor
+                    ? t("searchNearbyName", { name: anchor.name })
+                    : t("placeholder")
               }
               inputProps={{
                 id: SEARCH_INPUT_ID,
@@ -1185,45 +1244,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               )
             )}
 
-            {!nearbyMode && (
-              <Tooltip title={tCmd("open")} placement="bottom">
-                <Box
-                  component="kbd"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={tCmd("open")}
-                  onClick={() => useCommandPaletteStore.getState().open()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      useCommandPaletteStore.getState().open();
-                    }
-                  }}
-                  sx={(theme) => ({
-                    display: { xs: "none", sm: "inline-flex" },
-                    alignItems: "center",
-                    fontFamily: "monospace",
-                    fontSize: 11,
-                    px: 0.75,
-                    py: 0.25,
-                    ml: 0.5,
-                    border: `1px solid ${theme.palette.divider}`,
-                    borderRadius: 1,
-                    color: "text.secondary",
-                    cursor: "pointer",
-                    userSelect: "none",
-                    "&:hover": { bgcolor: "action.hover" },
-                    "&:focus-visible": {
-                      outline: `2px solid ${theme.palette.primary.main}`,
-                      outlineOffset: 1,
-                    },
-                  })}
-                >
-                  {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
-                </Box>
-              </Tooltip>
-            )}
-
             {!fullScreen &&
               !nearbyMode &&
               (hasSidePanel ? (
@@ -1262,7 +1282,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               while the user is typing a query. */}
             {!fullScreen && !nearbyMode && (
               <Box sx={{ display: { xs: "inline-flex", sm: "none" }, ml: 0.25, mr: 0.25 }}>
-                <AccountAvatarButton size={32} />
+                <AccountAvatarButton size={32} onOpen={openMenu} openLabel={t("menuAriaLabel")} />
               </Box>
             )}
 

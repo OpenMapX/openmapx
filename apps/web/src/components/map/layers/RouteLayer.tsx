@@ -136,8 +136,13 @@ export function RouteLayer() {
     return { type: "FeatureCollection" as const, features };
   }, [routes, activeRouteIndex, mode, navigating, hasWaypoints]);
 
-  const routeGroup = useMemo<MapLayerGroup>(
-    () => ({
+  // A walk is drawn as dots, the way maps mark a footpath, without the
+  // casing that would join them back into a line.
+  const walking = mode === "walking";
+  const routeGroup = useMemo<MapLayerGroup>(() => {
+    const dotted = walking ? { "line-dasharray": [0, 2] } : {};
+    const casingOpacity = walking ? 0 : undefined;
+    return {
       sources: { [SOURCE_ID]: { type: "geojson", data: routeFeatures } },
       layers: [
         {
@@ -149,7 +154,7 @@ export function RouteLayer() {
           paint: {
             "line-color": ROUTE_COLORS.casing,
             "line-width": ROUTE_WIDTHS.planning.altCasing,
-            "line-opacity": 0.6,
+            "line-opacity": casingOpacity ?? 0.6,
           },
           slot: "route-alt",
           order: 0,
@@ -164,6 +169,7 @@ export function RouteLayer() {
             "line-color": ROUTE_COLORS.alt,
             "line-width": ROUTE_WIDTHS.planning.altLine,
             "line-opacity": ROUTE_ALT_OPACITY,
+            ...dotted,
           },
           slot: "route-alt",
           order: 1,
@@ -174,7 +180,11 @@ export function RouteLayer() {
           source: SOURCE_ID,
           filter: ["==", ["get", "type"], "active"],
           layout: { "line-join": "round", "line-cap": "round" },
-          paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.planning.casing },
+          paint: {
+            "line-color": ROUTE_COLORS.casing,
+            "line-width": ROUTE_WIDTHS.planning.casing,
+            "line-opacity": casingOpacity ?? 1,
+          },
           slot: "route-active",
           order: 0,
         },
@@ -184,14 +194,17 @@ export function RouteLayer() {
           source: SOURCE_ID,
           filter: ["==", ["get", "type"], "active"],
           layout: { "line-join": "round", "line-cap": "round" },
-          paint: { "line-color": ROUTE_COLORS.active, "line-width": ROUTE_WIDTHS.planning.line },
+          paint: {
+            "line-color": ROUTE_COLORS.active,
+            "line-width": ROUTE_WIDTHS.planning.line,
+            ...dotted,
+          },
           slot: "route-active",
           order: 1,
         },
       ] satisfies SlottedLayer[],
-    }),
-    [routeFeatures],
-  );
+    };
+  }, [routeFeatures, walking]);
   useMapLayerGroup(routeGroup);
 
   // DOM pills are keyboard-focusable and remain on the map while a style swap

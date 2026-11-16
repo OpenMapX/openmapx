@@ -38,6 +38,7 @@ import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/Resu
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
+import { FUEL_SOURCE_ID, fuelComparisonGrade, selectedFuelGrades } from "@/lib/fuel/fuelGrades";
 import { BrandMark } from "../shared/BrandMark";
 import { DataSourcePartialNotice } from "./DataSourcePartialNotice";
 
@@ -154,9 +155,8 @@ export function DataSourceFilterContent() {
 
   // Available sort options per data source
   const sortOptions = useMemo(() => {
-    if (activeSource === "fuel") {
-      const ft = filters.fuelType;
-      const key = Array.isArray(ft) && ft.length > 0 ? String(ft[0]) : "diesel";
+    if (activeSource === FUEL_SOURCE_ID) {
+      const key = fuelComparisonGrade(selectedFuelGrades(filters.fuelType));
       return [{ key, labelKey: "price" as const }];
     }
     if (activeSource === "scooter-sharing") {

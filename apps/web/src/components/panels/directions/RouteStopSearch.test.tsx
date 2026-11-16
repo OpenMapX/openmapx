@@ -42,6 +42,12 @@ vi.mock("@/lib/navigation/usePlannedRouteSearch", () => ({
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMapOptional: () => ({ flyTo: fixture.flyTo }),
 }));
+vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
+  useDataSourceI18nResolver: (integrationId: string | undefined) => (value: unknown) =>
+    value && typeof value === "object" && "$t" in value
+      ? `${integrationId}:${String(value.$t)}`
+      : "",
+}));
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<typeof import("@openmapx/core")>()),
   useBrandSuggest: () => ({ data: { matches: [] } }),
@@ -90,6 +96,7 @@ const baseSearch = (): PlannedRouteSearch => ({
   capped: false,
   searchedMeters: 40_000,
   retry: fixture.retry,
+  fuelPrices: null,
 });
 
 function setWaypoints(coords: LngLat[]) {
@@ -177,6 +184,46 @@ describe("RouteStopSearch", () => {
     expect(fixture.queries.at(-1)).toBeNull();
     fireEvent.click(chip("Charging"));
     expect(fixture.queries.at(-1)).toEqual({ category: "ev_charging" });
+  });
+
+  it("shows each fuel station's price and age, or that it is unknown, and credits the price", () => {
+    fixture.search.results.push(poi("c", 35));
+    fixture.search.fuelPrices = new Map([
+      [
+        "a",
+        {
+          status: "priced",
+          result: {
+            id: "tk-a",
+            name: "Aral",
+            coordinates: [12 * KM, 0.001],
+            source: "tankerkoenig",
+            variant: "open",
+            labelSummary: { $t: "summary.priceAge" },
+            contributors: [{ sourceId: "tankerkoenig", name: "Tankerkönig prices" }],
+          },
+        },
+      ],
+      ["b", { status: "unknown" }],
+      ["c", { status: "loading" }],
+    ]);
+    render(view());
+    fireEvent.click(chip("Fuel"));
+    const row = (name: string) => screen.getByText(name).closest("[role=button]") as HTMLElement;
+    expect(row("Station a")).toHaveTextContent("12 km from start");
+    expect(row("Station a")).toHaveTextContent("fuel:summary.priceAge");
+    expect(row("Station b")).toHaveTextContent("Price unknown");
+    expect(row("Station c")).not.toHaveTextContent("Price unknown");
+    expect(row("Station c")).not.toHaveTextContent("summary");
+    fireEvent.click(screen.getByRole("button", { name: en.footer.attributions }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Tankerkönig prices");
+  });
+
+  it("shows no price line for other kinds of stop", () => {
+    render(view());
+    fireEvent.click(chip("Parking"));
+    expect(screen.queryByText(/Price unknown/)).toBeNull();
+    expect(screen.queryByText(/summary/)).toBeNull();
   });
 
   it("uses miles for imperial units", () => {

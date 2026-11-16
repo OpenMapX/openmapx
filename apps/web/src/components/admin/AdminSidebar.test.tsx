@@ -1,17 +1,19 @@
 import { en } from "@openmapx/i18n";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@/test";
+import { cleanup, render, screen, within } from "@/test";
 import { AdminSidebar } from "./AdminSidebar";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin/system/services" }));
-beforeEach(() =>
+// jsdom lays CSS out at a fixed 1024px viewport, where only the docked desktop
+// drawer is displayed; matchMedia has to agree with that layout.
+const stubWide = (matches: boolean) =>
   vi.stubGlobal("matchMedia", () => ({
-    matches: false,
+    matches,
     addEventListener: () => {},
     removeEventListener: () => {},
-  })),
-);
+  }));
+beforeEach(() => stubWide(true));
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -56,6 +58,7 @@ it("shows privacy casework to full administrators", () => {
 });
 
 it("closes mobile navigation on an ordinary destination selection", () => {
+  stubWide(false);
   const close = vi.fn();
   render(
     <NextIntlClientProvider locale="en" messages={en}>
@@ -63,6 +66,9 @@ it("closes mobile navigation on an ordinary destination selection", () => {
     </NextIntlClientProvider>,
   );
   document.addEventListener("click", (event) => event.preventDefault(), { once: true });
-  screen.getAllByRole("link", { name: "System" })[0].click();
+  // The phone drawer is open, but its `display: { md: "none" }` still applies
+  // at jsdom's 1024px layout viewport, so reach the link through the hidden tree.
+  const drawer = document.querySelector<HTMLElement>(".MuiDrawer-modal") as HTMLElement;
+  within(drawer).getByRole("link", { name: "System", hidden: true }).click();
   expect(close).toHaveBeenCalledTimes(1);
 });

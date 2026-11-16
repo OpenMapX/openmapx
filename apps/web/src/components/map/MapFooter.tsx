@@ -17,6 +17,7 @@ import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { CREDITS_SX } from "./MapCredits";
+import { MapScaleBar } from "./MapScaleBar";
 import { useMapFooterSurface } from "./useMapFooterSurface";
 
 // Below this much free space between the two groups they stop reading as two
@@ -95,7 +96,8 @@ export function MapFooter() {
       publishMapFooterCenterCovered(centerCovered());
       const l = links.getBoundingClientRect();
       const c = creditsEl?.getBoundingClientRect();
-      if (!c) {
+      // Without the links (hidden on phones) there is nothing to merge with.
+      if (!c || l.width === 0) {
         setMerged(false);
         return;
       }
@@ -168,11 +170,12 @@ export function MapFooter() {
         },
       }}
     >
+      {/* Phones keep only the credits on the map; the legal pages are in the menu. */}
       <Box
         ref={linksRef}
         sx={{
           ...barSx,
-          display: "flex",
+          display: { xs: "none", sm: "flex" },
           flexWrap: "wrap",
           alignItems: "center",
           alignContent: "center",
@@ -216,6 +219,11 @@ export function MapFooter() {
             label={t("credits")}
             logos={credits.visible.flatMap((notice) => notice.logos)}
           />
+          {!mobile && (
+            <Box component="span" sx={{ ml: "1.2em" }}>
+              <MapScaleBar />
+            </Box>
+          )}
           {tall && (
             <Box sx={{ mt: 0.5 }}>
               {t("manyRequiredCredits")}{" "}

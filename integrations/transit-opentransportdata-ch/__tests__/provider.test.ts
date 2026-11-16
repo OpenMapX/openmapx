@@ -548,6 +548,25 @@ const OCCUPANCY_FORECAST_JSON = {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
+/** Bodies of the requests sent to `endpoint` whose OJP request element is `requestElement`. */
+function ojpBodies(requestElement: string, endpoint = OJP_ENDPOINT): string[] {
+  return fetchMock.mock.calls
+    .filter(([input]) => String(input) === endpoint)
+    .map(([, init]) => (init as RequestInit | undefined)?.body)
+    .filter((body): body is string => typeof body === "string")
+    .filter((body) => body.includes(`<${requestElement}>`));
+}
+
+/** Inner XML of the first `<element>` in `xml`. */
+function xmlSection(xml: string, element: string): string | undefined {
+  return xml.match(new RegExp(`<${element}>([\\s\\S]*?)</${element}>`))?.[1];
+}
+
+/** Text of the first leaf `<element>` in `xml`. */
+function xmlText(xml: string | undefined, element: string): string | undefined {
+  return xml?.match(new RegExp(`<${element}>([^<]*)</${element}>`))?.[1];
+}
+
 beforeEach(() => {
   fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
@@ -789,6 +808,13 @@ describe("transit-opentransportdata-ch provider", () => {
         provider: "otdch",
       }),
     ]);
+
+    const [locationRequest] = ojpBodies("OJPLocationInformationRequest");
+    expect(xmlText(xmlSection(locationRequest ?? "", "InitialInput"), "Name")).toBe("Bern");
+    // The provider over-fetches three times the limit so deduplication can still fill it.
+    expect(xmlText(xmlSection(locationRequest ?? "", "Restrictions"), "NumberOfResults")).toBe(
+      "15",
+    );
   });
 
   it("applies Swiss GTFS-RT stop-board overlays and business-organisation metadata", async () => {
@@ -811,6 +837,13 @@ describe("transit-opentransportdata-ch provider", () => {
         tripId: "otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA",
       }),
     ]);
+
+    const [stopEventRequest] = ojpBodies("OJPStopEventRequest");
+    const location = xmlSection(stopEventRequest ?? "", "Location");
+    expect(xmlText(xmlSection(location ?? "", "PlaceRef"), "siri:StopPointRef")).toBe("8507000");
+    const stopEventParams = xmlSection(stopEventRequest ?? "", "Params");
+    expect(xmlText(stopEventParams, "StopEventType")).toBe("departure");
+    expect(xmlText(stopEventParams, "NumberOfResults")).toBe("30");
   });
 
   it("builds Swiss stop infrastructure from master data and accessibility datasets", async () => {
@@ -919,6 +952,21 @@ describe("transit-opentransportdata-ch provider", () => {
     expect(plan?.itineraries[0].legs[0]?.effectiveFareLegIndex).toBeUndefined();
     expect(plan?.itineraries[0].legs[0]?.fareTransferIndex).toBeUndefined();
 
+    const [tripRequest] = ojpBodies("OJPTripRequest");
+    const origin = xmlSection(tripRequest ?? "", "Origin");
+    const destination = xmlSection(tripRequest ?? "", "Destination");
+    expect(xmlText(origin, "siri:Latitude")).toBe("46.948");
+    expect(xmlText(origin, "siri:Longitude")).toBe("7.438");
+    expect(xmlText(destination, "siri:Latitude")).toBe("46.758");
+    expect(xmlText(destination, "siri:Longitude")).toBe("7.629");
+    expect(new Date(xmlText(origin, "DepArrTime") ?? "").toISOString()).toBe(
+      "2025-02-03T14:45:00.000Z",
+    );
+
+    const [fareRequest] = ojpBodies("OJPFareRequest", OJP_FARE_ENDPOINT);
+    const fareTrip = xmlSection(xmlSection(fareRequest ?? "", "TripFareRequest") ?? "", "Trip");
+    expect(xmlText(fareTrip, "Id")).toBe("trip-1");
+
     const geometry = await provider.getLegGeometry(
       "otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA",
       "otdch:ch:1:sloid:7000:5:10",
@@ -933,6 +981,13 @@ describe("transit-opentransportdata-ch provider", () => {
         [7.629, 46.758],
       ],
     });
+
+    const tripInfoRequests = ojpBodies("OJPTripInfoRequest");
+    expect(tripInfoRequests.length).toBeGreaterThan(0);
+    for (const tripInfoRequest of tripInfoRequests) {
+      expect(xmlText(tripInfoRequest, "JourneyRef")).toBe("ojp-92-12-_-j25-1-419-TA");
+      expect(xmlText(tripInfoRequest, "OperatingDayRef")).toBe("2025-02-03");
+    }
 
     const journey = await provider.getVehicleJourney("otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA");
 

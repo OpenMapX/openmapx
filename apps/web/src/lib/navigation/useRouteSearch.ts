@@ -29,6 +29,8 @@ import {
 } from "@openmapx/core";
 import { useLocale } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ROUTE_FUEL_CATEGORY } from "@/lib/fuel/fuelGrades";
+import { type RouteFuelPrices, useRouteFuelPrices } from "./useRouteFuelPrices";
 
 /** How far ahead along the route to search for POIs. */
 const LOOKAHEAD_M = 25_000;
@@ -71,6 +73,8 @@ export interface UseRouteSearch {
   results: AlongRoutePoi<CategoryPlace>[];
   isLoading: boolean;
   isError: boolean;
+  /** Fuel prices by result id while fuel is searched and a fuel source is offered, else null. */
+  fuelPrices: RouteFuelPrices | null;
   /** Re-plan the active route through the selected candidate as a new stop. Resolves to success. */
   addStop: (candidate: RouteStopCandidate) => Promise<boolean>;
   cancelAddStop: () => void;
@@ -157,6 +161,11 @@ export function useRouteSearch(query: RouteSearchQuery | null): UseRouteSearch {
         speedMps: speedMps > 0 ? speedMps : undefined,
       }),
     [projections, alongMeters, speedMps],
+  );
+  const aheadPlaces = useMemo(() => geometric.map((poi) => poi.place), [geometric]);
+  const fuelPrices = useRouteFuelPrices(
+    aheadPlaces,
+    filter === null && categoryKey === ROUTE_FUEL_CATEGORY,
   );
 
   const serial = useRef(0);
@@ -434,5 +443,12 @@ export function useRouteSearch(query: RouteSearchQuery | null): UseRouteSearch {
     }
   };
 
-  return { results, isLoading: active.isLoading, isError: active.isError, addStop, cancelAddStop };
+  return {
+    results,
+    isLoading: active.isLoading,
+    isError: active.isError,
+    fuelPrices,
+    addStop,
+    cancelAddStop,
+  };
 }

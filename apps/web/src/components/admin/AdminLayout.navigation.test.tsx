@@ -4,7 +4,7 @@ import { useContext } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import { AdminDraftContext, AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
-import { act, cleanup, createQueryWrapper, fireEvent, render, screen } from "@/test";
+import { act, cleanup, createQueryWrapper, fireEvent, render, screen, within } from "@/test";
 import { adminTestHistory } from "@/test/adminNavigation";
 import { AdminLayout } from "./AdminLayout";
 
@@ -119,7 +119,11 @@ it("keeps the desktop sidebar preference independent of mobile drawer navigation
   });
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute("aria-expanded", "true");
-  const link = screen.getAllByRole("link", { name: "Overview" })[0];
+  // jsdom lays CSS out at a fixed 1024px viewport, where the phone drawer
+  // (`display: { md: "none" }`) is hidden whatever matchMedia reports, so
+  // reach its link through the hidden tree.
+  const drawer = document.querySelector<HTMLElement>(".MuiDrawer-modal") as HTMLElement;
+  const link = within(drawer).getByRole("link", { name: "Overview", hidden: true });
   document.addEventListener("click", (event) => event.preventDefault(), { once: true });
   fireEvent.click(link);
   expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -173,7 +177,11 @@ it("links hosted Data operators to available Data topics", () => {
     { wrapper: createQueryWrapper() },
   );
   expect(screen.queryByRole("button", { name: "Host mutation" })).toBeNull();
-  expect(screen.queryByRole("link", { name: "Cache" })).toBeNull();
-  expect(screen.getAllByRole("link", { name: "Transit" })).toHaveLength(2);
-  expect(screen.getAllByRole("link", { name: "Coverage & freshness" })).toHaveLength(2);
+  // The topic link list only shows from `lg` up; at jsdom's fixed 1024px
+  // viewport the topic select stands in for it, so count hidden links too.
+  expect(screen.queryByRole("link", { name: "Cache", hidden: true })).toBeNull();
+  for (const name of ["Transit", "Coverage & freshness"]) {
+    expect(screen.getAllByRole("link", { name, hidden: true })).toHaveLength(2);
+    expect(screen.getByRole("link", { name })).toBeVisible();
+  }
 });

@@ -11,7 +11,6 @@ import {
   readLastMapView,
   useMapStore,
   useNavigationStore,
-  useSettingsStore,
   writeLastMapView,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
@@ -27,12 +26,9 @@ import { attributedRasterRequestTransform } from "@/integration-api/overlay/rast
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
-import { MAP_FOOTER_OBSTRUCTION_ID, useMapFooterBox } from "@/lib/mapFooterCenter";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
-import { useMapObstructionExtent, useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
-import { useMobilePanelClearance, useWindowHeight, useWindowWidth } from "@/lib/mobilePanelHeight";
 import { captureNativeBasemapRequest } from "@/lib/nativeBasemapAcquisition";
 import {
   ensureOfflinePackageRuntime,
@@ -41,7 +37,6 @@ import {
   selectOnlineFirstOpenMapXStyle,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
-import { planAboveFooter, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { localizeMapLabels } from "./localizeTextField";
 
 /** The main map uses its camera-aware 3D layer instead of basemap extrusions. */
@@ -109,37 +104,10 @@ export function MapCanvas({
   const currentStyleRef = useRef({ mapStyle, variant });
   currentStyleRef.current = { mapStyle, variant };
   const styleRequestRef = useRef(0);
-  const units = useSettingsStore((s) => s.units);
-  const unitsRef = useRef(units);
-  unitsRef.current = units;
-  const scaleRef = useRef<{ map: maplibregl.Map; control: maplibregl.ScaleControl } | null>(null);
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
   const requestFix = useForegroundLocation();
   const { browserAuthority, permission: nativePermission } = useMobileRuntime();
   const locationAuthority = browserAuthority ? "browser" : "native";
-  const insets = useMapObstructionInsets();
-  const viewportHeight = useWindowHeight();
-  const viewportWidth = useWindowWidth();
-  const sheetClearance = useMobilePanelClearance(viewportHeight);
-  // The live footer and sheet edges rather than `insets.bottom`, which holds a
-  // moving sheet's last settled height and would leave the scale behind it.
-  const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
-  const scaleLeft = 12;
-  const scaleBottom = Math.max(102, footerExtent + 12, sheetClearance + 12);
-  // While a sheet drives the follow, the scale rides the footer (or, with the
-  // footer docked, the sheet edge) on the compositor (see lib/sheetFollow).
-  const followTrack = useSheetFollowTrack();
-  const footerBox = useMapFooterBox();
-  const scaleFollow = followTrack ? planAboveFooter(followTrack, footerBox, 12, 102) : null;
-  // Turn-by-turn guidance has no use for a distance scale, and its speed-limit
-  // badge sits over the same corner.
-  const groundNavigating = useNavigationStore((s) => s.status !== "idle" && s.kind === "ground");
-  const scaleVisible =
-    !carSurface &&
-    !groundNavigating &&
-    (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
-    (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
-
   useEffect(() => {
     if (!containerRef.current) return;
     if (!carSurface) initializeMapClickModes();
@@ -170,10 +138,6 @@ export function MapCanvas({
       cleanupContextLost?.();
       cleanupContextLost = undefined;
       if (activeMap) {
-        if (scaleRef.current?.map === activeMap) {
-          activeMap.removeControl(scaleRef.current.control);
-          scaleRef.current = null;
-        }
         if (mapRef.current === activeMap) mapRef.current = null;
         activeMap.remove();
         activeMap = undefined;
@@ -222,9 +186,6 @@ export function MapCanvas({
         canvasContextAttributes: { antialias: true },
       });
       activeMap = map;
-      const scale = new maplibregl.ScaleControl({ maxWidth: 100, unit: unitsRef.current });
-      map.addControl(scale, "bottom-left");
-      scaleRef.current = { map, control: scale };
       installedNativeBasemap(map).install(viewportStyle, setOfflinePackageActive, true);
 
       const applyStyleForViewport = (reason: string) => {
@@ -435,12 +396,6 @@ export function MapCanvas({
     setZoom,
   ]);
 
-  // The persisted unit preference changes the existing control, not the map.
-  useEffect(() => {
-    const scale = scaleRef.current;
-    if (scale && mapRef.current === scale.map) scale.control.setUnit(units);
-  }, [mapRef, units]);
-
   const retry = () => {
     attemptRef.current++;
     setStatus("loading");
@@ -492,17 +447,6 @@ export function MapCanvas({
         sx={{
           width: "100%",
           height: "100%",
-          "& .maplibregl-ctrl-bottom-left > .maplibregl-ctrl-scale": {
-            display: scaleVisible ? "block" : "none",
-            marginLeft: `${scaleLeft}px`,
-            marginBottom: `${scaleFollow ? scaleFollow.base : scaleBottom}px`,
-            ...sheetFollowSx(scaleFollow),
-            pointerEvents: "none",
-            bgcolor: "background.paper",
-            color: "text.primary",
-            borderColor: "currentColor",
-            fontSize: 10,
-          },
         }}
       />
       {!carSurface && status !== "ready" && (

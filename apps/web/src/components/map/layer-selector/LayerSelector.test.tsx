@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, Ref } from "react";
 import { useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
-import { MAP_FOOTER_OBSTRUCTION_ID, publishMapFooterBox } from "@/lib/mapFooterCenter";
+import { LAYER_SELECTOR_OPEN_EVENT, SEARCH_INPUT_ID } from "@/components/command-palette/constants";
+import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
 
@@ -23,13 +23,6 @@ const mockPopoverAction = { updatePosition: vi.fn() };
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (k: string) => k,
-}));
-const follow = vi.hoisted(() => ({
-  track: null as import("@/lib/sheetFollow").SheetFollowTrack | null,
-}));
-vi.mock("@/lib/sheetFollow", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/sheetFollow")>()),
-  useSheetFollowTrack: () => follow.track,
 }));
 vi.mock("@mui/material/useMediaQuery", () => ({
   default: () => mockState.desktopDock,
@@ -74,11 +67,10 @@ vi.mock("./DesktopQuickSelector", () => ({
     </button>
   ),
 }));
-vi.mock("./DesktopMorePanel", () => ({
-  DesktopMorePanel: () => <div>map-details-panel</div>,
-}));
-vi.mock("./MobileLayerPanel", () => ({
-  MobileLayerPanel: () => <div>mobile-panel</div>,
+vi.mock("./LayerDetailsPanel", () => ({
+  LayerDetailsPanel: ({ variant }: { variant?: string }) => (
+    <div>{variant === "sheet" ? "phone-sheet" : "map-details-panel"}</div>
+  ),
 }));
 
 import { LayerSelector } from "./LayerSelector";
@@ -117,59 +109,45 @@ function dockBottom(label: string): string {
 }
 
 describe("LayerSelector desktop dock", () => {
-  it("clears a wrapped footer on mobile without moving the ordinary desktop dock", () => {
-    mockState.desktopDock = false;
+  it("stands the desktop dock on the map footer", () => {
     publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 34);
     const { rerender } = render(<LayerSelector />);
+    expect(dockBottom("openLayers")).toBe("42px");
 
-    expect(dockBottom("openLayerMenu")).toBe("42px");
-
-    mockState.desktopDock = true;
     publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 17);
     rerender(<LayerSelector />);
-
     expect(dockBottom("openLayers")).toBe("26px");
   });
 
-  it("rides the live footer and sheet edges rather than a sheet's settled extent", () => {
+  it("keeps the phone layer button at the top, clear of the footer and bottom sheets", () => {
     mockState.desktopDock = false;
     publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 300);
     publishMapObstruction("layer-test-sheet", "bottom", 500);
+    publishMobilePanelHeight("layer-test-sheet", 400);
     render(<LayerSelector />);
-    expect(dockBottom("openLayerMenu")).toBe("308px");
 
-    act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 200));
-    expect(dockBottom("openLayerMenu")).toBe("208px");
-
-    // A sheet past its follow cap has taken the footer inside it.
-    act(() => publishMobilePanelHeight("layer-test-sheet", 400));
-    expect(dockBottom("openLayerMenu")).toBe("408px");
-    expect(
-      getComputedStyle(dock("openLayerMenu"))
-        .transition.split(",")
-        .map((value) => value.trim().split(/\s+/)[0]),
-    ).toEqual(["opacity"]);
+    // Anchored from the top: nothing at the bottom edge moves it.
+    expect(["", "auto"]).toContain(getComputedStyle(dock("openLayerMenu")).bottom);
   });
 
-  it("rides the footer on a driving sheet's timeline, then the sheet edge once the footer docks", () => {
+  it("opens map type, details and tools in a bottom sheet on a phone", async () => {
     mockState.desktopDock = false;
-    follow.track = { scrollStart: 4, cap: 440, lift: 0, floor: 0 };
-    try {
-      act(() => publishMapFooterBox({ docked: false, height: 34 }));
-      render(<LayerSelector />);
-      let style = getComputedStyle(dock("openLayerMenu"));
-      expect(style.bottom).toBe("42px");
-      expect(style.getPropertyValue("animation-range")).toBe("4px 444px");
+    const user = userEvent.setup();
+    render(<LayerSelector />);
+    expect(screen.queryByText("phone-sheet")).toBeNull();
 
-      // Docked, it stands 8px above the sheet edge but never below its 26px floor.
-      act(() => publishMapFooterBox({ docked: true, height: 34 }));
-      style = getComputedStyle(dock("openLayerMenu"));
-      expect(style.bottom).toBe("26px");
-      expect(style.getPropertyValue("animation-range")).toBe("22px 444px");
-    } finally {
-      follow.track = null;
-      act(() => publishMapFooterBox({ docked: false, height: 0 }));
-    }
+    await user.click(screen.getByLabelText("openLayerMenu"));
+    expect(await screen.findByText("phone-sheet")).toBeDefined();
+  });
+
+  it("opens the phone sheet when asked to programmatically", async () => {
+    mockState.desktopDock = false;
+    render(<LayerSelector />);
+
+    act(() => {
+      window.dispatchEvent(new Event(LAYER_SELECTOR_OPEN_EVENT));
+    });
+    expect(await screen.findByText("phone-sheet")).toBeDefined();
   });
 
   it("collapses the quick selector when the full map-details panel opens", async () => {
@@ -200,6 +178,23 @@ describe("LayerSelector desktop dock", () => {
 
     expect(await screen.findByText("map-details-panel")).toBeDefined();
     expect(quickSelectorOpen()).toBe(false);
+  });
+
+  it("puts the desktop panel away when a search starts, so it can't cover the suggestions", async () => {
+    render(
+      <>
+        <input id={SEARCH_INPUT_ID} aria-label="search" />
+        <LayerSelector />
+      </>,
+    );
+    act(() => {
+      window.dispatchEvent(new Event(LAYER_SELECTOR_OPEN_EVENT));
+    });
+    expect(await screen.findByText("map-details-panel")).toBeDefined();
+
+    act(() => screen.getByRole("textbox", { name: "search" }).focus());
+
+    await waitFor(() => expect(screen.queryByText("map-details-panel")).toBeNull());
   });
 
   it("keeps the desktop dock visible when an expanded sidebar has a selected place", () => {

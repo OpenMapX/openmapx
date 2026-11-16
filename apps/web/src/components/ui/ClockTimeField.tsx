@@ -255,7 +255,6 @@ function TimePickerDialog({
             m: 2,
             width: 328,
             maxWidth: "calc(100vw - 32px)",
-            backgroundImage: "none",
           },
         },
       }}

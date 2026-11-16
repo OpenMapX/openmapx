@@ -72,6 +72,7 @@ import { BRAND } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
 import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
+import { PanelSectionTitle } from "../shared/PanelSectionTitle";
 import { useMobileSheet } from "../sheet/sheetState";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { OsmContributionEntry } from "./contributions/OsmContributionEntry";
@@ -596,6 +597,30 @@ export function PlaceOverviewTab({
     </>
   );
 
+  // Headline facts, then the remaining tag details, as one section below the
+  // contact rows rather than in the middle of them.
+  const aboutSection =
+    overviewFacts.length > 0 ? (
+      <>
+        <Divider sx={{ mx: 2, my: 1 }} />
+        <Box sx={{ px: 2, pt: 1 }}>
+          <PanelSectionTitle>{t("aboutThisPlace")}</PanelSectionTitle>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1 }}>
+            {overviewFacts.map(({ label, value }) => (
+              <Box key={label} sx={{ minWidth: 0 }}>
+                <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
+                  {label}
+                </Typography>
+                <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                  {value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </>
+    ) : null;
+
   return (
     <>
       <Box sx={{ px: 2, pt: 1, pb: 1 }}>
@@ -914,34 +939,6 @@ export function PlaceOverviewTab({
             </>
           )}
 
-          {overviewFacts.length > 0 && (
-            <Box sx={{ py: 1.5 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.75 }}>
-                {t("aboutThisPlace")}
-              </Typography>
-              <Box
-                sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1 }}
-              >
-                {overviewFacts.map(({ label, value }) => (
-                  <Box key={label} sx={{ minWidth: 0 }}>
-                    <Typography
-                      variant="caption"
-                      sx={{ display: "block", color: "text.secondary" }}
-                    >
-                      {label}
-                    </Typography>
-                    <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                      {value}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-              <Button size="small" onClick={onNavigateToInfo} sx={{ mt: 0.5, px: 0 }}>
-                {t("more")}
-              </Button>
-            </Box>
-          )}
-
           {/* Wikipedia */}
           {place.wikipediaUrl && (
             <DetailRow icon={<ArticleIcon sx={{ fontSize: 22 }} />}>
@@ -1110,22 +1107,32 @@ export function PlaceOverviewTab({
       {overviewAttributions.length > 0 && (
         <SectionAttribution attributions={overviewAttributions} inset />
       )}
-      {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
-      {place.osmTags && Object.keys(place.osmTags).length > 0 && (
-        <PlaceTagDetails
-          place={place}
-          osmTags={place.osmTags}
-          section={promotePracticalDetails ? "remaining" : "all"}
-          representedEmail={place.email}
-        />
-      )}
-      {/* Transit section — self-hides if no linked stops */}
+      {/* A station's lines and departures lead, ahead of its details. Self-hides
+          without linked stops. */}
       <PlaceTransitSection
         place={place}
         onOpenDepartures={onOpenDepartures}
         onOpenLineDetail={onOpenLineDetail}
         onOpenTripDetail={onOpenTripDetail}
       />
+      {aboutSection}
+      {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
+      {place.osmTags && Object.keys(place.osmTags).length > 0 && (
+        <PlaceTagDetails
+          place={place}
+          osmTags={place.osmTags}
+          section={promotePracticalDetails ? "remaining" : "all"}
+          divider={!aboutSection}
+          representedEmail={place.email}
+        />
+      )}
+      {aboutSection && (
+        <Box sx={{ px: 2 }}>
+          <Button size="small" onClick={onNavigateToInfo} sx={{ mx: -1, px: 1, minWidth: 0 }}>
+            {t("more")}
+          </Button>
+        </Box>
+      )}
       {/* Data source detail sections (e.g. EV charging connectors) */}
       {place.dataSourceDetail && (
         <DataSourceSections detail={place.dataSourceDetail} domain={place.primaryScheme} />

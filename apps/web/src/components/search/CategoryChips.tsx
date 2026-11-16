@@ -2,6 +2,8 @@
 
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import HomeIcon from "@mui/icons-material/Home";
+import WorkIcon from "@mui/icons-material/Work";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
@@ -15,18 +17,23 @@ import {
   useDataSourceStore,
   useDataSources,
   useDirectionsStore,
+  useLabeledPlaces,
   useMapStore,
+  usePlaceStore,
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { homeAndWork, openLabeledPlace } from "@/components/panels/saved/openLabeledPlace";
+import { useMap } from "@/integration-api/map/MapContext";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
+import { FINE_POINTER_QUERY } from "@/lib/useFinePointer";
 import { FLOATING_CHIP_HEIGHT, floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 
-const FINE_POINTER = "@media (hover: hover) and (pointer: fine)";
+const FINE_POINTER = `@media ${FINE_POINTER_QUERY}`;
 const TOUCH_FADE = 24;
 /** Wide enough to fade the chips out behind an arrow. */
 const ARROW_FADE = FLOATING_CHIP_HEIGHT + 16;
@@ -98,6 +105,11 @@ function SvgIcon({ path, size = 16 }: { path: string; size?: number }) {
 
 export function CategoryChips() {
   const t = useTranslations("search");
+  const tSaved = useTranslations("saved");
+  // Home and Work lead the row once set, a tap away as in native map apps.
+  const { data: labels } = useLabeledPlaces();
+  const { flyTo } = useMap();
+  const labelChips = homeAndWork(labels);
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
   const textSearchActive = useCategorySearchStore((s) => s.mode === "text");
   const { setQuery } = useSearchStore();
@@ -168,6 +180,8 @@ export function CategoryChips() {
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const selectedPlace = usePlaceStore((s) => s.selectedPlace);
+  const sidebarOpen = useSidebarStore((s) => s.activeSidebarId !== null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [chipsEl, setChipsEl] = useState<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -217,7 +231,11 @@ export function CategoryChips() {
     el.scrollTo({ left: target, behavior: prefersReducedMotion() ? "auto" : "smooth" });
   };
 
-  const hidden = directionsOpen || activeCategory || activeSource || textSearchActive;
+  // A phone's place sheet takes over the screen below the search bar, which
+  // then names the place; the chips would only stand between the two.
+  const placeSheetOpen = isMobile && sidebarOpen && selectedPlace !== null;
+  const hidden =
+    directionsOpen || activeCategory || activeSource || textSearchActive || placeSheetOpen;
   const zoomedOut = zoom < 9;
 
   // The chip row only lies across the map on mobile; on desktop it floats in
@@ -252,8 +270,8 @@ export function CategoryChips() {
     height: FLOATING_CHIP_HEIGHT,
     borderRadius: "50%",
     bgcolor: "background.paper",
-    border: "1px solid var(--omx-border)",
-    boxShadow: "0 1px 3px var(--omx-shadow-soft)",
+    border: "1px solid var(--omx-chip-border)",
+    boxShadow: 1,
     "&:hover": { bgcolor: "var(--omx-chip-hover)" },
     display: "none",
     [FINE_POINTER]: { display: "inline-flex" },
@@ -297,6 +315,19 @@ export function CategoryChips() {
       >
         {/* Sized to its chips, so the resize observer sees late chips arrive. */}
         <Box sx={{ display: "flex", gap: 1, width: "max-content" }}>
+          {labelChips.map(({ key, label }) => {
+            const Icon = key === "home" ? HomeIcon : WorkIcon;
+            return (
+              <Chip
+                key={`label:${key}`}
+                icon={<Icon sx={{ fontSize: 18 }} />}
+                label={tSaved(key)}
+                onClick={() => openLabeledPlace(label, flyTo)}
+                variant="outlined"
+                sx={chipSx(false)}
+              />
+            );
+          })}
           {chips.map((chip) => {
             if (chip.kind === "source") {
               const { source } = chip;

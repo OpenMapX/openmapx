@@ -314,7 +314,13 @@ export async function withAdministrativeConfigurationWriter<T>(
   try {
     // postgres-js reserves query execution but omits the parent's parser metadata.
     // Drizzle needs that metadata; it must still execute through this reserved SQL.
-    const connection = drizzle(Object.assign(reserved, { options: sql.options }), { schema });
+    // postgres v4 types a reserved connection without `begin`/`end`, which it never
+    // had at runtime. Drizzle only calls `begin` from `transaction()`; this writer
+    // opens its transactions with explicit BEGIN/COMMIT on the reserved connection.
+    const connection = drizzle(
+      Object.assign(reserved, { options: sql.options }) as unknown as typeof sql,
+      { schema },
+    );
     const deadline = Date.now() + 5_000;
     while (!global) {
       options.signal?.throwIfAborted();

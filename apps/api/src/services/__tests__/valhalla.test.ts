@@ -152,7 +152,9 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse({ trip })));
 
       const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
-      const route = (await valhallaService.getRoute(waypoints, "walking", { units: "imperial" }))
+      // Cycling keeps Valhalla's narrative; walking steps are rewritten from
+      // the turn and street (see walking-guidance.ts).
+      const route = (await valhallaService.getRoute(waypoints, "cycling", { units: "imperial" }))
         .routes[0];
 
       expect(route.distance).toBeCloseTo(1609.344, 3);

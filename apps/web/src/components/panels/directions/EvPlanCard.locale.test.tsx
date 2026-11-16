@@ -1,10 +1,17 @@
 import type { EvDirectionsResult } from "@openmapx/core";
 import de from "@openmapx/i18n/locales/de.json";
 import en from "@openmapx/i18n/locales/en.json";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test";
 import { renderWithIntl } from "@/test/intl";
 import { EvPlanCard } from "./EvPlanCard";
+
+// The card looks up the data-source list for the charger category; no source is
+// listed here, as when the list has not loaded.
+vi.mock("@openmapx/core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core")>()),
+  useDataSources: () => ({ data: { sources: [] }, isLoading: false }),
+}));
 
 const NB = " ";
 

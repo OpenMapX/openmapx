@@ -91,6 +91,8 @@ export { useCountryFromCoordinates } from "./useCountryFromCoordinates";
 export { useCurrentWeather } from "./useCurrentWeather";
 export { useDataSourceMatch } from "./useDataSourceMatch";
 export {
+  type DataSourceSearchEnvelope,
+  dataSourceSearchQueryOptions,
   useDataSourceDetail,
   useDataSourceMapContext,
   useDataSourceSearch,

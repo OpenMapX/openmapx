@@ -42,8 +42,7 @@ vi.mock("./useLayerSelectorConfig", () => {
   };
 });
 
-import { DesktopMorePanel } from "./DesktopMorePanel";
-import { MobileLayerPanel } from "./MobileLayerPanel";
+import { LayerDetailsPanel } from "./LayerDetailsPanel";
 
 afterEach(() => {
   capabilities.unavailable.clear();
@@ -55,10 +54,10 @@ afterEach(() => {
 });
 
 describe("layer panels", () => {
-  it("lets mobile users operate both tools and select one basemap", () => {
-    render(<MobileLayerPanel />);
-    act(() => fireEvent.click(screen.getByRole("switch", { name: "measurement" })));
-    act(() => fireEvent.click(screen.getByRole("switch", { name: "travel-time" })));
+  it("lets phone users operate both tools and select one basemap", () => {
+    render(<LayerDetailsPanel variant="sheet" onClose={() => undefined} />);
+    act(() => fireEvent.click(screen.getByRole("button", { name: "measurement" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "travel-time" })));
     expect(useMeasurementStore.getState().isActive).toBe(true);
     expect(useTravelTimeStore.getState().isActive).toBe(true);
     act(() => fireEvent.click(screen.getByRole("button", { name: "satellite" })));
@@ -75,8 +74,8 @@ describe("layer panels", () => {
   });
 
   it.each([
-    ["desktop", <DesktopMorePanel key="desktop" onClose={() => undefined} />],
-    ["mobile", <MobileLayerPanel key="mobile" />],
+    ["desktop", <LayerDetailsPanel key="desktop" onClose={() => undefined} />],
+    ["phone", <LayerDetailsPanel key="phone" variant="sheet" onClose={() => undefined} />],
   ])("keeps travel time usable on %s when its Valhalla health check fails", (_name, panel) => {
     capabilities.unavailable.add("travel-time");
     capabilities.unavailable.add("traffic-flow");
@@ -84,9 +83,7 @@ describe("layer panels", () => {
 
     expect(screen.getAllByText("travel-time")).toHaveLength(1);
     expect(screen.queryByText("traffic-flow")).toBeNull();
-    const control = screen.getByRole(_name === "desktop" ? "button" : "switch", {
-      name: "travel-time",
-    });
+    const control = screen.getByRole("button", { name: "travel-time" });
     act(() => fireEvent.click(control));
     expect(useTravelTimeStore.getState().isActive).toBe(true);
   });

@@ -7,7 +7,7 @@
  * others. Mirrors the other scripts/check-*.ts gates (run in pre-commit).
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   GTFSCLEAN_COMMIT,
@@ -18,294 +18,329 @@ import {
 const HERE = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 
-const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
-const errors: string[] = [];
 const SHA256 = /^[a-f0-9]{64}$/;
 const OCI_DIGEST = /^sha256:[a-f0-9]{64}$/;
+const TRANSPORT_APIS_COMMIT_PATTERN = /TRANSPORT_APIS_COMMIT\s*=\s*"([0-9a-f]{40})"/;
+const REGISTRY_PIN_PATH = "integrations/transit-dynamic-registry/pin.ts";
 
-// Node, pnpm, and mobile releases cross package-manager, container, and
-// provenance boundaries. Keep every duplicated declaration on the selected
-// exact toolchain rather than letting a stale build path survive an upgrade.
-const nodeVersion = read(".nvmrc").trim();
-const rootPackage = JSON.parse(read("package.json")) as {
-  packageManager?: string;
-  engines?: { node?: string };
-};
-const docsPackage = JSON.parse(read("docs/package.json")) as {
-  packageManager?: string;
-  engines?: { node?: string };
-};
-const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-};
-const releaseToolchains = JSON.parse(read("apps/mobile/release/toolchains.json")) as {
-  node?: string;
-  pnpm?: string;
-  expoSdk?: string;
-  reactNative?: string;
-};
-const packageManagerVersion = rootPackage.packageManager?.match(/^pnpm@([^+]+)/)?.[1];
-const expectedNodeRange = `>=${nodeVersion}`;
-const expoVersion = mobilePackage.dependencies?.expo?.replace(/^[~^]/, "");
+const readRepoFile = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
 
-if (!/^\d+\.\d+\.\d+$/.test(nodeVersion)) {
-  errors.push(`.nvmrc: "${nodeVersion}" must pin an exact Node release`);
-}
-if (rootPackage.engines?.node !== expectedNodeRange) {
-  errors.push(
-    `package.json: engines.node "${rootPackage.engines?.node}" != "${expectedNodeRange}"`,
-  );
-}
-if (docsPackage.engines?.node !== expectedNodeRange) {
-  errors.push(
-    `docs/package.json: engines.node "${docsPackage.engines?.node}" != "${expectedNodeRange}"`,
-  );
-}
-if (docsPackage.packageManager !== rootPackage.packageManager) {
-  errors.push("docs/package.json: packageManager must exactly match the root workspace");
-}
-if (releaseToolchains.node !== expectedNodeRange) {
-  errors.push(
-    `apps/mobile/release/toolchains.json: node "${releaseToolchains.node}" != "${expectedNodeRange}"`,
-  );
-}
-if (!packageManagerVersion || releaseToolchains.pnpm !== packageManagerVersion) {
-  errors.push(
-    `apps/mobile/release/toolchains.json: pnpm "${releaseToolchains.pnpm}" != root package manager "${packageManagerVersion}"`,
-  );
-}
-if (!expoVersion || releaseToolchains.expoSdk !== expoVersion.split(".")[0]) {
-  errors.push(
-    `apps/mobile/release/toolchains.json: Expo SDK "${releaseToolchains.expoSdk}" != expo "${expoVersion}"`,
-  );
-}
-if (releaseToolchains.reactNative !== mobilePackage.dependencies?.["react-native"]) {
-  errors.push(
-    `apps/mobile/release/toolchains.json: reactNative "${releaseToolchains.reactNative}" != installed runtime "${mobilePackage.dependencies?.["react-native"]}"`,
-  );
-}
-for (const rel of [
-  "apps/api/Dockerfile",
-  "apps/ops-agent/Dockerfile",
-  "apps/transitous-runner/Dockerfile",
-  "apps/web/Dockerfile",
-  "docs/Dockerfile",
-  "services/data-manager/Dockerfile",
-]) {
-  const nodeImages = read(rel).match(/^FROM node:([^@\s]+)/gm) ?? [];
-  if (nodeImages.length === 0) {
-    errors.push(`${rel}: no Node base image found`);
-    continue;
+/**
+ * Returns every supply-chain pin violation in the repository. `overrides` maps
+ * repository-relative paths to replacement contents, so tests can feed one
+ * altered file through the real rules; the `services/` directory walk stays real.
+ */
+export function collectToolchainPinViolations(
+  overrides: Readonly<Record<string, string>> = {},
+): string[] {
+  const read = (rel: string): string =>
+    Object.hasOwn(overrides, rel) ? (overrides[rel] as string) : readRepoFile(rel);
+  const errors: string[] = [];
+
+  // Node, pnpm, and mobile releases cross package-manager, container, and
+  // provenance boundaries. Keep every duplicated declaration on the selected
+  // exact toolchain rather than letting a stale build path survive an upgrade.
+  const nodeVersion = read(".nvmrc").trim();
+  const rootPackage = JSON.parse(read("package.json")) as {
+    packageManager?: string;
+    engines?: { node?: string };
+  };
+  const docsPackage = JSON.parse(read("docs/package.json")) as {
+    packageManager?: string;
+    engines?: { node?: string };
+  };
+  const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const releaseToolchains = JSON.parse(read("apps/mobile/release/toolchains.json")) as {
+    node?: string;
+    pnpm?: string;
+    expoSdk?: string;
+    reactNative?: string;
+  };
+  const packageManagerVersion = rootPackage.packageManager?.match(/^pnpm@([^+]+)/)?.[1];
+  const expectedNodeRange = `>=${nodeVersion}`;
+  const expoVersion = mobilePackage.dependencies?.expo?.replace(/^[~^]/, "");
+
+  if (!/^\d+\.\d+\.\d+$/.test(nodeVersion)) {
+    errors.push(`.nvmrc: "${nodeVersion}" must pin an exact Node release`);
   }
-  for (const image of nodeImages) {
-    if (!image.startsWith(`FROM node:${nodeVersion}-`)) {
-      errors.push(`${rel}: Node base "${image}" does not match .nvmrc ${nodeVersion}`);
+  if (rootPackage.engines?.node !== expectedNodeRange) {
+    errors.push(
+      `package.json: engines.node "${rootPackage.engines?.node}" != "${expectedNodeRange}"`,
+    );
+  }
+  if (docsPackage.engines?.node !== expectedNodeRange) {
+    errors.push(
+      `docs/package.json: engines.node "${docsPackage.engines?.node}" != "${expectedNodeRange}"`,
+    );
+  }
+  if (docsPackage.packageManager !== rootPackage.packageManager) {
+    errors.push("docs/package.json: packageManager must exactly match the root workspace");
+  }
+  if (releaseToolchains.node !== expectedNodeRange) {
+    errors.push(
+      `apps/mobile/release/toolchains.json: node "${releaseToolchains.node}" != "${expectedNodeRange}"`,
+    );
+  }
+  if (!packageManagerVersion || releaseToolchains.pnpm !== packageManagerVersion) {
+    errors.push(
+      `apps/mobile/release/toolchains.json: pnpm "${releaseToolchains.pnpm}" != root package manager "${packageManagerVersion}"`,
+    );
+  }
+  if (!expoVersion || releaseToolchains.expoSdk !== expoVersion.split(".")[0]) {
+    errors.push(
+      `apps/mobile/release/toolchains.json: Expo SDK "${releaseToolchains.expoSdk}" != expo "${expoVersion}"`,
+    );
+  }
+  if (releaseToolchains.reactNative !== mobilePackage.dependencies?.["react-native"]) {
+    errors.push(
+      `apps/mobile/release/toolchains.json: reactNative "${releaseToolchains.reactNative}" != installed runtime "${mobilePackage.dependencies?.["react-native"]}"`,
+    );
+  }
+  for (const rel of [
+    "apps/api/Dockerfile",
+    "apps/ops-agent/Dockerfile",
+    "apps/transitous-runner/Dockerfile",
+    "apps/web/Dockerfile",
+    "docs/Dockerfile",
+    "services/data-manager/Dockerfile",
+  ]) {
+    const nodeImages = read(rel).match(/^FROM node:([^@\s]+)/gm) ?? [];
+    if (nodeImages.length === 0) {
+      errors.push(`${rel}: no Node base image found`);
+      continue;
+    }
+    for (const image of nodeImages) {
+      if (!image.startsWith(`FROM node:${nodeVersion}-`)) {
+        errors.push(`${rel}: Node base "${image}" does not match .nvmrc ${nodeVersion}`);
+      }
     }
   }
-}
 
-// Third-party production services must retain a readable tag and an immutable
-// multi-architecture manifest digest. First-party OpenMapX images are released
-// by this repository and intentionally follow the separately gated digest
-// promotion workflow.
-for (const entry of readdirSync(join(ROOT, "services"), { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue;
-  const rel = `services/${entry.name}/service.json`;
-  if (!existsSync(join(ROOT, rel))) continue;
-  const manifest = JSON.parse(read(rel)) as {
-    container?: { image?: string; digest?: string };
-  };
-  const container = manifest.container;
-  if (!container?.image || container.image.startsWith("ghcr.io/openmapx/")) continue;
-  if (!OCI_DIGEST.test(container.digest ?? "")) {
-    errors.push(`${rel}: third-party image is missing a valid immutable sha256 digest`);
+  // Third-party production services must retain a readable tag and an immutable
+  // multi-architecture manifest digest. First-party OpenMapX images are released
+  // by this repository and intentionally follow the separately gated digest
+  // promotion workflow.
+  for (const entry of readdirSync(join(ROOT, "services"), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const rel = `services/${entry.name}/service.json`;
+    if (!existsSync(join(ROOT, rel))) continue;
+    const manifest = JSON.parse(read(rel)) as {
+      container?: { image?: string; digest?: string };
+      buildImages?: Record<string, { image?: string; digest?: string }>;
+    };
+    // Build images feed first-party images too, so every manifest pins them.
+    for (const [role, buildImage] of Object.entries(manifest.buildImages ?? {})) {
+      if (!OCI_DIGEST.test(buildImage.digest ?? "")) {
+        errors.push(`${rel}: build image "${role}" is missing a valid immutable sha256 digest`);
+      }
+    }
+    const container = manifest.container;
+    if (!container?.image || container.image.startsWith("ghcr.io/openmapx/")) continue;
+    if (!OCI_DIGEST.test(container.digest ?? "")) {
+      errors.push(`${rel}: third-party image is missing a valid immutable sha256 digest`);
+    }
   }
-}
 
-// MOTIS version: service.json container.tag (motis + staging).
-for (const rel of ["services/motis/service.json", "services/motis-staging/service.json"]) {
-  const container = (JSON.parse(read(rel)) as { container?: { tag?: string; digest?: string } })
-    .container;
-  const tag = container?.tag;
-  if (tag !== MOTIS_VERSION) {
-    errors.push(`${rel}: container.tag "${tag}" != MOTIS_VERSION "${MOTIS_VERSION}"`);
+  // MOTIS version: service.json container.tag (motis + staging).
+  for (const rel of ["services/motis/service.json", "services/motis-staging/service.json"]) {
+    const container = (JSON.parse(read(rel)) as { container?: { tag?: string; digest?: string } })
+      .container;
+    const tag = container?.tag;
+    if (tag !== MOTIS_VERSION) {
+      errors.push(`${rel}: container.tag "${tag}" != MOTIS_VERSION "${MOTIS_VERSION}"`);
+    }
+    if (!OCI_DIGEST.test(container?.digest ?? "")) {
+      errors.push(`${rel}: MOTIS image is not pinned by digest`);
+    }
   }
-  if (!OCI_DIGEST.test(container?.digest ?? "")) {
-    errors.push(`${rel}: MOTIS image is not pinned by digest`);
+
+  // MOTIS version: transitous-tools Dockerfile ARG (v-prefixed release tag).
+  if (
+    !read("services/motis/tools/transitous/Dockerfile").includes(
+      `ARG MOTIS_VERSION=v${MOTIS_VERSION}`,
+    )
+  ) {
+    errors.push(
+      `services/motis/tools/transitous/Dockerfile: ARG MOTIS_VERSION != v${MOTIS_VERSION}`,
+    );
   }
-}
 
-// MOTIS version: transitous-tools Dockerfile ARG (v-prefixed release tag).
-if (
-  !read("services/motis/tools/transitous/Dockerfile").includes(
-    `ARG MOTIS_VERSION=v${MOTIS_VERSION}`,
-  )
-) {
-  errors.push(`services/motis/tools/transitous/Dockerfile: ARG MOTIS_VERSION != v${MOTIS_VERSION}`);
-}
-
-// MOTIS version: @motis-project/motis-client deps (caret range).
-for (const rel of ["apps/api/package.json", "packages/mobility-core/package.json"]) {
-  const deps = (JSON.parse(read(rel)) as { dependencies?: Record<string, string> }).dependencies;
-  const v = deps?.["@motis-project/motis-client"];
-  if (v !== `^${MOTIS_VERSION}`) {
-    errors.push(`${rel}: @motis-project/motis-client "${v}" != "^${MOTIS_VERSION}"`);
+  // MOTIS version: @motis-project/motis-client deps (caret range).
+  for (const rel of ["apps/api/package.json", "packages/mobility-core/package.json"]) {
+    const deps = (JSON.parse(read(rel)) as { dependencies?: Record<string, string> }).dependencies;
+    const v = deps?.["@motis-project/motis-client"];
+    if (v !== `^${MOTIS_VERSION}`) {
+      errors.push(`${rel}: @motis-project/motis-client "${v}" != "^${MOTIS_VERSION}"`);
+    }
   }
-}
 
-// React Native's Jest preset imports runtime-internal entry points, so even a
-// semver-minor drift can make every mobile suite fail before tests execute.
-const reactNativeVersion = mobilePackage.dependencies?.["react-native"];
-const reactNativeJestPreset = mobilePackage.devDependencies?.["@react-native/jest-preset"];
-if (!reactNativeVersion || reactNativeJestPreset !== reactNativeVersion) {
-  errors.push(
-    `apps/mobile/package.json: @react-native/jest-preset "${reactNativeJestPreset}" must exactly match react-native "${reactNativeVersion}"`,
-  );
-}
-
-// gtfsclean commit: one reviewed build script copied by every image that ships it.
-const gtfscleanBuildScript = read("services/motis/tools/transitous/build-gtfsclean.sh");
-if (!gtfscleanBuildScript.includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
-  errors.push(
-    `services/motis/tools/transitous/build-gtfsclean.sh: gtfsclean commit != ${GTFSCLEAN_COMMIT}`,
-  );
-}
-for (const [rel, source] of [
-  ["services/motis/tools/transitous/Dockerfile", "build-gtfsclean.sh"],
-  ["services/data-manager/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
-  ["apps/transitous-runner/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
-] as const) {
-  if (!read(rel).includes(source)) {
-    errors.push(`${rel}: does not copy the pinned gtfsclean build script`);
+  // React Native's Jest preset imports runtime-internal entry points, so even a
+  // semver-minor drift can make every mobile suite fail before tests execute.
+  const reactNativeVersion = mobilePackage.dependencies?.["react-native"];
+  const reactNativeJestPreset = mobilePackage.devDependencies?.["@react-native/jest-preset"];
+  if (!reactNativeVersion || reactNativeJestPreset !== reactNativeVersion) {
+    errors.push(
+      `apps/mobile/package.json: @react-native/jest-preset "${reactNativeJestPreset}" must exactly match react-native "${reactNativeVersion}"`,
+    );
   }
-}
 
-const dataManagerDockerfile = read("services/data-manager/Dockerfile");
-for (const artifact of ["DUCKDB"] as const) {
+  // gtfsclean commit: one reviewed build script copied by every image that ships it.
+  const gtfscleanBuildScript = read("services/motis/tools/transitous/build-gtfsclean.sh");
+  if (!gtfscleanBuildScript.includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
+    errors.push(
+      `services/motis/tools/transitous/build-gtfsclean.sh: gtfsclean commit != ${GTFSCLEAN_COMMIT}`,
+    );
+  }
+  for (const [rel, source] of [
+    ["services/motis/tools/transitous/Dockerfile", "build-gtfsclean.sh"],
+    ["services/data-manager/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
+    ["apps/transitous-runner/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
+  ] as const) {
+    if (!read(rel).includes(source)) {
+      errors.push(`${rel}: does not copy the pinned gtfsclean build script`);
+    }
+  }
+
+  const dataManagerDockerfile = read("services/data-manager/Dockerfile");
+  for (const artifact of ["DUCKDB"] as const) {
+    for (const arch of ["AMD64", "ARM64"] as const) {
+      const value = dataManagerDockerfile.match(
+        new RegExp(`ARG ${artifact}_SHA256_${arch}=([a-f0-9]{64})`),
+      )?.[1];
+      if (!value || !SHA256.test(value)) {
+        errors.push(`services/data-manager/Dockerfile: ${artifact}_SHA256_${arch} is not pinned`);
+      }
+    }
+  }
+  if ((dataManagerDockerfile.match(/sha256sum -c -/g) ?? []).length < 1) {
+    errors.push(
+      "services/data-manager/Dockerfile: every downloaded executable must be checksummed",
+    );
+  }
+
+  const transitousDockerfile = read("services/motis/tools/transitous/Dockerfile");
   for (const arch of ["AMD64", "ARM64"] as const) {
-    const value = dataManagerDockerfile.match(
-      new RegExp(`ARG ${artifact}_SHA256_${arch}=([a-f0-9]{64})`),
+    const value = transitousDockerfile.match(
+      new RegExp(`ARG MOTIS_SHA256_${arch}=([a-f0-9]{64})`),
     )?.[1];
     if (!value || !SHA256.test(value)) {
-      errors.push(`services/data-manager/Dockerfile: ${artifact}_SHA256_${arch} is not pinned`);
+      errors.push(`services/motis/tools/transitous/Dockerfile: MOTIS_SHA256_${arch} is not pinned`);
     }
   }
-}
-if ((dataManagerDockerfile.match(/sha256sum -c -/g) ?? []).length < 1) {
-  errors.push("services/data-manager/Dockerfile: every downloaded executable must be checksummed");
-}
-
-const transitousDockerfile = read("services/motis/tools/transitous/Dockerfile");
-for (const arch of ["AMD64", "ARM64"] as const) {
-  const value = transitousDockerfile.match(
-    new RegExp(`ARG MOTIS_SHA256_${arch}=([a-f0-9]{64})`),
-  )?.[1];
-  if (!value || !SHA256.test(value)) {
-    errors.push(`services/motis/tools/transitous/Dockerfile: MOTIS_SHA256_${arch} is not pinned`);
+  if (!transitousDockerfile.includes("sha256sum -c -")) {
+    errors.push("services/motis/tools/transitous/Dockerfile: MOTIS download is not checksummed");
   }
-}
-if (!transitousDockerfile.includes("sha256sum -c -")) {
-  errors.push("services/motis/tools/transitous/Dockerfile: MOTIS download is not checksummed");
-}
 
-const requirementsInput = read("services/motis/tools/transitous/requirements.in");
-const requirementsLock = read("services/motis/tools/transitous/requirements.txt");
-for (const requirement of requirementsInput
-  .split("\n")
-  .filter((line) => line && !line.startsWith("#"))) {
-  const packageName = requirement.split("==", 1)[0]?.toLowerCase().replaceAll(/[._]/g, "-");
-  if (packageName && !requirementsLock.toLowerCase().includes(`${packageName}==`)) {
+  const requirementsInput = read("services/motis/tools/transitous/requirements.in");
+  const requirementsLock = read("services/motis/tools/transitous/requirements.txt");
+  for (const requirement of requirementsInput
+    .split("\n")
+    .filter((line) => line && !line.startsWith("#"))) {
+    const packageName = requirement.split("==", 1)[0]?.toLowerCase().replaceAll(/[._]/g, "-");
+    if (packageName && !requirementsLock.toLowerCase().includes(`${packageName}==`)) {
+      errors.push(
+        `services/motis/tools/transitous/requirements.txt: missing direct pin ${requirement}`,
+      );
+    }
+  }
+  const lockedRequirementBlocks = requirementsLock
+    .split(/\n(?=[a-z0-9][a-z0-9._-]*==)/i)
+    .filter((block) => /^[a-z0-9][a-z0-9._-]*==/i.test(block));
+  if (
+    lockedRequirementBlocks.length === 0 ||
+    lockedRequirementBlocks.some((block) => !block.includes("--hash=sha256:"))
+  ) {
     errors.push(
-      `services/motis/tools/transitous/requirements.txt: missing direct pin ${requirement}`,
+      "services/motis/tools/transitous/requirements.txt: every locked package needs a hash",
     );
   }
-}
-const lockedRequirementBlocks = requirementsLock
-  .split(/\n(?=[a-z0-9][a-z0-9._-]*==)/i)
-  .filter((block) => /^[a-z0-9][a-z0-9._-]*==/i.test(block));
-if (
-  lockedRequirementBlocks.length === 0 ||
-  lockedRequirementBlocks.some((block) => !block.includes("--hash=sha256:"))
-) {
-  errors.push(
-    "services/motis/tools/transitous/requirements.txt: every locked package needs a hash",
-  );
-}
-for (const [rel, dockerfile] of [
-  ["services/data-manager/Dockerfile", dataManagerDockerfile],
-  ["services/motis/tools/transitous/Dockerfile", transitousDockerfile],
-  ["apps/transitous-runner/Dockerfile", read("apps/transitous-runner/Dockerfile")],
-] as const) {
-  if (!dockerfile.includes("pip3 install --no-cache-dir --require-hashes")) {
-    errors.push(`${rel}: Python lock installation must use --require-hashes`);
+  for (const [rel, dockerfile] of [
+    ["services/data-manager/Dockerfile", dataManagerDockerfile],
+    ["services/motis/tools/transitous/Dockerfile", transitousDockerfile],
+    ["apps/transitous-runner/Dockerfile", read("apps/transitous-runner/Dockerfile")],
+  ] as const) {
+    if (!dockerfile.includes("pip3 install --no-cache-dir --require-hashes")) {
+      errors.push(`${rel}: Python lock installation must use --require-hashes`);
+    }
   }
-}
 
-const gbfsLock = JSON.parse(read("infra/docker/gbfs-catalog.lock.json")) as {
-  commit?: string;
-  url?: string;
-};
-if (gbfsLock.commit !== MOBILITYDATA_GBFS_CATALOG_COMMIT) {
-  errors.push(
-    `infra/docker/gbfs-catalog.lock.json: commit "${gbfsLock.commit}" != MOBILITYDATA_GBFS_CATALOG_COMMIT "${MOBILITYDATA_GBFS_CATALOG_COMMIT}"`,
-  );
-}
-if (!gbfsLock.url?.includes(`/${MOBILITYDATA_GBFS_CATALOG_COMMIT}/systems.csv`)) {
-  errors.push("infra/docker/gbfs-catalog.lock.json: URL is not pinned to the catalog commit");
-}
-
-// transport-apis catalog: pin.ts is the single source of truth; the lockfile
-// and the manifest health checks must name the same immutable commit.
-const registryPinSource = read("integrations/transit-dynamic-registry/pin.ts");
-const registryCommit = registryPinSource.match(/TRANSPORT_APIS_COMMIT\s*=\s*"([0-9a-f]{40})"/)?.[1];
-const registryRef = registryPinSource.match(/TRANSPORT_APIS_REF\s*=\s*"([^"]+)"/)?.[1];
-const registryLockedAt = registryPinSource.match(/TRANSPORT_APIS_LOCKED_AT\s*=\s*"([^"]+)"/)?.[1];
-if (!registryCommit) {
-  errors.push(
-    "integrations/transit-dynamic-registry/pin.ts: TRANSPORT_APIS_COMMIT is not a 40-hex commit SHA",
-  );
-} else {
-  const registryLock = JSON.parse(read("infra/docker/transport-apis.lock.json")) as {
+  const gbfsLock = JSON.parse(read("infra/docker/gbfs-catalog.lock.json")) as {
     commit?: string;
-    ref?: string;
-    lockedAt?: string;
+    url?: string;
   };
-  if (registryLock.commit !== registryCommit) {
+  if (gbfsLock.commit !== MOBILITYDATA_GBFS_CATALOG_COMMIT) {
     errors.push(
-      `infra/docker/transport-apis.lock.json: commit "${registryLock.commit}" != TRANSPORT_APIS_COMMIT "${registryCommit}"`,
+      `infra/docker/gbfs-catalog.lock.json: commit "${gbfsLock.commit}" != MOBILITYDATA_GBFS_CATALOG_COMMIT "${MOBILITYDATA_GBFS_CATALOG_COMMIT}"`,
     );
   }
-  if (registryLock.ref !== registryRef) {
-    errors.push(
-      `infra/docker/transport-apis.lock.json: ref "${registryLock.ref}" != TRANSPORT_APIS_REF "${registryRef}"`,
-    );
+  if (!gbfsLock.url?.includes(`/${MOBILITYDATA_GBFS_CATALOG_COMMIT}/systems.csv`)) {
+    errors.push("infra/docker/gbfs-catalog.lock.json: URL is not pinned to the catalog commit");
   }
-  if (registryLock.lockedAt !== registryLockedAt) {
+
+  // transport-apis catalog: pin.ts is the single source of truth; the lockfile
+  // and the manifest health checks must name the same immutable commit.
+  const registryPinSource = read(REGISTRY_PIN_PATH);
+  const registryCommit = registryPinSource.match(TRANSPORT_APIS_COMMIT_PATTERN)?.[1];
+  const registryRef = registryPinSource.match(/TRANSPORT_APIS_REF\s*=\s*"([^"]+)"/)?.[1];
+  const registryLockedAt = registryPinSource.match(/TRANSPORT_APIS_LOCKED_AT\s*=\s*"([^"]+)"/)?.[1];
+  if (!registryCommit) {
     errors.push(
-      `infra/docker/transport-apis.lock.json: lockedAt "${registryLock.lockedAt}" != TRANSPORT_APIS_LOCKED_AT "${registryLockedAt}"`,
+      "integrations/transit-dynamic-registry/pin.ts: TRANSPORT_APIS_COMMIT is not a 40-hex commit SHA",
     );
+  } else {
+    const registryLock = JSON.parse(read("infra/docker/transport-apis.lock.json")) as {
+      commit?: string;
+      ref?: string;
+      lockedAt?: string;
+    };
+    if (registryLock.commit !== registryCommit) {
+      errors.push(
+        `infra/docker/transport-apis.lock.json: commit "${registryLock.commit}" != TRANSPORT_APIS_COMMIT "${registryCommit}"`,
+      );
+    }
+    if (registryLock.ref !== registryRef) {
+      errors.push(
+        `infra/docker/transport-apis.lock.json: ref "${registryLock.ref}" != TRANSPORT_APIS_REF "${registryRef}"`,
+      );
+    }
+    if (registryLock.lockedAt !== registryLockedAt) {
+      errors.push(
+        `infra/docker/transport-apis.lock.json: lockedAt "${registryLock.lockedAt}" != TRANSPORT_APIS_LOCKED_AT "${registryLockedAt}"`,
+      );
+    }
+    const manifest = read("integrations/transit-dynamic-registry/manifest.json");
+    if (!manifest.includes(`transport-apis@${registryCommit}`)) {
+      errors.push(
+        "integrations/transit-dynamic-registry/manifest.json: JSDelivr health check is not pinned to TRANSPORT_APIS_COMMIT",
+      );
+    }
+    if (!manifest.includes(`git/trees/${registryCommit}?recursive=1`)) {
+      errors.push(
+        "integrations/transit-dynamic-registry/manifest.json: GitHub health check is not pinned to TRANSPORT_APIS_COMMIT",
+      );
+    }
   }
-  const manifest = read("integrations/transit-dynamic-registry/manifest.json");
-  if (!manifest.includes(`transport-apis@${registryCommit}`)) {
-    errors.push(
-      "integrations/transit-dynamic-registry/manifest.json: JSDelivr health check is not pinned to TRANSPORT_APIS_COMMIT",
-    );
-  }
-  if (!manifest.includes(`git/trees/${registryCommit}?recursive=1`)) {
-    errors.push(
-      "integrations/transit-dynamic-registry/manifest.json: GitHub health check is not pinned to TRANSPORT_APIS_COMMIT",
-    );
-  }
+
+  return errors;
 }
 
-if (errors.length > 0) {
-  console.error(
-    `✗ Production supply-chain pins are incomplete or out of sync:\n${errors.map((e) => `  - ${e}`).join("\n")}\n` +
-      "Update the reviewed image/artifact/Python pins together with their source versions.",
+function main(): void {
+  const errors = collectToolchainPinViolations();
+  if (errors.length > 0) {
+    console.error(
+      `✗ Production supply-chain pins are incomplete or out of sync:\n${errors.map((e) => `  - ${e}`).join("\n")}\n` +
+        "Update the reviewed image/artifact/Python pins together with their source versions.",
+    );
+    process.exit(1);
+  }
+  const registryCommit = readRepoFile(REGISTRY_PIN_PATH).match(TRANSPORT_APIS_COMMIT_PATTERN)?.[1];
+  console.log(
+    `✓ Supply-chain pins consistent — immutable third-party images, checked release artifacts, hash-locked Python, MOTIS ${MOTIS_VERSION}, gtfsclean ${GTFSCLEAN_COMMIT.slice(0, 10)}, transport-apis ${registryCommit?.slice(0, 10)}.`,
   );
-  process.exit(1);
 }
-console.log(
-  `✓ Supply-chain pins consistent — immutable third-party images, checked release artifacts, hash-locked Python, MOTIS ${MOTIS_VERSION}, gtfsclean ${GTFSCLEAN_COMMIT.slice(0, 10)}, transport-apis ${registryCommit?.slice(0, 10)}.`,
-);
+
+const entrypoint = process.argv[1] ? resolve(process.argv[1]) : undefined;
+if (entrypoint === fileURLToPath(import.meta.url)) main();

@@ -10,6 +10,11 @@ import {
   useOverlaySetLayerVisible,
 } from "@/integration-api/overlay/useOverlayStoreState";
 
+/** Quiet leading icons, so the labels carry the rows. */
+const ICON_SX = { minWidth: 48, color: "text.secondary" } as const;
+/** Rows tall enough to hit while driving. */
+const ROW_SX = { minHeight: 56 } as const;
+
 /** An action row: leading icon, label, tap runs `onClick`. */
 export function ActionRow({
   icon,
@@ -21,8 +26,8 @@ export function ActionRow({
   onClick: () => void;
 }) {
   return (
-    <ListItemButton onClick={onClick}>
-      <ListItemIcon sx={{ minWidth: 44 }}>{icon}</ListItemIcon>
+    <ListItemButton onClick={onClick} sx={ROW_SX}>
+      <ListItemIcon sx={ICON_SX}>{icon}</ListItemIcon>
       <ListItemText primary={label} />
     </ListItemButton>
   );
@@ -41,8 +46,8 @@ export function ToggleRow({
   onToggle: (next: boolean) => void;
 }) {
   return (
-    <ListItemButton onClick={() => onToggle(!checked)}>
-      <ListItemIcon sx={{ minWidth: 44 }}>{icon}</ListItemIcon>
+    <ListItemButton onClick={() => onToggle(!checked)} sx={ROW_SX}>
+      <ListItemIcon sx={ICON_SX}>{icon}</ListItemIcon>
       <ListItemText primary={label} />
       <Switch edge="end" checked={checked} tabIndex={-1} disableRipple />
     </ListItemButton>

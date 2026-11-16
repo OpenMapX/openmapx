@@ -31,6 +31,17 @@ interface Props {
   secondary?: ReactNode;
 }
 
+/** The bar's end and search buttons: filled circles, large enough to hit while driving. */
+const ROUND_BUTTON_SX = {
+  width: 48,
+  height: 48,
+  // Over the app-wide rounded-square IconButton radius.
+  borderRadius: "50%",
+  bgcolor: "action.hover",
+  color: "text.primary",
+  "&:hover": { bgcolor: "action.selected" },
+} as const;
+
 export function NavBottomBar({
   durationRemaining,
   etaEpochMs,
@@ -56,19 +67,7 @@ export function NavBottomBar({
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.5 }}>
       {/* Equal-width side groups keep the summary centred whatever sits beside it. */}
       <Box sx={{ flex: "1 1 0", display: "flex" }}>
-        <IconButton
-          onClick={onEnd}
-          aria-label={t("end")}
-          // borderRadius: the app-wide MuiIconButton override (providers.tsx) sets
-          // a rounded-square radius; force a full circle so the visible border is
-          // round rather than a rounded square.
-          sx={{
-            border: "1px solid",
-            borderColor: "divider",
-            color: "text.primary",
-            borderRadius: "50%",
-          }}
-        >
+        <IconButton onClick={onEnd} aria-label={t("end")} sx={ROUND_BUTTON_SX}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -77,7 +76,7 @@ export function NavBottomBar({
         role="status"
         aria-live="polite"
       >
-        <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.15 }}>
+        <Typography sx={{ fontSize: 24, fontWeight: 600, lineHeight: 1.2 }}>
           {formatDuration(durationRemaining, locale)}
         </Typography>
         <Typography variant="body2" color="text.secondary" noWrap>
@@ -86,17 +85,7 @@ export function NavBottomBar({
       </Box>
       <Box sx={{ flex: "1 1 0", display: "flex", justifyContent: "flex-end", gap: 1 }}>
         {onSearch && (
-          <IconButton
-            onClick={onSearch}
-            aria-label={t("searchAlongRoute")}
-            // Round with a border, matching the end button on the left.
-            sx={{
-              border: "1px solid",
-              borderColor: "divider",
-              color: "text.primary",
-              borderRadius: "50%",
-            }}
-          >
+          <IconButton onClick={onSearch} aria-label={t("searchAlongRoute")} sx={ROUND_BUTTON_SX}>
             <SearchIcon />
           </IconButton>
         )}

@@ -24,8 +24,8 @@ import { useState } from "react";
 import { ElevationProfile } from "@/components/elevation/ElevationProfile";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
 import { StepRow } from "@/components/panels/directions/StepRow";
-import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ClickableRow } from "@/components/ui/ClickableRow";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 
 /**
  * The sign-palette country for each step, where the step's maneuver sits
@@ -140,17 +140,9 @@ export function DetailsView({
         viaLabels={intermediateLabels}
         onBack={onBack}
       />
-      <AttributionStrip attributions={routeCredits} variant="panel-header" />
       <Divider />
       <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography
-          variant="h6"
-          component="span"
-          sx={{
-            fontWeight: 600,
-            color: "success.main",
-          }}
-        >
+        <Typography variant="h6" component="span" sx={{ fontSize: 22, fontWeight: 500 }}>
           {formatDuration(route.duration, locale)}{" "}
         </Typography>
         <Typography
@@ -198,20 +190,23 @@ export function DetailsView({
               {originLabel || t("origin")}
             </Typography>
           </Box>
-          {route.steps.map((step, i) => (
-            <StepRow
-              // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id
-              key={i}
-              instruction={step.instruction}
-              distance={step.distance}
-              duration={step.duration}
-              units={units}
-              lanes={step.lanes}
-              maneuver={step.maneuver}
-              sign={step.sign}
-              country={countries[i]}
-            />
-          ))}
+          {route.steps.map((step, i) =>
+            // The destination heading below says where the route ends.
+            step.maneuver?.type === "arrive" ? null : (
+              <StepRow
+                // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id
+                key={i}
+                instruction={step.instruction}
+                distance={step.distance}
+                duration={step.duration}
+                units={units}
+                lanes={step.lanes}
+                maneuver={step.maneuver}
+                sign={step.sign}
+                country={countries[i]}
+              />
+            ),
+          )}
           <Box sx={{ px: 2, py: 1.5 }}>
             <Typography
               variant="body2"
@@ -225,6 +220,7 @@ export function DetailsView({
         </>
       )}
       {route.mode !== "transit" && <ElevationProfile route={route} units={units} />}
+      <SectionAttribution attributions={routeCredits} inset />
     </Box>
   );
 }
@@ -321,20 +317,22 @@ function LegByLegView({
                   {fromLabel}
                 </Typography>
               </Box>
-              {leg.steps.map((step, j) => (
-                <StepRow
-                  // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id
-                  key={j}
-                  instruction={step.instruction}
-                  distance={step.distance}
-                  duration={step.duration}
-                  units={units}
-                  lanes={step.lanes}
-                  maneuver={step.maneuver}
-                  sign={step.sign}
-                  country={legCountries[j]}
-                />
-              ))}
+              {leg.steps.map((step, j) =>
+                step.maneuver?.type === "arrive" ? null : (
+                  <StepRow
+                    // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id
+                    key={j}
+                    instruction={step.instruction}
+                    distance={step.distance}
+                    duration={step.duration}
+                    units={units}
+                    lanes={step.lanes}
+                    maneuver={step.maneuver}
+                    sign={step.sign}
+                    country={legCountries[j]}
+                  />
+                ),
+              )}
               <Box sx={{ px: 2, py: 1 }}>
                 <Typography
                   variant="body2"

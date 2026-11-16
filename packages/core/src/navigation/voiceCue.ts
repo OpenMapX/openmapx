@@ -13,6 +13,9 @@ import type { CueTier, VoiceCue, VoiceScheduleConfig } from "./types";
  * Pure: the caller adds the returned `key` to the spoken set and localizes the
  * phrase from `tier` + `step` + `distance`.
  */
+/** Tiers from farthest to nearest. */
+const TIERS: readonly CueTier[] = ["far", "near", "now"];
+
 export function nextVoiceCue(
   step: RouteStep,
   stepIndex: number,
@@ -42,6 +45,11 @@ export function nextVoiceCue(
 
   const key = `${stepIndex}:${tier}`;
   if (spoken.includes(key)) return null;
+  // A cue never steps back: once a nearer tier was spoken for this maneuver, a
+  // jittery or re-snapped fix that reads farther away again must not announce
+  // "In 150 m, …" after "Turn now" has already played.
+  const nearer = TIERS.slice(TIERS.indexOf(tier) + 1);
+  if (nearer.some((later) => spoken.includes(`${stepIndex}:${later}`))) return null;
 
   return { key, tier, step, stepIndex, distance: distanceToManeuver };
 }

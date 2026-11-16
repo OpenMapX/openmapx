@@ -1,11 +1,11 @@
-FROM docker.io/golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b AS build-gtfsclean
+FROM docker.io/golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM docker.io/debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
+FROM docker.io/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Pin the MOTIS release we install. Override with `--build-arg MOTIS_VERSION=vX.Y.Z`.
@@ -23,20 +23,25 @@ ARG MOTIS_SHA256_ARM64=76f41df5bb4db14ccd163dad0a23dd85bebbb9f21a9736834e9b3d420
 ARG TARGETARCH
 
 # Explicitly upgrade PCRE2, Expat and Brotli inherited from the pinned base,
-# and libssl3 and openssl (3.0.22-1~deb12u2 fixes CVE-2026-84782) that curl,
-# git, Python and ca-certificates pull in, to their security fixes. The version
-# checks fail a stale mirror and, when raised, invalidate this layer in the
-# registry build cache.
-# apt and libapt-pkg6.0 2.6.2 fix CVE-2026-109518 (Debian DLA-4880-1).
+# and libssl3t64 and openssl (3.5.7-1~deb13u3 fixes CVE-2026-84782,
+# DSA-6531-1) that curl, git, Python and ca-certificates pull in, to their
+# security fixes. Expat 2.9.0-1~deb13u1 fixes CVE-2026-77214 (DSA-6566-1);
+# Brotli 1.1.0-2+deb13u1 fixes CVE-2026-111497 (DSA-6582-1). Trixie's PCRE2
+# 10.46-1~deb13u2 point release already fixes CVE-2026-86145, CVE-2026-89157
+# and CVE-2026-89161, so it needs no floor. The version checks fail a stale
+# mirror and, when raised, invalidate this layer in the registry build cache.
+# apt and libapt-pkg7.0 3.0.4 fix CVE-2026-109518 (Debian DSA-6607-1).
+# zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1 fixes CVE-2026-76844 and CVE-2026-85091.
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
-      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age apt libapt-pkg6.0 libpcre2-8-0 libexpat1 libbrotli1 libssl3 openssl \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge 2.6.2 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg6.0)" ge 2.6.2 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.0.9-2+deb12u1 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge 3.0.22-1~deb12u2 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.0.22-1~deb12u2 \
+      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age apt libapt-pkg7.0 libpcre2-8-0 libexpat1 libbrotli1 libssl3t64 openssl zlib1g \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge 3.0.4 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge 3.0.4 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.9.0-1~deb13u1 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge 3.5.7-1~deb13u3 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.5.7-1~deb13u3 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge 1:1.3.dfsg+really1.3.1-1+deb13u1 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED

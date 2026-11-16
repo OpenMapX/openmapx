@@ -7,7 +7,9 @@ import Typography from "@mui/material/Typography";
 import { formatDuration } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
+import { tripPlaceName } from "@/components/panels/directions/transitSummary";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { useTripEndLabels } from "@/lib/navigation/useTripEndLabels";
 
 /**
  * Transit arrival summary: names the destination and recaps the trip (total
@@ -24,23 +26,33 @@ export function TransitArrivalCard({
   const t = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
-  const destination = itinerary.legs[itinerary.legs.length - 1]?.to.name;
+  const labels = useTripEndLabels();
+  const last = itinerary.legs[itinerary.legs.length - 1];
+  const destination = last && tripPlaceName(last.to, labels.destination);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1.5, p: 3 }}>
-      <PlaceIcon color="primary" sx={{ fontSize: 48 }} />
-      <Typography variant="h6">{t("arrived")}</Typography>
-      {destination && (
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, textAlign: "center" }}>
-          {destination}
-        </Typography>
-      )}
-      <Typography variant="body2" color="text.secondary">
-        {formatDuration(itinerary.duration, locale)} · {fmt.time(itinerary.endTime)}
-      </Typography>
-      <Button variant="contained" onClick={onClose} sx={{ mt: 1 }}>
-        {t("done")}
-      </Button>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2, p: { xs: 2, sm: 3 } }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+        <PlaceIcon color="primary" sx={{ fontSize: 28, mt: 0.25 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" color="text.secondary">
+            {t("arrived")}
+          </Typography>
+          {destination && (
+            <Typography component="h2" sx={{ fontSize: 22, fontWeight: 500, lineHeight: 1.3 }}>
+              {destination}
+            </Typography>
+          )}
+          <Typography variant="body2" color="text.secondary">
+            {formatDuration(itinerary.duration, locale)} · {fmt.time(itinerary.endTime)}
+          </Typography>
+        </Box>
+      </Box>
+      <Box>
+        <Button variant="contained" onClick={onClose}>
+          {t("done")}
+        </Button>
+      </Box>
     </Box>
   );
 }

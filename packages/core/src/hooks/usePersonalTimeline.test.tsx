@@ -238,6 +238,8 @@ describe("personal timeline hooks", () => {
     const userADay = { version: 1, date: "2026-08-09", entries: [{ id: "private-a" }] };
     client.setQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "connection"], userAConnection);
     client.setQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"], userADay);
+    // User B's connection loads on mount; it must not show user A's while it does.
+    vi.spyOn(apiClient, "get").mockReturnValue(new Promise(() => {}) as never);
 
     const connection = renderHook(() => useTimelineConnection("user-b"), {
       wrapper: wrapperWith(client),
