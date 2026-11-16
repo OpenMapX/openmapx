@@ -474,3 +474,180 @@ describe("processFix on a route with no steps (geometry-only)", () => {
     expect(r.voiceCue).toBeNull();
   });
 });
+
+// The final manoeuvre starts the last travelling step; real engines then append
+// a 0-distance "arrive" step. The step gate commits to a step only once the
+// position is `stepGateExitMeters` past its manoeuvre, so arrival must not wait
+// for that when the final stretch is shorter, or the traveller stops on it.
+describe("processFix arrival after the final manoeuvre", () => {
+  /** East 200 m, turn left, then `finalMeters` north to the destination. */
+  function cornerRoute(northDegrees: number, finalMeters: number): Route {
+    const g: [number, number][] = [
+      [0, 0],
+      [0.0018, 0],
+      [0.0018, northDegrees],
+    ];
+    return {
+      distance: 200 + finalMeters,
+      duration: 30,
+      geometry: g,
+      legs: [],
+      mode: "driving",
+      steps: [
+        { instruction: "Head east", distance: 200, duration: 28, coordinates: [g[0], g[1]] },
+        {
+          instruction: "Turn left",
+          distance: finalMeters,
+          duration: 2,
+          coordinates: [g[1], g[2]],
+          maneuver: { type: "turn", modifier: "left" },
+        },
+        {
+          instruction: "Arrive",
+          distance: 0,
+          duration: 0,
+          coordinates: [g[2], g[2]],
+          maneuver: { type: "arrive" },
+        },
+      ],
+    } as unknown as Route;
+  }
+
+  /** Feeds the fixes in order, carrying state, and returns each fix's `arrived`. */
+  function arrivals(
+    route: Route,
+    coords: [number, number][],
+    mode: "driving" | "walking" = "driving",
+  ): boolean[] {
+    const modeOpts = navOptionsForMode(mode);
+    let state: NavTickState = emptyState;
+    return coords.map((c, i) => {
+      const r = processFix(
+        route,
+        { coords: c, accuracy: 5, speed: 0, timestampMs: i * 1000 },
+        state,
+        modeOpts,
+      );
+      state = r.nextState;
+      return r.arrived;
+    });
+  }
+
+  it("arrives on a final stretch shorter than the driving exit margin", () => {
+    // 3 m after the turn; the gate would need 5 m.
+    const route = cornerRoute(0.000027, 3);
+    expect(
+      arrivals(route, [
+        [0.00135, 0],
+        [0.0017, 0],
+        [0.00179, 0], // ~1 m before the turn: not yet
+        [0.0018, 0.000009], // 1 m past the turn
+        [0.0018, 0.000027], // at the destination
+      ]),
+    ).toEqual([false, false, false, true, true]);
+  });
+
+  it("arrives on a walking final stretch shorter than the walking exit margin", () => {
+    // 2 m after the turn; the walking gate would need 3 m.
+    const route = cornerRoute(0.000018, 2);
+    expect(
+      arrivals(
+        route,
+        [
+          [0.0017, 0],
+          [0.00179, 0],
+          [0.0018, 0.000009],
+          [0.0018, 0.000018],
+        ],
+        "walking",
+      ),
+    ).toEqual([false, false, true, true]);
+  });
+
+  it("arrives when stopped just past the final turn inside the arrival radius", () => {
+    // Destination 30 m after the turn; the traveller stops 2 m past it, 28 m
+    // from the destination (driving radius 35 m) and short of the 5 m exit.
+    const route = cornerRoute(0.00027, 30);
+    expect(
+      arrivals(route, [
+        [0.0017, 0],
+        [0.00179, 0],
+        [0.0018, 0.000018],
+        [0.0018, 0.000018],
+      ]),
+    ).toEqual([false, false, true, true]);
+  });
+
+  it("does not arrive on the approach before the final turn, even inside the radius", () => {
+    // Destination 10 m around the corner; stopped ~5.6 m before the turn,
+    // 11.45 m from the destination with 15.56 m remaining.
+    const route = cornerRoute(0.00009, 10);
+    expect(
+      arrivals(route, [
+        [0.0017, 0],
+        [0.00175, 0],
+        [0.00175, 0],
+      ]),
+    ).toEqual([false, false, false]);
+  });
+
+  it("still arrives normally on a final stretch longer than the exit margin", () => {
+    const route = cornerRoute(0.00027, 30);
+    expect(
+      arrivals(route, [
+        [0.0017, 0],
+        [0.0018, 0.00009], // 10 m past the turn, 20 m from the destination
+        [0.0018, 0.00018],
+      ]),
+    ).toEqual([false, true, true]);
+  });
+
+  it("does not arrive on an earlier leg that passes the destination", () => {
+    // Out and back: east 200 m, north 20 m, west 190 m to a destination 20 m
+    // north of the first leg.
+    const g: [number, number][] = [
+      [0, 0],
+      [0.0018, 0],
+      [0.0018, 0.00018],
+      [0.00009, 0.00018],
+    ];
+    const route = {
+      distance: 410,
+      duration: 60,
+      geometry: g,
+      legs: [],
+      mode: "driving",
+      steps: [
+        { instruction: "Head east", distance: 200, duration: 28, coordinates: [g[0], g[1]] },
+        {
+          instruction: "Turn left",
+          distance: 20,
+          duration: 4,
+          coordinates: [g[1], g[2]],
+          maneuver: { type: "turn", modifier: "left" },
+        },
+        {
+          instruction: "Turn left",
+          distance: 190,
+          duration: 28,
+          coordinates: [g[2], g[3]],
+          maneuver: { type: "turn", modifier: "left" },
+        },
+        {
+          instruction: "Arrive",
+          distance: 0,
+          duration: 0,
+          coordinates: [g[3], g[3]],
+          maneuver: { type: "arrive" },
+        },
+      ],
+    } as unknown as Route;
+    expect(
+      arrivals(route, [
+        [0, 0], // 22.4 m from the destination
+        [0.00009, 0], // 20.0 m from the destination
+        [0.0005, 0],
+      ]),
+    ).toEqual([false, false, false]);
+  });
+});

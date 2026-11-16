@@ -2,6 +2,7 @@ import type { LngLat } from "../types/geometry";
 import type { Route, RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import { eta } from "./eta";
+import { maneuverStartMeters } from "./maneuverPosition";
 import { navigationSpeed } from "./navigationSpeed";
 import { computeProgress, upcomingManeuverIndex } from "./progress";
 import { shouldReroute, updateOffRouteScore } from "./reroute";
@@ -162,24 +163,32 @@ export function processFix(
     opts.reroute,
   );
 
-  // Arrival: within the threshold of the destination AND the gate has committed
-  // to the final travel step. We key on the gate index (not the final step's
-  // distance) because real engines append a 0-distance "arrive" maneuver — using
-  // `distanceRemaining <= lastStep.distance` would collapse to `<= 0` and only
-  // fire when snapped exactly at the route end. `committedStepIndex >= lastIndex
-  // - 1` reaches true on the last travel step, so a multi-step route can't
-  // false-arrive near the start. Also require actual destination proximity:
-  // a distant off-route fix can project onto the endpoint with zero remaining
-  // distance. A step-less route has no gate to reach. Coasting can estimate
-  // progress into this range, but only a real fix can confirm arrival.
+  // Arrival: within the threshold of the destination AND at or past the final
+  // manoeuvre. Real engines append a 0-distance "arrive" maneuver, so
+  // `lastIndex - 1` is the last travel step and its start is the final
+  // manoeuvre. Keying on that position (not on the final step's distance, which
+  // would collapse to `<= 0`) keeps a fix on the approach, before the final
+  // turn, from arriving at a destination just around the corner. The gate's
+  // commitment also counts, but it alone is not enough: it waits until the
+  // position is `stepGateExitMeters` past the manoeuvre, which a final stretch
+  // shorter than that margin, or a traveller who stops just past the turn,
+  // never reaches. Also require actual destination proximity: a distant
+  // off-route fix can project onto the endpoint with zero remaining distance.
+  // A route with fewer than two steps has no final manoeuvre to pass. Coasting
+  // can estimate progress into this range, but only a real fix can confirm
+  // arrival.
   const lastIndex = route.steps.length - 1;
   const destination = route.geometry.at(-1);
+  const pastFinalManeuver =
+    lastIndex <= 0 ||
+    gate.committedStepIndex >= lastIndex - 1 ||
+    snap.alongMeters >= maneuverStartMeters(route, lastIndex - 1);
   const arrived =
     !fix.coasted &&
     destination !== undefined &&
     haversineDistance(fix.coords, destination) <= opts.arrivalThresholdMeters &&
     prog.distanceRemaining <= opts.arrivalThresholdMeters &&
-    (route.steps.length === 0 || gate.committedStepIndex >= lastIndex - 1);
+    pastFinalManeuver;
 
   // Announce the UPCOMING maneuver (at the end of the current step), not the one
   // already performed at the start of it. distanceToNextManeuver counts down to
