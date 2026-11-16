@@ -1,31 +1,8 @@
-import type { CacheClient } from "@openmapx/mobility-core/cache";
 import { afterEach, expect, it, vi } from "vitest";
 import { searchCityBikes } from "../providers/citybikes-client.js";
 import { searchNextbike } from "../providers/nextbike-client.js";
+import { memoryCache } from "./fixtures.js";
 
-function memoryCache(): CacheClient {
-  const values = new Map<string, unknown>();
-  return {
-    get: async <T>(key: string) => (values.get(key) as T) ?? null,
-    set: async (key, value) => {
-      values.set(key, structuredClone(value));
-    },
-    del: async (key) => {
-      values.delete(key);
-    },
-    withCache: async function <T>(
-      key: string,
-      _ttl: number,
-      load: (signal: AbortSignal) => Promise<T>,
-    ) {
-      const previous = await this.get<T>(key);
-      if (previous !== null) return previous;
-      const data = await load(new AbortController().signal);
-      await this.set(key, data);
-      return data;
-    },
-  };
-}
 const bbox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
 afterEach(() => vi.unstubAllGlobals());
 
