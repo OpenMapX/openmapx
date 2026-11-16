@@ -25,6 +25,21 @@ export interface CurlAtomicResult {
 }
 
 /**
+ * Abort a transfer whose connection cannot be set up within 30 s, or whose
+ * average speed stays below 1 KiB/s for 5 minutes (curl exit 28). No overall
+ * --max-time: planet downloads legitimately take hours and the execution
+ * deadline bounds total time.
+ */
+export const CURL_STALL_ARGS = [
+  "--connect-timeout",
+  "30",
+  "--speed-limit",
+  "1024",
+  "--speed-time",
+  "300",
+] as const;
+
+/**
  * Download `url` to `targetPath` atomically: streams to a sibling `.tmp.<rand>`
  * file, then renames into place on success. On failure (curl non-zero exit,
  * abort, etc.) the temp file is unlinked, so consumers never see a partial
@@ -67,7 +82,7 @@ export async function curlAtomicWithResult(
   // matching the file's mtime; combined with `-f --fail-with-body` curl exits
   // 0 with no output on 304. Best-effort: any HEAD/GET failure falls through
   // to a normal full download below.
-  const args = ["-fSL", "-o", tmpPath];
+  const args = ["-fSL", ...CURL_STALL_ARGS, "-o", tmpPath];
   if (existsSync(targetPath)) {
     args.push("-z", targetPath);
   }
