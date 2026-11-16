@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -57,19 +58,61 @@ describe("install smoke workflow", () => {
     }
   });
 
-  it("cancels superseded pull-request runs but never a run on main", () => {
-    expect(workflow.concurrency["cancel-in-progress"]).toBe(
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, not a JS template
-      "${{ github.event_name == 'pull_request' }}",
-    );
-    expect(workflow.concurrency.group).toContain("github.event.pull_request.number");
-    expect(workflow.concurrency.group).toContain("github.run_id");
-  });
-
   it("runs the checked-in script", () => {
     const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
     expect(steps.some((step) => step.run === "bash scripts/ci/install-smoke.sh")).toBe(true);
     expect(statSync(resolve(root, "scripts/ci/install-smoke.sh")).mode & 0o111).not.toBe(0);
+  });
+});
+
+describe.each(["install-smoke", "update-smoke"])("%s concurrency", (name) => {
+  const { concurrency } = parse(
+    readFileSync(resolve(root, `.github/workflows/${name}.yml`), "utf8"),
+  ) as { concurrency: { group: string; "cancel-in-progress": string } };
+  const run = (event_name: string, run_id: number, extra: Record<string, unknown> = {}) => ({
+    github: {
+      workflow: name,
+      ref: "refs/heads/main",
+      run_id,
+      run_attempt: 1,
+      event_name,
+      event: {},
+      ...extra,
+    },
+    format: (pattern: string, ...values: unknown[]) =>
+      pattern.replace(/\{(\d+)\}/g, (_, n) => String(values[Number(n)])),
+  });
+  const evaluate = (value: string, context: unknown) =>
+    value.replace(/\$\{\{(.*?)\}\}/g, (_, expression) =>
+      String(runInNewContext(expression, context as object)),
+    );
+  const group = (context: unknown) => evaluate(concurrency.group, context);
+
+  it("cancels only superseded pull-request runs", () => {
+    expect(concurrency["cancel-in-progress"]).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, not a JS template
+      "${{ github.event_name == 'pull_request' }}",
+    );
+    const pr = (run_id: number, number: number) =>
+      run("pull_request", run_id, {
+        ref: `refs/pull/${number}/merge`,
+        event: { pull_request: { number } },
+      });
+    expect(group(pr(1, 7))).toBe(group(pr(2, 7)));
+    expect(group(pr(1, 7))).not.toBe(group(pr(2, 8)));
+  });
+
+  it("lets a newer main push replace only the pending main run", () => {
+    expect(group(run("push", 1))).toBe(group(run("push", 2)));
+    expect(group(run("push", 1))).not.toBe(group(run("push", 2, { run_attempt: 2 })));
+  });
+
+  it("keeps nightly and manual runs out of the shared main group", () => {
+    const main = group(run("push", 1));
+    for (const event of ["schedule", "workflow_dispatch"]) {
+      expect(group(run(event, 2))).not.toBe(main);
+      expect(group(run(event, 2))).not.toBe(group(run(event, 3)));
+    }
   });
 });
 
