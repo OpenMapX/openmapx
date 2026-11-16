@@ -464,7 +464,10 @@ deployment's trusted web origins (`CORS_ORIGIN`); there is no separate mobile
 origin setting. A native client can forge
 `Origin`, so this check keeps browsers on other sites out; it does not
 authenticate the app. An intercepted code cannot be redeemed without its
-verifier; concurrent redemptions cannot both succeed.
+verifier; concurrent redemptions cannot both succeed. Better Auth's
+`/one-time-token/generate` endpoint refuses browser requests, so only `issue`
+mints a one-time token, after its origin check and bound to the PKCE handoff.
+`issue` also refuses an administrator impersonation session.
 
 The page receives the code, state and verifier through the bounded result,
 exchanges them for a Better Auth one-time token, then verifies that token to set

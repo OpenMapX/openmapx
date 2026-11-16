@@ -566,6 +566,23 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
     ).toMatchObject({ email: targetEmail });
   });
 
+  it("mints one-time tokens only from server calls", async () => {
+    const { cookie } = await verifiedUser("one-time-token@example.test");
+
+    const direct = await request("/api/auth/one-time-token/generate", undefined, cookie);
+    expect(direct.statusCode, direct.body).toBe(400);
+    expect(direct.json()).toMatchObject({ message: "Client requests are disabled" });
+
+    const generated = await auth.api.generateOneTimeToken({ headers: new Headers({ cookie }) });
+    expect(typeof generated.token).toBe("string");
+
+    const verified = await request("/api/auth/one-time-token/verify", { token: generated.token });
+    expect(verified.statusCode, verified.body).toBe(200);
+    expect(
+      verified.cookies.some((entry) => entry.name.includes("session_token") && entry.value),
+    ).toBe(true);
+  });
+
   it("refuses reserved .invalid addresses at sign-up without revealing existing placeholders", async () => {
     // Fixture input: the account an OpenStreetMap sign-in would already own.
     await fixture.db.insert(user).values({

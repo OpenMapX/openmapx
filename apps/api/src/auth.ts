@@ -395,8 +395,10 @@ function createPolicyAuth(
       // becomes a session in the WebView. Two minutes and single-use because the
       // token is in flight from the handoff exchange to the WebView, and the only
       // legitimate holder redeems it immediately. Stored hashed so a database
-      // read never yields a usable token.
-      oneTimeToken({ expiresIn: 2, storeToken: "hashed" }),
+      // read never yields a usable token. Browsers cannot call the generate
+      // endpoint: only `/mobile-auth/issue` mints a token, server-side, after
+      // its origin check and with the token bound to a PKCE handoff.
+      oneTimeToken({ expiresIn: 2, storeToken: "hashed", disableClientRequest: true }),
       emailHarmony({ allowNormalizedSignin: true }),
       passkey({
         rpID: envString("PASSKEY_RP_ID", "localhost"),

@@ -8,9 +8,14 @@ const SECOND_WEB_ORIGIN = "https://maps.openmapx.test";
 
 /** What the mocked Better Auth returns for this request. */
 const authState: {
-  session: { user: { id: string } } | null;
+  session: { user: { id: string }; session: { impersonatedBy: string | null } } | null;
   token: string | null;
-} = { session: { user: { id: "user-A" } }, token: "ott-value" };
+  generated: number;
+} = {
+  session: { user: { id: "user-A" }, session: { impersonatedBy: null } },
+  token: "ott-value",
+  generated: 0,
+};
 
 /** What the mocked handoff service returns, and what it was asked. */
 const handoff: {
@@ -24,8 +29,10 @@ vi.mock("../auth.js", () => ({
   auth: {
     api: {
       getSession: async () => authState.session,
-      generateOneTimeToken: async () =>
-        authState.token === null ? null : { token: authState.token },
+      generateOneTimeToken: async () => {
+        authState.generated += 1;
+        return authState.token === null ? null : { token: authState.token };
+      },
     },
   },
 }));
@@ -65,8 +72,9 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  authState.session = { user: { id: "user-A" } };
+  authState.session = { user: { id: "user-A" }, session: { impersonatedBy: null } };
   authState.token = "ott-value";
+  authState.generated = 0;
   handoff.issue = { ok: true, callbackCode: "code-value", expiresAtMs: 1_700_000_120_000 };
   handoff.exchange = { ok: true, oneTimeToken: "ott-value" };
   handoff.issued = [];
@@ -151,6 +159,18 @@ describe("POST /mobile-auth/issue", () => {
 
     expect(response.statusCode).toBe(401);
     expectMobilePrivacy(response);
+    expect(handoff.issued).toEqual([]);
+  });
+
+  it("refuses an administrator impersonation session before minting a token", async () => {
+    authState.session = { user: { id: "user-A" }, session: { impersonatedBy: "admin-1" } };
+
+    const response = await issue(validIssue);
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "invalid_request" });
+    expectMobilePrivacy(response);
+    expect(authState.generated).toBe(0);
     expect(handoff.issued).toEqual([]);
   });
 
