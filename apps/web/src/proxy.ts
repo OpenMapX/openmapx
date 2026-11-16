@@ -34,8 +34,23 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
+/**
+ * Every exclusion below names a real static location, anchored so that a page
+ * route which merely shares a prefix (`/apikeys`) or ends in a file extension
+ * (`/s/<token>.png`, a not-found `/x.png`) still gets the policy. Nothing is
+ * excluded by extension alone: a new page route is covered unless someone adds
+ * it here on purpose.
+ *
+ * - `_next/`, `api/`: framework assets and the backend.
+ * - `favicon.ico`, `sw.js`: exact files. The service worker must stay out,
+ *   because a CSP header on a worker script applies to the worker itself.
+ * - `icons/`, `fonts/`, `styles/`, `attribution/`: `public/` asset folders.
+ *
+ * Other `public/` files (the root SVG logos, `runtime/`) still pass through
+ * here; a policy header on an image, font or JSON response is inert.
+ */
 export const config = {
   matcher: [
-    "/((?!_next|api|favicon.ico|icons|sw\\.js|manifest\\.json|.*\\.png$|.*\\.jpg$|.*\\.svg$|.*\\.webp$|.*\\.ico$|.*\\.woff2?$|.*\\.ttf$|.*\\.otf$).*)",
+    "/((?!(?:_next|api)(?:/|$)|(?:favicon\\.ico|sw\\.js)$|(?:icons|fonts|styles|attribution)/).*)",
   ],
 };
