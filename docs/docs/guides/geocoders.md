@@ -129,6 +129,12 @@ running service; with no service, it falls back to Komoot's public instance.
 Nominatim bundles its own PostgreSQL and imports an OpenStreetMap extract on
 first start. There is no separate CLI build command.
 
+That database has its own password, `NOMINATIM_DB_PASSWORD`. Set it in
+`infra/docker/.env` before the first render; Nominatim does not render without
+it. Generate it with `openssl rand -hex 32` and keep it different from
+`POSTGRES_PASSWORD`. The image applies it when it first imports its database,
+so changing it later takes effect only with a new import.
+
 Nominatim _consumes_ an `osm-pbf`, so download the
 extract and link it into place before starting:
 

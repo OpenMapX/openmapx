@@ -45,7 +45,9 @@ an image or rely on emulation without reviewing volume compatibility.
 `POSTGRES_PASSWORD` is the PostgreSQL superuser's password. Only PostGIS
 administration and the CLI's backups and restores use it; `app-api` and
 `data-manager` connect as their own roles, whose passwords the render generates
-(see [Database roles](../install/configuration.md#database-roles)).
+(see [Database roles](../install/configuration.md#database-roles)). No other
+service receives it: Nominatim's bundled database has its own
+`NOMINATIM_DB_PASSWORD` (see [Nominatim](geocoders.md#nominatim)).
 
 Set a unique `POSTGRES_PASSWORD` in `infra/docker/.env` before the first render.
 Generate one with `openssl rand -hex 32`; production rejects known placeholders,

@@ -99,7 +99,8 @@ the roles from them on every start, before it reports healthy; `app-api` and
 `data-manager` each mount only their own file and receive its path as
 `DATABASE_PASSWORD_FILE`. The PostgreSQL superuser keeps `POSTGRES_PASSWORD`
 from `.env` and is used only by PostGIS administration and the CLI's backups
-and restores.
+and restores. Nominatim's bundled database has its own `NOMINATIM_DB_PASSWORD`
+in `.env`.
 
 To change a password, stop `app-api` and `data-manager`, delete the file, run
 `pnpm openmapx compose render`, then restart `postgis` followed by `app-api`

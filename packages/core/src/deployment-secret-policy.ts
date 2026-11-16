@@ -49,10 +49,10 @@ export function deploymentSecretIssue(
 }
 
 export class DeploymentSecretPolicyError extends Error {
-  readonly issue: DeploymentSecretIssue | "invalid-database-url";
+  readonly issue: DeploymentSecretIssue | "invalid-database-url" | "matches-superuser-password";
 
   constructor(
-    issue: DeploymentSecretIssue | "invalid-database-url",
+    issue: DeploymentSecretIssue | "invalid-database-url" | "matches-superuser-password",
     options: {
       credentialName?: string;
       minLength?: number;
