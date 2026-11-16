@@ -7,14 +7,27 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, proxyImageUrl } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useRef, useState } from "react";
+import { type ComponentProps, type ComponentType, lazy, Suspense, useRef, useState } from "react";
 import { useHydrated } from "@/lib/useHydrated";
+import { useOpenedOnce } from "@/lib/useOpenedOnce";
 import { useSettledSessionAuthority } from "@/providers/SessionAuthorityBoundary";
 import { useAccountSettingsStore } from "@/stores/accountSettingsStore";
 import { AccountMenu } from "./AccountMenu";
-import { AccountSettingsDialog } from "./AccountSettingsDialog";
+import type { AccountSettingsDialog as AccountSettingsDialogComponent } from "./AccountSettingsDialog";
 import { AuthDialog } from "./AuthDialog";
 import { ResetPasswordDialog } from "./ResetPasswordDialog";
+
+// The account dialog (privacy, timeline, Mangrove sections and the 2FA QR
+// encoder) loads on its first opening from any opener of the shared store.
+// A failed chunk renders nothing rather than replacing the map with an error.
+const AccountSettingsDialog = lazy<
+  ComponentType<ComponentProps<typeof AccountSettingsDialogComponent>>
+>(() =>
+  import("./AccountSettingsDialog").then(
+    (m) => ({ default: m.AccountSettingsDialog }),
+    () => ({ default: () => null }),
+  ),
+);
 
 interface Props {
   /** Visual size of the avatar button. */
@@ -45,6 +58,7 @@ export function AccountAvatarButton({
   const [authOpen, setAuthOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const settingsOpen = useAccountSettingsStore((state) => state.open);
+  const settingsLoaded = useOpenedOnce(settingsOpen);
   const settingsSection = useAccountSettingsStore((state) => state.section);
   const showSettings = useAccountSettingsStore((state) => state.show);
   const closeSettings = useAccountSettingsStore((state) => state.close);
@@ -128,14 +142,16 @@ export function AccountAvatarButton({
         />
       )}
 
-      {user && (
-        <AccountSettingsDialog
-          key={`settings:${authorityKey}`}
-          open={settingsOpen}
-          onClose={closeSettings}
-          user={user}
-          initialSection={settingsSection}
-        />
+      {user && settingsLoaded && (
+        <Suspense fallback={null}>
+          <AccountSettingsDialog
+            key={`settings:${authorityKey}`}
+            open={settingsOpen}
+            onClose={closeSettings}
+            user={user}
+            initialSection={settingsSection}
+          />
+        </Suspense>
       )}
     </>
   );
