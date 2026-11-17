@@ -84,6 +84,7 @@ import {
   completedCoordinatorMaintenance,
   completedCoordinatorMaintenanceSchema,
   maintenanceSettleCheckpointSchema,
+  settledRecordOf,
 } from "./configuration-maintenance-checkpoint";
 import type { MigrationResult } from "./configuration-migration/apply";
 import { migrationCompletionResult } from "./configuration-migration/completion";
@@ -872,11 +873,7 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
       settle = maintenanceSettleCheckpointSchema.parse(result?._configurationMaintenanceSettle),
       projection = readProjection(protocol, result),
-      delivered = projection.operations[settle.operationKey]?.receiptDelivery,
-      canonical =
-        delivered?.terminalReceipt.state === "succeeded"
-          ? maintenanceRecordSchema.parse(delivered.terminalReceipt.result)
-          : null;
+      canonical = settledRecordOf(projection.operations[settle.operationKey]);
     if (
       !result ||
       retained?.candidateId !== candidate.candidateId ||
@@ -891,7 +888,6 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       retained.rowVersions !== undefined ||
       remote?.phase !== "settled" ||
       settle.outcome !== "abandon" ||
-      !delivered ||
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.record) ||
       canonicalJson(closed) !== canonicalJson(canonical) ||
@@ -952,11 +948,7 @@ async function completeUnusedConfigurationCancellation(
       remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
       settle = maintenanceSettleCheckpointSchema.parse(result?._configurationMaintenanceSettle),
       projection = readProjection(protocol, result),
-      delivered = projection.operations[settle.operationKey]?.receiptDelivery,
-      canonical =
-        delivered?.terminalReceipt.state === "succeeded"
-          ? maintenanceRecordSchema.parse(delivered.terminalReceipt.result)
-          : null;
+      canonical = settledRecordOf(projection.operations[settle.operationKey]);
     if (
       !result ||
       !cancelRequestedAt(protocol) ||
@@ -970,7 +962,6 @@ async function completeUnusedConfigurationCancellation(
       retained.rowVersions !== undefined ||
       remote?.phase !== "settled" ||
       settle.outcome !== "abandon" ||
-      !delivered ||
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.record) ||
       canonicalJson(closed) !== canonicalJson(canonical) ||
@@ -1079,11 +1070,12 @@ export async function assertSettledConfigurationCandidate(
     const remote = result._configurationMaintenance as Record<string, unknown> | undefined,
       settled = maintenanceRecordSchema.parse(remote?.record),
       projection = readProjection(protocol, result),
-      delivered =
+      delivered = settledRecordOf(
         projection.operations[
           maintenanceSettleCheckpointSchema.parse(result._configurationMaintenanceSettle)
             .operationKey
-        ];
+        ],
+      );
     if (
       remote?.phase !== "settled" ||
       settled.state !== "settled" ||
@@ -1094,9 +1086,7 @@ export async function assertSettledConfigurationCandidate(
         : settled.generation !== "committed" ||
           settled.appliedRevisionId !== candidate.revisionId ||
           settled.followUp !== "complete") ||
-      !delivered?.receiptDelivery ||
-      delivered.receiptDelivery.terminalReceipt.state !== "succeeded" ||
-      canonicalJson(delivered.receiptDelivery.terminalReceipt.result) !== canonicalJson(settled)
+      canonicalJson(delivered) !== canonicalJson(settled)
     )
       throw Error("Original delivered maintenance completion required");
   }

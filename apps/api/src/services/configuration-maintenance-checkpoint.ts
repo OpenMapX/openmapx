@@ -5,6 +5,14 @@ import { z } from "zod";
 
 const key = z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/);
 
+/** The record a terminal settle operation returned, as the job's projection kept it. */
+export function settledRecordOf(
+  entry: { terminal?: boolean; phase?: string; errorClass?: string; result?: unknown } | undefined,
+) {
+  if (!entry?.terminal || entry.phase !== "terminal" || entry.errorClass) return null;
+  return maintenanceRecordSchema.parse(entry.result);
+}
+
 /** The settle request that settled the maintenance. */
 export const maintenanceSettleCheckpointSchema = z.strictObject({
   operationKey: key,
@@ -45,8 +53,9 @@ export function completedCoordinatorMaintenance(
             {
               terminal?: boolean;
               phase?: string;
-              operation?: { kind?: string; maintenanceId?: string; outcome?: string };
-              receiptDelivery?: { terminalReceipt?: { state?: string; result?: unknown } };
+              errorClass?: string;
+              result?: unknown;
+              operation?: { kind?: string; maintenanceId?: string };
             }
           >
         | undefined
@@ -60,12 +69,9 @@ export function completedCoordinatorMaintenance(
     record.binding.candidateId !== archived.candidate.candidateId ||
     record.maintenanceId !== archived.candidate.maintenanceId ||
     record.prepare.operationKey !== archived.candidate.prepareOperationKey ||
-    !settle?.terminal ||
-    settle.phase !== "terminal" ||
-    settle.operation?.kind !== "configurationMaintenance.settle" ||
+    settle?.operation?.kind !== "configurationMaintenance.settle" ||
     settle.operation.maintenanceId !== record.maintenanceId ||
-    settle.receiptDelivery?.terminalReceipt?.state !== "succeeded" ||
-    canonicalJson(settle.receiptDelivery.terminalReceipt.result) !== canonicalJson(record)
+    canonicalJson(settledRecordOf(settle)) !== canonicalJson(record)
   )
     throw Error("Original completed coordinator maintenance required");
   return archived;
