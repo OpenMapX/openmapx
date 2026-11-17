@@ -179,8 +179,12 @@ describe("production core restart workflow", () => {
           signal: controller.signal,
           log: vi.fn(async () => {}),
           setProgress: vi.fn(async () => {}),
-          checkpoint: async (value) => {
+          protocol: {},
+          // The job's agent operations are kept in its protocol, beside the result.
+          checkpoint: async (value, _progress, _key, _address, operations) => {
             ctx.checkpointResult = structuredClone(value);
+            if (operations)
+              ctx.protocol = { ...ctx.protocol, operations: structuredClone(operations) };
           },
         };
         const first = runCoreServiceMaintenance(ctx).then(
@@ -197,8 +201,11 @@ describe("production core restart workflow", () => {
           signal: new AbortController().signal,
           observationOnly: true,
           checkpointResult: structuredClone(ctx.checkpointResult),
-          checkpoint: async (value) => {
+          protocol: structuredClone(ctx.protocol),
+          checkpoint: async (value, _progress, _key, _address, operations) => {
             restored.checkpointResult = structuredClone(value);
+            if (operations)
+              restored.protocol = { ...restored.protocol, operations: structuredClone(operations) };
           },
         };
         release();
