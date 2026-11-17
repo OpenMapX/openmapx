@@ -15,8 +15,7 @@ import {
   inspectArtifactDelegation,
   inspectConfigurationPreEffectRefusal,
   issueControlChildPhase,
-  type LeaseStore,
-  localLeaseBackend,
+  localLeases,
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
   releaseArtifactTargetLease,
@@ -53,10 +52,12 @@ import {
 import {
   childSettlementState,
   inspectConfigurationGenerationNonCommit,
+  installationState,
 } from "../../../packages/core/src/build-artifacts/control-authority";
 import type { ControlChildReservation } from "../../../packages/core/src/build-artifacts/control-child-records";
 import { readConfigurationCandidate } from "./configuration-candidate-source";
 import {
+  CONFIGURATION_HANDOFF_LABEL,
   configurationHandoffRunArgs,
   inspectConfigurationHandoffPrerequisite,
 } from "./configuration-handoff";
@@ -80,7 +81,6 @@ import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "
 export interface MaintenanceRuntimeDeps {
   runtime: OpsRuntime;
   installation: ControlInstallation;
-  store: LeaseStore;
   journal: Pick<OpsJobJournal, "records">;
   /** Claims and dispatches one step operation under its own child execution. */
   runStepOperation(
@@ -140,8 +140,13 @@ async function retryDataManager<T>(
 const settlementDigest = (value: unknown) => controlDigest(value);
 
 export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
-  const { installation, store } = deps;
-  const leases = localLeaseBackend(store);
+  const { installation } = deps;
+  /** The installation's own lease store, which the kernel's lease handles use too. */
+  const leaseBackend = () => {
+    const local = localLeases(installationState(installation).leases);
+    if (!local) throw Error("Configuration maintenance runs in the agent");
+    return local;
+  };
   /** The lease handle of each preparation while its operation runs. */
   const preparing = new Map<string, ArtifactTargetLease>();
   const root = (file: MaintenanceFile): VerifiedExecutionAuthority =>
@@ -462,7 +467,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       const keys = handoffKeys(file);
       const stepExecution = reservedExecution(reservation, file.plan.prepare.deadlineAt);
       // Both children are recorded before the container exists.
-      await leases.delegate({
+      await leaseBackend().delegate({
         leaseId: file.record.leaseId,
         child: {
           key: keys.step,
@@ -475,7 +480,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           targets: [...reservation.serviceIds],
         },
       });
-      await leases.delegate({
+      await leaseBackend().delegate({
         leaseId: file.record.leaseId,
         child: {
           key: keys.helper,
@@ -516,7 +521,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           "-a",
           "--no-trunc",
           "--filter",
-          `label=openmapx.configuration-handoff=${handoffId}`,
+          `label=${CONFIGURATION_HANDOFF_LABEL}=${handoffId}`,
           "--format",
           "{{.ID}}",
         ],
@@ -550,7 +555,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
     async settleHandoff(file, outcome) {
       if (outcome === "unknown") return;
       const keys = handoffKeys(file);
-      const lease = leases.readSync(file.record.leaseId);
+      const lease = leaseBackend().readSync(file.record.leaseId);
       const helper = lease?.children.find((child) => child.key === keys.helper);
       const step = lease?.children.find((child) => child.key === keys.step);
       // A helper settles its own child; one that never started, or exited
@@ -558,7 +563,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       if (helper && helper.state !== "settled") {
         if (helper.adopted && outcome === "failed_without_effect")
           throw Error("A started configuration helper cannot be without effect");
-        await leases.settle({
+        await leaseBackend().settle({
           leaseId: file.record.leaseId,
           key: helper.key,
           settlement: {
@@ -574,7 +579,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         });
       }
       if (step && step.state !== "settled")
-        await leases.settle({
+        await leaseBackend().settle({
           leaseId: file.record.leaseId,
           key: step.key,
           settlement: {
@@ -590,11 +595,12 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         });
     },
     async cancelLease(file) {
-      const lease = leases.readSync(file.record.leaseId);
+      const lease = leaseBackend().readSync(file.record.leaseId);
       if (!lease) return;
-      await leases.cancel({ leaseId: lease.leaseId, key: null });
+      await leaseBackend().cancel({ leaseId: lease.leaseId, key: null });
       for (const child of lease.children)
-        if (child.state === "held") await leases.cancel({ leaseId: lease.leaseId, key: child.key });
+        if (child.state === "held")
+          await leaseBackend().cancel({ leaseId: lease.leaseId, key: child.key });
     },
     async releaseLease(file) {
       const authority = root(file);
@@ -612,7 +618,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           },
         });
       }
-      if (!leases.readSync(file.record.leaseId)) return;
+      if (!leaseBackend().readSync(file.record.leaseId)) return;
       const lease = restoreArtifactTargetLeaseForSettlement(authority);
       try {
         await settleArtifactTargetLeaseChild(

@@ -137,7 +137,7 @@ export async function inspectAgentContainer(
 
 /** Only original inherited environment values participate in the private source
  * copy. Container identity and fixed helper transport necessarily differ. */
-export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts): string[] {
+function configurationHandoffEnvironmentNames(facts: AgentContainerFacts): string[] {
   return z
     .array(
       z

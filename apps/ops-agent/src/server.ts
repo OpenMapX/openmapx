@@ -522,55 +522,52 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     options.resourceClaimer ?? createPolicyResourceClaimer(options.resourcePolicy ?? {});
   /** The configuration maintenance runs its steps through the same claim and
    * dispatch as any operation, each under its own lease child. */
-  const maintenanceRuntime: MaintenanceRuntime | undefined =
-    options.controlInstallation && options.leaseStore
-      ? createMaintenanceRuntime({
-          runtime,
-          installation: options.controlInstallation,
-          store: options.leaseStore,
-          journal,
-          ...(options.now ? { now: options.now } : {}),
-          otherActiveOperations: () =>
-            [...jobsById.values()].filter(
-              (job) =>
-                job.operation.kind !== "configurationMaintenance.apply" &&
-                configurationHandoffBlocksReplacement(job.operation.kind, job.state),
-            ).length + (options.artifactTransfers?.activeStreams ?? 0),
-          async runStepOperation(operation, context, payload) {
-            const fingerprint = opsOperationFingerprint(operation);
-            const claimed = await resourceClaimer.claim(operation, fingerprint, context.signal, {
-              role: "api",
-              operationKey: context.execution.operationKey,
-              maintenanceStep:
-                operation.kind === "service.recreate" ||
-                operation.kind === "service.recreateIsolated"
-                  ? {
-                      inspectServices: (signal) =>
-                        assertOwnedMaintenanceRecreateRuntime(runtime, operation, {
-                          ...context,
-                          signal,
-                        }),
-                    }
-                  : {},
-            });
-            if (!claimed || claimed.fingerprint !== fingerprint)
-              throw new OpsContractError("authorization", "Operation resource is not permitted");
-            const claim = immutableSnapshot({
-              fingerprint: claimed.fingerprint,
-              operation: claimed.operation,
-              source: claimed.source,
-              capability: payload
-                ? { ...claimed.capability, trustedConfiguration: payload }
-                : claimed.capability,
-            });
-            beginControlEffect(context.controlAuthority!);
-            return parseBoundedOpsResult(
-              operation.kind,
-              await dispatch(operation, runtime, { ...context, claim }),
-            );
-          },
-        })
-      : undefined;
+  const maintenanceRuntime: MaintenanceRuntime | undefined = options.controlInstallation
+    ? createMaintenanceRuntime({
+        runtime,
+        installation: options.controlInstallation,
+        journal,
+        ...(options.now ? { now: options.now } : {}),
+        otherActiveOperations: () =>
+          [...jobsById.values()].filter(
+            (job) =>
+              job.operation.kind !== "configurationMaintenance.apply" &&
+              configurationHandoffBlocksReplacement(job.operation.kind, job.state),
+          ).length + (options.artifactTransfers?.activeStreams ?? 0),
+        async runStepOperation(operation, context, payload) {
+          const fingerprint = opsOperationFingerprint(operation);
+          const claimed = await resourceClaimer.claim(operation, fingerprint, context.signal, {
+            role: "api",
+            operationKey: context.execution.operationKey,
+            maintenanceStep:
+              operation.kind === "service.recreate" || operation.kind === "service.recreateIsolated"
+                ? {
+                    inspectServices: (signal) =>
+                      assertOwnedMaintenanceRecreateRuntime(runtime, operation, {
+                        ...context,
+                        signal,
+                      }),
+                  }
+                : {},
+          });
+          if (!claimed || claimed.fingerprint !== fingerprint)
+            throw new OpsContractError("authorization", "Operation resource is not permitted");
+          const claim = immutableSnapshot({
+            fingerprint: claimed.fingerprint,
+            operation: claimed.operation,
+            source: claimed.source,
+            capability: payload
+              ? { ...claimed.capability, trustedConfiguration: payload }
+              : claimed.capability,
+          });
+          beginControlEffect(context.controlAuthority!);
+          return parseBoundedOpsResult(
+            operation.kind,
+            await dispatch(operation, runtime, { ...context, claim }),
+          );
+        },
+      })
+    : undefined;
   /** Maintenance kinds run in the maintenance runtime; everything else in the runtime. */
   const dispatchJob = (job: JobRecord, context: OpsExecutionContext) => {
     const operation = job.operation;

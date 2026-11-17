@@ -189,7 +189,7 @@ export function readPreparedMaintenanceRelease(
 /** The maintenance a borrowed step child belongs to, with the step it runs. The
  * step must be the one the record attempted, so only the running maintenance's
  * own step passes. */
-export function maintenanceStepOf(
+function maintenanceStepOf(
   context: Pick<OpsExecutionContext, "controlAuthority" | "artifactLease">,
   operation: { maintenanceId?: string | undefined },
 ) {
@@ -252,7 +252,7 @@ export async function assertOwnedMaintenanceRecreateRuntime(
 }
 /** Read-only eligibility from the actual MAC packet and closed existing
  * producer. It grants no generation child, decision or publication authority. */
-export async function assertPlannedCoordinatorConfigurationWrite(
+async function assertPlannedCoordinatorConfigurationWrite(
   runtime: OpsRuntime,
   operation: Extract<OpsOperation, { kind: "configuration.hardlinks.preview" }>,
 ) {
@@ -370,7 +370,7 @@ export async function assertPlannedCoordinatorConfigurationWrite(
   }
 }
 /** Actual publication is stricter than the read-only planned eligibility. */
-export async function assertOwnedCoordinatorConfigurationWrite(
+async function assertOwnedCoordinatorConfigurationWrite(
   runtime: OpsRuntime,
   context: OpsExecutionContext,
   operation: Extract<OpsOperation, { kind: "stack.render" | "vault.apply" }>,
