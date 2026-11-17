@@ -8,7 +8,7 @@ import { db } from "../db";
 import { adminJob, user } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
-import { executeAdminJobOperation } from "./admin-job-ops";
+import { executeAdminJobOperation, readProjection } from "./admin-job-ops";
 import { jobOwnership } from "./admin-job-state";
 import {
   withAdministrativeConfigurationJob,
@@ -55,13 +55,22 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
     throw new JobObservationPending("invalid_identity");
   const actorId = job.createdBy,
     operationKey = createDurableOpsKey("admin-job.guarded-release", ctx.jobId),
-    // Rows not yet saved: the forward path below runs again and continues
-    // with the candidate it prepared before the restart.
-    candidate = ctx.checkpointResult?._configurationCandidate as { phase?: unknown } | undefined,
-    retained =
-      candidate && !["prepared", "save_attempted"].includes(String(candidate.phase))
-        ? candidate
-        : undefined;
+    candidate = ctx.checkpointResult?._configurationCandidate as
+      | { phase?: unknown; prepareOperationKey?: unknown }
+      | undefined,
+    preparation =
+      typeof candidate?.prepareOperationKey === "string"
+        ? readProjection(ctx.checkpointResult).operations[candidate.prepareOperationKey]
+        : undefined,
+    // Rows not yet saved, not cancelled and the maintenance preparation not
+    // failed: the forward path below runs again and continues with the
+    // candidate it prepared before the restart. Otherwise the retained
+    // candidate's own recovery finishes or cleans it up.
+    continued =
+      ["prepared", "save_attempted"].includes(String(candidate?.phase)) &&
+      ctx.checkpointResult?._cancelRequestedAt === undefined &&
+      !(preparation?.terminal && preparation.errorClass),
+    retained = candidate && !continued ? candidate : undefined;
   let fixed =
     ctx.checkpointResult?._systemRelease === undefined
       ? undefined
