@@ -15,6 +15,7 @@ import {
   controlTerminalReceiptDigest,
   coordinatorPullSubmissionSchema,
   createControlRootOperationKey,
+  isTrustedConfigurationApplyOperation,
   type OpsJobStatus,
   type OpsOperation,
   type OpsOperationKind,
@@ -589,6 +590,13 @@ async function observeOperation(
     mirrorController.abort();
     await mirror;
     if (ownershipLost) throw ownershipLost;
+    if (
+      !observed.ok &&
+      observed.error instanceof OpsObservationPending &&
+      terminalStatus?.errorClass === "recovery_required" &&
+      endsWithRecoveryRequired(context, projected)
+    )
+      throw new ApiOpsError("recovery_required", terminalStatus.failureResult);
     if (!observed.ok) throw observed.error;
     const result = observed.result;
     projected.result = result;
@@ -638,7 +646,9 @@ async function observeOperation(
       context.checkpointResult = {
         ...context.checkpointResult,
         ...error.failureResult,
-        ...(error.errorClass === "host_update_required" ? { errorCode: error.errorClass } : {}),
+        ...(error.errorClass === "host_update_required" || error.errorClass === "recovery_required"
+          ? { errorCode: error.errorClass }
+          : {}),
       };
       await checkpointTerminalCopy(context, projection, projected, terminalStatus);
     } else if (!(error instanceof JobObservationPending)) {
@@ -658,6 +668,26 @@ async function observeOperation(
       };
     if (!ownershipLost) await safeCheckpoint();
   }
+}
+
+/** Candidate phases after which the candidate's own recovery has nothing left to do. */
+const CLOSED_CANDIDATE_PHASES = new Set(["settled", "discarded", "rolled_back"]);
+/**
+ * Whether an agent operation that ended `recovery_required` ends its job.
+ * The agent keeps the operation's targets held with an unknown outcome until
+ * an operator resolves it, so the job fails with that error code instead of
+ * waiting. While a configuration candidate is open, its operations are left
+ * to its own recovery, which settles the maintenance they belong to.
+ */
+function endsWithRecoveryRequired(context: JobContext, projected: ProjectedOperation): boolean {
+  const candidate = context.checkpointResult?._configurationCandidate as
+    | { phase?: unknown }
+    | undefined;
+  return (
+    (candidate === undefined || CLOSED_CANDIDATE_PHASES.has(String(candidate.phase))) &&
+    !projected.kind.startsWith("configuration") &&
+    !isTrustedConfigurationApplyOperation({ kind: projected.kind } as OpsOperation)
+  );
 }
 
 /** Reconciliation observes retained attempts only. It never invokes the original handler. */

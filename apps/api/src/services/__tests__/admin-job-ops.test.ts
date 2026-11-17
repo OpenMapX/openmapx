@@ -255,6 +255,67 @@ describe("administrative job operations broker", () => {
     );
   });
 
+  it.each([
+    ["ends its job with that error code", undefined],
+    ["ends its job after the job's configuration candidate settled", "settled"],
+    ["stays with an open configuration candidate's own recovery", "saved"],
+  ])("an agent operation that ended recovery_required %s", async (_name, phase) => {
+    const ctx = context();
+    const operationKey = "opk1_abcdefghijklmnop";
+    const operationId = "job1_abcdefghijklmnop";
+    seedProjection(ctx, operationKey, "backup.delete", operationId);
+    if (phase) ctx.checkpointResult = { _configurationCandidate: { phase } };
+    const candidate = phase === "saved";
+    const terminal = {
+      ...identity,
+      operationId,
+      operationKey,
+      kind: "backup.delete",
+      resourceId: "nightly",
+      state: "failed",
+      errorClass: "recovery_required",
+      submittedAt: "2026-10-19T00:00:00.000Z",
+      updatedAt: "2026-10-19T00:00:01.000Z",
+    };
+    const client = {
+      execute: vi.fn(),
+      status: vi.fn().mockResolvedValue(terminal),
+      events: vi.fn().mockResolvedValue({
+        version: 1,
+        operationId,
+        nextCursor: 0,
+        terminal: true,
+        truncated: false,
+        events: [],
+      }),
+      lookup: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const observed = executeAdminJobOperation(
+      ctx,
+      { kind: "backup.delete", backupId: "nightly" },
+      "admin-job.backup.delete",
+      { client: client as never, operationKey, pollIntervalMs: 1 },
+    );
+    if (candidate) {
+      await expect(observed).rejects.toMatchObject({ reason: "recovery_required" });
+      expect(ctx.checkpointResult).not.toHaveProperty("errorCode");
+      return;
+    }
+    await expect(observed).rejects.toMatchObject({
+      name: "ApiOpsError",
+      errorClass: "recovery_required",
+    });
+    expect(ctx.checkpointResult).toMatchObject({ errorCode: "recovery_required" });
+    expect(readProjection(ctx.protocol).operations[operationKey]).toMatchObject({
+      terminal: true,
+      phase: "terminal",
+      errorClass: "recovery_required",
+    });
+    expect(client.execute).not.toHaveBeenCalled();
+    expect(client.cancel).not.toHaveBeenCalled();
+  });
+
   it("mirrors bounded durable agent events without cancelling a running operation", async () => {
     const ctx = context();
     const operation: Extract<OpsOperation, { kind: "backup.delete" }> = {

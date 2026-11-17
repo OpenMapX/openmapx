@@ -1,8 +1,4 @@
 {
-  "never starts the service a second time and keeps the target held": {
-    "reason": "After the agent restarts, the interrupted start keeps its target held with an unknown outcome, but the API job stays running with observation recovery_required instead of ending, so the scenario never sees a final state.",
-    "fails": "^Timed out waiting for job [0-9a-f-]+\\nlast seen: (?=.*\"status\":\"running\")(?=.*\"observation\":\\{\"state\":\"unknown\",\"reason\":\"recovery_required\")"
-  },
   "finishes the recreate in flight, starts no further effect and never succeeds": {
     "reason": "A cancelled update's helper keeps recreating services, including the agent, and the update succeeds.",
     "fails": "^expected 'success' not to be 'success'"
