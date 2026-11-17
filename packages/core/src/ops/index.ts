@@ -10,6 +10,8 @@ export {
   configurationHandoffInspectionSchema,
   configurationHandoffIntentSchema,
   configurationHandoffPrepareOperationSchema,
+  type HandoffProgress,
+  handoffProgressSchema,
   protectedConfigurationServiceIdSchema,
 } from "./configuration-handoff-records";
 export * from "./configuration-maintenance";

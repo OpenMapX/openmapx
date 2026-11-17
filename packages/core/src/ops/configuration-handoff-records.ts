@@ -113,3 +113,47 @@ export const configurationHandoffInspectionSchema = z
     )
       ctx.addIssue({ code: "custom", message: "Inconsistent handoff observation" });
   });
+/** What the configuration helper reports while it replaces protected services.
+ * Only the helper writes it; the agent reads it once the helper container exited. */
+export const handoffProgressSchema = z
+  .strictObject({
+    version: z.literal(1),
+    maintenanceId: z.uuid(),
+    handoffId: z.uuid(),
+    phase: z.enum([
+      "draining",
+      "applying",
+      "verifying",
+      "applied",
+      "rolled_back",
+      "cancelled",
+      "failed",
+    ]),
+    targets: z
+      .array(
+        z.strictObject({
+          serviceId: id,
+          phase: z.enum([
+            "pending",
+            "recreate_attempted",
+            "verified",
+            "restore_attempted",
+            "restored",
+          ]),
+          oldContainerId: z.string().regex(/^[a-f0-9]{64}$/),
+          newContainerId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .nullable(),
+          expectedImageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+        }),
+      )
+      .min(1)
+      .max(64),
+    updatedAt: z.iso.datetime(),
+  })
+  .refine(
+    (value) =>
+      new Set(value.targets.map((target) => target.serviceId)).size === value.targets.length,
+  );
+export type HandoffProgress = z.infer<typeof handoffProgressSchema>;

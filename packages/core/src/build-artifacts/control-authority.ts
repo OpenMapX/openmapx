@@ -317,6 +317,7 @@ export function writePrivateRecord(
         "spawn-started",
         "execution-adoptions",
         "configuration-maintenance",
+        "maintenance",
         "hardlinks",
         "catalog-commits",
       ].includes(namespace)
