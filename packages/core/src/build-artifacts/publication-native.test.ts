@@ -128,7 +128,7 @@ it.each(["old-directory", "build-record"])(
       control.verifyControlEffectSettlement(installation, authority.execution),
     );
     await leases.releaseArtifactTargetLease(lease);
-    expect(leases.verifyLocalArtifactTargetRootRelease(authority).releasedAt).toBeGreaterThan(0);
+    expect(() => leases.verifyLocalArtifactTargetRootRelease(authority)).not.toThrow();
   },
   60000,
 );

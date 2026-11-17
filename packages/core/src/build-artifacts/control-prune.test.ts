@@ -146,7 +146,7 @@ const heldLeases = () =>
     .list()
     .map((value) => value.leaseId);
 
-it("prunes the root's lease record once its released lease left the store", async () => {
+it("prunes a root only once its released lease left the store", async () => {
   const { execution, authority } = admit();
   const lease = await acquireArtifactTargetLease({
     serviceIds: ["osrm"],
@@ -157,12 +157,13 @@ it("prunes the root's lease record once its released lease left the store", asyn
     lease,
     verifyControlEffectSettlement(installation, execution),
   );
+  const later = execution.deadlineAt + CONTROL_PRUNE_AFTER_MS + 60_000;
+  expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
+  expect(existsSync(record("executions", execution.operationKey))).toBe(true);
   await releaseArtifactTargetLease(lease);
   expect(heldLeases()).toEqual([]);
-  expect(existsSync(record("execution-leases", execution.operationKey))).toBe(true);
-  const later = execution.deadlineAt + CONTROL_PRUNE_AFTER_MS + 60_000;
   expect(await pruneControlRecords(installation, { now: later })).toEqual([execution.operationKey]);
-  expect(existsSync(record("execution-leases", execution.operationKey))).toBe(false);
+  expect(existsSync(record("executions", execution.operationKey))).toBe(false);
 });
 
 it("bounds each pass and continues where the previous pass stopped", async () => {

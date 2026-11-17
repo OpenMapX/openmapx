@@ -45,6 +45,7 @@ import {
   type LeaseBackend,
   localLeaseBackend,
   restoreArtifactTargetLeaseForSettlement,
+  rootLeaseId,
   verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
@@ -307,7 +308,6 @@ export function writePrivateRecord(
         "effect-started",
         "observations",
         "leases",
-        "execution-leases",
         "attempts",
         "adoptions",
         "parent-attempts",
@@ -2623,12 +2623,8 @@ export async function attestParentExecution(
   const plan = resolveControlChildPlan(authority, child);
   if (!plan || !childPhaseKinds[child.phase].includes(plan.kind))
     throw Error("Child absent from retained plan");
-  try {
-    readPrivateRecord(s.installation, "execution-leases", `${s.execution.operationKey}.json`);
+  if (await s.installation.leases.read(rootLeaseId(s.execution)))
     throw Error("Deadline-only parent must not hold targets");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
   if (
     child.recipient === "fixed-cli"
       ? child.phase !== "data-workflow" || s.installation.installation.role !== "ops-agent"

@@ -27,6 +27,7 @@ import {
 } from "./control-authority";
 import { controlDigest, controlOriginSchema, type InstallationState } from "./control-records";
 import { AnchoredDirectory } from "./filesystem";
+import { rootLeaseId } from "./target-lease";
 
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
 /** Namespaces swept by name. `executions` and `effects` go last; `configuration-maintenance` goes with its preparation. */
@@ -35,7 +36,6 @@ const NAMESPACES = [
   "effect-started",
   "observations",
   "leases",
-  "execution-leases",
   "attempts",
   "adoptions",
   "parent-attempts",
@@ -280,13 +280,8 @@ async function prunable(
     if (await local.leases.read(lease.leaseId)) return null;
     add(["adoptions"], lease.delegationId);
   }
-  const owned = optional(
-    () => leaseReferenceSchema.parse(readPrivateRecord(local, "execution-leases", name)).leaseId,
-  );
-  if (owned) {
-    if (await local.leases.read(owned)) return null;
-    add(issued, owned);
-  }
+  // Its own root lease must be gone from the store.
+  if (await local.leases.read(rootLeaseId(admitted.execution))) return null;
   if (ownerRecord && preparation) {
     const source = optional(() =>
       ownerSourceSchema.safeParse(

@@ -187,17 +187,17 @@ export function configurationMaintenanceReleasedOwner(
   });
 }
 /** Pure deterministic completion preimage. Callers must independently verify
- * the original immutable final, full closure and retained physical release. */
+ * the original immutable final, full closure and released root. */
 export function configurationMaintenanceSettleCompletion(
   owner: ConfigurationMaintenanceOwnerRecord,
-  releasedAt: number,
+  completedAt: number,
 ): ConfigurationMaintenanceOwnerRecord {
   const retained = owner.apiControls.settle;
   if (
     !retained ||
     owner.receipt.state !== "settled" ||
-    !Number.isSafeInteger(releasedAt) ||
-    releasedAt < retained.acceptedAt
+    !Number.isSafeInteger(completedAt) ||
+    completedAt < retained.acceptedAt
   )
     throw Error("Original released settle completion required");
   const { preflight, sequence, state, decision, dmFence, generation, appliedRevisionId, followUp } =
@@ -223,12 +223,12 @@ export function configurationMaintenanceSettleCompletion(
       resourceId: opsResourceId(retained.operation),
       state: "succeeded",
       submittedAt: new Date(retained.admittedAt).toISOString(),
-      updatedAt: new Date(releasedAt).toISOString(),
+      updatedAt: new Date(completedAt).toISOString(),
       result: { ...owner.receipt, ...result },
     },
     completed = configurationMaintenanceSettleControlSourceSchema.parse({
       ...retained,
-      completedAt: releasedAt,
+      completedAt,
       result,
       canonicalDigest: controlTerminalReceiptDigest(status),
     });

@@ -52,7 +52,6 @@ it("authenticates a bounded recovery observation independently of the unchanged 
       maintenanceId: "b877b2e3-4d00-42a3-84ca-0d76a0f28964",
       candidateId: "cc051823-df8e-49ed-94cd-9ee294ae3535",
       receiverEvidenceDigest: "d".repeat(64),
-      releasedAt: 123456,
     },
     proof = signMaintenanceRecoveryProof("original-token", fields),
     [payload, mac] = proof.split(".") as [string, string];

@@ -42,7 +42,6 @@ const maintenanceRecoveryProofSchema = z.strictObject({
   maintenanceId: z.uuid(),
   candidateId: z.uuid(),
   receiverEvidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  releasedAt: z.number().int().positive().safe(),
 });
 type MaintenanceRecoveryProof = z.infer<typeof maintenanceRecoveryProofSchema>;
 const recoveryDomain = "openmapx-maintenance-recovery-observation-v1\0";

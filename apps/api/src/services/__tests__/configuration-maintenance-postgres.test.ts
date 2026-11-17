@@ -4853,7 +4853,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ),
             ),
           ),
-          released = core.verifyLocalArtifactTargetRootRelease(authority),
           originalFinal = JSON.stringify(owner.final),
           originalInspection = JSON.stringify(owner.inspection),
           [originalSql] =
@@ -4882,7 +4881,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           controlInstallation: installation,
         });
         vi.stubEnv("OPS_AGENT_URL", await app.listen({ host: "127.0.0.1", port: 0 }));
-        const result = await maintenance.settleConfigurationMaintenance(request),
+        core.verifyLocalArtifactTargetRootRelease(authority);
+        const completedFrom = Date.now(),
+          result = await maintenance.settleConfigurationMaintenance(request),
           recovered = store.readOwnedConfigurationMaintenance(
             restoreAdmittedControlExecution(installation, prepared.prepare),
           );
@@ -4890,10 +4891,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(recovered.apiControls.settle).toMatchObject({
           operation: request,
           checkedSequence: observed.sequence,
-          completedAt: released.releasedAt,
+          completedAt: expect.any(Number),
           requestEvidenceDigest: request.evidenceDigest,
           result: { state: "settled" },
         });
+        expect(recovered.apiControls.settle!.completedAt).toBeGreaterThanOrEqual(completedFrom);
         expect(JSON.stringify(recovered.final)).toBe(originalFinal);
         expect(JSON.stringify(recovered.inspection)).toBe(originalInspection);
         expect(

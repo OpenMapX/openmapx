@@ -26,6 +26,7 @@ import {
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
+  rootLeaseId,
   settleArtifactTargetLeaseChild,
   verifyControlEffectSettlement,
   verifyLocalArtifactTargetRootRelease,
@@ -1284,20 +1285,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               }
             ).opsProjection.operations,
           ).find((operation) => operation.kind === "service.start")!,
-          lease = JSON.parse(
-            readFileSync(
-              join(
-                host.infraDir,
-                "state/ops-agent/control/execution-leases",
-                `${root.operationKey}.json`,
-              ),
-              "utf8",
-            ),
-          ),
           owner = openLeaseStore({
             directory: leaseStoreDirectory(host.infraDir),
             purpose: "test",
-          }).get(lease.leaseId);
+          }).get(rootLeaseId(root));
         expect(owner?.targets).toContain("data-manager");
         const request = await api.inject({
             method: "POST",

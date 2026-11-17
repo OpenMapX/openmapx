@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { configurationApplyResultSchema, opsOperationSchema } from "../ops/contract";
@@ -192,6 +192,19 @@ function furtherEdges(lease: LeaseRecord, child: LeaseChild): string[] {
   );
 }
 
+/**
+ * The id of the root lease `owner` holds. It is derived from the owner's key,
+ * so the owner finds its lease in the store without a record of its own; one
+ * key holds at most one root lease.
+ */
+export function rootLeaseId(owner: Pick<ExecutionRef, "operationKey">): string {
+  const d = createHash("sha256")
+    .update("openmapx-root-lease\0")
+    .update(owner.operationKey)
+    .digest("hex");
+  return `${d.slice(0, 8)}-${d.slice(8, 12)}-4${d.slice(13, 16)}-8${d.slice(17, 20)}-${d.slice(20, 32)}`;
+}
+
 /** The lease rules, applied under the store lock by every writer; the edge grammar is checked here. */
 export const leaseRules = {
   acquire(leases: LeaseRecord[], input: Parameters<LeaseBackend["acquire"]>[0], now: number) {
@@ -214,7 +227,7 @@ export const leaseRules = {
       if (holder) throw new TargetBusyError(target, holder);
     }
     const record: LeaseRecord = {
-      leaseId: randomUUID(),
+      leaseId: rootLeaseId(input.owner),
       owner: input.owner,
       ownerKind: input.ownerKind,
       targets,
@@ -363,6 +376,8 @@ interface State {
   canceled?: boolean;
 }
 const handles = new WeakMap<object, State>();
+/** Operation keys with an open root handle from `acquireArtifactTargetLease` in this process. */
+const openRoots = new Set<string>();
 function stateOf(lease: TargetLeaseAuthority): State {
   const state = handles.get(lease);
   if (!state || (lease.mode === "owner") !== (state.node === null))
@@ -529,27 +544,17 @@ export async function acquireArtifactTargetLease(options: {
     await verifyDataUpdatePrerequisites(options.owner, options.dataManager, options.signal);
   assertControlExecutionForward(options.owner);
   options.signal?.throwIfAborted();
-  const name = `${authority.execution.operationKey}.json`;
-  try {
-    readPrivateRecord(authority.installation, "execution-leases", name);
+  // The store returns an existing lease to a repeated acquisition, so a lost
+  // reply can be retried; a second root handle in this process is refused.
+  const key = authority.execution.operationKey;
+  if (openRoots.has(key))
     throw Error("Execution already acquired a root lease; reconcile its original identity");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
   const record = await admitRootLease(
     authority.installation.leases,
     { owner: authority.execution, ownerKind: authority.kind, targets: serviceIds },
     options.signal,
   );
-  // The lease is recorded before this owner's private reference to it, so an
-  // owner that dies in between leaves a held lease that is still visible.
-  writePrivateRecord(
-    authority.installation,
-    "execution-leases",
-    name,
-    { leaseId: record.leaseId },
-    true,
-  );
+  openRoots.add(key);
   return handleFor({
     backend: authority.installation.leases,
     installation: authority.installation,
@@ -831,7 +836,6 @@ export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Pr
     assertConfigurationMaintenanceRootClosure(s.authority, await observeClosure(s, s.authority));
   await s.backend.release({ leaseId: s.leaseId });
   s.seen = undefined;
-  if (s.authority) rootReleasedAt(s.authority);
 }
 
 export async function cancelArtifactTargetLease(
@@ -891,36 +895,13 @@ export function assertArtifactTargetLeaseContainmentOwner(
 }
 /** Drops the in-process handle. The lease, its children and every unknown fence remain. */
 export function closeArtifactTargetLeaseHandle(lease: TargetLeaseAuthority): void {
-  if (!handles.delete(lease)) throw Error("Unverified target lease handle");
+  const s = handles.get(lease);
+  if (!s || !handles.delete(lease)) throw Error("Unverified target lease handle");
+  if (s.node === null && !s.settlementOnly) openRoots.delete(s.execution.operationKey);
 }
 
-const executionLeaseSchema = z.strictObject({
-  leaseId: uuid,
-  releasedAt: z.number().int().positive().safe().optional(),
-});
-function executionLease(authority: VerifiedExecutionAuthority) {
-  const a = executionAuthorityState(authority);
-  return executionLeaseSchema.parse(
-    readPrivateRecord(a.installation, "execution-leases", `${a.execution.operationKey}.json`),
-  );
-}
 function executionLeaseId(authority: VerifiedExecutionAuthority): string {
-  return executionLease(authority).leaseId;
-}
-/** The time the owner first saw its root released, recorded once in its own state. */
-function rootReleasedAt(authority: VerifiedExecutionAuthority): number {
-  const a = executionAuthorityState(authority),
-    saved = executionLease(authority);
-  if (saved.releasedAt) return saved.releasedAt;
-  const releasedAt = Date.now();
-  writePrivateRecord(
-    a.installation,
-    "execution-leases",
-    `${a.execution.operationKey}.json`,
-    { leaseId: saved.leaseId, releasedAt },
-    false,
-  );
-  return releasedAt;
+  return rootLeaseId(executionAuthorityState(authority).execution);
 }
 /** Reopen the original owned lease for cancellation and settlement only. */
 export function restoreArtifactTargetLeaseForSettlement(
@@ -940,21 +921,16 @@ export function restoreArtifactTargetLeaseForSettlement(
   }) as ArtifactTargetLease;
 }
 /**
- * Whether the execution's own root lease is gone, after its own effect settled:
- * from the release this owner recorded after the store dropped its lease, or
- * from the store for a role that reads it.
+ * Checks that the execution's own root is released: its own effect settled
+ * with a known outcome and its lease is gone from the store.
  */
-export function verifyLocalArtifactTargetRootRelease(
-  authority: VerifiedExecutionAuthority,
-): Readonly<{ releasedAt: number }> {
+export function verifyLocalArtifactTargetRootRelease(authority: VerifiedExecutionAuthority): void {
+  if (!localRootReleased(authority)) throw Error("Original root release is not proved");
+}
+function localRootReleased(authority: VerifiedExecutionAuthority): boolean {
   const a = executionAuthorityState(authority);
-  const leaseId = executionLeaseId(authority);
   childSettlementState(verifyControlEffectSettlement(a.installation.installation, a.execution));
-  const recorded = executionLease(authority).releasedAt;
-  if (recorded) return Object.freeze({ releasedAt: recorded });
-  if (requireLocalLeases(a.installation.leases).readSync(leaseId))
-    throw Error("Original root release is not proved");
-  return Object.freeze({ releasedAt: rootReleasedAt(authority) });
+  return !requireLocalLeases(a.installation.leases).readSync(executionLeaseId(authority));
 }
 
 /** Settles the owner from recovery evidence and releases it when every child is known. */
@@ -980,12 +956,6 @@ export async function reconcileArtifactTargetLease(options: {
   if (lease.state !== "settled")
     await backend.settle({ leaseId: lease.leaseId, key: null, settlement: recovery.evidence });
   await backend.release({ leaseId: lease.leaseId });
-  rootReleasedAt(
-    restoreAdmittedControlExecution(
-      recovery.authority.installation.installation,
-      recovery.authority.execution,
-    ),
-  );
   return "released";
 }
 /** Image pulls hold no lease, but never run while their target is held. */
@@ -1423,18 +1393,18 @@ export function observeConfigurationMaintenanceRuntimeTree(
   return closureFromRecord(maintenanceLease(authority), authority);
 }
 /**
- * Whether the maintenance root is gone from the store after the release its
- * owner recorded. The store releases it only after the closure check passed,
- * and the released tree is no longer kept.
+ * Whether the maintenance root is released: its own effect settled and its
+ * lease gone from the store. The store releases it only after the closure
+ * check passed, and the released tree is no longer kept.
  */
 export function configurationMaintenanceRootReleased(
   authority: VerifiedExecutionAuthority,
 ): boolean {
-  const state = executionAuthorityState(authority);
-  return (
-    !localLeases(state.installation.leases)?.readSync(executionLeaseId(authority)) &&
-    Boolean(executionLease(authority).releasedAt)
-  );
+  try {
+    return localRootReleased(authority);
+  } catch {
+    return false;
+  }
 }
 export function verifyConfigurationMaintenanceRootClosure(
   authority: VerifiedExecutionAuthority,

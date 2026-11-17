@@ -1502,25 +1502,26 @@ export function completeConfigurationMaintenanceSettleControl(
 function completeOwnedConfigurationMaintenanceSettleControl(
   authority: VerifiedExecutionAuthority,
 ): ConfigurationMaintenanceReceipt {
-  const released = verifyLocalArtifactTargetRootRelease(authority);
+  verifyLocalArtifactTargetRootRelease(authority);
   restoreOwnedMaintenanceFinal(authority);
   assertConfigurationMaintenanceRootClosure(authority);
   return withPrivateEffectWriter(executionAuthorityState(authority), () => {
     const owner = read(authority),
       retained = owner.apiControls.settle;
     if (!retained) throw Error("Original accepted settle intent required");
-    const completed = configurationMaintenanceSettleCompletion(owner, released.releasedAt);
     if (retained.result) {
       if (retained.canonicalDigest !== controlTerminalReceiptDigest(settleStatus(owner, retained)))
         throw Error("Original settle completion changed");
       return { ...owner.receipt, ...retained.result };
     }
+    // The completion time is recorded once, here, after the root was released.
+    const completed = configurationMaintenanceSettleCompletion(owner, Date.now());
     write(authority, completed);
     return { ...owner.receipt, ...completed.apiControls.settle!.result };
   });
 }
 /** Observation-only completion of the ORIGINAL accepted control. The callee
- * requires its actual full closure and retained physical release timestamp. */
+ * requires its actual full closure and its released root. */
 export function completeObservedConfigurationMaintenanceSettlement(
   authority: VerifiedExecutionAuthority,
 ): ConfigurationMaintenanceReceipt {
@@ -1548,8 +1549,7 @@ export function inspectConfigurationMaintenanceSettleControl(
     throw Error("Original settle canonical source required");
   restoreOwnedMaintenanceFinal(source.authority);
   assertConfigurationMaintenanceRootClosure(source.authority);
-  if (verifyLocalArtifactTargetRootRelease(source.authority).releasedAt !== retained.completedAt)
-    throw Error("Original settle completion time changed");
+  verifyLocalArtifactTargetRootRelease(source.authority);
   return {
     receipt: { ...owner.receipt, ...retained.result },
     status: settleStatus(owner, retained),
@@ -2294,14 +2294,13 @@ async function recoverUnadmittedConfigurationMaintenanceOnce(
  * the data-manager settled its fence child with, its signed observation that
  * the prepare was never admitted. */
 function configurationMaintenanceRecoverySource(authority: VerifiedExecutionAuthority) {
-  const released = verifyLocalArtifactTargetRootRelease(authority),
-    owner = read(authority),
+  verifyLocalArtifactTargetRootRelease(authority);
+  const owner = read(authority),
     negative = readFenceNonAdmission(authority, owner);
   return {
     maintenanceId: owner.plan.operation.maintenanceId,
     candidateId: owner.plan.operation.candidateId,
     receiverEvidenceDigest: controlDigest(negative),
-    releasedAt: released.releasedAt,
   };
 }
 const fenceNonAdmissionName = (owner: ConfigurationMaintenanceOwnerRecord) =>
