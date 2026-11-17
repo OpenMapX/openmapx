@@ -8,7 +8,7 @@ import {
   walkLegStepProgress,
   walkStepInfo,
 } from "@openmapx/core/navigation";
-import { formatNavigationCue } from "@openmapx/i18n";
+import { formatNavigationCue } from "@openmapx/i18n/navigationCuesCompact";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect } from "react";

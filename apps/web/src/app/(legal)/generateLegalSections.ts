@@ -1,5 +1,7 @@
 import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
+// biome-ignore lint/style/noRestrictedImports: server-only legal page generation reads both catalogues
 import deCatalog from "@openmapx/i18n/locales/de.json";
+// biome-ignore lint/style/noRestrictedImports: server-only legal page generation reads both catalogues
 import enCatalog from "@openmapx/i18n/locales/en.json";
 import type { IntegrationDataSource } from "@openmapx/integration-framework";
 import type { Licensing } from "@openmapx/mobility-core/licensing";

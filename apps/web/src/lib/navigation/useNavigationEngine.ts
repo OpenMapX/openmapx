@@ -37,7 +37,8 @@ import {
   VOICE_TIMING_MULTIPLIER,
   withheldReroute,
 } from "@openmapx/core/navigation";
-import { formatNavigationCue, NavigationCueError, resolveLocale } from "@openmapx/i18n";
+import { resolveLocale } from "@openmapx/i18n/locale";
+import { formatNavigationCue, NavigationCueError } from "@openmapx/i18n/navigationCuesCompact";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { useLocale } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";

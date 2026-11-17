@@ -119,8 +119,21 @@
                   "@mui/material": {
                     "importNames": ["Dialog", "Menu", "Popover"],
                     "message": "Use the Back-aware wrappers in @/components/ui (Dialog, Menu, Popover)."
+                  },
+                  "@openmapx/i18n": "This barrel bundles every message catalogue. In client code import @openmapx/i18n/locale (locales, resolveLocale) or @openmapx/i18n/navigationCuesCompact (spoken cues); server-only code may suppress this with a reason."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@openmapx/i18n/index",
+                      "@openmapx/i18n/config",
+                      "@openmapx/i18n/translator",
+                      "@openmapx/i18n/navigationCues",
+                      "@openmapx/i18n/locales/*"
+                    ],
+                    "message": "This module bundles every message catalogue. In client code import @openmapx/i18n/locale or @openmapx/i18n/navigationCuesCompact; server-only code may suppress this with a reason."
                   }
-                }
+                ]
               }
             }
           }

@@ -40,12 +40,17 @@ const SRC_DIRS = [
 ];
 
 /**
- * Individually scanned files outside the directories above. `navigationCues.ts`
- * maps semantic intents onto fixed catalog keys for the headless engine, so its
- * keys are real usage — but this package's own scripts and their fixtures
- * contain illustrative `t("key")` patterns that must not be mistaken for it.
+ * Individually scanned files outside the directories above.
+ * `navigationCueFormatter.ts` holds the fixed catalog keys that semantic cue
+ * intents map onto, for the headless engine and the browser, so its keys are
+ * real usage; `navigationCues.ts` feeds it the registry. This package's own
+ * scripts and their fixtures contain illustrative `t("key")` patterns that must
+ * not be mistaken for usage.
  */
-const EXTRA_SRC_FILES = [join(PKG_ROOT, "navigationCues.ts")];
+const EXTRA_SRC_FILES = [
+  join(PKG_ROOT, "navigationCues.ts"),
+  join(PKG_ROOT, "navigationCueFormatter.ts"),
+];
 const FIX_MISSING = process.argv.includes("--fix-missing");
 
 // Helpers
