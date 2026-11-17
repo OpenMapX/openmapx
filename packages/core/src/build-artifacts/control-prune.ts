@@ -29,8 +29,7 @@ import { controlDigest, controlOriginSchema, type InstallationState } from "./co
 import { AnchoredDirectory } from "./filesystem";
 
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
-/** Namespaces swept by name. `executions`, `effects` and the terminal
- * commitment go last; `configuration-maintenance` goes with its preparation. */
+/** Namespaces swept by name. `executions` and `effects` go last; `configuration-maintenance` goes with its preparation. */
 const NAMESPACES = [
   "children",
   "effect-started",
@@ -46,7 +45,6 @@ const NAMESPACES = [
   "lifecycle-observations",
   "spawns",
   "spawn-started",
-  "prepared",
   "execution-adoptions",
   "hardlinks",
   "catalog-commits",

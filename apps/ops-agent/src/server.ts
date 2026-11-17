@@ -34,7 +34,6 @@ import {
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
   retainControlEffectReceipt,
-  retainControlPreparedTerminal,
   retainDataUpdatePlan,
   retainedControlAdoptionAssertion,
   retainFixedServiceLifecyclePlan,
@@ -1113,13 +1112,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       await journal.replace(
         [...jobsById.values()].map((entry) => persisted(entry === job ? candidate : entry)),
       );
-      if (
-        authority &&
-        state === "succeeded" &&
-        (job.operation.kind === "configurationMaintenance.prepare" ||
-          job.operation.kind === "configurationHandoff.prepare")
-      )
-        retainControlPreparedTerminal(authority);
       Object.assign(job, updates);
       if (["succeeded", "failed", "timed_out"].includes(state)) delete job.progressResult;
       if (state === "succeeded" && job.operation.kind === "services.buildAll")

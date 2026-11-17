@@ -285,7 +285,6 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
     }),
     { mode: 0o600 },
   );
-  c.retainControlPreparedTerminal(authority);
   c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",

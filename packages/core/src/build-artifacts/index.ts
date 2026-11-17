@@ -75,7 +75,6 @@ export {
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
   retainControlEffectReceipt,
-  retainControlPreparedTerminal,
   retainedControlAdoptionAssertion,
   retainedControlParent,
   retainFixedCliSpawnIntent,

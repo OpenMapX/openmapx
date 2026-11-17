@@ -322,7 +322,6 @@ export function writePrivateRecord(
         "lifecycle-observations",
         "spawns",
         "spawn-started",
-        "prepared",
         "execution-adoptions",
         "configuration-maintenance",
         "hardlinks",
@@ -3766,103 +3765,54 @@ export function retainedControlAdoptionAssertion(
   return saved.assertion;
 }
 
-const preparedTerminalSchema = z.strictObject({
-  version: z.literal(1),
-  execution: executionRefSchema,
-  kind: z.enum(["configurationMaintenance.prepare", "configurationHandoff.prepare"]),
-  receiptDigest: digest,
-});
-/** Fixed preparing adapter calls only after publishing its terminal journal. This performs the read itself. */
-export function retainControlPreparedTerminal(authority: VerifiedExecutionAuthority): void {
-  const s = executionAuthorityState(authority);
-  if (
-    s.installation.fixedChildId ||
-    s.execution.executor !== "ops-agent" ||
-    !["configurationMaintenance.prepare", "configurationHandoff.prepare"].includes(s.kind)
-  )
-    throw Error("Unsupported terminal preparation");
-  const infra = new AnchoredDirectory(dirname(s.installation.dataRoot));
-  let state: AnchoredDirectory | undefined;
+/** Whether the agent journal records this maintenance or handoff preparation
+ * as succeeded with a prepared result; the journal is its only terminal record. */
+export function verifyControlPreparedTerminal(
+  state: InstallationState,
+  execution: ExecutionRef,
+): void {
+  const infra = new AnchoredDirectory(dirname(state.dataRoot));
+  let stateDir: AnchoredDirectory | undefined;
   let jobs: AnchoredDirectory | undefined;
   try {
-    state = infra.directory("state");
-    jobs = state.directory("ops-agent");
+    stateDir = infra.directory("state");
+    jobs = stateDir.directory("ops-agent");
     const journal = z
-      .object({ version: z.literal(2), jobs: z.array(z.unknown()).max(256) })
+      .object({ version: z.literal(2), jobs: z.array(z.unknown()).max(512) })
       .parse(JSON.parse(jobs.read("jobs-v1.json", 24 * 1024 * 1024).toString("utf8")));
     const matches = journal.jobs.filter(
       (j) =>
         j &&
         typeof j === "object" &&
-        (j as { operationId?: string }).operationId === s.execution.executionId,
+        (j as { operationId?: string }).operationId === execution.executionId,
     );
     if (matches.length !== 1) throw Error("Missing exact terminal preparation journal");
     const job = z
       .object({
-        operationId: z.string(),
         operationKey: z.string(),
-        operationFingerprint: digest,
         fingerprint: digest,
-        deadlineAt: z.number().int().safe(),
         state: z.literal("succeeded"),
-        operation: z.object({ kind: z.string() }).passthrough(),
+        operation: z.object({
+          kind: z.enum(["configurationMaintenance.prepare", "configurationHandoff.prepare"]),
+        }),
         result: z
           .object({
             phase: z.literal("prepared").optional(),
             state: z.literal("prepared").optional(),
           })
           .passthrough(),
-        terminalAt: z.iso.datetime(),
       })
       .parse(matches[0]);
     if (
-      job.operationKey !== s.execution.operationKey ||
-      job.operationFingerprint !== s.execution.operationFingerprint ||
-      job.fingerprint !== s.execution.fingerprint ||
-      job.deadlineAt !== s.execution.deadlineAt ||
-      job.operation.kind !== s.kind ||
-      controlDigest(job.operation) !== s.execution.operationFingerprint ||
+      job.operationKey !== execution.operationKey ||
+      job.fingerprint !== execution.fingerprint ||
       !(job.result.phase === "prepared" || job.result.state === "prepared")
     )
       throw Error("Terminal preparation identity mismatch");
-    const record = preparedTerminalSchema.parse({
-      version: 1,
-      execution: s.execution,
-      kind: s.kind,
-      receiptDigest: controlDigest(job),
-    });
-    writePrivateRecord(
-      s.installation,
-      "prepared",
-      `${s.execution.operationKey}.json`,
-      record,
-      true,
-    );
-    const d = executionWitnessDirectory(s.installation, "ops-agent");
-    try {
-      d.role.write(`${s.execution.operationKey}.prepared.json`, canonicalJson(record), true);
-    } finally {
-      d.close();
-    }
   } finally {
     jobs?.close();
-    state?.close();
+    stateDir?.close();
     infra.close();
-  }
-}
-export function verifyControlPreparedTerminal(
-  state: InstallationState,
-  execution: ExecutionRef,
-): void {
-  const d = executionWitnessDirectory(state, "ops-agent");
-  try {
-    const receipt = preparedTerminalSchema.parse(
-      JSON.parse(d.role.read(`${execution.operationKey}.prepared.json`, 8192).toString("utf8")),
-    );
-    if (controlDigest(receipt.execution) !== controlDigest(execution))
-      throw Error("Foreign terminal preparation");
-  } finally {
-    d.close();
   }
 }
 

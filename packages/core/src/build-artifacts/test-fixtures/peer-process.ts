@@ -62,7 +62,6 @@ for await (const line of createInterface({ input: process.stdin })) {
       });
       if (input.fixedId) input.child.childId = c.prepareFixedControlChild(authority, input.fixedId);
       const assertion = await l.delegateArtifactTargetLease(lease, input.child);
-      if (input.prepared) c.retainControlPreparedTerminal(authority);
       c.retainControlEffectReceipt(authority, {
         outcome: "failed_without_effect",
         publication: "not_started",
