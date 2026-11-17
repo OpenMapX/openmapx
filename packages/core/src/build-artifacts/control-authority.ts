@@ -27,8 +27,6 @@ export {
   controlChildOperationKey,
 } from "./control-child-records";
 
-// biome-ignore lint/suspicious/noImportCycles: The failed receipt is read after initialization, never during module evaluation.
-import { readFailedServiceLifecycleReceipt } from "../services/service-lifecycle-receipt";
 import {
   type ControlInstallation,
   controlDigest,
@@ -72,7 +70,6 @@ import {
   type OpsJobStatus,
   type OpsOperationKind,
   opsOperationSchema,
-  opsResourceId,
   parseBoundedOpsResult,
   parseOpsJobStatus,
 } from "../ops/contract";
@@ -106,7 +103,6 @@ import {
   inspectControlChildPublication,
   lookupControlChildPhase,
   lookupControlChildPhaseAttempt,
-  lookupControlChildPhaseBinding,
   prepareControlChildPublication,
   resolveControlChildPlan,
   validateControlChildReservations,
@@ -125,10 +121,7 @@ import {
   stagedCoordinatorSourceSchema,
 } from "./coordinator-pull-records";
 // biome-ignore-start lint/suspicious/noImportCycles: Fixed proof verification uses this module's original nominal authority and effect writer after initialization.
-import {
-  inspectFeedProxyValidationFailure,
-  recordFeedProxyReloadAttempted,
-} from "./data-execution-candidate";
+import { recordFeedProxyReloadAttempted } from "./data-execution-candidate";
 // biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
 import { AnchoredDirectory, identity } from "./filesystem";
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
@@ -1029,29 +1022,6 @@ const REPORTED_FAILURE_KINDS = new Set([
   "backup.create",
   "backup.restore",
 ]);
-/** No fence exists for this maintenance owner: its fence child was never
- * issued, or the data-manager settled it without effect (a refusal, or the
- * observation that the prepare was never admitted). */
-function verifyConfigurationFenceNotPrepared(authority: VerifiedExecutionAuthority): void {
-  const s = executionAuthorityState(authority),
-    reservation = s.reservations.find((slot) => slot.phase === "configuration-fence");
-  if (!reservation) throw Error("Original fence preparation reservation required");
-  const binding = lookupControlChildPhaseBinding(authority, reservation);
-  if (
-    !binding &&
-    inspectControlChildPublication(authority, reservation).publication.state === "unissued"
-  )
-    return;
-  if (!binding) throw Error("Original fence preparation binding required");
-  const lease = restoreArtifactTargetLeaseForSettlement(authority);
-  try {
-    const settled = inspectLocalLeaseChildSettlement(lease, binding.child.execution);
-    if (settled?.outcome !== "failed_without_effect")
-      throw Error("Data-manager fence refusal required");
-  } finally {
-    closeArtifactTargetLeaseHandle(lease);
-  }
-}
 /** Fixed writer producer only. A DTO, caller error or parsed result cannot
  * substitute for the actual completed native writer observation. */
 export function retainConfigurationGenerationNonCommit(
@@ -1268,111 +1238,55 @@ function readDataWorkflowProgress(authority: VerifiedExecutionAuthority) {
     throw Error("Full Update checkpoint identity changed");
   return body.receipt;
 }
-export function retainControlEffectReceipt(
-  authority: VerifiedExecutionAuthority,
-  effect: {
-    outcome: ChildSettlement["outcome"];
-    publication: ChildSettlement["publication"];
-    receipt: unknown;
-  },
-): void {
-  const s = executionAuthorityState(authority);
-  withPrivateEffectWriter(s, () => {
-    const parsed = effectObservationSchema.safeParse(effect.receipt);
-    if (!parsed.success) throw Error("Unsupported effect receipt evidence");
-    const receipt = parsed.data;
-    let outcome: ChildSettlement["outcome"] = "unknown",
-      publication: ChildSettlement["publication"] = "unknown";
-    if (receipt.kind === "catalog-pins-initialized") {
-      if (
-        s.kind !== "catalog-pins.initialize" ||
-        s.installation.fixedChildId ||
-        !["ops-agent", "host-cli"].includes(s.installation.installation.role)
-      )
-        throw Error("Original local catalog initialization required");
-      const source = z
-        .strictObject({
-          version: z.literal(1),
-          execution: executionRefSchema,
-          generationId: digest.nullable(),
-          pointerDigest: digest.nullable(),
-        })
-        .parse(
+/** The settlement a receipt states. The execution's owner writes it about its
+ * own effect, so only the kind's own rules apply: a result that commits, a
+ * failure its command reported, and "not started" only before any effect. */
+function receiptSettlement(
+  s: AuthorityState,
+  receipt: z.infer<typeof effectObservationSchema>,
+): Pick<ChildSettlement, "outcome" | "publication"> {
+  switch (receipt.kind) {
+    case "catalog-pins-initialized":
+    case "feed-credential-template-written":
+    case "configuration-helper-completion":
+    case "fixed-cli-exit":
+      return { outcome: "committed", publication: "committed" };
+    case "data-command":
+      return receipt.status.status === "ok"
+        ? { outcome: "committed", publication: "committed" }
+        : { outcome: "unknown", publication: "unknown" };
+    case "service-lifecycle-contained-failure":
+      return { outcome: "contained", publication: "committed" };
+    case "reported-failure":
+      if (!REPORTED_FAILURE_KINDS.has(s.kind) || s.installation.installation.role !== "ops-agent")
+        throw Error("Only a leased agent Docker effect reports its own failure");
+      return { outcome: "contained", publication: "committed" };
+    case "feed-proxy-validation-failure":
+      return { outcome: "contained", publication: "not_started" };
+    case "configuration-fence-not-prepared":
+      return { outcome: "failed_without_effect", publication: "not_started" };
+    case "not-started": {
+      if (s.installation.fixedChildId) throw Error("Fixed child cannot assert unused execution");
+      try {
+        if (
           readPrivateRecord(
             s.installation,
-            "catalog-commits",
-            `initialization-${s.execution.operationKey}.json`,
-            65536,
-          ),
-        );
-      if (
-        controlDigest(source.execution) !== controlDigest(s.execution) ||
-        source.generationId !== receipt.generationId
-      )
-        throw Error("Catalog initialization source mismatch");
-      outcome = "committed";
-      publication = "committed";
-    } else if (receipt.kind === "feed-credential-template-written") {
-      if (
-        s.kind !== LOCAL_CREDENTIAL_TEMPLATE_KIND ||
-        s.installation.fixedChildId ||
-        s.installation.installation.role !== "host-cli"
-      )
-        throw Error("Original local credential template required");
-      const name = `${s.execution.operationKey}.json`,
-        started = readPrivateRecord(s.installation, "effect-started", name);
-      if (
-        !started ||
-        controlDigest((started as { execution: unknown }).execution) !==
-          controlDigest(s.execution) ||
-        (started as { receiptDigest: unknown }).receiptDigest !== s.receiptDigest
-      )
-        throw Error("Original started credential template required");
-      const admitted = readPrivateRecord(s.installation, "executions", name, 65536) as {
-        operation: unknown;
-      };
-      const operation = localCredentialTemplateOperationSchema.parse(admitted.operation);
-      if (
-        receipt.fileDigest !== operation.fileDigest ||
-        localCredentialTemplateFileDigest(s.installation, operation) !== operation.fileDigest
-      )
-        throw Error("Credential template file evidence changed");
-      outcome = "committed";
-      publication = "committed";
-    } else if (receipt.kind === "service-lifecycle-contained-failure") {
-      // The lease refuses release while a child it issued is unsettled, so the
-      // failed receipt alone names what this failure contained.
-      if (
-        controlDigest(readFailedServiceLifecycleReceipt(authority)) !== receipt.failedReceiptDigest
-      )
-        throw Error("Original failed lifecycle source changed");
-      outcome = "contained";
-      publication = "committed";
-    } else if (receipt.kind === "ops-result") {
-      receipt.result = parseBoundedOpsResult(s.kind as OpsOperationKind, receipt.result);
-      if (s.kind === "data.update") {
-        const actual = readDataWorkflowProgress(authority),
-          result = receipt.result as { dataWorkflow?: unknown };
-        if (
-          actual.phase !== "complete" ||
-          actual.children.length !== 3 ||
-          actual.children.some((c) => c.status !== "succeeded") ||
-          actual.failedBuildIds.length ||
-          actual.skippedBuildIds.length ||
-          !actual.revisionId ||
-          canonicalJson(actual) !== canonicalJson(result.dataWorkflow)
+            "effect-started",
+            `${s.execution.operationKey}.json`,
+          ) !== null
         )
-          throw Error("Actual completed Full Update workflow required");
-        verifyDataUpdateCompletionSource(authority, actual);
+          throw Error("Started effects require containment evidence");
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       }
+      return { outcome: "failed_without_effect", publication: "not_started" };
+    }
+    case "ops-result": {
+      receipt.result = parseBoundedOpsResult(s.kind as OpsOperationKind, receipt.result);
       const result = receipt.result as { outcome?: string };
-      // The fixed prepared publisher resolves only after complete restoration
-      // or a pre-publication refusal. Uncertain restoration throws and cannot
-      // manufacture this typed local result through the request envelope.
-      if (s.kind === "artifactTransfer.import" && result.outcome === "not_committed") {
-        outcome = "contained";
-        publication = "not_started";
-      }
+      // A restored import published nothing.
+      if (s.kind === "artifactTransfer.import" && result.outcome === "not_committed")
+        return { outcome: "contained", publication: "not_started" };
       if (
         !result.outcome ||
         ["applied", "unchanged", "committed"].includes(result.outcome) ||
@@ -1387,182 +1301,28 @@ export function retainControlEffectReceipt(
           ["commit", "rollback"].includes(result.outcome)) ||
         (s.kind === "serviceRepository.settle" &&
           ["commit", "rollback", "release"].includes(result.outcome))
-      ) {
-        outcome = "committed";
-        publication = "committed";
-      }
-    } else if (receipt.kind === "reported-failure") {
-      if (!REPORTED_FAILURE_KINDS.has(s.kind) || s.installation.installation.role !== "ops-agent")
-        throw Error("Only a leased agent Docker effect reports its own failure");
-      outcome = "contained";
-      publication = "committed";
-    } else if (receipt.kind === "feed-proxy-validation-failure") {
-      if (
-        s.kind !== "feedProxy.validateAndReload" ||
-        inspectFeedProxyValidationFailure(authority, receipt.commitmentDigest) === null
       )
-        throw Error("Original contained validation failure required");
-      outcome = "contained";
-      publication = "not_started";
-    } else if (receipt.kind === "data-command") {
-      const slots = s.reservations.filter(
-        (slot) => slot.recipient === "data-manager" && slot.phase === "data-step",
-      );
-      if (slots.length !== 1) throw Error("Exact single data command required");
-      const bound = lookupControlChildPhase(authority, slots[0]!);
-      if (
-        !bound ||
-        bound.execution.executionId !== receipt.status.id ||
-        bound.execution.fingerprint !== receipt.status.fingerprint
-      )
-        throw Error("Bound data command identity required");
-      verifyDeadlineEdge(s.kind, "data-step", "data-manager", receipt.status.kind);
-      readDataControlTerminalObservation(
-        s.installation.installation,
-        bound.execution,
-        receipt.status,
-      );
-      if (receipt.status.status === "ok") {
-        outcome = "committed";
-        publication = "committed";
-      }
-    } else if (receipt.kind === "configuration-helper-completion") {
-      if (s.kind !== "configuration-helper" || !s.installation.fixedChildId)
-        throw Error("Original fixed configuration helper required");
-      const admitted = readPrivateRecord(
-          s.installation,
-          "executions",
-          `${s.execution.operationKey}.json`,
-          65536,
-        ) as { operation: unknown },
-        body = z
-          .strictObject({
-            kind: z.literal("configuration-helper"),
-            handoffId: uuid,
-            intentDigest: digest,
-          })
-          .parse(admitted.operation),
-        intent = readConfigurationHandoffSpawnIntent(
-          s.installation.installation,
-          s.execution,
-          body.handoffId,
-        ),
-        progressName = configurationHandoffRecordName(body.handoffId, "progress"),
-        progressRaw = readPrivateRecord(s.installation, "observations", progressName),
-        progress = configurationHandoffProgressSchema.parse(progressRaw),
-        completionName = configurationHandoffRecordName(body.handoffId, "completion"),
-        completionRaw = readPrivateRecord(s.installation, "observations", completionName),
-        completion = configurationHandoffWorkerRecordSchema.parse(completionRaw),
-        spawnName = `${s.installation.fixedChildId}.json`,
-        spawn = readPrivateRecord(s.installation, "spawn-started", spawnName) as {
-          execution: unknown;
-        },
-        startedName = `${s.execution.operationKey}.json`,
-        started = readPrivateRecord(s.installation, "effect-started", startedName) as {
-          execution: unknown;
-          receiptDigest: unknown;
-        };
-      if (
-        body.intentDigest !== controlDigest(intent.operation) ||
-        controlDigest(spawn.execution) !== controlDigest(s.execution) ||
-        controlDigest(started.execution) !== controlDigest(s.execution) ||
-        started.receiptDigest !== s.receiptDigest ||
-        progress.intentDigest !== controlDigest(intent) ||
-        progress.phase !== "launched" ||
-        progress.launch.state !== "confirmed" ||
-        completion.intentDigest !== controlDigest(intent) ||
-        completion.preparationDigest !== controlDigest(progress) ||
-        controlDigest(completion.execution) !== controlDigest(s.execution) ||
-        completion.phase !== "applied" ||
-        completion.completedAt === null ||
-        completion.launch.containerId !== progress.launch.containerId ||
-        receipt.completionDigest !== controlDigest(completion) ||
-        completion.targets.length !== intent.operation.serviceIds.length ||
-        completion.targets.some(
-          (target) =>
-            !intent.operation.serviceIds.includes(target.serviceId) ||
-            target.expectedImageId !== intent.operation.expectedImageIdentities[target.serviceId] ||
-            target.oldContainerId !==
-              progress.targets.find((original) => original.serviceId === target.serviceId)
-                ?.oldContainerId,
-        )
-      )
-        throw Error("Actual original helper completion required");
-      outcome = "committed";
-      publication = "committed";
-    } else if (receipt.kind === "fixed-cli-exit") {
-      if (!s.installation.fixedChildId)
-        throw Error("Fixed command receipt requires certified child");
-      readFixedCliSpawnIntent(s.installation.installation, s.execution, receipt.args);
-      readPrivateRecord(s.installation, "spawn-started", `${s.installation.fixedChildId}.json`);
-      for (const slot of s.reservations.filter(
-        (item) =>
-          item.recipient === "data-manager" &&
-          ["data-step", "osm", "transit", "fonts"].includes(item.phase),
-      )) {
-        const binding = lookupControlChildPhase(authority, slot);
-        if (
-          !binding ||
-          readDataControlTerminalObservation(s.installation.installation, binding.execution).status
-            .status !== "ok"
-        )
-          throw Error("Actual backend data containment required before fixed command success");
-      }
-      if (s.kind === "data.update") {
-        for (const slot of s.reservations.filter((value) => value.phase === "hardlinks")) {
-          const bound = lookupControlChildPhase(authority, slot);
-          if (
-            !bound ||
-            readDataControlTerminalObservation(s.installation.installation, bound.execution).status
-              .status !== "ok"
-          )
-            throw Error("Actual Full Update hardlink containment required");
-        }
-        const workflow = readDataWorkflowProgress(authority),
-          spawn = readFixedCliSpawnIntent(s.installation.installation, s.execution, receipt.args);
-        const expected =
-          spawn.dataUpdatePlan?.dataReservation.execution.operationKey === s.execution.operationKey
-            ? "build"
-            : "complete";
-        if (workflow.phase !== expected) throw Error("Original Full Update checkpoint required");
-      }
-      outcome = "committed";
-      publication = "committed";
-    } else if (receipt.kind === "configuration-fence-not-prepared") {
-      if (
-        s.kind !== "configurationMaintenance.prepare" ||
-        s.installation.fixedChildId ||
-        s.installation.installation.role !== "ops-agent" ||
-        (
-          readPrivateRecord(
-            s.installation,
-            "executions",
-            `${s.execution.operationKey}.json`,
-            65536,
-          ) as { operation?: { maintenanceId?: string } }
-        ).operation?.maintenanceId !== receipt.maintenanceId
-      )
-        throw Error("Original maintenance owner required");
-      verifyConfigurationFenceNotPrepared(authority);
-      outcome = "failed_without_effect";
-      publication = "not_started";
-    } else if (receipt.kind === "not-started") {
-      try {
-        if (
-          readPrivateRecord(
-            s.installation,
-            "effect-started",
-            `${s.execution.operationKey}.json`,
-          ) !== null
-        )
-          throw Error("Started effects require containment evidence");
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      }
-      if (s.installation.fixedChildId) throw Error("Fixed child cannot assert unused execution");
-      outcome = "failed_without_effect";
-      publication = "not_started";
+        return { outcome: "committed", publication: "committed" };
+      return { outcome: "unknown", publication: "unknown" };
     }
+    default:
+      return { outcome: "unknown", publication: "unknown" };
+  }
+}
+export function retainControlEffectReceipt(
+  authority: VerifiedExecutionAuthority,
+  effect: {
+    outcome: ChildSettlement["outcome"];
+    publication: ChildSettlement["publication"];
+    receipt: unknown;
+  },
+): void {
+  const s = executionAuthorityState(authority);
+  withPrivateEffectWriter(s, () => {
+    const parsed = effectObservationSchema.safeParse(effect.receipt);
+    if (!parsed.success) throw Error("Unsupported effect receipt evidence");
+    const receipt = parsed.data;
+    const { outcome, publication } = receiptSettlement(s, receipt);
     if (effect.outcome !== outcome || effect.publication !== publication)
       throw Error("Effect evidence does not prove requested settlement");
     settleExecutionLifecycle(s);
@@ -2162,12 +1922,8 @@ export function verifyConfigurationMaintenanceChildTerminal(
     canonicalJson(source.execution) !== canonicalJson(child.execution)
   )
     throw Error("Original frozen maintenance child required");
-  const childAuthority = restoreAdmittedControlExecution(
-      root.installation.installation,
-      child.execution,
-    ),
-    state = executionAuthorityState(childAuthority),
-    admission = readPrivateRecord(
+  restoreAdmittedControlExecution(root.installation.installation, child.execution);
+  const admission = readPrivateRecord(
       root.installation,
       "executions",
       `${child.execution.operationKey}.json`,
@@ -3883,82 +3639,6 @@ export async function verifyDataUpdatePrerequisites(authority: VerifiedExecution
     return receipt;
   } finally {
     if (childInstallation) closeControlInstallation(childInstallation);
-  }
-}
-
-/** A signed progress file cannot mint success. Rejoin the actual original CLI
- * exit sources and DM settlements, and the exact generation they published. */
-function verifyDataUpdateCompletionSource(
-  authority: VerifiedExecutionAuthority,
-  receipt: import("../ops/job-evidence").DataWorkflowReceipt,
-) {
-  const s = executionAuthorityState(authority);
-  if (s.installation.fixedChildId) throw Error("Original Full Update root required");
-  const name = `data-update-plan-${s.execution.operationKey}.json`,
-    raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  const plan = dataUpdatePlanSchema.parse(raw),
-    infraDir = dirname(s.installation.dataRoot);
-  if (
-    controlDigest(plan.parent) !== controlDigest(s.execution) ||
-    opsOperationFingerprint(plan.operation) !== s.execution.operationFingerprint ||
-    receipt.revisionId !== plan.finalRevisionId ||
-    currentConfigurationGeneration(infraDir) !== plan.finalRevisionId ||
-    dataUpdateSourcesDigest(infraDir) !== plan.sourcesDigest
-  )
-    throw Error("Original Full Update completion sources changed");
-  const checkData = (dataAuthority: VerifiedExecutionAuthority) => {
-    const dataState = executionAuthorityState(dataAuthority);
-    for (const [index, slot] of plan.dataChildren.entries()) {
-      const bound = lookupControlChildPhase(dataAuthority, slot),
-        child = receipt.children[index];
-      if (
-        !bound ||
-        !child ||
-        child.operationKey !== bound.execution.operationKey ||
-        child.jobId !== bound.execution.executionId ||
-        child.fingerprint !== bound.execution.fingerprint ||
-        child.deadlineAt !== bound.execution.deadlineAt ||
-        readDataControlTerminalObservation(dataState.installation.installation, bound.execution)
-          .status.status !== "ok"
-      )
-        throw Error("Actual Full Update data completion required");
-    }
-  };
-  if (s.execution.executor === "ops-agent") {
-    for (const slot of [plan.dataReservation, plan.finalizationReservation]) {
-      const attempt = lookupControlChildPhaseAttempt(authority, slot);
-      if (!attempt) throw Error("Full Update fixed phase missing");
-      const child = openFixedChildInstallation({
-        infraDir,
-        assertion: attempt.assertion,
-      });
-      try {
-        readFixedCliSpawnIntent(child, attempt.execution, fixedCliArguments(plan.operation));
-        const childAuthority = restoreAdmittedControlExecution(child, attempt.execution),
-          effect = childSettlementState(
-            verifyControlEffectSettlement(child, attempt.execution),
-          ).evidence;
-        if (effect.outcome !== "committed" || effect.publication !== "committed")
-          throw Error("Full Update fixed phase unsettled");
-        const progress = readDataWorkflowProgress(childAuthority);
-        if (slot.phase === "data-workflow") checkData(childAuthority);
-        else if (canonicalJson(progress) !== canonicalJson(receipt))
-          throw Error("Original Full Update final receipt changed");
-      } finally {
-        closeControlInstallation(child);
-      }
-    }
-  } else {
-    checkData(authority);
-    for (const slot of plan.finalizationChildren) {
-      const bound = lookupControlChildPhase(authority, slot);
-      if (
-        !bound ||
-        readDataControlTerminalObservation(s.installation.installation, bound.execution).status
-          .status !== "ok"
-      )
-        throw Error("Actual Full Update hardlink completion required");
-    }
   }
 }
 
