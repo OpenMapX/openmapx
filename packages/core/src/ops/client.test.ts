@@ -689,3 +689,23 @@ it("fix1 refuses an older agent before any version2 mutation admission", async (
   expect(posts).toBe(0);
   expect(error).toMatchObject({ name: "OpsProtocolUpgradeRequiredError" });
 });
+
+it("reports an agent that does not answer as unreachable, not as one needing an update", async () => {
+  let posts = 0;
+  const client = new OpsClient({
+    baseUrl: "http://ops-agent:4300",
+    tokenFile: tokenFile(),
+    fetch: async (_url, init) => {
+      if (init?.method === "POST") posts++;
+      throw new TypeError("fetch failed");
+    },
+  });
+  const error = await client
+    .execute(
+      { kind: "service.build", serviceId: "osrm" },
+      { operationKey: "opk1_abcdefghijklmnop" },
+    )
+    .catch((error) => error);
+  expect(posts).toBe(0);
+  expect(error).toMatchObject({ name: "OpsClientError", errorClass: "runtime" });
+});

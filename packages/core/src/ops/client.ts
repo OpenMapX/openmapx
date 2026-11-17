@@ -500,10 +500,13 @@ export class OpsClient {
       try {
         value = await this.get("/v1/protocol", { signal });
       } catch (error) {
+        // Only an agent that answers without this protocol needs an update; one
+        // that does not answer at all (restarting, recreated) is unreachable.
         if (
           isAbortError(error) ||
           (error instanceof OpsClientError &&
-            ["authentication", "authorization", "timeout"].includes(error.errorClass))
+            (["authentication", "authorization", "timeout"].includes(error.errorClass) ||
+              (error.errorClass === "runtime" && error.status === undefined)))
         )
           throw error;
         throw new OpsProtocolUpgradeRequiredError();
