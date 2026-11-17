@@ -588,6 +588,58 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(readdirSync(host.candidates)).toEqual([]);
     }, 180000);
 
+    it("keeps the lease of a maintenance needing recovery until the operator resolves it", async () => {
+      await coordinator();
+      const ctx = await job();
+      // The recreate's outcome is lost: the step is unknown.
+      host.setCreatingProcess(async () => {
+        throw Error("synthetic lost recreate");
+      });
+      await expect(
+        owned(ctx, async () => {
+          const candidate = await credentialCandidate(ctx, "synthetic-unknown-credential");
+          return prospective.persistAndApplyProspectiveConfiguration(candidate, {
+            coordinatorMode: "require-running",
+            signal: ctx.signal,
+          });
+        }),
+      ).rejects.toMatchObject({ reason: "recovery_required" });
+      const record = agentRecord(ctx);
+      expect(record.state).toBe("recovery_required");
+      expect(record.steps.at(-1)).toMatchObject({ state: "terminal", outcome: "unknown" });
+      expect(heldTargets(host.infraDir)).toContain("data-manager");
+      expect(await dm!.fenceStates()).toEqual(["prepared"]);
+      // The job's next run neither settles nor releases it.
+      await reclaim(ctx);
+      await expect(
+        owned(ctx, () => prospective.resumeRetainedConfigurationCandidate()),
+      ).rejects.toMatchObject({ reason: "recovery_required" });
+      expect(agentRecord(ctx).state).toBe("recovery_required");
+      expect(heldTargets(host.infraDir)).toContain("data-manager");
+      // `openmapx control resolve --as failed` settles the record and the fence.
+      const { openLeaseStore, leaseStoreDirectory } = await import(
+        "@openmapx/core/build-artifacts"
+      );
+      const lease = openLeaseStore({
+        directory: leaseStoreDirectory(host.infraDir),
+        purpose: "test operator",
+      })
+        .list()
+        .find((value) => value.ownerKind === "configurationMaintenance.prepare");
+      const { settleMaintenanceFence } = await import(
+        "../../../../../packages/cli/src/lib/control-resolve"
+      );
+      // The CLI presents the host CLI's own data-manager token.
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(`${dm!.token}-cli`));
+      await settleMaintenanceFence(host.infraDir, lease!, "failed");
+      expect(agentRecord(ctx)).toMatchObject({
+        state: "settled",
+        fenceOutcome: "applied",
+        fence: { state: "settled" },
+      });
+      expect(await dm!.fenceStates()).toEqual(["settled"]);
+    }, 120000);
+
     it("refuses the same immediate key with a different intent before any effect", async () => {
       await coordinator();
       const { jobRunner } = await import("../job-runner");
