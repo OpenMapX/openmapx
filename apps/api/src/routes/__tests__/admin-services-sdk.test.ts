@@ -434,7 +434,6 @@ describe("actual service producers through final exported SDK", () => {
         outcome: "not_committed",
         reason: "failed",
         cleanupFailed: false,
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       });
     });
@@ -491,7 +490,6 @@ describe("actual service producers through final exported SDK", () => {
                 cleanupFailed: false,
               }
             : { outcome, reason: "failed" as const, cleanupFailed: false }),
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       });
       apply.mockRejectedValueOnce(failure);
@@ -519,7 +517,6 @@ describe("actual service producers through final exported SDK", () => {
       outcome: "not_committed",
       reason: "failed",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     });
     failure.message = "synthetic-secret-apply";

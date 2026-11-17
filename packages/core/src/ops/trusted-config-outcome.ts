@@ -6,7 +6,7 @@ import {
 export type TrustedConfigurationApplyOutcome = (
   | ConfigurationApplyResult
   | { outcome: "unknown"; reason: "transport_or_result" }
-) & { publisherCleanupFailed: boolean; registryUpdateFailed: boolean; problem?: string };
+) & { registryUpdateFailed: boolean; problem?: string };
 export function completeTrustedConfigurationApply(
   outcome: TrustedConfigurationApplyOutcome,
 ): boolean {
@@ -14,7 +14,6 @@ export function completeTrustedConfigurationApply(
     outcome.outcome === "committed" &&
     outcome.followUp === "complete" &&
     !outcome.cleanupFailed &&
-    !outcome.publisherCleanupFailed &&
     !outcome.registryUpdateFailed
   );
 }
@@ -25,11 +24,8 @@ export function parseTrustedConfigurationApplyOutcome(
 ): TrustedConfigurationApplyOutcome {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Configuration outcome unavailable");
-  const { publisherCleanupFailed, registryUpdateFailed, problem, ...application } = value as Record<
-    string,
-    unknown
-  >;
-  if (typeof publisherCleanupFailed !== "boolean" || typeof registryUpdateFailed !== "boolean")
+  const { registryUpdateFailed, problem, ...application } = value as Record<string, unknown>;
+  if (typeof registryUpdateFailed !== "boolean")
     throw new Error("Configuration outcome unavailable");
   if (problem !== undefined && typeof problem !== "string")
     throw new Error("Configuration outcome unavailable");
@@ -44,14 +40,12 @@ export function parseTrustedConfigurationApplyOutcome(
     return {
       outcome: "unknown",
       reason: "transport_or_result",
-      publisherCleanupFailed,
       registryUpdateFailed,
     };
   }
   return {
     ...configurationApplyResultSchema.parse(application),
     ...(problem === undefined ? {} : { problem }),
-    publisherCleanupFailed,
     registryUpdateFailed,
   };
 }

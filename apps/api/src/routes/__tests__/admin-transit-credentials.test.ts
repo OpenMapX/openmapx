@@ -85,7 +85,6 @@ beforeEach(async () => {
       enabledServiceIds: ["data-manager"],
       followUp: "complete",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     },
   });

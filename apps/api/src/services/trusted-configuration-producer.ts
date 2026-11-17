@@ -152,7 +152,6 @@ export async function applyTrustedConfigurationWithEvidence(
         outcome: "not_committed",
         reason: "failed",
         cleanupFailed: false,
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       },
     };
@@ -348,7 +347,6 @@ export function completeTrustedConfigurationApplication(
     outcome.outcome !== "committed" ||
     outcome.followUp !== "complete" ||
     outcome.cleanupFailed ||
-    outcome.publisherCleanupFailed ||
     outcome.registryUpdateFailed
   )
     if (options.ctx)

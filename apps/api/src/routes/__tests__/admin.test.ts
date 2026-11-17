@@ -54,7 +54,6 @@ vi.mock("../../services/trusted-config-operations.js", () => ({
       enabledServiceIds: [],
       followUp: "complete",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     },
   }),
@@ -488,7 +487,6 @@ describe("POST /admin/integrations/:id/enable", () => {
                 cleanupFailed: false,
               }
             : { outcome, reason: "failed" as const, cleanupFailed: false }),
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       });
       vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(error);

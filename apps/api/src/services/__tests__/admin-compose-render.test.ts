@@ -110,7 +110,6 @@ it("resumes the exact retained candidate instead of resealing a replacement", as
       revisionId: revision,
       followUp: "complete",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
       enabledServiceIds: [],
     },

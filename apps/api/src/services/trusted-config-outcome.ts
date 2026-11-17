@@ -28,7 +28,6 @@ export class TrustedConfigurationUpgradeRequired extends TrustedConfigurationApp
       outcome: "not_committed",
       reason: "failed",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     });
     this.name = "TrustedConfigurationUpgradeRequired";

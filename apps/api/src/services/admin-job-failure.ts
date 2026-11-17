@@ -19,7 +19,6 @@ export class ConfigurationPrerequisiteFailure extends AdminJobFailure {
         outcome: "not_committed",
         reason: "conflict",
         cleanupFailed: false,
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       },
     });

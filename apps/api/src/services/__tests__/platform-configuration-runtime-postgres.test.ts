@@ -1564,7 +1564,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           application: {
                             outcome: "committed",
                             followUp: "complete",
-                            publisherCleanupFailed: false,
                             registryUpdateFailed: false,
                           },
                         });

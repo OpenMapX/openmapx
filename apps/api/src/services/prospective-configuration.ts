@@ -643,7 +643,6 @@ async function completeUnissuedConfigurationCancellation(
       outcome: "not_committed",
       reason: "failed",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     };
     committed = {
@@ -816,7 +815,6 @@ async function completeNeverPreparedConfiguration(
     outcome: "not_committed",
     reason: terminal.errorClass === "busy" ? "busy" : "failed",
     cleanupFailed: false,
-    publisherCleanupFailed: false,
     registryUpdateFailed: false,
   };
   await owner.job.checkpoint({
@@ -1007,7 +1005,6 @@ async function completeUnusedConfigurationCancellation(
       outcome: "not_committed",
       reason: "failed",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     };
     committed = {
@@ -1099,10 +1096,7 @@ export async function assertSettledConfigurationCandidate(
   const outcome = parseTrustedConfigurationApplyOutcome(outcomes?.[candidate.operationKey]);
   if (
     contained
-      ? outcome.outcome !== "not_committed" ||
-        outcome.cleanupFailed ||
-        outcome.publisherCleanupFailed ||
-        outcome.registryUpdateFailed
+      ? outcome.outcome !== "not_committed" || outcome.cleanupFailed || outcome.registryUpdateFailed
       : !completeTrustedConfigurationApply(outcome) ||
         outcome.outcome !== "committed" ||
         outcome.revisionId !== candidate.revisionId
@@ -1306,23 +1300,11 @@ export async function retireSettledProspectiveConfiguration(
       { job } = administrativeConfigurationState(state.writer);
     if ((job.checkpointResult?._configurationCandidate as Record<string, unknown>)?.retirement)
       throw new JobObservationPending("recovery_required");
-    const outcome = {
-      ...(job.checkpointResult?.configuration as Record<string, unknown>),
-      publisherCleanupFailed: true,
-    };
     await job.checkpoint({
       ...job.checkpointResult,
       _configurationCandidate: {
         ...(job.checkpointResult?._configurationCandidate as Record<string, unknown>),
-        phase: (job.checkpointResult?._configurationCandidate as Record<string, unknown>)
-          ?.retirement
-          ? "settled"
-          : "unknown",
-      },
-      configuration: outcome,
-      _configurationOutcomes: {
-        ...(job.checkpointResult?._configurationOutcomes as Record<string, unknown>),
-        [candidate.operationKey]: outcome,
+        phase: "unknown",
       },
     });
     throw new JobObservationPending("recovery_required");
@@ -1453,7 +1435,6 @@ async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
     outcome: "not_committed",
     reason: "failed",
     cleanupFailed: false,
-    publisherCleanupFailed: false,
     registryUpdateFailed: false,
   };
   await job.checkpoint({
@@ -2660,7 +2641,6 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
     outcome: "not_committed",
     reason: "conflict",
     cleanupFailed: false,
-    publisherCleanupFailed: false,
     registryUpdateFailed: false,
   };
   await job.checkpoint({
@@ -2986,7 +2966,6 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
       outcome: "not_committed",
       reason: "conflict",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     },
   });
@@ -3027,7 +3006,6 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
       outcome: "not_committed",
       reason: "conflict",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     };
     await job.checkpoint({
@@ -3202,7 +3180,6 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
     outcome: "not_committed",
     reason: "conflict",
     cleanupFailed: false,
-    publisherCleanupFailed: false,
     registryUpdateFailed: false,
   };
   await job.checkpoint({
@@ -4870,7 +4847,6 @@ export async function persistAndApplyProspectiveConfiguration(
             outcome: "not_committed",
             reason: "conflict",
             cleanupFailed: false,
-            publisherCleanupFailed: false,
             registryUpdateFailed: false,
           },
         });
@@ -4915,7 +4891,6 @@ export async function persistAndApplyProspectiveConfiguration(
         outcome: "not_committed",
         reason: "conflict",
         cleanupFailed: false,
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       };
       await owner.job.checkpoint({
@@ -5000,7 +4975,6 @@ export async function persistAndApplyProspectiveConfiguration(
       throw new JobObservationPending("recovery_required");
     const application: TrustedConfigurationApplyOutcome = {
         ...generation,
-        publisherCleanupFailed: false,
         registryUpdateFailed,
       },
       checkpoint = owner.job.checkpointResult?._configurationCandidate as Record<string, unknown>,
@@ -5125,7 +5099,6 @@ export async function persistAndApplyProspectiveConfiguration(
           outcome: "not_committed",
           reason: "conflict",
           cleanupFailed: false,
-          publisherCleanupFailed: false,
           registryUpdateFailed: false,
         },
       };
@@ -5215,12 +5188,10 @@ async function applyCommittedOrdinaryCandidate(
   }
   const application = {
     ...result,
-    publisherCleanupFailed: false,
     registryUpdateFailed,
   };
   const phase =
     application.outcome === "unknown" ||
-    application.publisherCleanupFailed ||
     application.registryUpdateFailed ||
     application.cleanupFailed
       ? "unknown"

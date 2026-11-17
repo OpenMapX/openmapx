@@ -788,7 +788,6 @@ describe("service credentials", () => {
                   cleanupFailed: false,
                 }
               : { outcome, reason: "failed" as const, cleanupFailed: false }),
-          publisherCleanupFailed: false,
           registryUpdateFailed: false,
         });
         vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(error);
@@ -816,7 +815,6 @@ describe("service credentials", () => {
           outcome: "not_committed",
           reason: "failed",
           cleanupFailed: false,
-          publisherCleanupFailed: false,
           registryUpdateFailed: false,
           problem,
         }),

@@ -15,7 +15,6 @@ export type DeleteAdminIntegrationCredential200HostApply =
       enabledServiceIds: string[];
       followUp: "complete" | "failed";
       cleanupFailed: boolean;
-      publisherCleanupFailed: boolean;
       registryUpdateFailed: boolean;
     }
   | {
@@ -23,12 +22,10 @@ export type DeleteAdminIntegrationCredential200HostApply =
       reason: "conflict" | "busy" | "failed";
       currentRevisionId?: string | null;
       cleanupFailed: boolean;
-      publisherCleanupFailed: boolean;
       registryUpdateFailed: boolean;
     }
   | {
       outcome: "unknown";
       reason: "transport_or_result";
-      publisherCleanupFailed: boolean;
       registryUpdateFailed: boolean;
     };

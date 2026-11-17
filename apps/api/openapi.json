@@ -37773,9 +37773,6 @@
                                     "cleanupFailed": {
                                       "type": "boolean"
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -37786,7 +37783,6 @@
                                     "enabledServiceIds",
                                     "followUp",
                                     "cleanupFailed",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -37822,9 +37818,6 @@
                                     "cleanupFailed": {
                                       "type": "boolean"
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -37833,7 +37826,6 @@
                                     "outcome",
                                     "reason",
                                     "cleanupFailed",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -37853,9 +37845,6 @@
                                         "transport_or_result"
                                       ]
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -37863,7 +37852,6 @@
                                   "required": [
                                     "outcome",
                                     "reason",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -39059,9 +39047,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -39072,7 +39057,6 @@
                             "enabledServiceIds",
                             "followUp",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -39108,9 +39092,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -39119,7 +39100,6 @@
                             "outcome",
                             "reason",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -39139,9 +39119,6 @@
                                 "transport_or_result"
                               ]
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -39149,7 +39126,6 @@
                           "required": [
                             "outcome",
                             "reason",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -40023,9 +39999,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -40036,7 +40009,6 @@
                             "enabledServiceIds",
                             "followUp",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -40072,9 +40044,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -40083,7 +40052,6 @@
                             "outcome",
                             "reason",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -40103,9 +40071,6 @@
                                 "transport_or_result"
                               ]
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -40113,7 +40078,6 @@
                           "required": [
                             "outcome",
                             "reason",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -52512,9 +52476,6 @@
                                     "cleanupFailed": {
                                       "type": "boolean"
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -52525,7 +52486,6 @@
                                     "enabledServiceIds",
                                     "followUp",
                                     "cleanupFailed",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -52561,9 +52521,6 @@
                                     "cleanupFailed": {
                                       "type": "boolean"
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -52572,7 +52529,6 @@
                                     "outcome",
                                     "reason",
                                     "cleanupFailed",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -52592,9 +52548,6 @@
                                         "transport_or_result"
                                       ]
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -52602,7 +52555,6 @@
                                   "required": [
                                     "outcome",
                                     "reason",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -57252,9 +57204,6 @@
                                     "cleanupFailed": {
                                       "type": "boolean"
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -57265,7 +57214,6 @@
                                     "enabledServiceIds",
                                     "followUp",
                                     "cleanupFailed",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -57301,9 +57249,6 @@
                                     "cleanupFailed": {
                                       "type": "boolean"
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -57312,7 +57257,6 @@
                                     "outcome",
                                     "reason",
                                     "cleanupFailed",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -57332,9 +57276,6 @@
                                         "transport_or_result"
                                       ]
                                     },
-                                    "publisherCleanupFailed": {
-                                      "type": "boolean"
-                                    },
                                     "registryUpdateFailed": {
                                       "type": "boolean"
                                     }
@@ -57342,7 +57283,6 @@
                                   "required": [
                                     "outcome",
                                     "reason",
-                                    "publisherCleanupFailed",
                                     "registryUpdateFailed"
                                   ],
                                   "additionalProperties": false
@@ -57946,9 +57886,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -57959,7 +57896,6 @@
                             "enabledServiceIds",
                             "followUp",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -57995,9 +57931,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -58006,7 +57939,6 @@
                             "outcome",
                             "reason",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -58026,9 +57958,6 @@
                                 "transport_or_result"
                               ]
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -58036,7 +57965,6 @@
                           "required": [
                             "outcome",
                             "reason",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -58843,9 +58771,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -58856,7 +58781,6 @@
                             "enabledServiceIds",
                             "followUp",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -58892,9 +58816,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -58903,7 +58824,6 @@
                             "outcome",
                             "reason",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -58923,9 +58843,6 @@
                                 "transport_or_result"
                               ]
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -58933,7 +58850,6 @@
                           "required": [
                             "outcome",
                             "reason",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -90353,9 +90269,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -90366,7 +90279,6 @@
                             "enabledServiceIds",
                             "followUp",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -90402,9 +90314,6 @@
                             "cleanupFailed": {
                               "type": "boolean"
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -90413,7 +90322,6 @@
                             "outcome",
                             "reason",
                             "cleanupFailed",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
@@ -90433,9 +90341,6 @@
                                 "transport_or_result"
                               ]
                             },
-                            "publisherCleanupFailed": {
-                              "type": "boolean"
-                            },
                             "registryUpdateFailed": {
                               "type": "boolean"
                             }
@@ -90443,7 +90348,6 @@
                           "required": [
                             "outcome",
                             "reason",
-                            "publisherCleanupFailed",
                             "registryUpdateFailed"
                           ],
                           "additionalProperties": false
