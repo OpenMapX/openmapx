@@ -455,6 +455,38 @@ describe("configuration maintenance in the agent", () => {
     expect(order).toEqual(["prepare-fence", "cancel-lease", "step:0"]);
     expect(applied.record.steps[1]?.state).toBe("pending");
   });
+
+  it("cancels on an abandon once a step started, and returns the settled record on a repeat", async () => {
+    admit({ handoff: true });
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    expect(
+      (await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000))).outcome,
+    ).toBe("running");
+    progress("applying", "recreate_attempted");
+    // The helper still runs: the abandon cancels the lease instead of settling.
+    const abandoned = await maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000));
+    expect(abandoned).toMatchObject({ state: "applying", cancelRequestedAt: expect.any(String) });
+    expect(order).toContain("cancel-lease");
+    expect(order).not.toContain("release");
+    await expect(
+      maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000)),
+    ).rejects.toThrow(MaintenanceTransitionRefused);
+    progress("cancelled", "verified");
+    helper = { id: "c".repeat(64), running: false, exitCode: 1 };
+    const settled = await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
+    expect(settled).toMatchObject({ state: "settled", followUp: "contained" });
+    expect(order.at(-1)).toBe("release");
+    // Settle is idempotent: a repeat of either outcome changes nothing.
+    const releases = order.filter((entry) => entry === "release").length;
+    expect(await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000))).toEqual(
+      settled,
+    );
+    expect(await maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000))).toEqual(
+      settled,
+    );
+    expect(order.filter((entry) => entry === "release")).toHaveLength(releases);
+  });
 });
 
 describe("helper outcome", () => {
