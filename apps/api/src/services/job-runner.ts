@@ -1,10 +1,9 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   adminIntegrationReloadResultSchema,
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
-import { canonicalJson, hardlinkApplySummarySchema, readOpsTokenFile } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
+import { canonicalJson, hardlinkApplySummarySchema } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
@@ -15,6 +14,7 @@ import {
   isActiveMaintenanceViolation,
 } from "./active-maintenance-conflict";
 import { checkpointOwnedAdminJob } from "./admin-job-checkpoint";
+import { apiKeyedDigest } from "./admin-job-digest";
 import {
   AdminJobFailure,
   ConfigurationPrerequisiteFailure,
@@ -429,11 +429,7 @@ class AdminJobRunner {
     ) => Promise<{ value: T; result: Record<string, unknown>; failed?: boolean }>,
     restore: (result: Record<string, unknown>) => T,
   ): Promise<T> {
-    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-    const intentDigest = createHmac("sha256", token)
-      .update("openmapx-immediate-configuration-intent-v1\0")
-      .update(canonicalJson(options.intent))
-      .digest("hex");
+    const intentDigest = apiKeyedDigest("immediate-configuration-intent", options.intent);
     const actorId = options.actorId ?? "internal";
     const find = (connection: Pick<typeof db, "select">) =>
       connection

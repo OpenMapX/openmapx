@@ -1,9 +1,7 @@
 /** Observation/continuation of one already saved nominal managed-map candidate.
  * This never constructs a participant, consumes a proof, saves, encrypts or seals. */
-import { createHmac } from "node:crypto";
-import { canonicalJson, readOpsTokenFile } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
 import type { db } from "../db";
+import { apiKeyedDigest } from "./admin-job-digest";
 import { JobObservationPending } from "./admin-job-failure";
 import type { JobContext } from "./job-runner";
 import type { ProspectiveConfigurationOverlay } from "./prospective-configuration";
@@ -52,17 +50,11 @@ export async function recoveredTransitCredentialResult(
   if (typeof actorId !== "string" || typeof operationKey !== "string") return result;
   const retained = await readRetainedFeedCredentialPreview({ actorId, operationKey });
   if (!retained) return result;
-  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
-    digest = createHmac("sha256", token)
-      .update("openmapx-immediate-configuration-intent-v1\0")
-      .update(
-        canonicalJson({
-          purpose: "transit-credentials",
-          previewId: retained.row.id,
-          intentFingerprint: retained.row.intentFingerprint,
-        }),
-      )
-      .digest("hex");
+  const digest = apiKeyedDigest("immediate-configuration-intent", {
+    purpose: "transit-credentials",
+    previewId: retained.row.id,
+    intentFingerprint: retained.row.intentFingerprint,
+  });
   if (digest !== ctx.checkpointResult?._immediateIntentDigest)
     throw new JobObservationPending("invalid_identity");
   const checkpoint = ctx.checkpointResult?._configurationCandidate as

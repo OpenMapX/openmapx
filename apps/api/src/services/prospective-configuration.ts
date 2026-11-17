@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   type IntegrationApplyReceipt,
   integrationApplyReceiptSchema,
@@ -44,6 +44,7 @@ import * as schema from "../db/schema";
 import { integrationApplicationReceipt } from "../db/schema";
 import { resolveIntegrationConfigWithSourcesStrict } from "../integration-config";
 import { getIntegration, inspectIntegrationRuntime } from "../integration-host";
+import { apiKeyedDigest } from "./admin-job-digest";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
   checkpointTerminalCopy,
@@ -1866,10 +1867,7 @@ function freeze(value: unknown): void {
   for (const child of Object.values(value)) freeze(child);
   Object.freeze(value);
 }
-async function sourceFingerprint(
-  context: AdministrativeConfigurationReadContext,
-  token: string,
-): Promise<string> {
+async function sourceFingerprint(context: AdministrativeConfigurationReadContext): Promise<string> {
   const integrations = [];
   for (const integration of context.integrations)
     integrations.push({
@@ -1880,23 +1878,18 @@ async function sourceFingerprint(
         context,
       ),
     });
-  const subkey = createHmac("sha256", token).update("openmapx-prospective-source-v1").digest();
-  return createHmac("sha256", subkey)
-    .update(
-      canonicalJson({
-        services: context.services.map((service) => service.manifest),
-        integrations,
-        env: context.env,
-        files: administrativeConfigurationFileObservations(context),
-        serviceRows: context.serviceRows,
-        bindingRows: context.bindingRows,
-        bindingRevisionRows: context.bindingRevisionRows,
-        integrationRows: context.integrationRows,
-        serviceSecretRows: context.serviceSecretRows,
-        integrationSecretRows: context.integrationSecretRows,
-      }),
-    )
-    .digest("hex");
+  return apiKeyedDigest("configuration-source", {
+    services: context.services.map((service) => service.manifest),
+    integrations,
+    env: context.env,
+    files: administrativeConfigurationFileObservations(context),
+    serviceRows: context.serviceRows,
+    bindingRows: context.bindingRows,
+    bindingRevisionRows: context.bindingRevisionRows,
+    integrationRows: context.integrationRows,
+    serviceSecretRows: context.serviceSecretRows,
+    integrationSecretRows: context.integrationSecretRows,
+  });
 }
 function publisherOptions(token: string) {
   return { token };
@@ -2266,7 +2259,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
       if (
         coordinator &&
         (decision.rowVersions.some((row) => row.rowVersion !== row.previousRowVersion) ||
-          (await sourceFingerprint(read, token)) !== record.sourceFingerprint)
+          (await sourceFingerprint(read)) !== record.sourceFingerprint)
       )
         throw new JobObservationPending("recovery_required");
     }
@@ -2429,7 +2422,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         Date.now() >= record.parentDeadlineAt ||
         Date.now() >= parseControlRootOperationKey(record.prepareOperationKey!).notAfter ||
         inspected.snapshot.expiresAt <= new Date().toISOString() ||
-        (await sourceFingerprint(read, token)) !== record.sourceFingerprint
+        (await sourceFingerprint(read)) !== record.sourceFingerprint
       ) {
         candidates.set(candidate, state);
         setStage(candidate, "recovered_unissued");
@@ -2515,7 +2508,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         Date.now() >= record.parentDeadlineAt ||
         Date.now() >= parseControlRootOperationKey(record.prepareOperationKey!).notAfter ||
         inspected.snapshot.expiresAt <= new Date().toISOString() ||
-        (await sourceFingerprint(read, token)) !== record.sourceFingerprint
+        (await sourceFingerprint(read)) !== record.sourceFingerprint
       ) {
         // The original private bytes/locked prepared checkpoint prove which
         // helper to OBSERVE, or its explicit nonissuance before this new claim.
@@ -3579,7 +3572,7 @@ export async function prepareProspectiveConfiguration(input: {
   const result = await withAdministrativeConfigurationRead(
     { signal: input.signal },
     async (context) => {
-      const fingerprint = await sourceFingerprint(context, token);
+      const fingerprint = await sourceFingerprint(context);
       const merged = await mergeOverlay(context, overlay, source);
       const read = openAdministrativeConfigurationRead(merged);
       try {
@@ -3619,7 +3612,7 @@ export async function prepareProspectiveConfiguration(input: {
             ),
         );
         freeze(integrationReloadSnapshot);
-        if ((await sourceFingerprint(context, token)) !== fingerprint)
+        if ((await sourceFingerprint(context)) !== fingerprint)
           throw Error("Configuration source changed during preparation");
         for (const entry of payload.serviceConfigs) {
           const manifest = context.services.find(
@@ -4553,7 +4546,7 @@ async function prepareMaintenanceCoordinator(
   )
     rejectUnissuedCandidate(candidate, "Configuration candidate expired");
   await withAdministrativeConfigurationRead({ signal }, async (read) => {
-    if ((await sourceFingerprint(read, state.publisher.token)) !== candidate.sourceFingerprint)
+    if ((await sourceFingerprint(read)) !== candidate.sourceFingerprint)
       rejectUnissuedCandidate(candidate, "Configuration source conflict");
   });
   await verifyConfigurationCommitParticipant(candidate, state.writer);
@@ -4600,7 +4593,7 @@ async function prepareMaintenanceCoordinator(
   if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
     rejectUnissuedCandidate(candidate, "Configuration candidate expired");
   await withAdministrativeConfigurationRead({ signal }, async (read) => {
-    if ((await sourceFingerprint(read, state.publisher.token)) !== candidate.sourceFingerprint)
+    if ((await sourceFingerprint(read)) !== candidate.sourceFingerprint)
       rejectUnissuedCandidate(candidate, "Configuration source conflict");
   });
   const ready = await verifyCurrentPreview(candidate, state, signal);
@@ -4832,7 +4825,7 @@ export async function commitProspectiveConfigurationMaintenance(
           canonicalJson(prepared)
       )
         throw Error("Original owned prepared candidate checkpoint required");
-      if ((await sourceFingerprint(context, state.publisher.token)) !== candidate.sourceFingerprint)
+      if ((await sourceFingerprint(context)) !== candidate.sourceFingerprint)
         throw Error("Configuration source conflict");
       if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
         throw Error("Configuration candidate expired");
@@ -5219,7 +5212,7 @@ export async function persistAndApplyProspectiveConfiguration(
   setStage(candidate, "save_attempted");
   try {
     await withConfigurationWriteTransaction(state.writer, async (tx, context) => {
-      if ((await sourceFingerprint(context, state.publisher.token)) !== candidate.sourceFingerprint)
+      if ((await sourceFingerprint(context)) !== candidate.sourceFingerprint)
         throw Error("Configuration source conflict");
       if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
         throw Error("Configuration candidate expired");
