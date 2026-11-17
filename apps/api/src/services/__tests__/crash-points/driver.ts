@@ -360,7 +360,7 @@ export class CrashHost {
       await host.provision(options);
       return host;
     } catch (error) {
-      await host.close();
+      await host.close("provisioning");
       throw error;
     }
   }
@@ -829,11 +829,17 @@ export class CrashHost {
     await launched.started;
     const startedAt = Date.now();
     void launched.exited.then(({ code, signal }) => {
-      writeFileSync(
-        join(this.workDir, `${role}.log`),
-        `${launched.output()}\n[crash-points] ${role} exited (${code ?? signal})\n`,
-        { flag: "a" },
-      );
+      try {
+        writeFileSync(
+          join(this.workDir, `${role}.log`),
+          `${launched.output()}\n[crash-points] ${role} exited (${code ?? signal})\n`,
+          { flag: "a" },
+        );
+      } catch (error) {
+        // A role that a recreate started while the host closed exits after
+        // the host's files are gone.
+        if (!this.closed) throw error;
+      }
       if (this.closed || record.killedByTest || this.roles.get(role) !== record) return;
       // The container's restart policy: a crashed process comes back, with
       // Docker's doubling delay while it keeps crashing right away.
@@ -1055,12 +1061,12 @@ export class CrashHost {
   }
 
   dropReply(link: Link, match: ReplyMatch): Promise<ProxiedRequest> {
-    return this.proxies[link].dropReply(match);
+    return this.proxies[link].dropReply(requestMatch(match));
   }
 
   /** Keeps the next matching request on a link from its receiver until released. */
   holdRequest(link: Link, match: ReplyMatch): HeldRequest {
-    return this.proxies[link].holdRequest(match);
+    return this.proxies[link].holdRequest(requestMatch(match));
   }
 
   /** Kills every running configuration helper, as `docker kill` would. */
@@ -1355,9 +1361,10 @@ export class CrashHost {
     kind?: string,
   ): Array<{ kind: string; operationId: string; operationKey?: string }> {
     const seen = new Map<string, { kind: string; operationId: string; operationKey?: string }>();
+    const kinds = kind ? requestKinds(kind) : undefined;
     for (const entry of this.proxies["api->agent"].requests) {
       if (entry.method !== "POST" || !entry.kind || !entry.operationId) continue;
-      if (kind && entry.kind !== kind) continue;
+      if (kinds && !kinds.includes(entry.kind)) continue;
       seen.set(entry.operationId, {
         kind: entry.kind,
         operationId: entry.operationId,
@@ -1493,7 +1500,21 @@ export class CrashHost {
     }
   }
 
-  async close(): Promise<void> {
+  private keepEvidence(testName: string) {
+    const name = `${testName.replace(/[^a-z0-9]+/gi, "-").slice(0, 80)}-${Date.now()}`;
+    const target = join(
+      process.env.OPENMAPX_CRASH_LOG_DIR ?? join(tmpdir(), "openmapx-crash-logs"),
+      name,
+    );
+    copyEvidence(this.workDir, join(target, "work"));
+    copyEvidence(join(this.infraDir, "state"), join(target, "state"));
+    process.stderr.write(`[crash-points] kept the logs and state of "${testName}" in ${target}\n`);
+  }
+
+  /** Stops every role and removes the host. `keepAs` names a failed test:
+   * its role logs and the agent's state are copied first to
+   * `OPENMAPX_CRASH_LOG_DIR` (default `<tmpdir>/openmapx-crash-logs`). */
+  async close(keepAs?: string): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     for (const role of [...this.roles.keys()]) {
@@ -1514,6 +1535,7 @@ export class CrashHost {
       this.notablePlacesSource.server.closeAllConnections();
       await new Promise<void>((resolve) => this.notablePlacesSource?.server.close(() => resolve()));
     }
+    if (keepAs) this.keepEvidence(keepAs);
     if (this.stateFilesystem)
       spawnSync("sudo", ["-n", "umount", "--lazy", this.stateFilesystem], { stdio: "ignore" });
     if (this.databaseName && process.env.OPENMAPX_CRASH_KEEP !== "1") {
@@ -1529,6 +1551,37 @@ export class CrashHost {
     }
     if (process.env.OPENMAPX_CRASH_KEEP !== "1")
       rmSync(this.root, { recursive: true, force: true });
+  }
+}
+
+/** The API requests that carry an effect a scenario names by its operation
+ * kind. A maintenance's generation is the first step the agent runs inside
+ * `configurationMaintenance.apply`, so the API's request that renders a
+ * generation is either `stack.render` or that apply. */
+function requestKinds(kind: string): readonly string[] {
+  return kind === "stack.render" ? ["stack.render", "configurationMaintenance.apply"] : [kind];
+}
+
+function requestMatch(match: ReplyMatch): ReplyMatch {
+  return typeof match.kind === "string" ? { ...match, kind: requestKinds(match.kind) } : match;
+}
+
+/** Copies a directory the roles wrote, as root where their identities
+ * differ from the test's, and leaves the copy readable by the test's user. */
+function copyEvidence(source: string, target: string) {
+  if (!existsSync(source)) return;
+  mkdirSync(dirname(target), { recursive: true });
+  const copied = spawnSync("sudo", ["-n", "cp", "-a", source, target], { stdio: "ignore" });
+  if (copied.status === 0) {
+    spawnSync("sudo", ["-n", "chown", "-R", `${process.getuid?.() ?? 0}`, target], {
+      stdio: "ignore",
+    });
+    return;
+  }
+  try {
+    cpSync(source, target, { recursive: true, force: true });
+  } catch (error) {
+    writeFileSync(`${target}.unreadable`, `${(error as Error).message}\n`);
   }
 }
 

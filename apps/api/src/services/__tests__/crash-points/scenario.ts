@@ -71,17 +71,27 @@ export function crashScenario(scenario: {
 }): void {
   describe.skipIf(!scenario.enabled || !!crashPointsUnavailable())(scenario.title, () => {
     let host: CrashHost | undefined;
+    let failed = false;
     beforeAll(async () => {
       host = await CrashHost.open(scenario.host);
     }, 600_000);
     afterAll(async () => {
-      await host?.close();
+      // A failed scenario keeps its host's logs and agent state for diagnosis.
+      await host?.close(failed ? scenario.name : undefined);
     }, 120_000);
     const run = () => scenario.run(host as CrashHost);
     const entry = Object.hasOwn(knownFailures, scenario.name)
       ? knownFailures[scenario.name]
       : undefined;
-    if (entry) it(scenario.name, () => expectKnownFailure(entry, run), scenario.timeout);
-    else it(scenario.name, run, scenario.timeout);
+    it(
+      scenario.name,
+      ({ onTestFailed }) => {
+        onTestFailed(() => {
+          failed = true;
+        });
+        return entry ? expectKnownFailure(entry, run) : run();
+      },
+      scenario.timeout,
+    );
   });
 }

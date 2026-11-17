@@ -19,7 +19,9 @@ listed in `known-failures.json`. Each entry gives a one-line `reason` and a
 `fails` signature: a regular expression matched against the failure's message
 and, for an assertion, the values it compared. Every scenario declares itself
 through `crashScenario()` (`scenario.ts`), which opens one fresh host for it and
-closes it afterwards. A listed scenario passes only when it
+closes it afterwards. A scenario that fails keeps its host's role logs and the
+agent's state in `OPENMAPX_CRASH_LOG_DIR` (default `<tmpdir>/openmapx-crash-logs`)
+before the host is removed. A listed scenario passes only when it
 fails with its signature within its normal timeout. CI turns red when it
 passes, when it fails any other way (the original error is reported) and when
 it hangs. The rules:
@@ -103,7 +105,7 @@ here.
 | C14 | Registry outage after the check                                  | `registry-outage.test.ts`                                                    | pinned                                                                                       |
 | C15 | New API image unhealthy                                          | `unhealthy-api-image.test.ts`                                                | pinned                                                                                       |
 | C16 | Helper killed mid-recreate                                       | `helper-killed.test.ts`                                                      | pinned                                                                                       |
-| C16 | Cancelled mid-recreate                                           | `update-cancelled-mid-recreate.test.ts`                                      | known failure: the helper continues and the update succeeds after the cancel                 |
+| C16 | Cancelled mid-recreate                                           | `update-cancelled-mid-recreate.test.ts`                                      | pinned                                                                                       |
 | C16 | Deadline variant                                                 | —                                                                            | not expressible: deadlines are not reachable from outside                                    |
 | C17 | Agent restarted while the helper runs                            | `agent-restart-during-helper.test.ts`                                        | pinned                                                                                       |
 | C18 | Host lifecycle commands while the helper runs                    | `cli-during-helper.test.ts`                                                  | pinned                                                                                       |

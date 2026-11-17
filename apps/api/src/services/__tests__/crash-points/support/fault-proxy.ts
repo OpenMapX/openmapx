@@ -29,7 +29,8 @@ export interface ProxiedRequest {
 export interface ReplyMatch {
   method?: string;
   path: RegExp;
-  kind?: string;
+  /** One operation kind, or any of several. */
+  kind?: string | readonly string[];
   skip?: number;
   times?: number;
 }
@@ -37,7 +38,7 @@ export interface ReplyMatch {
 interface Rule {
   method?: string;
   path: RegExp;
-  kind?: string;
+  kind?: string | readonly string[];
   skip: number;
   times: number;
 }
@@ -66,7 +67,10 @@ function take<T extends Rule>(rules: T[], entry: ProxiedRequest): T | undefined 
       candidate.times > 0 &&
       (!candidate.method || candidate.method === entry.method) &&
       candidate.path.test(entry.path) &&
-      (!candidate.kind || candidate.kind === entry.kind),
+      (!candidate.kind ||
+        (typeof candidate.kind === "string"
+          ? candidate.kind === entry.kind
+          : candidate.kind.includes(entry.kind ?? ""))),
   );
   if (!rule) return undefined;
   if (rule.skip > 0) {
