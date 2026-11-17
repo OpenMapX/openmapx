@@ -48,6 +48,7 @@ jobs:
       plan: ${{ steps.select.outputs['plan'] }}
       database-matrix: ${{ steps.select.outputs['database-matrix'] }}
       code: ${{ steps.select.outputs['code'] }}
+      reason: ${{ steps.select.outputs['reason'] }}
       head: ${{ steps.select.outputs['head'] }}
       base: ${{ steps.select.outputs['base'] }}
       lint: ${{ steps.select.outputs['lint'] }}
@@ -693,8 +694,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Only main saves this cache: entries from pull requests and merge-queue
+      # refs were readable by no other run and filled the 10 GB Actions cache.
       - name: Restore Turbo build cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
           key: turbo-build-${{ runner.os }}-${{ github.sha }}
@@ -703,7 +706,22 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Build production applications, services, and packages
+        env:
+          TURBO_RUN_SUMMARY: "true"
         run: pnpm build
+
+      # Each save would otherwise carry every earlier build's outputs forward
+      # and the entry would keep growing; keep exactly this build's tasks.
+      - name: Prune Turbo build outputs this build did not use
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule')
+        run: node scripts/ci/prune-turbo-cache.mjs .turbo/runs .turbo/cache
+
+      - name: Save Turbo build cache
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-build-${{ runner.os }}-${{ github.sha }}
 
       - name: Exercise the bundled data-manager worker threads
         run: OPENMAPX_RUN_BUILT_WORKER_TESTS=1 pnpm exec vitest run --project node services/data-manager/src/__tests__/live-writer-worker.test.ts services/data-manager/src/__tests__/offline-extractor-worker.test.ts
@@ -793,7 +811,10 @@ jobs:
           tags: openmapx-ci:${{ matrix.app }}
           pull: ${{ matrix.app == 'docs' }}
           cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=${{ matrix.app == 'api' && 'min' || 'max' }},scope=${{ matrix.app }}
+          # Minimal export: a pull request's cache serves only that pull
+          # request, and full exports of every stage evicted each other
+          # before reuse while costing up to minutes per build.
+          cache-to: type=gha,mode=min,scope=${{ matrix.app }}
 
       - name: Boot the built API image
         if: matrix.app == 'api'
@@ -843,7 +864,7 @@ jobs:
         docker-changes,
         docker-build,
       ]
-    if: always() && github.event.pull_request.state != 'closed' && (github.event_name == 'pull_request' || needs.select.result != 'success' || needs.select.outputs.code != 'false')
+    if: always() && github.event.pull_request.state != 'closed' && (github.event_name == 'pull_request' || needs.select.result != 'success' || needs.select.outputs.code != 'false' || needs.select.outputs.reason == 'merge-queue-validated')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -884,7 +905,7 @@ jobs:
         run: node scripts/ci-impact-plan.mjs verify
 
       - name: Revalidate successful code evidence for metadata edits
-        if: needs.select.result == 'success' && needs.select.outputs.code == 'false'
+        if: needs.select.result == 'success' && needs.select.outputs.code == 'false' && needs.select.outputs.reason != 'merge-queue-validated'
         env:
           GH_TOKEN: ${{ github.token }}
           CI_PLAN: ${{ needs.select.outputs.plan }}
@@ -892,6 +913,44 @@ jobs:
           CI_BASE: ${{ github.event.pull_request.base.sha || '' }}
           CI_NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci-impact-plan.mjs verify-reuse
+
+      # The merge queue validated this exact commit in full; recheck that run's
+      # provider records before the release below may publish it.
+      - name: Reuse the merge-queue validation of this commit
+        if: needs.select.result == 'success' && needs.select.outputs.code == 'false' && needs.select.outputs.reason == 'merge-queue-validated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_PLAN: ${{ needs.select.outputs.plan }}
+          CI_HEAD: ${{ github.sha }}
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci-impact-plan.mjs verify-merge-queue
+
+  # A push that reuses the merge queue's validation installs nothing, so main
+  # would stop saving the dependency store pull requests restore. Installs only
+  # when the store for the current lockfile is missing.
+  warm-dependency-cache:
+    name: keep main's dependency cache
+    needs: select
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.select.outputs.reason == 'merge-queue-validated'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - id: node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - if: steps.node.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile
 
   release:
     name: build, scan, and publish Docker release

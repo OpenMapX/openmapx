@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { codeReceipt, findReusableCodeValidation, targetDigest } from "./ci-code-evidence.mjs";
+import {
+  codeReceipt,
+  findMergeQueueValidation,
+  findReusableCodeValidation,
+  targetDigest,
+} from "./ci-code-evidence.mjs";
 
 const head = "a".repeat(40);
 const source = { head, number: 790, baseRef: "main", baseRepositoryId: 1171046573 };
@@ -190,5 +195,118 @@ describe("provider-bound code validation reuse", () => {
   it("binds base repository/ref while allowing normal base-branch advancement", () => {
     expect(targetDigest(source)).toBe(targetDigest({ ...source, baseSha: "new-main" }));
     expect(targetDigest(source)).not.toBe(targetDigest({ ...source, baseRef: "release" }));
+  });
+});
+
+describe("merge-queue validation reused by the push to main", () => {
+  const pushRun = {
+    id: 500,
+    workflow_id: 55,
+    event: "push",
+    head_branch: "main",
+    path: ".github/workflows/ci.yml",
+    head_sha: head,
+    run_attempt: 1,
+  };
+  const queueRun = (id: number, extra = {}) => ({
+    id,
+    workflow_id: 55,
+    event: "merge_group",
+    head_branch: `gh-readonly-queue/main/pr-1028-${"b".repeat(40)}`,
+    path: ".github/workflows/ci.yml",
+    head_sha: head,
+    run_attempt: 1,
+    run_started_at: new Date(Date.UTC(2026, 10, 17, 0, 0, id)).toISOString(),
+    status: "completed",
+    conclusion: "success",
+    ...extra,
+  });
+  const queueJobs = (id: number, extra: Partial<JobRow>[] = []): JobRow[] =>
+    [
+      { name: "select required validation" },
+      { name: "test (database, crash-points, 1/4)" },
+      { name: "build Docker", conclusion: "skipped" },
+      { name: "lint / types / test" },
+      ...extra,
+    ].map((job) => ({
+      status: "completed",
+      conclusion: "success",
+      run_id: id,
+      run_attempt: 1,
+      head_sha: head,
+      ...job,
+    })) as JobRow[];
+  const lookup = (
+    runs: ReturnType<typeof queueRun>[],
+    jobs: Record<number, JobRow[]>,
+    current = {},
+  ) =>
+    findMergeQueueValidation({
+      current: { ...pushRun, ...current },
+      head,
+      runs,
+      readJobs: async (id: number) => jobs[id],
+    });
+
+  it("reuses the newest entirely green merge-queue run of the same commit", async () => {
+    expect(
+      await lookup([queueRun(600), queueRun(700)], { 600: queueJobs(600), 700: queueJobs(700) }),
+    ).toEqual({
+      version: 1,
+      runId: 700,
+      attempt: 1,
+      workflowId: 55,
+      head,
+    });
+  });
+
+  it("falls back to an older green run when the newest is not reusable", async () => {
+    const failed = queueJobs(700, [{ name: "types (not yet enforced)", conclusion: "failure" }]);
+    expect(
+      (await lookup([queueRun(600), queueRun(700)], { 600: queueJobs(600), 700: failed }))?.runId,
+    ).toBe(600);
+  });
+
+  it("refuses incomplete, red or foreign runs", async () => {
+    const jobs = { 600: queueJobs(600) };
+    for (const run of [
+      queueRun(600, { status: "in_progress" }),
+      queueRun(600, { conclusion: "failure" }),
+      queueRun(600, { event: "pull_request" }),
+      queueRun(600, { workflow_id: 56 }),
+      queueRun(600, { path: ".github/workflows/other.yml" }),
+      queueRun(600, { head_sha: "c".repeat(40) }),
+      queueRun(600, { head_branch: "gh-readonly-queue/release/pr-1" }),
+      queueRun(600, { head_branch: "main" }),
+    ])
+      expect(await lookup([run], jobs)).toBeNull();
+    for (const extra of [
+      [{ name: "test (node)", conclusion: "failure" }],
+      [{ name: "test (node)", conclusion: "cancelled" }],
+      [{ name: "test (node)", status: "in_progress", conclusion: undefined }],
+      [{ name: "lint / types / test" }],
+      [{ name: "late", run_id: 601 }],
+      [{ name: "late", head_sha: "c".repeat(40) }],
+    ])
+      expect(await lookup([queueRun(600)], { 600: queueJobs(600, extra) })).toBeNull();
+    const regated = queueJobs(600).map((job) =>
+      job.name === "lint / types / test" ? { ...job, run_attempt: 2 } : job,
+    );
+    expect(await lookup([queueRun(600)], { 600: regated })).toBeNull();
+    expect(await lookup([queueRun(600)], { 600: [] })).toBeNull();
+  });
+
+  it("applies only to a push to main of the same commit through this workflow", async () => {
+    const jobs = { 600: queueJobs(600) };
+    for (const current of [
+      { event: "schedule" },
+      { event: "pull_request" },
+      { head_branch: "release" },
+      { head_sha: "c".repeat(40) },
+      { path: ".github/workflows/other.yml" },
+      { workflow_id: 0 },
+      { run_attempt: 2 },
+    ])
+      expect(await lookup([queueRun(600)], jobs, current)).toBeNull();
   });
 });
