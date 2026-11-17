@@ -181,22 +181,6 @@ it("bounds each pass and continues where the previous pass stopped", async () =>
   expect(new Set(pruned).size).toBe(2);
 });
 
-it("keeps an agent execution until its canonical terminal commitment is sealed", async () => {
-  const { execution, authority, target } = admit(undefined, "ops-agent");
-  try {
-    settle(authority);
-    const later = execution.deadlineAt + 30 * 24 * 3600_000;
-    expect(await pruneControlRecords(target, { now: later })).toEqual([]);
-    expect(
-      existsSync(
-        join(root, "state/ops-agent/control/executions", `${execution.operationKey}.json`),
-      ),
-    ).toBe(true);
-  } finally {
-    closeControlInstallation(target);
-  }
-});
-
 it("keeps a finished maintenance step while its owner record exists, and that record with it", async () => {
   const maintenanceId = randomUUID(),
     { execution, authority } = admit(undefined, "host-cli", {

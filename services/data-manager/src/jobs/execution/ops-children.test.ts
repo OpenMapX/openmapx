@@ -1106,14 +1106,6 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         })
         .catch(() => undefined);
       expect(await first.exited).toBe(86);
-      const terminalPath = join(
-        root,
-        "state/ops-agent/control/observations",
-        `terminal-${bound.execution.operationKey}.json`,
-      );
-      const originalTerminal = existsSync(terminalPath)
-        ? JSON.parse(readFileSync(terminalPath, "utf8"))
-        : undefined;
       restarted = await start();
       const status = await restarted.client.lookup(operation, bound.execution.operationKey, {
         fingerprint: bound.execution.fingerprint,
@@ -1129,9 +1121,6 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         await expect(
           control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
         ).resolves.toMatchObject({ outcome: "contained", publication: "not_started" });
-        const repaired = JSON.parse(readFileSync(terminalPath, "utf8"));
-        expect(repaired.terminalDigest).toBe(originalTerminal.terminalDigest);
-        expect(repaired.terminalAt).toBe(originalTerminal.terminalAt);
       } else {
         expect(status.errorClass).toBe("recovery_required");
         // A status that is not terminal is never recorded.

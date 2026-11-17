@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -20,11 +20,8 @@ import {
   openControlInstallation,
   prepareFixedControlChild,
   provisionControlDirectories,
-  reserveControlTerminal,
-  restoreConfigurationPreEffectTerminal,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
-  retainControlTerminalCommitment,
   verifyControlEffectSettlement,
 } from "./control-authority";
 import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
@@ -155,52 +152,5 @@ it.each(["begun", "bound", "issued"])(
         .list()
         .map((value) => value.leaseId),
     ).toEqual([lease.leaseId]);
-  },
-);
-it.each(["exact", "different error", "missing"] as const)(
-  "restores original pre-effect whole tuple only from %s commitment",
-  async (mode) => {
-    const owner = start();
-    reserveControlTerminal(owner);
-    retainConfigurationPreEffectRefusal(owner);
-    const admission = JSON.parse(
-        readFileSync(
-          join(root, "state/ops-agent/control/executions", `${owner.execution.operationKey}.json`),
-          "utf8",
-        ),
-      ),
-      terminalAt = Date.now(),
-      status = {
-        version: 2 as const,
-        admittedAt: admission.admittedAt,
-        deadlineAt: owner.execution.deadlineAt,
-        fingerprint: owner.execution.fingerprint,
-        operationId: owner.execution.executionId,
-        operationKey: owner.execution.operationKey,
-        kind: "service.start" as const,
-        resourceId: "motis",
-        state: "failed" as const,
-        submittedAt: new Date(admission.admittedAt).toISOString(),
-        updatedAt: new Date(terminalAt).toISOString(),
-        errorClass:
-          mode === "different error"
-            ? ("runtime" as const)
-            : ("configuration_prerequisite" as const),
-        failureResult: {},
-      };
-    if (mode !== "missing") retainControlTerminalCommitment(owner, status, terminalAt);
-    const observed = {
-      ...status,
-      errorClass: "recovery_required" as const,
-      updatedAt: new Date(terminalAt + 1000).toISOString(),
-    };
-    if (mode === "exact")
-      expect(
-        restoreConfigurationPreEffectTerminal(installation, owner.execution, observed),
-      ).toEqual({ status, terminalAt });
-    else
-      expect(() =>
-        restoreConfigurationPreEffectTerminal(installation, owner.execution, observed),
-      ).toThrow();
   },
 );

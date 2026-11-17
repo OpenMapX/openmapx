@@ -352,224 +352,6 @@ export function retainedExecutionOrigin(
     throw Error("Execution origin identity mismatch");
   return admitted.origin;
 }
-const terminalCommitmentSchema = z.strictObject({
-  version: z.literal(1),
-  phase: z.enum(["prepared", "canonical"]),
-  origin: controlOriginSchema,
-  execution: executionRefSchema,
-  admissionDigest: digest,
-  terminalDigest: digest,
-  terminalAt: z.number().int().positive().safe(),
-});
-const terminalCommitmentName = (execution: ExecutionRef) =>
-  `terminal-${execution.operationKey}.json`;
-function terminalIdentity(s: AuthorityState, status: OpsJobStatus) {
-  const terminal = parseOpsJobStatus(status),
-    execution = s.execution;
-  const raw = readPrivateRecord(
-    s.installation,
-    "executions",
-    `${execution.operationKey}.json`,
-    65536,
-  );
-  const admitted = z
-    .object({ admittedAt: z.number().int().nonnegative().safe(), operation: opsOperationSchema })
-    .passthrough()
-    .parse(raw);
-  if (
-    s.installation.installation.role !== "ops-agent" ||
-    s.installation.fixedChildId ||
-    terminal.admittedAt !== admitted.admittedAt ||
-    terminal.operationId !== execution.executionId ||
-    terminal.operationKey !== execution.operationKey ||
-    terminal.fingerprint !== execution.fingerprint ||
-    terminal.deadlineAt !== execution.deadlineAt ||
-    terminal.kind !== s.kind
-  )
-    throw Error("Original terminal identity required");
-  return { terminal, admitted, digest: controlTerminalReceiptDigest(terminal) };
-}
-function readTerminalCommitment(s: AuthorityState) {
-  const proof = terminalCommitmentSchema.parse(
-    readPrivateRecord(s.installation, "observations", terminalCommitmentName(s.execution), 4096),
-  );
-  if (
-    proof.admissionDigest !== s.receiptDigest ||
-    controlDigest(proof.execution) !== controlDigest(s.execution) ||
-    !sameControlOrigin(proof.origin, s.origin)
-  )
-    throw Error("Original terminal commitment identity changed");
-  return proof;
-}
-/** Fixed live producer only: sign the full canonical tuple digest and original
- * time before its public journal row. This record makes no containment claim. */
-export function retainControlTerminalCommitment(
-  authority: VerifiedExecutionAuthority,
-  status: OpsJobStatus,
-  terminalAt: number,
-): number {
-  const s = executionAuthorityState(authority),
-    value = terminalIdentity(s, status),
-    origin = s.origin;
-  if (!origin || !Number.isSafeInteger(terminalAt) || terminalAt < value.admitted.admittedAt)
-    throw Error("Invalid original terminal time");
-  return withPrivateEffectWriter(s, () => {
-    const raw = readPrivateRecord(
-      s.installation,
-      "observations",
-      terminalCommitmentName(s.execution),
-      4096,
-    );
-    const prior = raw === null ? undefined : readTerminalCommitment(s);
-    const originalTime = prior?.terminalAt ?? terminalAt;
-    if (prior) {
-      if (prior.terminalDigest === value.digest) return originalTime;
-      // Configuration results stay masked while confidential claim cleanup
-      // refines their prepared result. A canonical receipt is never replaceable.
-      if (prior.phase !== "prepared" || !("revisionId" in value.admitted.operation))
-        throw Error("Original terminal tuple conflict");
-    }
-    const payload = terminalCommitmentSchema.parse({
-      version: 1,
-      phase: "prepared",
-      origin,
-      execution: s.execution,
-      admissionDigest: s.receiptDigest,
-      terminalDigest: value.digest,
-      terminalAt: originalTime,
-    });
-    writePrivateRecord(
-      s.installation,
-      "observations",
-      terminalCommitmentName(s.execution),
-      payload,
-      false,
-    );
-    return originalTime;
-  });
-}
-function verifyAndSealTerminalCommitment(
-  s: AuthorityState,
-  status: OpsJobStatus,
-  terminalAt?: number,
-) {
-  const value = terminalIdentity(s, status),
-    proof = readTerminalCommitment(s),
-    origin = s.origin;
-  if (
-    !origin ||
-    proof.terminalDigest !== value.digest ||
-    (terminalAt !== undefined && proof.terminalAt !== terminalAt)
-  )
-    throw Error("Original canonical terminal tuple/time changed");
-  if (proof.phase === "prepared")
-    writePrivateRecord(
-      s.installation,
-      "observations",
-      terminalCommitmentName(s.execution),
-      {
-        ...proof,
-        phase: "canonical" as const,
-      },
-      false,
-    );
-  return proof;
-}
-export function retainControlTerminalStatus(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  status: OpsJobStatus,
-  terminalAt?: number,
-): void {
-  const authority = restoreAdmittedControlExecution(installation, execution),
-    s = executionAuthorityState(authority);
-  withPrivateEffectWriter(s, () => {
-    verifyAndSealTerminalCommitment(s, status, terminalAt);
-  });
-}
-/** Rejoin a terminal worker from its original signed admission and known effect
- * receipt. The fixed startup adapter separately proves borrowed/claim cleanup. */
-export function repairControlJournalTerminal(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  status: OpsJobStatus,
-  terminalAt: number,
-): VerifiedExecutionAuthority {
-  const authority = restoreAdmittedControlExecution(installation, execution),
-    s = executionAuthorityState(authority);
-  const terminal = parseOpsJobStatus(status);
-  if (
-    installation.role !== "ops-agent" ||
-    s.installation.fixedChildId ||
-    terminal.operationId !== execution.executionId ||
-    terminal.operationKey !== execution.operationKey ||
-    terminal.fingerprint !== execution.fingerprint ||
-    terminal.deadlineAt !== execution.deadlineAt ||
-    terminal.kind !== s.kind ||
-    !Number.isSafeInteger(terminalAt) ||
-    terminalAt < terminal.admittedAt
-  )
-    throw Error("Original terminal journal identity required");
-  withPrivateEffectWriter(s, () => {
-    const admittedRaw = readPrivateRecord(
-      s.installation,
-      "executions",
-      `${execution.operationKey}.json`,
-      65536,
-    );
-    const admitted = z
-      .object({ admittedAt: z.number().int().nonnegative().safe() })
-      .passthrough()
-      .parse(admittedRaw);
-    if (admitted.admittedAt !== terminal.admittedAt) throw Error("Original admission time changed");
-    verifyControlEffectSettlement(installation, execution);
-    const proof = settlementSchema
-      .extend({ receipt: effectObservationSchema })
-      .parse(readPrivateRecord(s.installation, "effects", `${execution.operationKey}.json`));
-    const succeeded =
-      terminal.state === "succeeded" &&
-      proof.outcome === "committed" &&
-      proof.publication === "committed" &&
-      proof.receipt.kind === "ops-result" &&
-      controlDigest(proof.receipt.result) === controlDigest(terminal.result);
-    const failedWithoutEffect =
-      ["failed", "timed_out"].includes(terminal.state) &&
-      proof.outcome === "failed_without_effect" &&
-      proof.publication === "not_started" &&
-      proof.receipt.kind === "not-started";
-    const validationFailed =
-      terminal.state === "failed" &&
-      s.kind === "feedProxy.validateAndReload" &&
-      proof.outcome === "contained" &&
-      proof.publication === "not_started" &&
-      proof.receipt.kind === "feed-proxy-validation-failure" &&
-      inspectFeedProxyValidationFailure(authority, proof.receipt.commitmentDigest) !== null;
-    const generationNotCommitted =
-      terminal.state === "succeeded" &&
-      proof.outcome === "contained" &&
-      proof.publication === "not_started" &&
-      proof.receipt.kind === "configuration-generation-not-committed" &&
-      canonicalJson(proof.receipt.result) === canonicalJson(terminal.result) &&
-      canonicalJson(inspectConfigurationGenerationNonCommit(installation, execution)) ===
-        canonicalJson(proof.receipt);
-    if (!succeeded && !failedWithoutEffect && !validationFailed && !generationNotCommitted)
-      throw Error("Terminal worker containment is not proved");
-    verifyAndSealTerminalCommitment(s, terminal, terminalAt);
-  });
-  return authority;
-}
-/** Reserves the execution's terminal commitment record before any effect. */
-export function reserveControlTerminal(authority: VerifiedExecutionAuthority): void {
-  const s = executionAuthorityState(authority);
-  // Reserve the immutable terminal authentication cell before any effect.
-  writePrivateRecord(
-    s.installation,
-    "observations",
-    terminalCommitmentName(s.execution),
-    null,
-    true,
-  );
-}
 export function assertFreshControlRoot(key: string, requestedDeadlineAt: number | undefined): void {
   const parsed = parseControlRootOperationKey(key);
   if (requestedDeadlineAt !== parsed.notAfter || parsed.notAfter - Date.now() > 7 * 24 * 3600_000)
@@ -1464,63 +1246,6 @@ export function inspectConfigurationPreEffectRefusal(authority: VerifiedExecutio
   )
     throw Error("Unstarted managed configuration child source changed");
 }
-/** Recover only the exact failure ALREADY fixed by the original signed
- * terminal commitment. The interrupted journal is a locator, never authority;
- * neither a new error/time nor an uncommitted failure can pass this comparison. */
-export function restoreConfigurationPreEffectTerminal(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  observed: OpsJobStatus,
-): { status: OpsJobStatus; terminalAt: number } {
-  const authority = restoreAdmittedControlExecution(installation, execution);
-  inspectConfigurationPreEffectRefusal(authority);
-  const state = configurationPreEffectState(authority),
-    proof = readTerminalCommitment(state),
-    proofName = terminalCommitmentName(state.execution),
-    rawProof = readPrivateRecord(state.installation, "observations", proofName, 4096);
-  if (controlDigest(rawProof) !== controlDigest(proof))
-    throw Error("Original pre-effect terminal changed");
-  const rawAdmission = readPrivateRecord(
-    state.installation,
-    "executions",
-    `${execution.operationKey}.json`,
-    65536,
-  );
-  if (controlDigest(rawAdmission) !== state.receiptDigest)
-    throw Error("Original pre-effect admission changed");
-  const admitted = z
-    .object({ admittedAt: z.number().int().nonnegative().safe(), operation: opsOperationSchema })
-    .passthrough()
-    .parse(rawAdmission);
-  if ("revisionId" in admitted.operation || proof.terminalAt < admitted.admittedAt)
-    throw Error("Immutable original pre-effect tuple required");
-  // Startup may have added an expiry cancellation projection. Only the
-  // original signed whole-tuple digest decides whether it was present.
-  for (const terminationRequestedAt of new Set([undefined, observed.terminationRequestedAt])) {
-    const status = parseOpsJobStatus({
-      version: 2,
-      admittedAt: admitted.admittedAt,
-      deadlineAt: execution.deadlineAt,
-      fingerprint: execution.fingerprint,
-      operationId: execution.executionId,
-      operationKey: execution.operationKey,
-      kind: admitted.operation.kind,
-      resourceId: opsResourceId(admitted.operation),
-      state: "failed",
-      submittedAt: new Date(admitted.admittedAt).toISOString(),
-      updatedAt: new Date(proof.terminalAt).toISOString(),
-      errorClass:
-        admitted.operation.kind === "service.pull" ? "busy" : "configuration_prerequisite",
-      failureResult: {},
-      ...(terminationRequestedAt === undefined ? {} : { terminationRequestedAt }),
-    });
-    if (controlTerminalReceiptDigest(status) === proof.terminalDigest) {
-      terminalIdentity(state, status);
-      return { status, terminalAt: proof.terminalAt };
-    }
-  }
-  throw Error("Original pre-effect terminal unavailable");
-}
 /** Fixed executor adapters supply their parsed result or exact fixed-command exit; arbitrary text is never proof. */
 /** Original indexed progress is business evidence only. A success producer must
  * additionally prove its actual children/target tree before committing. */
@@ -1944,14 +1669,10 @@ export function verifyMaintenanceCoordinatorPrerequisite(
   )
     throw Error("Original coordinator admission changed");
   const authority = restoreAdmittedControlExecution(installation, admitted.execution),
-    owner = executionAuthorityState(authority),
-    canonical = readTerminalCommitment(owner),
-    settled = verifyControlEffectSettlement(installation, admitted.execution),
     effect = settlementSchema
       .extend({ receipt: effectObservationSchema })
       .parse(readPrivateRecord(local, "effects", `${fixed.root.operationKey}.json`));
   if (
-    canonical.phase !== "canonical" ||
     effect.outcome !== "committed" ||
     effect.publication !== "committed" ||
     effect.receipt.kind !== "ops-result" ||
@@ -1960,12 +1681,6 @@ export function verifyMaintenanceCoordinatorPrerequisite(
   )
     throw Error("Conclusive successful coordinator prerequisite required");
   verifyLocalArtifactTargetRootRelease(authority);
-  return Object.freeze({
-    execution: Object.freeze(admitted.execution),
-    terminalDigest: canonical.terminalDigest,
-    terminalAt: canonical.terminalAt,
-    effectSettlementDigest: controlDigest(childSettlementState(settled).evidence),
-  });
 }
 
 declare const stagedCoordinatorBrand: unique symbol;
@@ -2040,20 +1755,20 @@ export function readVerifiedStagedCoordinatorOwnership(
     throw Error("Original staged coordinator admission changed");
   const authority = restoreAdmittedControlExecution(installation, execution),
     state = executionAuthorityState(authority),
-    canonical = readTerminalCommitment(state),
-    terminal = terminalIdentity(state, input),
+    terminal = parseOpsJobStatus(input),
+    terminalDigest = controlTerminalReceiptDigest(terminal),
     settlement = verifyControlEffectSettlement(installation, execution),
     effectRecord = readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
     effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(effectRecord);
   if (
     canonicalJson(state.origin) !== canonicalJson(admitted.origin) ||
-    canonical.phase !== "canonical" ||
-    terminal.terminal.state !== "succeeded" ||
-    canonical.terminalDigest !== terminal.digest ||
+    terminal.state !== "succeeded" ||
+    terminal.operationKey !== execution.operationKey ||
+    terminal.fingerprint !== execution.fingerprint ||
     effect.outcome !== "committed" ||
     effect.publication !== "committed" ||
     effect.receipt.kind !== "ops-result" ||
-    canonicalJson(terminal.terminal.result) !== canonicalJson(effect.receipt.result)
+    canonicalJson(terminal.result) !== canonicalJson(effect.receipt.result)
   )
     throw Error("Actual successful contained staged coordinator source required");
   const result = servicePullResultSchema.parse(effect.receipt.result);
@@ -2067,7 +1782,7 @@ export function readVerifiedStagedCoordinatorOwnership(
       admittedAt: admitted.admittedAt,
       baseline,
       admissionDigest: controlDigest(raw),
-      canonicalDigest: canonical.terminalDigest,
+      canonicalDigest: terminalDigest,
       effectDigest: controlDigest(childSettlementState(settlement).evidence),
     }),
     proof = Object.freeze({}) as VerifiedStagedCoordinatorOwnership;
@@ -2332,8 +2047,8 @@ export function observeCoordinatorPullForMaintenance(
   const admitted = verifyCoordinatorPullAdmissionSource(installation, record),
     authority = restoreAdmittedControlExecution(installation, admitted.execution),
     state = executionAuthorityState(authority),
-    canonical = readTerminalCommitment(state),
-    terminal = terminalIdentity(state, status),
+    terminal = parseOpsJobStatus(status),
+    terminalDigest = controlTerminalReceiptDigest(terminal),
     settlement = verifyControlEffectSettlement(installation, admitted.execution),
     effect = settlementSchema
       .extend({ receipt: effectObservationSchema })
@@ -2341,13 +2056,13 @@ export function observeCoordinatorPullForMaintenance(
         readPrivateRecord(state.installation, "effects", `${admitted.execution.operationKey}.json`),
       );
   if (
-    canonical.phase !== "canonical" ||
-    terminal.terminal.state !== "succeeded" ||
-    canonical.terminalDigest !== terminal.digest ||
+    terminal.state !== "succeeded" ||
+    terminal.operationKey !== admitted.execution.operationKey ||
+    terminal.fingerprint !== admitted.execution.fingerprint ||
     effect.outcome !== "committed" ||
     effect.publication !== "committed" ||
     effect.receipt.kind !== "ops-result" ||
-    canonicalJson(terminal.terminal.result) !== canonicalJson(effect.receipt.result)
+    canonicalJson(terminal.result) !== canonicalJson(effect.receipt.result)
   )
     throw Error("Actual successful contained coordinator pull required");
   const { changed: _changed, ...result } = servicePullResultSchema.parse(effect.receipt.result),
@@ -2369,7 +2084,7 @@ export function observeCoordinatorPullForMaintenance(
       apiParentDigest: controlDigest(admitted.parent),
       sourceRevision: record.expectedSourceRevision,
       ...result,
-      terminalReceiptDigest: terminal.digest,
+      terminalReceiptDigest: terminalDigest,
       effectReceiptDigest: controlDigest(childSettlementState(settlement).evidence),
       baseline: admitted.coordinatorPullBaseline,
       baselineAdmissionDigest: controlDigest(
@@ -2459,7 +2174,6 @@ export function verifyConfigurationMaintenanceChildTerminal(
       `${child.execution.operationKey}.json`,
       65536,
     ) as { operation?: unknown; parent?: unknown },
-    canonical = readTerminalCommitment(state),
     status = parseOpsJobStatus(input),
     settlement = childSettlementState(
       verifyControlEffectSettlement(root.installation.installation, child.execution),
@@ -2485,9 +2199,6 @@ export function verifyConfigurationMaintenanceChildTerminal(
       canonicalJson(parseBoundedOpsResult(step.operation.kind, effect.receipt.result)) ===
         canonicalJson(status.result);
   if (
-    canonical.phase !== "canonical" ||
-    canonical.terminalAt !== terminalAt ||
-    canonical.terminalDigest !== controlTerminalReceiptDigest(status) ||
     status.state !== "succeeded" ||
     status.kind !== step.operation.kind ||
     status.operationId !== child.execution.executionId ||
@@ -2523,8 +2234,8 @@ export function verifyConfigurationMaintenanceChildTerminal(
       ordinal,
       execution: child.execution,
       status: safe,
-      terminalDigest: canonical.terminalDigest,
-      terminalAt: canonical.terminalAt,
+      terminalDigest: controlTerminalReceiptDigest(status),
+      terminalAt,
       effectSettlementDigest: controlDigest(settlement),
       settlement,
     }),

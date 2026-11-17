@@ -2511,10 +2511,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         expect(starts[0]!.phase).toBe("terminal");
         expect(starts[0]!.receiptDelivery).toBeDefined();
-        const source = verifyMaintenanceCoordinatorPrerequisite(installation, record);
-        expect(source.execution.operationKey).toBe(
-          record.coordinatorPrerequisite!.root.operationKey,
-        );
+        expect(() => verifyMaintenanceCoordinatorPrerequisite(installation, record)).not.toThrow();
         expect(() =>
           verifyMaintenanceCoordinatorPrerequisite(installation, {
             ...record,

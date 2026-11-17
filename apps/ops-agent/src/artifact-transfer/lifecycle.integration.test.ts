@@ -40,7 +40,6 @@ it.skipIf(process.platform !== "linux").each(["byte-recovery", "validation-recov
       });
       if (fixture === "validation-recovery")
         expect(receipt).toMatchObject({
-          originalCanonicalUnchanged: true,
           managedFilesPublished: false,
         });
     } finally {

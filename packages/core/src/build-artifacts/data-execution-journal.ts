@@ -31,7 +31,6 @@ import {
   readOpsControlTerminalObservation,
   readPrivateRecord,
   recordDataControlTerminalObservation,
-  reserveControlTerminal,
   restoreAdmittedControlExecution,
   settleExecutionLifecycle,
   type VerifiedExecutionAuthority,
@@ -703,7 +702,6 @@ export function createDataExecutionControlJournal(
       const value = await load(authority.execution);
       if (value.status.status !== "queued" || value.status.cancellationRequestedAt)
         throw Error("Only a newly admitted data worker may begin");
-      reserveControlTerminal(authority);
       beginControlEffect(authority);
     },
     /** The actual dispatcher promise must contain and await all of its process,

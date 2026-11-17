@@ -88,9 +88,6 @@ const ownerSourceSchema = z.object({
   plan: z.object({ operation: z.object({ expectedSourceRevision: z.uuid() }).passthrough() }),
 });
 const sourceWitness = (revision: string) => `configuration-source-${revision}.json`;
-const terminalCommitmentSchema = z
-  .object({ phase: z.enum(["prepared", "canonical"]) })
-  .passthrough();
 const cursors = new WeakMap<InstallationState, number>();
 
 interface Prunable {
@@ -210,15 +207,6 @@ async function prunable(
   const admitted = admissionSchema.parse(readPrivateRecord(local, "executions", name, 65536));
   const key = admitted.execution.operationKey;
   if (admitted.origin.notAfter + CONTROL_PRUNE_AFTER_MS > now) return null;
-  // Every agent execution reserves a terminal commitment before its effect;
-  // only a sealed canonical commitment proves its journal terminal.
-  if (
-    local.installation.role === "ops-agent" &&
-    terminalCommitmentSchema.safeParse(
-      readPrivateRecord(local, "observations", `terminal-${name}`, 4096),
-    ).data?.phase !== "canonical"
-  )
-    return null;
   const finishedAt = withNamespace(local, "effects", (dir) => mtime(dir, name)) ?? null;
   if (finishedAt === null || finishedAt + CONTROL_PRUNE_AFTER_MS > now) return null;
   const outcome = childSettlementState(

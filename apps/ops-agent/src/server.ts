@@ -27,19 +27,14 @@ import {
   controlHeaders as readControlHeaders,
   reconcileConfigurationPreEffectRoot,
   releaseArtifactTargetLease,
-  repairControlJournalTerminal,
   replaceControlRegisteredServiceIds,
-  reserveControlTerminal,
   reserveFeedProxyValidation,
   restoreAdmittedControlExecution,
   restoreArtifactTargetLeaseForSettlement,
-  restoreConfigurationPreEffectTerminal,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
   retainControlEffectReceipt,
   retainControlPreparedTerminal,
-  retainControlTerminalCommitment,
-  retainControlTerminalStatus,
   retainDataUpdatePlan,
   retainedControlAdoptionAssertion,
   retainFixedServiceLifecyclePlan,
@@ -57,7 +52,6 @@ import {
 import {
   inspectArtifactPublication,
   inspectSettledArtifactImport,
-  retainArtifactValidationObservation,
   retainUnstartedArtifactImport,
 } from "@openmapx/core/build-artifacts/publication";
 import {
@@ -844,6 +838,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   ): Promise<void> => {
     await withAdmissionLock(async () => {
       if (state === "termination_pending" && job.terminalAt !== undefined) return;
+      // A recorded terminal is final; only an outcome still needing recovery
+      // may be replaced by the one recovery established.
+      if (job.terminalAt !== undefined && !recoveryRequired(job))
+        throw Error("Recorded terminal state is final");
       let updatedAt = now().toISOString();
       const maintenanceControl = maintenanceControls.get(job.operationId);
       if (
@@ -1106,15 +1104,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       if (["succeeded", "failed", "timed_out"].includes(state)) delete candidate.progressResult;
       if (state === "succeeded" && job.operation.kind === "services.buildAll")
         delete candidate.failureResult;
-      if (authority && ["succeeded", "failed", "timed_out"].includes(state)) {
-        if (candidate.terminalAt === undefined) throw Error("Missing terminal time");
-        candidate.terminalAt = retainControlTerminalCommitment(
-          authority,
-          statusFor(candidate, true),
-          candidate.terminalAt,
-        );
-        updates = { ...updates, terminalAt: candidate.terminalAt };
-      }
       if (releaseUnstartedRoot && lease?.mode === "owner" && authority) {
         await releaseArtifactTargetLease(lease);
         verifyLocalArtifactTargetRootRelease(authority);
@@ -1137,14 +1126,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         delete job.failureResult;
       job.updatedAt = updatedAt;
       job.state = state;
-      if (containedValidation && authority && job.terminalAt !== undefined) {
-        retainArtifactValidationObservation(
-          authority,
-          statusFor(job, true),
-          job.terminalAt,
-          containedValidation,
-        );
-      }
       if (lease && ["succeeded", "failed", "timed_out"].includes(state)) {
         closeArtifactTargetLeaseHandle(lease);
         controlLeases.delete(job.operationId);
@@ -1613,13 +1594,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 pushEvent(job, { cursor: job.cursor, type: "state", state: "succeeded" });
               }
               const authority = controlAuthorities.get(job.operationId);
-              if (terminalDurable && authority && options.controlInstallation)
-                retainControlTerminalStatus(
-                  options.controlInstallation,
-                  authority.execution,
-                  statusFor(job),
-                  job.terminalAt,
-                );
               if (terminalDurable && authority && !recordStepTerminal(job))
                 // The step's terminal is not recorded with its owner; the
                 // maintenance stays held for recovery and nothing replays.
@@ -1707,20 +1681,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               })
               .catch(() => forceRecoveryRequired(job));
           } finally {
-            try {
-              const authority = controlAuthorities.get(job.operationId);
-              if (terminalDurable && authority && options.controlInstallation)
-                retainControlTerminalStatus(
-                  options.controlInstallation,
-                  authority.execution,
-                  statusFor(job),
-                  job.terminalAt,
-                );
-            } finally {
-              // The slot is returned even when terminal bookkeeping throws.
-              activeControllers.delete(job.operationId);
-              active -= 1;
-            }
+            // The slot is returned even when terminal bookkeeping throws.
+            activeControllers.delete(job.operationId);
+            active -= 1;
           }
         },
       );
@@ -1803,30 +1766,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           controlLeases.delete(job.operationId);
           if (result.outcome === "not_committed")
             await finishRestoredPreparedImport(runtime, context);
-          try {
-            await transition(job, "succeeded", {
-              result,
-              errorClass: undefined,
-              terminalAt: now().getTime(),
-            });
-            retainControlTerminalStatus(
-              installation,
-              authority.execution,
-              statusFor(job),
-              job.terminalAt,
-            );
-            stickyRecoveryRequired.delete(job.operationId);
-          } catch {
-            // Preserve an older canonical tuple. Its fixed purpose observer
-            // can still expose proved committed files and physical release.
-            if (result.outcome === "committed" && job.terminalAt !== undefined) {
-              try {
-                inspectSettledArtifactImport(authority, statusFor(job), job.terminalAt);
-              } catch {
-                /* retain unknown source */
-              }
-            }
-          }
+          await transition(job, "succeeded", {
+            result,
+            errorClass: undefined,
+            terminalAt: now().getTime(),
+          });
+          stickyRecoveryRequired.delete(job.operationId);
         }
       } catch {
         /* Unknown/foreign paths or the operator-owned configuration lock retain their original fences. */
@@ -1875,19 +1820,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             publication: "committed",
             receipt: { kind: "ops-result", result: validation },
           });
-          retainControlTerminalCommitment(authority, statusFor(job), job.terminalAt);
-          retainArtifactValidationObservation(
-            authority,
-            statusFor(job),
-            job.terminalAt,
-            validation,
-          );
           stickyRecoveryRequired.delete(job.operationId);
           return { ...found, validation };
         }
         if (job.operation.kind !== "artifactTransfer.import" || found.claim.use !== "import-build")
           return found;
-        const publication = inspectSettledArtifactImport(authority, statusFor(job), job.terminalAt);
+        const publication = inspectSettledArtifactImport(authority);
         return { ...found, publication };
       } catch {
         return found;
@@ -2056,13 +1994,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   terminalAt: published.terminalAt,
                   updatedAt: new Date(published.terminalAt).toISOString(),
                 };
-                // A previously sealed, different canonical tuple refuses here;
-                // an unknown secondary journal never overrides that source.
-                restored.terminalAt = retainControlTerminalCommitment(
-                  authority,
-                  statusFor(restored, true),
-                  published.terminalAt,
-                );
                 await journal.replace(
                   [...jobsById.values()].map((value) =>
                     persisted(value === job ? restored : value),
@@ -2084,80 +2015,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           job.result = undefined;
           stickyRecoveryRequired.add(job.operationId);
           changed = true;
-        }
-      }
-      if (
-        job.operation.kind !== "configurationMaintenance.decide" &&
-        job.operation.kind !== "configurationMaintenance.settle" &&
-        opsKindRequiresControlAuthority(job.operation.kind) &&
-        ["succeeded", "failed", "timed_out"].includes(job.state)
-      ) {
-        try {
-          if (!options.controlInstallation || job.terminalAt === undefined)
-            throw Error("Original terminal authority unavailable");
-          const execution = executionFor(job);
-          if (
-            literalProductionRuntime &&
-            job.state === "failed" &&
-            ["configuration_prerequisite", "busy", "recovery_required"].includes(
-              job.errorClass ?? "",
-            ) &&
-            (job.operation.kind === "service.update" ||
-              job.operation.kind === "stack.start" ||
-              (job.operation.kind === "service.start" &&
-                job.operation.serviceId !== "data-manager") ||
-              (job.operation.kind === "service.pull" &&
-                job.operation.serviceId === "data-manager" &&
-                job.operation.candidateId))
-          ) {
-            const recovered = restoreConfigurationPreEffectTerminal(
-                options.controlInstallation,
-                execution,
-                statusFor(job),
-              ),
-              authority = repairControlJournalTerminal(
-                options.controlInstallation,
-                execution,
-                recovered.status,
-                recovered.terminalAt,
-              ),
-              restored: JobRecord = {
-                ...job,
-                state: "failed",
-                result: undefined,
-                errorClass: recovered.status.errorClass,
-                failureResult: recovered.status.failureResult,
-                terminationRequestedAt: recovered.status.terminationRequestedAt,
-                terminalAt: recovered.terminalAt,
-                updatedAt: recovered.status.updatedAt,
-              };
-            // Retain the exact original body before finishing its physical
-            // release. A failed/unknown write cannot create a fresh attempt.
-            await journal.replace(
-              [...jobsById.values()].map((value) => persisted(value === job ? restored : value)),
-            );
-            await reconcileConfigurationPreEffectRoot(authority);
-            Object.assign(job, restored);
-            controlAuthorities.set(job.operationId, authority);
-            continue;
-          }
-          if (job.controlAdoption)
-            verifyRetainedArtifactTargetSettlement(
-              options.controlInstallation,
-              job.controlAdoption,
-              execution,
-            );
-          const authority = repairControlJournalTerminal(
-            options.controlInstallation,
-            execution,
-            statusFor(job),
-            job.terminalAt,
-          );
-          controlAuthorities.set(job.operationId, authority);
-        } catch {
-          // The loaded terminal state, elapsed time and absence of a PID never
-          // prove containment. Keep its exact outcome and original time intact.
-          stickyRecoveryRequired.add(job.operationId);
         }
       }
     }
@@ -2908,7 +2765,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 if (hardlinksPlan) retainGenerationHardlinksOwnerPlan(authority, hardlinksPlan);
                 if (artifactImport) retainArtifactImportPlan(authority, artifactImport.plan);
                 if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
-                reserveControlTerminal(authority);
                 controlAuthorities.set(job.operationId, authority);
                 if (LEASED_KINDS.has(job.operation.kind)) {
                   const lease = await acquireArtifactTargetLease({
@@ -2965,7 +2821,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                       lease.serviceIds,
                     ),
                   );
-                reserveControlTerminal(authority);
                 controlLeases.set(job.operationId, lease);
                 controlAuthorities.set(job.operationId, authority);
                 job.controlAdoption = { ...adoption, phase: "ready" };
@@ -3230,12 +3085,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               restoreAdmittedControlExecution(options.controlInstallation, executionFor(job)),
             ),
             status = statusFor(job);
-          retainControlTerminalStatus(
-            options.controlInstallation,
-            executionFor(job),
-            statusFor(job, true),
-            job.terminalAt,
-          );
           const proof = signMaintenanceRecoveryProof(options.tokens.api, {
             version: 1,
             kind: "configuration-maintenance-contained",

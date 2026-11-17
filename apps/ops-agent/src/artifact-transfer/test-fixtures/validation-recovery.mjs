@@ -7,9 +7,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const moduleUrl = pathToFileURL(process.argv[2]).href;
-const { ArtifactTransferStore, control, ops, retainArtifactValidationObservation } = await import(
-  moduleUrl
-);
+const { ArtifactTransferStore, control } = await import(moduleUrl);
 const root = mkdtempSync(join(tmpdir(), "omx-native-validation-")),
   infra = join(root, "infra"),
   options = {
@@ -31,7 +29,7 @@ try {
     const bytes=Buffer.concat(chunks),stage=await store.createStage({ownerId:'native-admin',purpose:'prepared-artifact',direction:'upload',declaredBytes:bytes.length,operationKey:'opk1_'+randomUUID().replaceAll('-','')});
     await store.upload({stageId:stage.stageId,ownerId:'native-admin',purpose:stage.purpose,attemptId:randomUUID(),deadlineAt:Date.now()+60000,body:new ReadableStream({start(c){c.enqueue(bytes);c.close();}})});
     const operation={kind:'artifactTransfer.validate',stageId:stage.stageId,ownerId:'native-admin',purpose:'prepared-artifact'},operationFingerprint=ops.opsOperationFingerprint(operation),admittedAt=Date.now(),requestedDeadlineAt=admittedAt+600000,operationKey=ops.createControlRootOperationKey({notAfter:requestedDeadlineAt,nonce:randomBytes(16)}),admission=ops.normalizeExecutionAdmission({operationFingerprint,operationKey,kind:operation.kind,admittedAt,requestedDeadlineAt}),execution={executor:'ops-agent',principal:'api',executionId:'job1_'+randomUUID().replaceAll('-',''),operationKey,operationFingerprint,deadlineAt:admission.deadlineAt,fingerprint:admission.fingerprint},authority=control.retainAdmittedControlExecution(installation,{execution,kind:operation.kind,operation,admittedAt,requestedDeadlineAt,serviceIds:['osrm']});
-    control.reserveControlTerminal(authority);control.beginControlEffect(authority);
+    control.beginControlEffect(authority);
     const native=fs.writeSync;let stopped=false;
     fs.writeSync=function(fd,...args){const value=native.call(fs,fd,...args);if(!stopped && fs.readlinkSync('/proc/self/fd/'+fd).includes('/prepared-')){stopped=true;native.call(fs,1,Buffer.from(JSON.stringify({stage,execution,operation,admittedAt})+'\\n'));process.kill(process.pid,'SIGSTOP');}return value;};syncBuiltinESMExports();
     await store.validatePreparedArtifact({execution,controlAuthority:authority,signal:new AbortController().signal,emitLog(){},claim:{source:'registry',operation,fingerprint:operationFingerprint,capability:{revisionId:'fixture',values:{}}}});
@@ -87,37 +85,12 @@ try {
     role: "ops-agent",
     serviceIds: ["osrm"],
   });
-  const authority = control.restoreAdmittedControlExecution(installation, original.execution),
-    at = Date.now(),
-    status = {
-      version: 2,
-      admittedAt: original.admittedAt,
-      deadlineAt: original.execution.deadlineAt,
-      fingerprint: original.execution.fingerprint,
-      operationId: original.execution.executionId,
-      operationKey: original.execution.operationKey,
-      kind: "artifactTransfer.validate",
-      resourceId: ops.opsResourceId(original.operation),
-      state: "failed",
-      errorClass: "recovery_required",
-      submittedAt: new Date(original.admittedAt).toISOString(),
-      updatedAt: new Date(at).toISOString(),
-    };
+  const authority = control.restoreAdmittedControlExecution(installation, original.execution);
   control.retainControlEffectReceipt(authority, {
     outcome: "unknown",
     publication: "unknown",
     receipt: { kind: "unresolved" },
   });
-  control.retainControlTerminalCommitment(authority, status, at);
-  control.retainControlTerminalStatus(installation, original.execution, status, at);
-  const owner = control.executionAuthorityState(authority),
-    before = control.controlDigest(
-      control.readPrivateRecord(
-        owner.installation,
-        "observations",
-        "terminal-" + original.execution.operationKey + ".json",
-      ),
-    );
   const contained = await store.recoverPreparedValidation(authority);
   control.cancelControlExecution(authority);
   control.retainControlEffectReceipt(authority, {
@@ -125,17 +98,6 @@ try {
     publication: "committed",
     receipt: { kind: "ops-result", result: contained },
   });
-  retainArtifactValidationObservation(authority, status, at, contained);
-  assert.equal(
-    control.controlDigest(
-      control.readPrivateRecord(
-        owner.installation,
-        "observations",
-        "terminal-" + original.execution.operationKey + ".json",
-      ),
-    ),
-    before,
-  );
   assert.equal(existsSync(join(infra, "data/osrm-graph")), false);
   console.log(
     JSON.stringify({
@@ -144,7 +106,6 @@ try {
       actualExtractionWrite: true,
       liveOwnerPreserved: true,
       recoveredPrivateFailure: true,
-      originalCanonicalUnchanged: true,
       managedFilesPublished: false,
       reservedBytes: 0,
     }),

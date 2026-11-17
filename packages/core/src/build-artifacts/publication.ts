@@ -22,8 +22,6 @@ import {
   executionAuthorityState,
   readPrivateRecord,
   retainControlEffectReceipt,
-  retainControlTerminalCommitment,
-  retainControlTerminalStatus,
   type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
   writePrivateRecord,
@@ -891,11 +889,7 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
 /** Close only this purpose's proved historical publication. The original
  * canonical status/digest/time remain unchanged even if delivery failed after
  * files committed; containment is a separate, source-verified fact. */
-export function inspectSettledArtifactImport(
-  authority: VerifiedExecutionAuthority,
-  status: OpsJobStatus,
-  terminalAt: number,
-) {
+export function inspectSettledArtifactImport(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import required");
   const journal = readJournal({ ...owner, origin: owner.origin });
@@ -915,8 +909,6 @@ export function inspectSettledArtifactImport(
     inspectOwnedGenerationHardlinks(authority) === "complete"
       ? ("complete" as const)
       : ("failed" as const);
-  retainControlTerminalCommitment(authority, status, terminalAt);
-  retainControlTerminalStatus(owner.installation.installation, owner.execution, status, terminalAt);
   if (journal.phase === "restored")
     return {
       outcome: "not_committed" as const,
@@ -1047,34 +1039,6 @@ export function originalArtifactValidationOperation(authority: VerifiedExecution
  * store producer first proves its extraction is contained and cleaned. Match
  * its actual signed effect result before upgrading only the retained knowledge;
  * the original public status tuple, deadline and timestamp remain unchanged. */
-export function retainArtifactValidationObservation(
-  authority: VerifiedExecutionAuthority,
-  status: OpsJobStatus,
-  terminalAt: number,
-  result: unknown,
-) {
-  const operation = originalArtifactValidationOperation(authority),
-    owner = executionAuthorityState(authority),
-    stage = transferStageSchema.parse(result);
-  if (
-    stage.stageId !== operation.stageId ||
-    stage.purpose !== "prepared-artifact" ||
-    !["ready", "failed"].includes(stage.state) ||
-    (stage.state === "failed" && stage.cleanup !== "complete")
-  )
-    throw Error("Original contained validation required");
-  const effect = childSettlementState(
-    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
-  ).evidence;
-  if (
-    effect.outcome !== "committed" ||
-    effect.publication !== "committed" ||
-    effect.terminalReceiptDigest !== controlDigest({ kind: "ops-result", result: stage })
-  )
-    throw Error("Original validation producer result required");
-  retainControlTerminalStatus(owner.installation.installation, owner.execution, status, terminalAt);
-}
-
 export function assertKnownArtifactStageReceipt(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
   if (!["artifactTransfer.import", "artifactTransfer.validate"].includes(owner.kind))

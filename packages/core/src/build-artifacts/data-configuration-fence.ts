@@ -26,7 +26,6 @@ import {
   inspectRemoteDelegation,
   installationState,
   readPrivateRecord,
-  reserveControlTerminal,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainedControlParent,
@@ -214,7 +213,6 @@ export function createDataConfigurationFenceStore(
       if (!saved) throw new DataFenceBusy();
       return receiptOf(saved);
     }
-    reserveControlTerminal(authority);
     beginControlEffect(authority);
     let receipt: DataConfigurationFenceReceipt;
     try {

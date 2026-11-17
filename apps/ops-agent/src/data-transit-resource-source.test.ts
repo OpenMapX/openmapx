@@ -271,51 +271,6 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
           control.commitFeedProxyValidationFailure(authority, { ...input, validationExitCode: 2 }),
         ).toThrow();
         expect(() => control.markFeedProxyReloadAttempted(authority)).toThrow();
-        const status = await f.client.status(f.operation.kind, accepted.operationId);
-        const terminal = JSON.parse(
-          readFileSync(
-            join(
-              f.root,
-              "state/ops-agent/control/observations",
-              `terminal-${f.bound.execution.operationKey}.json`,
-            ),
-            "utf8",
-          ),
-        );
-        expect(() =>
-          control.repairControlJournalTerminal(
-            f.agent,
-            f.bound.execution,
-            status,
-            terminal.terminalAt,
-          ),
-        ).not.toThrow();
-        expect(() =>
-          control.repairControlJournalTerminal(
-            f.agent,
-            f.bound.execution,
-            status,
-            terminal.terminalAt + 1,
-          ),
-        ).toThrow();
-        raw.validationExitCode += 1;
-        writeFileSync(
-          join(
-            f.root,
-            "state/ops-agent/control/observations",
-            `proxy-validation-${f.bound.execution.operationKey}.json`,
-          ),
-          JSON.stringify(raw),
-          { mode: 0o600 },
-        );
-        expect(() =>
-          control.repairControlJournalTerminal(
-            f.agent,
-            f.bound.execution,
-            status,
-            terminal.terminalAt,
-          ),
-        ).toThrow();
       } else {
         expect(
           await control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.bound.execution),

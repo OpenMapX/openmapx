@@ -125,13 +125,7 @@ describe.skipIf(
           { jobRunner } = await import("../job-runner"),
           candidate = f.ctx.checkpointResult!._configurationCandidate as {
             sealedOperationKey: string;
-          },
-          canonicalPath = join(
-            f.root,
-            "state/ops-agent/control/observations",
-            `terminal-${f.owner.operationKey}.json`,
-          ),
-          canonical = readFileSync(canonicalPath);
+          };
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(f.owner.deadlineAt + 1);
         if (alreadyFailed === true) {
@@ -268,7 +262,6 @@ describe.skipIf(
         expect(existsSync(join(f.host.candidates, `${candidate.sealedOperationKey}.json`))).toBe(
           false,
         );
-        expect(readFileSync(canonicalPath)).toEqual(canonical);
         expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
         expect(f.data.preparePosts).toBe(0);
         expect(f.host.calls.some((args) => args.includes("up") || args.includes("restart"))).toBe(
@@ -533,13 +526,7 @@ describe.skipIf(
         const fence = createDataConfigurationMaintenance(f.sql, f.dm);
         await fence.startup();
         await f.failPreparation();
-        const canonicalPath = join(
-            f.root,
-            "state/ops-agent/control/observations",
-            `terminal-${f.owner.operationKey}.json`,
-          ),
-          canonical = readFileSync(canonicalPath),
-          // The agent's own owner record, and the lease store it releases the root in.
+        const // The agent's own owner record, and the lease store it releases the root in.
           suffix = boundary === "owner" ? `${f.input.maintenanceId}.json` : "leases.json",
           nativeRename = (await vi.importActual<typeof import("node:fs")>("node:fs")).renameSync,
           maintenance = await import(
@@ -565,7 +552,6 @@ describe.skipIf(
         expect(faulted).toBe(true);
         await maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority);
         expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
-        expect(readFileSync(canonicalPath)).toEqual(canonical);
         expect(f.data.preparePosts).toBe(0);
         expect(f.data.recoveryPosts).toBe(1);
         expect(
