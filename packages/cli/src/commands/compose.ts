@@ -42,7 +42,6 @@ import { applyServiceSelection } from "../lib/service-selection";
 import { ensureTransitousApiKeysFile } from "../lib/transitous-api-keys";
 
 const {
-  agentStatePaths,
   prepareAgentStateDirectories,
   withConfigurationGenerationWriter,
   embeddedBuiltInIntegrationManifests,
@@ -244,8 +243,6 @@ export async function renderComposeWithWriter(
   // The agent's stores, owner-only, before the generation mounts one into
   // app-api.
   coreServices.prepareAgentStores(paths.infraDir);
-  const agentState = agentStatePaths(paths.infraDir);
-  ensurePlatformPrivateDirectory(agentState.trustedConfig);
   ensurePlatformPrivateDirectory(join(paths.infraDir, "catalog-pins"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);

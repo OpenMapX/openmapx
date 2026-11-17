@@ -24,6 +24,7 @@ import {
   opsOperationSchema,
   parseOpsJobStatus,
   readOpsTokenFile,
+  type TrustedConfigurationPayload,
   verifyMaintenanceRecoveryProof,
 } from "@openmapx/core/ops";
 import { cancelAdminDataChildren } from "./admin-data-children";
@@ -79,6 +80,8 @@ export interface ExecuteAdminJobOperationOptions {
   pollIntervalMs?: number;
   durableIdentity?: string;
   preparedRoot?: ApiPreparedRoot;
+  /** A configuration apply's payload, sent with its first submission only. */
+  payload?: TrustedConfigurationPayload;
 }
 
 async function persistProjection(
@@ -472,6 +475,7 @@ async function observeOperation(
           ...(fresh && projected.attempt
             ? { parentAssertion: await issueApiJobChildAssertion(projected.attempt) }
             : {}),
+          ...(fresh && options.payload ? { payload: options.payload } : {}),
         },
       );
       if (admission.execution === "sync") {

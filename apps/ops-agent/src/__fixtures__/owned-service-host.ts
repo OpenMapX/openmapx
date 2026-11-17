@@ -13,7 +13,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   opsOperationFingerprint,
-  sealTrustedConfigurationSnapshot,
+  prepareConfigurationCandidate,
+  type TrustedConfigurationPayload,
   type OpsOperation,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -27,7 +28,8 @@ import {
   serviceActionAuthority,
 } from "../production-runtime";
 import { createTrustedConfigurationAuthorityLoader } from "../trusted-configuration-authority";
-import { createFileTrustedOpsDataSource } from "../trusted-config-source";
+import { configurationCandidateSource } from "../configuration-candidate-source";
+import { configurationPayloadSource } from "../data-transit-resource-source";
 import { dispatchOpsOperation, type OpsRuntime } from "../runtime";
 import { testExecution } from "./execution";
 import { createDefaultFixedCli, inspectReleaseAuthority } from "../administrative-runtime";
@@ -247,9 +249,6 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     },
   });
   await repositories.recover();
-  const queue = join(root, "trusted-queue");
-  mkdirSync(queue, { mode: 0o700 });
-  mkdirSync(join(queue, ".claimed"), { mode: 0o700 });
   mkdirSync(join(infraDir, "data"), { mode: 0o700, recursive: true });
   await provisionControlDirectories(infraDir);
   const token = Buffer.alloc(32, 17).toString("base64url");
@@ -265,7 +264,8 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       if (options.competeAfterDefaultCli) competingRevisionId = (await services.commitConfigurationGeneration({ infraDir, services: loaded,
         input: { ...services.readAppliedConfiguration(infraDir), domain: "example.test", selectedRoots: withCoordinator ? ["data-manager", "motis"] : ["motis"] } })).revisionId;
     } } : {}),
-    candidateSource: { directory: queue, token, ownerUid: statSync(queue).uid, ownerGid: statSync(queue).gid },
+    candidateSource: configurationCandidateSource(infraDir),
+    apiToken: token,
     docker: {
       execFile,
       fileExists: existsSync,
@@ -276,14 +276,10 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       },
     },
   });
+  mkdirSync(configurationCandidateSource(infraDir).directory, { recursive: true, mode: 0o700 });
   const runtime = await reopenRuntime();
   const authority = await loadAuthority();
-  const trustedData = createFileTrustedOpsDataSource({
-    directory: queue,
-    token,
-    allowedUids: [statSync(queue).uid],
-    expectedGid: statSync(queue).gid,
-  });
+  const trustedData = configurationPayloadSource;
   const createResourceClaimer = (ownerRuntime: OpsRuntime) => createProductionRegistryResourceClaimer({
     services: authority.services.map((s) => ({
       serviceId: s.manifest.id,
@@ -324,53 +320,57 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const context = async (
     operation: OpsOperation,
     signal: AbortSignal = new AbortController().signal,
+    payload?: TrustedConfigurationPayload,
   ) => {
     const claim = await claimer.claim(operation, opsOperationFingerprint(operation), signal, {
       role: "api",
       operationKey: testExecution().operationKey,
     });
     if (!claim) throw new Error("Admission denied");
-    return { execution: testExecution(), signal, emitLog() {}, claim };
+    return {
+      execution: testExecution(),
+      signal,
+      emitLog() {},
+      claim: payload
+        ? { ...claim, capability: { ...claim.capability, trustedConfiguration: payload } }
+        : claim,
+    };
   };
   let counter = 0;
   const select = async (selectedRoots: string[]) => {
     const inspection = { kind: "configuration.sources.inspect" } as const;
     const source = await dispatchOpsOperation(runtime, inspection, await context(inspection));
-    const sealed = sealTrustedConfigurationSnapshot({
+    const payload = {
+      domain: "example.test",
+      selectedRoots,
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    };
+    const sealed = prepareConfigurationCandidate({
       role: "api",
-      token,
       nonce: `nonce_ownership_${String(++counter).padStart(12, "0")}`,
       operationKey: testExecution().operationKey,
-      operationForRevision: (revisionId) => ({
+      operationForRevision: (revisionId, payloadDigest) => ({
         kind: "serviceSelection.apply",
         expectedSourceRevision: source.sourceRevision,
         coordinatorMode: "ensure-running",
         revisionId,
+        payloadDigest,
         expectedCurrentRevisionId: services.currentConfigurationGeneration(infraDir),
       }),
-      payload: {
-        domain: "example.test",
-        selectedRoots,
-        serviceConfigs: [],
-        integrationConfigs: [],
-        serviceSecrets: [],
-      },
+      payload,
     });
-    writeFileSync(join(queue, `${sealed.revisionId}.json`), sealed.bytes, { mode: 0o600 });
-    const ctx = await context(sealed.operation);
-    await ctx.claim.admission?.commit();
-    try {
-      return await dispatchOpsOperation(runtime, sealed.operation, ctx);
-    } finally {
-      await ctx.claim.admission?.release();
-    }
+    const ctx = await context(sealed.operation, undefined, payload);
+    return dispatchOpsOperation(runtime, sealed.operation, ctx);
   };
   const deselect = () => select([]);
   return {
     root,
     cleanupRoot,
-    queue,
     token,
+    /** The agent's own candidate store, which the API fills through typed operations. */
+    candidates: configurationCandidateSource(infraDir).directory,
     infraDir,
     loaded,
     initial,

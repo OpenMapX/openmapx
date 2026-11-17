@@ -19,7 +19,6 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { heldTargets } from "../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { openOpsJobJournal, type PersistedOpsJob } from "./journal";
 import { buildOpsAgentServer } from "./server";
-import { initializeTerminalClaimCleanup } from "./trusted-config-source";
 
 let bundle: string, bundleRoot: string;
 beforeAll(async () => {
@@ -295,17 +294,7 @@ it.each(
           serviceIds: ["motis"],
         });
         const journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
-        const terminalClaimCleanup =
-          "revisionId" in original.operation
-            ? await initializeTerminalClaimCleanup(join(root, "trusted-config"), {
-                allowedUids: [process.getuid?.() ?? -1],
-                expectedGid: process.getgid?.() ?? -1,
-                token: Buffer.alloc(32, 7).toString("base64url"),
-                journalRecords: journal.records(),
-              })
-            : undefined;
         app = buildOpsAgentServer({
-          terminalClaimCleanup,
           tokens: {
             api: Buffer.alloc(32, 7).toString("base64url"),
             "data-manager": "b".repeat(32),
@@ -320,39 +309,7 @@ it.each(
         expect(journal.records()).toEqual([original]);
         return journal;
       };
-      if ("revisionId" in original.operation) {
-        installation = c.openControlInstallation({
-          infraDir: root,
-          role: "ops-agent",
-          serviceIds: ["motis"],
-        });
-        const unproved = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
-        const claimed = join(root, `trusted-config/.claimed/${original.operation.revisionId}.json`);
-        expect(existsSync(claimed)).toBe(true);
-        app = buildOpsAgentServer({
-          tokens: {
-            api: Buffer.alloc(32, 7).toString("base64url"),
-            "data-manager": "b".repeat(32),
-          },
-          controlInstallation: installation,
-          journal: unproved,
-          dispatch,
-          terminalClaimCleanup: Object.freeze(
-            {},
-          ) as import("./trusted-config-source").VerifiedTerminalClaimCleanup,
-        });
-        await app.ready();
-        expect(existsSync(claimed)).toBe(true);
-        await app.close();
-        app = undefined;
-        c.closeControlInstallation(installation);
-        installation = undefined;
-      }
       let journal = await start();
-      if ("revisionId" in original.operation)
-        expect(
-          existsSync(join(root, `trusted-config/.claimed/${original.operation.revisionId}.json`)),
-        ).toBe(false);
       const get = async () => {
         if (!app) throw Error("Missing restarted server");
         const response = await app.inject({

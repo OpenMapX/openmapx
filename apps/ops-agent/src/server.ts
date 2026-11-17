@@ -178,17 +178,13 @@ import {
   OpsHostUpdateRequiredError,
   OpsNotWiredError,
   type OpsRuntime,
-  type OpsTrustedClaim,
 } from "./runtime";
 import { prepareServiceUpdateAdmission } from "./service-lifecycle-runtime";
 import { prepareCoordinatorPullBaseline } from "./service-pull-runtime";
 
-import {
-  type VerifiedTerminalClaimCleanup,
-  verifiesTerminalClaimCleanup,
-} from "./trusted-config-source";
-
 const DEFAULT_BODY_LIMIT = 32 * 1024;
+// A prepared candidate (up to 768 KiB) and its request envelope.
+const CANDIDATE_BODY_LIMIT = 800 * 1024;
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_REPLAY_ENTRIES = 10_000;
 const DEFAULT_JOB_ENTRIES = 256;
@@ -280,7 +276,6 @@ export interface BuildOpsAgentServerOptions {
   controlInstallation?: ControlInstallation;
   /** The agent's lease store, for the leases data-manager and the host CLI hold. */
   leaseStore?: LeaseStore;
-  terminalClaimCleanup?: VerifiedTerminalClaimCleanup;
   tokens: Record<OpsRole, string>;
   releaseRecovery?: { ready: boolean; reason?: "recovery_required" };
   resourcePolicy?: OpsResourcePolicy;
@@ -1380,7 +1375,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     job: JobRecord,
     startedAt: number,
     claim: OpsExecutionContext["claim"],
-    claimAdmission: OpsTrustedClaim["admission"],
   ) => {
     try {
       await transition(job, "running");
@@ -1395,7 +1389,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     const timeoutMs = Math.max(0, (job.deadlineAt ?? now().getTime()) - now().getTime());
     let timedOut = false;
     let terminalDurable = false;
-    let claimReleased = !claimAdmission;
     let configurationEvidence: ConfigurationApplyResult | undefined;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -1478,8 +1471,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           clearTimeout(timer);
           try {
             if (isTrustedConfigurationApplyOperation(job.operation)) {
-              // Persist commit evidence before releasing confidential claim data.
-              // Public status remains running until cleanup evidence is settled.
+              // Public status remains running until the terminal event is published.
               const result = configurationApplyResultSchema.parse(
                 parseBoundedOpsResult(job.operation.kind, rawResult),
               );
@@ -1491,18 +1483,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 terminalAt: now().getTime(),
               });
               terminalDurable = true;
-              try {
-                await claimAdmission?.release();
-                claimReleased = true;
-              } catch {
-                claimReleased = false;
-                configurationEvidence = { ...result, cleanupFailed: true };
-                await transition(job, "succeeded", {
-                  result: configurationEvidence,
-                  errorClass: undefined,
-                  terminalAt: now().getTime(),
-                });
-              }
               audit(
                 job.role,
                 job.operation.kind,
@@ -1630,21 +1610,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 job.cursor += 1;
                 pushEvent(job, { cursor: job.cursor, type: "state", state: "succeeded" });
               }
-              if (terminalDurable && !claimReleased && !configurationEvidence) {
-                await claimAdmission
-                  ?.release()
-                  .then(() => {
-                    claimReleased = true;
-                  })
-                  .catch(async () => {
-                    stickyRecoveryRequired.add(job.operationId);
-                    await transition(job, "failed", {
-                      result: undefined,
-                      errorClass: "recovery_required",
-                      terminalAt: now().getTime(),
-                    }).catch(() => forceRecoveryRequired(job));
-                  });
-              }
               const authority = controlAuthorities.get(job.operationId);
               if (terminalDurable && authority && options.controlInstallation)
                 retainControlTerminalStatus(
@@ -1653,7 +1618,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   statusFor(job),
                   job.terminalAt,
                 );
-              if (terminalDurable && claimReleased && authority && !recordStepTerminal(job))
+              if (terminalDurable && authority && !recordStepTerminal(job))
                 // The step's terminal is not recorded with its owner; the
                 // maintenance stays held for recovery and nothing replays.
                 stickyRecoveryRequired.add(job.operationId);
@@ -1741,21 +1706,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               .catch(() => forceRecoveryRequired(job));
           } finally {
             try {
-              if (terminalDurable && !claimReleased) {
-                await claimAdmission
-                  ?.release()
-                  .then(() => {
-                    claimReleased = true;
-                  })
-                  .catch(async () => {
-                    stickyRecoveryRequired.add(job.operationId);
-                    await transition(job, "failed", {
-                      result: undefined,
-                      errorClass: "recovery_required",
-                      terminalAt: now().getTime(),
-                    }).catch(() => forceRecoveryRequired(job));
-                  });
-              }
               const authority = controlAuthorities.get(job.operationId);
               if (terminalDurable && authority && options.controlInstallation)
                 retainControlTerminalStatus(
@@ -2143,15 +2093,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         try {
           if (!options.controlInstallation || job.terminalAt === undefined)
             throw Error("Original terminal authority unavailable");
-          if (
-            isTrustedConfigurationApplyOperation(job.operation) &&
-            !verifiesTerminalClaimCleanup(
-              options.terminalClaimCleanup,
-              job.operation,
-              new Date(job.terminalAt).toISOString(),
-            )
-          )
-            throw Error("Terminal claim cleanup is not proved");
           const execution = executionFor(job);
           if (
             literalProductionRuntime &&
@@ -2249,7 +2190,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
 
   app.post(
     "/v1/operations",
-    { bodyLimit: options.bodyLimit ?? 772 * 1024 },
+    { bodyLimit: options.bodyLimit ?? CANDIDATE_BODY_LIMIT },
     async (request, reply) => {
       const startedAt = Date.now();
       const requestId = requestIdFromBody(request.body);
@@ -2260,9 +2201,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       try {
         const parsed = parseOpsRequest(request.body, { role });
         const requestLimit =
-          parsed.operation.kind === "transitousLock.propose"
-            ? 772 * 1024
-            : (options.bodyLimit ?? DEFAULT_BODY_LIMIT);
+          parsed.operation.kind === "configuration.candidate.retain"
+            ? CANDIDATE_BODY_LIMIT
+            : parsed.operation.kind === "transitousLock.propose" || parsed.payload
+              ? 772 * 1024
+              : (options.bodyLimit ?? DEFAULT_BODY_LIMIT);
         if (Buffer.byteLength(JSON.stringify(request.body), "utf8") > requestLimit)
           throw new RequestGuardError("validation", 413);
         const operation = immutableSnapshot(parsed.operation);
@@ -2559,7 +2502,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           if (error instanceof RequestGuardError && error.errorClass === "timeout") {
             void claimExecution.then(
               (lateClaim) => {
-                void lateClaim?.admission?.rollback().catch(() => undefined);
                 active -= 1;
                 audit(role, kind, resourceId, "late_completion", startedAt, "timeout");
               },
@@ -2574,7 +2516,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           active -= 1;
           throw error;
         }
-        let claimAdmission: OpsTrustedClaim["admission"];
         let coordinatorCapture: CoordinatorPullOwnershipObservation | undefined;
         try {
           if (
@@ -2603,15 +2544,16 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               candidateId: operation.candidateId,
               policyRevision: claim.capability.revisionId,
             });
-          claimAdmission = claim.admission;
           claim = immutableSnapshot({
             fingerprint: claim.fingerprint,
             operation: claim.operation,
             source: claim.source,
-            capability: claim.capability,
+            // The payload is held in memory for the run only, never journaled.
+            capability: parsed.payload
+              ? { ...claim.capability, trustedConfiguration: parsed.payload }
+              : claim.capability,
           });
         } catch {
-          await claim?.admission?.rollback().catch(() => undefined);
           active -= 1;
           throw new OpsContractError("authorization", "Operation resource is not permitted");
         }
@@ -3057,7 +2999,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               return withAdmissionLock(admit);
             })
             .catch(async (error) => {
-              await claimAdmission?.rollback().catch(() => undefined);
               active -= 1;
               throw error instanceof RequestGuardError
                 ? error
@@ -3066,34 +3007,25 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   : new RequestGuardError("runtime", 500);
             });
           if (admission.type === "retained") {
-            await claimAdmission?.rollback().catch(() => undefined);
             active -= 1;
             return reply.code(202).send(opsSuccess(parsed.requestId, admissionFor(admission.job)));
           }
           const { job } = admission;
-          try {
-            if (normalized.deadlineAt <= now().getTime())
-              throw new RequestGuardError("timeout", 504);
-            await claimAdmission?.commit();
-          } catch {
+          if (normalized.deadlineAt <= now().getTime()) {
             stickyRecoveryRequired.add(job.operationId);
             await transition(job, "failed", {
               result: undefined,
               errorClass: "recovery_required",
               terminalAt: now().getTime(),
             }).catch(() => forceRecoveryRequired(job));
-            await claimAdmission?.release().catch(() => undefined);
             active -= 1;
             throw new RequestGuardError("runtime", 500);
           }
-          await runAsync(job, startedAt, claim, claimAdmission);
+          await runAsync(job, startedAt, claim);
           return reply.code(202).send(opsSuccess(parsed.requestId, admissionFor(job)));
         }
         const controller = new AbortController();
-        try {
-          if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
-          await claimAdmission?.commit();
-        } catch {
+        if (normalized.deadlineAt <= now().getTime()) {
           active -= 1;
           throw new RequestGuardError("runtime", 500);
         }

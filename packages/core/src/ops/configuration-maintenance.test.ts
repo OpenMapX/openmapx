@@ -43,6 +43,7 @@ function receipt(): maintenance.ConfigurationMaintenanceReceipt {
           kind: "vault.apply",
           serviceId: "data-manager",
           revisionId: binding.revisionId,
+          payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
           expectedCurrentRevisionId: binding.expectedCurrentRevisionId,
           expectedSourceRevision: binding.expectedSourceRevision,
           coordinatorMode: binding.coordinatorMode,

@@ -133,7 +133,7 @@ describe("Gate C — host authority", () => {
   });
 
   it("keeps the operations agent's state out of every other service's reach in the rendered stack", () => {
-    // The journal, trusted-config queue and privacy scratch
+    // The journal, configuration candidates and privacy scratch
     // live in infra/docker/state/ops-agent. data-manager, which mounts the
     // data directory read-write as the same uid, must not reach any of it.
     const state = "./state/ops-agent";
@@ -151,7 +151,6 @@ describe("Gate C — host authority", () => {
         .map((source) => `${id} ${source}`),
     );
     expect(reaching.filter((entry) => !entry.startsWith(`${AUTHORITY_SERVICE} `))).toEqual([
-      "app-api ./state/ops-agent/trusted-config",
       "app-api ./state/ops-agent/custom-integrations",
       "traefik ./state/ops-agent/configuration/current/traefik/traefik.yml",
       "traefik ./state/ops-agent/traefik/dynamic",
@@ -314,10 +313,14 @@ describe("Gate C — host authority", () => {
           }),
         );
       };
-      manifest("app-api", ["@infra:state/ops-agent/trusted-config", "@infra:state/ops-agent"]);
+      manifest("app-api", [
+        "@infra:state/ops-agent/configuration-candidates",
+        "@infra:state/ops-agent",
+      ]);
       manifest("data-manager", ["@infra:data", "@infra:state", "@infra:."]);
-      manifest("ops-agent", ["@infra:state/ops-agent/trusted-config"]);
+      manifest("ops-agent", ["@infra:state/ops-agent/configuration-candidates"]);
       expect(stateDetails(findAuthorityViolations(root))).toEqual([
+        `service "app-api" mounts the operations agent's state (@infra:state/ops-agent/configuration-candidates)`,
         `service "app-api" mounts the operations agent's state (@infra:state/ops-agent)`,
         `service "data-manager" mounts the operations agent's state (@infra:state)`,
         `service "data-manager" mounts the operations agent's state (@infra:.)`,
@@ -343,8 +346,6 @@ describe("Gate C — host authority", () => {
       };
       manifest("app-api", [
         "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/custom_integrations",
-        "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent/trusted-config",
-        "@infra:data/../state/ops-agent/trusted-config/",
       ]);
       manifest("data-manager", [
         "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",

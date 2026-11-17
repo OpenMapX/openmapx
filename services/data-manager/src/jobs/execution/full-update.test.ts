@@ -23,11 +23,11 @@ import postgres from "postgres";
 import { expect, it } from "vitest";
 import { ownedServiceHost } from "../../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
 import { configurationPolicyRevision } from "../../../../../apps/ops-agent/src/configured-resource-authority";
+import { configurationPayloadSource } from "../../../../../apps/ops-agent/src/data-transit-resource-source";
 import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
 import { createProductionRegistryResourceClaimer } from "../../../../../apps/ops-agent/src/policy";
 import { dispatchOpsOperation } from "../../../../../apps/ops-agent/src/runtime";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
-import { createFileTrustedOpsDataSource } from "../../../../../apps/ops-agent/src/trusted-config-source";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
@@ -274,12 +274,7 @@ it.skipIf(
           };
         },
         enabledServiceIds: () => new Set(["data-manager", "motis", "osrm"]),
-        trustedData: createFileTrustedOpsDataSource({
-          directory: host.queue,
-          token: host.token,
-          allowedUids: [process.geteuid?.() ?? 0],
-          expectedGid: process.getegid?.() ?? 0,
-        }),
+        trustedData: configurationPayloadSource,
         ownedServices: host.owned,
         resourceAuthority: {
           allowRegion: (kind, id) => kind === "data.update" && id === "europe/germany",

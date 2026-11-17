@@ -1,12 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  writeSync,
-} from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import * as c from "@openmapx/core/build-artifacts";
 import {
@@ -16,20 +9,18 @@ import {
   type OpsJobStatus,
   type OpsOperation,
   opsOperationFingerprint,
-  sealTrustedConfigurationSnapshot,
+  prepareConfigurationCandidate,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { AnchoredDirectory } from "../../../../packages/core/src/build-artifacts/filesystem";
 import { configurationSource } from "../__fixtures__/configuration-source";
+import { configurationPayloadSource } from "../data-transit-resource-source";
 import { openOpsJobJournal, type PersistedOpsJob } from "../journal";
 import { createRegistryResourceClaimer } from "../policy";
 import { createUnavailableRuntime } from "../runtime";
 import { buildOpsAgentServer } from "../server";
 import { installTrustedConfigurationRuntime } from "../trusted-config-runtime";
-import {
-  createFileTrustedOpsDataSource,
-  initializeTrustedSnapshotDirectory,
-} from "../trusted-config-source";
 
 let inputText = "";
 for await (const chunk of process.stdin) inputText += chunk;
@@ -48,6 +39,7 @@ let operation: OpsOperation = input.borrowed
   ? { kind: "motis.primary.stop" }
   : { kind: "backup.delete", backupId: "daily" };
 let resourceClaimer: ReturnType<typeof createRegistryResourceClaimer> | undefined;
+let payload: TrustedConfigurationPayload | undefined;
 if (input.outcome === "configuration") {
   const sourceRuntime = createUnavailableRuntime();
   installTrustedConfigurationRuntime(sourceRuntime, {
@@ -70,40 +62,32 @@ if (input.outcome === "configuration") {
     ],
   });
   const source = await configurationSource(sourceRuntime, input.root);
-  const directory = join(input.root, "trusted-config");
-  mkdirSync(directory, { mode: 0o700 });
-  const policy = {
-    allowedUids: [process.getuid?.() ?? -1],
-    expectedGid: process.getgid?.() ?? -1,
-    token,
+  payload = {
+    domain: "maps.example.test",
+    selectedRoots: ["motis"],
+    serviceConfigs: [{ serviceId: "motis", values: {} }],
+    integrationConfigs: [],
+    serviceSecrets: [],
   };
-  await initializeTrustedSnapshotDirectory(directory, policy);
-  const snapshot = sealTrustedConfigurationSnapshot({
+  const snapshot = prepareConfigurationCandidate({
     role: "api",
     operationKey: key,
-    token,
     issuedAtMs: Date.now(),
     nonce: "nonce_0123456789abcdef",
-    operationForRevision: (revisionId) => ({
+    operationForRevision: (revisionId, payloadDigest) => ({
       ...source,
       kind: "stack.render",
       revisionId,
+      payloadDigest,
       expectedCurrentRevisionId: null,
     }),
-    payload: {
-      domain: "maps.example.test",
-      selectedRoots: ["motis"],
-      serviceConfigs: [{ serviceId: "motis", values: {} }],
-      integrationConfigs: [],
-      serviceSecrets: [],
-    },
+    payload,
   });
   operation = snapshot.operation;
-  writeFileSync(join(directory, `${snapshot.revisionId}.json`), snapshot.bytes, { mode: 0o600 });
   resourceClaimer = createRegistryResourceClaimer({
     serviceIds: ["motis"],
     integrationIds: [],
-    trustedData: createFileTrustedOpsDataSource({ directory, ...policy }),
+    trustedData: configurationPayloadSource,
   });
 }
 const apiJobId = randomUUID(),
@@ -252,6 +236,7 @@ const admitted = await app.inject({
     issuedAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10000).toISOString(),
     operation,
+    ...(payload ? { payload } : {}),
     execution: { requestedDeadlineAt: notAfter },
   },
 });

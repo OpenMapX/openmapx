@@ -39,6 +39,7 @@ import {
   stackRenderOperationSchema,
   vaultApplyOperationSchema,
 } from "./configuration-operation-records";
+import { preparedConfigurationRecordSchema } from "./configuration-preparation-records";
 import {
   CONFIGURATION_RELEASE_IMAGE_NAMES,
   configurationReleaseSelectionSchema,
@@ -51,6 +52,11 @@ import {
   standaloneIntegrationOperationSchemas,
   standaloneIntegrationResultSchemas,
 } from "./standalone-integrations";
+import {
+  configurationPayloadDigest,
+  parseTrustedConfigurationPayload,
+  trustedConfigurationPayloadSchema,
+} from "./trusted-config";
 
 export { configurationGenerationRevisionSchema } from "./configuration-operation-records";
 
@@ -121,6 +127,9 @@ export const OPS_OPERATION_KINDS = [
   "configurationHandoff.prepare",
   "configurationHandoff.inspect",
   "configuration.failure.inspect",
+  "configuration.candidate.retain",
+  "configuration.candidate.read",
+  "configuration.candidate.discard",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -269,6 +278,9 @@ export const OPS_KIND_POLICIES = {
   "configurationHandoff.prepare": asyncEffect("api", 3600_000, 65536),
   "configurationHandoff.inspect": sync("api", 15_000, 65536),
   "configuration.failure.inspect": sync("api", 15_000),
+  "configuration.candidate.retain": sync("api", 15_000),
+  "configuration.candidate.read": sync("api", 15_000, OPS_MAX_RESULT_BYTES),
+  "configuration.candidate.discard": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
@@ -492,6 +504,24 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("configuration.hardlinks.inspect"),
     revisionId: configurationGenerationRevisionSchema,
+  }),
+  // A prepared candidate the API keeps in the agent's own state until it is
+  // applied or discarded. Retaining the same operation key again with a
+  // different record is a conflict.
+  z.strictObject({
+    kind: z.literal("configuration.candidate.retain"),
+    record: preparedConfigurationRecordSchema,
+  }),
+  z.strictObject({
+    kind: z.literal("configuration.candidate.read"),
+    lookup: z.union([
+      z.strictObject({ operationKey: operationKeySchema }),
+      z.strictObject({ candidateId: z.uuid() }),
+    ]),
+  }),
+  z.strictObject({
+    kind: z.literal("configuration.candidate.discard"),
+    operationKey: operationKeySchema,
   }),
   // Why a configuration apply was not committed, when the operator can act
   // on it (an override render may not use), as one line for the admin panel.
@@ -741,6 +771,8 @@ const opsRequestSchema = z.strictObject({
   issuedAt: timestampSchema,
   expiresAt: timestampSchema,
   operation: opsOperationSchema,
+  // Only a configuration apply carries one; its operation names the digest.
+  payload: trustedConfigurationPayloadSchema.optional(),
   execution: z
     .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
     .optional(),
@@ -818,6 +850,19 @@ export function parseOpsRequest(input: unknown, options: { role: OpsRole }): Ops
     throw new OpsContractError("authorization", "Operation is not permitted for this role");
   const parsed = opsRequestSchema.safeParse(input);
   if (!parsed.success) throw new OpsContractError("validation", "Invalid operations request");
+  const operation = parsed.data.operation;
+  if (isTrustedConfigurationApplyOperation(operation)) {
+    let digest: string | undefined;
+    try {
+      if (parsed.data.payload)
+        digest = configurationPayloadDigest(parseTrustedConfigurationPayload(parsed.data.payload));
+    } catch {
+      digest = undefined;
+    }
+    if (digest !== operation.payloadDigest)
+      throw new OpsContractError("validation", "Invalid operations request");
+  } else if (parsed.data.payload !== undefined)
+    throw new OpsContractError("validation", "Invalid operations request");
   return parsed.data;
 }
 
@@ -1087,6 +1132,11 @@ export const OPS_RESULT_SCHEMAS = {
   "configurationMaintenance.inspect": configurationMaintenanceReceiptSchema,
   "configurationMaintenance.decide": configurationMaintenanceReceiptSchema,
   "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
+  "configuration.candidate.retain": z.strictObject({ retained: z.literal(true) }),
+  "configuration.candidate.read": z.strictObject({
+    record: preparedConfigurationRecordSchema.nullable(),
+  }),
+  "configuration.candidate.discard": z.strictObject({ removed: z.boolean() }),
   "configuration.failure.inspect": z.strictObject({
     attemptedRevisionId: configurationGenerationRevisionSchema,
     problem: z.string().min(1).max(4_096).nullable(),

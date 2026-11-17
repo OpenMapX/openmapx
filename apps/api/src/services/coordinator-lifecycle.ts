@@ -6,9 +6,7 @@ import {
   canonicalJson,
   coordinatorLifecycleMetadataSchema,
   type PreparedConfigurationRecord,
-  readOpsTokenFile,
 } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { readProjection } from "./admin-job-projection";
@@ -17,12 +15,9 @@ import {
   type AdministrativeConfigurationWriter,
   administrativeConfigurationState,
 } from "./administrative-configuration-writer-owner";
+import { readConfigurationCandidate } from "./configuration-candidate-store";
 import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
-import {
-  configurationPublisherFromEnvironment,
-  readPreparedTrustedConfigurationCandidate,
-} from "./trusted-config-publication-store";
 
 declare const coordinatorIntent: unique symbol;
 export interface CoordinatorLifecycleIntent {
@@ -196,7 +191,6 @@ export function assertRetainedCoordinatorLifecycleProvenance(
  * prepared pull into an attempted one. Old-owner attempt bytes are preserved. */
 export async function claimCoordinatorPullDelivery(context: JobContext, candidateId: string) {
   if (!context.execution || context.observationOnly) throw refuse();
-  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   let updated: Record<string, unknown> | undefined;
   const delivery = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -218,10 +212,7 @@ export async function claimCoordinatorPullDelivery(context: JobContext, candidat
         )
     )
       throw refuse();
-    const retained = await readPreparedTrustedConfigurationCandidate(
-        configurationPublisherFromEnvironment(token),
-        checkpoint.sealedOperationKey,
-      ),
+    const retained = await readConfigurationCandidate(checkpoint.sealedOperationKey),
       record = retained.record,
       fixed = assertRetainedCoordinatorLifecycleProvenance(row, record);
     if (
@@ -277,7 +268,6 @@ export async function closeUnissuedCoordinatorPull(
   packetOperationKey?: string,
 ): Promise<void> {
   if (!context.execution || context.observationOnly) throw refuse();
-  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   const updated = await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
@@ -332,10 +322,7 @@ export async function closeUnissuedCoordinatorPull(
         // This caller failed before constructing any private packet. A first
         // delivery still required both that packet and the staged checkpoint.
       } else {
-        const source = await readPreparedTrustedConfigurationCandidate(
-            configurationPublisherFromEnvironment(token),
-            originalPacket,
-          ),
+        const source = await readConfigurationCandidate(originalPacket),
           fixed = assertRetainedCoordinatorLifecycleProvenance(row, source.record);
         if (
           fixed.action !== "update" ||

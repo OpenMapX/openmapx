@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { join } from "node:path";
 import { createApiClient } from "@openmapx/core";
@@ -119,9 +119,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
         OPENMAPX_SECRETS_KEY: "71".repeat(32),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "migration-local-synthetic",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
@@ -239,7 +236,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ).unlink;
       let interrupted = false;
       vi.mocked(fsPromises.unlink).mockImplementation(async (path) => {
-        if (!interrupted && String(path).includes("/.candidates/")) {
+        if (!interrupted && String(path).includes("/configuration-candidates/")) {
           const row = (await state.fixture.db.select().from(adminJob)).find(
             (value) =>
               (value.payload as { operationKey?: string })?.operationKey === input.operationKey,
@@ -521,7 +518,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       let interrupted = false;
       vi.mocked(fsPromises.unlink).mockImplementation(async (path) => {
         await originalUnlink(path);
-        if (!interrupted && String(path).includes("/.candidates/")) {
+        if (!interrupted && String(path).includes("/configuration-candidates/")) {
           interrupted = true;
           throw Error("credential import acknowledgement lost after packet retirement");
         }

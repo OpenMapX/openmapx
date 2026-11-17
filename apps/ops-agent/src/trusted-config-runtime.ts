@@ -21,7 +21,10 @@ import { retainConfigurationGenerationNonCommit } from "../../../packages/core/s
 import { configurationGenerationNonCommitForError } from "../../../packages/core/src/services/configuration-generation";
 import {
   type ConfigurationCandidateSource,
+  discardConfigurationCandidate,
   readConfigurationCandidate,
+  readConfigurationCandidateRecord,
+  retainConfigurationCandidate,
 } from "./configuration-candidate-source";
 import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
 import { assertConfigurationCoordinatorReady } from "./configuration-hardlinks-runtime";
@@ -520,6 +523,20 @@ export function installTrustedConfigurationRuntime(
         .digest("hex"),
     };
   };
+  const candidates = () => {
+    if (!options.candidateSource) throw Error("Configuration candidate source unavailable");
+    return options.candidateSource;
+  };
+  runtime["configuration.candidate.retain"] = async (operation) => {
+    retainConfigurationCandidate(candidates(), operation.record);
+    return { retained: true };
+  };
+  runtime["configuration.candidate.read"] = async (operation) => ({
+    record: readConfigurationCandidateRecord(candidates(), operation.lookup),
+  });
+  runtime["configuration.candidate.discard"] = async (operation) => ({
+    removed: await discardConfigurationCandidate(candidates(), operation.operationKey),
+  });
   // Why recent applies were not committed, when the operator can act on it.
   const failures = new Map<string, string>();
   runtime["configuration.failure.inspect"] = async (operation) => ({

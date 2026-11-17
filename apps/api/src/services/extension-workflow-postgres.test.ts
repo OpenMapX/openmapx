@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,9 +108,6 @@ beforeAll(async () => {
     OPS_AGENT_URL: url,
     OPS_AGENT_TOKEN_FILE: token,
     OPENMAPX_ROOT_DIR: host.root,
-    OPS_TRUSTED_CONFIG_DIR: host.queue,
-    OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-    OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
     DOMAIN: "example.test",
     POSTGRES_PASSWORD: "p".repeat(24),
     BETTER_AUTH_SECRET: "a".repeat(32),

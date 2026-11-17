@@ -81,11 +81,6 @@ export interface OpsTrustedClaim {
     values: Readonly<Record<string, string | number | boolean | null>>;
     trustedConfiguration?: Readonly<TrustedConfigurationPayload>;
   }>;
-  readonly admission?: Readonly<{
-    commit(): Promise<void>;
-    rollback(): Promise<void>;
-    release(): Promise<void>;
-  }>;
 }
 
 type OpsRuntimeHandler<K extends OpsOperationKind> = (

@@ -4,7 +4,7 @@
 
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -301,7 +301,6 @@ async function nativeReleaseAgent(
       infraDir: host.infraDir,
       stack: host.stack,
       serviceIds: ids,
-      queue: host.queue,
       token: host.token,
       dockerBridge: `${dockerBridge}/docker`,
       listenPort: port,
@@ -781,9 +780,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         for (const [key, value] of Object.entries({
           OPS_AGENT_URL: url,
           OPS_AGENT_TOKEN_FILE: tokenFile,
-          OPS_TRUSTED_CONFIG_DIR: host.queue,
-          OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-          OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
           OPENMAPX_SECRETS_KEY: "31".repeat(32),
           DOMAIN: "example.test",
           DATA_MANAGER_URL: dm.baseUrl,
@@ -1165,8 +1161,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 _configurationCandidate?: { sealedOperationKey?: string; rowVersions?: unknown };
               };
               const packet = join(
-                  host.queue,
-                  ".candidates",
+                  host.candidates,
                   `${original._configurationCandidate!.sealedOperationKey}.json`,
                 ),
                 bytes = readFileSync(packet);
@@ -1530,9 +1525,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           host.initial.revisionId,
                         );
                         expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(0);
-                        expect(existsSync(join(host.queue, `${candidate.revisionId}.json`))).toBe(
-                          false,
-                        );
                         const [desired] = await state.fixture.db
                           .select()
                           .from(schema.systemSettings)
@@ -1584,9 +1576,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         const original =
                           prospective.validatedConfigurationCandidateState(candidate);
                         expect(
-                          existsSync(
-                            join(host.queue, ".candidates", `${original.record.operationKey}.json`),
-                          ),
+                          existsSync(join(host.candidates, `${original.record.operationKey}.json`)),
                         ).toBe(false);
                         expect(ctx.checkpointResult?._completion).toMatchObject({
                           result: {

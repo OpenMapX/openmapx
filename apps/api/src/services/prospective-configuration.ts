@@ -1,14 +1,10 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, open, unlink } from "node:fs/promises";
-import { join } from "node:path";
 import {
   type IntegrationApplyReceipt,
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
 import { controlChildOperationKey } from "@openmapx/core/build-artifacts";
 import {
-  acquireTrustedConfigurationQueueLock,
   type ConfigurationHardlinksPreview,
   type ConfigurationMaintenanceDecision,
   type ConfigurationMaintenanceIdentity,
@@ -27,17 +23,16 @@ import {
   configurationMaintenanceSettleSchema,
   coordinatorModeSchema,
   createControlRootOperationKey,
-  encodePreparedConfigurationRecord,
-  inspectPreparedConfigurationRecord,
+  OPS_MAX_REQUEST_TTL_MS,
   OpsClientError,
   type OpsOperation,
   opsOperationFingerprint,
   opsOperationSchema,
   type PreparedConfigurationRecord,
   parseControlRootOperationKey,
+  prepareConfigurationCandidate,
   protectedConfigurationServiceIdSchema,
   readOpsTokenFile,
-  sealTrustedConfigurationSnapshot,
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "@openmapx/core/ops";
@@ -85,6 +80,12 @@ import {
   withAdministrativeConfigurationRead,
   withConfigurationWriteTransaction,
 } from "./administrative-configuration-writer";
+import {
+  discardConfigurationCandidate,
+  findConfigurationCandidate,
+  readConfigurationCandidate,
+  retainConfigurationCandidate,
+} from "./configuration-candidate-store";
 import {
   configurationMaintenanceDecisionCheckpointSchema as abandonCheckpointSchema,
   assertConfigurationSavedRows,
@@ -150,18 +151,6 @@ import {
   parseTrustedConfigurationApplyOutcome,
   type TrustedConfigurationApplyOutcome,
 } from "./trusted-config-outcome";
-import {
-  consumePublishedTrustedConfiguration,
-  findPreparedTrustedConfigurationCandidate,
-  publishSnapshot,
-  REJECTED,
-  readPreparedTrustedConfigurationCandidate,
-  retainPreparedTrustedConfigurationCandidate,
-  SNAPSHOT_MODE,
-  syncDirectory,
-  validateDirectory,
-  withPublicationLock,
-} from "./trusted-config-publication-store";
 
 export type BoundedConfigValue =
   TrustedConfigurationPayload["serviceConfigs"][number]["values"][string];
@@ -256,7 +245,7 @@ export interface ValidatedConfigurationCandidate {
   readonly expectedCurrentRevisionId: string | null;
   readonly revisionId: string;
   readonly sourceFingerprint: string;
-  readonly sealedBytes: number;
+  readonly payloadBytes: number;
   readonly affectedServiceIds: readonly string[];
 }
 export type ProspectiveConfigurationReceipt = {
@@ -269,9 +258,11 @@ interface CandidateState {
   writer: AdministrativeConfigurationWriter;
   overlay: Overlay;
   payload: TrustedConfigurationPayload;
-  sealed: ReturnType<typeof sealTrustedConfigurationSnapshot>;
+  sealed: Omit<ReturnType<typeof prepareConfigurationCandidate>, "operation"> & {
+    operation: OpsOperation;
+  };
   record: PreparedConfigurationRecord;
-  publisher: { directory: string; token: string; ownerUid: number; ownerGid: number };
+  publisher: { token: string };
   source: ConfigurationSourcesInspection | null;
   preview?: ConfigurationHardlinksPreview;
   rows: Pick<
@@ -296,6 +287,7 @@ interface CandidateState {
     AdministrativeConfigurationReadContext["integrationReloadSnapshot"]
   > | null;
 }
+const REJECTED = "Trusted configuration snapshot publish failed";
 const candidates = new WeakMap<ValidatedConfigurationCandidate, CandidateState>();
 const recoveredCommittedCandidates = new WeakSet<ValidatedConfigurationCandidate>();
 const recoveredPreRootCandidates = new WeakSet<ValidatedConfigurationCandidate>();
@@ -1842,11 +1834,7 @@ export async function retainedConfigurationIntegrationIds(
     if (retained?.neverPreparedCleanup !== undefined)
       return retirementSchema.parse(retained.neverPreparedCleanup).integrationIds;
     if (typeof retained?.sealedOperationKey !== "string") throw Error();
-    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
-      { record } = await readPreparedTrustedConfigurationCandidate(
-        publisherOptions(token),
-        retained.sealedOperationKey,
-      );
+    const { record } = await readConfigurationCandidate(retained.sealedOperationKey);
     if (
       record.apiJobId !== job.jobId ||
       record.actorId !== actorId ||
@@ -1897,20 +1885,7 @@ async function sourceFingerprint(
     .digest("hex");
 }
 function publisherOptions(token: string) {
-  const number = (name: string) => {
-    const value = process.env[name];
-    if (!value || !/^(0|[1-9][0-9]{0,9})$/.test(value) || !Number.isSafeInteger(Number(value)))
-      throw Error("Configuration candidate unavailable");
-    return Number(value);
-  };
-  const directory = process.env.OPS_TRUSTED_CONFIG_DIR;
-  if (!directory) throw Error("Configuration candidate unavailable");
-  return {
-    directory,
-    token,
-    ownerUid: number("OPS_TRUSTED_CONFIG_UID"),
-    ownerGid: number("OPS_TRUSTED_CONFIG_GID"),
-  };
+  return { token };
 }
 /** Rehydrate the original pre-save or atomically committed candidate under its
  * newly claimed job. The row lock waits out the former transaction; its old
@@ -1967,10 +1942,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         (unusedSettlement && !unusedDecision))
     )
       throw new JobObservationPending("recovery_required");
-    const inspected = await readPreparedTrustedConfigurationCandidate(
-        publisher,
-        retained.sealedOperationKey,
-      ),
+    const inspected = await readConfigurationCandidate(retained.sealedOperationKey),
       record = inspected.record,
       coordinator =
         record.privateCoordinatorLifecycle && row
@@ -2285,16 +2257,14 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
     }
     // inspectPrepared... already authenticated these EXACT historical bytes.
     // Parsing their payload is not opening an expired apply claim or resealing.
-    const payload = trustedConfigurationPayloadSchema.parse(
-        JSON.parse(inspected.sealed.toString("utf8")).payload,
-      ),
+    const payload = inspected.payload,
       candidate = Object.freeze({
         candidateId: record.candidateId,
         operationKey: writer.operationKey,
         expectedCurrentRevisionId: operation.expectedCurrentRevisionId,
         revisionId: inspected.snapshot.revisionId,
         sourceFingerprint: record.sourceFingerprint,
-        sealedBytes: inspected.sealed.length,
+        payloadBytes: Buffer.byteLength(JSON.stringify(inspected.payload)),
         affectedServiceIds: Object.freeze([...record.affectedServiceIds]),
       }) as ValidatedConfigurationCandidate;
     if (saved && overlay.purpose === "transit-credentials") {
@@ -2347,7 +2317,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         revisionId: candidate.revisionId,
         operation,
         operationFingerprint: inspected.snapshot.operationFingerprint,
-        bytes: inspected.sealed,
+        snapshot: inspected.snapshot,
       },
     };
     if (preRoot && record.privateIntegrationReload?.stagedMigration) {
@@ -2441,7 +2411,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         result._cancelRequestedAt !== undefined ||
         Date.now() >= record.parentDeadlineAt ||
         Date.now() >= parseControlRootOperationKey(record.prepareOperationKey!).notAfter ||
-        JSON.parse(inspected.sealed.toString()).expiresAt <= new Date().toISOString() ||
+        inspected.snapshot.expiresAt <= new Date().toISOString() ||
         (await sourceFingerprint(read, token)) !== record.sourceFingerprint
       ) {
         candidates.set(candidate, state);
@@ -2527,7 +2497,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         result._cancelRequestedAt !== undefined ||
         Date.now() >= record.parentDeadlineAt ||
         Date.now() >= parseControlRootOperationKey(record.prepareOperationKey!).notAfter ||
-        JSON.parse(inspected.sealed.toString()).expiresAt <= new Date().toISOString() ||
+        inspected.snapshot.expiresAt <= new Date().toISOString() ||
         (await sourceFingerprint(read, token)) !== record.sourceFingerprint
       ) {
         // The original private bytes/locked prepared checkpoint prove which
@@ -2632,8 +2602,7 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
     )
       throw new JobObservationPending("recovery_required");
     if (retained.phase === "prepared") {
-      const { record, snapshot } = await readPreparedTrustedConfigurationCandidate(
-          publisher,
+      const { record, snapshot } = await readConfigurationCandidate(
           String(retained.sealedOperationKey),
         ),
         operation = opsOperationSchema.parse(record.operation);
@@ -2750,10 +2719,7 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
       result._configurationMaintenanceDecision !== undefined
     )
       throw new JobObservationPending("recovery_required");
-    const inspected = await readPreparedTrustedConfigurationCandidate(
-        publisher,
-        retained.sealedOperationKey,
-      ),
+    const inspected = await readConfigurationCandidate(retained.sealedOperationKey),
       record = inspected.record,
       operation = opsOperationSchema.parse(record.operation),
       overlay = overlaySchema.parse(record.privateOverlay),
@@ -2855,16 +2821,14 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
         },
         tx,
       );
-    const payload = trustedConfigurationPayloadSchema.parse(
-        JSON.parse(inspected.sealed.toString("utf8")).payload,
-      ),
+    const payload = inspected.payload,
       candidate = Object.freeze({
         candidateId: record.candidateId,
         operationKey: writer.operationKey,
         expectedCurrentRevisionId: operation.expectedCurrentRevisionId,
         revisionId: inspected.snapshot.revisionId,
         sourceFingerprint: record.sourceFingerprint,
-        sealedBytes: inspected.sealed.length,
+        payloadBytes: Buffer.byteLength(JSON.stringify(inspected.payload)),
         affectedServiceIds: Object.freeze([...record.affectedServiceIds]),
       }) as ValidatedConfigurationCandidate;
     if (overlay.purpose === "integration-binding")
@@ -2888,7 +2852,7 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
         revisionId: candidate.revisionId,
         operation,
         operationFingerprint: inspected.snapshot.operationFingerprint,
-        bytes: inspected.sealed,
+        snapshot: inspected.snapshot,
       },
     });
     candidateStages.set(candidate, "committed");
@@ -2962,7 +2926,7 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
   if (operation?.kind !== "service.pull" || !operation.candidateId)
     throw new JobObservationPending("invalid_identity");
   const publisher = publisherOptions(await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""))),
-    retained = await findPreparedTrustedConfigurationCandidate(publisher, operation.candidateId);
+    retained = await findConfigurationCandidate(operation.candidateId);
   if (retained) {
     const record = retained.record,
       [row] = await administrativeConfigurationState(writer)
@@ -2992,16 +2956,14 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
       expectedCurrentRevisionId: typed.expectedCurrentRevisionId,
       revisionId: retained.snapshot.revisionId,
       sourceFingerprint: record.sourceFingerprint,
-      sealedBytes: retained.sealed.length,
+      payloadBytes: Buffer.byteLength(JSON.stringify(retained.payload)),
       affectedServiceIds: Object.freeze([...record.affectedServiceIds]),
     }) as ValidatedConfigurationCandidate;
     candidates.set(candidate, {
       writer,
       record,
       overlay: overlaySchema.parse(record.privateOverlay),
-      payload: trustedConfigurationPayloadSchema.parse(
-        JSON.parse(retained.sealed.toString()).payload,
-      ),
+      payload: retained.payload,
       publisher,
       source: null,
       rows: null,
@@ -3012,7 +2974,7 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
         revisionId: candidate.revisionId,
         operation: typed,
         operationFingerprint: retained.snapshot.operationFingerprint,
-        bytes: retained.sealed,
+        snapshot: retained.snapshot,
       },
     });
     candidateStages.set(candidate, "unissued");
@@ -3757,10 +3719,11 @@ export async function prepareProspectiveConfiguration(input: {
                 ),
               }
             : null;
-        const operationForRevision = (revisionId: string): OpsOperation =>
+        const operationForRevision = (revisionId: string, payloadDigest: string): OpsOperation =>
           ({
             kind,
             revisionId,
+            payloadDigest,
             expectedCurrentRevisionId: input.expectedCurrentRevisionId,
             expectedSourceRevision: source.sourceRevision,
             coordinatorMode: overlay.coordinatorMode,
@@ -3772,12 +3735,11 @@ export async function prepareProspectiveConfiguration(input: {
               ? { integrationId: (overlay.changes[0] as { integrationId: string }).integrationId }
               : {}),
           }) as OpsOperation;
-        const sealed = sealTrustedConfigurationSnapshot({
+        const sealed = prepareConfigurationCandidate({
           role: "api",
           operationKey: applyOperationKey,
           operationForRevision,
           payload,
-          token,
           nonce: `nonce_${randomUUID().replaceAll("-", "")}`,
         });
         const record: PreparedConfigurationRecord = {
@@ -3787,7 +3749,8 @@ export async function prepareProspectiveConfiguration(input: {
           operation: sealed.operation,
           sourceFingerprint: fingerprint,
           expectedSourceRevision: source.sourceRevision,
-          sealed: sealed.bytes.toString("base64"),
+          snapshot: sealed.snapshot,
+          payload,
           privateOverlay: overlay,
           apiJobId: owner.job.jobId,
           actorId: writer.actorId,
@@ -3866,7 +3829,7 @@ export async function prepareProspectiveConfiguration(input: {
           expectedCurrentRevisionId: input.expectedCurrentRevisionId,
           revisionId: sealed.revisionId,
           sourceFingerprint: fingerprint,
-          sealedBytes: sealed.bytes.length,
+          payloadBytes: Buffer.byteLength(JSON.stringify(payload)),
           affectedServiceIds: Object.freeze(affectedServiceIds),
         }) as ValidatedConfigurationCandidate;
         freeze(overlay);
@@ -3898,7 +3861,7 @@ export async function prepareProspectiveConfiguration(input: {
             rowVersion: row.state === "present" ? "4294967295" : null,
           })),
         );
-        await retainPreparedTrustedConfigurationCandidate(publisher, record);
+        await retainConfigurationCandidate(record);
         const state = validatedConfigurationCandidateState(candidate);
         let preflightStage: "preview" | "coordinator" | "capacity" = "preview";
         try {
@@ -4464,7 +4427,7 @@ async function prepareMaintenanceCoordinator(
   owner.job.signal.throwIfAborted();
   if (
     Date.now() >= fixed.root.requestedDeadlineAt ||
-    JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString()
+    state.sealed.snapshot.expiresAt <= new Date().toISOString()
   )
     rejectUnissuedCandidate(candidate, "Configuration candidate expired");
   await withAdministrativeConfigurationRead({ signal }, async (read) => {
@@ -4510,7 +4473,7 @@ async function prepareMaintenanceCoordinator(
   );
   signal?.throwIfAborted();
   owner.job.signal.throwIfAborted();
-  if (JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString())
+  if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
     rejectUnissuedCandidate(candidate, "Configuration candidate expired");
   await withAdministrativeConfigurationRead({ signal }, async (read) => {
     if ((await sourceFingerprint(read, state.publisher.token)) !== candidate.sourceFingerprint)
@@ -4585,7 +4548,7 @@ export async function stageProspectiveConfigurationMaintenance(
       _configurationCandidate: checkpoint,
       _parentExecution: parent,
     });
-  if (JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString())
+  if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
     rejectUnissuedCandidate(candidate, "Configuration candidate expired");
   const fixedPull =
     state.record.privateCoordinatorLifecycle?.action === "update"
@@ -4625,7 +4588,7 @@ export async function stageProspectiveConfigurationMaintenance(
   await prepareMaintenanceCoordinator(candidate, state, signal);
   if (state.record.privateCoordinatorLifecycle?.action === "update") {
     await deliverPull();
-    if (JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString())
+    if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
       rejectUnissuedCandidate(candidate, "Configuration candidate expired");
     await verifyCurrentPreview(candidate, state, signal);
   }
@@ -4740,7 +4703,7 @@ export async function commitProspectiveConfigurationMaintenance(
         throw Error("Original owned prepared candidate checkpoint required");
       if ((await sourceFingerprint(context, state.publisher.token)) !== candidate.sourceFingerprint)
         throw Error("Configuration source conflict");
-      if (JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString())
+      if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
         throw Error("Configuration candidate expired");
       await verifyConfigurationCommitParticipant(candidate, state.writer);
       await verifyCurrentPreview(candidate, state, owner.job.signal);
@@ -5130,7 +5093,7 @@ export async function persistAndApplyProspectiveConfiguration(
     await withConfigurationWriteTransaction(state.writer, async (tx, context) => {
       if ((await sourceFingerprint(context, state.publisher.token)) !== candidate.sourceFingerprint)
         throw Error("Configuration source conflict");
-      if (JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString())
+      if (state.sealed.snapshot.expiresAt <= new Date().toISOString())
         throw Error("Configuration candidate expired");
       await verifyConfigurationCommitParticipant(candidate, state.writer);
       await verifyCurrentPreview(candidate, state, options.signal);
@@ -5228,6 +5191,7 @@ async function applyCommittedOrdinaryCandidate(
   const execute = () =>
     executeAdminJobOperation(owner.job, state.sealed.operation, "admin-job.configuration", {
       operationKey: candidate.operationKey,
+      payload: state.payload,
       preparedRoot: {
         operationKey: state.record.operationKey,
         requestedDeadlineAt: parseControlRootOperationKey(state.record.operationKey).notAfter,
@@ -5239,14 +5203,8 @@ async function applyCommittedOrdinaryCandidate(
       },
     });
   const attempted = readProjection(committed).operations[state.record.operationKey]?.attempt;
-  const consumed = attempted
-    ? { submission: { status: "fulfilled" as const, value: await execute() }, cleanupFailed: false }
-    : await consumePublishedTrustedConfiguration(
-        await publishPreparedTrustedConfigurationSnapshot(candidate),
-        execute,
-      );
-  if (consumed.submission.status === "rejected") throw consumed.submission.reason;
-  const result = consumed.submission.value as TrustedConfigurationApplyOutcome;
+  if (!attempted) await assertConfigurationApplySubmittable(candidate);
+  const result = (await execute()) as TrustedConfigurationApplyOutcome;
   let registryUpdateFailed = false;
   if (result.outcome === "committed") {
     try {
@@ -5257,7 +5215,7 @@ async function applyCommittedOrdinaryCandidate(
   }
   const application = {
     ...result,
-    publisherCleanupFailed: consumed.cleanupFailed,
+    publisherCleanupFailed: false,
     registryUpdateFailed,
   };
   const phase =
@@ -5294,30 +5252,18 @@ async function applyCommittedOrdinaryCandidate(
   };
 }
 
-// Fixed nominal candidate publication and maintenance share this sole owner.
-/** Consume the producer's exact seal, never reseal or rebuild after desired rows save. */
-export async function publishPreparedTrustedConfigurationSnapshot(
-  candidate: ValidatedConfigurationCandidate,
-) {
+/**
+ * A committed candidate's apply may be submitted only while its snapshot is
+ * current, and every request must expire before it does: after the snapshot
+ * expires, recovery may rely on the apply never being admitted.
+ */
+async function assertConfigurationApplySubmittable(candidate: ValidatedConfigurationCandidate) {
   assertCommittedConfigurationCandidate(candidate);
   const state = validatedConfigurationCandidateState(candidate);
   if (state.record.privatePlatformIntent)
     await verifyConfigurationCommitParticipant(candidate, state.writer);
-  const inspected = inspectPreparedConfigurationRecord(
-    encodePreparedConfigurationRecord(state.record, state.publisher.token),
-    state.publisher.token,
-  );
-  if (inspected.snapshot.expiresAtMs <= Date.now()) throw new Error(REJECTED);
-  return publishSnapshot(
-    {
-      ...state.publisher,
-      operationKey: state.record.operationKey,
-      operationForRevision: () => state.sealed.operation,
-      payload: state.payload,
-    },
-    {},
-    state.sealed,
-  );
+  if (Date.parse(state.sealed.snapshot.expiresAt) <= Date.now() + OPS_MAX_REQUEST_TTL_MS)
+    throw new Error(REJECTED);
 }
 
 /** The installed staged preview can discard only its original unissued packet.
@@ -5364,7 +5310,6 @@ export async function completeRetainedConfigurationRetirement(
   handle: RetainedConfigurationRetirement,
 ): Promise<void> {
   const state = retainedConfigurationRetirementState(handle),
-    options = state.publisher,
     expected = state.checkpoint;
   if (
     typeof expected.sealedOperationKey !== "string" ||
@@ -5373,146 +5318,37 @@ export async function completeRetainedConfigurationRetirement(
     !/^cfg1_[A-Za-z0-9_-]{43}$/.test(expected.revisionId)
   )
     throw Error(REJECTED);
-  await withPublicationLock(async () => {
-    const queue = await acquireTrustedConfigurationQueueLock({
-      ...options,
-      participant: "api",
-      operationKey: expected.sealedOperationKey as string,
-    });
-    try {
-      for (const path of [
-        join(options.directory, `${expected.revisionId}.json`),
-        join(options.directory, ".claimed", `${expected.revisionId}.json`),
-      ]) {
-        try {
-          await lstat(path);
-          throw Error(REJECTED);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-      }
-      const directory = join(options.directory, ".candidates"),
-        path = join(directory, `${expected.sealedOperationKey}.json`);
-      await validateDirectory(directory, options.ownerUid, options.ownerGid);
-      let file: Awaited<ReturnType<typeof open>>;
-      try {
-        file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        queue.assertHeld();
-        await syncDirectory(directory);
-        return;
-      }
-      try {
-        const before = await file.stat(),
-          current = await lstat(path);
-        if (
-          !before.isFile() ||
-          before.nlink !== 1 ||
-          before.size > 768 * 1024 ||
-          before.uid !== options.ownerUid ||
-          before.gid !== options.ownerGid ||
-          (before.mode & 0o777) !== SNAPSHOT_MODE ||
-          before.dev !== current.dev ||
-          before.ino !== current.ino
-        )
-          throw Error(REJECTED);
-        const { record, snapshot } = inspectPreparedConfigurationRecord(
-          await file.readFile(),
-          options.token,
-        );
-        if (
-          record.apiJobId !== state.apiJobId ||
-          record.actorId !== state.actorId ||
-          record.candidateId !== expected.candidateId ||
-          record.operationKey !== expected.sealedOperationKey ||
-          snapshot.revisionId !== expected.revisionId ||
-          record.sourceFingerprint !== expected.sourceFingerprint ||
-          record.maintenanceId !== expected.maintenanceId ||
-          record.prepareOperationKey !== expected.prepareOperationKey
-        )
-          throw Error(REJECTED);
-        retainedConfigurationRetirementState(handle);
-        queue.assertHeld();
-        const latest = await lstat(path);
-        if (latest.dev !== before.dev || latest.ino !== before.ino) throw Error(REJECTED);
-        await unlink(path);
-        await syncDirectory(directory);
-      } finally {
-        await file.close();
-      }
-    } finally {
-      queue.release();
-    }
-  });
+  let retained: Awaited<ReturnType<typeof findConfigurationCandidate>>;
+  try {
+    retained = await readConfigurationCandidate(expected.sealedOperationKey);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Configuration candidate missing") return;
+    throw error;
+  }
+  const { record, snapshot } = retained;
+  if (
+    record.apiJobId !== state.apiJobId ||
+    record.actorId !== state.actorId ||
+    record.candidateId !== expected.candidateId ||
+    record.operationKey !== expected.sealedOperationKey ||
+    snapshot.revisionId !== expected.revisionId ||
+    record.sourceFingerprint !== expected.sourceFingerprint ||
+    record.maintenanceId !== expected.maintenanceId ||
+    record.prepareOperationKey !== expected.prepareOperationKey
+  )
+    throw Error(REJECTED);
+  retainedConfigurationRetirementState(handle);
+  await discardConfigurationCandidate(expected.sealedOperationKey);
 }
 async function removeExactRetainedCandidate(
-  candidate: ValidatedConfigurationCandidate,
+  _candidate: ValidatedConfigurationCandidate,
   state: ReturnType<typeof validatedConfigurationCandidateState>,
 ): Promise<void> {
-  await withPublicationLock(async () => {
-    const options = state.publisher;
-    const queue = await acquireTrustedConfigurationQueueLock({
-      ...options,
-      participant: "api",
-      operationKey: state.record.operationKey,
-    });
-    try {
-      for (const path of [
-        join(options.directory, `${candidate.revisionId}.json`),
-        join(options.directory, ".claimed", `${candidate.revisionId}.json`),
-      ]) {
-        try {
-          await lstat(path);
-          throw new Error(REJECTED);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-      }
-      const directory = join(options.directory, ".candidates");
-      await validateDirectory(directory, options.ownerUid, options.ownerGid);
-      const path = join(directory, `${state.record.operationKey}.json`);
-      let handle: Awaited<ReturnType<typeof open>>;
-      try {
-        handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        // Both callers have already proved this nominal candidate unadmitted
-        // or conclusively settled. Absence completes only its inert-file
-        // deletion, never establishes an effect/guard outcome. Flush a prior
-        // unlink whose acknowledgement or directory sync was interrupted.
-        queue.assertHeld();
-        await syncDirectory(directory);
-        return;
-      }
-      try {
-        const before = await handle.stat(),
-          current = await lstat(path);
-        if (
-          !before.isFile() ||
-          before.nlink !== 1 ||
-          before.uid !== options.ownerUid ||
-          before.gid !== options.ownerGid ||
-          (before.mode & 0o777) !== SNAPSHOT_MODE ||
-          before.dev !== current.dev ||
-          before.ino !== current.ino ||
-          !(await handle.readFile()).equals(
-            encodePreparedConfigurationRecord(state.record, options.token),
-          )
-        )
-          throw new Error(REJECTED);
-        queue.assertHeld();
-        const latest = await lstat(path);
-        if (latest.dev !== before.dev || latest.ino !== before.ino) throw new Error(REJECTED);
-        await unlink(path);
-        await syncDirectory(directory);
-      } finally {
-        await handle.close();
-      }
-    } finally {
-      queue.release();
-    }
-  });
+  const retained = await findConfigurationCandidate(state.record.candidateId);
+  // Both callers have already proved this candidate unadmitted or settled.
+  if (!retained) return;
+  if (canonicalJson(retained.record) !== canonicalJson(state.record)) throw new Error(REJECTED);
+  await discardConfigurationCandidate(state.record.operationKey);
 }
 
 /** Request correlation only: the receiver restores the SAME admitted root.
@@ -5846,7 +5682,7 @@ export async function decideConfigurationMaintenance(
 
 /** API-only coordinator for ONE frozen phase. The body/address comes from the
  * actual committed job/decision, never a browser plan or preparedRoot recipe.
- * An attempted phase is lookup-only and never republishes the sealed claim. */
+ * An attempted phase is lookup-only and never resends the payload. */
 export async function executeConfigurationMaintenanceStep(
   candidate: ValidatedConfigurationCandidate,
   ordinal: number,
@@ -5864,17 +5700,15 @@ export async function executeConfigurationMaintenanceStep(
       executeAdminJobOperation(job, prepared.step.operation, "configuration-maintenance.step", {
         operationKey: prepared.step.operationKey,
         preparedRoot: prepared.root,
+        ...(prepared.step.phase === "configuration-commit" ? { payload: state.payload } : {}),
       });
   if (
     prepared.step.phase !== "configuration-commit" ||
     readProjection(job.checkpointResult).operations[prepared.step.operationKey]
   )
     return execute();
-  const published = await publishPreparedTrustedConfigurationSnapshot(candidate),
-    consumed = await consumePublishedTrustedConfiguration(published, execute);
-  if (consumed.submission.status === "rejected") throw consumed.submission.reason;
-  if (consumed.cleanupFailed) throw new JobObservationPending("recovery_required");
-  return consumed.submission.value;
+  await assertConfigurationApplySubmittable(candidate);
+  return execute();
 }
 
 /** Retain the exact API-observed request before HMAC/POST. An attempted winner

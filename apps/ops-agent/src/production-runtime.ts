@@ -63,6 +63,8 @@ export interface ProductionOpsRuntimeOptions {
   docker?: Pick<DockerRuntimeOptions, "execFile" | "followLogs" | "fileExists">;
   runFixedCli?: FixedCliRunner;
   candidateSource?: ConfigurationCandidateSource;
+  /** The API's token, which keys the backup prune proof and the transit credentials revision. */
+  apiToken?: string;
 }
 const registeredServiceSources = new WeakMap<
   OpsRuntime,
@@ -286,7 +288,7 @@ export async function createProductionOpsRuntime(
   });
   installBackupPruneRuntime(runtime, {
     infraDir: options.stack.infraDir,
-    token: options.candidateSource?.token,
+    token: options.apiToken,
   });
   const releaseEffects = installReleaseCapabilityBoundary(
     runtime,
@@ -300,7 +302,7 @@ export async function createProductionOpsRuntime(
   createTransitousLockRuntime(runtime, { rootDir: options.rootDir });
   installTransitCredentialsRuntime(runtime, {
     rootDir: options.rootDir,
-    sourceToken: options.candidateSource?.token,
+    sourceToken: options.apiToken,
     stack: options.stack,
     ownedServices: owned,
     execFile: options.docker?.execFile,

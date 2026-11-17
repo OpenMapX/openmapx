@@ -279,6 +279,7 @@ describe("operation-specific authority policy", () => {
         kind: "integrationConfig.apply",
         integrationId: "integration-live",
         revisionId: `cfg1_${"c".repeat(43)}`,
+        payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       },
       "c".repeat(64),
       signal,
@@ -314,6 +315,7 @@ describe("operation-specific authority policy", () => {
           kind: "integrationConfig.apply",
           integrationId: "integration-live",
           revisionId: `cfg1_${"e".repeat(43)}`,
+          payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         },
         "e".repeat(64),
         signal,
@@ -321,8 +323,7 @@ describe("operation-specific authority policy", () => {
     ).resolves.toBeNull();
   });
 
-  it("rolls back the exact pre-admission snapshot when refreshed authority rejects its binding", async () => {
-    let rollbacks = 0;
+  it("refuses a capability that already names an authority revision", async () => {
     const claimer = createProductionRegistryResourceClaimer({
       services: [{ serviceId: "worker", enabled: true, isBuiltIn: true }],
       integrationIds: [],
@@ -333,17 +334,8 @@ describe("operation-specific authority policy", () => {
       }),
       trustedData: {
         claim: async (operation) => ({
-          capability: {
-            revisionId: "revisionId" in operation ? operation.revisionId : "invalid",
-            values: { authorityRevision: "caller-controlled" },
-          },
-          admission: {
-            rollback: async () => {
-              rollbacks += 1;
-            },
-            commit: async () => undefined,
-            release: async () => undefined,
-          },
+          revisionId: "revisionId" in operation ? operation.revisionId : "invalid",
+          values: { authorityRevision: "caller-controlled" },
         }),
       },
     });
@@ -355,13 +347,13 @@ describe("operation-specific authority policy", () => {
           expectedCurrentRevisionId: null,
           kind: "stack.render",
           revisionId: `cfg1_${"r".repeat(43)}`,
+          payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         },
         "a".repeat(64),
         new AbortController().signal,
         { role: "api", operationKey: "opk1_authorityReject00" },
       ),
     ).resolves.toBeNull();
-    expect(rollbacks).toBe(1);
   });
 
   it("tracks committed generation enable/disable state for lifecycle authority across restart", async () => {
@@ -532,6 +524,7 @@ describe("operation-specific authority policy", () => {
         kind: "serviceConfig.apply",
         serviceId: "ops-agent",
         revisionId: "revision_1",
+        payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       },
       {
         kind: "backup.restore",
@@ -545,6 +538,7 @@ describe("operation-specific authority policy", () => {
         kind: "integrationConfig.apply",
         integrationId: "unregistered-integration",
         revisionId: "revision_1",
+        payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       },
     ];
     for (const operation of forbidden) {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -9,10 +9,11 @@ import {
   provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import {
+  configurationPayloadDigest,
   type OpsOperation,
   opsOperationFingerprint,
   opsOperationSchema,
-  sealTrustedConfigurationSnapshot,
+  prepareConfigurationCandidate,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -25,12 +26,12 @@ import type { JobContext } from "../../api/src/services/job-runner";
 import { installConfigurationRuntimeFixture as installTrustedConfigurationRuntime } from "./__fixtures__/configuration-runtime";
 import { configurationSource } from "./__fixtures__/configuration-source";
 import { testExecution } from "./__fixtures__/execution";
+import { configurationPayloadSource } from "./data-transit-resource-source";
 import type { PersistedOpsJob } from "./journal";
 import { createRegistryResourceClaimer } from "./policy";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 import { buildOpsAgentServer } from "./server";
 import type { TrustedConfigurationRuntimeOptions } from "./trusted-config-runtime";
-import { createFileTrustedOpsDataSource } from "./trusted-config-source";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -100,6 +101,7 @@ function fixture() {
       expectedCurrentRevisionId: coreServices.currentConfigurationGeneration(infraDir),
       kind: "stack.render",
       revisionId: revision(letter),
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       ...(expected !== undefined ? { expectedCurrentRevisionId: expected } : {}),
     } as OpsOperation & { kind: "stack.render" };
     return dispatchOpsOperation(runtime, operation, {
@@ -166,6 +168,7 @@ describe("trusted configuration ownership and outcomes", () => {
           ...(await configurationSource(runtime, f.infraDir)),
           kind,
           revisionId: revision("c"),
+          payloadDigest: configurationPayloadDigest(capturedPayload),
           expectedCurrentRevisionId: capturedRevision,
           ...(kind === "serviceConfig.apply" || kind === "vault.apply"
             ? { serviceId: "alpha" }
@@ -335,6 +338,7 @@ describe("trusted configuration ownership and outcomes", () => {
       ...(await configurationSource(runtime, f.infraDir)),
       kind: "stack.render" as const,
       revisionId: revision("a"),
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       expectedCurrentRevisionId: null,
     };
     const operation = { ...claimed, expectedCurrentRevisionId: revision("b") };
@@ -369,6 +373,7 @@ describe("trusted configuration ownership and outcomes", () => {
       expectedCurrentRevisionId: null,
       kind: "stack.render" as const,
       revisionId: revision("a"),
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     const bound = { ...base, expectedCurrentRevisionId: revision("b") };
     expect(opsOperationSchema.safeParse(bound).success).toBe(true);
@@ -384,8 +389,8 @@ describe("trusted configuration ownership and outcomes", () => {
 });
 
 describe("authenticated conditional configuration admission", () => {
-  it.each(["success", "cleanup", "cancellation", "journal"] as const)(
-    "retains actual commit evidence after %s failure and deduplicates repeated operation identity",
+  it.each(["success", "cancellation"] as const)(
+    "retains actual commit evidence after %s and deduplicates repeated operation identity",
     async (fault) => {
       const f = fixture();
       const token = Buffer.alloc(32, 7).toString("base64url");
@@ -419,26 +424,24 @@ describe("authenticated conditional configuration admission", () => {
         env: {},
       });
       const source = await configurationSource(sourceRuntime, f.infraDir);
-      const queue = join(f.root, "queue");
-      mkdirSync(queue, { mode: 0o700 });
-      mkdirSync(join(queue, ".claimed"), { mode: 0o700 });
-      const sealed = sealTrustedConfigurationSnapshot({
+      const payload = {
+        domain: "a.example.test",
+        serviceConfigs: [{ serviceId: "alpha", values: { label: "a" } }],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      };
+      const sealed = prepareConfigurationCandidate({
         role: "api",
-        token,
         nonce: "nonce_conditional1234567",
         operationKey,
-        operationForRevision: (revisionId) => ({
+        operationForRevision: (revisionId, payloadDigest) => ({
           ...source,
           kind: "stack.render",
           revisionId,
+          payloadDigest,
           expectedCurrentRevisionId: null,
         }),
-        payload: {
-          domain: "a.example.test",
-          serviceConfigs: [{ serviceId: "alpha", values: { label: "a" } }],
-          integrationConfigs: [],
-          serviceSecrets: [],
-        },
+        payload,
       });
       const tokenPath = join(f.root, "api-token");
       writeFileSync(tokenPath, token, { mode: 0o600 });
@@ -451,25 +454,6 @@ describe("authenticated conditional configuration admission", () => {
       )!;
       await parentContext.checkpoint({ _parentExecution: prepared.parent, attempt });
       const parentAssertion = await issueApiJobChildAssertion(attempt);
-      writeFileSync(join(queue, `${sealed.revisionId}.json`), sealed.bytes, { mode: 0o600 });
-      const fileSource = createFileTrustedOpsDataSource({
-        directory: queue,
-        token,
-        allowedUids: [statSync(queue).uid],
-        expectedGid: statSync(queue).gid,
-        afterTerminalLink: async () => {
-          if (fault === "cleanup") throw new Error("synthetic terminal-link fault");
-        },
-      });
-      const raceAdmission = fault === "success" || fault === "cleanup";
-      const claimEntered = Promise.withResolvers<void>();
-      const returnClaim = Promise.withResolvers<void>();
-      const cleanupEntered = Promise.withResolvers<void>();
-      const returnCleanup = Promise.withResolvers<void>();
-      let holdFirstClaim = raceAdmission;
-      let released = false;
-      let terminalDurableAtRelease = false;
-      let interimResultHidden = false;
       let journalRecords: readonly PersistedOpsJob[] = [];
       let executions = 0;
       let finish!: () => void;
@@ -479,45 +463,7 @@ describe("authenticated conditional configuration admission", () => {
       const claimer = createRegistryResourceClaimer({
         serviceIds: ["alpha"],
         integrationIds: [],
-        trustedData: {
-          claim: async (...args) => {
-            const resolved = await fileSource.claim(...args);
-            if (!resolved || !("admission" in resolved)) return resolved;
-            if (holdFirstClaim) {
-              holdFirstClaim = false;
-              claimEntered.resolve();
-              await returnClaim.promise;
-            }
-            return {
-              ...resolved,
-              admission: {
-                ...resolved.admission,
-                release: async () => {
-                  terminalDurableAtRelease = journalRecords.some(
-                    (record) => record.state === "succeeded",
-                  );
-                  const interim = (
-                    await app.inject({
-                      method: "GET",
-                      url: `/v1/operations/${journalRecords[0].operationId}`,
-                      headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
-                    })
-                  ).json().result;
-                  interimResultHidden = interim.state === "running" && interim.result === undefined;
-                  if (raceAdmission) {
-                    cleanupEntered.resolve();
-                    await returnCleanup.promise;
-                  }
-                  try {
-                    await resolved.admission.release();
-                  } finally {
-                    released = true;
-                  }
-                },
-              },
-            };
-          },
-        },
+        trustedData: configurationPayloadSource,
       });
       const runtime = createUnavailableRuntime();
       installTrustedConfigurationRuntime(runtime, {
@@ -537,21 +483,21 @@ describe("authenticated conditional configuration admission", () => {
         },
         resourceClaimer: claimer,
         controlInstallation: installation,
-        // This deliberately holds one authenticated claim across the other real
-        // control-store/configuration commits; its fixture budget must cover that I/O.
-        claimTimeoutMs: 15_000,
         journal: {
           records: () => journalRecords,
           replace: async (records) => {
-            if (fault === "journal" && records.some((record) => record.state === "succeeded"))
-              throw new Error("synthetic journal persistence fault");
             journalRecords = structuredClone(records);
           },
         },
         runtime,
       });
       let counter = 0;
-      const submit = (operation: OpsOperation, key = operationKey, assertion = parentAssertion) =>
+      const submit = (
+        operation: OpsOperation,
+        key = operationKey,
+        assertion = parentAssertion,
+        body: unknown = payload,
+      ) =>
         app.inject({
           method: "POST",
           url: "/v1/operations",
@@ -564,6 +510,7 @@ describe("authenticated conditional configuration admission", () => {
             issuedAt: new Date().toISOString(),
             expiresAt: new Date(Date.now() + 20_000).toISOString(),
             operation,
+            payload: body,
           },
         });
       try {
@@ -571,46 +518,20 @@ describe("authenticated conditional configuration admission", () => {
           ...sealed.operation,
           expectedCurrentRevisionId: `cfg1_${"x".repeat(43)}`,
         } as OpsOperation);
-        expect(tampered.statusCode).toBe(403);
-        // The first request passes the early lookup and holds a real authenticated
-        // claim. The second creates the job; resuming the first exercises raced
-        // admission after the durable result exists but before cleanup settles.
-        const raced = raceAdmission ? submit(sealed.operation).then((response) => response) : null;
-        if (raceAdmission) await bounded(claimEntered.promise);
+        expect(tampered.statusCode).toBeGreaterThanOrEqual(400);
+        const otherPayload = await submit(sealed.operation, operationKey, parentAssertion, {
+          ...payload,
+          domain: "b.example.test",
+        });
+        expect(otherPayload.statusCode).toBe(400);
         const first = await submit(sealed.operation);
         expect(first.statusCode).toBe(202);
         const id = first.json().result.operationId;
-        if (raceAdmission) {
-          await bounded(cleanupEntered.promise);
-          returnClaim.resolve();
-          const racedAck = await raced;
-          const duplicateAck = await submit(sealed.operation);
-          for (const ack of [racedAck, duplicateAck]) {
-            expect(ack?.statusCode).toBe(202);
-            expect.soft(ack?.json().result).toMatchObject({ operationId: id, state: "running" });
-          }
-          const status = (
-            await app.inject({
-              method: "GET",
-              url: `/v1/operations/${id}`,
-              headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
-            })
-          ).json().result;
-          expect(status.state).toBe("running");
-          expect(status.result).toBeUndefined();
-          const events = (
-            await app.inject({
-              method: "GET",
-              url: `/v1/operations/${id}/events?after=0&limit=100`,
-              headers: { authorization: `Bearer ${token}` },
-            })
-          ).json().result.events;
-          expect(
-            events.filter((event: { type: string }) => event.type === "state").at(-1).state,
-          ).toBe("running");
-          expect(released).toBe(false);
-          returnCleanup.resolve();
-        }
+        // The journal names the payload by digest only; it never holds the values.
+        expect(JSON.stringify(journalRecords)).not.toContain("a.example.test");
+        expect(journalRecords[0]?.operation).toMatchObject({
+          payloadDigest: configurationPayloadDigest(payload),
+        });
         if (fault === "cancellation") {
           const enteredDeadline = performance.now() + 3_000;
           while (executions === 0 && performance.now() < enteredDeadline) await delay(10);
@@ -651,15 +572,8 @@ describe("authenticated conditional configuration admission", () => {
         }
         expect(status).toMatchObject({
           state: "succeeded",
-          result: {
-            outcome: "committed",
-            revisionId: sealed.revisionId,
-            cleanupFailed: fault === "cleanup" || fault === "journal",
-          },
+          result: { outcome: "committed", revisionId: sealed.revisionId, cleanupFailed: false },
         });
-        expect(terminalDurableAtRelease).toBe(fault !== "journal");
-        expect(released).toBe(fault !== "journal");
-        expect(interimResultHidden).toBe(fault !== "journal");
         expect(f.label()).toBe("a");
         await f.apply("b");
         const replay = await submit(sealed.operation);
@@ -687,8 +601,6 @@ describe("authenticated conditional configuration admission", () => {
         );
         expect(changed.statusCode).toBe(409);
       } finally {
-        returnClaim.resolve();
-        returnCleanup.resolve();
         finish();
         await app.close();
         closeControlInstallation(installation);

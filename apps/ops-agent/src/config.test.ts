@@ -15,7 +15,6 @@ describe("ops-agent configuration", () => {
       rootDir: "/srv/openmapx",
       journalFile: "/srv/openmapx/infra/docker/state/ops-agent/jobs-v1.json",
       // The agent reaches the queue through the checkout; it has no mount of its own.
-      trustedConfigDirectory: "/srv/openmapx/infra/docker/state/ops-agent/trusted-config",
       host: "0.0.0.0",
       port: 4300,
     });

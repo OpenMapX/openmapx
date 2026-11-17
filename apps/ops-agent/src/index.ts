@@ -23,8 +23,12 @@ import { ArtifactTransferStore, artifactTransferPrivateRoot } from "./artifact-t
 import { startOpsAgentServer } from "./bootstrap";
 import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
+import { configurationCandidateSource } from "./configuration-candidate-source";
 import { configurationHandoffPendingMaintenanceIds } from "./configuration-maintenance-store";
-import { createDataTransitTrustedOpsDataSource } from "./data-transit-resource-source";
+import {
+  configurationPayloadSource,
+  createDataTransitTrustedOpsDataSource,
+} from "./data-transit-resource-source";
 import {
   createDockerDawarichCollector,
   createDockerDawarichRuntimeInspector,
@@ -49,10 +53,6 @@ import {
   initializeTrustedConfigurationRuntime,
   readTrustedEnabledServiceIds,
 } from "./trusted-config-runtime";
-import {
-  createFileTrustedOpsDataSource,
-  initializeTerminalClaimCleanup,
-} from "./trusted-config-source";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
 async function main(): Promise<void> {
@@ -70,7 +70,6 @@ async function main(): Promise<void> {
     const builtInServices = releaseAuthority.services.map((service) => structuredClone(service));
     const paths = repoPaths(config.rootDir);
     const uid = process.geteuid?.() ?? 0;
-    const gid = process.getegid?.() ?? 0;
     const authorityOptions = {
       rootDir: config.rootDir,
       builtInAuthorityDigest: releaseAuthority.digest,
@@ -173,15 +172,6 @@ async function main(): Promise<void> {
         );
       }
     }
-    const terminalClaimCleanup = await initializeTerminalClaimCleanup(
-      config.trustedConfigDirectory,
-      {
-        allowedUids: [uid],
-        expectedGid: gid,
-        token: apiToken,
-        journalRecords: journal.records(),
-      },
-    );
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     const authorityLoader = createTrustedConfigurationAuthorityLoader({
       ...authorityOptions,
@@ -216,12 +206,8 @@ async function main(): Promise<void> {
       communityRepositories,
       integrationStore,
       runFixedCli: administrativeCli,
-      candidateSource: {
-        directory: config.trustedConfigDirectory,
-        token: apiToken,
-        ownerUid: uid,
-        ownerGid: gid,
-      },
+      candidateSource: configurationCandidateSource(paths.infraDir),
+      apiToken,
     });
     const transferPolicy = loadArtifactTransferPolicy();
     const artifactTransfers =
@@ -304,12 +290,7 @@ async function main(): Promise<void> {
           },
           trustedData: createDataTransitTrustedOpsDataSource(
             controlStartup.installation,
-            createFileTrustedOpsDataSource({
-              directory: config.trustedConfigDirectory,
-              token: apiToken,
-              allowedUids: [uid],
-              expectedGid: gid,
-            }),
+            configurationPayloadSource,
           ),
           resourceAuthority: {
             allowBackup: (kind, backupId, serviceIds) =>
@@ -326,7 +307,6 @@ async function main(): Promise<void> {
         }),
         journal,
         controlInstallation: controlStartup.installation,
-        terminalClaimCleanup,
         runtime,
         artifactTransfers,
         audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),

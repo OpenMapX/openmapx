@@ -7,7 +7,6 @@ import filesystem, {
   readFileSync,
   renameSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";
@@ -284,11 +283,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
       host.setRows([host.row, old]);
       host.setImagePullProcess(async (reference) => {
-        const candidates = readdirSync(join(host.queue, ".candidates"));
+        const candidates = readdirSync(host.candidates);
         expect(candidates).toHaveLength(1);
         const candidate = inspectPreparedConfigurationRecord(
-            readFileSync(join(host.queue, ".candidates", candidates[0]!)),
-            host.token,
+            JSON.parse(readFileSync(join(host.candidates, candidates[0]!), "utf8")),
           ).record,
           fixed = candidate.privateCoordinatorLifecycle;
         if (fixed?.action !== "update") throw Error("Actual original sealed Update source missing");
@@ -532,9 +530,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: await agent.listen({ host: "127.0.0.1", port: 0 }),
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
         OPENMAPX_ROOT_DIR: host.root,
         OPENMAPX_SECRETS_KEY: "71".repeat(32),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "task012-coordinator-local-admin",
@@ -735,7 +730,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await delay(500);
         }
         expect((await finished(id)).status).toBe("canceled");
-        expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+        expect(readdirSync(host.candidates)).toHaveLength(0);
         expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
         const [retained] = await fixture.db
           .select()
@@ -841,7 +836,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           root: host.root,
           infraDir: host.infraDir,
           stack: host.stack,
-          queue: host.queue,
           token: host.token,
           serviceIds: host.loaded.map((service) => service.manifest.id),
           dockerBridge: `${dockerBridge}/docker`,
@@ -936,7 +930,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }),
           );
           expect(pull.receiptDelivery?.terminalReceipt.state).toBe("succeeded");
-          expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+          expect(readdirSync(host.candidates)).toHaveLength(0);
           expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
           const path = join(
             host.infraDir,
@@ -1118,7 +1112,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
         expect(services.readDesiredSelection(host.infraDir)).toEqual(selection);
         expect(readFileSync(pullPath)).toEqual(original);
-        expect(readdirSync(join(host.queue, ".candidates"))).toEqual([]);
+        expect(readdirSync(host.candidates)).toEqual([]);
       }
       expect(posts.get("service.pull")).toBe(1);
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
@@ -1320,7 +1314,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           0,
         );
         expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-        expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+        expect(readdirSync(host.candidates)).toHaveLength(0);
       } finally {
         beforeLifecycleProcess = undefined;
         release.resolve();
@@ -1498,7 +1492,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           0,
         );
         expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-        expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+        expect(readdirSync(host.candidates)).toHaveLength(0);
         const directory = join(host.infraDir, "state/ops-agent/control/executions"),
           actualPulls = readdirSync(directory)
             .filter((name) => name.endsWith(".json"))
@@ -1910,7 +1904,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(posts.get("service.update") ?? 0).toBe(0);
           expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
           expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
-          expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+          expect(readdirSync(host.candidates)).toHaveLength(0);
           expect(readFileSync(pullPath)).toEqual(original);
           const repair = await api.inject({
             method: "POST",
@@ -1972,7 +1966,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
       expect(readFileSync(pullPath).equals(original)).toBe(true);
-      expect(readdirSync(join(host.queue, ".candidates"))).toEqual([]);
+      expect(readdirSync(host.candidates)).toEqual([]);
       expect(posts.get("serviceConfig.apply") ?? 0).toBe(0);
       expect(posts.get("stack.render") ?? 0).toBe(0);
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
@@ -2322,9 +2316,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   .operations,
               ).map((value) => value.phase),
             ).toEqual(["prepared"]);
-            expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(
-              point === "orphan candidate" ? 1 : 0,
-            );
+            expect(readdirSync(host.candidates)).toHaveLength(point === "orphan candidate" ? 1 : 0);
             first.child.kill("SIGKILL");
             expect((await first.exited).signal).toBe("SIGKILL");
             const lease = Date.parse(before._observationLeaseUntil as string);
@@ -2347,7 +2339,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ).toEqual(["unissued"]);
             expect(posts.get("service.pull") ?? 0).toBe(0);
             expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-            expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+            expect(readdirSync(host.candidates)).toHaveLength(0);
             const failed = JSON.stringify(row!.result);
             const next = await api.inject({
               method: "POST",
@@ -2386,14 +2378,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .where(eq(schema.adminJob.id, id)),
             prior = before!.result as Record<string, unknown>,
             candidate = prior._configurationCandidate as Record<string, unknown>,
-            path = join(host.queue, ".candidates", `${candidate.sealedOperationKey}.json`),
+            path = join(host.candidates, `${candidate.sealedOperationKey}.json`),
             // The native unlink hook publishes these exact bytes only after unlink succeeds.
             bytes =
               point === "candidate unlink"
                 ? readFileSync(join(host.root, "coordinator-retirement-unlinked"))
                 : readFileSync(path),
             decision = JSON.stringify(prior._configurationMaintenanceDecision),
-            inspected = inspectPreparedConfigurationRecord(bytes, host.token).record,
+            inspected = inspectPreparedConfigurationRecord(
+              JSON.parse(bytes.toString("utf8")),
+            ).record,
             originalNormal =
               inspected.privateCoordinatorLifecycle?.action === "update"
                 ? readFileSync(
@@ -2734,7 +2728,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("service.pull") ?? 0).toBe(0);
       expect(posts.get("service.start") ?? 0).toBe(0);
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+      expect(readdirSync(host.candidates)).toHaveLength(0);
       expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
       const original = JSON.stringify(row!.result);
       services.writeServiceSelectionFile(host.infraDir, ["data-manager", "motis"]);
@@ -2970,7 +2964,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
             host.initial.revisionId,
           );
-          expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+          expect(readdirSync(host.candidates)).toHaveLength(0);
           if (retry) {
             // Preserve monotonic process/retention time AND actual PG clock evidence.
             // No SQL clock or signed settlement preimage is substituted.
@@ -3094,7 +3088,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect((row!.result as { completedServiceIds: string[] }).completedServiceIds).toEqual([
         "motis",
       ]);
-      expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+      expect(readdirSync(host.candidates)).toHaveLength(0);
       expect(posts.get("service.update")).toBe(1);
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
     }, 240000);

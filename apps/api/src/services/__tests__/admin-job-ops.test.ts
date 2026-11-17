@@ -663,6 +663,7 @@ it("retains a service workflow parent budget beyond its short render child", asy
       {
         kind: "stack.render",
         revisionId: `cfg1_${"a".repeat(43)}`,
+        payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         expectedCurrentRevisionId: null,
         expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
         coordinatorMode: "ensure-running",

@@ -19,15 +19,13 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
   opsExecutionBudget,
+  prepareConfigurationCandidate,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { waitForOpsResult } from "../apps/api/src/services/ops-client";
-import {
-  consumePublishedTrustedConfiguration,
-  publishTrustedConfigurationSnapshot,
-} from "../apps/api/src/services/trusted-config-publisher";
 import {
   configurationHandoffRunArgs,
   inspectAgentContainer,
@@ -268,8 +266,9 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       agent: Agent,
       operation: Extract<OpsOperation, { kind: K }>,
       identity = localRootIdentity(operation.kind),
+      payload?: TrustedConfigurationPayload,
     ): Promise<OpsResultFor<K>> {
-      const submitted = await agent.client.execute<K>(operation, identity);
+      const submitted = await agent.client.execute<K>(operation, { ...identity, payload });
       if (submitted.execution === "sync") return submitted.value;
       return waitForOpsResult<K>(agent.client, operation.kind, submitted, {
         execution: identity.execution,
@@ -285,29 +284,36 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       const identity = localRootIdentity("stack.render");
       const { operationKey } = identity;
       const before = services.currentConfigurationGeneration(infra);
-      const sealed = await publishTrustedConfigurationSnapshot({
-        directory: services.agentStatePaths(infra).trustedConfig,
-        token: agent.token,
-        ownerUid: uid,
-        ownerGid: gid,
+      const payload = {
+        domain: `${name}.example.test`,
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      };
+      const sealed = prepareConfigurationCandidate({
+        role: "api",
+        nonce: `nonce_${randomUUID().replaceAll("-", "")}`,
         operationKey,
-        operationForRevision: (revisionId) => ({
+        operationForRevision: (revisionId, payloadDigest) => ({
           kind: "stack.render",
           revisionId,
+          payloadDigest,
           expectedCurrentRevisionId: before,
           expectedSourceRevision: inspected.value.sourceRevision,
           coordinatorMode: "require-running",
         }),
-        payload: {
-          domain: `${name}.example.test`,
-          serviceConfigs: [],
-          integrationConfigs: [],
-          serviceSecrets: [],
-        },
+        payload,
       });
-      const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-        operate(agent, sealed.operation, identity),
-      );
+      let submission: PromiseSettledResult<unknown>;
+      try {
+        submission = {
+          status: "fulfilled",
+          value: await operate(agent, sealed.operation, identity, payload),
+        };
+      } catch (reason) {
+        submission = { status: "rejected", reason };
+      }
+      const consumed = { submission };
       expect(consumed.submission.status, await agent.logs()).toBe("fulfilled");
       const result =
         consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;

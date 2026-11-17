@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import * as nodeFs from "node:fs";
-import { mkdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { dataConfigurationFencePrepareSchema } from "@openmapx/core/data-manager-contracts";
@@ -166,7 +166,7 @@ describe.skipIf(
             expect(refused?.status).toBe("failed");
             expect(refused?.result._configurationCandidate.phase).toBe("prepared");
             expect(
-              existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
+              existsSync(join(f.host.candidates, `${candidate.sealedOperationKey}.json`)),
             ).toBe(true);
             await f.sql`UPDATE admin_job SET result=${JSON.stringify(historical!.result)}::jsonb WHERE id=${f.ctx.jobId}`;
           }
@@ -205,7 +205,9 @@ describe.skipIf(
             await actual.unlink(path);
             if (
               !faulted &&
-              String(path).endsWith(`/.candidates/${candidate.sealedOperationKey}.json`)
+              String(path).endsWith(
+                `/configuration-candidates/${candidate.sealedOperationKey}.json`,
+              )
             ) {
               faulted = true;
               throw Error("Lost acknowledgement after original inert candidate unlink");
@@ -229,9 +231,9 @@ describe.skipIf(
             },
             { timeout: 15000, interval: 100 },
           );
-          expect(
-            existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
-          ).toBe(false);
+          expect(existsSync(join(f.host.candidates, `${candidate.sealedOperationKey}.json`))).toBe(
+            false,
+          );
           const [interrupted] = await f.sql`SELECT result FROM admin_job WHERE id=${f.ctx.jobId}`;
           expect(
             await (await import("../admin-job-ops")).hasRecoveredMaintenanceCandidate(
@@ -263,9 +265,9 @@ describe.skipIf(
           }),
         ).toBe("failed");
         expect(finished?.result._configurationCandidate.phase).toBe("discarded");
-        expect(
-          existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
-        ).toBe(false);
+        expect(existsSync(join(f.host.candidates, `${candidate.sealedOperationKey}.json`))).toBe(
+          false,
+        );
         expect(readFileSync(canonicalPath)).toEqual(canonical);
         expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
         expect(f.data.preparePosts).toBe(0);
@@ -994,9 +996,6 @@ async function ownedFenceFixture(
   for (const [key, value] of Object.entries({
     OPS_AGENT_URL: await app.listen({ host: "127.0.0.1", port: 0 }),
     OPS_AGENT_TOKEN_FILE: tokenFile,
-    OPS_TRUSTED_CONFIG_DIR: host.queue,
-    OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-    OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
     OPENMAPX_ROOT_DIR: host.root,
     OPENMAPX_SECRETS_KEY: "71".repeat(32),
     OPENMAPX_RELEASE: "local",

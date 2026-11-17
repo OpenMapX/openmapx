@@ -7,14 +7,17 @@ import { closeControlInstallation, openControlInstallation } from "@openmapx/cor
 import { services } from "@openmapx/core/server";
 import { inspectReleaseAuthority } from "../administrative-runtime.ts";
 import { CommunityRepositoryStore } from "../community-repositories.ts";
+import { configurationCandidateSource } from "../configuration-candidate-source.ts";
 import { configurationPolicyRevision } from "../configured-resource-authority.ts";
-import { createDataTransitTrustedOpsDataSource } from "../data-transit-resource-source.ts";
+import {
+  configurationPayloadSource,
+  createDataTransitTrustedOpsDataSource,
+} from "../data-transit-resource-source.ts";
 import { openOpsJobJournal } from "../journal.ts";
 import { createProductionRegistryResourceClaimer } from "../policy.ts";
 import { safeProcessDiagnostic } from "../process-output.ts";
 import { createProductionOpsRuntime, productionOwnedServices } from "../production-runtime.ts";
 import { buildOpsAgentServer } from "../server.ts";
-import { createFileTrustedOpsDataSource } from "../trusted-config-source.ts";
 import { createTrustedConfigurationAuthorityLoader } from "../trusted-configuration-authority.ts";
 
 let raw = "";
@@ -49,12 +52,8 @@ const runtime = await createProductionOpsRuntime({
   stack: input.stack,
   loadAuthority,
   communityRepositories: repositories,
-  candidateSource: {
-    directory: input.queue,
-    token: input.token,
-    ownerUid: fs.statSync(input.queue).uid,
-    ownerGid: fs.statSync(input.queue).gid,
-  },
+  candidateSource: configurationCandidateSource(input.infraDir),
+  apiToken: input.token,
   docker: {
     fileExists: fs.existsSync,
     execFile: async (file, args, options) => {
@@ -143,15 +142,7 @@ const app = buildOpsAgentServer({
     services: authority.services,
     integrationIds: authority.integrationIds,
     loadAuthority: policyAuthority,
-    trustedData: createDataTransitTrustedOpsDataSource(
-      installation,
-      createFileTrustedOpsDataSource({
-        directory: input.queue,
-        token: input.token,
-        allowedUids: [fs.statSync(input.queue).uid],
-        expectedGid: fs.statSync(input.queue).gid,
-      }),
-    ),
+    trustedData: createDataTransitTrustedOpsDataSource(installation, configurationPayloadSource),
     resourceAuthority: {
       allowRelease: (kind, releaseId) =>
         kind === "release.images.pull" && inspectReleaseAuthority(input.root, releaseId),

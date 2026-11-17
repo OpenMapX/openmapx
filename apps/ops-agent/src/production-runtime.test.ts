@@ -675,7 +675,7 @@ describe("assembled production service authority", () => {
     expect(entry).toMatch(
       /createDataTransitTrustedOpsDataSource\(\s*controlStartup\.installation,/,
     );
-    expect(entry).toContain("createFileTrustedOpsDataSource({");
+    expect(entry).toContain("configurationPayloadSource,");
     const recovery = entry.indexOf("await communityRepositories.recover()");
     expect(recovery).toBeGreaterThanOrEqual(0);
     expect(recovery).toBeLessThan(entry.indexOf("const controlStartup ="));

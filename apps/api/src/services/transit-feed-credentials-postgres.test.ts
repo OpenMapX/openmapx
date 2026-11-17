@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -173,9 +173,6 @@ describe.skipIf(!enabled)(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: url,
         OPS_AGENT_TOKEN_FILE: token,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
       }))
         vi.stubEnv(key, value);
       dm = await ownedDataManager({

@@ -249,8 +249,8 @@ describe("configuration helper container", () => {
       },
       {
         Type: "bind",
-        Source: "/srv/openmapx/infra/docker/state/ops-agent/trusted-config",
-        Destination: "/var/lib/openmapx/trusted-config",
+        Source: "/srv/openmapx/infra/docker/state/ops-agent/custom-integrations",
+        Destination: "/var/lib/openmapx/custom-integrations",
         RW: true,
       },
     ]);

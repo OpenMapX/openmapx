@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { opsOperationFingerprint } from "@openmapx/core/ops";
+import { configurationPayloadDigest, opsOperationFingerprint } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { closeControlInstallation, observeConfigurationSources, openControlInstallation, provisionControlDirectories } from "@openmapx/core/build-artifacts";
 import { renderComposeForRepo } from "../../../../packages/cli/src/commands/compose";
@@ -70,6 +70,7 @@ try {
     const operation = {
       kind: "stack.render",
       revisionId: `cfg1_${letter.repeat(43)}`,
+      payloadDigest: configurationPayloadDigest(payload),
       expectedSourceRevision: source.sourceRevision,
       coordinatorMode: "ensure-running",
       // This synthetic writer captures its initial baseline before entering the

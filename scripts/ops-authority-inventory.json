@@ -53,6 +53,9 @@
       "communityServices.inspect",
       "configuration.hardlinks.apply",
       "configuration.failure.inspect",
+      "configuration.candidate.retain",
+      "configuration.candidate.read",
+      "configuration.candidate.discard",
       "configuration.hardlinks.inspect",
       "configuration.hardlinks.preview",
       "configuration.inspect",
@@ -343,7 +346,11 @@
         "apps/api/src/services/admin-cli.ts#validateServiceSelectionForWrite",
         "apps/api/src/routes/admin.ts#adminRoute",
         "apps/api/src/services/service-secrets.ts#setServiceSecret",
-        "packages/core/src/build-artifacts/configuration-source-witness.ts#observeConfigurationSources"
+        "packages/core/src/build-artifacts/configuration-source-witness.ts#observeConfigurationSources",
+        "apps/api/src/services/configuration-candidate-store.ts#retainConfigurationCandidate",
+        "apps/api/src/services/configuration-candidate-store.ts#readConfigurationCandidate",
+        "apps/api/src/services/configuration-candidate-store.ts#findConfigurationCandidate",
+        "apps/api/src/services/configuration-candidate-store.ts#discardConfigurationCandidate"
       ],
       "typedKinds": [
         "configuration.inspect",
@@ -351,7 +358,10 @@
         "serviceConfig.apply",
         "integrationConfig.apply",
         "vault.apply",
-        "configuration.sources.inspect"
+        "configuration.sources.inspect",
+        "configuration.candidate.retain",
+        "configuration.candidate.read",
+        "configuration.candidate.discard"
       ]
     },
     {

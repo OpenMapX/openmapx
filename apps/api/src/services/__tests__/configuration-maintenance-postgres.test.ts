@@ -9,7 +9,6 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  watch,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
@@ -255,9 +254,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
         OPENMAPX_SECRETS_KEY: "71".repeat(32),
       }))
         vi.stubEnv(key, value);
@@ -392,7 +388,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .where(eq(schema.adminJob.id, ctx.jobId));
         const candidate = (original!.result as Record<string, unknown>)
             ._configurationCandidate as Record<string, unknown>,
-          path = join(host.queue, ".candidates", `${candidate.sealedOperationKey}.json`),
+          path = join(host.candidates, `${candidate.sealedOperationKey}.json`),
           bytes = readFileSync(path),
           { claimAdminJob } = await import("../admin-job-state"),
           reclaimed = await claimAdminJob(original!);
@@ -553,7 +549,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           );
           return { child, exited };
         };
-        let readyObserver: ReturnType<typeof watch> | undefined;
         const first = start();
         try {
           await Promise.race([
@@ -565,7 +560,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const [original] = await fixture.db.select().from(schema.adminJob),
             originalResult = original!.result as Record<string, unknown>,
             candidate = originalResult._configurationCandidate as Record<string, unknown>,
-            path = join(host.queue, ".candidates", `${candidate.sealedOperationKey}.json`),
+            path = join(host.candidates, `${candidate.sealedOperationKey}.json`),
             bytes = readFileSync(path),
             record = JSON.parse(bytes.toString()).record,
             parent = {
@@ -600,17 +595,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           while (Date.now() <= lease + 100)
             await nativeDelay(Math.min(1000, lease + 101 - Date.now()));
           if (!refused) expect(readFileSync(path).equals(bytes)).toBe(true);
-          let readyPublications = 0;
-          if (mode === "applied") {
-            expect(existsSync(join(host.queue, `${candidate.revisionId}.json`))).toBe(false);
-            readyObserver = watch(host.queue, (_event, name) => {
-              if (
-                name?.toString() === `${candidate.revisionId}.json` &&
-                existsSync(join(host.queue, name.toString()))
-              )
-                readyPublications++;
-            });
-          }
           expect((await start().exited).code).toBe(refused ? 2 : 0);
           const [finished] = await fixture.db
               .select()
@@ -664,7 +648,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .where(eq(schema.adminJob.id, original!.id));
           expect(duplicate!.result).toEqual(result);
           expect(actualPosts.get(applyKind)).toBe(1);
-          expect(readyPublications).toBe(0);
           const next = await job();
           await owned(next, async () =>
             expect(writer.currentAdministrativeConfigurationWriter()).toBeDefined(),
@@ -681,7 +664,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }),
           );
         } finally {
-          readyObserver?.close();
           relay.release();
           for (const child of children)
             if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
@@ -917,13 +899,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     return (
                       c?.phase === "settled" &&
                       (retired
-                        ? !existsSync(
-                            join(host.queue, ".candidates", `${c.sealedOperationKey}.json`),
-                          )
+                        ? !existsSync(join(host.candidates, `${c.sealedOperationKey}.json`))
                         : c.retirement?.version === 1 &&
-                          existsSync(
-                            join(host.queue, ".candidates", `${c.sealedOperationKey}.json`),
-                          ) &&
+                          existsSync(join(host.candidates, `${c.sealedOperationKey}.json`)) &&
                           (await heldUpdateInTransaction(fixture.sql, observation.backendPid)))
                     );
                   }
@@ -1172,11 +1150,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   ),
                 )
               : null;
-          const candidatePath = join(
-              host.queue,
-              ".candidates",
-              `${candidate.sealedOperationKey}.json`,
-            ),
+          const candidatePath = join(host.candidates, `${candidate.sealedOperationKey}.json`),
             candidateBytes = retired ? undefined : readFileSync(candidatePath),
             rootLease = () => targetLease(host.infraDir, "data-manager"),
             rootInode = rootLease();
@@ -1674,9 +1648,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
             unused || contained ? host.initial.revisionId : nativeRevision,
           );
-          expect(
-            existsSync(join(host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
-          ).toBe(false);
+          expect(existsSync(join(host.candidates, `${candidate.sealedOperationKey}.json`))).toBe(
+            false,
+          );
           expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
           expect(host.calls.filter((args) => args.includes("up"))).toHaveLength(
             unused || contained ? 0 : preRootHelper ? 2 : 1,
@@ -1784,8 +1758,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
         );
-        expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(1);
-        expect(readdirSync(host.queue).filter((name) => /^cfg1_/.test(name))).toHaveLength(0);
+        expect(readdirSync(host.candidates)).toHaveLength(1);
         expect(host.calls.some((args) => args.includes("up") || args.includes("pull"))).toBe(false);
         const receipt = await prospective.persistAndApplyProspectiveConfiguration(candidate, {
           coordinatorMode: "ensure-running",
@@ -1852,14 +1825,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ],
           },
         });
-        const { publishPreparedTrustedConfigurationSnapshot } = await import(
-          "../trusted-config-publisher"
-        );
         // Diagnostic state is not commit authority, even for an internal caller.
         prospective.validatedConfigurationCandidateState(candidate).persisted = true;
-        await expect(publishPreparedTrustedConfigurationSnapshot(candidate)).rejects.toThrow();
+        await expect(
+          prospective.executeConfigurationMaintenanceStep(candidate, 0),
+        ).rejects.toThrow();
         expect(await fixture.db.select().from(schema.serviceConfig)).toEqual([]);
-        expect(readdirSync(host.queue).filter((name) => name.startsWith("cfg1_"))).toEqual([]);
       });
     });
     it("refuses an oversized retained full envelope before a desired-row write or consumable publication", async () => {
@@ -1887,7 +1858,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).rejects.toThrow();
       expect(await fixture.db.select().from(schema.serviceConfig)).toEqual(before);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
-      expect(readdirSync(host.queue).filter((name) => /^cfg1_/.test(name))).toHaveLength(0);
       expect(host.calls.some((args) => args.includes("up") || args.includes("pull"))).toBe(false);
     });
     it("refuses host-source drift after preview before any desired-row persistence", async () => {
@@ -1935,7 +1905,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ],
           },
         });
-        expect(candidate.sealedBytes).toBeLessThanOrEqual(524288);
+        expect(candidate.payloadBytes).toBeLessThanOrEqual(524288);
         const receipt = await prospective.persistAndApplyProspectiveConfiguration(candidate, {
           coordinatorMode: "ensure-running",
         });
@@ -1973,7 +1943,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         (retained?.result as { _configurationCandidate?: { phase?: string } })
           ?._configurationCandidate?.phase,
       ).toBe("settled");
-      expect(readdirSync(join(host.queue, ".candidates"))).toEqual([]);
+      expect(readdirSync(host.candidates)).toEqual([]);
       expect(
         host.calls.some(
           (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
@@ -2071,7 +2041,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         before + 1,
       );
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
-      expect(readdirSync(join(host.queue, ".candidates"))).toEqual([]);
+      expect(readdirSync(host.candidates)).toEqual([]);
       const [job] = await fixture.db.select().from(schema.adminJob);
       expect((job?.result as Record<string, unknown>)?.serviceCredential).toMatchObject({
         serviceId: "motis",
@@ -2205,7 +2175,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(
             (original?.result as Record<string, unknown>)?._configurationCandidate === undefined,
           ).toBe(true);
-          const candidates = join(host.queue, ".candidates");
+          const candidates = host.candidates;
           expect(existsSync(candidates) ? readdirSync(candidates) : []).toEqual([]);
           expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
           expect(actualPosts.get("service.start") ?? 0).toBe(0);
@@ -2497,7 +2467,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(
           await fixture.sql`SELECT maintenance_id FROM data_manager.configuration_fence`,
         ).toEqual([]);
-        expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(1);
+        expect(readdirSync(host.candidates)).toHaveLength(1);
         coordinator.State = "running";
         host.setRows([host.row, coordinator]);
         started++;
@@ -2645,9 +2615,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           admission = readFileSync(helperPath);
         while (Date.now() <= state.record.parentDeadlineAt)
           await nativeDelay(Math.min(1000, state.record.parentDeadlineAt - Date.now() + 10));
-        expect(JSON.parse(state.sealed.bytes.toString()).expiresAt > new Date().toISOString()).toBe(
-          true,
-        );
+        expect(state.sealed.snapshot.expiresAt > new Date().toISOString()).toBe(true);
         await expect(
           prospective.persistAndApplyProspectiveConfiguration(candidate, {
             coordinatorMode: "ensure-running",
@@ -2667,7 +2635,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(dm!.preparePosts).toBe(0);
         expect(dm!.settlePosts).toBe(0);
         expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
-        expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+        expect(readdirSync(host.candidates)).toHaveLength(0);
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
         );
@@ -2723,7 +2691,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             },
           }),
           state = prospective.validatedConfigurationCandidateState(candidate),
-          path = join(host.queue, ".candidates", `${state.record.operationKey}.json`),
+          path = join(host.candidates, `${state.record.operationKey}.json`),
           bytes = readFileSync(path),
           actualFetch = globalThis.fetch;
         let losses = 0,
@@ -2847,7 +2815,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           candidateId: candidate.candidateId,
           phase: "discarded",
         });
-        expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
+        expect(readdirSync(host.candidates)).toHaveLength(0);
       });
       const next = await job();
       await owned(next, async () =>
@@ -2913,7 +2881,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await expect(async () =>
             prospective.discardNeverPreparedProspectiveConfiguration(candidate),
           ).rejects.toThrow("Conclusive never-prepared maintenance closure required");
-          expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(1);
+          expect(readdirSync(host.candidates)).toHaveLength(1);
           const { createApiOpsClient, createDurableOpsKey } = await import("../ops-client"),
             { prepareApiJobChildAttempt, issueApiJobChildAssertion } = await import(
               "../admin-job-parent"
@@ -3257,7 +3225,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
             host.initial.revisionId,
           );
-          expect(readdirSync(host.queue).filter((name) => name.startsWith("cfg1_"))).toEqual([]);
           expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
         });
       },
@@ -3939,9 +3906,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(owner.apiControls.steps).toHaveLength(1);
           expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
           expect(
-            existsSync(
-              join(host.queue, ".candidates", `${owner.plan.operation.applyOperationKey}.json`),
-            ),
+            existsSync(join(host.candidates, `${owner.plan.operation.applyOperationKey}.json`)),
           ).toBe(false);
           expect(
             host.calls.some(
@@ -4175,9 +4140,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               (ctx.checkpointResult!._configurationCandidate as Record<string, unknown>).phase,
             ).toBe("settled");
             expect(
-              existsSync(
-                join(host.queue, ".candidates", `${prepared.binding.applyOperationKey}.json`),
-              ),
+              existsSync(join(host.candidates, `${prepared.binding.applyOperationKey}.json`)),
             ).toBe(false);
           } else {
             prepared = await maintenance.prepareConfigurationMaintenance(candidate);
@@ -5083,9 +5046,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ).toBe(false);
           await prospective.discardUnusedPreparedProspectiveConfiguration(candidate);
           expect(
-            existsSync(
-              join(host.queue, ".candidates", `${prepared.binding.applyOperationKey}.json`),
-            ),
+            existsSync(join(host.candidates, `${prepared.binding.applyOperationKey}.json`)),
           ).toBe(false);
           expect(
             (ctx.checkpointResult!._configurationCandidate as Record<string, unknown>).phase,
@@ -5545,7 +5506,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             host.initial.revisionId,
           );
           expect(await fixture.db.select().from(schema.serviceConfig)).toEqual([]);
-          expect(readdirSync(join(host.queue, ".candidates"))).toEqual([]);
+          expect(readdirSync(host.candidates)).toEqual([]);
         }
         expect(
           host.calls.some(
@@ -5784,8 +5745,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(
             existsSync(
               join(
-                host.queue,
-                ".candidates",
+                host.candidates,
                 `${prospective.validatedConfigurationCandidateState(candidate).record.operationKey}.json`,
               ),
             ),

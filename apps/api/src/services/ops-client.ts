@@ -23,6 +23,7 @@ import {
   opsKindRequiresControlAuthority,
   parseOpsResult,
   type TrustedConfigurationApplyOperation,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import {
   DAWARICH_TAR_MEDIA_TYPE,
@@ -487,6 +488,7 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
     recoveryTimeoutMs?: number;
     execution?: { requestedDeadlineAt: number };
     parentAssertion?: string;
+    payload?: TrustedConfigurationPayload;
   } = {},
 ): Promise<OpsSubmitResult<K>> {
   let firstError: unknown;
@@ -498,6 +500,7 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
         signal: options.signal,
         execution: options.execution,
         parentAssertion: options.parentAssertion,
+        payload: options.payload,
       });
     } catch (error) {
       firstError = error;

@@ -418,7 +418,7 @@ and CPU (0.125–256 cores) limits. These are Docker `deploy.resources.limits`,
 not environment variables. Leaving a field unset preserves the manifest limit,
 including host interpolation. Clear a saved resource field to restore that limit. Host-owned fields are locked; both `SERVICE_*`
 overrides and the original variable referenced by a manifest take precedence.
-Saving uses the same validated, sealed prospective configuration as applying:
+Saving uses the same validated prospective configuration as applying:
 failed database reads, invalid values or an oversized snapshot refuse the entire
 change. Saving configuration does not rebuild prepared data.
 

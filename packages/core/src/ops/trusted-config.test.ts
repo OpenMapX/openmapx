@@ -1,53 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
-  inspectTrustedConfigurationSnapshot,
+  inspectPreparedConfigurationRecord,
+  prepareConfigurationCandidate,
+} from "./configuration-preparation";
+import { parseOpsRequest } from "./contract";
+import {
+  configurationPayloadDigest,
+  createConfigurationSnapshot,
   OPS_TRUSTED_CONFIG_MAX_BYTES,
-  OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES,
-  OPS_TRUSTED_CONFIG_QUEUE_MAX_ENTRIES,
-  openTrustedConfigurationSnapshot,
-  sealTrustedConfigurationSnapshot,
+  parseTrustedConfigurationPayload,
   type TrustedConfigurationPayload,
-  trustedConfigurationQueueFits,
+  verifyConfigurationSnapshot,
 } from "./trusted-config";
 
-it("accepts exactly 524288 serialized sealed UTF-8 bytes and rejects the next byte", () => {
-  const input = payload();
-  input.serviceSecrets = [
-    {
-      serviceId: "motis",
-      values: {
-        ...Object.fromEntries(
-          Array.from({ length: 8 }, (_, i) => [`TOKEN_${i}`, "x".repeat(60000)]),
-        ),
-        PAD: "",
-      },
-    },
-  ];
-  const seal = () =>
-    sealTrustedConfigurationSnapshot({
-      role: "api",
-      operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({
-        kind: "stack.render",
-        revisionId,
-        expectedCurrentRevisionId: null,
-        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-        coordinatorMode: "ensure-running",
-      }),
-      payload: input,
-      token,
-      issuedAtMs: now,
-      nonce: "nonce_0123456789abcdef",
-    });
-  const remaining = OPS_TRUSTED_CONFIG_MAX_BYTES - seal().bytes.length;
-  input.serviceSecrets[0]!.values.PAD = "x".repeat(remaining);
-  expect(seal().bytes.length).toBe(524288);
-  input.serviceSecrets[0]!.values.PAD += "x";
-  expect(() => seal()).toThrow();
-});
-
-const token = Buffer.alloc(32, 0x2a).toString("base64url");
 const now = Date.parse("2026-08-24T08:00:00.000Z");
+const operationKey = "opk1_0123456789abcdef";
 
 function payload(): TrustedConfigurationPayload {
   return {
@@ -64,234 +31,169 @@ function payload(): TrustedConfigurationPayload {
   };
 }
 
-describe("trusted configuration snapshot protocol", () => {
-  it("refuses to seal a read-only hardlink preview as a generation apply", () => {
-    expect(() =>
-      sealTrustedConfigurationSnapshot({
-        role: "api",
-        operationKey: "opk1_candidatekind123456",
-        token,
-        issuedAtMs: now,
-        nonce: "nonce_candidate_kind_123456",
-        payload: payload(),
-        operationForRevision: (revisionId) => ({
-          kind: "configuration.hardlinks.preview",
-          candidateId: "031d2b04-4494-443b-8a70-5d1c44b4d951",
-          revisionId,
-          expectedCurrentRevisionId: null,
-          expectedSourceRevision: "d1daa4b7-1c11-47e7-88af-5442be6a3ae7",
-          coordinatorMode: "require-running",
-        }),
-      }),
-    ).toThrow();
+function snapshot(input: TrustedConfigurationPayload, ttlMs?: number) {
+  return createConfigurationSnapshot({
+    role: "api",
+    operationKey,
+    payload: input,
+    issuedAtMs: now,
+    ...(ttlMs === undefined ? {} : { ttlMs }),
+    nonce: "nonce_0123456789abcdef",
   });
-  it("uses one retained queue budget for ready, claimed, and in-flight reservations", () => {
-    expect(
-      trustedConfigurationQueueFits({
-        retainedEntries: OPS_TRUSTED_CONFIG_QUEUE_MAX_ENTRIES - 1,
-        retainedBytes: OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES - OPS_TRUSTED_CONFIG_MAX_BYTES,
-        reservedEntries: 1,
-        reservedBytes: OPS_TRUSTED_CONFIG_MAX_BYTES,
-      }),
-    ).toBe(true);
-    expect(
-      trustedConfigurationQueueFits({
-        retainedEntries: OPS_TRUSTED_CONFIG_QUEUE_MAX_ENTRIES,
-        retainedBytes: 1,
-        reservedEntries: 1,
-        reservedBytes: 1,
-      }),
-    ).toBe(false);
-    expect(
-      trustedConfigurationQueueFits({
-        retainedEntries: 4,
-        retainedBytes: OPS_TRUSTED_CONFIG_MAX_BYTES * 4,
-        reservedEntries: 1,
-        reservedBytes: OPS_TRUSTED_CONFIG_MAX_BYTES,
-      }),
-    ).toBe(true);
-    expect(
-      trustedConfigurationQueueFits({
-        retainedEntries: 32,
-        retainedBytes: OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES,
-        reservedEntries: 1,
-        reservedBytes: 1,
-      }),
-    ).toBe(false);
-    expect(
-      trustedConfigurationQueueFits({
-        retainedEntries: -1,
-        retainedBytes: 0,
-        reservedEntries: 0,
-        reservedBytes: 0,
-      }),
-    ).toBe(false);
+}
+
+function render(revisionId: string, payloadDigest: string) {
+  return {
+    kind: "stack.render" as const,
+    revisionId,
+    payloadDigest,
+    expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running" as const,
+  };
+}
+
+function request(operation: unknown, body?: unknown) {
+  return {
+    version: 2,
+    requestId: "ops1_0123456789abcdef0123456789ab",
+    operationKey,
+    issuedAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + 20_000).toISOString(),
+    operation,
+    ...(body === undefined ? {} : { payload: body }),
+  };
+}
+
+describe("configuration payload", () => {
+  it("accepts a payload of exactly the size limit and rejects the next byte", () => {
+    const input = payload();
+    input.serviceSecrets = [
+      {
+        serviceId: "motis",
+        values: {
+          ...Object.fromEntries(
+            Array.from({ length: 8 }, (_, i) => [`TOKEN_${i}`, "x".repeat(60000)]),
+          ),
+          PAD: "",
+        },
+      },
+    ];
+    const size = () => Buffer.byteLength(JSON.stringify(input), "utf8");
+    input.serviceSecrets[0]!.values.PAD = "x".repeat(OPS_TRUSTED_CONFIG_MAX_BYTES - size());
+    expect(size()).toBe(OPS_TRUSTED_CONFIG_MAX_BYTES);
+    expect(() => parseTrustedConfigurationPayload(input)).not.toThrow();
+    input.serviceSecrets[0]!.values.PAD += "x";
+    expect(() => parseTrustedConfigurationPayload(input)).toThrow("Configuration payload rejected");
   });
 
-  it("authenticates bounded expiry metadata without disclosing the payload", () => {
-    const sealed = sealTrustedConfigurationSnapshot({
-      role: "api",
-      operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({
-        expectedCurrentRevisionId: null,
-        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-        coordinatorMode: "ensure-running" as const,
-        kind: "stack.render",
-        revisionId,
-      }),
-      payload: payload(),
-      token,
-      issuedAtMs: now,
-      nonce: "nonce_0123456789abcdef",
-    });
-    expect(inspectTrustedConfigurationSnapshot(sealed.bytes, { token })).toEqual({
-      revisionId: sealed.revisionId,
-      role: "api",
-      operationKey: "opk1_0123456789abcdef",
-      operationFingerprint: sealed.operationFingerprint,
+  it("names the generation after the payload, key and nonce, and verifies only that payload", () => {
+    const first = snapshot(payload());
+    expect(first.revisionId).toMatch(/^cfg1_[A-Za-z0-9_-]{43}$/);
+    expect(first.payloadDigest).toBe(configurationPayloadDigest(payload()));
+    expect(snapshot(payload())).toEqual(first);
+    expect(verifyConfigurationSnapshot(first, payload())).toEqual({
       issuedAtMs: now,
       expiresAtMs: now + 5 * 60_000,
     });
-    const tampered = Buffer.from(sealed.bytes);
-    tampered[tampered.length - 3] = tampered[tampered.length - 3] === 65 ? 66 : 65;
-    expect(() => inspectTrustedConfigurationSnapshot(tampered, { token })).toThrow(
-      "Trusted configuration snapshot rejected",
-    );
+    const changed = { ...payload(), domain: "other.example.test" };
+    expect(snapshot(changed).revisionId).not.toBe(first.revisionId);
+    expect(() => verifyConfigurationSnapshot(first, changed)).toThrow();
+    expect(() =>
+      verifyConfigurationSnapshot(
+        { ...first, expiresAt: new Date(now + 6 * 60_000).toISOString() },
+        payload(),
+      ),
+    ).toThrow();
+    expect(() => snapshot(payload(), 0)).toThrow("Configuration payload rejected");
   });
 
-  it("content- and MAC-binds an immutable typed payload to role, key, operation, and revision", () => {
-    const sealed = sealTrustedConfigurationSnapshot({
+  it("binds a candidate's apply operation to the payload digest and refuses a read-only kind", () => {
+    const candidate = prepareConfigurationCandidate({
       role: "api",
-      operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({
-        expectedCurrentRevisionId: null,
-        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-        coordinatorMode: "ensure-running" as const,
-        kind: "serviceConfig.apply",
-        serviceId: "redis",
-        revisionId,
-      }),
+      operationKey,
       payload: payload(),
-      token,
       issuedAtMs: now,
       nonce: "nonce_0123456789abcdef",
+      operationForRevision: render,
     });
-
-    const opened = openTrustedConfigurationSnapshot(sealed.bytes, {
-      role: "api",
-      operationKey: "opk1_0123456789abcdef",
-      operation: sealed.operation,
-      fingerprint: sealed.operationFingerprint,
-      token,
-      nowMs: now + 1,
+    expect(candidate.operation).toMatchObject({
+      revisionId: candidate.revisionId,
+      payloadDigest: configurationPayloadDigest(payload()),
     });
-    expect(opened.revisionId).toBe(sealed.revisionId);
-    expect(opened.payload).toEqual(payload());
-    expect(Object.isFrozen(opened.payload)).toBe(true);
-    expect(sealed.bytes.byteLength).toBeLessThanOrEqual(OPS_TRUSTED_CONFIG_MAX_BYTES);
-  });
-
-  it.each([
-    ["role", { role: "data-manager" }],
-    ["owner key", { operationKey: "opk1_fedcba9876543210" }],
-    [
-      "operation fingerprint",
-      {
-        operation: {
-          expectedCurrentRevisionId: null,
-          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-          coordinatorMode: "ensure-running" as const,
-          kind: "serviceConfig.apply" as const,
-          serviceId: "postgis",
-          revisionId: "cfg1_0123456789abcdef0123456789abcdef0123456789a",
-        },
-      },
-    ],
-    ["claimed fingerprint", { fingerprint: "0".repeat(64) }],
-    ["MAC key", { token: Buffer.alloc(32, 0x2b).toString("base64url") }],
-    ["expiry", { nowMs: now + 5 * 60_000 + 1 }],
-  ] as const)(
-    "rejects a mismatched or stale %s without returning payload data",
-    (_label, change) => {
-      const sealed = sealTrustedConfigurationSnapshot({
+    expect(() =>
+      prepareConfigurationCandidate({
         role: "api",
-        operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({
-          expectedCurrentRevisionId: null,
-          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-          coordinatorMode: "ensure-running" as const,
-          kind: "stack.render",
-          revisionId,
-        }),
+        operationKey,
         payload: payload(),
-        token,
         issuedAtMs: now,
         nonce: "nonce_0123456789abcdef",
-      });
-      expect(() =>
-        openTrustedConfigurationSnapshot(sealed.bytes, {
-          role: "api",
-          operationKey: "opk1_0123456789abcdef",
-          operation: sealed.operation,
-          fingerprint: sealed.operationFingerprint,
-          token,
-          nowMs: now + 1,
-          ...change,
-        }),
-      ).toThrow("Trusted configuration snapshot rejected");
-    },
-  );
-
-  it("rejects unknown fields, malformed UTF-8 and hostile identifiers", () => {
-    const base = {
-      role: "api" as const,
-      operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId: string) => ({
-        expectedCurrentRevisionId: null,
-        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-        coordinatorMode: "ensure-running" as const,
-        kind: "stack.render" as const,
-        revisionId,
+        operationForRevision: (revisionId) =>
+          ({
+            kind: "configuration.hardlinks.preview",
+            candidateId: "22222222-2222-4222-8222-222222222222",
+            revisionId,
+            expectedCurrentRevisionId: null,
+            expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+            coordinatorMode: "ensure-running",
+          }) as never,
       }),
-      payload: payload(),
-      token,
-      issuedAtMs: now,
-      nonce: "nonce_0123456789abcdef",
-    };
-    expect(() =>
-      sealTrustedConfigurationSnapshot({
-        ...base,
-        payload: { ...payload(), callerPath: "/tmp/escape" } as TrustedConfigurationPayload,
-      }),
-    ).toThrow("Trusted configuration snapshot rejected");
-    expect(() =>
-      sealTrustedConfigurationSnapshot({
-        ...base,
-        payload: {
-          ...payload(),
-          serviceConfigs: [{ serviceId: "../escape", values: {} }],
-        },
-      }),
-    ).toThrow("Trusted configuration snapshot rejected");
-    expect(() =>
-      openTrustedConfigurationSnapshot(Buffer.from([0x7b, 0x22, 0xff, 0x22, 0x7d]), {
-        role: "api",
-        operationKey: "opk1_0123456789abcdef",
-        operation: {
-          expectedCurrentRevisionId: null,
-          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-          coordinatorMode: "ensure-running" as const,
-          kind: "stack.render",
-          revisionId: "cfg1_0123456789abcdef0123456789abcdef0123456789a",
-        },
-        fingerprint: "0".repeat(64),
-        token,
-        nowMs: now,
-      }),
-    ).toThrow("Trusted configuration snapshot rejected");
+    ).toThrow("Prepared configuration unavailable");
   });
 
-  it("accepts bounded nested JSON config but rejects duplicate identities and invalid validity ordering", () => {
+  it("refuses a stored candidate whose payload no longer matches its snapshot", () => {
+    const candidate = prepareConfigurationCandidate({
+      role: "api",
+      operationKey,
+      payload: payload(),
+      issuedAtMs: now,
+      nonce: "nonce_0123456789abcdef",
+      operationForRevision: render,
+    });
+    const record = {
+      version: 1,
+      candidateId: "22222222-2222-4222-8222-222222222222",
+      operationKey,
+      operation: candidate.operation,
+      sourceFingerprint: "0".repeat(64),
+      expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+      snapshot: candidate.snapshot,
+      payload: payload(),
+      privateOverlay: {},
+      apiJobId: "33333333-3333-4333-8333-333333333333",
+      actorId: "admin",
+      parentOperationKey: operationKey,
+      parentFingerprint: "0".repeat(64),
+      parentDeadlineAt: now,
+      affectedServiceIds: [],
+      maintenanceId: null,
+      prepareOperationKey: null,
+    };
+    expect(inspectPreparedConfigurationRecord(record).snapshot.revisionId).toBe(
+      candidate.revisionId,
+    );
+    expect(() =>
+      inspectPreparedConfigurationRecord({
+        ...record,
+        payload: { ...payload(), domain: "x.test" },
+      }),
+    ).toThrow();
+  });
+
+  it("requires exactly the digested payload beside an apply and none beside other kinds", () => {
+    const digest = configurationPayloadDigest(payload());
+    const apply = render(snapshot(payload()).revisionId, digest);
+    expect(parseOpsRequest(request(apply, payload()), { role: "api" }).payload).toEqual(payload());
+    expect(() => parseOpsRequest(request(apply), { role: "api" })).toThrow();
+    expect(() =>
+      parseOpsRequest(request(apply, { ...payload(), domain: "x.test" }), { role: "api" }),
+    ).toThrow();
+    expect(() =>
+      parseOpsRequest(request({ kind: "docker.status" }, payload()), { role: "api" }),
+    ).toThrow();
+  });
+
+  it("accepts bounded nested JSON config but rejects duplicate identities", () => {
     const nested = payload();
     nested.integrationConfigs = [
       {
@@ -299,24 +201,7 @@ describe("trusted configuration snapshot protocol", () => {
         values: { profiles: [{ mode: "rail", options: ["fast", "accessible"] }] },
       },
     ];
-    expect(() =>
-      sealTrustedConfigurationSnapshot({
-        role: "api",
-        operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({
-          expectedCurrentRevisionId: null,
-          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-          coordinatorMode: "ensure-running" as const,
-          kind: "stack.render",
-          revisionId,
-        }),
-        payload: nested,
-        token,
-        issuedAtMs: now,
-        nonce: "nonce_0123456789abcdef",
-      }),
-    ).not.toThrow();
-
+    expect(() => parseTrustedConfigurationPayload(nested)).not.toThrow();
     for (const duplicate of [
       {
         ...payload(),
@@ -339,87 +224,40 @@ describe("trusted configuration snapshot protocol", () => {
           { serviceId: "redis", values: {} },
         ],
       },
-    ]) {
-      expect(() =>
-        sealTrustedConfigurationSnapshot({
-          role: "api",
-          operationKey: "opk1_0123456789abcdef",
-          operationForRevision: (revisionId) => ({
-            expectedCurrentRevisionId: null,
-            expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-            coordinatorMode: "ensure-running" as const,
-            kind: "stack.render",
-            revisionId,
-          }),
-          payload: duplicate,
-          token,
-          issuedAtMs: now,
-          nonce: "nonce_0123456789abcdef",
-        }),
-      ).toThrow("Trusted configuration snapshot rejected");
-    }
+    ])
+      expect(() => parseTrustedConfigurationPayload(duplicate)).toThrow();
     expect(() =>
-      sealTrustedConfigurationSnapshot({
-        role: "api",
-        operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({
-          expectedCurrentRevisionId: null,
-          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-          coordinatorMode: "ensure-running" as const,
-          kind: "stack.render",
-          revisionId,
-        }),
-        payload: payload(),
-        token,
-        issuedAtMs: now,
-        ttlMs: 0,
-        nonce: "nonce_0123456789abcdef",
+      parseTrustedConfigurationPayload({ ...payload(), callerPath: "/tmp/escape" }),
+    ).toThrow();
+    expect(() =>
+      parseTrustedConfigurationPayload({
+        ...payload(),
+        serviceConfigs: [{ serviceId: "../escape", values: {} }],
       }),
-    ).toThrow("Trusted configuration snapshot rejected");
+    ).toThrow();
   });
 
   it("accepts canonical hyphenated and nested manifest keys but rejects path and prototype keys", () => {
-    const base = {
-      role: "api" as const,
-      operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId: string) => ({
-        expectedCurrentRevisionId: null,
-        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
-        coordinatorMode: "ensure-running" as const,
-        kind: "stack.render" as const,
-        revisionId,
-      }),
-      token,
-      issuedAtMs: now,
-      nonce: "nonce_0123456789abcdef",
-    };
     expect(() =>
-      sealTrustedConfigurationSnapshot({
-        ...base,
-        payload: {
-          ...payload(),
-          integrationConfigs: [
-            {
-              integrationId: "ev-charging",
-              values: {
-                "at-econtrol-referer-domain": "maps.example.test",
-                providers: [
-                  {
-                    type: "remote",
-                    headers: { "User-Agent": "OpenMapX", "X-API-Key": "reference" },
-                  },
-                ],
-              },
+      parseTrustedConfigurationPayload({
+        ...payload(),
+        integrationConfigs: [
+          {
+            integrationId: "ev-charging",
+            values: {
+              "at-econtrol-referer-domain": "maps.example.test",
+              providers: [
+                {
+                  type: "remote",
+                  headers: { "User-Agent": "OpenMapX", "X-API-Key": "reference" },
+                },
+              ],
             },
-            {
-              integrationId: "routing-valhalla",
-              values: { "bidirectional-alternates": true },
-            },
-          ],
-        },
+          },
+          { integrationId: "routing-valhalla", values: { "bidirectional-alternates": true } },
+        ],
       }),
     ).not.toThrow();
-
     for (const hostileKey of [
       "../escape",
       "a/b",
@@ -434,15 +272,12 @@ describe("trusted configuration snapshot protocol", () => {
       values[hostileKey] = "blocked";
       expect(
         () =>
-          sealTrustedConfigurationSnapshot({
-            ...base,
-            payload: {
-              ...payload(),
-              integrationConfigs: [{ integrationId: "routing", values }],
-            },
+          parseTrustedConfigurationPayload({
+            ...payload(),
+            integrationConfigs: [{ integrationId: "routing", values }],
           }),
         hostileKey,
-      ).toThrow("Trusted configuration snapshot rejected");
+      ).toThrow();
     }
   });
 });

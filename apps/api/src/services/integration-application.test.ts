@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
@@ -170,9 +170,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
         OPENMAPX_SECRETS_KEY: "71".repeat(32),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "binding-owned-admin",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",

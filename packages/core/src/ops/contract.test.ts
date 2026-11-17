@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createCatalogPinSet } from "../catalog-pins/generation";
+import { prepareConfigurationCandidate } from "./configuration-preparation";
 import {
   authorizeOpsOperation,
+  isTrustedConfigurationApplyOperation,
   OPS_KIND_POLICIES,
   OPS_MAX_BACKUP_ID_LENGTH,
   OPS_OPERATION_KINDS,
@@ -65,6 +67,27 @@ const transferClaim = {
   sha256: "a".repeat(64),
   bytes: 4,
 };
+const candidatePayload = {
+  domain: "maps.example.test",
+  serviceConfigs: [],
+  integrationConfigs: [],
+  serviceSecrets: [],
+};
+const preparedCandidate = prepareConfigurationCandidate({
+  role: "api",
+  operationKey: "opk1_0123456789abcdef",
+  payload: candidatePayload,
+  issuedAtMs: Date.parse("2026-08-24T08:00:00.000Z"),
+  nonce: "nonce_0123456789abcdef",
+  operationForRevision: (revisionId, payloadDigest) => ({
+    kind: "stack.render",
+    revisionId,
+    payloadDigest,
+    expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
+  }),
+});
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "artifactTransfer.capabilities": { kind: "artifactTransfer.capabilities", ownerId: "admin" },
   "artifactTransfer.export": {
@@ -235,6 +258,36 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "configuration.hardlinks.inspect",
     revisionId: `cfg1_${"a".repeat(43)}`,
   },
+  "configuration.candidate.retain": {
+    kind: "configuration.candidate.retain",
+    record: {
+      version: 1,
+      candidateId: "22222222-2222-4222-8222-222222222222",
+      operationKey: "opk1_0123456789abcdef",
+      operation: preparedCandidate.operation,
+      sourceFingerprint: "a".repeat(64),
+      expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+      snapshot: preparedCandidate.snapshot,
+      payload: candidatePayload,
+      privateOverlay: {},
+      apiJobId: "33333333-3333-4333-8333-333333333333",
+      actorId: "admin",
+      parentOperationKey: "opk1_0123456789abcdef",
+      parentFingerprint: "a".repeat(64),
+      parentDeadlineAt: 1,
+      affectedServiceIds: [],
+      maintenanceId: null,
+      prepareOperationKey: null,
+    },
+  },
+  "configuration.candidate.read": {
+    kind: "configuration.candidate.read",
+    lookup: { candidateId: "22222222-2222-4222-8222-222222222222" },
+  },
+  "configuration.candidate.discard": {
+    kind: "configuration.candidate.discard",
+    operationKey: "opk1_0123456789abcdef",
+  },
   "configuration.failure.inspect": {
     kind: "configuration.failure.inspect",
     attemptedRevisionId: `cfg1_${"a".repeat(43)}`,
@@ -245,6 +298,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     coordinatorMode: "ensure-running",
     kind: "stack.render",
     revisionId: "config_20260823",
+    payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   },
   "stack.start": { kind: "stack.start", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
   "stack.stop": { kind: "stack.stop" },
@@ -386,6 +440,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     coordinatorMode: "ensure-running",
     kind: "serviceSelection.apply",
     revisionId: "selection_20260823",
+    payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   },
   "serviceSelection.inspect": { kind: "serviceSelection.inspect" },
   "serviceConfig.apply": {
@@ -395,6 +450,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "serviceConfig.apply",
     serviceId: "motis",
     revisionId: "config_20260823",
+    payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   },
   "integrationConfig.apply": {
     expectedCurrentRevisionId: null,
@@ -403,6 +459,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "integrationConfig.apply",
     integrationId: "routing",
     revisionId: "config_20260823",
+    payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   },
   "vault.apply": {
     expectedCurrentRevisionId: null,
@@ -411,6 +468,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "vault.apply",
     serviceId: "motis",
     revisionId: "vault_20260823",
+    payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   },
   "data.inspect": { kind: "data.inspect" },
   "data.downloadOsm": { kind: "data.downloadOsm", regionId: "europe/germany" },
@@ -589,6 +647,11 @@ describe("ops contract", () => {
       const role: OpsRole = OPS_KIND_POLICIES[operation.kind].role;
       if (operation.kind === "data.generateApiKeys") {
         expect(() => parseOpsRequest(request(operation), { role })).toThrow(/not permitted/);
+        continue;
+      }
+      // An apply's payload travels beside it and must match its digest.
+      if (isTrustedConfigurationApplyOperation(operation)) {
+        expect(() => parseOpsRequest(request(operation), { role })).toThrow(/Invalid/);
         continue;
       }
       expect(parseOpsRequest(request(operation), { role }).operation).toEqual(operation);

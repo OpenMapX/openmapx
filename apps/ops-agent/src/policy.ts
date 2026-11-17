@@ -17,7 +17,7 @@ import {
 import type { OpsTrustedClaim } from "./runtime";
 import { decideServiceAction } from "./service-action-policy";
 
-export interface OpsClaimOwner {
+interface OpsClaimOwner {
   role: "api" | "data-manager";
   operationKey: string;
   maintenanceStep?: unknown;
@@ -38,14 +38,7 @@ export interface TrustedOpsDataSource {
     fingerprint: string,
     signal: AbortSignal,
     owner?: OpsClaimOwner,
-  ): Promise<
-    | OpsTrustedClaim["capability"]
-    | {
-        capability: OpsTrustedClaim["capability"];
-        admission: NonNullable<OpsTrustedClaim["admission"]>;
-      }
-    | null
-  >;
+  ): Promise<OpsTrustedClaim["capability"] | null>;
 }
 
 export const denyAllTrustedOpsData: TrustedOpsDataSource = {
@@ -230,7 +223,6 @@ function immutableClaim(
   fingerprint: string,
   source: OpsTrustedClaim["source"],
   capability: OpsTrustedClaim["capability"] = { revisionId: "registry-v1", values: {} },
-  admission?: OpsTrustedClaim["admission"],
 ): OpsTrustedClaim {
   const deepFreeze = (value: unknown): void => {
     if (!value || typeof value !== "object" || Object.isFrozen(value)) return;
@@ -246,7 +238,6 @@ function immutableClaim(
     operation: snapshot,
     source,
     capability: capabilitySnapshot,
-    ...(admission ? { admission } : {}),
   });
 }
 
@@ -401,17 +392,11 @@ export function createRegistryResourceClaimer(options: {
         return null;
       }
       if (signal.aborted) return null;
-      const resolved = await options.trustedData.claim(operation, fingerprint, signal, owner);
-      if (!resolved) return null;
-      const capability = "capability" in resolved ? resolved.capability : resolved;
-      const admission = "capability" in resolved ? resolved.admission : undefined;
-      const rejectResolved = async () => {
-        await admission?.rollback().catch(() => undefined);
-        return null;
-      };
-      if (signal.aborted) return rejectResolved();
+      const capability = await options.trustedData.claim(operation, fingerprint, signal, owner);
+      if (!capability) return null;
+      if (signal.aborted) return null;
       if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(capability.revisionId)) {
-        return rejectResolved();
+        return null;
       }
       if (
         !capability.values ||
@@ -426,12 +411,12 @@ export function createRegistryResourceClaimer(options: {
         ) ||
         Buffer.byteLength(JSON.stringify(capability), "utf8") > 512 * 1024
       ) {
-        return rejectResolved();
+        return null;
       }
       if (!(await authorizeOpsResources(operation, claimedResourcePolicy(policy, operation)))) {
-        return rejectResolved();
+        return null;
       }
-      return immutableClaim(operation, fingerprint, "trusted-data", capability, admission);
+      return immutableClaim(operation, fingerprint, "trusted-data", capability);
     },
   };
 }
@@ -506,22 +491,12 @@ export function createProductionRegistryResourceClaimer<
       }
       const trustedData: TrustedOpsDataSource = {
         claim: async (...args) => {
-          const resolved = await options.trustedData.claim(...args);
-          if (!resolved) return null;
-          const capability = "capability" in resolved ? resolved.capability : resolved;
-          if (capability.values.authorityRevision !== undefined) {
-            if ("capability" in resolved) {
-              await resolved.admission.rollback().catch(() => undefined);
-            }
-            return null;
-          }
-          const bound = {
+          const capability = await options.trustedData.claim(...args);
+          if (!capability || capability.values.authorityRevision !== undefined) return null;
+          return {
             ...capability,
             values: { ...capability.values, authorityRevision: authority.revisionId },
           };
-          return "capability" in resolved
-            ? { capability: bound, admission: resolved.admission }
-            : bound;
         },
       };
       return createRegistryResourceClaimer({

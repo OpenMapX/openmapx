@@ -22,6 +22,14 @@ keys from it. The API's link from a child operation to its admin job, and the
 artifact-transfer and standalone-integration records, no longer carry a MAC;
 the API's request is authenticated by its token as before.
 
+A configuration apply now carries its payload in the API's authenticated request
+to the agent, named in the operation by its digest; the agent's journal keeps
+only the digest. app-api no longer mounts `infra/docker/state/ops-agent/trusted-config`
+or receives `OPS_TRUSTED_CONFIG_DIR`, `OPS_TRUSTED_CONFIG_UID` and
+`OPS_TRUSTED_CONFIG_GID`. The prepared candidate the API keeps for recovery lives
+in `infra/docker/state/ops-agent/configuration-candidates`, which only the agent
+writes.
+
 ## Who is affected
 
 Installations created before this release that still have the key files or the
@@ -36,7 +44,7 @@ rm -f infra/docker/secrets/control-ops-agent.key \
   infra/docker/secrets/control-data-manager.key \
   infra/docker/secrets/control-host-cli.key \
   infra/docker/secrets/control-verifiers.json
-rm -rf infra/docker/control-private
+rm -rf infra/docker/control-private infra/docker/state/ops-agent/trusted-config
 ```
 
 Records under the old directory are not migrated; run `openmapx compose render`

@@ -26,6 +26,7 @@ import {
   parseOpsResult,
 } from "./contract";
 import { opsOperationFingerprint } from "./fingerprint";
+import type { TrustedConfigurationPayload } from "./trusted-config";
 
 const TOKEN_BYTES = 43;
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
@@ -533,6 +534,8 @@ export class OpsClient {
       execution?: { requestedDeadlineAt: number };
       controlAssertion?: string;
       parentAssertion?: string;
+      /** A configuration apply's payload, which its operation names by digest. */
+      payload?: TrustedConfigurationPayload;
     } = {},
   ): Promise<OpsSubmitResult<K>> {
     if (OPS_KIND_POLICIES[operation.kind].execution === "async" && !options.operationKey) {
@@ -552,6 +555,7 @@ export class OpsClient {
         issued.getTime() + Math.min(20_000, OPS_MAX_REQUEST_TTL_MS),
       ).toISOString(),
       operation,
+      ...(options.payload ? { payload: options.payload } : {}),
       ...(options.execution ? { execution: options.execution } : {}),
     };
     const timeoutSignal = AbortSignal.timeout(

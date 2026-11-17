@@ -496,7 +496,6 @@ it
           JSON.stringify({
             root: f.root,
             infraDir: f.infraDir,
-            queue: f.queue,
             stack: f.stack,
             serviceIds,
             token: f.token,

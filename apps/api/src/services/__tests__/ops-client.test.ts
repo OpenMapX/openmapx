@@ -602,6 +602,7 @@ describe("configuration outcome evidence", () => {
     coordinatorMode: "ensure-running" as const,
     kind: "stack.render" as const,
     revisionId: `cfg1_${"a".repeat(43)}`,
+    payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   };
   it("treats arbitrary submission failure as unknown and submits once", async () => {
     const client = fakeClient({

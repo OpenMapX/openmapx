@@ -1,5 +1,3 @@
-import { lstat, opendir } from "node:fs/promises";
-import { join } from "node:path";
 import {
   observeCoordinatorPullForMaintenance,
   observedCoordinatorPullBaseline,
@@ -23,7 +21,6 @@ import { readOwnedGenerationHardlinkPlan } from "../../../packages/core/src/buil
 import {
   type ConfigurationCandidateSource,
   readConfigurationCandidate,
-  readRetainedConfigurationCandidate,
 } from "./configuration-candidate-source";
 import {
   assertConfigurationCoordinatorReady,
@@ -106,7 +103,6 @@ import {
   settleDataConfigurationFence,
 } from "@openmapx/core/data-manager-sdk";
 import {
-  acquireTrustedConfigurationQueueLock,
   type ConfigurationMaintenanceDecision,
   type ConfigurationMaintenancePrepare,
   type ConfigurationMaintenanceReceipt,
@@ -123,7 +119,6 @@ import {
   opsResourceId,
   protectedConfigurationServiceIdSchema,
   type RetainedParentExecution,
-  type TrustedConfigurationQueueLock,
   type VerifiedParentExecution,
   verifiedApiJobParentBinding,
 } from "@openmapx/core/ops";
@@ -2946,7 +2941,7 @@ export async function inspectFrozenMaintenanceRuntime(
           owner.apiControls.steps.length !== 1))
     )
       throw Error("Complete original runtime child sources required");
-    const candidate = await readRetainedConfigurationCandidate(
+    const candidate = await readConfigurationCandidate(
       source.candidateSource,
       owner.plan.operation.candidateId,
     );
@@ -3109,14 +3104,8 @@ export async function inspectFrozenMaintenanceRuntime(
       planDigest: owner.plan.planDigest,
     }),
     queue = source.candidateSource;
-  let lease: ReturnType<typeof restoreArtifactTargetLeaseForSettlement> | undefined,
-    lock: TrustedConfigurationQueueLock | undefined;
+  let lease: ReturnType<typeof restoreArtifactTargetLeaseForSettlement> | undefined;
   try {
-    lock = await acquireTrustedConfigurationQueueLock({
-      ...queue,
-      participant: "ops-agent",
-      operationKey: state.execution.operationKey,
-    });
     lease = restoreArtifactTargetLeaseForSettlement(authority);
     const phaseObservations = [];
     for (const step of owner.plan.steps) {
@@ -3142,57 +3131,14 @@ export async function inspectFrozenMaintenanceRuntime(
         controlDigest({ kind: "data-configuration-fence", receipt: owner.preparedFence })
     )
       throw Error("Original prepared guard settlement unavailable");
-    const candidate = await readRetainedConfigurationCandidate(
-      queue,
-      owner.plan.operation.candidateId,
-    );
+    const candidate = await readConfigurationCandidate(queue, owner.plan.operation.candidateId);
     if (
       controlDigest(candidate.record) !== owner.plan.candidateRecordDigest ||
       candidate.record.prepareOperationKey !== state.execution.operationKey ||
       candidate.snapshot.revisionId !== owner.plan.operation.revisionId
     )
       throw Error("Original unused candidate changed");
-    const directories = [];
-    for (const [name, path] of [
-      ["queue", queue.directory],
-      ["claimed", join(queue.directory, ".claimed")],
-    ] as const) {
-      lock.assertHeld();
-      const before = await lstat(path);
-      if (
-        !before.isDirectory() ||
-        before.isSymbolicLink() ||
-        before.uid !== queue.ownerUid ||
-        before.gid !== queue.ownerGid ||
-        (before.mode & 0o777) !== 0o700
-      )
-        throw Error("Original unused queue unavailable");
-      const directory = await opendir(path);
-      let count = 0;
-      // Dir's async iterator closes its descriptor on completion or an abrupt exit.
-      for await (const entry of directory)
-        if (++count > 1024 || entry.name.includes(candidate.snapshot.revisionId))
-          throw Error("Unused candidate publication/claim uncertain");
-      const after = await lstat(path);
-      if (
-        before.dev !== after.dev ||
-        before.ino !== after.ino ||
-        before.uid !== after.uid ||
-        before.gid !== after.gid ||
-        before.mode !== after.mode
-      )
-        throw Error("Original unused queue changed");
-      directories.push({
-        name,
-        dev: before.dev,
-        ino: before.ino,
-        uid: before.uid,
-        gid: before.gid,
-        mode: before.mode & 0o777,
-        entries: count,
-        matchingCandidateEntries: 0,
-      });
-    }
+    assertCandidateApplyNeverAdmitted(runtime, candidate.record.operationKey);
     const current = services.currentConfigurationGeneration(source.infraDir),
       containers = await inspectOriginalOwnerServices(source, authority, signal);
     if (
@@ -3207,7 +3153,7 @@ export async function inspectFrozenMaintenanceRuntime(
     )
       throw Error("Original unused guard/owner changed");
     signal.throwIfAborted();
-    lock.assertHeld();
+    assertCandidateApplyNeverAdmitted(runtime, candidate.record.operationKey);
     const requiredChecks = configurationMaintenanceRequiredChecksSchema.parse([
         ...["generation", "owner-containers", "candidate-not-consumed", "dm-guard"].map(
           (check) => ({
@@ -3233,7 +3179,7 @@ export async function inspectFrozenMaintenanceRuntime(
           candidateId: candidate.record.candidateId,
           revisionId: candidate.snapshot.revisionId,
           recordDigest: controlDigest(candidate.record),
-          directories,
+          applyAdmitted: false,
         },
         { guard },
         ...phaseObservations,
@@ -3273,13 +3219,18 @@ export async function inspectFrozenMaintenanceRuntime(
     runtimeInspections.set(value, Object.freeze({ authority, signed: freezeProof(record) }));
     return value;
   } finally {
-    lock?.release();
     if (lease) closeArtifactTargetLeaseHandle(lease);
   }
 }
-/** Runs `publish` synchronously while the candidate queue lock is held and the
- * original candidate is proved neither published nor claimed. Historical seal
- * authentication here never opens a forward/apply payload. */
+/** The candidate's apply was never admitted: the journal holds no job under its key. */
+function assertCandidateApplyNeverAdmitted(runtime: OpsRuntime, operationKey: string): void {
+  const journal = journals.get(runtime);
+  if (!journal) throw Error("Maintenance journal source unavailable");
+  if (journal.records().some((job) => job.role === "api" && job.operationKey === operationKey))
+    throw Error("Candidate apply was admitted");
+}
+/** Runs `publish` synchronously once the original candidate's apply is proved
+ * never admitted. */
 async function withUnconsumedMaintenanceCandidate(
   runtime: OpsRuntime,
   authority: VerifiedExecutionAuthority,
@@ -3297,17 +3248,9 @@ async function withUnconsumedMaintenanceCandidate(
     owner.receipt.generation !== "not_started"
   )
     throw Error("Original never-applied candidate owner required");
-  const queue = source.candidateSource,
-    lock = await acquireTrustedConfigurationQueueLock({
-      ...queue,
-      participant: "ops-agent",
-      operationKey: state.execution.operationKey,
-    });
-  try {
-    const candidate = await readRetainedConfigurationCandidate(
-        queue,
-        owner.plan.operation.candidateId,
-      ),
+  const queue = source.candidateSource;
+  {
+    const candidate = await readConfigurationCandidate(queue, owner.plan.operation.candidateId),
       candidateRecordDigest = controlDigest(candidate.record);
     if (
       candidateRecordDigest !== owner.plan.candidateRecordDigest ||
@@ -3322,41 +3265,10 @@ async function withUnconsumedMaintenanceCandidate(
       candidate.record.parentDeadlineAt !== owner.receipt.parentDeadlineAt
     )
       throw Error("Original retained maintenance candidate changed");
-    for (const path of [queue.directory, join(queue.directory, ".claimed")]) {
-      lock.assertHeld();
-      const before = await lstat(path);
-      if (
-        !before.isDirectory() ||
-        before.isSymbolicLink() ||
-        before.uid !== queue.ownerUid ||
-        before.gid !== queue.ownerGid ||
-        (before.mode & 0o777) !== 0o700
-      )
-        throw Error("Original candidate queue unavailable");
-      const dir = await opendir(path);
-      let entries = 0;
-      // Dir's async iterator owns close on success and on thrown refusal.
-      for await (const entry of dir) {
-        if (++entries > 1024 || entry.name.includes(candidate.snapshot.revisionId))
-          throw Error("Candidate publication/claim requires retained observation");
-      }
-      const after = await lstat(path);
-      if (
-        before.dev !== after.dev ||
-        before.ino !== after.ino ||
-        before.uid !== after.uid ||
-        before.gid !== after.gid ||
-        before.mode !== after.mode
-      )
-        throw Error("Original candidate queue changed during observation");
-    }
-    lock.assertHeld();
     if (canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner))
       throw Error("Original owner changed during candidate observation");
+    assertCandidateApplyNeverAdmitted(runtime, candidate.record.operationKey);
     publish();
-    lock.assertHeld();
-  } finally {
-    lock.release();
   }
 }
 /** Only the actual production factory supplies this source; no handler/result

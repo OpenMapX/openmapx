@@ -4,6 +4,7 @@ import { platformConfigurationSchema } from "../services/platform-configuration"
 import { protectedConfigurationReconcileIdsSchema } from "./configuration-handoff-records";
 import { configurationReleaseSelectionSchema } from "./configuration-release-downloads";
 import { coordinatorLifecycleMetadataSchema } from "./coordinator-lifecycle-records";
+import { configurationSnapshotSchema, trustedConfigurationPayloadSchema } from "./trusted-config";
 
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
@@ -90,7 +91,8 @@ export const preparedConfigurationRecordSchema = z.strictObject({
   operation: z.unknown(),
   sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   expectedSourceRevision: z.uuid(),
-  sealed: z.string().max(699052),
+  snapshot: configurationSnapshotSchema,
+  payload: trustedConfigurationPayloadSchema,
   privateOverlay: z.unknown(),
   apiJobId: z.uuid(),
   actorId: z.string().min(1).max(256),

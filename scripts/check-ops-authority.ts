@@ -24,9 +24,7 @@ const AUTHORITY_SERVICE = "ops-agent";
 /** The agent's state, relative to the checkout. */
 const AGENT_STATE = "infra/docker/state";
 
-/** The parts of the agent's state another service may mount: app-api's snapshot queue… */
-const AGENT_TRUSTED_CONFIG_QUEUE = `${AGENT_STATE}/ops-agent/trusted-config`;
-/** …and, read-only, the integrations the agent installed, which app-api loads. */
+/** The part of the agent's state app-api may mount, read-only: the integrations the agent installed. */
 const AGENT_INTEGRATION_STORE = `${AGENT_STATE}/ops-agent/custom-integrations`;
 /** Data-manager's own private control records, which only it mounts. */
 const DATA_MANAGER_PRIVATE_STATE = `${AGENT_STATE}/data-manager/control`;
@@ -308,12 +306,11 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           detail: `service "${serviceId}" mounts the host repository root`,
         });
       }
-      // The agent's own state (job journal, trusted-config
-      // queue, privacy scratch, stores). app-api publishes into the trusted-config
-      // queue and reads the integration store, and nothing else; every other
-      // service, data-manager above all,
-      // must not be able to reach it, by whichever form of source. A source
-      // this gate cannot resolve is refused rather than assumed to be safe.
+      // The agent's own state (job journal, configuration candidates, privacy
+      // scratch, stores). app-api reads the integration store and nothing else;
+      // every other service, data-manager above all, must not be able to reach
+      // it, by whichever form of source. A source this gate cannot resolve is
+      // refused rather than assumed to be safe.
       if (source !== "@docker-socket") {
         const path = checkoutPath(serviceId, source);
         if (path === null) {
@@ -323,10 +320,7 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           });
         } else if (
           reachesAgentState(path) &&
-          !(
-            serviceId === "app-api" &&
-            (path === AGENT_TRUSTED_CONFIG_QUEUE || (path === AGENT_INTEGRATION_STORE && readOnly))
-          ) &&
+          !(serviceId === "app-api" && path === AGENT_INTEGRATION_STORE && readOnly) &&
           !(serviceId === "traefik" && AGENT_TRAEFIK_FILES.has(path) && readOnly) &&
           !(serviceId === "data-manager" && path === DATA_MANAGER_PRIVATE_STATE)
         ) {
