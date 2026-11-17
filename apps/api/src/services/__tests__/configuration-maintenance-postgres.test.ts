@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import * as nodeFs from "node:fs";
 import {
   existsSync,
-  linkSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -455,15 +454,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       30000,
     );
-    it.each([
-      "saved",
-      "applied",
-      "missing",
-      "corrupt",
-      "hardlink",
-      "credential-saved",
-      "credential-recreated",
-    ])(
+    it.each(["saved", "applied", "missing", "corrupt", "credential-saved", "credential-recreated"])(
       "reclaims a killed native ordinary configuration without resealing or saving again (mode=%s)",
       async (mode) => {
         const key = `opk1_native_ordinary_${randomUUID().replaceAll("-", "")}`,
@@ -562,14 +553,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             candidate = originalResult._configurationCandidate as Record<string, unknown>,
             path = join(host.candidates, `${candidate.sealedOperationKey}.json`),
             bytes = readFileSync(path),
-            record = JSON.parse(bytes.toString()).record,
+            record = JSON.parse(bytes.toString()),
             parent = {
               operationKey: record.parentOperationKey,
               fingerprint: record.parentFingerprint,
               deadlineAt: record.parentDeadlineAt,
             },
             versions = await readVersions();
-          const refused = ["missing", "corrupt", "hardlink"].includes(mode);
+          const refused = ["missing", "corrupt"].includes(mode);
           expect(versions).toHaveLength(1);
           expect(candidate.phase).toBe(afterRecreate ? "follow_up_pending" : "saved");
           expect(actualPosts.get(applyKind) ?? 0).toBe(mode === "applied" || afterRecreate ? 1 : 0);
@@ -579,11 +570,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await nativeApiSessionsEnded(fixture.sql);
           if (mode === "missing") rmSync(path);
           if (mode === "corrupt") {
+            // A payload that no longer matches the candidate's snapshot is refused.
             const value = JSON.parse(bytes.toString());
-            value.mac = value.mac === "A".repeat(43) ? "B".repeat(43) : "A".repeat(43);
+            value.payload.domain = `corrupt.${value.payload.domain}`;
             writeFileSync(path, JSON.stringify(value), { mode: 0o600 });
           }
-          if (mode === "hardlink") linkSync(path, join(host.root, "candidate-alias"));
           const [retained] = await fixture.db
               .select()
               .from(schema.adminJob)
@@ -1168,7 +1159,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
             refusedOwnerBytes = refusedPreparation ? readFileSync(refusedOwnerPath) : undefined;
           const helper = preRootHelper
-              ? JSON.parse(candidateBytes!.toString()).record.coordinatorPrerequisite
+              ? JSON.parse(candidateBytes!.toString()).coordinatorPrerequisite
               : null,
             helperAdmission =
               helper && !unattemptedHelper
@@ -1632,7 +1623,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(preparePosts).toBe(1);
           expect(await fixture.db.select().from(schema.adminJob)).toHaveLength(1);
           if (preRootHelper) {
-            const retainedRecord = JSON.parse(candidateBytes!.toString()).record
+            const retainedRecord = JSON.parse(candidateBytes!.toString())
                 .privateMaintenancePreparation.serviceSecrets[0],
               [actualSaved] = await fixture.db.select().from(schema.serviceSecret);
             expect(
@@ -1674,7 +1665,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               expect(() =>
                 sourceControl.verifyMaintenanceCoordinatorPrerequisite(
                   installation,
-                  JSON.parse(candidateBytes!.toString()).record,
+                  JSON.parse(candidateBytes!.toString()),
                 ),
               ).not.toThrow();
             }

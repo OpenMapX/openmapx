@@ -190,20 +190,8 @@ const unusedCandidateObservationSchema = z.strictObject({
   candidateId: z.uuid(),
   revisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
   recordDigest: digest,
-  directories: z
-    .array(
-      z.strictObject({
-        name: z.enum(["queue", "claimed"]),
-        dev: epoch,
-        ino: epoch,
-        uid: epoch,
-        gid: epoch,
-        mode: z.literal(0o700),
-        entries: z.number().int().min(0).max(1024),
-        matchingCandidateEntries: z.literal(0),
-      }),
-    )
-    .length(2),
+  // The agent's journal held no job under the candidate's apply key.
+  applyAdmitted: z.literal(false),
 });
 /** Consistency only. The caller must authenticate/index the ACTUAL owner,
  * inspection and final first. No parsed state creates final authority. */
@@ -273,10 +261,6 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     candidate.candidateId !== owner.plan.operation.candidateId ||
     candidate.revisionId !== owner.plan.operation.revisionId ||
     candidate.recordDigest !== owner.plan.candidateRecordDigest ||
-    candidate.directories[0]!.name !== "queue" ||
-    candidate.directories[1]!.name !== "claimed" ||
-    candidate.directories[0]!.uid !== candidate.directories[1]!.uid ||
-    candidate.directories[0]!.gid !== candidate.directories[1]!.gid ||
     !owner.plan.steps.every((step, index) =>
       same(details[index + 4], {
         phase: step.phase,
