@@ -556,7 +556,75 @@ function stopMatchesRequested(place: Place | undefined, requestedIds: Set<string
   );
 }
 
-/** Discover every compiled route pattern incident to a stop via a zoom-11 map query. */
+/** The grid zoom-11 route probes are snapped to, in micro-degrees (~1.1 km of latitude). */
+const ROUTE_PROBE_CELL_MICRODEGREES = 10_000;
+/**
+ * The margin a probe keeps around every stop in its cell, in micro-degrees (~100 m):
+ * wide enough that shape-derived segment boxes snapped a few metres off a stop still
+ * overlap. The stop-id/parent match in getRoutesForStop is the false-positive guard.
+ */
+const ROUTE_PROBE_MARGIN_MICRODEGREES = 1_000;
+
+type RouteProbe = { data?: RouteMapResponse; error?: unknown };
+
+/** Route probes in flight per instance; an entry is removed as soon as it settles. */
+const routeProbesInFlight = new WeakMap<MotisInstance, Map<string, Promise<RouteProbe>>>();
+
+/**
+ * The probe box for the grid cell holding a point: the cell plus the margin, so it
+ * contains the point's own ±margin box. Edges are exact six-decimal strings.
+ */
+export function routeProbeBox(
+  lat: number,
+  lon: number,
+): { cell: string; min: string; max: string } {
+  const cellLat = Math.floor((lat * 1e6) / ROUTE_PROBE_CELL_MICRODEGREES);
+  const cellLon = Math.floor((lon * 1e6) / ROUTE_PROBE_CELL_MICRODEGREES);
+  const edge = (cellIndex: number, offset: number) =>
+    ((cellIndex * ROUTE_PROBE_CELL_MICRODEGREES + offset) / 1e6).toFixed(6);
+  const lo = -ROUTE_PROBE_MARGIN_MICRODEGREES;
+  const hi = ROUTE_PROBE_CELL_MICRODEGREES + ROUTE_PROBE_MARGIN_MICRODEGREES;
+  return {
+    cell: `${cellLat}\u0000${cellLon}`,
+    min: `${edge(cellLat, lo)},${edge(cellLon, lo)}`,
+    max: `${edge(cellLat, hi)},${edge(cellLon, hi)}`,
+  };
+}
+
+/**
+ * One zoom-11 `map/routes` request per instance, dataset epoch and grid cell at a
+ * time: a station's linked stops share it instead of each fetching a near-identical
+ * multi-megabyte response. Failures are not remembered.
+ */
+function probeRoutesNear(
+  instance: MotisInstance,
+  lat: number,
+  lon: number,
+  activeEpoch: string,
+): Promise<RouteProbe> {
+  const box = routeProbeBox(lat, lon);
+  const key = `${activeEpoch}\u0000${box.cell}`;
+  let inFlight = routeProbesInFlight.get(instance);
+  if (!inFlight) {
+    inFlight = new Map();
+    routeProbesInFlight.set(instance, inFlight);
+  }
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+  const probes = inFlight;
+  const probe = Promise.resolve(
+    motisRoutesApi({
+      client: instance.client,
+      query: { min: box.min, max: box.max, zoom: 11 },
+    }) as Promise<RouteProbe>,
+  ).finally(() => {
+    if (probes.get(key) === probe) probes.delete(key);
+  });
+  probes.set(key, probe);
+  return probe;
+}
+
+/** Discover every compiled route pattern incident to a stop via a zoom-11 map query shared by the stops in its grid cell. */
 export async function getRoutesForStop(
   instance: MotisInstance,
   stopId: string,
@@ -567,19 +635,15 @@ export async function getRoutesForStop(
   const requestedIds = new Set(
     [requested.stopId, requested.parentId].filter((id): id is string => typeof id === "string"),
   );
-  // ~100m: wide enough that shape-derived segment bboxes snapped a few meters
-  // off the stop still overlap; the stop-id/parent match below is the actual
-  // false-positive guard, so the extra width costs nothing.
-  const delta = 0.001;
   try {
-    const { data, error } = await motisRoutesApi({
-      client: instance.client,
-      query: {
-        min: `${requested.lat - delta},${requested.lon - delta}`,
-        max: `${requested.lat + delta},${requested.lon + delta}`,
-        zoom: 11,
-      },
-    });
+    // Shared with the station's other stops in this grid cell; the cell's box contains
+    // this stop's ±100 m box, and the stop-id/parent match below selects its routes.
+    const { data, error } = await probeRoutesNear(
+      instance,
+      requested.lat,
+      requested.lon,
+      activeEpoch,
+    );
     if (error || !data) throw new Error("MOTIS route lookup unavailable");
     if (!data.routes?.length) return [];
     if (data.zoomFiltered !== false) {
