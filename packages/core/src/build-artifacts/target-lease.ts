@@ -985,30 +985,6 @@ export async function reconcileArtifactTargetLease(options: {
   );
   return "released";
 }
-/** Finish only this original unused root. No acquisition, forward authority, new clock or caller ID. */
-export async function reconcileConfigurationPreEffectRoot(
-  authority: VerifiedExecutionAuthority,
-): Promise<void> {
-  inspectConfigurationPreEffectRefusal(authority);
-  const state = executionAuthorityState(authority);
-  let leaseId: string;
-  try {
-    leaseId = executionLeaseId(authority);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT" && state.kind === "service.pull") return;
-    throw error;
-  }
-  if (state.kind === "service.pull")
-    throw Error("Normal coordinator pull cannot own a target lease");
-  if (
-    (await reconcileArtifactTargetLease({
-      leaseId,
-      authority: verifyControlRecoveryAuthority(authority),
-    })) !== "released"
-  )
-    throw Error("Original pre-effect root remains fenced");
-}
-
 /** Image pulls hold no lease, but never run while their target is held. */
 export function assertCoordinatorPullLeaseCompatibility(
   authority: VerifiedExecutionAuthority,
