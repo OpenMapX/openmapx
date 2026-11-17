@@ -53,7 +53,6 @@ describe("reviewed ops foundation contract", () => {
     const extendedBudgets: Record<string, number> = {
       "configurationMaintenance.prepare": 3600_000,
       "configurationMaintenance.apply": 3600_000,
-      "configurationHandoff.prepare": 3600_000,
       "artifactTransfer.validate": 72 * 3600_000,
       "artifactTransfer.import": 72 * 3600_000,
       "artifactTransfer.export": 72 * 3600_000,

@@ -92666,11 +92666,6 @@
                                 },
                                 "truncated": {
                                   "type": "boolean"
-                                },
-                                "maintenanceRecovery": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 4096
                                 }
                               },
                               "required": [
@@ -94297,11 +94292,6 @@
                         },
                         "truncated": {
                           "type": "boolean"
-                        },
-                        "maintenanceRecovery": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 4096
                         }
                       },
                       "required": [
@@ -95844,11 +95834,6 @@
                         },
                         "truncated": {
                           "type": "boolean"
-                        },
-                        "maintenanceRecovery": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 4096
                         }
                       },
                       "required": [

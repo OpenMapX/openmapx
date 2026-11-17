@@ -9,6 +9,7 @@ import {
 import {
   type ConfigurationMaintenancePrepare,
   type ConfigurationMaintenanceStep,
+  configurationMaintenanceEffectFingerprint,
   configurationMaintenancePrepareSchema,
   configurationMaintenanceStepSchema,
   protectedConfigurationServiceIdSchema,
@@ -225,9 +226,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
     throw Error("Fixed maintenance continuation conflict");
   const intents: {
     phase: ConfigurationMaintenanceStep["phase"];
-    operation:
-      | OpsOperation
-      | Omit<Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>, "planDigest">;
+    operation: Record<string, unknown> & { kind: string };
     prerequisites: number[];
   }[] = [{ phase: "configuration-commit", operation: apply, prerequisites: [] }];
   if (hardlinkPlan.plan.length)
@@ -288,7 +287,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
         ? intent.operation
         : { ...intent.operation, planDigest };
     const execution = address(prepare.operationKey, intent.phase, ordinal, "ops-agent"),
-      operationFingerprint = opsOperationFingerprint(opsOperationSchema.parse(body));
+      operationFingerprint = configurationMaintenanceEffectFingerprint(body);
     reservations.push({
       version: 1,
       phase: intent.phase,

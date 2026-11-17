@@ -62,57 +62,6 @@ export const configurationHandoffPrepareOperationSchema =
     planDigest: digest,
     expectedCurrentRevisionId: revision,
   });
-export const configurationHandoffInspectOperationSchema = z.strictObject({
-  kind: z.literal("configurationHandoff.inspect"),
-  handoffId: z.uuid(),
-});
-export const configurationHandoffPreparedSchema = z.strictObject({
-  handoffId: z.uuid(),
-  phase: z.literal("prepared"),
-});
-export const configurationHandoffInspectionSchema = z
-  .strictObject({
-    handoffId: z.uuid(),
-    phase: z.enum([
-      "prepared",
-      "draining",
-      "applying",
-      "verifying",
-      "applied",
-      "rolled_back",
-      "failed",
-      "recovery_required",
-    ]),
-    expectedRevisionId: revision,
-    appliedRevisionId: revision.nullable(),
-    completedServiceIds: z.array(id).max(64),
-    failedServiceIds: z.array(id).max(64),
-    recoveryCodes: z
-      .array(
-        z.enum([
-          "helper_unavailable",
-          "launch_unknown",
-          "source_changed",
-          "deadline_expired",
-          "cancel_pending",
-          "container_unknown",
-          "readiness_failed",
-          "restore_failed",
-          "receipt_pending",
-        ]),
-      )
-      .max(16),
-  })
-  .superRefine((value, ctx) => {
-    if (
-      new Set(value.completedServiceIds).size !== value.completedServiceIds.length ||
-      new Set(value.failedServiceIds).size !== value.failedServiceIds.length ||
-      value.failedServiceIds.some((id) => value.completedServiceIds.includes(id)) ||
-      (value.phase === "applied" &&
-        (value.appliedRevisionId !== value.expectedRevisionId || value.failedServiceIds.length > 0))
-    )
-      ctx.addIssue({ code: "custom", message: "Inconsistent handoff observation" });
-  });
 /** What the configuration helper reports while it replaces protected services.
  * Only the helper writes it; the agent reads it once the helper container exited. */
 export const handoffProgressSchema = z

@@ -6,9 +6,4 @@ export type InspectCatalogReview200ExecutionDiagnostics = {
   /** @maxItems 256 */
   tail: InspectCatalogReview200ExecutionDiagnosticsTailItem[];
   truncated: boolean;
-  /**
-   * @minLength 1
-   * @maxLength 4096
-   */
-  maintenanceRecovery?: string;
 };

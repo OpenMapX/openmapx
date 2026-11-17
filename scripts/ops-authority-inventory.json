@@ -60,8 +60,6 @@
       "configuration.hardlinks.preview",
       "configuration.inspect",
       "configuration.sources.inspect",
-      "configurationHandoff.inspect",
-      "configurationHandoff.prepare",
       "configurationMaintenance.apply",
       "configurationMaintenance.inspect",
       "configurationMaintenance.prepare",
@@ -425,9 +423,7 @@
         "configurationMaintenance.prepare",
         "configurationMaintenance.inspect",
         "configurationMaintenance.apply",
-        "configurationMaintenance.settle",
-        "configurationHandoff.prepare",
-        "configurationHandoff.inspect"
+        "configurationMaintenance.settle"
       ]
     },
     {

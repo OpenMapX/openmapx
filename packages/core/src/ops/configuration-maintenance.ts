@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
+import { canonicalJson } from "./canonical-json";
 import { configurationMaintenanceEffectOperationSchema } from "./configuration-operation-records";
 import { coordinatorModeSchema } from "./configuration-preparation-records";
-import type { OpsOperation } from "./contract";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const key = z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/);
@@ -48,23 +49,18 @@ export const configurationMaintenanceSettleSchema = z.strictObject({
 export type ConfigurationMaintenanceBinding = z.infer<typeof configurationMaintenanceBindingSchema>;
 export type ConfigurationMaintenancePrepare = z.infer<typeof configurationMaintenancePrepareSchema>;
 export type ConfigurationMaintenanceSettle = z.infer<typeof configurationMaintenanceSettleSchema>;
-export type ConfigurationMaintenanceEffect = Extract<
-  OpsOperation,
-  {
-    kind:
-      | "stack.render"
-      | "serviceSelection.apply"
-      | "serviceConfig.apply"
-      | "integrationConfig.apply"
-      | "vault.apply"
-      | "configuration.hardlinks.apply"
-      | "service.recreate"
-      | "service.recreateIsolated"
-      | "configurationHandoff.prepare";
-  }
+/** A maintenance step's operation: a trusted apply, the hardlinks owner, a
+ * recreate, or the handoff the agent runs through its helper. */
+export type ConfigurationMaintenanceEffect = z.infer<
+  typeof configurationMaintenanceEffectOperationSchema
 >;
-const effectSchema: z.ZodType<ConfigurationMaintenanceEffect> =
-  configurationMaintenanceEffectOperationSchema;
+const effectSchema = configurationMaintenanceEffectOperationSchema;
+/** The digest of a step operation, as for any operation body. */
+export function configurationMaintenanceEffectFingerprint(operation: unknown): string {
+  return createHash("sha256")
+    .update(canonicalJson(configurationMaintenanceEffectOperationSchema.parse(operation)))
+    .digest("hex");
+}
 export const configurationMaintenanceStepSchema = z.strictObject({
   phase: z.enum([
     "configuration-commit",

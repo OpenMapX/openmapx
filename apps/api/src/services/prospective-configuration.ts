@@ -44,7 +44,6 @@ import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
   deliverCoordinatorPullSubmission,
   executeAdminJobOperation,
-  hasRecoveredMaintenanceCandidate,
   prepareAdminJobOperationRoot,
   readProjection,
   reserveCoordinatorPullSubmission,
@@ -735,14 +734,6 @@ export async function discardNeverPreparedProspectiveConfiguration(
         _configurationCandidate: {
           ...retained,
           phase: "discarding_without_guard",
-          ...((await hasRecoveredMaintenanceCandidate(result, protocol, owner.job.jobId))
-            ? {
-                neverPreparedCleanup: {
-                  version: 1,
-                  integrationIds: [...state.writer.integrationIds],
-                },
-              }
-            : {}),
         },
       };
       const saved = await tx
@@ -1302,118 +1293,6 @@ const retirementSchema = z.strictObject({
 /** Only original negative recovery and a fresh authenticated never-prepared inspection
  * authorize finishing an interrupted inert unlink. The marker selects this
  * verifier; it neither proves absence nor grants a new configuration effect. */
-async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
-  const writer = currentAdministrativeConfigurationWriter(),
-    { job } = administrativeConfigurationState(writer);
-  let original: Record<string, unknown> | undefined;
-  let originalProtocol: AdminJobProtocol | undefined;
-  await withConfigurationWriteTransaction(writer, async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(schema.adminJob)
-      .where(jobOwnership(job.jobId, job.execution))
-      .for("update");
-    original = row?.result as Record<string, unknown> | undefined;
-    originalProtocol = row?.protocol as AdminJobProtocol | undefined;
-    const retained = original?._configurationCandidate as Record<string, unknown> | undefined,
-      cleanup = retirementSchema.parse(retained?.neverPreparedCleanup),
-      immediate =
-        original?._immediateJobId === job.jobId &&
-        original?._immediateActorId === writer.actorId &&
-        job.payload.operationKey === writer.operationKey,
-      queued =
-        writer.actorId === job.jobId &&
-        ((row?.type === "service.apply" &&
-          job.payload.service === "data-manager" &&
-          Object.keys(job.payload).every(
-            (key) => key === "service" || key === "_maintenanceRequest",
-          ) &&
-          writer.operationKey === coordinatorLifecycleOperationKey(job.jobId, null)) ||
-          (row?.type === "service.bulk" &&
-            job.payload.action === "update" &&
-            Array.isArray(job.payload.serviceIds) &&
-            job.payload.serviceIds.filter((id) => id === "data-manager").length === 1 &&
-            writer.operationKey ===
-              coordinatorLifecycleOperationKey(
-                job.jobId,
-                job.payload.serviceIds.indexOf("data-manager"),
-              ))),
-      release =
-        row?.type === "system.update" &&
-        row.createdBy === writer.actorId &&
-        guardedSystemReleasePayloadSchema.safeParse(row.payload).success &&
-        writer.operationKey === createDurableOpsKey("admin-job.guarded-release", job.jobId) &&
-        (original?._systemRelease as { actorId?: unknown; operationKey?: unknown } | undefined)
-          ?.actorId === writer.actorId &&
-        (original?._systemRelease as { operationKey?: unknown } | undefined)?.operationKey ===
-          writer.operationKey;
-    if (
-      !row ||
-      row.type !== job.jobType ||
-      canonicalJson(row.payload) !== canonicalJson(job.payload) ||
-      (!immediate && !queued && !release) ||
-      retained?.operationKey !== writer.operationKey ||
-      !["discarding_without_guard", "discarded"].includes(String(retained?.phase)) ||
-      canonicalJson(cleanup.integrationIds) !== canonicalJson(writer.integrationIds) ||
-      hasUnsettledManagedOperation(original, originalProtocol) ||
-      !(await hasRecoveredMaintenanceCandidate(original, originalProtocol, job.jobId))
-    )
-      throw new JobObservationPending("recovery_required");
-  });
-  if (!original) throw new JobObservationPending("recovery_required");
-  job.checkpointResult = original;
-  const retained = original._configurationCandidate as Record<string, unknown>,
-    operation = readProjection(originalProtocol, original).operations[
-      String(retained.prepareOperationKey)
-    ]!,
-    closed = await inspectConfigurationMaintenance(String(retained.maintenanceId));
-  if (
-    closed.apiJobId !== job.jobId ||
-    closed.state !== "settled" ||
-    closed.fence !== null ||
-    closed.generation !== "not_started" ||
-    closed.followUp !== "not_started" ||
-    closed.appliedRevisionId !== null ||
-    closed.prepare.executionId !== operation.operationId ||
-    closed.prepare.fingerprint !== operation.fingerprint
-  )
-    throw new JobObservationPending("recovery_required");
-  const handle = Object.freeze({}) as RetainedConfigurationRetirement;
-  retirements.set(handle, {
-    writer,
-    publisher: publisherOptions(await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""))),
-    checkpoint: retained,
-    apiJobId: job.jobId,
-    actorId: writer.actorId,
-  });
-  try {
-    await completeRetainedConfigurationRetirement(handle);
-  } finally {
-    retirements.delete(handle);
-  }
-  const configuration: TrustedConfigurationApplyOutcome = {
-    outcome: "not_committed",
-    reason: "failed",
-    cleanupFailed: false,
-    registryUpdateFailed: false,
-  };
-  await job.checkpoint({
-    ...job.checkpointResult,
-    _configurationCandidate: { ...retained, phase: "discarded" },
-    _configurationMaintenance: {
-      ...(job.checkpointResult?._configurationMaintenance as Record<string, unknown>),
-      phase: "settled",
-      record: closed,
-    },
-    configuration,
-    _configurationOutcomes: {
-      ...(job.checkpointResult?._configurationOutcomes as Record<string, unknown>),
-      [writer.operationKey]: configuration,
-    },
-  });
-  return { configuration };
-}
-
 async function resumeCompletedConfigurationRetirement(): Promise<Record<string, unknown>> {
   const writer = currentAdministrativeConfigurationWriter(),
     { job } = administrativeConfigurationState(writer);
@@ -1770,8 +1649,6 @@ export async function retainedConfigurationIntegrationIds(
       return retirementSchema.parse(retained.unissuedCleanup).integrationIds;
     if (retained?.retirement !== undefined)
       return retirementSchema.parse(retained.retirement).integrationIds;
-    if (retained?.neverPreparedCleanup !== undefined)
-      return retirementSchema.parse(retained.neverPreparedCleanup).integrationIds;
     if (typeof retained?.sealedOperationKey !== "string") throw Error();
     const { record } = await readConfigurationCandidate(retained.sealedOperationKey);
     if (
@@ -2748,7 +2625,6 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
   )
     return discardRetainedUnissuedOrdinaryCandidate();
   if (current?.retirement !== undefined) return resumeCompletedConfigurationRetirement();
-  if (current?.neverPreparedCleanup !== undefined) return resumeNeverPreparedCleanup();
   let candidate: ValidatedConfigurationCandidate;
   try {
     const { job } = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),

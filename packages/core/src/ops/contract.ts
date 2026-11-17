@@ -21,12 +21,6 @@ import {
   backupPruneResultSchema,
 } from "./backup-prune";
 import {
-  configurationHandoffInspectionSchema,
-  configurationHandoffInspectOperationSchema,
-  configurationHandoffPreparedSchema,
-  configurationHandoffPrepareOperationSchema,
-} from "./configuration-handoff-records";
-import {
   configurationGenerationRevisionSchema,
   configurationHardlinksApplyOperationSchema,
   integrationConfigApplyOperationSchema,
@@ -128,8 +122,6 @@ export const OPS_OPERATION_KINDS = [
   "configurationMaintenance.inspect",
   "configurationMaintenance.apply",
   "configurationMaintenance.settle",
-  "configurationHandoff.prepare",
-  "configurationHandoff.inspect",
   "configuration.failure.inspect",
   "configuration.candidate.retain",
   "configuration.candidate.read",
@@ -279,8 +271,6 @@ export const OPS_KIND_POLICIES = {
   "configurationMaintenance.inspect": sync("api", 15_000, 65536),
   "configurationMaintenance.apply": asyncEffect("api", 3600_000, 65536),
   "configurationMaintenance.settle": asyncEffect("api", 60_000, 65536),
-  "configurationHandoff.prepare": asyncEffect("api", 3600_000, 65536),
-  "configurationHandoff.inspect": sync("api", 15_000, 65536),
   "configuration.failure.inspect": sync("api", 15_000),
   "configuration.candidate.retain": sync("api", 15_000),
   "configuration.candidate.read": sync("api", 15_000, OPS_MAX_RESULT_BYTES),
@@ -486,8 +476,6 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("configuration.inspect"),
   kindOnly("configuration.sources.inspect"),
   configurationMaintenancePrepareSchema,
-  configurationHandoffPrepareOperationSchema,
-  configurationHandoffInspectOperationSchema,
   configurationMaintenanceInspectSchema,
   configurationMaintenanceApplySchema,
   configurationMaintenanceSettleSchema,
@@ -1130,8 +1118,6 @@ export const OPS_RESULT_SCHEMAS = {
   "configuration.hardlinks.preview": configurationHardlinksPreviewSchema,
   "configuration.hardlinks.apply": hardlinkApplySummarySchema,
   "configurationMaintenance.prepare": maintenanceRecordSchema,
-  "configurationHandoff.prepare": configurationHandoffPreparedSchema,
-  "configurationHandoff.inspect": configurationHandoffInspectionSchema,
   "configurationMaintenance.inspect": maintenanceRecordSchema,
   // `generation` is the generation step's result when this run applied it.
   "configurationMaintenance.apply": z.strictObject({

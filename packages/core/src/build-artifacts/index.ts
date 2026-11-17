@@ -60,7 +60,6 @@ export {
   ownedStagedCoordinatorBaseline,
   prepareFixedControlChild,
   provisionControlDirectories,
-  readConfigurationHandoffSpawnIntent,
   readFixedCliSpawnIntent,
   readPrivateRecord,
   readVerifiedStagedCoordinatorOwnership,

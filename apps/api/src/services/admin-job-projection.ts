@@ -65,7 +65,6 @@ export interface ProjectedOperation {
     checkpointOwnerVersion: number;
     terminalDigest: string;
     terminalReceipt: OpsJobStatus;
-    maintenanceRecovery?: string;
   };
 }
 
@@ -245,10 +244,6 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
           operation.terminal !== true ||
           operation.phase !== "terminal" ||
           !d ||
-          (d.maintenanceRecovery !== undefined &&
-            (typeof d.maintenanceRecovery !== "string" ||
-              d.maintenanceRecovery.length < 1 ||
-              d.maintenanceRecovery.length > 4096)) ||
           !z.uuid().safeParse(d.terminalCopyId).success ||
           !Number.isSafeInteger(d.checkpointOwnerVersion) ||
           d.checkpointOwnerVersion < 1 ||

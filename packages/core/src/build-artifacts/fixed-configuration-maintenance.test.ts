@@ -251,54 +251,6 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     "maintenance-handoff",
   ]);
   expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
-  const { configurationHandoffIntentRecordSchema } = await import(
-    "./configuration-handoff-records"
-  );
-  const intent = {
-    version: 1,
-    origin: {
-      version: 1,
-      rootKey: prepare.operationKey,
-      issuer: "ops-agent",
-      notAfter: prepare.deadlineAt,
-    },
-    ownerPrepare: prepare,
-    preparer: prepare,
-    helper: {
-      ...prepare,
-      executor: "host-cli",
-      executionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    },
-    operation: plan.steps.at(-1)!.operation,
-    admittedAt: Date.now(),
-    requestedDeadlineAt: prepare.deadlineAt,
-    helperId: "a".repeat(43),
-    sourceDigest: "b".repeat(64),
-    environmentNames: [],
-    preparerAdmissionDigest: "c".repeat(64),
-    leaseId: "88888888-8888-4888-8888-888888888888",
-    delegationId: "99999999-9999-4999-8999-999999999999",
-    assertion: "original-fixed-assertion",
-    helperContainerName: `openmapx-configuration-handoff-${handoff.handoffId}`,
-    preparedAt: Date.now(),
-    release,
-  };
-  expect(configurationHandoffIntentRecordSchema.parse(intent).release).toEqual(release);
-  expect(
-    configurationHandoffIntentRecordSchema.safeParse({ ...intent, release: undefined }).success,
-  ).toBe(false);
-  expect(
-    configurationHandoffIntentRecordSchema.safeParse({
-      ...intent,
-      release: { ...release, manifestDigest: "f".repeat(64) },
-    }).success,
-  ).toBe(false);
-  expect(
-    configurationHandoffIntentRecordSchema.safeParse({
-      ...intent,
-      operation: { ...intent.operation, mode: { kind: "configuration" } },
-    }).success,
-  ).toBe(false);
   expect(plan.release).toEqual(release);
 
   // A realistic stack must fit without relaxing the private-record limits.

@@ -198,7 +198,6 @@ const LEASED_KINDS = new Set<OpsOperationKind>([
   "valhalla.traffic.refreshWaysToEdges",
 ]);
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
-  "configurationHandoff.inspect",
   "configurationMaintenance.inspect",
   "system.diagnostics",
   "docker.status",
@@ -1952,13 +1951,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
         // Maintenance steps run inside the agent's own apply; the API never sends one.
         if (
-          operation.kind === "configurationHandoff.prepare" ||
-          operation.kind === "configurationHandoff.inspect" ||
-          ((isTrustedConfigurationApplyOperation(operation) ||
+          (isTrustedConfigurationApplyOperation(operation) ||
             operation.kind === "configuration.hardlinks.apply" ||
             operation.kind === "service.recreate" ||
             operation.kind === "service.recreateIsolated") &&
-            operation.maintenanceId)
+          operation.maintenanceId
         )
           throw new RequestGuardError("authorization", 403);
         if (

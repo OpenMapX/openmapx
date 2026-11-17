@@ -1,9 +1,5 @@
 import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import {
-  configurationHandoffIntentRecordSchema,
-  configurationHandoffRecordName,
-} from "./configuration-handoff-records";
-import {
   type ControlChildPhase,
   type ControlRecipient,
   childPhaseKinds,
@@ -2830,36 +2826,6 @@ export function readFixedCliSpawnIntent(
   s.registeredTargets = new Set(saved.serviceIds);
   return saved;
 }
-/** Fixed helper enrollment from the original indexed role-signed launch. A
- * caller target list cannot enroll a child, and the role key remains masked. */
-export function readConfigurationHandoffSpawnIntent(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  handoffId: string,
-) {
-  const s = installationState(installation),
-    name = configurationHandoffRecordName(handoffId, "intent"),
-    raw = readPrivateRecord(s, "observations", name),
-    saved = configurationHandoffIntentRecordSchema.parse(raw);
-  if (
-    !s.fixedChildId ||
-    installation.role !== "ops-agent" ||
-    s.fixedChildId !== saved.delegationId ||
-    controlIdentity(installation) !== saved.helperId ||
-    saved.operation.handoffId !== handoffId ||
-    canonicalJson(saved.helper) !== canonicalJson(execution) ||
-    execution.executor !== "host-cli" ||
-    execution.operationFingerprint !==
-      controlDigest({
-        kind: "configuration-helper",
-        handoffId,
-        intentDigest: controlDigest(saved.operation),
-      })
-  )
-    throw Error("Original configuration helper spawn required");
-  s.registeredTargets = new Set(saved.operation.serviceIds);
-  return saved;
-}
 export function beginFixedCliExecution(
   installation: ControlInstallation,
   execution: ExecutionRef,
@@ -3026,7 +2992,7 @@ export function verifyControlPreparedTerminal(
         fingerprint: digest,
         state: z.literal("succeeded"),
         operation: z.object({
-          kind: z.enum(["configurationMaintenance.prepare", "configurationHandoff.prepare"]),
+          kind: z.literal("configurationMaintenance.prepare"),
         }),
         result: z
           .object({

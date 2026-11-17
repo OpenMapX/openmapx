@@ -7,7 +7,6 @@ export * from "./catalog-pin-approval";
 export * from "./client";
 export {
   type ConfigurationHandoffIntent,
-  configurationHandoffInspectionSchema,
   configurationHandoffIntentSchema,
   configurationHandoffPrepareOperationSchema,
   type HandoffProgress,

@@ -6,9 +6,4 @@ export type CancelAdminTransitPinExecution200Diagnostics = {
   /** @maxItems 256 */
   tail: CancelAdminTransitPinExecution200DiagnosticsTailItem[];
   truncated: boolean;
-  /**
-   * @minLength 1
-   * @maxLength 4096
-   */
-  maintenanceRecovery?: string;
 };

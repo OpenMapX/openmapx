@@ -1,4 +1,3 @@
-import { envString } from "@openmapx/core/server-env";
 import {
   type OpsProjection,
   type ProjectedOperation,
@@ -24,9 +23,7 @@ import {
   opsKindRequiresControlAuthority,
   opsOperationSchema,
   parseOpsJobStatus,
-  readOpsTokenFile,
   type TrustedConfigurationPayload,
-  verifyMaintenanceRecoveryProof,
 } from "@openmapx/core/ops";
 import { cancelAdminDataChildren } from "./admin-data-children";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
@@ -38,10 +35,8 @@ import {
 } from "./admin-job-parent";
 import {
   ADMIN_JOB_LOG_LIMITS,
-  cancelRequestedAt,
   JobOwnershipLost,
   JobStepAllocationConflict,
-  readAdminJobProtocol,
 } from "./admin-job-state";
 import { readArtifactPurposeObservation } from "./artifact-purpose-observation";
 import {
@@ -157,9 +152,6 @@ export async function checkpointTerminalCopy(
     checkpointOwnerVersion: context.execution.version,
     terminalDigest: controlTerminalReceiptDigest(safe),
     terminalReceipt: safe,
-    ...(status.diagnostics?.maintenanceRecovery
-      ? { maintenanceRecovery: status.diagnostics.maintenanceRecovery }
-      : {}),
   };
   try {
     await persistProjection(context, projection);
@@ -780,100 +772,7 @@ type AdminOperationCancellation = "succeeded" | "contained" | "already_terminal"
  *   this request, and at least one had already failed or timed out.
  * - `pending` — at least one operation is still not terminal.
  */
-export type AdminJobCancellationOutcome =
-  | "canceled"
-  | "completed"
-  | "already_terminal"
-  | "recovered_failure"
-  | "pending";
-
-async function verifiedOriginalMaintenanceRecovery(
-  status: OpsJobStatus,
-  operation: ProjectedOperation,
-): Promise<boolean> {
-  try {
-    const body = operation.operation,
-      proof = status.diagnostics?.maintenanceRecovery;
-    if (
-      !proof ||
-      status.kind !== "configurationMaintenance.prepare" ||
-      body?.kind !== "configurationMaintenance.prepare"
-    )
-      return false;
-    const observed = verifyMaintenanceRecoveryProof(
-      await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
-      proof,
-    );
-    return (
-      observed.operationId === operation.operationId &&
-      observed.operationKey === operation.operationKey &&
-      observed.fingerprint === operation.fingerprint &&
-      observed.terminalDigest === controlTerminalReceiptDigest(status) &&
-      observed.maintenanceId === body.maintenanceId &&
-      observed.candidateId === body.candidateId
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Routing only: a completed negative recovery does not itself discard the
- * API's sealed candidate. Only the fixed original producer may authenticate
- * that packet and finish its never-prepared cleanup under a replacement owner. */
-export async function hasRecoveredMaintenanceCandidate(
-  result: unknown,
-  protocol: unknown,
-  jobId: string,
-): Promise<boolean> {
-  try {
-    const saved = result as Record<string, unknown> | null,
-      candidate = saved?._configurationCandidate as Record<string, unknown> | undefined;
-    if (
-      !candidate ||
-      !["prepared", "discarding_without_guard", "discarded"].includes(String(candidate.phase)) ||
-      candidate.rowVersions !== undefined ||
-      !cancelRequestedAt(readAdminJobProtocol(protocol)) ||
-      saved?._configurationMaintenanceDecision !== undefined ||
-      saved?._configurationMaintenanceSettle !== undefined
-    )
-      return false;
-    const operation = readProjection(protocol, saved).operations[
-        String(candidate.prepareOperationKey)
-      ],
-      delivery = operation?.receiptDelivery,
-      terminal = delivery?.terminalReceipt,
-      body = operation?.operation;
-    if (
-      !operation?.terminal ||
-      operation.attempt?.apiJobId !== jobId ||
-      operation.phase !== "terminal" ||
-      !delivery ||
-      !terminal ||
-      terminal.errorClass !== "recovery_required" ||
-      !["failed", "timed_out"].includes(terminal.state) ||
-      body?.kind !== "configurationMaintenance.prepare" ||
-      body.candidateId !== candidate.candidateId ||
-      body.maintenanceId !== candidate.maintenanceId ||
-      body.revisionId !== candidate.revisionId ||
-      body.applyOperationKey !== candidate.sealedOperationKey ||
-      delivery.terminalDigest !== controlTerminalReceiptDigest(terminal)
-    )
-      return false;
-    return verifiedOriginalMaintenanceRecovery(
-      {
-        ...terminal,
-        diagnostics: {
-          tail: [],
-          truncated: false,
-          maintenanceRecovery: delivery.maintenanceRecovery,
-        },
-      },
-      operation,
-    );
-  } catch {
-    return false;
-  }
-}
+export type AdminJobCancellationOutcome = "canceled" | "completed" | "already_terminal" | "pending";
 
 export async function cancelAdminJobOperations(
   result: unknown,
@@ -946,7 +845,6 @@ export async function cancelAdminJobOperations(
   // and a failure that predates this request must not be reported as a
   // cancellation it did not cause.
   const outcomes: AdminOperationCancellation[] = [];
-  let recoveredFailure = false;
   const readSignal = () =>
     options.signal
       ? AbortSignal.any([options.signal, AbortSignal.timeout(2_000)])
@@ -958,40 +856,13 @@ export async function cancelAdminJobOperations(
     }
     if (operation.terminal && operation.receiptDelivery) {
       if (!options.context) return "pending";
-      let recovered = false;
       try {
-        if (
-          operation.kind === "configurationMaintenance.prepare" &&
-          operation.receiptDelivery.terminalReceipt.errorClass === "recovery_required"
-        ) {
-          if (!operation.operationId || !operation.fingerprint) return "pending";
-          const retained = operation.receiptDelivery.maintenanceRecovery,
-            prior = {
-              ...operation.receiptDelivery.terminalReceipt,
-              diagnostics: { tail: [], truncated: false, maintenanceRecovery: retained },
-            },
-            observed =
-              retained && (await verifiedOriginalMaintenanceRecovery(prior, operation))
-                ? prior
-                : await client.cancel(operation.operationId, {
-                    signal: readSignal(),
-                    fingerprint: operation.fingerprint,
-                  });
-          if (!(await verifiedOriginalMaintenanceRecovery(observed, operation))) return "pending";
-          operation.receiptDelivery = {
-            ...operation.receiptDelivery,
-            maintenanceRecovery: observed.diagnostics!.maintenanceRecovery!,
-          };
-          await persistProjection(options.context, projection);
-          recovered = true;
-        }
         await checkpointTerminalCopy(options.context, projection, operation);
       } catch (error) {
         if (error instanceof JobObservationPending) throw error;
         return "pending";
       }
       const receipt = operation.receiptDelivery.terminalReceipt;
-      if (recovered) recoveredFailure = true;
       outcomes.push(
         receipt.state === "succeeded"
           ? "succeeded"
@@ -1026,7 +897,6 @@ export async function cancelAdminJobOperations(
     // so observing it here is equivalent evidence to the durable marker.
     let sawTerminationPending = false;
     let status: Awaited<ReturnType<ApiOpsClient["cancel"]>> | undefined;
-    let verifiedRecovery = false;
     const matches = (value: Awaited<ReturnType<ApiOpsClient["cancel"]>>) =>
       value &&
       value.operationId === operation.operationId &&
@@ -1037,17 +907,6 @@ export async function cancelAdminJobOperations(
     try {
       status = await client.status(operation.kind, operation.operationId, { signal: readSignal() });
       if (!matches(status)) return "pending";
-      if (
-        operation.kind === "configurationMaintenance.prepare" &&
-        status.errorClass === "recovery_required"
-      ) {
-        status = await client.cancel(operation.operationId, {
-          signal: readSignal(),
-          fingerprint: status.fingerprint,
-        });
-        if (!matches(status)) return "pending";
-        verifiedRecovery = await verifiedOriginalMaintenanceRecovery(status, operation);
-      }
       sawTerminationPending = status.state === "termination_pending";
       if (
         !["succeeded", "failed", "timed_out"].includes(status.state) &&
@@ -1061,12 +920,8 @@ export async function cancelAdminJobOperations(
       // The cancel request may have reached the agent. Reconcile through its
       // authenticated journal status rather than treating response loss as success.
     }
-    if (
-      status?.errorClass === "recovery_required" &&
-      operation.kind === "configurationMaintenance.prepare" &&
-      !verifiedRecovery
-    )
-      return "pending";
+    // An operation that needs recovery holds its targets until an operator resolves it.
+    if (status?.errorClass === "recovery_required") return "pending";
     for (let attempt = 0; attempt < CANCEL_POLL_ATTEMPTS; attempt += 1) {
       if (options.signal?.aborted) return "pending";
       if (!status || !["succeeded", "failed", "timed_out"].includes(status.state)) {
@@ -1092,11 +947,7 @@ export async function cancelAdminJobOperations(
           ...status.failureResult,
           ...(status.diagnostics ? { diagnostics: status.diagnostics } : {}),
         });
-        if (
-          status.errorClass === "recovery_required" &&
-          operation.kind !== "configurationMaintenance.prepare"
-        )
-          return "pending";
+        if (status.errorClass === "recovery_required") return "pending";
         if (status.state === "termination_pending") sawTerminationPending = true;
         if (status.state === "succeeded") break;
         if (status.state === "failed" || status.state === "timed_out") break;
@@ -1132,7 +983,6 @@ export async function cancelAdminJobOperations(
         return "pending";
       }
     }
-    if (verifiedRecovery) recoveredFailure = true;
     outcomes.push(
       status.state === "succeeded"
         ? "succeeded"
@@ -1150,7 +1000,6 @@ export async function cancelAdminJobOperations(
   if (backend === "contained" || latestBackend === "contained") outcomes.push("contained");
   else if (backend === "already_terminal" || latestBackend === "already_terminal")
     outcomes.push("already_terminal");
-  if (recoveredFailure) return "recovered_failure";
   const standaloneResult = options.context?.checkpointResult ?? result;
   if (
     standaloneResult &&
