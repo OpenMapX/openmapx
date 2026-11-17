@@ -286,27 +286,14 @@ interface CandidateState {
   integrationReloadSnapshot: NonNullable<
     AdministrativeConfigurationReadContext["integrationReloadSnapshot"]
   > | null;
+  stage?: CandidateStage;
+  /** Restored after a restart: its rows were saved, or no maintenance root was attempted. */
+  recovered?: "committed" | "pre_root";
+  /** A known local refusal before any maintenance admission was attempted. */
+  rejectedUnissued?: boolean;
+  discardedUnused?: ReturnType<typeof configurationMaintenanceReceiptSchema.parse>;
 }
-const REJECTED = "Trusted configuration snapshot publish failed";
-const candidates = new WeakMap<ValidatedConfigurationCandidate, CandidateState>();
-const recoveredCommittedCandidates = new WeakSet<ValidatedConfigurationCandidate>();
-const recoveredPreRootCandidates = new WeakSet<ValidatedConfigurationCandidate>();
-const rejectedUnissuedCandidates = new WeakSet<ValidatedConfigurationCandidate>();
-const discardedUnusedCandidates = new WeakMap<
-  ValidatedConfigurationCandidate,
-  ReturnType<typeof configurationMaintenanceReceiptSchema.parse>
->();
-/** A known comparison/refusal produced here selects an inert intent failure.
- * External exceptions and observer aborts never mint this local evidence. */
-function rejectUnissuedCandidate(
-  candidate: ValidatedConfigurationCandidate,
-  message: string,
-): never {
-  rejectedUnissuedCandidates.add(candidate);
-  throw Error(message);
-}
-const candidateStages = new WeakMap<
-  ValidatedConfigurationCandidate,
+type CandidateStage =
   | "preflight"
   | "prepared"
   | "recovered_pre_save"
@@ -318,8 +305,29 @@ const candidateStages = new WeakMap<
   | "unissued"
   | "unused"
   | "discarded"
-  | "retired"
->();
+  | "retired";
+const REJECTED = "Trusted configuration snapshot publish failed";
+const candidates = new WeakMap<ValidatedConfigurationCandidate, CandidateState>();
+function stageOf(candidate: ValidatedConfigurationCandidate): CandidateStage | undefined {
+  return candidates.get(candidate)?.stage;
+}
+function setStage(candidate: ValidatedConfigurationCandidate, stage: CandidateStage): void {
+  const state = candidates.get(candidate);
+  if (!state) throw Error("Configuration candidate unavailable");
+  state.stage = stage;
+}
+const recoveredAs = (candidate: ValidatedConfigurationCandidate) =>
+  candidates.get(candidate)?.recovered;
+/** A known comparison/refusal produced here selects an inert intent failure.
+ * External exceptions and observer aborts never mint this local evidence. */
+function rejectUnissuedCandidate(
+  candidate: ValidatedConfigurationCandidate,
+  message: string,
+): never {
+  const state = candidates.get(candidate);
+  if (state) state.rejectedUnissued = true;
+  throw Error(message);
+}
 export function validatedConfigurationCandidateState(
   candidate: ValidatedConfigurationCandidate,
 ): CandidateState {
@@ -348,7 +356,7 @@ async function verifyConfigurationCommitParticipant(
   }
   if (state.overlay.purpose === "migration") {
     if (
-      recoveredCommittedCandidates.has(candidate) &&
+      recoveredAs(candidate) === "committed" &&
       state.record.privateIntegrationReload?.stagedMigration
     ) {
       await (await import("./configuration-migration/staging")).assertRetainedMigrationRows(
@@ -367,7 +375,7 @@ async function verifyConfigurationCommitParticipant(
   if (state.overlay.purpose === "integration-binding")
     assertIntegrationBindingOverlay(writer, state.overlay);
   if (state.overlay.purpose === "platform") {
-    if (recoveredCommittedCandidates.has(candidate)) {
+    if (recoveredAs(candidate) === "committed") {
       const { assertSavedPlatformConfiguration } = await import(
         "./platform-configuration-recovery"
       );
@@ -404,19 +412,18 @@ export function assertCommittedConfigurationCandidate(
   candidate: ValidatedConfigurationCandidate,
 ): void {
   validatedConfigurationCandidateState(candidate);
-  if (candidateStages.get(candidate) !== "committed")
-    throw Error("Committed configuration candidate required");
+  if (stageOf(candidate) !== "committed") throw Error("Committed configuration candidate required");
 }
 function assertKnownRolledBackConfigurationCandidate(
   candidate: ValidatedConfigurationCandidate,
 ): void {
   const state = validatedConfigurationCandidateState(candidate);
-  if (state.persisted || candidateStages.get(candidate) !== "rolled_back")
+  if (state.persisted || stageOf(candidate) !== "rolled_back")
     throw Error("Actual original rolled-back candidate required");
 }
 function assertUnadmittedConfigurationCandidate(candidate: ValidatedConfigurationCandidate): void {
   const state = validatedConfigurationCandidateState(candidate);
-  const stage = candidateStages.get(candidate);
+  const stage = stageOf(candidate);
   if (
     !["preflight", "prepared", "rolled_back", "never_prepared", "unissued", "unused"].includes(
       stage ?? "",
@@ -439,7 +446,7 @@ async function discardUnissuedMaintenanceCandidate(
   if (
     !record.maintenanceId ||
     !record.prepareOperationKey ||
-    !["prepared", "recovered_unissued"].includes(candidateStages.get(candidate) ?? "") ||
+    !["prepared", "recovered_unissued"].includes(stageOf(candidate) ?? "") ||
     state.persisted
   )
     throw new JobObservationPending("recovery_required");
@@ -547,7 +554,7 @@ async function discardUnissuedMaintenanceCandidate(
   });
   if (!checkpoint) throw new JobObservationPending("recovery_required");
   owner.job.checkpointResult = checkpoint;
-  candidateStages.set(candidate, "unissued");
+  setStage(candidate, "unissued");
   await discardUnadmittedTrustedConfigurationCandidate(candidate);
   await owner.job.checkpoint({
     ...owner.job.checkpointResult,
@@ -556,7 +563,7 @@ async function discardUnissuedMaintenanceCandidate(
       phase: "discarded",
     },
   });
-  candidateStages.set(candidate, "discarded");
+  setStage(candidate, "discarded");
 }
 /** Final API publication of this canceled, conclusively UNISSUED intent.
  * The private nominal stage and locked original row/child delivery prove no
@@ -568,7 +575,7 @@ async function completeUnissuedConfigurationCancellation(
     owner = administrativeConfigurationState(state.writer),
     record = state.record;
   if (
-    candidateStages.get(candidate) !== "discarded" ||
+    stageOf(candidate) !== "discarded" ||
     state.persisted ||
     !record.maintenanceId ||
     !record.prepareOperationKey
@@ -674,7 +681,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
 ): Promise<void> {
   const state = validatedConfigurationCandidateState(candidate),
     owner = administrativeConfigurationState(state.writer),
-    stage = candidateStages.get(candidate);
+    stage = stageOf(candidate);
   if (
     !state.record.maintenanceId ||
     !state.record.prepareOperationKey ||
@@ -759,7 +766,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
   }
   if (!checkpoint) throw Error("Original candidate cleanup checkpoint unavailable");
   owner.job.checkpointResult = checkpoint;
-  candidateStages.set(candidate, "never_prepared");
+  setStage(candidate, "never_prepared");
   // Pending cleanup retains the global candidate fence. Only exact bytes under
   // the real queue ownership can be removed; an I/O failure leaves it pending.
   await discardUnadmittedTrustedConfigurationCandidate(candidate);
@@ -770,7 +777,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
       phase: "discarded",
     },
   });
-  candidateStages.set(candidate, "discarded");
+  setStage(candidate, "discarded");
 }
 /** A failed prepare is not itself never-prepared evidence. Only the actual fixed
  * inspector/disjoint closure and original canonical failure above permit this
@@ -841,7 +848,7 @@ export async function discardUnusedPreparedProspectiveConfiguration(
     !state.record.maintenanceId ||
     !state.record.prepareOperationKey ||
     !["prepared", "recovered_pre_save", "rolled_back", "unused", "discarded"].includes(
-      candidateStages.get(candidate) ?? "",
+      stageOf(candidate) ?? "",
     )
   )
     throw Error("Original unsaved prepared candidate required");
@@ -921,7 +928,7 @@ export async function discardUnusedPreparedProspectiveConfiguration(
   });
   if (!committed) throw new JobObservationPending("recovery_required");
   owner.job.checkpointResult = committed;
-  candidateStages.set(candidate, "unused");
+  setStage(candidate, "unused");
   await discardUnadmittedTrustedConfigurationCandidate(candidate);
   await owner.job.checkpoint({
     ...owner.job.checkpointResult,
@@ -930,9 +937,9 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       phase: "discarded",
     },
   });
-  candidateStages.set(candidate, "discarded");
+  setStage(candidate, "discarded");
   freeze(closed);
-  discardedUnusedCandidates.set(candidate, closed);
+  state.discardedUnused = closed;
 }
 /** Actual prepared-unused cancellation completion. Only the fixed discarded
  * unused producer above mints this private source after full original
@@ -943,10 +950,10 @@ async function completeUnusedConfigurationCancellation(
   const state = validatedConfigurationCandidateState(candidate),
     owner = administrativeConfigurationState(state.writer),
     record = state.record,
-    closed = discardedUnusedCandidates.get(candidate);
+    closed = state.discardedUnused;
   if (
     !closed ||
-    candidateStages.get(candidate) !== "discarded" ||
+    stageOf(candidate) !== "discarded" ||
     state.persisted ||
     !record.maintenanceId ||
     !record.prepareOperationKey
@@ -1310,7 +1317,7 @@ export async function retireSettledProspectiveConfiguration(
     });
     throw new JobObservationPending("recovery_required");
   }
-  candidateStages.set(candidate, "retired");
+  setStage(candidate, "retired");
 }
 
 declare const retirementBrand: unique symbol;
@@ -1638,7 +1645,7 @@ export async function reloadProspectiveIntegrations(candidate: ValidatedConfigur
   }
   await assertCurrentIntegrationReloadSources(candidate);
   const { reloadIntegrations } = await import("../integration-host");
-  if (!recoveredCommittedCandidates.has(candidate))
+  if (recoveredAs(candidate) !== "committed")
     return withProspectiveConfigurationRead(candidate, (read) => reloadIntegrations(read));
   const retained = state.record.privateIntegrationReload;
   if (
@@ -2306,7 +2313,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
       if (Object.keys(projection.operations).length || result._dataExecutions !== undefined)
         throw new JobObservationPending("recovery_required");
       candidates.set(candidate, state);
-      candidateStages.set(candidate, "recovered_unissued");
+      setStage(candidate, "recovered_unissued");
       checkpoint = result;
       return candidate;
     }
@@ -2397,7 +2404,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         (await sourceFingerprint(read, token)) !== record.sourceFingerprint
       ) {
         candidates.set(candidate, state);
-        candidateStages.set(candidate, "recovered_unissued");
+        setStage(candidate, "recovered_unissued");
         checkpoint = result;
         return candidate;
       }
@@ -2421,12 +2428,12 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         serviceSecretRows: read.serviceSecretRows,
         integrationSecretRows: read.integrationSecretRows,
       };
-      recoveredPreRootCandidates.add(candidate);
+      state.recovered = "pre_root";
     } else if (preRoot && overlay.purpose === "transit-credentials") {
       if (Object.keys(projection.operations).length || result._dataExecutions !== undefined)
         throw new JobObservationPending("recovery_required");
       candidates.set(candidate, state);
-      candidateStages.set(candidate, "recovered_unissued");
+      setStage(candidate, "recovered_unissued");
       checkpoint = result;
       return candidate;
     } else if (preRoot) {
@@ -2488,7 +2495,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         // recovery-only stage has no prepared rows/source and cannot persist,
         // render, reseal or prepare a maintenance root.
         candidates.set(candidate, state);
-        candidateStages.set(candidate, "recovered_unissued");
+        setStage(candidate, "recovered_unissued");
         checkpoint = result;
         return candidate;
       }
@@ -2526,10 +2533,10 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
           ...preparedRows,
         ],
       };
-      recoveredPreRootCandidates.add(candidate);
+      state.recovered = "pre_root";
     }
     candidates.set(candidate, state);
-    candidateStages.set(
+    setStage(
       candidate,
       saved
         ? "committed"
@@ -2539,7 +2546,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
             ? "prepared"
             : "recovered_pre_save",
     );
-    if (saved) recoveredCommittedCandidates.add(candidate);
+    if (saved) state.recovered = "committed";
     checkpoint = result;
     return candidate;
   });
@@ -2836,8 +2843,8 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
         snapshot: inspected.snapshot,
       },
     });
-    candidateStages.set(candidate, "committed");
-    recoveredCommittedCandidates.add(candidate);
+    setStage(candidate, "committed");
+    validatedConfigurationCandidateState(candidate).recovered = "committed";
     checkpoint = result;
     return candidate;
   });
@@ -2958,9 +2965,9 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
         snapshot: retained.snapshot,
       },
     });
-    candidateStages.set(candidate, "unissued");
+    setStage(candidate, "unissued");
     await discardUnadmittedTrustedConfigurationCandidate(candidate);
-    candidateStages.set(candidate, "discarded");
+    setStage(candidate, "discarded");
   }
   throw new AdminJobFailure("Original configuration candidate was not issued", {
     configuration: {
@@ -2999,7 +3006,7 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
   const state = validatedConfigurationCandidateState(candidate),
     { job } = administrativeConfigurationState(state.writer),
     maintenance = await configurationMaintenanceProtocol;
-  if (candidateStages.get(candidate) === "recovered_unissued") {
+  if (stageOf(candidate) === "recovered_unissued") {
     await discardUnissuedMaintenanceCandidate(candidate);
     if (job.checkpointResult?._cancelRequestedAt !== undefined)
       return completeUnissuedConfigurationCancellation(candidate);
@@ -3019,14 +3026,14 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
     });
     return { configuration };
   }
-  if (recoveredPreRootCandidates.has(candidate)) {
+  if (recoveredAs(candidate) === "pre_root") {
     const receipt = await persistAndApplyProspectiveConfiguration(candidate, {
       coordinatorMode: state.overlay.coordinatorMode,
       signal: job.signal,
     });
     return { configuration: receipt.application };
   }
-  if (recoveredCommittedCandidates.has(candidate)) {
+  if (recoveredAs(candidate) === "committed") {
     const receipt = state.record.maintenanceId
       ? await persistAndApplyProspectiveConfiguration(candidate, {
           coordinatorMode: state.overlay.coordinatorMode,
@@ -3844,7 +3851,7 @@ export async function prepareProspectiveConfiguration(input: {
           persisted: false,
           integrationReloadSnapshot,
         });
-        candidateStages.set(candidate, "preflight");
+        setStage(candidate, "preflight");
         await verifyConfigurationCommitParticipant(candidate, writer);
         assertRowReceiptBudget(
           savedRowIntents(validatedConfigurationCandidateState(candidate)).map((row) => ({
@@ -3895,7 +3902,7 @@ export async function prepareProspectiveConfiguration(input: {
           // Preview is read-only. This exact inert candidate has no apply/guard
           // admission, so a conclusive local refusal may free its reserved queue slot.
           await discardUnadmittedTrustedConfigurationCandidate(candidate);
-          candidateStages.set(candidate, "discarded");
+          setStage(candidate, "discarded");
           // This operation is read-only and the exact local slot/packet closure
           // above proves no apply/maintenance/pull dispatch. A lost preview
           // response is a known local preflight failure, not an unknown effect.
@@ -3913,7 +3920,7 @@ export async function prepareProspectiveConfiguration(input: {
             },
           });
         }
-        candidateStages.set(candidate, "prepared");
+        setStage(candidate, "prepared");
         return candidate;
       } finally {
         closeAdministrativeConfigurationRead(read);
@@ -4000,7 +4007,7 @@ async function reusePreparedCandidate(input: {
     persisted: false,
     integrationReloadSnapshot: input.integrationReloadSnapshot,
   });
-  candidateStages.set(candidate, "prepared");
+  setStage(candidate, "prepared");
   await verifyConfigurationCommitParticipant(candidate, input.writer);
   return candidate;
 }
@@ -4597,7 +4604,7 @@ export async function stageProspectiveConfigurationMaintenance(
       deadlineAt: state.record.parentDeadlineAt,
     };
   if (
-    candidateStages.get(candidate) !== "prepared" ||
+    stageOf(candidate) !== "prepared" ||
     !state.record.maintenanceId ||
     owner.transactionActive ||
     owner.participant?.mode === "preview" ||
@@ -4673,7 +4680,7 @@ export async function commitProspectiveConfigurationMaintenance(
   const state = validatedConfigurationCandidateState(candidate),
     owner = administrativeConfigurationState(state.writer),
     record = state.record,
-    stage = candidateStages.get(candidate),
+    stage = stageOf(candidate),
     maintenance = await configurationMaintenanceProtocol;
   if (
     !record.maintenanceId ||
@@ -4737,7 +4744,7 @@ export async function commitProspectiveConfigurationMaintenance(
     ...owner.job.checkpointResult,
     _configurationCandidate: { ...checkpoint, phase: "save_attempted" },
   });
-  candidateStages.set(candidate, "save_attempted");
+  setStage(candidate, "save_attempted");
   let committed: Record<string, unknown> | undefined,
     decision: ConfigurationMaintenanceDecision | undefined;
   try {
@@ -4831,7 +4838,7 @@ export async function commitProspectiveConfigurationMaintenance(
     if (error instanceof ConfigurationWriteRolledBack) {
       // This catch consumes the actual transaction wrapper's conclusive native
       // rollback, never a caller-supplied error, boolean or row-absence guess.
-      candidateStages.set(candidate, "rolled_back");
+      setStage(candidate, "rolled_back");
       let rollbackCheckpoint: Record<string, unknown> | undefined;
       await withConfigurationWriteTransaction(state.writer, async (tx) => {
         const [row] = await tx
@@ -4889,7 +4896,7 @@ export async function commitProspectiveConfigurationMaintenance(
   }
   if (!committed || !decision) throw new JobObservationPending("recovery_required");
   state.persisted = true;
-  candidateStages.set(candidate, "committed");
+  setStage(candidate, "committed");
   owner.job.checkpointResult = committed;
   return decision;
 }
@@ -4900,7 +4907,7 @@ export async function persistAndApplyProspectiveConfiguration(
 ): Promise<ProspectiveConfigurationReceipt> {
   const state = validatedConfigurationCandidateState(candidate);
   const owner = administrativeConfigurationState(state.writer),
-    stage = candidateStages.get(candidate);
+    stage = stageOf(candidate);
   if (
     (stage !== "prepared" && stage !== "committed") ||
     options.coordinatorMode !== state.overlay.coordinatorMode ||
@@ -4913,7 +4920,7 @@ export async function persistAndApplyProspectiveConfiguration(
     !(
       ["transit-credentials", "platform"].includes(state.overlay.purpose) &&
       stage === "committed" &&
-      recoveredCommittedCandidates.has(candidate)
+      recoveredAs(candidate) === "committed"
     )
   )
     throw Error("Configuration commit participant unavailable");
@@ -4929,8 +4936,8 @@ export async function persistAndApplyProspectiveConfiguration(
       // abandon. Prove nonissuance under the same row lock before deleting its
       // inert packet; unknown helper/root/save attempts stay pinned.
       if (
-        candidateStages.get(candidate) === "prepared" &&
-        rejectedUnissuedCandidates.has(candidate) &&
+        stageOf(candidate) === "prepared" &&
+        candidates.get(candidate)?.rejectedUnissued === true &&
         owner.job.checkpointResult?._configurationMaintenance === undefined
       ) {
         await discardUnissuedMaintenanceCandidate(candidate);
@@ -4947,7 +4954,7 @@ export async function persistAndApplyProspectiveConfiguration(
         state.record.prepareOperationKey &&
         readProjection(owner.job.checkpointResult).operations[state.record.prepareOperationKey];
       if (
-        candidateStages.get(candidate) === "prepared" &&
+        stageOf(candidate) === "prepared" &&
         preparation &&
         preparation.terminal &&
         preparation.receiptDelivery !== undefined &&
@@ -4956,10 +4963,7 @@ export async function persistAndApplyProspectiveConfiguration(
         await completeNeverPreparedConfiguration(candidate);
         throw error;
       }
-      if (
-        !(error instanceof ConfigurationWriteRolledBack) ||
-        candidateStages.get(candidate) !== "rolled_back"
-      )
+      if (!(error instanceof ConfigurationWriteRolledBack) || stageOf(candidate) !== "rolled_back")
         throw error;
       const abandon = await maintenance.prepareConfigurationMaintenanceAbandon(candidate);
       await maintenance.decideConfigurationMaintenance(abandon);
@@ -5142,7 +5146,7 @@ export async function persistAndApplyProspectiveConfiguration(
     await verifyConfigurationCommitParticipant(candidate, state.writer);
   } catch (error) {
     await discardUnadmittedTrustedConfigurationCandidate(candidate);
-    candidateStages.set(candidate, "discarded");
+    setStage(candidate, "discarded");
     await owner.job.checkpoint({
       ...owner.job.checkpointResult,
       _configurationCandidate: { ...checkpoint, phase: "discarded" },
@@ -5154,7 +5158,7 @@ export async function persistAndApplyProspectiveConfiguration(
     ...owner.job.checkpointResult,
     _configurationCandidate: { ...checkpoint, phase: "save_attempted" },
   });
-  candidateStages.set(candidate, "save_attempted");
+  setStage(candidate, "save_attempted");
   try {
     await withConfigurationWriteTransaction(state.writer, async (tx, context) => {
       if ((await sourceFingerprint(context, state.publisher.token)) !== candidate.sourceFingerprint)
@@ -5176,9 +5180,9 @@ export async function persistAndApplyProspectiveConfiguration(
     });
   } catch (error) {
     if (error instanceof ConfigurationWriteRolledBack) {
-      candidateStages.set(candidate, "rolled_back");
+      setStage(candidate, "rolled_back");
       await discardUnadmittedTrustedConfigurationCandidate(candidate);
-      candidateStages.set(candidate, "discarded");
+      setStage(candidate, "discarded");
       await owner.job.checkpoint({
         ...owner.job.checkpointResult,
         _configurationCandidate: { ...checkpoint, phase: "settled", saved: "conflict" },
@@ -5200,7 +5204,7 @@ export async function persistAndApplyProspectiveConfiguration(
     throw error;
   }
   state.persisted = true;
-  candidateStages.set(candidate, "committed");
+  setStage(candidate, "committed");
   owner.job.checkpointResult = {
     ...owner.job.checkpointResult,
     _configurationCandidate: { ...checkpoint, phase: "saved", rowVersions },
@@ -5349,7 +5353,7 @@ export async function discardStagedMigrationPreview(candidate: ValidatedConfigur
     )
   )
     throw Error("Unadmitted staged preview required");
-  candidateStages.set(candidate, "preflight");
+  setStage(candidate, "preflight");
   return discardUnadmittedTrustedConfigurationCandidate(candidate);
 }
 /** Fixed producer cleanup: an inert, unadmitted candidate cannot have a ready/claimed alias. */
