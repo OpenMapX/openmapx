@@ -157,7 +157,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           const v = JSON.parse(value);
                           return (
                             v._configurationCandidate?.phase === "saved" &&
-                            v._configurationMaintenanceDecision?.operation?.decision === "continue"
+                            Array.isArray(v._configurationCandidate?.rowVersions)
                           );
                         } catch {
                           return false;
@@ -508,7 +508,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
           }
         }
-        if (kind === "configurationMaintenance.decide" && decisionReplyGate) {
+        if (kind === "configurationMaintenance.apply" && decisionReplyGate) {
           const gate = decisionReplyGate;
           gate.reached();
           await gate.release;
@@ -1223,14 +1223,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           (job) => (job.result as Record<string, unknown>)?._configurationMaintenance,
         ),
         checkpoint = ownerJob!.result as {
-          _configurationMaintenance: { receipt: { binding: { maintenanceId: string } } };
+          _configurationMaintenance: { maintenanceId: string };
         },
         owner = JSON.parse(
           readFileSync(
             join(
               host.infraDir,
-              "state/ops-agent/control/configuration-maintenance",
-              `${checkpoint._configurationMaintenance.receipt.binding.maintenanceId}.json`,
+              "state/ops-agent/control/maintenance",
+              `${checkpoint._configurationMaintenance.maintenanceId}.json`,
             ),
             "utf8",
           ),
@@ -2112,7 +2112,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).toBe("success");
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(1);
       expect(dm.preparePosts).toBe(1);
-      expect(posts.get("configurationMaintenance.decide")).toBe(1);
+      expect(posts.get("configurationMaintenance.apply")).toBe(1);
       expect(posts.get("configurationMaintenance.settle")).toBe(1);
       expect(host.calls.filter((a) => a.includes("--force-recreate"))).toHaveLength(1);
       expect(await fixture.db.select().from(schema.serviceConfig)).toEqual([]);
@@ -2142,25 +2142,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("stack.render")).toBe(1);
       expect(posts.get("service.start") ?? 0).toBe(0);
       const checkpoint = row.result as {
-          _configurationMaintenance: { receipt: { binding: { maintenanceId: string } } };
+          _configurationMaintenance: { maintenanceId: string };
         },
         owner = JSON.parse(
           readFileSync(
             join(
               host.infraDir,
               "state/ops-agent/control",
-              "configuration-maintenance",
-              `${checkpoint._configurationMaintenance.receipt.binding.maintenanceId}.json`,
+              "maintenance",
+              `${checkpoint._configurationMaintenance.maintenanceId}.json`,
             ),
             "utf8",
           ),
         );
       expect(owner.coordinatorPull.imageId).toBe(pulledImageId);
       expect(owner.coordinatorPull.version).toBe(2);
-      expect(owner.receipt.state).toBe("settled");
-      expect(owner.final.ownerFinal.outcome).toBe("applied");
-      expect(owner.apiControls.settle.result.state).toBe("settled");
-      expect(owner.apiControls.settle.receiptDelivery).not.toBeNull();
+      expect(owner.record.state).toBe("settled");
+      expect(owner.record.fenceOutcome).toBe("applied");
       expect(dm.settlePosts).toBe(1);
       expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(host.calls.filter((a) => a.includes("--force-recreate"))).toHaveLength(1);
@@ -2375,7 +2373,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               point === "candidate unlink"
                 ? readFileSync(join(host.root, "coordinator-retirement-unlinked"))
                 : readFileSync(path),
-            decision = JSON.stringify(prior._configurationMaintenanceDecision),
+            decision = JSON.stringify(
+              (prior._configurationCandidate as { rowVersions?: unknown }).rowVersions,
+            ),
             inspected = inspectPreparedConfigurationRecord(
               JSON.parse(bytes.toString("utf8")),
             ).record,
@@ -2399,7 +2399,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(posts.get("configurationMaintenance.settle")).toBe(1);
           }
           expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
-          expect(posts.get("configurationMaintenance.decide") ?? 0).toBe(!pullBoundary ? 1 : 0);
+          expect(posts.get("configurationMaintenance.apply") ?? 0).toBe(!pullBoundary ? 1 : 0);
           if (pullBoundary) expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
           first.child.kill("SIGKILL");
           expect((await first.exited).signal).toBe("SIGKILL");
@@ -2475,7 +2475,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(row.status).toBe("success");
           expect((row.protocol as { execution: { version: number } }).execution.version).toBe(2);
           if (point === "decision")
-            expect(JSON.stringify(result._configurationMaintenanceDecision)).toBe(decision);
+            expect(
+              JSON.stringify(
+                (result._configurationCandidate as { rowVersions?: unknown }).rowVersions,
+              ),
+            ).toBe(decision);
           if (originalNormal && inspected.privateCoordinatorLifecycle?.action === "update") {
             expect(
               readFileSync(
@@ -2489,7 +2493,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(posts.get("service.pull")).toBe(1);
           }
           expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-          expect(posts.get("configurationMaintenance.decide")).toBe(1);
+          expect(posts.get("configurationMaintenance.apply")).toBe(1);
           expect(posts.get("configurationMaintenance.settle")).toBe(1);
           expect(host.calls.filter((a) => a.includes("--force-recreate"))).toHaveLength(1);
           expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
@@ -2756,24 +2760,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(issuedKnownRollbacks).toBeGreaterThan(0);
       expect(row.status).toBe("failed");
       const result = row.result as {
-        _configurationMaintenance: { receipt: { binding: { maintenanceId: string } } };
-        _configurationMaintenanceRollback: { disposition: string };
+        _configurationMaintenance: { maintenanceId: string };
+        _configurationCandidate: { phase: string };
       };
-      expect(result._configurationMaintenanceRollback.disposition).toBe("known_rolled_back");
+      expect(result._configurationCandidate.phase).toBe("discarded");
       const owner = JSON.parse(
         readFileSync(
           join(
             host.infraDir,
-            "state/ops-agent/control/configuration-maintenance",
-            `${result._configurationMaintenance.receipt.binding.maintenanceId}.json`,
+            "state/ops-agent/control/maintenance",
+            `${result._configurationMaintenance.maintenanceId}.json`,
           ),
           "utf8",
         ),
       );
-      expect(owner.receipt.state).toBe("settled");
-      expect(owner.final.ownerFinal.outcome).toBe("unused");
-      expect(owner.receipt.decision.decision).toBe("abandon");
-      expect(owner.receipt.generation).toBe("not_started");
+      expect(owner.record.state).toBe("settled");
+      expect(owner.record.fenceOutcome).toBe("unused");
+      expect(owner.record.generation).toBe("not_started");
       expect(posts.get("service.pull")).toBe(1);
       expect(posts.get("stack.render") ?? 0).toBe(0);
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
@@ -3205,7 +3208,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const result = row!.result as { completedServiceIds: string[] };
         expect(result.completedServiceIds).toEqual(serviceIds);
         expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-        expect(posts.get("configurationMaintenance.decide")).toBe(1);
+        expect(posts.get("configurationMaintenance.apply")).toBe(1);
         expect(posts.get("configurationMaintenance.settle")).toBe(1);
         expect(posts.get("service.update")).toBe(1);
         expect(posts.get("service.pull")).toBe(1);
