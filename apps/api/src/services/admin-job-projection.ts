@@ -19,7 +19,6 @@ import { z } from "zod";
 import { JobObservationPending } from "./admin-job-failure";
 import { type ApiJobChildAttempt, apiJobChildAttemptSchema } from "./admin-job-parent";
 import { ADMIN_JOB_LOG_LIMITS } from "./admin-job-state";
-import { assertConfigurationMaintenanceProjectedStep } from "./configuration-maintenance-step-records";
 
 const ADMIN_EVENT_LIMIT = ADMIN_JOB_LOG_LIMITS.events;
 const ADMIN_EVENT_BYTE_LIMIT = ADMIN_JOB_LOG_LIMITS.bytes;
@@ -299,18 +298,7 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
       if (parseControlRootOperationKey(step.operationKey).notAfter !== step.requestedDeadlineAt)
         throw Error("Original managed root deadline changed");
     } catch {
-      const operation = operations[step.operationKey]!;
-      try {
-        assertConfigurationMaintenanceProjectedStep(
-          (result ?? {}) as Record<string, unknown>,
-          protocol,
-          step.operationKey,
-          operation.operation,
-          operation.attempt,
-        );
-      } catch {
-        throw new JobObservationPending("invalid_identity");
-      }
+      throw new JobObservationPending("invalid_identity");
     }
     steps[address] = step;
   }

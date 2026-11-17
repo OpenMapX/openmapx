@@ -24,7 +24,6 @@ import { startOpsAgentServer } from "./bootstrap";
 import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
 import { configurationCandidateSource } from "./configuration-candidate-source";
-import { configurationHandoffPendingMaintenanceIds } from "./configuration-maintenance-store";
 import {
   configurationPayloadSource,
   createDataTransitTrustedOpsDataSource,
@@ -37,6 +36,7 @@ import { describeDeploymentUserAtStart } from "./deployment-user-at-start";
 import { recoverInterruptedTrafficMaintenance } from "./docker-runtime";
 import { IntegrationStore } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
+import { pendingHandoffs } from "./maintenance";
 import { createProductionRegistryResourceClaimer } from "./policy";
 import {
   createProductionOpsRuntime,
@@ -216,7 +216,9 @@ async function main(): Promise<void> {
             dataRoot: join(paths.infraDir, "data", ".openmapx-transfers"),
             privateRoot: artifactTransferPrivateRoot(paths.infraDir),
             policy: transferPolicy.policy,
-            admissionsOpen: () => configurationHandoffPendingMaintenanceIds(runtime).size === 0,
+            admissionsOpen: () =>
+              !controlStartup.installation ||
+              pendingHandoffs(controlStartup.installation).size === 0,
           })
         : undefined;
     if (artifactTransfers) {

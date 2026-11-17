@@ -696,9 +696,7 @@ dbDescribe("durable exact platform preview", () => {
     expect(stored?.consumedByJobId).toBeNull();
     await fixture.db.transaction(async (tx) => {
       const receipt = await commitPlatformConfigurationIntent(input, tx);
-      const { assertConfigurationSavedRows } = await import(
-        "../configuration-maintenance-decision"
-      );
+      const { assertConfigurationSavedRows } = await import("../configuration-saved-rows");
       await assertConfigurationSavedRows(tx, [receipt]);
       await tx
         .update(adminJob)

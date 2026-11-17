@@ -14,8 +14,6 @@ export {
   lookupControlChildPhaseBinding,
 } from "./child-phase";
 export {
-  assertConfigurationHandoffHostSources,
-  captureConfigurationHandoffHostSources,
   configurationHostFields,
   observeConfigurationSources,
   verifyConfigurationReleaseSourceWitness,
@@ -194,4 +192,3 @@ export {
 export { inspectControlAdmission, inspectDataExecutionAdmission } from "./peer-admission";
 export * from "./prepared-evidence";
 export * from "./target-lease";
-export { verifyConfigurationMaintenanceRootClosure as assertConfigurationMaintenanceRootClosure } from "./target-lease";

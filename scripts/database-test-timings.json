@@ -39,7 +39,6 @@
   "preserves native coordinator update after original orphan candidate without another admission or save": 72.4,
   "expires the original candidate TTL after actual image staging without acquiring maintenance or leaving a writer fence: fresh explicit retry": 374.61,
   "packages/core/src/services/__tests__/traefik-dynamic.integration.test.ts": 25.72,
-  "apps/api/src/services/__tests__/platform-configuration-runtime-postgres.test.ts": 737.29,
   "apps/api/src/services/__tests__/retained-maintenance-job-postgres.test.ts": 38.01,
   "apps/api/src/services/integration-application.test.ts": 22.71,
   "apps/api/src/account/account-provisioning-postgres.test.ts": 132.32,

@@ -25,8 +25,9 @@ import {
   readPrivateRecord,
   verifyControlEffectSettlement,
 } from "./control-authority";
-import { controlDigest, controlOriginSchema, type InstallationState } from "./control-records";
+import { controlOriginSchema, type InstallationState } from "./control-records";
 import { AnchoredDirectory } from "./filesystem";
+import { MAINTENANCE_NAMESPACE } from "./maintenance-file";
 import { rootLeaseId } from "./target-lease";
 
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
@@ -209,7 +210,7 @@ async function prunable(
     verifyControlEffectSettlement(installation, admitted.execution),
   ).evidence.outcome;
   if (outcome === "unknown") return null;
-  // A step stays while the maintenance it belongs to still has an owner record;
+  // A step stays while the maintenance it belongs to still has its record;
   // that record goes only with its own preparation.
   const maintenanceId = admitted.operation?.maintenanceId;
   const ownerRecord = maintenanceId ? `${maintenanceId}.json` : undefined;
@@ -217,7 +218,7 @@ async function prunable(
   if (
     ownerRecord &&
     !preparation &&
-    withNamespace(local, "configuration-maintenance", (dir) => mtime(dir, ownerRecord)) != null
+    withNamespace(local, MAINTENANCE_NAMESPACE, (dir) => mtime(dir, ownerRecord)) != null
   )
     return null;
   const identifiers = new Map<string, Set<string>>();
@@ -284,9 +285,7 @@ async function prunable(
   if (await local.leases.read(rootLeaseId(admitted.execution))) return null;
   if (ownerRecord && preparation) {
     const source = optional(() =>
-      ownerSourceSchema.safeParse(
-        readPrivateRecord(local, "configuration-maintenance", ownerRecord),
-      ),
+      ownerSourceSchema.safeParse(readPrivateRecord(local, MAINTENANCE_NAMESPACE, ownerRecord)),
     );
     if (source?.success)
       add(["observations"], sourceWitness(source.data.plan.operation.expectedSourceRevision));
@@ -401,9 +400,12 @@ export async function pruneControlRecords(
           if (!terminals.has(entry) && ids.some((id) => entry.includes(id))) dir.removeFile(entry);
       });
     }
-    withNamespace(local, "configuration-maintenance", (dir) => {
+    withNamespace(local, MAINTENANCE_NAMESPACE, (dir) => {
       for (const { ownerRecord } of found)
-        if (ownerRecord) optional(() => dir.removeFile(ownerRecord));
+        if (ownerRecord) {
+          optional(() => dir.removeFile(ownerRecord));
+          optional(() => dir.removeFile(ownerRecord.replace(/\.json$/, ".handoff.json")));
+        }
     });
     // A namespace read only in part may still hold records of these
     // executions; their admissions stay so a later pass finds them again.
@@ -446,10 +448,10 @@ export async function pruneControlRecords(
   // Source witnesses no maintenance owner references any more, once old enough.
   if (complete) {
     const referenced = new Set<string>();
-    withNamespace(local, "configuration-maintenance", (dir) => {
+    withNamespace(local, MAINTENANCE_NAMESPACE, (dir) => {
       for (const entry of entries(dir, onFull)) {
         const source = ownerSourceSchema.safeParse(
-          optional(() => readPrivateRecord(local, "configuration-maintenance", entry)),
+          optional(() => readPrivateRecord(local, MAINTENANCE_NAMESPACE, entry)),
         );
         if (source.success)
           referenced.add(sourceWitness(source.data.plan.operation.expectedSourceRevision));

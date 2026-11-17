@@ -15,7 +15,6 @@ export {
   protectedConfigurationServiceIdSchema,
 } from "./configuration-handoff-records";
 export * from "./configuration-maintenance";
-export * from "./configuration-maintenance-control-validation";
 export * from "./configuration-maintenance-record";
 export * from "./configuration-preparation";
 export * from "./configuration-release-downloads";

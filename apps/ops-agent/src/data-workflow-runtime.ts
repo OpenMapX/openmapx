@@ -4,8 +4,8 @@ import type { DataWorkflowReceipt, ExecutionRef, OpsOperation } from "@openmapx/
 import { services } from "@openmapx/core/server";
 import type { FixedCliRunner } from "./administrative-runtime";
 import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
-import { assertStagedCoordinatorConfigurationWrite } from "./configuration-maintenance-runtime";
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
+import { assertStagedCoordinatorConfigurationWrite } from "./maintenance-source";
 import { OpsExecutionFailure, OpsHostUpdateRequiredError, type OpsRuntime } from "./runtime";
 
 const sources = new WeakMap<OpsRuntime, { rootDir: string }>();

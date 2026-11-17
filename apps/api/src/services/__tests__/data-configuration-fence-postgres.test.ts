@@ -1,17 +1,13 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import * as nodeFs from "node:fs";
 import { mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { dataConfigurationFencePrepareSchema } from "@openmapx/core/data-manager-contracts";
 import {
   canonicalJson,
-  controlTerminalReceiptDigest,
   createControlRootOperationKey,
   type ExecutionRef,
   executionFingerprint,
-  signMaintenanceRecoveryProof,
-  verifyMaintenanceRecoveryProof,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
@@ -384,254 +380,6 @@ describe.skipIf(
     }
   }, 60000);
 
-  it("cancels the original failed preparation without changing its canonical or replaying PREPARE", async () => {
-    const f = await ownedFenceFixture({
-      productionRegistration: true,
-      loseRecoveryResponseOnce: true,
-    });
-    let clock: ReturnType<typeof vi.spyOn> | undefined;
-    try {
-      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-      await fence.startup();
-      await f.failPreparation();
-      const { createApiOpsClient } = await import("../ops-client"),
-        client = createApiOpsClient(),
-        original = await client.status("configurationMaintenance.prepare", f.owner.executionId);
-      expect(original).toMatchObject({ state: "failed", errorClass: "recovery_required" });
-      clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-      const { cancelAdminJobOperations } = await import("../admin-job-ops");
-      vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:0");
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("pending");
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
-      vi.stubEnv("DATA_MANAGER_URL", f.data.baseUrl);
-      const cancel = client.cancel.bind(client),
-        legacy = vi.spyOn(client, "cancel").mockImplementation(async (...args) => {
-          const { diagnostics: _diagnostics, ...status } = await cancel(...args);
-          return status; // an older agent cannot attest original ownership closure
-        });
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("pending");
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("pending");
-      legacy.mockRestore();
-      for (const change of ["token", "candidate", "canonical"] as const) {
-        const altered = vi.spyOn(client, "cancel").mockImplementation(async (...args) => {
-          const status = await cancel(...args),
-            proof = verifyMaintenanceRecoveryProof(
-              f.host.token,
-              status.diagnostics!.maintenanceRecovery!,
-            );
-          return {
-            ...status,
-            diagnostics: {
-              ...status.diagnostics!,
-              maintenanceRecovery: signMaintenanceRecoveryProof(
-                change === "token" ? "other-token" : f.host.token,
-                {
-                  ...proof,
-                  ...(change === "candidate" ? { candidateId: randomUUID() } : {}),
-                  ...(change === "canonical" ? { terminalDigest: "f".repeat(64) } : {}),
-                },
-              ),
-            },
-          };
-        });
-        try {
-          expect(
-            await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
-              context: f.ctx,
-              jobId: f.ctx.jobId,
-              pollIntervalMs: 1,
-            }),
-          ).toBe("pending");
-        } finally {
-          altered.mockRestore();
-        }
-      }
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("recovered_failure");
-      // A new API cancellation context can complete the durable copy/ACK even
-      // while the agent is unreachable; it does not infer recovery from a flag.
-      vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
-      const { jobRunner } = await import("../job-runner");
-      expect(await jobRunner.cancel(f.ctx.jobId)).toBe(true);
-      const [finished] =
-        await f.sql`SELECT status,finished_at,protocol FROM admin_job WHERE id=${f.ctx.jobId}`;
-      expect(finished?.status).toBe("failed");
-      expect(finished?.finished_at).not.toBeNull();
-      expect(finished?.protocol.cancelRequestedAt).toBeDefined();
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).not.toThrow();
-      expect(await client.status("configurationMaintenance.prepare", f.owner.executionId)).toEqual(
-        original,
-      );
-      expect(
-        controlTerminalReceiptDigest(
-          await client.cancel(f.owner.executionId, { fingerprint: f.owner.fingerprint }),
-        ),
-      ).toBe(controlTerminalReceiptDigest(original));
-      expect(f.data.preparePosts).toBe(0);
-      // Asking data-manager again is read-only and answers the same.
-      expect(f.data.recoveryPosts).toBeGreaterThanOrEqual(1);
-      expect(
-        await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
-      ).toHaveLength(0);
-      const maintenance = await import(
-          "../../../../../apps/ops-agent/src/configuration-maintenance-store"
-        ),
-        origin = maintenance.readOwnedConfigurationMaintenance(f.authority).origin,
-        admission = join(
-          f.root,
-          "state/ops-agent/control/executions",
-          `${f.owner.operationKey}.json`,
-        ),
-        closedAt = Date.now();
-      // Kept until 72 hours after it finished and until its root key expired.
-      expect(await control.pruneControlRecords(f.agent, { now: closedAt + 60 * 3600000 })).toEqual(
-        [],
-      );
-      expect(existsSync(admission)).toBe(true);
-      const later = Math.max(origin.notAfter, closedAt) + 96 * 3600000;
-      expect(await control.pruneControlRecords(f.agent, { now: later })).toContain(
-        f.owner.operationKey,
-      );
-      await f.data.pruneRecords(later);
-      expect(existsSync(admission)).toBe(false);
-      // A later request under the expired root is refused, never re-admitted.
-      expect(() => control.assertFreshControlRoot(f.owner.operationKey, origin.notAfter)).toThrow();
-    } finally {
-      clock?.mockRestore();
-      await f.close();
-    }
-  }, 60000);
-
-  it.each(["owner", "release"] as const)(
-    "rejoins only original negative recovery after lost %s publication acknowledgement",
-    async (boundary) => {
-      const f = await ownedFenceFixture({ productionRegistration: true });
-      let clock: ReturnType<typeof vi.spyOn> | undefined,
-        fault: ReturnType<typeof vi.spyOn> | undefined;
-      try {
-        const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-        await fence.startup();
-        await f.failPreparation();
-        const // The agent's own owner record, and the lease store it releases the root in.
-          suffix = boundary === "owner" ? `${f.input.maintenanceId}.json` : "leases.json",
-          nativeRename = (await vi.importActual<typeof import("node:fs")>("node:fs")).renameSync,
-          maintenance = await import(
-            "../../../../../apps/ops-agent/src/configuration-maintenance-store"
-          );
-        let faulted = false;
-        clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-        fault = vi.spyOn(nodeFs, "renameSync").mockImplementation((source, target) => {
-          nativeRename(source, target);
-          if (!faulted && String(target).endsWith(suffix)) {
-            faulted = true;
-            throw Error("Named acknowledgement loss after original recovery publication");
-          }
-        });
-        const recovery = maintenance.recoverUnadmittedConfigurationMaintenance(
-          f.host.runtime,
-          f.authority,
-        );
-        // A lost write ends this attempt; the retry reuses what was kept and
-        // asks data-manager no second time.
-        await expect(recovery).rejects.toThrow();
-        fault.mockRestore();
-        expect(faulted).toBe(true);
-        await maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority);
-        expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).not.toThrow();
-        expect(f.data.preparePosts).toBe(0);
-        expect(f.data.recoveryPosts).toBe(1);
-        expect(
-          await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
-        ).toHaveLength(0);
-      } finally {
-        fault?.mockRestore();
-        clock?.mockRestore();
-        await f.close();
-      }
-    },
-    60000,
-  );
-
-  it("settles only the expired unadmitted original preparation through receiver recovery", async () => {
-    const f = await ownedFenceFixture({ productionRegistration: true });
-    let clock: ReturnType<typeof vi.spyOn> | undefined;
-    try {
-      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-      await fence.startup();
-      const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
-        execution = join(
-          f.root,
-          "state/data-manager/control/executions",
-          `${f.child.operationKey}.json`,
-        );
-      expect(existsSync(execution)).toBe(false);
-      clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-      control.cancelControlExecution(f.authority);
-      await control.cancelArtifactTargetLease(f.lease);
-      const response = await fetch(
-        `${f.data.baseUrl}/executions/configuration-maintenance/recovery`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${f.data.token}`,
-            "content-type": "application/json",
-            "x-openmapx-control-delegation": f.assertion,
-          },
-          body: JSON.stringify(f.input),
-        },
-      );
-      expect(response.status).toBe(200);
-      const proof = await response.json();
-      expect(proof).toMatchObject({
-        kind: "configuration-prepare-not-admitted",
-        input: f.input,
-        child: f.child,
-      });
-      expect(existsSync(execution)).toBe(false);
-      // data-manager answers; the agent settles its child from that answer.
-      expect(storeChild(f.root, assertion.leaseId, assertion.delegationId)?.state).not.toBe(
-        "settled",
-      );
-      expect(
-        await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
-      ).toHaveLength(0);
-      const maintenance = await import(
-        "../../../../../apps/ops-agent/src/configuration-maintenance-store"
-      );
-      await expect(
-        maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority),
-      ).resolves.toMatchObject({ maintenanceId: f.input.maintenanceId });
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).not.toThrow();
-    } finally {
-      clock?.mockRestore();
-      await f.close();
-    }
-  }, 60000);
-
   it("prepares a full application closure with the production Data Manager target registration", async () => {
     const f = await ownedFenceFixture({ productionRegistration: true });
     try {
@@ -908,7 +656,7 @@ describe.skipIf(
   }, 60000);
 });
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
 
@@ -1165,9 +913,9 @@ async function ownedFenceFixture(
               },
             });
             await prospective.stageProspectiveConfigurationMaintenance(candidate);
-            return (
-              await import("../../../../../apps/api/src/services/configuration-maintenance")
-            ).prepareConfigurationMaintenance(candidate);
+            return (await import("../prospective-configuration")).prepareConfigurationMaintenance(
+              candidate,
+            );
           },
         ),
       );

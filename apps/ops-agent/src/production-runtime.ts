@@ -20,11 +20,6 @@ import {
 import type { ConfigurationCandidateSource } from "./configuration-candidate-source";
 import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
 import { installConfigurationHardlinksRuntime } from "./configuration-hardlinks-runtime";
-import { registerConfigurationMaintenanceSource } from "./configuration-maintenance-runtime";
-import {
-  assertOwnedMaintenanceRecreateRuntime,
-  assertStagedCoordinatorReleaseWrite,
-} from "./configuration-maintenance-store";
 import { installConfigurationReleaseImagesRuntime } from "./configuration-release-images-pull";
 import { installCoreServiceRuntime } from "./core-service-runtime";
 import {
@@ -34,8 +29,12 @@ import {
 } from "./docker-runtime";
 import { installImageStageRuntime } from "./image-stage-runtime";
 import { type IntegrationStore, installIntegrationRuntime } from "./integration-store";
+import {
+  assertOwnedMaintenanceRecreateRuntime,
+  assertStagedCoordinatorReleaseWrite,
+  registerConfigurationMaintenanceSource,
+} from "./maintenance-source";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
-import { installPlatformConfigurationRuntime } from "./platform-configuration-runtime";
 import { serviceActionForOperation } from "./policy";
 import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
 import { decideServiceAction, type ServiceAuthority } from "./service-action-policy";
@@ -314,7 +313,6 @@ export async function createProductionOpsRuntime(
     execFile: options.docker?.execFile,
   });
   installCatalogApprovalRuntime(runtime, { rootDir: options.rootDir });
-  installPlatformConfigurationRuntime(runtime, { infraDir: options.stack.infraDir });
   installConfigurationReleaseImagesRuntime(runtime, {
     infraDir: options.stack.infraDir,
     execFile: options.docker?.execFile ?? runContainedProcess,

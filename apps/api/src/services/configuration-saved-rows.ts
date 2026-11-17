@@ -1,11 +1,5 @@
-/** Fixed non-secret DB decision data. Decoding/checksums confer no authority;
- * producers and delivery read these only under the actual owned job row lock. */
-import { createHash } from "node:crypto";
-import {
-  type ConfigurationMaintenanceDecision,
-  canonicalJson,
-  configurationMaintenanceDecisionSchema,
-} from "@openmapx/core/ops";
+/** The configuration rows a save wrote, by row version, so a later step can check
+ * they are still the ones it saved. No desired values or secret material. */
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import * as schema from "../db/schema";
@@ -39,55 +33,6 @@ export const configurationSavedRowSchema = z
       (row.state === "present" ? row.rowVersion !== null : row.rowVersion === null),
   );
 export type ConfigurationSavedRow = z.infer<typeof configurationSavedRowSchema>;
-/** Written ONLY by the fixed desired-transaction catch after the actual SAME
- * connection's awaited ROLLBACK acknowledgement. No error/value is serialized. */
-export const configurationMaintenanceRollbackCheckpointSchema = z.strictObject({
-  version: z.literal(1),
-  disposition: z.literal("known_rolled_back"),
-  rollbackId: z.uuid(),
-  candidateId: z.uuid(),
-  maintenanceId: z.uuid(),
-  prepareOperationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-  prepareFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  planDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  checkpointVersion: z.number().int().positive().safe(),
-});
-const parent = z.strictObject({
-  operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  deadlineAt: z.number().int().nonnegative().safe(),
-});
-export const configurationMaintenanceDecisionCheckpointSchema = z
-  .strictObject({
-    version: z.literal(1),
-    operation: configurationMaintenanceDecisionSchema,
-    rowVersions: z
-      .array(configurationSavedRowSchema)
-      .max(512)
-      .refine((rows) => Buffer.byteLength(canonicalJson(rows)) <= 65536),
-    attempt: z.enum(["not_attempted", "attempted"]),
-    delivery: z
-      .strictObject({
-        stepAddress: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-        root: z.strictObject({
-          operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-          requestedDeadlineAt: z.number().int().nonnegative().safe(),
-          parent,
-        }),
-      })
-      .optional(),
-  })
-  .refine((value) => value.operation.decision !== "abandon" || value.rowVersions.length === 0);
-export function configurationMaintenanceDbDecisionDigest(
-  operation: Omit<ConfigurationMaintenanceDecision, "checkpointDigest">,
-  rowVersions: readonly ConfigurationSavedRow[],
-): string {
-  const { kind: _kind, expectedSequence: _sequence, ...tuple } = operation;
-  return createHash("sha256")
-    .update("openmapx-configuration-maintenance-db-decision-v1\0")
-    .update(canonicalJson({ ...tuple, rowVersions }))
-    .digest("hex");
-}
 /** Actual row versions on the SAME physical writer transaction. No desired
  * values or hashes of secret material enter this receipt or its checksum. */
 export async function assertConfigurationSavedRows(

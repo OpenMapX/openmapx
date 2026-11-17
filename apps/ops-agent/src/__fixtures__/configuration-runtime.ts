@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import { services } from "@openmapx/core/server";
-import { registerConfigurationMaintenanceSource } from "../configuration-maintenance-store";
+import { registerConfigurationMaintenanceSource } from "../maintenance-source";
 import { createOwnedServiceResolver } from "../owned-services";
 import type { OpsRuntime } from "../runtime";
 import {

@@ -90,7 +90,7 @@ export async function advanceCompletedBulkCandidate(
     "./administrative-configuration-writer-owner"
   );
   const { completedCoordinatorMaintenance } = await import(
-    "./configuration-maintenance-step-records"
+    "./configuration-maintenance-checkpoint"
   );
   const { hasUnsettledManagedOperation } = await import("./admin-job-state");
   const { completeTrustedConfigurationApply, parseTrustedConfigurationApplyOutcome } = await import(
@@ -141,7 +141,7 @@ export async function advanceCompletedBulkCandidate(
     if (previous.maintenanceId) {
       const archived = completedCoordinatorMaintenance(result, protocol);
       if (
-        archived.receipt.apiJobId !== job.jobId ||
+        archived.record.apiJobId !== job.jobId ||
         archived.originalOrdinal !== ordinal ||
         archived.candidate.candidateId !== previous.candidateId
       )

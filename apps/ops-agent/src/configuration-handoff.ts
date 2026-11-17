@@ -1,13 +1,7 @@
-/** Fixed configuration helper launch mechanics. These data builders confer no
- * authority: the installed owner/runtime must first join the original frozen
- * step, actual borrowed lease, recorded source and one-use helper dispatch. */
+/** Configuration helper launch mechanics. The helper acts only under the lease
+ * child the agent recorded for it before the launch. */
 import { join } from "node:path";
-import {
-  type ExecutionRef,
-  executionRefSchema,
-  type OpsJobState,
-  type OpsOperation,
-} from "@openmapx/core/ops";
+import type { OpsJobState, OpsOperation } from "@openmapx/core/ops";
 import { z } from "zod";
 import type { DockerCommandRunner } from "./release-images";
 import { OpsHostUpdateRequiredError } from "./runtime";
@@ -25,9 +19,9 @@ const NOT_INHERITED = new Set([
   "HOSTNAME",
   "DOCKER_CONFIG",
   "OPS_CONFIGURATION_HANDOFF_ID",
-  "OPENMAPX_CONTROL_EXECUTION",
-  "OPENMAPX_CONTROL_DELEGATION",
-  "OPENMAPX_PARENT_EXECUTION",
+  "OPENMAPX_MAINTENANCE_ID",
+  "OPENMAPX_LEASE_ID",
+  "OPENMAPX_LEASE_CHILD",
   "OPENMAPX_ROOT_DIR",
 ]);
 
@@ -157,21 +151,17 @@ export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts)
     .parse([...new Set(facts.envNames.filter((name) => !NOT_INHERITED.has(name)))].sort());
 }
 /** Runs the running agent's image with its identity and mounts, no network and
- * confined resources. */
+ * confined resources. The container is kept after it exits, so the agent reads
+ * its exit code; the agent removes it once it recorded the outcome. */
 export function configurationHandoffRunArgs(
   facts: AgentContainerFacts,
   rootDir: string,
-  input: { handoffId: string; assertion: string; execution: ExecutionRef },
+  input: { handoffId: string; maintenanceId: string; leaseId: string; leaseChild: string },
 ): string[] {
   const handoffId = z.uuid().parse(input.handoffId),
-    execution = executionRefSchema.parse(input.execution);
-  z.string()
-    .min(1)
-    .max(4096)
-    .regex(/^[A-Za-z0-9_-]+$/)
-    .parse(input.assertion);
-  if (execution.executor !== "host-cli")
-    throw Error("Original configuration helper execution required");
+    maintenanceId = z.uuid().parse(input.maintenanceId),
+    leaseId = z.uuid().parse(input.leaseId),
+    leaseChild = z.uuid().parse(input.leaseChild);
   if (
     !MOUNT_PATH.test(rootDir) ||
     facts.rootMounts.length === 0 ||
@@ -198,7 +188,6 @@ export function configurationHandoffRunArgs(
   return [
     "run",
     "--detach",
-    "--rm",
     "--name",
     `openmapx-configuration-handoff-${handoffId}`,
     "--label",
@@ -231,9 +220,11 @@ export function configurationHandoffRunArgs(
     "--env",
     `OPS_CONFIGURATION_HANDOFF_ID=${handoffId}`,
     "--env",
-    `OPENMAPX_CONTROL_DELEGATION=${input.assertion}`,
+    `OPENMAPX_MAINTENANCE_ID=${maintenanceId}`,
     "--env",
-    `OPENMAPX_CONTROL_EXECUTION=${JSON.stringify(execution)}`,
+    `OPENMAPX_LEASE_ID=${leaseId}`,
+    "--env",
+    `OPENMAPX_LEASE_CHILD=${leaseChild}`,
     "--workdir",
     "/app/apps/ops-agent",
     "--entrypoint",

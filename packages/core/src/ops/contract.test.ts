@@ -31,13 +31,6 @@ const maintenanceBinding = {
   coordinatorMode: "ensure-running" as const,
   followUp: "render-only" as const,
 };
-const maintenanceIdentity = {
-  maintenanceId: maintenanceBinding.maintenanceId,
-  candidateId: maintenanceBinding.candidateId,
-  prepareOperationKey: "opk1_originalPrepare0001",
-  prepareFingerprint: "c".repeat(64),
-  planDigest: "d".repeat(64),
-};
 
 function request(operation: unknown, extra: Record<string, unknown> = {}) {
   return {
@@ -223,23 +216,15 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "configurationMaintenance.inspect": {
     kind: "configurationMaintenance.inspect",
     maintenanceId: maintenanceBinding.maintenanceId,
-    candidateId: maintenanceBinding.candidateId,
   },
-  "configurationMaintenance.decide": {
-    kind: "configurationMaintenance.decide",
-    ...maintenanceIdentity,
-    decisionId: "44444444-4444-4444-8444-444444444444",
-    decision: "abandon",
-    expectedSequence: 1,
-    checkpointVersion: 1,
-    checkpointDigest: "e".repeat(64),
+  "configurationMaintenance.apply": {
+    kind: "configurationMaintenance.apply",
+    maintenanceId: maintenanceBinding.maintenanceId,
   },
   "configurationMaintenance.settle": {
     kind: "configurationMaintenance.settle",
-    ...maintenanceIdentity,
-    decisionId: "44444444-4444-4444-8444-444444444444",
-    expectedSequence: 2,
-    evidenceDigest: "f".repeat(64),
+    maintenanceId: maintenanceBinding.maintenanceId,
+    outcome: "abandon",
   },
   "configuration.hardlinks.preview": {
     kind: "configuration.hardlinks.preview",

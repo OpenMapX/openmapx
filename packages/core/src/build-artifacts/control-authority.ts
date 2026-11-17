@@ -1,9 +1,7 @@
 import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import {
   configurationHandoffIntentRecordSchema,
-  configurationHandoffProgressSchema,
   configurationHandoffRecordName,
-  configurationHandoffWorkerRecordSchema,
 } from "./configuration-handoff-records";
 import {
   type ControlChildPhase,
@@ -40,11 +38,8 @@ import {
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
 import {
-  closeArtifactTargetLeaseHandle,
-  inspectLocalLeaseChildSettlement,
   type LeaseBackend,
   localLeaseBackend,
-  restoreArtifactTargetLeaseForSettlement,
   rootLeaseId,
   verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
@@ -109,10 +104,6 @@ import {
   resolveControlChildPlan,
   validateControlChildReservations,
 } from "./child-phase";
-import {
-  assertConfigurationMaintenanceDecisionSource,
-  configurationMaintenanceOwnerRecordSchema,
-} from "./configuration-maintenance-owner-records";
 // biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
 import {
   type CoordinatorPullBaseline,
@@ -127,6 +118,12 @@ import { recordFeedProxyReloadAttempted } from "./data-execution-candidate";
 // biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
 import { readDataManagerTerminal } from "./data-manager-terminal";
 import { AnchoredDirectory, identity } from "./filesystem";
+import {
+  MAINTENANCE_NAMESPACE,
+  type MaintenanceFile,
+  maintenanceFileName,
+  parseMaintenanceFile,
+} from "./maintenance-file";
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
 const PRIVATE_RECORD_BYTES = 131072;
 declare const authorityBrand: unique symbol,
@@ -1571,6 +1568,23 @@ export function verifiedStagedCoordinatorOwnerBaselineState(
   if (!value) throw Error("Actual staged original-owner provenance required");
   return structuredClone(value);
 }
+/** The maintenance file of a `configurationMaintenance.prepare` root, by its admitted body. */
+function maintenanceFileOf(state: InstallationState, execution: ExecutionRef): MaintenanceFile {
+  const admitted = readPrivateRecord(
+    state,
+    "executions",
+    `${execution.operationKey}.json`,
+    65536,
+  ) as { operation?: { maintenanceId?: string } };
+  const maintenanceId = uuid.parse(admitted.operation?.maintenanceId);
+  const file = parseMaintenanceFile(
+    readPrivateRecord(state, MAINTENANCE_NAMESPACE, maintenanceFileName(maintenanceId)),
+    maintenanceId,
+  );
+  if (canonicalJson(file.plan.prepare) !== canonicalJson(execution))
+    throw Error("Original maintenance root changed");
+  return file;
+}
 /** A separately bound historical observation, never this owner's pull or a
  * caller-selected current generation. All postcommit exceptions verify the
  * original actual canonical/effect/physical child under the same decision. */
@@ -1584,15 +1598,7 @@ export function ownedStagedCoordinatorBaseline(
     state.installation.installation.role !== "ops-agent"
   )
     throw Error("Original staged maintenance owner required");
-  const admitted = readPrivateRecord(
-    state.installation,
-    "executions",
-    `${state.execution.operationKey}.json`,
-    65536,
-  ) as { operation?: { maintenanceId?: string } };
-  const name = `${uuid.parse(admitted.operation?.maintenanceId)}.json`,
-    raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
-  const owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
+  const owner = maintenanceFileOf(state.installation, state.execution);
   const observation = stagedCoordinatorObservationPayloadSchema.parse(
       owner.stagedCoordinatorProvenance,
     ),
@@ -1600,10 +1606,6 @@ export function ownedStagedCoordinatorBaseline(
   if (
     owner.coordinatorPull ||
     owner.plan.coordinatorImage?.action !== "apply" ||
-    owner.admissionDigest !== state.receiptDigest ||
-    controlDigest(admitted) !== state.receiptDigest ||
-    canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution) ||
-    canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
     canonicalJson(observation.ownerPrepare) !== canonicalJson(state.execution) ||
     observation.candidateId !== owner.plan.operation.candidateId ||
     observation.planDigest !== owner.plan.planDigest ||
@@ -1613,32 +1615,16 @@ export function ownedStagedCoordinatorBaseline(
   )
     throw Error("Original staged owner/source binding changed");
   let expectedCurrentRevisionId = baseline.configurationRevisionId;
-  if (owner.receipt.generation === "committed") {
-    const generation = owner.apiControls.steps.find((value) => value.ordinal === 0);
+  if (owner.record.generation === "committed") {
     if (
-      !generation?.canonical ||
-      owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId
+      owner.record.steps[0]?.outcome !== "committed" ||
+      owner.record.appliedRevisionId !== owner.plan.operation.revisionId
     )
       throw Error("Original staged owner generation required");
-    const child = verifyConfigurationMaintenanceChildTerminal(
-        authority,
-        0,
-        generation.canonical.status,
-        generation.canonical.terminalAt,
-      ),
-      verified = configurationMaintenanceChildState(child, authority),
-      lease = restoreArtifactTargetLeaseForSettlement(authority);
-    try {
-      const physical = inspectLocalLeaseChildSettlement(lease, generation.execution);
-      if (!physical || canonicalJson(physical) !== canonicalJson(verified.settlement))
-        throw Error("Actual staged generation settlement required");
-    } finally {
-      closeArtifactTargetLeaseHandle(lease);
-    }
     expectedCurrentRevisionId = owner.plan.operation.revisionId;
   } else if (
-    owner.receipt.generation !== "not_started" &&
-    owner.receipt.generation !== "not_committed"
+    owner.record.generation !== "not_started" &&
+    owner.record.generation !== "not_committed"
   )
     throw Error("Unknown staged owner generation");
   const proof = Object.freeze({}) as VerifiedStagedCoordinatorOwnerBaseline;
@@ -1681,21 +1667,9 @@ export function ownedCoordinatorPullBaseline(
     state.installation.installation.role !== "ops-agent"
   )
     throw Error("Original maintenance owner required");
-  const admitted = readPrivateRecord(
-    state.installation,
-    "executions",
-    `${state.execution.operationKey}.json`,
-    65536,
-  ) as { operation?: { maintenanceId?: string } };
-  const name = `${uuid.parse(admitted.operation?.maintenanceId)}.json`,
-    raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
-  const owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
+  const owner = maintenanceFileOf(state.installation, state.execution);
   const witness = coordinatorPullWitnessPayloadSchema.parse(owner.coordinatorPull);
   if (
-    owner.admissionDigest !== state.receiptDigest ||
-    controlDigest(admitted) !== state.receiptDigest ||
-    canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution) ||
-    canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
     canonicalJson(witness.maintenancePrepare) !== canonicalJson(state.execution) ||
     witness.candidateId !== owner.plan.operation.candidateId ||
     witness.maintenanceId !== owner.plan.operation.maintenanceId ||
@@ -1714,7 +1688,7 @@ export function ownedCoordinatorPullBaseline(
     Object.freeze({
       ...structuredClone(witness),
       expectedCurrentRevisionId:
-        owner.receipt.generation === "committed"
+        owner.record.generation === "committed"
           ? owner.plan.operation.revisionId
           : witness.baseline.configurationRevisionId,
     }),
@@ -1868,149 +1842,6 @@ export function observeCoordinatorPullForMaintenance(
   );
   observedBaselineProofs.set(witness, proof);
   return witness;
-}
-declare const maintenanceChildBrand: unique symbol;
-export type VerifiedConfigurationMaintenanceChild = Readonly<{ [maintenanceChildBrand]: true }>;
-const maintenanceChildren = new WeakMap<
-  VerifiedConfigurationMaintenanceChild,
-  {
-    rootDigest: string;
-    ordinal: number;
-    execution: ExecutionRef;
-    status: OpsJobStatus;
-    terminalDigest: string;
-    terminalAt: number;
-    effectSettlementDigest: string;
-    settlement: ChildSettlement;
-  }
->();
-/** The status is only a canonical preimage. The actual original admission,
- * fixed phase, private effect and private canonical tuple/time
- * must ALL agree; a public status/result/digest cannot create this proof. */
-export function verifyConfigurationMaintenanceChildTerminal(
-  authority: VerifiedExecutionAuthority,
-  ordinal: number,
-  input: OpsJobStatus,
-  terminalAt: number,
-): VerifiedConfigurationMaintenanceChild {
-  const root = executionAuthorityState(authority);
-  if (
-    root.kind !== "configurationMaintenance.prepare" ||
-    root.installation.installation.role !== "ops-agent" ||
-    root.installation.fixedChildId
-  )
-    throw Error("Original maintenance child source required");
-  const admitted = readPrivateRecord(
-      root.installation,
-      "executions",
-      `${root.execution.operationKey}.json`,
-      65536,
-    ) as { operation?: { maintenanceId?: string } },
-    name = `${uuid.parse(admitted.operation?.maintenanceId)}.json`,
-    raw = readPrivateRecord(root.installation, "configuration-maintenance", name),
-    owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
-  assertConfigurationMaintenanceDecisionSource(owner);
-  const step = owner.plan.steps[ordinal],
-    source = owner.apiControls.steps.find((value) => value.ordinal === ordinal),
-    slot = root.reservations.find((value) => value.ordinal === ordinal),
-    child = slot && lookupControlChildPhase(authority, slot);
-  if (
-    !step ||
-    !source?.grant ||
-    !child ||
-    canonicalJson(owner.plan.prepare) !== canonicalJson(root.execution) ||
-    owner.admissionDigest !== root.receiptDigest ||
-    canonicalJson(source.execution) !== canonicalJson(child.execution)
-  )
-    throw Error("Original frozen maintenance child required");
-  restoreAdmittedControlExecution(root.installation.installation, child.execution);
-  const admission = readPrivateRecord(
-      root.installation,
-      "executions",
-      `${child.execution.operationKey}.json`,
-      65536,
-    ) as { operation?: unknown; parent?: unknown },
-    status = parseOpsJobStatus(input),
-    settlement = childSettlementState(
-      verifyControlEffectSettlement(root.installation.installation, child.execution),
-    ).evidence,
-    effect = settlementSchema
-      .extend({ receipt: effectObservationSchema })
-      .parse(
-        readPrivateRecord(root.installation, "effects", `${child.execution.operationKey}.json`),
-      );
-  const nonCommit =
-      step.phase === "configuration-commit" &&
-      effect.receipt.kind === "configuration-generation-not-committed" &&
-      settlement.outcome === "contained" &&
-      settlement.publication === "not_started" &&
-      canonicalJson(
-        inspectConfigurationGenerationNonCommit(root.installation.installation, child.execution)
-          .result,
-      ) === canonicalJson(status.result),
-    committed =
-      settlement.outcome === "committed" &&
-      settlement.publication === "committed" &&
-      effect.receipt.kind === "ops-result" &&
-      canonicalJson(parseBoundedOpsResult(step.operation.kind, effect.receipt.result)) ===
-        canonicalJson(status.result);
-  if (
-    status.state !== "succeeded" ||
-    status.kind !== step.operation.kind ||
-    status.operationId !== child.execution.executionId ||
-    status.operationKey !== child.execution.operationKey ||
-    status.fingerprint !== child.execution.fingerprint ||
-    status.deadlineAt !== child.execution.deadlineAt ||
-    canonicalJson(admission.operation) !== canonicalJson(step.operation) ||
-    canonicalJson(admission.parent) !== canonicalJson(retainedControlParent(root.execution)) ||
-    !(committed || nonCommit)
-  )
-    throw Error("Actual committed maintenance child canonical/effect source required");
-  if (
-    step.phase === "configuration-commit" &&
-    !nonCommit &&
-    (!(status.result && typeof status.result === "object") ||
-      (status.result as { outcome?: string }).outcome !== "committed" ||
-      (status.result as { revisionId?: string }).revisionId !== owner.plan.operation.revisionId)
-  )
-    throw Error("Original candidate generation commit required");
-  const { diagnostics: _diagnostics, ...safe } = status,
-    value = Object.freeze({}) as VerifiedConfigurationMaintenanceChild;
-  const freezeSource = <T>(data: T): T => {
-    if (data && typeof data === "object" && !Object.isFrozen(data)) {
-      for (const child of Object.values(data)) freezeSource(child);
-      Object.freeze(data);
-    }
-    return data;
-  };
-  maintenanceChildren.set(
-    value,
-    freezeSource({
-      rootDigest: root.receiptDigest,
-      ordinal,
-      execution: child.execution,
-      status: safe,
-      terminalDigest: controlTerminalReceiptDigest(status),
-      terminalAt,
-      effectSettlementDigest: controlDigest(settlement),
-      settlement,
-    }),
-  );
-  return value;
-}
-export function configurationMaintenanceChildState(
-  value: VerifiedConfigurationMaintenanceChild,
-  authority: VerifiedExecutionAuthority,
-) {
-  const source = maintenanceChildren.get(value),
-    root = executionAuthorityState(authority);
-  if (
-    !source ||
-    source.rootDigest !== root.receiptDigest ||
-    root.kind !== "configurationMaintenance.prepare"
-  )
-    throw Error("Actual original maintenance child proof required");
-  return source;
 }
 const recovery = new WeakMap<object, { authority: AuthorityState; evidence: ChildSettlement }>();
 export function verifyControlRecoveryAuthority(
@@ -2339,20 +2170,6 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
 /** Internal publication scope. All filesystem writes complete before guards
  * release; callers may not await HTTP/DB or acquire a lease from this scope. */
 const publicationScopes = new WeakMap<VerifiedExecutionAuthority, AnchoredDirectory>();
-/** Initial private owner publication precedes the first ordinary grant. */
-export function withControlMaintenanceInitialization<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const s = executionAuthorityState(authority);
-  if (
-    s.kind !== "configurationMaintenance.prepare" ||
-    s.installation.fixedChildId ||
-    s.installation.installation.role !== "ops-agent"
-  )
-    throw Error("Original maintenance initialization required");
-  return withControlExecutionForward(authority, run);
-}
 export function assertControlPublicationScope(
   authority: VerifiedExecutionAuthority,
 ): AnchoredDirectory {
@@ -2370,26 +2187,9 @@ export function withControlDelegationPublication<T>(
     withExecutionWriter(s.installation, s.execution, (directory) => {
       const current = readLifecycle(directory, s.execution);
       if (s.kind === "configurationMaintenance.prepare") {
-        const admission = readPrivateRecord(
-            s.installation,
-            "executions",
-            `${s.execution.operationKey}.json`,
-            65536,
-          ) as { operation?: { maintenanceId?: string } },
-          raw = readPrivateRecord(
-            s.installation,
-            "configuration-maintenance",
-            `${uuid.parse(admission.operation?.maintenanceId)}.json`,
-          ),
-          owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
-        if (
-          owner.admissionDigest !== s.receiptDigest ||
-          canonicalJson(owner.plan.prepare) !== canonicalJson(s.execution) ||
-          canonicalJson(owner.origin) !== canonicalJson(s.origin) ||
-          canonicalJson(owner.plan.reservations) !== canonicalJson(s.reservations)
-        )
+        const owner = maintenanceFileOf(s.installation, s.execution);
+        if (canonicalJson(owner.plan.reservations) !== canonicalJson(s.reservations))
           throw Error("Original maintenance issuer changed");
-        assertConfigurationMaintenanceDecisionSource(owner);
         if (
           [
             "configuration-commit",
@@ -2397,14 +2197,12 @@ export function withControlDelegationPublication<T>(
             "maintenance-recreate",
             "maintenance-handoff",
           ].includes(phase) &&
-          (canonicalJson(owner.receipt.prepare) !== canonicalJson(s.execution) ||
-            !["authorized", "applying"].includes(owner.receipt.state) ||
-            owner.receipt.decision?.decision !== "continue" ||
-            owner.receipt.dmFence?.state !== "prepared" ||
-            owner.apiControls.decide?.operation.decision !== "continue")
+          (owner.record.state !== "applying" ||
+            owner.record.cancelRequestedAt !== null ||
+            owner.record.fence?.state !== "prepared")
         )
           throw new ControlExecutionFencedError(
-            "Original authorized configuration decision required",
+            "Original applying configuration maintenance required",
           );
       }
       const prepared =
@@ -2442,35 +2240,6 @@ export function withControlDelegationPublication<T>(
 }
 export function assertControlExecutionForward(authority: VerifiedExecutionAuthority): void {
   withControlExecutionForward(authority, () => {});
-}
-/** Only a prepared maintenance owner's finite metadata decision may use its
- * terminal preparation here. This scope issues no grant/forward handle and
- * does not alter ordinary execution normalization or terminal graph rules. */
-export function withControlMaintenanceDecisionPublication<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const s = executionAuthorityState(authority);
-  if (s.kind !== "configurationMaintenance.prepare")
-    throw Error("Original prepared maintenance decision owner required");
-  const own = () =>
-    withExecutionWriter(s.installation, s.execution, (directory) => {
-      const current = readLifecycle(directory, s.execution);
-      if (current.phase !== "settled" || Date.now() >= s.execution.deadlineAt)
-        throw new ControlExecutionFencedError(
-          "Original prepared maintenance forward decision is fenced",
-        );
-      verifyControlPreparedTerminal(s.installation, s.execution);
-      return run();
-    });
-  const assertion = retainedParentAssertion(s);
-  return assertion
-    ? withParentLifecycles(s.installation, assertion, (forward) => {
-        if (!forward)
-          throw new ControlExecutionFencedError("Canceled ancestor prevents maintenance continue");
-        return own();
-      })
-    : own();
 }
 /** Only the protocol's frozen terminal preparation edges may outlive their local worker. */
 export function assertControlDelegationForward(
@@ -3105,68 +2874,6 @@ export function beginFixedCliExecution(
       begin();
     });
   else begin();
-}
-
-/** Original agent-owned helper publication and its fixed-child committed
- * effect. Data only: no forward/adoption/lease authority is constructed. */
-export function readCompletedConfigurationHandoff(
-  installation: ControlInstallation,
-  handoffId: string,
-) {
-  const state = installationState(installation);
-  if (installation.role !== "ops-agent") throw Error("Original helper observer required");
-  const intentName = configurationHandoffRecordName(handoffId, "intent"),
-    intentRaw = readPrivateRecord(state, "observations", intentName),
-    intent = configurationHandoffIntentRecordSchema.parse(intentRaw),
-    progressName = configurationHandoffRecordName(handoffId, "progress"),
-    progressRaw = readPrivateRecord(state, "observations", progressName),
-    progress = configurationHandoffProgressSchema.parse(progressRaw),
-    completionName = configurationHandoffRecordName(handoffId, "completion"),
-    completionRaw = readPrivateRecord(state, "observations", completionName),
-    completion = configurationHandoffWorkerRecordSchema.parse(completionRaw),
-    effectName = `${intent.helper.operationKey}.json`,
-    effectRaw = readPrivateRecord(state, "effects", effectName),
-    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(effectRaw);
-  if (
-    intent.operation.handoffId !== handoffId ||
-    progress.intentDigest !== controlDigest(intent) ||
-    progress.phase !== "launched" ||
-    progress.launch.state !== "confirmed" ||
-    completion.intentDigest !== controlDigest(intent) ||
-    completion.preparationDigest !== controlDigest(progress) ||
-    completion.phase !== "applied" ||
-    !!intent.release !== !!completion.release ||
-    (intent.release &&
-      completion.release &&
-      (completion.release.images.length !== intent.release.downloads.images.length ||
-        completion.release.images.some(
-          (image, index) =>
-            image.image !== intent.release!.downloads.images[index]?.image ||
-            image.reference !== intent.release!.downloads.images[index]?.reference ||
-            image.phase !== "verified" ||
-            !image.imageId,
-        ))) ||
-    completion.launch.containerId !== progress.launch.containerId ||
-    canonicalJson(completion.execution) !== canonicalJson(intent.helper) ||
-    canonicalJson(effect.identity) !== canonicalJson(intent.helper) ||
-    effect.outcome !== "committed" ||
-    effect.publication !== "committed" ||
-    effect.receipt.kind !== "configuration-helper-completion" ||
-    effect.receipt.completionDigest !== controlDigest(completion) ||
-    effect.terminalReceiptDigest !== controlDigest(effect.receipt) ||
-    completion.targets.length !== intent.operation.serviceIds.length ||
-    completion.targets.some(
-      (target) =>
-        !intent.operation.serviceIds.includes(target.serviceId) ||
-        target.expectedImageId !== intent.operation.expectedImageIdentities[target.serviceId] ||
-        target.oldContainerId !==
-          progress.targets.find((original) => original.serviceId === target.serviceId)
-            ?.oldContainerId,
-    )
-  )
-    throw Error("Original committed configuration helper required");
-  const { receipt: _private, ...settlement } = effect;
-  return { intent, completion, settlement };
 }
 
 const executionWitnessSchema = z.strictObject({

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
-import { configurationApplyResultSchema, opsOperationSchema } from "../ops/contract";
+import { opsOperationSchema } from "../ops/contract";
 import {
   type ExecutionRef,
   executionRefSchema,
@@ -13,26 +13,8 @@ import { leaseTargetsSchema } from "../ops/lease-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import type { DataManagerTransport } from "../services/data-manager/transport";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
-import {
-  inspectControlChildPublication,
-  lookupControlChildPhaseBinding,
-  prepareControlChildPublication,
-  resolveControlChildPlan,
-} from "./child-phase";
+import { prepareControlChildPublication, resolveControlChildPlan } from "./child-phase";
 // biome-ignore-end lint/suspicious/noImportCycles: Same exact deferred guard import.
-import {
-  assertAppliedConfigurationMaintenanceFinalState,
-  assertContainedConfigurationMaintenanceFinalState,
-  assertUnusedConfigurationMaintenanceFinalState,
-  configurationChildEvidenceSchema,
-  configurationMaintenanceRuntimeInspectionSchema,
-  configurationOwnerFinalSchema,
-} from "./configuration-maintenance-final-records";
-import {
-  assertConfigurationMaintenanceDecisionSource,
-  configurationMaintenanceDecisionCommitmentPayloadSchema,
-  configurationMaintenanceOwnerRecordSchema,
-} from "./configuration-maintenance-owner-records";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   type ArtifactDelegationAssertion,
@@ -42,40 +24,30 @@ import {
   type ControlRecipient,
   childPhaseKinds,
   childSettlementState,
-  configurationMaintenanceChildState,
   controlPeerState,
   encodeControlAssertion,
   executionAuthorityState,
   fixedControlChildId,
   type InstallationState,
-  inspectConfigurationPreEffectRefusal,
   installationState,
   parseControlAssertion,
-  readCompletedConfigurationHandoff,
   readPrivateRecord,
   recordLeaseControlAttempt,
   recoveryAuthorityState,
-  restoreAdmittedControlExecution,
   retainedControlParent,
   type VerifiedChildSettlement,
   type VerifiedControlPeer,
   type VerifiedExecutionAuthority,
   type VerifiedRecoveryAuthority,
-  verifyConfigurationMaintenanceChildTerminal,
   verifyControlEffectSettlement,
   verifyControlPreparedTerminal,
-  verifyControlRecoveryAuthority,
   verifyDataUpdatePrerequisites,
   withControlDelegationPublication,
-  withControlMaintenanceDecisionPublication,
-  withControlMaintenanceInitialization,
-  withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
 import { controlChildOperationKey } from "./control-child-records";
-import { controlDigest, targetSchema, uuid } from "./control-records";
+import { controlDigest, targetSchema } from "./control-records";
 import { assertDataManagerTerminal } from "./data-manager-terminal";
-import { assertFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
 import {
   knownSettlement,
   type LeaseChild,
@@ -818,22 +790,12 @@ export async function settleArtifactTargetLeaseChild(
   const proof = childSettlementState(evidence);
   if (!sameExecution(proof.evidence.identity, s.execution))
     throw Error("Foreign settlement identity");
-  if (s.node === null && s.authority) {
-    const owner = executionAuthorityState(s.authority);
-    if (owner.kind === "configurationMaintenance.prepare")
-      assertConfigurationMaintenanceRootClosure(s.authority, await observeClosure(s, s.authority));
-  }
   s.seen = await s.backend.settle({ leaseId: s.leaseId, key: s.node, settlement: proof.evidence });
 }
 
 export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Promise<void> {
   const s = stateOf(lease);
   if (s.node !== null) throw Error("Borrower cannot release root");
-  if (
-    s.authority &&
-    executionAuthorityState(s.authority).kind === "configurationMaintenance.prepare"
-  )
-    assertConfigurationMaintenanceRootClosure(s.authority, await observeClosure(s, s.authority));
   await s.backend.release({ leaseId: s.leaseId });
   s.seen = undefined;
 }
@@ -946,13 +908,6 @@ export async function reconcileArtifactTargetLease(options: {
     throw Error("Foreign recovery execution");
   if (!knownSettlement(recovery.evidence) || lease.children.some((child) => !settledKnown(child)))
     return "fenced";
-  if (recovery.authority.kind === "configurationMaintenance.prepare") {
-    const verified = restoreAdmittedControlExecution(
-      recovery.authority.installation.installation,
-      recovery.authority.execution,
-    );
-    assertConfigurationMaintenanceRootClosure(verified, closureFromRecord(lease, verified));
-  }
   if (lease.state !== "settled")
     await backend.settle({ leaseId: lease.leaseId, key: null, settlement: recovery.evidence });
   await backend.release({ leaseId: lease.leaseId });
@@ -1005,134 +960,6 @@ function assertImagePullTargetFree(
   if (!local) throw Error("Image pulls run in the agent");
   for (const lease of local.listSync())
     if (lease.targets.includes(target)) throw Error("Coordinator target is held");
-}
-
-/** Complete only the original terminal handoff preparer after its helper has committed and settled. */
-export async function settlePreparedConfigurationHandoff(
-  authority: VerifiedExecutionAuthority,
-): Promise<void> {
-  const owner = executionAuthorityState(authority);
-  if (
-    owner.kind !== "configurationHandoff.prepare" ||
-    owner.installation.fixedChildId ||
-    owner.installation.installation.role !== "ops-agent"
-  )
-    throw Error("Original handoff preparer required");
-  const admitted = readPrivateRecord(
-      owner.installation,
-      "executions",
-      `${owner.execution.operationKey}.json`,
-      65536,
-    ) as { operation: unknown },
-    operation = opsOperationSchema.parse(admitted.operation);
-  if (operation.kind !== "configurationHandoff.prepare")
-    throw Error("Original handoff operation required");
-  const source = readCompletedConfigurationHandoff(
-    owner.installation.installation,
-    operation.handoffId,
-  );
-  const lease = await owner.installation.leases.read(source.intent.leaseId);
-  if (!lease) throw Error("Original prepared helper tree changed");
-  const parent = lease.children.filter((child) => sameExecution(child.execution, owner.execution)),
-    helper = lease.children.find((child) => child.key === source.intent.delegationId);
-  if (
-    parent.length !== 1 ||
-    !sameExecution(source.intent.preparer, owner.execution) ||
-    canonicalJson(source.intent.operation) !== canonicalJson(operation) ||
-    source.intent.preparerAdmissionDigest !== owner.receiptDigest ||
-    !sameExecution(source.intent.ownerPrepare, lease.owner) ||
-    helper?.parentKey !== parent[0]!.key ||
-    helper.recipient !== "configuration-helper" ||
-    helper.phase !== "configuration-handoff" ||
-    helper.kind !== "configuration-helper" ||
-    !sameExecution(helper.execution, source.intent.helper) ||
-    helper.state !== "settled" ||
-    canonicalJson(helper.settlement) !== canonicalJson(source.settlement)
-  )
-    throw Error("Original prepared helper tree changed");
-  verifyControlPreparedTerminal(owner.installation, owner.execution);
-  const proof = childSettlementState(
-    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
-  ).evidence;
-  if (proof.outcome !== "committed" || proof.publication !== "committed")
-    throw Error("Original prepared handoff effect required");
-  const prior = parent[0]!;
-  if (prior.state === "settled") {
-    if (canonicalJson(prior.settlement) !== canonicalJson(proof))
-      throw Error("Original handoff settlement changed");
-    return;
-  }
-  await owner.installation.leases.settle({
-    leaseId: lease.leaseId,
-    key: prior.key,
-    settlement: proof,
-  });
-}
-/** Receipt-only settlement of the original completed helper. */
-export async function settleRetainedConfigurationHandoffHelper(
-  authority: VerifiedExecutionAuthority,
-): Promise<void> {
-  const owner = executionAuthorityState(authority);
-  if (owner.kind !== "configuration-helper" || !owner.installation.fixedChildId)
-    throw Error("Original completed fixed helper required");
-  const raw = readPrivateRecord(
-      owner.installation,
-      "executions",
-      `${owner.execution.operationKey}.json`,
-      65536,
-    ) as { operation: { handoffId?: unknown } },
-    source = readCompletedConfigurationHandoff(
-      owner.installation.installation,
-      uuid.parse(raw.operation.handoffId),
-    ),
-    adoption = z
-      .object({
-        state: z.literal("ready"),
-        execution: executionRefSchema,
-        assertion: z.string(),
-        grantDigest: z.string(),
-      })
-      .parse(
-        readPrivateRecord(
-          owner.installation,
-          "adoptions",
-          `${source.intent.delegationId}.json`,
-          8192,
-        ),
-      ),
-    assertion = parseControlAssertion(adoption.assertion);
-  if (
-    !sameExecution(source.intent.helper, owner.execution) ||
-    source.intent.delegationId !== owner.installation.fixedChildId ||
-    adoption.assertion !== source.intent.assertion ||
-    !sameExecution(adoption.execution, owner.execution) ||
-    assertion.leaseId !== source.intent.leaseId ||
-    assertion.delegationId !== source.intent.delegationId
-  )
-    throw Error("Original helper ready adoption changed");
-  const lease = await owner.installation.leases.read(source.intent.leaseId),
-    child = lease?.children.find((value) => value.key === source.intent.delegationId);
-  if (
-    !lease ||
-    !child ||
-    child.recipient !== "configuration-helper" ||
-    child.kind !== "configuration-helper" ||
-    !sameExecution(child.execution, owner.execution)
-  )
-    throw Error("Original retained helper tree changed");
-  if (child.state === "settled") {
-    if (canonicalJson(child.settlement) !== canonicalJson(source.settlement))
-      throw Error("Original helper settlement changed");
-    return;
-  }
-  verifyControlPreparedTerminal(owner.installation, source.intent.preparer);
-  await owner.installation.leases.settle({
-    leaseId: lease.leaseId,
-    key: child.key,
-    settlement: childSettlementState(
-      verifyControlEffectSettlement(owner.installation.installation, owner.execution),
-    ).evidence,
-  });
 }
 
 function childSettlementOf(
@@ -1286,20 +1113,6 @@ export function catalogPinTargetOwner(lease: TargetLeaseAuthority) {
   };
 }
 
-/** A helper can adopt before its preparer exits, but may not drain before terminal preparation. */
-export function verifyConfigurationHelperReady(lease: BorrowedArtifactTargetLease): void {
-  const s = stateOf(lease);
-  const record = current(s);
-  const grant = record?.children.find((child) => child.key === s.node);
-  if (
-    !record ||
-    grant?.recipient !== "configuration-helper" ||
-    grant.phase !== "configuration-handoff" ||
-    !leaseNodeForward(record, s.node, Date.now())
-  )
-    throw Error("Configuration helper cannot enter drain");
-  verifyControlPreparedTerminal(s.installation, grant.parent);
-}
 /** The delegation's root lease is still held by its owner. Observation only. */
 export function assertArtifactDelegationRootHeld(
   installation: import("./control-authority").ControlInstallation,
@@ -1330,212 +1143,6 @@ export function verifyRetainedArtifactTargetSettlement(
     throw Error("Terminal child settlement is not proved");
 }
 
-declare const maintenanceClosureBrand: unique symbol;
-export type ConfigurationMaintenanceClosureObservation = Readonly<{
-  [maintenanceClosureBrand]: true;
-}>;
-const maintenanceClosureObservations = new WeakMap<
-  ConfigurationMaintenanceClosureObservation,
-  {
-    authority: VerifiedExecutionAuthority;
-    leaseId: string;
-    children: Array<{ execution: ExecutionRef; settlement: ChildSettlement }>;
-  }
->();
-export function configurationMaintenanceClosureObservationState(
-  value: ConfigurationMaintenanceClosureObservation,
-  authority: VerifiedExecutionAuthority,
-) {
-  const source = maintenanceClosureObservations.get(value);
-  if (!source || source.authority !== authority)
-    throw Error("Actual original target-tree closure observation required");
-  return source;
-}
-function closureFromRecord(
-  lease: LeaseRecord,
-  authority: VerifiedExecutionAuthority,
-): ConfigurationMaintenanceClosureObservation {
-  const children = lease.children.map((child) => {
-    if (!settledKnown(child))
-      throw Error("Every original maintenance descendant must be contained");
-    return { execution: child.execution, settlement: child.settlement as ChildSettlement };
-  });
-  const observation = Object.freeze({}) as ConfigurationMaintenanceClosureObservation;
-  maintenanceClosureObservations.set(observation, {
-    authority,
-    leaseId: lease.leaseId,
-    children,
-  });
-  return observation;
-}
-async function observeClosure(s: State, authority: VerifiedExecutionAuthority) {
-  const record = await fresh(s);
-  if (!record) throw Error("Original maintenance root is not held");
-  return closureFromRecord(record, authority);
-}
-function maintenanceLease(authority: VerifiedExecutionAuthority): LeaseRecord {
-  const owner = executionAuthorityState(authority);
-  if (
-    owner.kind !== "configurationMaintenance.prepare" ||
-    owner.installation.installation.role !== "ops-agent" ||
-    owner.installation.fixedChildId
-  )
-    throw Error("Original maintenance runtime tree required");
-  const lease = localLeases(owner.installation.leases)?.readSync(executionLeaseId(authority));
-  if (!lease || !sameExecution(lease.owner, owner.execution))
-    throw Error("Original maintenance root is not held");
-  return lease;
-}
-/** Read-only observation of the original maintenance tree; it creates no lease or proof. */
-export function observeConfigurationMaintenanceRuntimeTree(
-  authority: VerifiedExecutionAuthority,
-): ConfigurationMaintenanceClosureObservation {
-  return closureFromRecord(maintenanceLease(authority), authority);
-}
-/**
- * Whether the maintenance root is released: its own effect settled and its
- * lease gone from the store. The store releases it only after the closure
- * check passed, and the released tree is no longer kept.
- */
-export function configurationMaintenanceRootReleased(
-  authority: VerifiedExecutionAuthority,
-): boolean {
-  try {
-    return localRootReleased(authority);
-  } catch {
-    return false;
-  }
-}
-export function verifyConfigurationMaintenanceRootClosure(
-  authority: VerifiedExecutionAuthority,
-): void {
-  if (configurationMaintenanceRootReleased(authority)) return;
-  const observation = observeConfigurationMaintenanceRuntimeTree(authority);
-  try {
-    assertConfigurationMaintenanceRootClosure(authority, observation);
-  } finally {
-    maintenanceClosureObservations.delete(observation);
-  }
-}
-/** Source-only observation of the original held maintenance root. */
-export function configurationMaintenanceTargetOwner(lease: ArtifactTargetLease) {
-  const s = stateOf(lease);
-  const record = current(s);
-  const owner = s.authority && executionAuthorityState(s.authority);
-  if (
-    s.node !== null ||
-    !record ||
-    !owner ||
-    s.installation.installation.role !== "ops-agent" ||
-    owner.kind !== "configurationMaintenance.prepare" ||
-    record.state === "settled"
-  )
-    throw Error("Held original maintenance target owner required");
-  return Object.freeze({
-    installation: s.installation.installation,
-    execution: s.execution,
-    origin: owner.origin,
-    admissionDigest: owner.receiptDigest,
-    leaseId: s.leaseId,
-    serviceIds: record.targets,
-  });
-}
-function maintenanceOwnerScope(
-  lease: ArtifactTargetLease,
-  authority: VerifiedExecutionAuthority,
-  message: string,
-) {
-  const s = stateOf(lease),
-    owner = executionAuthorityState(authority);
-  if (
-    s.node !== null ||
-    owner.kind !== "configurationMaintenance.prepare" ||
-    !sameExecution(owner.execution, s.execution)
-  )
-    throw Error(message);
-  return { s, owner };
-}
-export function withConfigurationMaintenanceOwnerInitialization<T>(
-  lease: ArtifactTargetLease,
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const { s, owner } = maintenanceOwnerScope(
-    lease,
-    authority,
-    "Original live maintenance initialization required",
-  );
-  if (s.authority !== authority || s.settlementOnly)
-    throw Error("Original live maintenance initialization required");
-  return withControlMaintenanceInitialization(authority, () => withPrivateEffectWriter(owner, run));
-}
-/** Publication of already proved guard observations remains possible after cancellation. */
-export function withConfigurationMaintenanceOwnerObservation<T>(
-  lease: ArtifactTargetLease,
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const { s, owner } = maintenanceOwnerScope(
-    lease,
-    authority,
-    "Original configuration maintenance recovery owner required",
-  );
-  const record = current(s);
-  if (!record || record.state === "settled")
-    throw Error("Maintenance observation owner already released");
-  return withPrivateEffectWriter(owner, run);
-}
-export function withConfigurationMaintenanceDecisionPublication<T>(
-  lease: ArtifactTargetLease,
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const { s, owner } = maintenanceOwnerScope(
-    lease,
-    authority,
-    "Original maintenance decision owner required",
-  );
-  if (current(s)?.state !== "held") throw Error("Original prepared maintenance root is fenced");
-  return withControlMaintenanceDecisionPublication(authority, () =>
-    withPrivateEffectWriter(owner, run),
-  );
-}
-export function withConfigurationMaintenancePhasePublication<T>(
-  lease: ArtifactTargetLease,
-  authority: VerifiedExecutionAuthority,
-  phase:
-    | "configuration-commit"
-    | "maintenance-hardlinks"
-    | "maintenance-recreate"
-    | "maintenance-handoff",
-  run: () => T,
-): T {
-  const { s, owner } = maintenanceOwnerScope(
-    lease,
-    authority,
-    "Original frozen maintenance issuer required",
-  );
-  if (s.settlementOnly || s.authority !== authority)
-    throw Error("Original frozen maintenance issuer required");
-  return withControlDelegationPublication(authority, phase, () => {
-    if (current(s)?.state !== "held") throw Error("Original maintenance phase is fenced");
-    return withPrivateEffectWriter(owner, run);
-  });
-}
-export function withConfigurationMaintenanceReservationPublication<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const owner = executionAuthorityState(authority);
-  if (owner.kind !== "configurationMaintenance.prepare")
-    throw Error("Original maintenance reservation owner required");
-  if (maintenanceLease(authority).state !== "held")
-    throw Error("Original pre-effect maintenance root required");
-  return withControlDelegationPublication(authority, "configuration-fence", () =>
-    withPrivateEffectWriter(owner, run),
-  );
-}
-/** Reopen the prepared owner's already-authorized frozen phase issuer. */
 export function restoreConfigurationMaintenancePhaseIssuer(
   authority: VerifiedExecutionAuthority,
   phase:
@@ -1563,277 +1170,4 @@ export function restoreConfigurationMaintenancePhaseIssuer(
     closeArtifactTargetLeaseHandle(lease);
     throw error;
   }
-}
-
-// Fixed closure and original children consume this module's one tree observation.
-export function readOriginalMaintenanceFinalChildren(
-  authority: VerifiedExecutionAuthority,
-  observation: ConfigurationMaintenanceClosureObservation,
-) {
-  const state = executionAuthorityState(authority),
-    tree = configurationMaintenanceClosureObservationState(observation, authority),
-    admitted = readPrivateRecord(
-      state.installation,
-      "executions",
-      `${state.execution.operationKey}.json`,
-      65536,
-    ) as { operation?: { maintenanceId?: string } },
-    name = `${admitted.operation?.maintenanceId}.json`,
-    raw = readPrivateRecord(state.installation, "configuration-maintenance", name),
-    owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
-  assertConfigurationMaintenanceDecisionSource(owner);
-  if (
-    state.kind !== "configurationMaintenance.prepare" ||
-    !owner.preparedFence ||
-    tree.leaseId !== owner.leaseId ||
-    owner.admissionDigest !== state.receiptDigest ||
-    canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution)
-  )
-    throw Error("Original final child owner required");
-  const fence = state.reservations.find((value) => value.phase === "configuration-fence"),
-    fenceBinding = fence && lookupControlChildPhaseBinding(authority, fence);
-  if (!fenceBinding) throw Error("Original fence preparation binding required");
-  const children: ReturnType<typeof configurationChildEvidenceSchema.parse>[] = [],
-    allowed = new Set([controlDigest(fenceBinding.child.execution)]);
-  for (const step of owner.plan.steps) {
-    const source = owner.apiControls.steps.find((value) => value.ordinal === step.ordinal),
-      publication = inspectControlChildPublication(authority, step);
-    if (!source) {
-      if (publication.binding !== null || publication.publication.state !== "unissued")
-        throw Error("Frozen child attempt has no original source");
-      continue;
-    }
-    if (!source.canonical) throw Error("Original frozen child canonical delivery pending");
-    const actual = configurationMaintenanceChildState(
-        verifyConfigurationMaintenanceChildTerminal(
-          authority,
-          step.ordinal,
-          source.canonical.status,
-          source.canonical.terminalAt,
-        ),
-        authority,
-      ),
-      physical = tree.children.find((value) => sameExecution(value.execution, actual.execution));
-    if (!physical || canonicalJson(physical.settlement) !== canonicalJson(actual.settlement))
-      throw Error("Original child physical settlement changed");
-    allowed.add(controlDigest(actual.execution));
-    children.push(
-      configurationChildEvidenceSchema.parse({
-        planIndex: step.ordinal,
-        execution: actual.execution,
-        terminalDigest: actual.terminalDigest,
-        terminalAt: actual.terminalAt,
-        effectSettlementDigest: actual.effectSettlementDigest,
-        publication: actual.settlement.publication,
-      }),
-    );
-    if (step.phase === "maintenance-hardlinks" && owner.plan.nestedHardlinks) {
-      const child = restoreAdmittedControlExecution(
-          state.installation.installation,
-          actual.execution,
-        ),
-        binding = lookupControlChildPhaseBinding(child, owner.plan.nestedHardlinks);
-      if (!binding) throw Error("Original middle owner's DM leaf unavailable");
-      // The middle owner commits its hardlinks step only after data-manager
-      // reported the leaf ok and committed, so the leaf's committed settlement
-      // stands for that terminal.
-      const physical = tree.children.find((value) =>
-        sameExecution(value.execution, binding.child.execution),
-      );
-      if (
-        !physical ||
-        physical.settlement.outcome !== "committed" ||
-        physical.settlement.publication !== "committed"
-      )
-        throw Error("Original exact DM generation leaf settlement unavailable");
-      allowed.add(controlDigest(binding.child.execution));
-      children.push(
-        configurationChildEvidenceSchema.parse({
-          planIndex: step.ordinal,
-          execution: binding.child.execution,
-          terminalDigest: physical.settlement.terminalReceiptDigest,
-          terminalAt: actual.terminalAt,
-          effectSettlementDigest: controlDigest(physical.settlement),
-          publication: "committed",
-        }),
-      );
-    }
-    if (step.phase === "maintenance-handoff" && owner.plan.handoff && owner.plan.nestedHandoff) {
-      const helper = readCompletedConfigurationHandoff(
-          state.installation.installation,
-          owner.plan.handoff.handoffId,
-        ),
-        physical = tree.children.find((value) =>
-          sameExecution(value.execution, helper.intent.helper),
-        );
-      if (
-        canonicalJson(helper.intent.operation) !== canonicalJson(step.operation) ||
-        !sameExecution(helper.intent.preparer, actual.execution) ||
-        helper.intent.leaseId !== owner.leaseId ||
-        !physical ||
-        canonicalJson(physical.settlement) !== canonicalJson(helper.settlement)
-      )
-        throw Error("Original fixed helper settlement unavailable");
-      allowed.add(controlDigest(helper.intent.helper));
-      children.push(
-        configurationChildEvidenceSchema.parse({
-          planIndex: step.ordinal,
-          execution: helper.intent.helper,
-          terminalDigest: controlDigest(helper.completion),
-          terminalAt: helper.completion.completedAt,
-          effectSettlementDigest: controlDigest(helper.settlement),
-          publication: "committed",
-        }),
-      );
-    }
-  }
-  if (
-    tree.children.some((value) => !allowed.has(controlDigest(value.execution))) ||
-    tree.children.length !== allowed.size
-  )
-    throw Error("Unaccounted original maintenance descendant");
-  children.sort(
-    (a, b) =>
-      a.planIndex - b.planIndex || a.execution.operationKey.localeCompare(b.execution.operationKey),
-  );
-  return {
-    ownerDigest: controlDigest(owner),
-    children,
-    complete: owner.plan.steps.every((step) =>
-      owner.apiControls.steps.some((value) => value.ordinal === step.ordinal && value.canonical),
-    ),
-    generation: children.find((value) => value.planIndex === 0),
-    generationResult: owner.apiControls.steps.find((value) => value.ordinal === 0)?.canonical
-      ? configurationApplyResultSchema.parse(
-          owner.apiControls.steps.find((value) => value.ordinal === 0)!.canonical!.status.result,
-        )
-      : null,
-    followUpReceiptDigests: [
-      ...new Set(
-        children.filter((value) => value.planIndex !== 0).map((value) => value.terminalDigest),
-      ),
-    ].sort(),
-  };
-}
-
-const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
-function need(value: unknown, message: string): asserts value {
-  if (!value) throw Error(message);
-}
-/** The original owner's own final and inspection, after the data-manager confirmed the settle. */
-function assertPreparedAndSettledClosure(
-  authority: VerifiedExecutionAuthority,
-  observation: ConfigurationMaintenanceClosureObservation,
-  owner: z.infer<typeof configurationMaintenanceOwnerRecordSchema>,
-): void {
-  const tree = configurationMaintenanceClosureObservationState(observation, authority),
-    state = executionAuthorityState(authority);
-  assertConfigurationMaintenanceDecisionSource(owner);
-  assertFixedConfigurationMaintenancePlan(owner.plan);
-  if (
-    owner.final?.ownerFinal.outcome === "applied" ||
-    owner.final?.ownerFinal.outcome === "contained"
-  ) {
-    const contained = owner.final.ownerFinal.outcome === "contained";
-    if (contained) assertContainedConfigurationMaintenanceFinalState(owner);
-    else assertAppliedConfigurationMaintenanceFinalState(owner);
-    const actual = readOriginalMaintenanceFinalChildren(authority, observation);
-    need(
-      (contained
-        ? actual.generationResult?.outcome === "not_committed" &&
-          !actual.generationResult.cleanupFailed &&
-          actual.children.length === 1
-        : actual.complete) &&
-        same(actual.children, owner.final.evidence.children) &&
-        owner.final.evidence.generation.commitReceiptDigest ===
-          (contained ? null : actual.generation?.terminalDigest) &&
-        same(owner.final.evidence.followUp.receiptDigests, actual.followUpReceiptDigests),
-      "Original applied final child sources changed",
-    );
-  } else assertUnusedConfigurationMaintenanceFinalState(owner);
-  need(
-    owner.final &&
-      owner.inspection &&
-      owner.preparedFence &&
-      owner.receipt.dmFence?.state === "settled" &&
-      owner.apiControls.decide,
-    "Actual prepared final, inspection and settled fence required",
-  );
-  need(
-    owner.admissionDigest === state.receiptDigest &&
-      same(owner.origin, state.origin) &&
-      same(owner.plan.prepare, state.execution) &&
-      owner.leaseId === tree.leaseId &&
-      same(owner.plan.reservations, state.reservations),
-    "Original prepared root identity changed",
-  );
-  const final = configurationOwnerFinalSchema.parse(owner.final.ownerFinal),
-    inspection = configurationMaintenanceRuntimeInspectionSchema.parse(owner.inspection);
-  configurationMaintenanceDecisionCommitmentPayloadSchema.parse(
-    owner.apiControls.decide.commitment,
-  );
-  need(
-    final.privateInspectionId === inspection.inspectionId &&
-      final.evidenceDigest === owner.final.evidenceDigest &&
-      owner.receipt.dmFence.fenceId === owner.preparedFence.fenceId,
-    "Original actual final/inspection changed",
-  );
-  for (const step of final.outcome === "unused" ? owner.plan.steps : []) {
-    const phase = inspectControlChildPublication(authority, step);
-    need(
-      phase.binding === null && phase.publication.state === "unissued",
-      "Unused final has attempted frozen work",
-    );
-  }
-}
-/** The maintenance root may release once every descendant is contained and either
- * its fence is settled after a final, or no fence was ever prepared. */
-export function assertConfigurationMaintenanceRootClosure(
-  authority: VerifiedExecutionAuthority,
-  observed: ConfigurationMaintenanceClosureObservation,
-): void {
-  const state = executionAuthorityState(authority),
-    tree = configurationMaintenanceClosureObservationState(observed, authority);
-  need(
-    state.kind === "configurationMaintenance.prepare" &&
-      state.installation.installation.role === "ops-agent" &&
-      !state.installation.fixedChildId &&
-      state.origin,
-    "Original maintenance root closure source required",
-  );
-  const admission = readPrivateRecord(
-      state.installation,
-      "executions",
-      `${state.execution.operationKey}.json`,
-      65536,
-    ) as { operation?: { maintenanceId?: string } },
-    name = `${z.uuid().parse(admission.operation?.maintenanceId)}.json`,
-    raw = readPrivateRecord(state.installation, "configuration-maintenance", name),
-    owner = configurationMaintenanceOwnerRecordSchema.parse(raw);
-  if (owner.preparedFence !== null || owner.final !== null || owner.inspection !== null) {
-    assertPreparedAndSettledClosure(authority, observed, owner);
-    return;
-  }
-  need(
-    owner.receipt.dmFence === null &&
-      owner.receipt.generation === "not_started" &&
-      owner.admissionDigest === state.receiptDigest &&
-      same(owner.origin, state.origin) &&
-      same(owner.plan.prepare, state.execution) &&
-      owner.leaseId === tree.leaseId &&
-      tree.children.every((child) => child.settlement.outcome !== "committed"),
-    "Never-prepared maintenance closure required",
-  );
-  const own = childSettlementState(
-    verifyControlEffectSettlement(state.installation.installation, state.execution),
-  ).evidence;
-  need(
-    own.outcome === "failed_without_effect" &&
-      own.terminalReceiptDigest ===
-        controlDigest({
-          kind: "configuration-fence-not-prepared",
-          maintenanceId: owner.plan.operation.maintenanceId,
-        }),
-    "Original never-prepared maintenance effect required",
-  );
 }

@@ -6,26 +6,21 @@ import {
 import { controlChildOperationKey } from "@openmapx/core/build-artifacts";
 import {
   type ConfigurationHardlinksPreview,
-  type ConfigurationMaintenanceDecision,
-  type ConfigurationMaintenanceIdentity,
-  type ConfigurationMaintenanceReceipt,
-  type ConfigurationMaintenanceSettle,
+  type ConfigurationMaintenancePrepare,
   type ConfigurationSourcesInspection,
   type CoordinatorMode,
   canonicalJson,
   configurationApplyResultSchema,
   configurationHardlinksPreviewSchema,
-  configurationMaintenanceDecisionSchema,
-  configurationMaintenanceIdentitySchema,
   configurationMaintenancePrepareSchema,
-  configurationMaintenanceReceiptSchema,
-  configurationMaintenanceSettleRequestDigest,
-  configurationMaintenanceSettleSchema,
   coordinatorModeSchema,
   createControlRootOperationKey,
+  type MaintenanceRecord,
+  maintenanceRecordSchema,
   OPS_MAX_REQUEST_TTL_MS,
   OpsClientError,
   type OpsOperation,
+  type OpsResultFor,
   opsOperationFingerprint,
   opsOperationSchema,
   type PreparedConfigurationRecord,
@@ -47,7 +42,6 @@ import { getIntegration, inspectIntegrationRuntime } from "../integration-host";
 import { apiKeyedDigest } from "./admin-job-digest";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
-  checkpointTerminalCopy,
   deliverCoordinatorPullSubmission,
   executeAdminJobOperation,
   hasRecoveredMaintenanceCandidate,
@@ -56,12 +50,7 @@ import {
   reserveCoordinatorPullSubmission,
   resumeAdminJobObservation,
 } from "./admin-job-ops";
-import {
-  type ApiJobChildAttempt,
-  issueApiJobChildAssertion,
-  prepareApiJobChildAttempt,
-  prepareApiJobRoot,
-} from "./admin-job-parent";
+import { issueApiJobChildAssertion, prepareApiJobChildAttempt } from "./admin-job-parent";
 import {
   type AdminJobProtocol,
   cancelRequestedAt,
@@ -78,7 +67,6 @@ import {
   type AdministrativeConfigurationReadContext,
   type AdministrativeConfigurationWriter,
   administrativeConfigurationState,
-  assertAdministrativeConfigurationRead,
   ConfigurationWriteCommitUnknown,
   ConfigurationWriteRolledBack,
   type ConfigurationWriteTransaction,
@@ -93,20 +81,10 @@ import {
   retainConfigurationCandidate,
 } from "./configuration-candidate-store";
 import {
-  configurationMaintenanceDecisionCheckpointSchema as abandonCheckpointSchema,
-  assertConfigurationSavedRows,
-  type ConfigurationSavedRow,
-  configurationMaintenanceDbDecisionDigest,
-  configurationMaintenanceDecisionCheckpointSchema,
-  configurationMaintenanceRollbackCheckpointSchema,
-  configurationSavedRowSchema,
-} from "./configuration-maintenance-decision";
-import { configurationMaintenanceSettleCheckpointSchema } from "./configuration-maintenance-settle-records";
-import { prepareOwnedConfigurationMaintenanceStep } from "./configuration-maintenance-step";
-import {
   completedCoordinatorMaintenance,
   completedCoordinatorMaintenanceSchema,
-} from "./configuration-maintenance-step-records";
+  maintenanceSettleCheckpointSchema,
+} from "./configuration-maintenance-checkpoint";
 import type { MigrationResult } from "./configuration-migration/apply";
 import { migrationCompletionResult } from "./configuration-migration/completion";
 import {
@@ -123,6 +101,11 @@ import {
   integrationOwnershipSnapshot,
   projectFieldOwnership,
 } from "./configuration-ownership-view";
+import {
+  assertConfigurationSavedRows,
+  type ConfigurationSavedRow,
+  configurationSavedRowSchema,
+} from "./configuration-saved-rows";
 import {
   assertCoordinatorLifecycleIntent,
   assertRetainedCoordinatorLifecycleProvenance,
@@ -297,7 +280,7 @@ interface CandidateState {
   recovered?: "committed" | "pre_root";
   /** A known local refusal before any maintenance admission was attempted. */
   rejectedUnissued?: boolean;
-  discardedUnused?: ReturnType<typeof configurationMaintenanceReceiptSchema.parse>;
+  discardedUnused?: MaintenanceRecord;
 }
 type CandidateStage =
   | "preflight"
@@ -313,6 +296,9 @@ type CandidateStage =
   | "discarded"
   | "retired";
 const REJECTED = "Trusted configuration snapshot publish failed";
+/** The time a save leaves for the steps: a preparation closer to its deadline is
+ * not saved under, so a saved candidate always gets to apply. */
+const MAINTENANCE_APPLY_MARGIN_MS = 15 * 60_000;
 const candidates = new WeakMap<ValidatedConfigurationCandidate, CandidateState>();
 function stageOf(candidate: ValidatedConfigurationCandidate): CandidateStage | undefined {
   return candidates.get(candidate)?.stage;
@@ -421,7 +407,7 @@ export function assertCommittedConfigurationCandidate(
   validatedConfigurationCandidateState(candidate);
   if (stageOf(candidate) !== "committed") throw Error("Committed configuration candidate required");
 }
-function assertKnownRolledBackConfigurationCandidate(
+function _assertKnownRolledBackConfigurationCandidate(
   candidate: ValidatedConfigurationCandidate,
 ): void {
   const state = validatedConfigurationCandidateState(candidate);
@@ -703,14 +689,10 @@ export async function discardNeverPreparedProspectiveConfiguration(
   )
     throw Error("Original inert maintenance candidate required");
   const { inspectConfigurationMaintenance } = await configurationMaintenanceProtocol,
-    closed = await inspectConfigurationMaintenance({
-      maintenanceId: state.record.maintenanceId,
-      candidateId: candidate.candidateId,
-    });
+    closed = await inspectConfigurationMaintenance(state.record.maintenanceId);
   if (
     closed.state !== "settled" ||
-    closed.dmFence !== null ||
-    closed.decision !== null ||
+    closed.fence !== null ||
     closed.generation !== "not_started" ||
     closed.appliedRevisionId !== null ||
     closed.followUp !== "not_started"
@@ -728,8 +710,6 @@ export async function discardNeverPreparedProspectiveConfiguration(
       const result = row?.result as Record<string, unknown> | undefined,
         protocol = row?.protocol as AdminJobProtocol | undefined,
         retained = result?._configurationCandidate as Record<string, unknown> | undefined,
-        maintenance = result?._configurationMaintenance as Record<string, unknown> | undefined,
-        inspection = maintenance?.inspection as Record<string, unknown> | undefined,
         projected = readProjection(protocol, result).operations[state.record.prepareOperationKey!];
       if (
         !result ||
@@ -741,9 +721,6 @@ export async function discardNeverPreparedProspectiveConfiguration(
         retained.prepareOperationKey !== state.record.prepareOperationKey ||
         !["prepared", "discarding_without_guard"].includes(String(retained.phase)) ||
         retained.rowVersions !== undefined ||
-        maintenance?.decision !== undefined ||
-        inspection?.state !== "complete" ||
-        canonicalJson(inspection.receipt) !== canonicalJson(closed) ||
         !projected?.terminal ||
         !projected.receiptDelivery ||
         projected.kind !== "configurationMaintenance.prepare" ||
@@ -824,14 +801,10 @@ async function completeNeverPreparedConfiguration(
   } catch {
     throw new JobObservationPending("recovery_required");
   }
-  const retained = owner.job.checkpointResult?._configurationMaintenance as Record<string, unknown>,
-    inspection = retained.inspection as { state?: string; receipt?: unknown },
-    closed = configurationMaintenanceReceiptSchema.parse(inspection.receipt);
+  const closed = await inspectConfigurationMaintenance(state.record.maintenanceId!);
   if (
-    inspection.state !== "complete" ||
     closed.state !== "settled" ||
-    closed.dmFence !== null ||
-    closed.decision !== null ||
+    closed.fence !== null ||
     closed.binding.candidateId !== candidate.candidateId ||
     closed.prepare.operationKey !== state.record.prepareOperationKey
   )
@@ -844,7 +817,11 @@ async function completeNeverPreparedConfiguration(
   };
   await owner.job.checkpoint({
     ...owner.job.checkpointResult,
-    _configurationMaintenance: { ...retained, phase: "settled", receipt: closed },
+    _configurationMaintenance: {
+      ...(owner.job.checkpointResult?._configurationMaintenance as Record<string, unknown>),
+      phase: "settled",
+      record: closed,
+    },
     configuration,
     _configurationOutcomes: {
       ...(owner.job.checkpointResult?._configurationOutcomes as Record<string, unknown>),
@@ -870,14 +847,11 @@ export async function discardUnusedPreparedProspectiveConfiguration(
   )
     throw Error("Original unsaved prepared candidate required");
   const maintenance = await configurationMaintenanceProtocol,
-    closed = await maintenance.inspectConfigurationMaintenance({
-      maintenanceId: state.record.maintenanceId,
-      candidateId: candidate.candidateId,
-    });
+    closed = await maintenance.inspectConfigurationMaintenance(state.record.maintenanceId);
   if (
     closed.state !== "settled" ||
-    closed.dmFence?.state !== "settled" ||
-    closed.decision?.decision !== "abandon" ||
+    closed.fence?.state !== "settled" ||
+    closed.fenceOutcome !== "unused" ||
     closed.generation !== "not_started" ||
     closed.appliedRevisionId !== null ||
     closed.followUp !== "not_started" ||
@@ -896,17 +870,12 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined,
       remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
-      decision = configurationMaintenanceDecisionCheckpointSchema.parse(
-        result?._configurationMaintenanceDecision,
-      ),
-      settle = configurationMaintenanceSettleCheckpointSchema.parse(
-        result?._configurationMaintenanceSettle,
-      ),
+      settle = maintenanceSettleCheckpointSchema.parse(result?._configurationMaintenanceSettle),
       projection = readProjection(protocol, result),
-      delivered = projection.operations[settle.delivery.root.operationKey]?.receiptDelivery,
+      delivered = projection.operations[settle.operationKey]?.receiptDelivery,
       canonical =
         delivered?.terminalReceipt.state === "succeeded"
-          ? configurationMaintenanceReceiptSchema.parse(delivered.terminalReceipt.result)
+          ? maintenanceRecordSchema.parse(delivered.terminalReceipt.result)
           : null;
     if (
       !result ||
@@ -921,18 +890,11 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       ) ||
       retained.rowVersions !== undefined ||
       remote?.phase !== "settled" ||
-      decision.operation.decision !== "abandon" ||
-      decision.operation.decisionId !== closed.decision?.decisionId ||
-      decision.rowVersions.length ||
-      decision.attempt !== "attempted" ||
-      settle.attempt !== "attempted" ||
-      settle.operation.candidateId !== candidate.candidateId ||
-      settle.operation.maintenanceId !== state.record.maintenanceId ||
-      settle.operation.decisionId !== decision.operation.decisionId ||
+      settle.outcome !== "abandon" ||
       !delivered ||
       !canonical ||
-      canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
-      canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
+      canonicalJson(canonical) !== canonicalJson(remote.record) ||
+      canonicalJson(closed) !== canonicalJson(canonical) ||
       hasUnsettledManagedOperation(result, protocol)
     )
       throw Error("Original delivered unused candidate checkpoint required");
@@ -988,17 +950,12 @@ async function completeUnusedConfigurationCancellation(
       protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined,
       remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
-      decision = configurationMaintenanceDecisionCheckpointSchema.parse(
-        result?._configurationMaintenanceDecision,
-      ),
-      settle = configurationMaintenanceSettleCheckpointSchema.parse(
-        result?._configurationMaintenanceSettle,
-      ),
+      settle = maintenanceSettleCheckpointSchema.parse(result?._configurationMaintenanceSettle),
       projection = readProjection(protocol, result),
-      delivered = projection.operations[settle.delivery.root.operationKey]?.receiptDelivery,
+      delivered = projection.operations[settle.operationKey]?.receiptDelivery,
       canonical =
         delivered?.terminalReceipt.state === "succeeded"
-          ? configurationMaintenanceReceiptSchema.parse(delivered.terminalReceipt.result)
+          ? maintenanceRecordSchema.parse(delivered.terminalReceipt.result)
           : null;
     if (
       !result ||
@@ -1012,18 +969,11 @@ async function completeUnusedConfigurationCancellation(
       retained.phase !== "discarded" ||
       retained.rowVersions !== undefined ||
       remote?.phase !== "settled" ||
-      decision.operation.decision !== "abandon" ||
-      decision.operation.decisionId !== closed.decision?.decisionId ||
-      decision.rowVersions.length ||
-      decision.attempt !== "attempted" ||
-      settle.attempt !== "attempted" ||
-      settle.operation.candidateId !== candidate.candidateId ||
-      settle.operation.maintenanceId !== record.maintenanceId ||
-      settle.operation.decisionId !== decision.operation.decisionId ||
+      settle.outcome !== "abandon" ||
       !delivered ||
       !canonical ||
-      canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
-      canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
+      canonicalJson(canonical) !== canonicalJson(remote.record) ||
+      canonicalJson(closed) !== canonicalJson(canonical) ||
       hasUnsettledManagedOperation(result, protocol)
     )
       throw new JobObservationPending("recovery_required");
@@ -1064,18 +1014,14 @@ export async function assertSettledConfigurationCandidate(
   let contained = false;
   if (state.record.maintenanceId) {
     const maintenance = await configurationMaintenanceProtocol,
-      actual = await maintenance.inspectConfigurationMaintenance({
-        maintenanceId: state.record.maintenanceId,
-        candidateId: candidate.candidateId,
-      });
+      actual = await maintenance.inspectConfigurationMaintenance(state.record.maintenanceId);
     contained =
       actual.generation === "not_committed" &&
       actual.appliedRevisionId === null &&
       actual.followUp === "contained";
     if (
       actual.state !== "settled" ||
-      actual.dmFence?.state !== "settled" ||
-      actual.decision?.decision !== "continue" ||
+      actual.fence?.state !== "settled" ||
       (!contained &&
         (actual.generation !== "committed" ||
           actual.appliedRevisionId !== candidate.revisionId ||
@@ -1131,14 +1077,13 @@ export async function assertSettledConfigurationCandidate(
     throw Error("Configuration candidate application unavailable");
   if (state.record.maintenanceId) {
     const remote = result._configurationMaintenance as Record<string, unknown> | undefined,
-      settled = configurationMaintenanceReceiptSchema.parse(remote?.receipt),
+      settled = maintenanceRecordSchema.parse(remote?.record),
       projection = readProjection(protocol, result),
-      delivered = Object.values(projection.operations).find(
-        (value) =>
-          value.operation?.kind === "configurationMaintenance.settle" &&
-          value.operation.maintenanceId === state.record.maintenanceId &&
-          value.operation.candidateId === candidate.candidateId,
-      );
+      delivered =
+        projection.operations[
+          maintenanceSettleCheckpointSchema.parse(result._configurationMaintenanceSettle)
+            .operationKey
+        ];
     if (
       remote?.phase !== "settled" ||
       settled.state !== "settled" ||
@@ -1273,9 +1218,8 @@ export async function retireSettledProspectiveConfiguration(
           : {}),
       },
       operationKey = state.record.maintenanceId
-        ? configurationMaintenanceSettleCheckpointSchema.parse(
-            original._configurationMaintenanceSettle,
-          ).delivery.root.operationKey
+        ? maintenanceSettleCheckpointSchema.parse(original._configurationMaintenanceSettle)
+            .operationKey
         : state.record.apiFollowUp === "service-apply" && "serviceId" in state.sealed.operation
           ? createDurableOpsKey(
               "admin-job.credential.recreate",
@@ -1284,12 +1228,12 @@ export async function retireSettledProspectiveConfiguration(
           : state.record.operationKey;
     let completedCoordinator: Record<string, unknown> = {};
     if (queuedCoordinator && state.record.privateCoordinatorLifecycle?.action === "update") {
-      const settled = configurationMaintenanceSettleCheckpointSchema.parse(
+      const settled = maintenanceSettleCheckpointSchema.parse(
         original._configurationMaintenanceSettle,
       );
       const source = original._configurationCandidate as Record<string, unknown>;
       const archived = completedCoordinatorMaintenanceSchema.parse({
-        version: 1,
+        version: 2,
         originalOrdinal: state.record.privateCoordinatorLifecycle.originalOrdinal,
         candidate: {
           candidateId: source.candidateId,
@@ -1299,9 +1243,8 @@ export async function retireSettledProspectiveConfiguration(
           operationKey: source.operationKey,
           phase: source.phase,
         },
-        receipt: (original._configurationMaintenance as { receipt: unknown }).receipt,
-        steps: original._configurationMaintenanceSteps,
-        settlementOperationKey: settled.delivery.root.operationKey,
+        record: (original._configurationMaintenance as { record: unknown }).record,
+        settlementOperationKey: settled.operationKey,
       });
       completedCoordinator = { _completedCoordinatorMaintenance: archived };
       completedCoordinatorMaintenance({ ...original, ...completedCoordinator }, job.protocol);
@@ -1433,15 +1376,11 @@ async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
     operation = readProjection(originalProtocol, original).operations[
       String(retained.prepareOperationKey)
     ]!,
-    closed = await inspectConfigurationMaintenance({
-      maintenanceId: String(retained.maintenanceId),
-      candidateId: String(retained.candidateId),
-    });
+    closed = await inspectConfigurationMaintenance(String(retained.maintenanceId));
   if (
     closed.apiJobId !== job.jobId ||
     closed.state !== "settled" ||
-    closed.dmFence !== null ||
-    closed.decision !== null ||
+    closed.fence !== null ||
     closed.generation !== "not_started" ||
     closed.followUp !== "not_started" ||
     closed.appliedRevisionId !== null ||
@@ -1474,7 +1413,7 @@ async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
     _configurationMaintenance: {
       ...(job.checkpointResult?._configurationMaintenance as Record<string, unknown>),
       phase: "settled",
-      receipt: closed,
+      record: closed,
     },
     configuration,
     _configurationOutcomes: {
@@ -1512,7 +1451,7 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
         writer.operationKey === coordinatorLifecycleOperationKey(job.jobId, null)) ||
         (row.type === "service.bulk" &&
           job.payload.action === "update" &&
-          completedCoordinatorMaintenance(original!, originalProtocol).receipt.apiJobId ===
+          completedCoordinatorMaintenance(original!, originalProtocol).record.apiJobId ===
             job.jobId &&
           writer.operationKey ===
             coordinatorLifecycleOperationKey(
@@ -1562,22 +1501,17 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
   // A missing packet or the retirement marker alone never proves completion.
   await resumeAdminJobObservation(job);
   if (retained.maintenanceId) {
-    const actual = await (await configurationMaintenanceProtocol).inspectConfigurationMaintenance({
-        maintenanceId: String(retained.maintenanceId),
-        candidateId: String(retained.candidateId),
-      }),
+    const actual = await (await configurationMaintenanceProtocol).inspectConfigurationMaintenance(
+        String(retained.maintenanceId),
+      ),
       remote = original._configurationMaintenance as
-        | { receipt?: unknown; phase?: string }
+        | { record?: unknown; phase?: string }
         | undefined;
     if (
       actual.state !== "settled" ||
-      actual.dmFence?.state !== "settled" ||
-      actual.decision?.decision !== "continue" ||
+      actual.fence?.state !== "settled" ||
       remote?.phase !== "settled" ||
-      canonicalJson({
-        ...actual,
-        preflight: configurationMaintenanceReceiptSchema.parse(remote.receipt).preflight,
-      }) !== canonicalJson(remote.receipt)
+      canonicalJson(actual) !== canonicalJson(remote.record)
     )
       throw new JobObservationPending("recovery_required");
   }
@@ -1927,28 +1861,8 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
     )
       throw new JobObservationPending("recovery_required");
     const saved = retained.phase === "saved",
-      rolledBack = retained.phase === "rolled_back",
-      unusedDecision =
-        !saved && result._configurationMaintenanceDecision !== undefined
-          ? configurationMaintenanceDecisionCheckpointSchema.parse(
-              result._configurationMaintenanceDecision,
-            )
-          : undefined,
-      unusedSettlement =
-        !saved && result._configurationMaintenanceSettle !== undefined
-          ? configurationMaintenanceSettleCheckpointSchema.parse(
-              result._configurationMaintenanceSettle,
-            )
-          : undefined;
-    if (
-      !saved &&
-      (retained.rowVersions !== undefined ||
-        (unusedDecision &&
-          (unusedDecision.operation.decision !== "abandon" ||
-            unusedDecision.rowVersions.length !== 0 ||
-            unusedDecision.operation.checkpointVersion >= job.execution!.version)) ||
-        (unusedSettlement && !unusedDecision))
-    )
+      rolledBack = retained.phase === "rolled_back";
+    if (!saved && retained.rowVersions !== undefined)
       throw new JobObservationPending("recovery_required");
     const inspected = await readConfigurationCandidate(retained.sealedOperationKey),
       record = inspected.record,
@@ -1970,71 +1884,6 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         (record.privateMaintenancePreparation !== undefined ||
           record.privateCoordinatorSource !== undefined ||
           !!record.privateIntegrationReload?.stagedMigration);
-    const recoveryControls = [
-      ...(unusedDecision?.delivery
-        ? [
-            {
-              operation: unusedDecision.operation,
-              delivery: unusedDecision.delivery,
-              attempt: unusedDecision.attempt,
-            },
-          ]
-        : []),
-      ...(unusedSettlement ? [unusedSettlement] : []),
-    ];
-    const exactRecoveryControl = (entry: ReturnType<typeof readProjection>["operations"][string]) =>
-      recoveryControls.some((source) => {
-        const { operation, delivery } = source,
-          attempt = entry.attempt;
-        return (
-          source.attempt === "attempted" &&
-          entry.operationKey === delivery.root.operationKey &&
-          canonicalJson(entry.operation) === canonicalJson(operation) &&
-          attempt?.apiJobId === job.jobId &&
-          attempt.apiOwnerVersion < job.execution!.version &&
-          attempt.childOperationKey === delivery.root.operationKey &&
-          attempt.childOperationFingerprint === opsOperationFingerprint(operation) &&
-          attempt.requestedDeadlineAt === delivery.root.requestedDeadlineAt &&
-          attempt.parentOperationKey === record.parentOperationKey &&
-          attempt.parentFingerprint === record.parentFingerprint &&
-          attempt.parentDeadlineAt === record.parentDeadlineAt &&
-          delivery.stepAddress ===
-            createDurableOpsKey(
-              operation.kind === "configurationMaintenance.decide"
-                ? "configuration-maintenance.decide"
-                : "configuration-maintenance.settle",
-              `${job.jobId}:${record.candidateId}`,
-            ) &&
-          canonicalJson(delivery.root.parent) ===
-            canonicalJson({
-              operationKey: record.parentOperationKey,
-              fingerprint: record.parentFingerprint,
-              deadlineAt: record.parentDeadlineAt,
-            })
-        );
-      });
-    for (const source of recoveryControls) {
-      const entry = projection.operations[source.delivery.root.operationKey];
-      if (
-        source.delivery.stepAddress !==
-          createDurableOpsKey(
-            source.operation.kind === "configurationMaintenance.decide"
-              ? "configuration-maintenance.decide"
-              : "configuration-maintenance.settle",
-            `${job.jobId}:${record.candidateId}`,
-          ) ||
-        canonicalJson(source.delivery.root.parent) !==
-          canonicalJson({
-            operationKey: record.parentOperationKey,
-            fingerprint: record.parentFingerprint,
-            deadlineAt: record.parentDeadlineAt,
-          }) ||
-        (source.attempt === "attempted"
-          ? !entry || !exactRecoveryControl(entry)
-          : entry !== undefined)
-      )
-        throw new JobObservationPending("recovery_required");
-    }
     // This finite current adapter has no integration reload/participant proof
     // to reconstruct. Other recovery cases stay fenced until installed.
     if (
@@ -2100,152 +1949,38 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
           fingerprint: record.parentFingerprint,
           deadlineAt: record.parentDeadlineAt,
         }) ||
+      // Unsaved rows never had an apply.
       (!saved &&
         Object.values(projection.operations).some(
-          (value) =>
-            !exactRecoveryControl(value) &&
-            (value.operation?.kind === "configurationMaintenance.decide" ||
-              value.operation?.kind === "configurationMaintenance.settle" ||
-              (value.operation &&
-                "maintenanceId" in value.operation &&
-                value.operation.maintenanceId === record.maintenanceId &&
-                value.kind !== "configurationMaintenance.prepare")),
+          (value) => value.operation?.kind === "configurationMaintenance.apply",
         ))
     )
       throw new JobObservationPending("recovery_required");
-    if (rolledBack || unusedDecision) {
-      // Recover only original unused controls. A rolled-back candidate still
-      // requires the actual same-connection ROLLBACK acknowledgement. A retained
-      // ABANDON binds the original prepared receipt and exact control attempts;
-      // neither branch restores desired rows or a forward capability.
+    if (rolledBack) {
+      // A known rollback after the maintenance prepared: nothing was saved and
+      // the prepared maintenance is abandoned next.
       const remote = result._configurationMaintenance as Record<string, unknown> | undefined,
-        delivery = preparation?.receiptDelivery,
-        prepared = configurationMaintenanceReceiptSchema.parse(delivery?.terminalReceipt.result),
-        observed = configurationMaintenanceReceiptSchema.parse(remote?.receipt);
-      if (rolledBack) {
-        const rollback = configurationMaintenanceRollbackCheckpointSchema.parse(
-          result._configurationMaintenanceRollback,
-        );
-        if (
-          rollback.candidateId !== record.candidateId ||
-          rollback.maintenanceId !== record.maintenanceId ||
-          rollback.prepareOperationKey !== record.prepareOperationKey ||
-          rollback.prepareFingerprint !== prepared.prepare.operationFingerprint ||
-          rollback.planDigest !== prepared.planDigest ||
-          rollback.checkpointVersion >= job.execution!.version
-        )
-          throw new JobObservationPending("recovery_required");
-      }
-      if (unusedDecision) {
-        const { checkpointDigest, ...body } = unusedDecision.operation;
-        if (
-          body.candidateId !== record.candidateId ||
-          body.maintenanceId !== record.maintenanceId ||
-          body.prepareOperationKey !== record.prepareOperationKey ||
-          body.prepareFingerprint !== prepared.prepare.operationFingerprint ||
-          body.planDigest !== prepared.planDigest ||
-          body.expectedSequence !== prepared.sequence ||
-          checkpointDigest !== configurationMaintenanceDbDecisionDigest(body, []) ||
-          (observed.decision !== null &&
-            canonicalJson(observed.decision) !==
-              canonicalJson({
-                decisionId: body.decisionId,
-                decision: body.decision,
-                checkpointVersion: body.checkpointVersion,
-                checkpointDigest,
-              })) ||
-          (unusedSettlement &&
-            (unusedSettlement.operation.candidateId !== body.candidateId ||
-              unusedSettlement.operation.maintenanceId !== body.maintenanceId ||
-              unusedSettlement.operation.prepareOperationKey !== body.prepareOperationKey ||
-              unusedSettlement.operation.prepareFingerprint !== body.prepareFingerprint ||
-              unusedSettlement.operation.planDigest !== body.planDigest ||
-              unusedSettlement.operation.decisionId !== body.decisionId))
-        )
-          throw new JobObservationPending("recovery_required");
-      }
+        delivery = preparation?.receiptDelivery;
       if (
         !remote ||
-        !(
-          unusedDecision ? ["prepared", "authorized", "settling", "settled"] : ["prepared"]
-        ).includes(String(remote.phase)) ||
+        !["prepared", "settled"].includes(String(remote.phase)) ||
         remote.prepareOperationKey !== record.prepareOperationKey ||
-        remote.prepareOperationFingerprint !== prepared.prepare.operationFingerprint ||
-        prepared.state !== "prepared" ||
-        prepared.decision !== null ||
-        prepared.dmFence?.state !== "prepared" ||
-        prepared.generation !== "not_started" ||
-        prepared.followUp !== "not_started" ||
-        prepared.appliedRevisionId !== null ||
-        prepared.apiJobId !== job.jobId ||
-        prepared.binding.candidateId !== record.candidateId ||
-        prepared.binding.maintenanceId !== record.maintenanceId ||
-        prepared.binding.applyOperationKey !== record.operationKey ||
-        prepared.binding.applyOperationFingerprint !== opsOperationFingerprint(operation) ||
-        prepared.binding.revisionId !== inspected.snapshot.revisionId ||
-        prepared.prepare.operationKey !== record.prepareOperationKey ||
         !delivery ||
         delivery.terminalReceipt.state !== "succeeded" ||
-        canonicalJson(observed.binding) !== canonicalJson(prepared.binding) ||
-        canonicalJson(observed.prepare) !== canonicalJson(prepared.prepare) ||
-        observed.planDigest !== prepared.planDigest ||
-        observed.apiJobId !== prepared.apiJobId ||
-        observed.parentOperationKey !== prepared.parentOperationKey ||
-        observed.parentFingerprint !== prepared.parentFingerprint ||
-        observed.parentDeadlineAt !== prepared.parentDeadlineAt ||
-        canonicalJson(observed.steps) !== canonicalJson(prepared.steps) ||
-        canonicalJson(observed.serviceIds) !== canonicalJson(prepared.serviceIds) ||
-        !observed.dmFence ||
-        canonicalJson({
-          ...observed.dmFence,
-          sequence: prepared.dmFence?.sequence,
-          state: prepared.dmFence?.state,
-        }) !== canonicalJson(prepared.dmFence) ||
-        observed.generation !== "not_started" ||
-        observed.followUp !== "not_started" ||
-        observed.appliedRevisionId !== null ||
-        (!unusedDecision && observed.decision !== null) ||
-        result._dataExecutions !== undefined ||
-        Object.values(projection.operations).some(
-          (entry) =>
-            !exactRecoveryControl(entry) &&
-            ((entry.operationKey !== record.prepareOperationKey &&
-              (entry.operationKey !== record.coordinatorPrerequisite?.root.operationKey ||
-                canonicalJson(entry.operation) !==
-                  canonicalJson(record.coordinatorPrerequisite?.operation))) ||
-              !entry.terminal ||
-              !entry.receiptDelivery),
-        )
+        result._dataExecutions !== undefined
       )
         throw new JobObservationPending("recovery_required");
     }
     if (saved) {
-      const decision = configurationMaintenanceDecisionCheckpointSchema.parse(
-          result._configurationMaintenanceDecision,
-        ),
-        { checkpointDigest, ...body } = decision.operation,
-        remote = result._configurationMaintenance as Record<string, unknown> | undefined,
-        receipt = configurationMaintenanceReceiptSchema.parse(remote?.receipt);
+      const rowVersions = z.array(configurationSavedRowSchema).max(512).parse(retained.rowVersions),
+        remote = result._configurationMaintenance as Record<string, unknown> | undefined;
       if (
-        body.decision !== "continue" ||
-        body.candidateId !== record.candidateId ||
-        body.maintenanceId !== record.maintenanceId ||
-        body.prepareOperationKey !== record.prepareOperationKey ||
-        body.prepareFingerprint !== receipt.prepare.operationFingerprint ||
-        body.planDigest !== receipt.planDigest ||
-        body.checkpointVersion >= job.execution!.version ||
-        canonicalJson(retained.rowVersions) !== canonicalJson(decision.rowVersions) ||
-        checkpointDigest !== configurationMaintenanceDbDecisionDigest(body, decision.rowVersions) ||
-        receipt.apiJobId !== job.jobId ||
-        receipt.prepare.operationKey !== record.prepareOperationKey ||
-        receipt.binding.candidateId !== record.candidateId ||
-        receipt.binding.applyOperationKey !== record.operationKey ||
-        receipt.binding.applyOperationFingerprint !== opsOperationFingerprint(operation) ||
-        receipt.binding.revisionId !== inspected.snapshot.revisionId ||
-        !preparation?.receiptDelivery
+        remote?.prepareOperationKey !== record.prepareOperationKey ||
+        !preparation?.receiptDelivery ||
+        preparation.receiptDelivery.terminalReceipt.state !== "succeeded"
       )
         throw new JobObservationPending("recovery_required");
-      await assertConfigurationSavedRows(tx, decision.rowVersions);
+      await assertConfigurationSavedRows(tx, rowVersions);
       if (record.privateIntegrationReload?.stagedMigration)
         await (await import("./configuration-migration/staging")).assertRetainedMigrationRows(
           {
@@ -2258,7 +1993,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         );
       if (
         coordinator &&
-        (decision.rowVersions.some((row) => row.rowVersion !== row.previousRowVersion) ||
+        (rowVersions.some((row) => row.rowVersion !== row.previousRowVersion) ||
           (await sourceFingerprint(read)) !== record.sourceFingerprint)
       )
         throw new JobObservationPending("recovery_required");
@@ -3189,33 +2924,8 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
       return { configuration: await completeNeverPreparedConfiguration(candidate) };
     throw error;
   }
-  const retainedAbandon = job.checkpointResult?._configurationMaintenanceDecision;
-  const abandon =
-    retainedAbandon === undefined
-      ? await maintenance.prepareConfigurationMaintenanceAbandon(candidate)
-      : configurationMaintenanceDecisionCheckpointSchema.parse(retainedAbandon).operation;
-  if (abandon.decision !== "abandon") throw new JobObservationPending("recovery_required");
-  await maintenance.decideConfigurationMaintenance(abandon);
-  const observed = await maintenance.inspectConfigurationMaintenance({
-    maintenanceId: state.record.maintenanceId!,
-    candidateId: candidate.candidateId,
-  });
-  const settlement = job.checkpointResult?._configurationMaintenanceSettle;
-  await maintenance.settleConfigurationMaintenance(
-    settlement === undefined
-      ? {
-          kind: "configurationMaintenance.settle",
-          maintenanceId: observed.binding.maintenanceId,
-          candidateId: candidate.candidateId,
-          prepareOperationKey: observed.prepare.operationKey,
-          prepareFingerprint: observed.prepare.operationFingerprint,
-          planDigest: observed.planDigest,
-          decisionId: abandon.decisionId,
-          expectedSequence: observed.sequence,
-          evidenceDigest: configurationMaintenanceSettleRequestDigest(observed),
-        }
-      : configurationMaintenanceSettleCheckpointSchema.parse(settlement).operation,
-  );
+  // The rows were never saved: the prepared maintenance is abandoned unused.
+  await maintenance.settleConfigurationMaintenance(state.record.maintenanceId!, "abandon");
   await discardUnusedPreparedProspectiveConfiguration(candidate);
   if (job.protocol?.cancelRequestedAt !== undefined)
     return completeUnusedConfigurationCancellation(candidate);
@@ -4716,13 +4426,13 @@ export async function stageProspectiveConfigurationMaintenance(
   }
 }
 
-/** The fixed prepared candidate producer. Desired rows, participant commit,
- * actual xmin receipts and ONE continue decision share the original writer
- * connection/transaction. This entry does not publish an apply claim or issue
- * a host grant; the persister coordinates those only after decision delivery. */
+/** Prepares the maintenance, then saves the desired rows in one transaction
+ * with the candidate's `saved` phase and the row versions. That transaction is
+ * the only check that the sources did not change and the preparation still
+ * holds. A repeat on a saved candidate checks the rows are still the saved ones. */
 export async function commitProspectiveConfigurationMaintenance(
   candidate: ValidatedConfigurationCandidate,
-): Promise<ConfigurationMaintenanceDecision> {
+): Promise<void> {
   const state = validatedConfigurationCandidateState(candidate),
     owner = administrativeConfigurationState(state.writer),
     record = state.record,
@@ -4739,52 +4449,35 @@ export async function commitProspectiveConfigurationMaintenance(
     throw Error("Original maintenance candidate transaction required");
   if (stage === "committed") {
     let observed: Record<string, unknown> | undefined;
-    const operation = await withConfigurationWriteTransaction(state.writer, async (tx) => {
+    await withConfigurationWriteTransaction(state.writer, async (tx) => {
       const [row] = await tx
-          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
+          .select({ result: schema.adminJob.result })
           .from(schema.adminJob)
           .where(jobOwnership(owner.job.jobId, owner.job.execution))
           .for("update"),
         result = row?.result as Record<string, unknown> | undefined,
-        protocol = row?.protocol as AdminJobProtocol | undefined,
-        retained = result?._configurationCandidate as Record<string, unknown> | undefined,
-        source = configurationMaintenanceDecisionCheckpointSchema.parse(
-          result?._configurationMaintenanceDecision,
-        ),
-        { checkpointDigest, ...body } = source.operation;
+        retained = result?._configurationCandidate as Record<string, unknown> | undefined;
       if (
         !result ||
         retained?.candidateId !== candidate.candidateId ||
         retained.revisionId !== candidate.revisionId ||
         retained.sealedOperationKey !== record.operationKey ||
         retained.maintenanceId !== record.maintenanceId ||
-        retained.phase !== "saved" ||
-        body.decision !== "continue" ||
-        body.candidateId !== candidate.candidateId ||
-        body.prepareOperationKey !== record.prepareOperationKey ||
-        canonicalJson(retained.rowVersions) !== canonicalJson(source.rowVersions) ||
-        checkpointDigest !== configurationMaintenanceDbDecisionDigest(body, source.rowVersions)
+        retained.phase !== "saved"
       )
-        throw Error("Original committed maintenance decision required");
-      await assertConfigurationSavedRows(tx, source.rowVersions);
+        throw Error("Original saved maintenance candidate required");
+      await assertConfigurationSavedRows(
+        tx,
+        z.array(configurationSavedRowSchema).max(512).parse(retained.rowVersions),
+      );
       observed = result;
-      return source.operation;
     });
     if (!observed) throw new JobObservationPending("recovery_required");
     owner.job.checkpointResult = observed;
-    return operation;
+    return;
   }
   const prepared = await maintenance.prepareConfigurationMaintenance(candidate),
     checkpoint = candidateCheckpoint(candidate, state);
-  if (
-    prepared.state !== "prepared" ||
-    prepared.decision !== null ||
-    prepared.dmFence?.state !== "prepared" ||
-    prepared.generation !== "not_started" ||
-    prepared.followUp !== "not_started" ||
-    prepared.preflight !== "current"
-  )
-    throw Error("Original prepared maintenance reservation required");
   await verifyCurrentPreview(candidate, state, owner.job.signal);
   await verifyConfigurationCommitParticipant(candidate, state.writer);
   await owner.job.checkpoint({
@@ -4792,20 +4485,16 @@ export async function commitProspectiveConfigurationMaintenance(
     _configurationCandidate: { ...checkpoint, phase: "save_attempted" },
   });
   setStage(candidate, "save_attempted");
-  let committed: Record<string, unknown> | undefined,
-    decision: ConfigurationMaintenanceDecision | undefined;
+  let committed: Record<string, unknown> | undefined;
   try {
     await withConfigurationWriteTransaction(state.writer, async (tx, context) => {
       const [row] = await tx
-          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
+          .select({ result: schema.adminJob.result })
           .from(schema.adminJob)
           .where(jobOwnership(owner.job.jobId, owner.job.execution))
           .for("update"),
         result = row?.result as Record<string, unknown> | undefined,
-        protocol = row?.protocol as AdminJobProtocol | undefined,
-        retained = result?._configurationCandidate as Record<string, unknown> | undefined,
-        remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
-        preparation = readProjection(protocol, result).operations[record.prepareOperationKey!];
+        retained = result?._configurationCandidate as Record<string, unknown> | undefined;
       if (
         !result ||
         retained?.candidateId !== candidate.candidateId ||
@@ -4813,16 +4502,7 @@ export async function commitProspectiveConfigurationMaintenance(
         retained.sealedOperationKey !== record.operationKey ||
         retained.revisionId !== candidate.revisionId ||
         retained.phase !== "save_attempted" ||
-        retained.rowVersions !== undefined ||
-        remote?.phase !== "prepared" ||
-        canonicalJson(remote.receipt) !== canonicalJson(prepared) ||
-        result._configurationMaintenanceDecision !== undefined ||
-        result._configurationMaintenanceRollback !== undefined ||
-        hasUnsettledManagedOperation(result, protocol) ||
-        !preparation?.receiptDelivery ||
-        preparation.receiptDelivery.terminalReceipt.state !== "succeeded" ||
-        canonicalJson(preparation.receiptDelivery.terminalReceipt.result) !==
-          canonicalJson(prepared)
+        retained.rowVersions !== undefined
       )
         throw Error("Original owned prepared candidate checkpoint required");
       if ((await sourceFingerprint(context)) !== candidate.sourceFingerprint)
@@ -4831,41 +4511,19 @@ export async function commitProspectiveConfigurationMaintenance(
         throw Error("Configuration candidate expired");
       await verifyConfigurationCommitParticipant(candidate, state.writer);
       await verifyCurrentPreview(candidate, state, owner.job.signal);
-      const fresh = await maintenance.inspectConfigurationMaintenance({
-        maintenanceId: record.maintenanceId!,
-        candidateId: candidate.candidateId,
-      });
+      // The preparation still holds, with time left to apply under it.
+      const fresh = await maintenance.inspectConfigurationMaintenance(record.maintenanceId!);
       if (
-        fresh.preflight !== "current" ||
-        canonicalJson({ ...fresh, preflight: prepared.preflight }) !== canonicalJson(prepared)
+        fresh.state !== "prepared" ||
+        fresh.cancelRequestedAt !== null ||
+        canonicalJson(fresh.fence) !== canonicalJson(prepared.fence) ||
+        Date.now() + MAINTENANCE_APPLY_MARGIN_MS >= fresh.prepare.deadlineAt
       )
-        throw Error("Original prepared maintenance preflight changed");
+        throw Error("Configuration maintenance preparation no longer holds");
       await owner.participant?.commit(candidate, state.writer, tx);
       const rowVersions = await persistOverlay(tx, state, candidate),
-        body = {
-          kind: "configurationMaintenance.decide" as const,
-          maintenanceId: record.maintenanceId!,
-          candidateId: candidate.candidateId,
-          prepareOperationKey: record.prepareOperationKey!,
-          prepareFingerprint: prepared.prepare.operationFingerprint,
-          planDigest: prepared.planDigest,
-          decisionId: randomUUID(),
-          decision: "continue" as const,
-          expectedSequence: prepared.sequence,
-          checkpointVersion: owner.job.execution!.version,
-        };
-      decision = configurationMaintenanceDecisionSchema.parse({
-        ...body,
-        checkpointDigest: configurationMaintenanceDbDecisionDigest(body, rowVersions),
-      });
-      const source = configurationMaintenanceDecisionCheckpointSchema.parse({
-          version: 1,
-          operation: decision,
-          rowVersions,
-          attempt: "not_attempted",
-        }),
         [latest] = await tx
-          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
+          .select({ result: schema.adminJob.result })
           .from(schema.adminJob)
           .where(jobOwnership(owner.job.jobId, owner.job.execution))
           .for("update");
@@ -4873,7 +4531,6 @@ export async function commitProspectiveConfigurationMaintenance(
       committed = {
         ...(latest.result as Record<string, unknown>),
         _configurationCandidate: { ...checkpoint, phase: "saved", rowVersions },
-        _configurationMaintenanceDecision: source,
       };
       const saved = await tx
         .update(schema.adminJob)
@@ -4884,70 +4541,21 @@ export async function commitProspectiveConfigurationMaintenance(
     });
   } catch (error) {
     if (error instanceof ConfigurationWriteRolledBack) {
-      // This catch consumes the actual transaction wrapper's conclusive native
-      // rollback, never a caller-supplied error, boolean or row-absence guess.
+      // The transaction's own rollback is known: nothing was saved.
       setStage(candidate, "rolled_back");
-      let rollbackCheckpoint: Record<string, unknown> | undefined;
-      await withConfigurationWriteTransaction(state.writer, async (tx) => {
-        const [row] = await tx
-            .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
-            .from(schema.adminJob)
-            .where(jobOwnership(owner.job.jobId, owner.job.execution))
-            .for("update"),
-          actual = row?.result as Record<string, unknown> | undefined,
-          actualProtocol = row?.protocol as AdminJobProtocol | undefined,
-          retained = actual?._configurationCandidate as Record<string, unknown> | undefined,
-          remote = actual?._configurationMaintenance as Record<string, unknown> | undefined;
-        if (
-          !actual ||
-          retained?.candidateId !== candidate.candidateId ||
-          retained.revisionId !== candidate.revisionId ||
-          retained.sealedOperationKey !== record.operationKey ||
-          retained.maintenanceId !== record.maintenanceId ||
-          retained.phase !== "save_attempted" ||
-          retained.rowVersions !== undefined ||
-          actual._configurationMaintenanceDecision !== undefined ||
-          actual._configurationMaintenanceRollback !== undefined ||
-          remote?.phase !== "prepared" ||
-          canonicalJson(remote.receipt) !== canonicalJson(prepared) ||
-          hasUnsettledManagedOperation(actual, actualProtocol)
-        )
-          throw new JobObservationPending("recovery_required");
-        const proof = configurationMaintenanceRollbackCheckpointSchema.parse({
-          version: 1,
-          disposition: "known_rolled_back",
-          rollbackId: randomUUID(),
-          candidateId: candidate.candidateId,
-          maintenanceId: record.maintenanceId,
-          prepareOperationKey: record.prepareOperationKey,
-          prepareFingerprint: prepared.prepare.operationFingerprint,
-          planDigest: prepared.planDigest,
-          checkpointVersion: owner.job.execution!.version,
-        });
-        rollbackCheckpoint = {
-          ...actual,
-          _configurationCandidate: { ...retained, phase: "rolled_back" },
-          _configurationMaintenanceRollback: proof,
-        };
-        const saved = await tx
-          .update(schema.adminJob)
-          .set({ result: rollbackCheckpoint })
-          .where(jobOwnership(owner.job.jobId, owner.job.execution))
-          .returning({ id: schema.adminJob.id });
-        if (saved.length !== 1) throw new JobObservationPending("recovery_required");
+      await owner.job.checkpoint({
+        ...owner.job.checkpointResult,
+        _configurationCandidate: { ...checkpoint, phase: "rolled_back" },
       });
-      if (!rollbackCheckpoint) throw new JobObservationPending("recovery_required");
-      owner.job.checkpointResult = rollbackCheckpoint;
     }
     if (error instanceof ConfigurationWriteCommitUnknown)
       throw new JobObservationPending("recovery_required");
     throw error;
   }
-  if (!committed || !decision) throw new JobObservationPending("recovery_required");
+  if (!committed) throw new JobObservationPending("recovery_required");
   state.persisted = true;
   setStage(candidate, "committed");
   owner.job.checkpointResult = committed;
-  return decision;
 }
 
 export async function persistAndApplyProspectiveConfiguration(
@@ -4976,14 +4584,12 @@ export async function persistAndApplyProspectiveConfiguration(
   if (!state.record.maintenanceId && stage === "committed")
     return applyCommittedOrdinaryCandidate(candidate, options.signal);
   if (state.record.maintenanceId) {
-    const maintenance = await configurationMaintenanceProtocol;
-    let decision: ConfigurationMaintenanceDecision;
+    const maintenanceId = state.record.maintenanceId;
     try {
-      decision = await commitProspectiveConfigurationMaintenance(candidate);
+      await commitProspectiveConfigurationMaintenance(candidate);
     } catch (error) {
-      // A known original pre-root rejection has no remote reservation to
-      // abandon. Prove nonissuance under the same row lock before deleting its
-      // inert packet; unknown helper/root/save attempts stay pinned.
+      // A known rejection before the preparation has nothing to settle; the
+      // inert candidate is discarded once nothing was issued.
       if (
         stageOf(candidate) === "prepared" &&
         candidates.get(candidate)?.rejectedUnissued === true &&
@@ -5016,23 +4622,8 @@ export async function persistAndApplyProspectiveConfiguration(
       }
       if (!(error instanceof ConfigurationWriteRolledBack) || stageOf(candidate) !== "rolled_back")
         throw error;
-      const abandon = await maintenance.prepareConfigurationMaintenanceAbandon(candidate);
-      await maintenance.decideConfigurationMaintenance(abandon);
-      const observed = await maintenance.inspectConfigurationMaintenance({
-        maintenanceId: state.record.maintenanceId,
-        candidateId: candidate.candidateId,
-      });
-      await maintenance.settleConfigurationMaintenance({
-        kind: "configurationMaintenance.settle",
-        maintenanceId: observed.binding.maintenanceId,
-        candidateId: candidate.candidateId,
-        prepareOperationKey: observed.prepare.operationKey,
-        prepareFingerprint: observed.prepare.operationFingerprint,
-        planDigest: observed.planDigest,
-        decisionId: abandon.decisionId,
-        expectedSequence: observed.sequence,
-        evidenceDigest: configurationMaintenanceSettleRequestDigest(observed),
-      });
+      // Nothing was saved: the prepared maintenance is abandoned unused.
+      await settleConfigurationMaintenance(maintenanceId, "abandon");
       await discardUnusedPreparedProspectiveConfiguration(candidate);
       const application: TrustedConfigurationApplyOutcome = {
         outcome: "not_committed",
@@ -5055,10 +4646,21 @@ export async function persistAndApplyProspectiveConfiguration(
         application,
       };
     }
-    const authorized = await maintenance.decideConfigurationMaintenance(decision),
-      generation = configurationApplyResultSchema.parse(
-        await maintenance.executeConfigurationMaintenanceStep(candidate, 0),
-      );
+    const { applied, settled } = await applySavedConfigurationMaintenance(candidate);
+    // A cancel before the maintenance applied anything leaves the generation as it was.
+    if (!applied?.generation) {
+      if (settled.generation !== "not_started")
+        throw new JobObservationPending("recovery_required");
+      throw new AdminJobFailure("Configuration maintenance was cancelled", {
+        configuration: {
+          outcome: "not_committed",
+          reason: "failed",
+          cleanupFailed: false,
+          registryUpdateFailed: false,
+        },
+      });
+    }
+    const generation = configurationApplyResultSchema.parse(applied.generation);
     const contained = generation.outcome === "not_committed" && !generation.cleanupFailed;
     if (
       !contained &&
@@ -5068,6 +4670,12 @@ export async function persistAndApplyProspectiveConfiguration(
         generation.cleanupFailed)
     )
       throw new JobObservationPending("recovery_required");
+    if (
+      contained
+        ? settled.generation !== "not_committed" || settled.appliedRevisionId !== null
+        : settled.generation !== "committed" || settled.appliedRevisionId !== candidate.revisionId
+    )
+      throw new JobObservationPending("recovery_required");
     let registryUpdateFailed = false;
     if (generation.outcome === "committed")
       try {
@@ -5075,59 +4683,16 @@ export async function persistAndApplyProspectiveConfiguration(
       } catch {
         registryUpdateFailed = true;
       }
-    if (!contained)
-      for (const step of authorized.steps.slice(1))
-        await maintenance.executeConfigurationMaintenanceStep(candidate, step.ordinal);
-    const observed = await maintenance.inspectConfigurationMaintenance(authorized.binding);
-    if (
-      !observed.decision ||
-      observed.decision.decisionId !== decision.decisionId ||
-      (contained
-        ? observed.generation !== "not_committed" ||
-          observed.appliedRevisionId !== null ||
-          observed.followUp !== "contained"
-        : observed.generation !== "committed" ||
-          observed.appliedRevisionId !== candidate.revisionId ||
-          observed.followUp !== "complete")
-    )
-      throw new JobObservationPending("recovery_required");
-    // Once admitted, the original request is immutable even when finalization
-    // advanced the observed owner sequence. Recovery delivers/copies that
-    // exact retained winner; it never derives a new checksum/body or key.
-    const originalSettlement = owner.job.checkpointResult?._configurationMaintenanceSettle,
-      settled = await maintenance.settleConfigurationMaintenance(
-        originalSettlement === undefined
-          ? {
-              kind: "configurationMaintenance.settle",
-              maintenanceId: observed.binding.maintenanceId,
-              candidateId: candidate.candidateId,
-              prepareOperationKey: observed.prepare.operationKey,
-              prepareFingerprint: observed.prepare.operationFingerprint,
-              planDigest: observed.planDigest,
-              decisionId: observed.decision.decisionId,
-              expectedSequence: observed.sequence,
-              evidenceDigest: configurationMaintenanceSettleRequestDigest(observed),
-            }
-          : configurationMaintenanceSettleCheckpointSchema.parse(originalSettlement).operation,
-      );
-    if (
-      contained
-        ? settled.generation !== "not_committed" ||
-          settled.appliedRevisionId !== null ||
-          settled.followUp !== "contained"
-        : settled.generation !== "committed" ||
-          settled.appliedRevisionId !== candidate.revisionId ||
-          settled.followUp !== "complete"
-    )
-      throw new JobObservationPending("recovery_required");
     const application: TrustedConfigurationApplyOutcome = {
         ...generation,
         registryUpdateFailed,
       },
+      followUp = contained || settled.followUp !== "complete" ? "contained" : "complete",
       checkpoint = owner.job.checkpointResult?._configurationCandidate as Record<string, unknown>,
-      source = configurationMaintenanceDecisionCheckpointSchema.parse(
-        owner.job.checkpointResult?._configurationMaintenanceDecision,
-      ),
+      rowVersions = z
+        .array(configurationSavedRowSchema)
+        .max(512)
+        .parse(checkpoint?.rowVersions ?? []),
       serviceId = "serviceId" in state.sealed.operation ? state.sealed.operation.serviceId : null;
     await owner.job.checkpoint({
       ...owner.job.checkpointResult,
@@ -5149,7 +4714,7 @@ export async function persistAndApplyProspectiveConfiguration(
             serviceCredential: {
               serviceId,
               revisionId: candidate.revisionId,
-              followUp: contained ? "contained" : "complete",
+              followUp,
             },
           }
         : {}),
@@ -5159,7 +4724,7 @@ export async function persistAndApplyProspectiveConfiguration(
               serviceId: "data-manager",
               action: state.record.privateCoordinatorLifecycle.action,
               revisionId: candidate.revisionId,
-              followUp: contained ? "contained" : "complete",
+              followUp,
             },
           }
         : {}),
@@ -5169,11 +4734,17 @@ export async function persistAndApplyProspectiveConfiguration(
               previewFingerprint: state.record.privatePlatformIntent.previewFingerprint,
               handoffId: state.record.privatePlatformIntent.handoffId,
               revisionId: candidate.revisionId,
-              followUp: contained ? "contained" : "complete",
+              followUp,
             },
           }
         : {}),
     });
+    // A generation committed with a follow-up that did not complete, as after a
+    // cancel, ends the job without success.
+    if (!contained && followUp !== "complete")
+      throw new AdminJobFailure("Configuration maintenance did not complete", {
+        configuration: application,
+      });
     if (!registryUpdateFailed && !state.record.privateIntegrationReload?.stagedMigration)
       await retireSettledProspectiveConfiguration(candidate);
     return {
@@ -5181,7 +4752,7 @@ export async function persistAndApplyProspectiveConfiguration(
       revisionId: candidate.revisionId,
       saved: state.record.privateCoordinatorLifecycle
         ? "unchanged"
-        : source.rowVersions.length
+        : rowVersions.length
           ? "committed"
           : "unchanged",
       application,
@@ -5278,7 +4849,7 @@ async function applyCommittedOrdinaryCandidate(
         .where(jobOwnership(owner.job.jobId, owner.job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
-      protocol = row?.protocol as AdminJobProtocol | undefined,
+      _protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined;
     if (
       !result ||
@@ -5475,13 +5046,9 @@ async function removeExactRetainedCandidate(
 /** Request correlation only: the receiver restores the SAME admitted root.
  * The original API parent deadline stays exact; only this fixed no-effect
  * metadata attempt receives its own bounded reconciliation clock. */
-function prepareMaintenanceControlRequest(
-  job: JobContext,
-  operation: ConfigurationMaintenanceDecision | ConfigurationMaintenanceSettle,
-  stepAddress: string,
-) {
-  if (operation.kind === "configurationMaintenance.decide" && operation.decision === "continue")
-    return prepareApiJobRoot(job, operation.kind, stepAddress);
+/** A maintenance settle has its own short deadline, so it can still be sent
+ * once the job's parent deadline passed or the job was cancelled. */
+function maintenanceSettleRoot(job: JobContext, stepAddress: string) {
   const parent = z
     .strictObject({
       operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
@@ -5489,7 +5056,7 @@ function prepareMaintenanceControlRequest(
       deadlineAt: z.number().int().nonnegative().safe(),
     })
     .parse(job.checkpointResult?._parentExecution);
-  if (!job.execution) throw Error("Original owned maintenance control required");
+  if (!job.execution) throw Error("Owned maintenance settlement required");
   const requestedDeadlineAt = Date.now() + 60000,
     nonce = createHash("sha256")
       .update("openmapx-api-control-root-nonce-v1\0")
@@ -5502,461 +5069,30 @@ function prepareMaintenanceControlRequest(
     parent,
   };
 }
-class MaintenanceUnsavedCheckpointConflict extends Error {
-  constructor() {
-    super("Original known-unsaved maintenance checkpoint required");
-  }
+/** The job's maintenance checkpoint: what it prepared and the record it saw last. */
+function maintenanceCheckpoint(job: JobContext) {
+  return job.checkpointResult?._configurationMaintenance as Record<string, unknown> | undefined;
 }
-function abandonCheckpointDigest(
-  operation: Omit<ConfigurationMaintenanceDecision, "checkpointDigest">,
+function assertOwnRecord(
+  job: JobContext,
+  record: MaintenanceRecord,
+  prepare: ConfigurationMaintenancePrepare,
+  prepareOperationKey: string,
 ) {
-  return configurationMaintenanceDbDecisionDigest(operation, []);
-}
-
-/** Retain only a known pre-save abandonment. The actual owned row lock waits
- * out an earlier transaction; a stale cache, timeout or missing desired row
- * cannot create it. This records the decision and issues NO host request/grant.
- * Delivery must consume the exact committed checkpoint, never this return
- * value as caller-supplied authorization. */
-export async function prepareConfigurationMaintenanceAbandon(
-  candidate: ValidatedConfigurationCandidate,
-): Promise<ConfigurationMaintenanceDecision> {
-  const source = validatedConfigurationCandidateState(candidate),
-    owner = administrativeConfigurationState(source.writer),
-    record = source.record;
-  if (!record.maintenanceId || !record.prepareOperationKey || !owner.job.execution)
-    throw new MaintenanceUnsavedCheckpointConflict();
-  const prepared = await inspectConfigurationMaintenance({
-    maintenanceId: record.maintenanceId,
-    candidateId: candidate.candidateId,
-  });
+  const { kind: _kind, ...binding } = prepare;
   if (
-    prepared.state !== "prepared" ||
-    prepared.decision !== null ||
-    prepared.dmFence?.state !== "prepared" ||
-    prepared.generation !== "not_started" ||
-    prepared.followUp !== "not_started" ||
-    prepared.appliedRevisionId !== null ||
-    prepared.binding.applyOperationKey !== record.operationKey ||
-    prepared.binding.applyOperationFingerprint !==
-      opsOperationFingerprint(source.sealed.operation) ||
-    prepared.binding.revisionId !== candidate.revisionId ||
-    prepared.prepare.operationKey !== record.prepareOperationKey
+    canonicalJson(record.binding) !== canonicalJson(binding) ||
+    record.prepare.operationKey !== prepareOperationKey ||
+    record.prepare.operationFingerprint !== opsOperationFingerprint(prepare) ||
+    record.apiJobId !== job.jobId
   )
-    throw new MaintenanceUnsavedCheckpointConflict();
-  let committed: Record<string, unknown> | undefined,
-    operation: ConfigurationMaintenanceDecision | undefined;
-  try {
-    await withConfigurationWriteTransaction(source.writer, async (tx) => {
-      const [row] = await tx
-          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
-          .from(schema.adminJob)
-          .where(jobOwnership(owner.job.jobId, owner.job.execution))
-          .for("update"),
-        result = row?.result as Record<string, unknown> | undefined,
-        protocol = row?.protocol as AdminJobProtocol | undefined,
-        retained = result?._configurationCandidate as Record<string, unknown> | undefined,
-        maintenance = result?._configurationMaintenance as Record<string, unknown> | undefined,
-        projected = readProjection(protocol, result).operations[record.prepareOperationKey!],
-        delivery = projected?.receiptDelivery;
-      if (retained?.phase === "rolled_back") {
-        assertKnownRolledBackConfigurationCandidate(candidate);
-        const rollback = configurationMaintenanceRollbackCheckpointSchema.parse(
-          result?._configurationMaintenanceRollback,
-        );
-        if (
-          rollback.candidateId !== candidate.candidateId ||
-          rollback.maintenanceId !== record.maintenanceId ||
-          rollback.prepareOperationKey !== record.prepareOperationKey ||
-          rollback.prepareFingerprint !== prepared.prepare.operationFingerprint ||
-          rollback.planDigest !== prepared.planDigest ||
-          rollback.checkpointVersion > owner.job.execution!.version
-        )
-          throw new MaintenanceUnsavedCheckpointConflict();
-      } else if (result?._configurationMaintenanceRollback !== undefined)
-        throw new MaintenanceUnsavedCheckpointConflict();
-      if (
-        !result ||
-        retained?.candidateId !== candidate.candidateId ||
-        retained.operationKey !== candidate.operationKey ||
-        retained.revisionId !== candidate.revisionId ||
-        retained.sealedOperationKey !== record.operationKey ||
-        retained.maintenanceId !== record.maintenanceId ||
-        retained.prepareOperationKey !== record.prepareOperationKey ||
-        !["prepared", "rolled_back"].includes(String(retained.phase)) ||
-        retained.rowVersions !== undefined ||
-        maintenance?.phase !== "prepared" ||
-        maintenance.prepareOperationKey !== record.prepareOperationKey ||
-        maintenance.prepareOperationFingerprint !== prepared.prepare.operationFingerprint ||
-        !projected?.terminal ||
-        projected.kind !== "configurationMaintenance.prepare" ||
-        !delivery ||
-        delivery.terminalReceipt.state !== "succeeded" ||
-        canonicalJson(delivery.terminalReceipt.result) !== canonicalJson(maintenance.receipt) ||
-        hasUnsettledManagedOperation(result, protocol) ||
-        canonicalJson(result._parentExecution) !==
-          canonicalJson({
-            operationKey: record.parentOperationKey,
-            fingerprint: record.parentFingerprint,
-            deadlineAt: record.parentDeadlineAt,
-          })
-      )
-        throw new MaintenanceUnsavedCheckpointConflict();
-      const previous = result._configurationMaintenanceDecision;
-      if (previous !== undefined) {
-        const existing = abandonCheckpointSchema.parse(previous),
-          { checkpointDigest, ...body } = existing.operation;
-        if (
-          body.decision !== "abandon" ||
-          body.candidateId !== candidate.candidateId ||
-          body.maintenanceId !== record.maintenanceId ||
-          body.prepareOperationKey !== record.prepareOperationKey ||
-          body.prepareFingerprint !== prepared.prepare.operationFingerprint ||
-          body.planDigest !== prepared.planDigest ||
-          body.expectedSequence !== prepared.sequence ||
-          checkpointDigest !== abandonCheckpointDigest(body)
-        )
-          throw new MaintenanceUnsavedCheckpointConflict();
-        committed = result;
-        operation = existing.operation;
-        return;
-      }
-      const body = {
-        kind: "configurationMaintenance.decide" as const,
-        maintenanceId: record.maintenanceId!,
-        candidateId: candidate.candidateId,
-        prepareOperationKey: record.prepareOperationKey!,
-        prepareFingerprint: prepared.prepare.operationFingerprint,
-        planDigest: prepared.planDigest,
-        decisionId: randomUUID(),
-        decision: "abandon" as const,
-        expectedSequence: prepared.sequence,
-        checkpointVersion: owner.job.execution!.version,
-      };
-      operation = configurationMaintenanceDecisionSchema.parse({
-        ...body,
-        checkpointDigest: abandonCheckpointDigest(body),
-      });
-      const checkpoint = abandonCheckpointSchema.parse({
-        version: 1,
-        operation,
-        rowVersions: [],
-        attempt: "not_attempted",
-      });
-      committed = { ...result, _configurationMaintenanceDecision: checkpoint };
-      const saved = await tx
-        .update(schema.adminJob)
-        .set({ result: committed })
-        .where(jobOwnership(owner.job.jobId, owner.job.execution))
-        .returning({ id: schema.adminJob.id });
-      if (saved.length !== 1) throw new MaintenanceUnsavedCheckpointConflict();
-    });
-  } catch (error) {
-    if (error instanceof ConfigurationWriteCommitUnknown)
-      throw new JobObservationPending("recovery_required");
-    if (
-      error instanceof ConfigurationWriteRolledBack &&
-      error.failure instanceof MaintenanceUnsavedCheckpointConflict
-    )
-      throw error.failure;
-    throw error;
-  }
-  if (!committed || !operation) throw new JobObservationPending("recovery_required");
-  owner.job.checkpointResult = committed;
-  return operation;
-}
-
-/** Deliver the actual committed checkpoint, not a caller decision/digest. Its
- * one stable API step consumes the existing64-step capacity; the host binds the
- * request to the ORIGINAL owner rather than admitting a new physical root. */
-export async function decideConfigurationMaintenance(
-  decision: ConfigurationMaintenanceDecision,
-): Promise<ConfigurationMaintenanceReceipt> {
-  const expected = configurationMaintenanceDecisionSchema.parse(decision),
-    exact = configurationMaintenanceIdentitySchema.parse({
-      maintenanceId: expected.maintenanceId,
-      candidateId: expected.candidateId,
-      prepareOperationKey: expected.prepareOperationKey,
-      prepareFingerprint: expected.prepareFingerprint,
-      planDigest: expected.planDigest,
-    }),
-    owner = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),
-    { job } = owner;
-  let committed: Record<string, unknown> | undefined,
-    retained: z.infer<typeof abandonCheckpointSchema> | undefined;
-  try {
-    await withConfigurationWriteTransaction(owner.writer, async (tx) => {
-      const [row] = await tx
-          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
-          .from(schema.adminJob)
-          .where(jobOwnership(job.jobId, job.execution))
-          .for("update"),
-        result = row?.result as Record<string, unknown> | undefined,
-        protocol = row?.protocol as AdminJobProtocol | undefined;
-      if (!result) throw new MaintenanceUnsavedCheckpointConflict();
-      const source = abandonCheckpointSchema.parse(result._configurationMaintenanceDecision),
-        operation = source.operation,
-        { checkpointDigest, ...body } = operation;
-      if (
-        canonicalJson(operation) !== canonicalJson(expected) ||
-        checkpointDigest !== configurationMaintenanceDbDecisionDigest(body, source.rowVersions) ||
-        canonicalJson({
-          maintenanceId: operation.maintenanceId,
-          candidateId: operation.candidateId,
-          prepareOperationKey: operation.prepareOperationKey,
-          prepareFingerprint: operation.prepareFingerprint,
-          planDigest: operation.planDigest,
-        }) !== canonicalJson(exact)
-      )
-        throw new MaintenanceUnsavedCheckpointConflict();
-      if (operation.decision === "continue") {
-        const candidate = result._configurationCandidate as Record<string, unknown> | undefined;
-        if (
-          candidate?.candidateId !== exact.candidateId ||
-          candidate.maintenanceId !== exact.maintenanceId ||
-          candidate.prepareOperationKey !== exact.prepareOperationKey ||
-          !["saved", "applying", "follow_up_pending", "settling", "settled"].includes(
-            String(candidate.phase),
-          ) ||
-          canonicalJson(candidate.rowVersions) !== canonicalJson(source.rowVersions)
-        )
-          throw new MaintenanceUnsavedCheckpointConflict();
-        await assertConfigurationSavedRows(tx, source.rowVersions);
-      }
-      const maintenance = result._configurationMaintenance as Record<string, unknown> | undefined,
-        prepared = configurationMaintenanceReceiptSchema.parse(maintenance?.receipt);
-      if (
-        prepared.prepare.operationKey !== exact.prepareOperationKey ||
-        prepared.prepare.operationFingerprint !== exact.prepareFingerprint ||
-        prepared.binding.maintenanceId !== exact.maintenanceId ||
-        prepared.binding.candidateId !== exact.candidateId ||
-        prepared.planDigest !== exact.planDigest
-      )
-        throw new MaintenanceUnsavedCheckpointConflict();
-      if (source.delivery) {
-        retained = source;
-        committed = result;
-        return;
-      }
-      if (source.attempt !== "not_attempted" || maintenance?.phase !== "prepared")
-        throw new MaintenanceUnsavedCheckpointConflict();
-      const stepAddress = createDurableOpsKey(
-          "configuration-maintenance.decide",
-          `${job.jobId}:${exact.candidateId}`,
-        ),
-        root = prepareMaintenanceControlRequest(
-          { ...job, checkpointResult: result, protocol },
-          source.operation,
-          stepAddress,
-        );
-      retained = abandonCheckpointSchema.parse({ ...source, delivery: { stepAddress, root } });
-      committed = { ...result, _configurationMaintenanceDecision: retained };
-      const saved = await tx
-        .update(schema.adminJob)
-        .set({ result: committed })
-        .where(jobOwnership(job.jobId, job.execution))
-        .returning({ id: schema.adminJob.id });
-      if (saved.length !== 1) throw new MaintenanceUnsavedCheckpointConflict();
-    });
-  } catch (error) {
-    if (error instanceof ConfigurationWriteCommitUnknown)
-      throw new JobObservationPending("recovery_required");
-    if (
-      error instanceof ConfigurationWriteRolledBack &&
-      error.failure instanceof MaintenanceUnsavedCheckpointConflict
-    )
-      throw error.failure;
-    throw error;
-  }
-  if (!committed || !retained?.delivery) throw new JobObservationPending("recovery_required");
-  job.checkpointResult = committed;
-  const source = retained,
-    receipt = configurationMaintenanceReceiptSchema.parse(
-      await executeAdminJobOperation(job, source.operation, "configuration-maintenance.decide", {
-        operationKey: source.delivery!.stepAddress,
-        preparedRoot: source.delivery!.root,
-      }),
-    );
-  if (
-    receipt.binding.maintenanceId !== exact.maintenanceId ||
-    receipt.binding.candidateId !== exact.candidateId ||
-    receipt.prepare.operationKey !== exact.prepareOperationKey ||
-    receipt.prepare.operationFingerprint !== exact.prepareFingerprint ||
-    receipt.planDigest !== exact.planDigest ||
-    receipt.decision?.decisionId !== source.operation.decisionId ||
-    receipt.decision.decision !== source.operation.decision ||
-    receipt.decision.checkpointVersion !== source.operation.checkpointVersion ||
-    receipt.decision.checkpointDigest !== source.operation.checkpointDigest
-  )
-    throw new JobObservationPending("invalid_identity");
-  const latest = job.checkpointResult?._configurationMaintenance as Record<string, unknown>;
-  if (!["settling", "settled"].includes(String(latest.phase)))
-    await job.checkpoint({
-      ...job.checkpointResult,
-      _configurationMaintenance: {
-        ...latest,
-        phase: "authorized",
-        decision: source.operation,
-        receipt,
-      },
-    });
-  return receipt;
-}
-
-/** API-only coordinator for ONE frozen phase. The body/address comes from the
- * actual committed job/decision, never a browser plan or preparedRoot recipe.
- * An attempted phase is lookup-only and never resends the payload. */
-export async function executeConfigurationMaintenanceStep(
-  candidate: ValidatedConfigurationCandidate,
-  ordinal: number,
-): Promise<unknown> {
-  assertCommittedConfigurationCandidate(candidate);
-  const state = validatedConfigurationCandidateState(candidate),
-    { job } = administrativeConfigurationState(state.writer);
-  if (!state.record.maintenanceId) throw Error("Original maintenance candidate required");
-  const prepared = await prepareOwnedConfigurationMaintenanceStep(
-      ordinal,
-      candidate.candidateId,
-      state.record.maintenanceId,
-    ),
-    execute = () =>
-      executeAdminJobOperation(job, prepared.step.operation, "configuration-maintenance.step", {
-        operationKey: prepared.step.operationKey,
-        preparedRoot: prepared.root,
-        ...(prepared.step.phase === "configuration-commit" ? { payload: state.payload } : {}),
-      });
-  if (
-    prepared.step.phase !== "configuration-commit" ||
-    readProjection(job.protocol, job.checkpointResult).operations[prepared.step.operationKey]
-  )
-    return execute();
-  await assertConfigurationApplySubmittable(candidate);
-  return execute();
-}
-
-/** Retain the exact API-observed request before HMAC/POST. An attempted winner
- * observes its original body after later owner sequences, never rekeys. */
-export async function settleConfigurationMaintenance(
-  request: ConfigurationMaintenanceSettle,
-): Promise<ConfigurationMaintenanceReceipt> {
-  const exact = configurationMaintenanceSettleSchema.parse(request),
-    owner = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),
-    { job } = owner;
-  if (owner.transactionActive || !job.execution)
-    throw Error("Original settlement job writer required");
-  const prior = job.checkpointResult?._configurationMaintenanceSettle;
-  let observed: ConfigurationMaintenanceReceipt | undefined;
-  if (prior === undefined) {
-    observed = await inspectConfigurationMaintenance(exact);
-    if (
-      observed.decision?.decisionId !== exact.decisionId ||
-      observed.sequence !== exact.expectedSequence ||
-      observed.prepare.operationKey !== exact.prepareOperationKey ||
-      observed.prepare.operationFingerprint !== exact.prepareFingerprint ||
-      observed.planDigest !== exact.planDigest ||
-      configurationMaintenanceSettleRequestDigest(observed) !== exact.evidenceDigest
-    )
-      throw Error("Actual API settlement observation conflict");
-  }
-  let committed: Record<string, unknown> | undefined;
-  const retained = await withConfigurationWriteTransaction(owner.writer, async (tx) => {
-    const [row] = await tx
-        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
-        .from(schema.adminJob)
-        .where(jobOwnership(job.jobId, job.execution))
-        .for("update"),
-      result = row?.result as Record<string, unknown> | undefined,
-      protocol = row?.protocol as AdminJobProtocol | undefined,
-      maintenance = result?._configurationMaintenance as Record<string, unknown> | undefined,
-      decision = abandonCheckpointSchema.parse(result?._configurationMaintenanceDecision);
-    if (
-      !result ||
-      maintenance?.candidateId !== exact.candidateId ||
-      maintenance.maintenanceId !== exact.maintenanceId ||
-      maintenance.prepareOperationKey !== exact.prepareOperationKey ||
-      maintenance.prepareOperationFingerprint !== exact.prepareFingerprint ||
-      decision.operation.decisionId !== exact.decisionId ||
-      decision.operation.planDigest !== exact.planDigest ||
-      decision.attempt !== "attempted"
-    )
-      throw Error("Actual original settlement checkpoint required");
-    if (result._configurationMaintenanceSettle !== undefined) {
-      const original = configurationMaintenanceSettleCheckpointSchema.parse(
-        result._configurationMaintenanceSettle,
-      );
-      if (canonicalJson(original.operation) !== canonicalJson(exact))
-        throw Error("Original accepted settlement request changed");
-      committed = result;
-      return original;
-    }
-    if (!observed || hasUnsettledManagedOperation(result, protocol) || !decision.delivery)
-      throw new JobObservationPending("recovery_required");
-    const delivered = readProjection(protocol, result).operations[
-      decision.delivery.root.operationKey
-    ]?.receiptDelivery;
-    if (
-      !delivered ||
-      delivered.terminalReceipt.state !== "succeeded" ||
-      configurationMaintenanceReceiptSchema.parse(delivered.terminalReceipt.result).decision
-        ?.decisionId !== exact.decisionId
-    )
-      throw Error("Original delivered decision required");
-    const stepAddress = createDurableOpsKey(
-        "configuration-maintenance.settle",
-        `${job.jobId}:${exact.candidateId}`,
-      ),
-      checkpoint = configurationMaintenanceSettleCheckpointSchema.parse({
-        version: 1,
-        operation: exact,
-        attempt: "not_attempted",
-        delivery: {
-          stepAddress,
-          root: prepareMaintenanceControlRequest(
-            { ...job, checkpointResult: result },
-            exact,
-            stepAddress,
-          ),
-        },
-      });
-    committed = { ...result, _configurationMaintenanceSettle: checkpoint };
-    const saved = await tx
-      .update(schema.adminJob)
-      .set({ result: committed })
-      .where(jobOwnership(job.jobId, job.execution))
-      .returning({ id: schema.adminJob.id });
-    if (saved.length !== 1) throw new JobObservationPending("recovery_required");
-    return checkpoint;
-  });
-  if (!committed) throw new JobObservationPending("recovery_required");
-  job.checkpointResult = committed;
-  const receipt = configurationMaintenanceReceiptSchema.parse(
-    await executeAdminJobOperation(job, retained.operation, "configuration-maintenance.settle", {
-      operationKey: retained.delivery.stepAddress,
-      preparedRoot: retained.delivery.root,
-    }),
-  );
-  if (
-    receipt.binding.maintenanceId !== exact.maintenanceId ||
-    receipt.binding.candidateId !== exact.candidateId ||
-    receipt.prepare.operationKey !== exact.prepareOperationKey ||
-    receipt.prepare.operationFingerprint !== exact.prepareFingerprint ||
-    receipt.planDigest !== exact.planDigest ||
-    receipt.decision?.decisionId !== exact.decisionId ||
-    receipt.state !== "settled" ||
-    receipt.dmFence?.state !== "settled"
-  )
-    throw new JobObservationPending("invalid_identity");
-  const latest = job.checkpointResult?._configurationMaintenance as Record<string, unknown>;
-  await job.checkpoint({
-    ...job.checkpointResult,
-    _configurationMaintenance: { ...latest, phase: "settled", receipt },
-  });
-  return receipt;
+    throw Error("Configuration maintenance identity changed");
+  return record;
 }
 
 export async function prepareConfigurationMaintenance(
   candidate: ValidatedConfigurationCandidate,
-): Promise<ConfigurationMaintenanceReceipt> {
+): Promise<MaintenanceRecord> {
   const source = validatedConfigurationCandidateState(candidate),
     { job } = administrativeConfigurationState(source.writer),
     record = source.record,
@@ -5994,9 +5130,7 @@ export async function prepareConfigurationMaintenance(
     operation,
     phase: "preparing",
   };
-  const retained = job.checkpointResult?._configurationMaintenance as
-    | Record<string, unknown>
-    | undefined;
+  const retained = maintenanceCheckpoint(job);
   if (
     retained &&
     (retained.prepareOperationKey !== checkpoint.prepareOperationKey ||
@@ -6004,8 +5138,7 @@ export async function prepareConfigurationMaintenance(
       retained.candidateId !== checkpoint.candidateId)
   )
     throw Error("Original maintenance attempt changed");
-  // An attempted root is lookup-only. Its replay never reruns preparation,
-  // helper admission or candidate validation against a newer desired state.
+  // An attempted preparation is only observed again; it never stages again.
   if (
     !readProjection(job.protocol, job.checkpointResult).operations[record.prepareOperationKey]
       ?.attempt
@@ -6013,131 +5146,51 @@ export async function prepareConfigurationMaintenance(
     await stageProspectiveConfigurationMaintenance(candidate, job.signal);
   if (!retained)
     await job.checkpoint({ ...job.checkpointResult, _configurationMaintenance: checkpoint });
-  const receipt = configurationMaintenanceReceiptSchema.parse(
-    await executeAdminJobOperation(job, operation, "configuration-maintenance.prepare", {
-      operationKey: createDurableOpsKey(
-        "configuration-maintenance.prepare",
-        `${job.jobId}:${candidate.candidateId}`,
-      ),
-      preparedRoot: {
-        operationKey: record.prepareOperationKey,
-        requestedDeadlineAt: parseControlRootOperationKey(record.prepareOperationKey).notAfter,
-        parent: {
-          operationKey: record.parentOperationKey,
-          fingerprint: record.parentFingerprint,
-          deadlineAt: record.parentDeadlineAt,
+  const prepared = assertOwnRecord(
+    job,
+    maintenanceRecordSchema.parse(
+      await executeAdminJobOperation(job, operation, "configuration-maintenance.prepare", {
+        operationKey: createDurableOpsKey(
+          "configuration-maintenance.prepare",
+          `${job.jobId}:${candidate.candidateId}`,
+        ),
+        preparedRoot: {
+          operationKey: record.prepareOperationKey,
+          requestedDeadlineAt: parseControlRootOperationKey(record.prepareOperationKey).notAfter,
+          parent: {
+            operationKey: record.parentOperationKey,
+            fingerprint: record.parentFingerprint,
+            deadlineAt: record.parentDeadlineAt,
+          },
         },
-      },
-    }),
+      }),
+    ),
+    operation,
+    record.prepareOperationKey,
   );
-  if (
-    receipt.binding.maintenanceId !== record.maintenanceId ||
-    receipt.binding.candidateId !== candidate.candidateId ||
-    receipt.binding.applyOperationKey !== record.operationKey ||
-    receipt.binding.applyOperationFingerprint !== operation.applyOperationFingerprint ||
-    receipt.prepare.operationKey !== record.prepareOperationKey ||
-    receipt.prepare.operationFingerprint !== checkpoint.prepareOperationFingerprint ||
-    receipt.apiJobId !== job.jobId ||
-    receipt.parentOperationKey !== record.parentOperationKey ||
-    receipt.parentFingerprint !== record.parentFingerprint ||
-    receipt.parentDeadlineAt !== record.parentDeadlineAt ||
-    receipt.state !== "prepared" ||
-    receipt.preflight !== "current"
-  )
-    throw Error("Original prepared maintenance receipt required");
-  const latest = job.checkpointResult?._configurationMaintenance as
-    | Record<string, unknown>
-    | undefined;
-  if (!["authorized", "applying", "settling", "settled"].includes(String(latest?.phase)))
+  if (prepared.state !== "prepared" || prepared.fence?.state !== "prepared")
+    throw Error("Original prepared maintenance record required");
+  if (maintenanceCheckpoint(job)?.phase === "preparing")
     await job.checkpoint({
       ...job.checkpointResult,
-      _configurationMaintenance: { ...checkpoint, phase: "prepared", receipt },
+      _configurationMaintenance: { ...checkpoint, phase: "prepared", record: prepared },
     });
-  return receipt;
+  return prepared;
 }
-type MaintenanceInspectionCheckpoint =
-  | { attempt: ApiJobChildAttempt; state: "attempted" }
-  | { attempt: ApiJobChildAttempt; state: "complete"; receipt: ConfigurationMaintenanceReceipt };
-/** An inspection inside the final desired-write transaction uses THAT owned
- * connection. It never waits on its own row through the generic checkpoint
- * pool, changes the caller's committed cache or acknowledges mutation evidence
- * from an uncommitted transaction. The host request itself is read-only. */
-async function checkpointMaintenanceInspection(
-  retained: Record<string, unknown>,
-  inspection: MaintenanceInspectionCheckpoint,
-  transaction: AdministrativeConfigurationReadContext | null,
-): Promise<void> {
-  const owner = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),
-    { job } = owner;
-  if (transaction === null) {
-    if (owner.transactionActive) throw Error("Maintenance inspection ownership changed");
-    await job.checkpoint({
-      ...job.checkpointResult,
-      _configurationMaintenance: { ...retained, inspection },
-    });
-    return;
-  }
-  if (
-    !owner.transactionActive ||
-    owner.transactionMode !== "write" ||
-    owner.transactionContext !== transaction
-  )
-    throw Error("Actual original owned write inspection transaction required");
-  assertAdministrativeConfigurationRead(owner.transactionContext);
-  const [row] = await owner.connection
-      .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
-      .from(schema.adminJob)
-      .where(jobOwnership(job.jobId, job.execution))
-      .for("update"),
-    result = row?.result as Record<string, unknown> | undefined,
-    protocol = row?.protocol as AdminJobProtocol | undefined,
-    actual = result?._configurationMaintenance as Record<string, unknown> | undefined,
-    attempt = inspection.attempt;
-  if (
-    !result ||
-    !actual ||
-    actual.maintenanceId !== retained.maintenanceId ||
-    actual.candidateId !== retained.candidateId ||
-    actual.prepareOperationKey !== retained.prepareOperationKey ||
-    actual.prepareOperationFingerprint !== retained.prepareOperationFingerprint ||
-    canonicalJson(actual.operation) !== canonicalJson(retained.operation) ||
-    attempt.apiJobId !== job.jobId ||
-    attempt.apiOwnerVersion !== job.execution?.version ||
-    canonicalJson(result._parentExecution) !==
-      canonicalJson({
-        operationKey: attempt.parentOperationKey,
-        fingerprint: attempt.parentFingerprint,
-        deadlineAt: attempt.parentDeadlineAt,
-      })
-  )
-    throw Error("Original owned maintenance inspection checkpoint required");
-  const rows = await owner.connection
-    .update(schema.adminJob)
-    .set({ result: { ...result, _configurationMaintenance: { ...actual, inspection } } })
-    .where(jobOwnership(job.jobId, job.execution))
-    .returning({ id: schema.adminJob.id });
-  if (rows.length !== 1) throw Error("Original maintenance inspection ownership changed");
-}
-/** Each inspection is a bounded authenticated read of the ORIGINAL owner. It
- * never reuses a cached sync result, renews the seal/root or authorizes effects. */
+
+/** A read of the maintenance record; it never changes anything at the agent
+ * other than recording a helper that exited. */
 export async function inspectConfigurationMaintenance(
-  identity: Pick<ConfigurationMaintenanceIdentity, "maintenanceId" | "candidateId">,
-): Promise<ConfigurationMaintenanceReceipt> {
+  maintenanceId: string,
+): Promise<MaintenanceRecord> {
   const owner = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),
     { job } = owner,
-    transaction = owner.transactionActive ? owner.transactionContext : null,
-    retained = job.checkpointResult?._configurationMaintenance as
-      | Record<string, unknown>
-      | undefined,
+    retained = maintenanceCheckpoint(job),
     prepared = configurationMaintenancePrepareSchema.parse(retained?.operation);
-  if (transaction === undefined)
-    throw Error("Actual original maintenance inspection scope required");
   if (
     !job.execution ||
-    prepared.maintenanceId !== identity.maintenanceId ||
-    prepared.candidateId !== identity.candidateId ||
-    typeof retained?.prepareOperationKey !== "string" ||
-    retained.prepareOperationFingerprint !== opsOperationFingerprint(prepared)
+    prepared.maintenanceId !== maintenanceId ||
+    typeof retained?.prepareOperationKey !== "string"
   )
     throw Error("Original retained maintenance inspection required");
   const parent = z
@@ -6147,14 +5200,10 @@ export async function inspectConfigurationMaintenance(
         deadlineAt: z.number().int().nonnegative().safe(),
       })
       .parse(job.checkpointResult?._parentExecution),
-    operation = {
-      kind: "configurationMaintenance.inspect" as const,
-      maintenanceId: prepared.maintenanceId,
-      candidateId: prepared.candidateId,
-    },
+    operation = { kind: "configurationMaintenance.inspect" as const, maintenanceId },
     key = createDurableOpsKey(
       "configuration-maintenance.inspect",
-      `${job.jobId}:${retained.prepareOperationKey}:${prepared.candidateId}`,
+      `${job.jobId}:${retained.prepareOperationKey}:${randomUUID()}`,
     ),
     attempt = prepareApiJobChildAttempt(job, operation, key, {
       operationKey: key,
@@ -6162,17 +5211,15 @@ export async function inspectConfigurationMaintenance(
       requestedDeadlineAt: Date.now() + 15000,
     });
   if (!attempt) throw Error("Original live API inspection owner required");
-  await checkpointMaintenanceInspection(retained, { attempt, state: "attempted" }, transaction);
   const response = await createApiOpsClient()
     .execute(operation, {
       operationKey: key,
       signal: AbortSignal.any([job.signal, AbortSignal.timeout(15000)]),
       execution: { requestedDeadlineAt: attempt.requestedDeadlineAt },
-      parentAssertion: await issueApiJobChildAssertion(attempt),
+      parentAssertion: issueApiJobChildAssertion(attempt),
     })
     .catch((error: unknown) => {
-      // An unavailable inspection proves no terminal outcome. Retain the
-      // original candidate/fences for bounded observation, never replay effects.
+      // An unanswered inspection proves nothing; the job observes again later.
       if (error instanceof OpsClientError) {
         if (["runtime", "timeout", "busy"].includes(error.errorClass))
           throw new JobObservationPending("transport");
@@ -6182,86 +5229,120 @@ export async function inspectConfigurationMaintenance(
       throw error;
     });
   if (response.execution !== "sync") throw Error("Original maintenance inspection unavailable");
-  const receipt = configurationMaintenanceReceiptSchema.parse(response.value),
-    { kind: _kind, ...binding } = prepared;
-  if (
-    JSON.stringify(receipt.binding) !== JSON.stringify(binding) ||
-    receipt.prepare.operationKey !== retained.prepareOperationKey ||
-    receipt.prepare.operationFingerprint !== retained.prepareOperationFingerprint ||
-    receipt.apiJobId !== job.jobId ||
-    receipt.parentOperationKey !== parent.operationKey ||
-    receipt.parentFingerprint !== parent.fingerprint ||
-    receipt.parentDeadlineAt !== parent.deadlineAt
-  )
-    throw Error("Original maintenance inspection identity changed");
-  const latest = job.checkpointResult?._configurationMaintenance as Record<string, unknown>;
-  await checkpointMaintenanceInspection(
-    latest,
-    { attempt, state: "complete", receipt },
-    transaction,
+  return assertOwnRecord(
+    job,
+    maintenanceRecordSchema.parse(response.value),
+    prepared,
+    retained.prepareOperationKey,
   );
-  // Only the fixed host inspector's full, released never-prepared closure can resolve a
-  // historical unknown preparation. Deliver its ORIGINAL canonical failure;
-  // neither that failure's classification nor its immutable bytes are changed.
-  if (
-    receipt.state === "settled" &&
-    receipt.dmFence === null &&
-    receipt.decision === null &&
-    receipt.generation === "not_started" &&
-    receipt.followUp === "not_started"
-  ) {
-    if (
-      administrativeConfigurationState(currentAdministrativeConfigurationWriter()).transactionActive
-    )
-      throw new JobObservationPending("transport");
-    const projection = readProjection(job.protocol, job.checkpointResult),
-      projected = projection.operations[receipt.prepare.operationKey];
-    if (
-      !projected?.attempt ||
-      projected.kind !== "configurationMaintenance.prepare" ||
-      !projected.operation ||
-      opsOperationFingerprint(projected.operation) !== receipt.prepare.operationFingerprint ||
-      projected.operationId !== receipt.prepare.executionId ||
-      projected.fingerprint !== receipt.prepare.fingerprint ||
-      projected.deadlineAt !== receipt.prepare.deadlineAt ||
-      projected.attempt.apiJobId !== receipt.apiJobId ||
-      projected.attempt.parentOperationKey !== receipt.parentOperationKey ||
-      projected.attempt.parentFingerprint !== receipt.parentFingerprint ||
-      projected.attempt.parentDeadlineAt !== receipt.parentDeadlineAt
-    )
-      throw Error("Original closed maintenance preparation required");
-    const client = createApiOpsClient(),
-      status = await client.status(projected.kind, projected.operationId, {
-        signal: AbortSignal.timeout(15000),
-      });
-    if (
-      (status.state !== "failed" && status.state !== "timed_out") ||
-      status.kind !== projected.kind ||
-      status.operationId !== projected.operationId ||
-      status.operationKey !== projected.operationKey ||
-      status.fingerprint !== projected.fingerprint ||
-      status.deadlineAt !== projected.deadlineAt
-    )
-      throw Error("Original closed maintenance canonical failure required");
-    projected.phase = "terminal";
-    projected.terminal = true;
-    projected.errorClass = status.errorClass;
-    projected.failureResult = status.failureResult;
-    delete projected.outcome;
-    await checkpointTerminalCopy(job, projection, projected, status);
-    if (!projected.receiptDelivery)
-      throw Error("Original closed maintenance receipt delivery unavailable");
+}
+
+/** Runs the maintenance's steps at the agent. It returns once the steps the
+ * agent runs itself ended; a handoff may still run then. */
+async function applyConfigurationMaintenance(
+  candidate: ValidatedConfigurationCandidate,
+): Promise<OpsResultFor<"configurationMaintenance.apply">> {
+  const state = validatedConfigurationCandidateState(candidate),
+    { job } = administrativeConfigurationState(state.writer),
+    maintenanceId = state.record.maintenanceId!,
+    retained = maintenanceCheckpoint(job);
+  if (!retained || retained.maintenanceId !== maintenanceId)
+    throw Error("Original prepared maintenance required");
+  if (retained.phase === "prepared")
+    await job.checkpoint({
+      ...job.checkpointResult,
+      _configurationMaintenance: { ...retained, phase: "applying" },
+    });
+  return executeAdminJobOperation(
+    job,
+    { kind: "configurationMaintenance.apply", maintenanceId },
+    "configuration-maintenance.apply",
+    { durableIdentity: maintenanceId },
+  );
+}
+
+/** Settles the maintenance: `complete` once no step is unresolved, `abandon`
+ * before any step started or, once one did, to stop it after the step in
+ * flight. Each outcome has its own key; a repeat returns the same record. */
+export async function settleConfigurationMaintenance(
+  maintenanceId: string,
+  outcome: "complete" | "abandon",
+): Promise<MaintenanceRecord> {
+  const owner = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),
+    { job } = owner,
+    retained = maintenanceCheckpoint(job),
+    prepared = configurationMaintenancePrepareSchema.parse(retained?.operation);
+  if (prepared.maintenanceId !== maintenanceId || typeof retained?.prepareOperationKey !== "string")
+    throw Error("Original prepared maintenance required");
+  const stepAddress = createDurableOpsKey(
+      "configuration-maintenance.settle",
+      `${job.jobId}:${maintenanceId}:${outcome}`,
+    ),
+    retainedRoot = readProjection(job.protocol, job.checkpointResult).steps[stepAddress],
+    root = retainedRoot ? undefined : maintenanceSettleRoot(job, stepAddress);
+  const record = assertOwnRecord(
+    job,
+    maintenanceRecordSchema.parse(
+      await executeAdminJobOperation(
+        job,
+        { kind: "configurationMaintenance.settle", maintenanceId, outcome },
+        "configuration-maintenance.settle",
+        { operationKey: stepAddress, ...(root ? { preparedRoot: root } : {}) },
+      ),
+    ),
+    prepared,
+    retained.prepareOperationKey,
+  );
+  if (record.state === "settled")
+    await job.checkpoint({
+      ...job.checkpointResult,
+      _configurationMaintenance: { ...maintenanceCheckpoint(job), phase: "settled", record },
+      _configurationMaintenanceSettle: maintenanceSettleCheckpointSchema.parse({
+        operationKey: readProjection(job.protocol, job.checkpointResult).steps[stepAddress]
+          ?.operationKey,
+        outcome,
+      }),
+    });
+  return record;
+}
+
+/** Applies a saved maintenance candidate: every step at the agent, then, once
+ * the handoff (if any) ended, the settlement. A cancel stops the maintenance
+ * after the step in flight; the job then ends without success. */
+async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurationCandidate) {
+  const state = validatedConfigurationCandidateState(candidate),
+    { job } = administrativeConfigurationState(state.writer),
+    maintenanceId = state.record.maintenanceId!;
+  const cancelled = () => job.protocol?.cancelRequestedAt !== undefined;
+  let applied: OpsResultFor<"configurationMaintenance.apply"> | undefined;
+  if (!cancelled()) applied = await applyConfigurationMaintenance(candidate);
+  let record = applied?.record ?? (await inspectConfigurationMaintenance(maintenanceId));
+  let cancelSent = false;
+  for (;;) {
+    if (record.state === "recovery_required") throw new JobObservationPending("recovery_required");
+    const unresolved = record.steps.some((step) => step.state === "attempted");
+    if (cancelled() && !cancelSent && record.state === "applying" && unresolved) {
+      record = await settleConfigurationMaintenance(maintenanceId, "abandon");
+      cancelSent = true;
+      continue;
+    }
+    if (!unresolved) break;
+    job.signal.throwIfAborted();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    record = await inspectConfigurationMaintenance(maintenanceId);
   }
-  return receipt;
+  const settled = await settleConfigurationMaintenance(
+    maintenanceId,
+    record.state === "prepared" ? "abandon" : "complete",
+  );
+  if (settled.state !== "settled") throw new JobObservationPending("transport");
+  return { applied, settled };
 }
 
 const configurationMaintenanceProtocol = Object.freeze({
-  prepareConfigurationMaintenanceAbandon,
-  decideConfigurationMaintenance,
-  executeConfigurationMaintenanceStep,
-  settleConfigurationMaintenance,
   prepareConfigurationMaintenance,
   inspectConfigurationMaintenance,
+  settleConfigurationMaintenance,
 });
 
 /** Observation-only after an interrupted attempt; never replay unknown setup. */

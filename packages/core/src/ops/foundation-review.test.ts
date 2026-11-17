@@ -52,6 +52,7 @@ describe("reviewed ops foundation contract", () => {
     // retains the original 30 minute cap.
     const extendedBudgets: Record<string, number> = {
       "configurationMaintenance.prepare": 3600_000,
+      "configurationMaintenance.apply": 3600_000,
       "configurationHandoff.prepare": 3600_000,
       "artifactTransfer.validate": 72 * 3600_000,
       "artifactTransfer.import": 72 * 3600_000,

@@ -6,13 +6,10 @@ import {
   type OpsResourcePolicy,
 } from "@openmapx/core/ops";
 import {
-  inspectOwnedMaintenanceRecreateAdmission,
-  isOwnedMaintenanceRecreateAdmission,
-} from "./configuration-maintenance-store";
-import {
   attachCoordinatorPullOwnershipCapture,
   captureCoordinatorPullOwnership,
   type OwnedServiceResolver,
+  type OwnedServiceSnapshot,
 } from "./owned-services";
 import type { OpsTrustedClaim } from "./runtime";
 import { decideServiceAction } from "./service-action-policy";
@@ -20,7 +17,10 @@ import { decideServiceAction } from "./service-action-policy";
 interface OpsClaimOwner {
   role: "api" | "data-manager";
   operationKey: string;
-  maintenanceStep?: unknown;
+  /** Set only by the agent's own configuration maintenance for one of its steps:
+   * the step may run a workflow action, and a recreate sees the containers as
+   * the maintenance found them. */
+  maintenanceStep?: { inspectServices?(signal: AbortSignal): Promise<OwnedServiceSnapshot[]> };
 }
 
 export interface OpsResourceClaimer {
@@ -283,18 +283,8 @@ export function createRegistryResourceClaimer(options: {
         const action = serviceActionForOperation(operation.kind);
         if ("serviceId" in operation && action && options.ownedServices) {
           const snapshots =
-            operation.serviceId === "data-manager" &&
-            isOwnedMaintenanceRecreateAdmission(
-              owner?.maintenanceStep,
-              operation,
-              owner?.operationKey ?? "",
-            )
-              ? await inspectOwnedMaintenanceRecreateAdmission(
-                  owner?.maintenanceStep,
-                  operation,
-                  owner?.operationKey ?? "",
-                  signal,
-                )
+            operation.serviceId === "data-manager" && owner?.maintenanceStep?.inspectServices
+              ? await owner.maintenanceStep.inspectServices(signal)
               : await options.ownedServices.inspectOwnedServices(signal);
           const snapshot = snapshots.find((s) => s.serviceId === operation.serviceId);
           const service = options.serviceMetadata?.find(
@@ -354,10 +344,10 @@ export function createRegistryResourceClaimer(options: {
               !checkedCoordinatorUpdate &&
               !(operation.kind === "service.image.stage" && decision.workflow === "image-stage") &&
               !(operation.kind === "coreService.restart" && decision.workflow === "core-restart") &&
-              !isOwnedMaintenanceRecreateAdmission(
-                owner?.maintenanceStep,
-                operation,
-                owner?.operationKey ?? "",
+              !(
+                owner?.maintenanceStep &&
+                (operation.kind === "service.recreate" ||
+                  operation.kind === "service.recreateIsolated")
               ))
           )
             return null;

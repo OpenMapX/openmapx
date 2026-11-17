@@ -66,11 +66,15 @@ import {
   pairedPinApprovalResultSchema,
 } from "./catalog-pin-approval";
 import {
-  configurationMaintenanceDecisionSchema,
+  configurationMaintenanceApplySchema,
+  configurationMaintenanceInspectSchema,
   configurationMaintenancePrepareSchema,
-  configurationMaintenanceReceiptSchema,
   configurationMaintenanceSettleSchema,
 } from "./configuration-maintenance";
+import {
+  maintenanceRecordSchema,
+  maintenanceStepOutcomeSchema,
+} from "./configuration-maintenance-record";
 import {
   configurationHardlinksPreviewSchema,
   configurationSourcesInspectionSchema,
@@ -122,7 +126,7 @@ export const OPS_OPERATION_KINDS = [
   "configuration.hardlinks.apply",
   "configurationMaintenance.prepare",
   "configurationMaintenance.inspect",
-  "configurationMaintenance.decide",
+  "configurationMaintenance.apply",
   "configurationMaintenance.settle",
   "configurationHandoff.prepare",
   "configurationHandoff.inspect",
@@ -273,7 +277,7 @@ export const OPS_KIND_POLICIES = {
   "configuration.hardlinks.apply": asyncEffect("api", 10 * 60_000),
   "configurationMaintenance.prepare": asyncEffect("api", 3600_000, 65536),
   "configurationMaintenance.inspect": sync("api", 15_000, 65536),
-  "configurationMaintenance.decide": asyncEffect("api", 60_000, 65536),
+  "configurationMaintenance.apply": asyncEffect("api", 3600_000, 65536),
   "configurationMaintenance.settle": asyncEffect("api", 60_000, 65536),
   "configurationHandoff.prepare": asyncEffect("api", 3600_000, 65536),
   "configurationHandoff.inspect": sync("api", 15_000, 65536),
@@ -376,6 +380,9 @@ export function opsKindRequiresControlAuthority(kind: OpsOperationKind): boolean
       "system.diagnostics",
       "serviceRepository.inspect",
       "catalogIntegration.inspect",
+      // These run under the maintenance's own lease and record.
+      "configurationMaintenance.apply",
+      "configurationMaintenance.settle",
     ].includes(kind)
   );
 }
@@ -481,12 +488,8 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   configurationMaintenancePrepareSchema,
   configurationHandoffPrepareOperationSchema,
   configurationHandoffInspectOperationSchema,
-  z.strictObject({
-    kind: z.literal("configurationMaintenance.inspect"),
-    maintenanceId: z.uuid(),
-    candidateId: z.uuid(),
-  }),
-  configurationMaintenanceDecisionSchema,
+  configurationMaintenanceInspectSchema,
+  configurationMaintenanceApplySchema,
   configurationMaintenanceSettleSchema,
   z.strictObject({
     kind: z.literal("configuration.hardlinks.preview"),
@@ -1126,12 +1129,20 @@ export const OPS_RESULT_SCHEMAS = {
   "configuration.sources.inspect": configurationSourcesInspectionSchema,
   "configuration.hardlinks.preview": configurationHardlinksPreviewSchema,
   "configuration.hardlinks.apply": hardlinkApplySummarySchema,
-  "configurationMaintenance.prepare": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.prepare": maintenanceRecordSchema,
   "configurationHandoff.prepare": configurationHandoffPreparedSchema,
   "configurationHandoff.inspect": configurationHandoffInspectionSchema,
-  "configurationMaintenance.inspect": configurationMaintenanceReceiptSchema,
-  "configurationMaintenance.decide": configurationMaintenanceReceiptSchema,
-  "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.inspect": maintenanceRecordSchema,
+  // `generation` is the generation step's result when this run applied it.
+  "configurationMaintenance.apply": z.strictObject({
+    outcome: z.union([
+      maintenanceStepOutcomeSchema.exclude(["failed_without_effect"]),
+      z.literal("running"),
+    ]),
+    record: maintenanceRecordSchema,
+    generation: configurationApplyResultSchema.nullable(),
+  }),
+  "configurationMaintenance.settle": maintenanceRecordSchema,
   "configuration.candidate.retain": z.strictObject({ retained: z.literal(true) }),
   "configuration.candidate.read": z.strictObject({
     record: preparedConfigurationRecordSchema.nullable(),

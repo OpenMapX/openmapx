@@ -173,6 +173,7 @@ async function launched() {
     fenceDelegated: () => true,
     settleFence: vi.fn(),
     runStep: async () => ({ outcome: "committed", appliedRevisionId: revisionId, result: {} }),
+    settleHandoff: async () => {},
     launchHelper: async (value) => {
       const step = value.plan.steps.at(-1)!;
       await leases.delegate({

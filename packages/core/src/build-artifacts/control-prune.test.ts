@@ -182,7 +182,7 @@ it("bounds each pass and continues where the previous pass stopped", async () =>
   expect(new Set(pruned).size).toBe(2);
 });
 
-it("keeps a finished maintenance step while its owner record exists, and that record with it", async () => {
+it("keeps a finished maintenance step while its maintenance record exists", async () => {
   const maintenanceId = randomUUID(),
     { execution, authority } = admit(undefined, "host-cli", {
       kind: "service.recreate",
@@ -191,17 +191,21 @@ it("keeps a finished maintenance step while its owner record exists, and that re
       maintenanceId,
     });
   settle(authority);
-  // The owner record of a still-held maintenance names each step it ran.
-  const owner = record("configuration-maintenance", maintenanceId);
+  // The record of a maintenance that is still kept holds each step it ran.
+  const owner = record("maintenance", maintenanceId);
   mkdirSync(dirname(owner), { recursive: true, mode: 0o700 });
-  writeFileSync(owner, JSON.stringify({ payload: { apiControls: { steps: [{ execution }] } } }), {
-    mode: 0o600,
-  });
+  writeFileSync(
+    owner,
+    JSON.stringify({ record: { steps: [{ operationKey: execution.operationKey }] } }),
+    {
+      mode: 0o600,
+    },
+  );
   const later = execution.deadlineAt + 30 * 24 * 3600_000;
   expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
   expect(existsSync(owner)).toBe(true);
   expect(existsSync(record("executions", execution.operationKey))).toBe(true);
-  // Once the preparation and its owner record are gone, the step goes too.
+  // Once the preparation and its record are gone, the step goes too.
   rmSync(owner);
   expect(await pruneControlRecords(installation, { now: later })).toEqual([execution.operationKey]);
 });

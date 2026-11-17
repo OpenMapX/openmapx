@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
-import { configurationHandoffPrepareOperationSchema } from "../ops/configuration-handoff-records";
 import {
   type ConfigurationSourcesInspection,
   configurationSourcesInspectionSchema,
@@ -16,18 +15,10 @@ import {
 } from "../services/configuration-generation";
 import { serviceSelectionPath } from "../services/deployment";
 import type { LoadedService } from "../services/types";
-import { configurationMaintenanceOwnerRecordSchema } from "./configuration-maintenance-owner-records";
 import {
-  assertControlExecutionForward,
   type ControlInstallation,
-  controlDigest,
-  controlIdentity,
-  executionAuthorityState,
-  fixedControlChildId,
   installationState,
-  readConfigurationHandoffSpawnIntent,
   readPrivateRecord,
-  type VerifiedExecutionAuthority,
   writePrivateRecord,
 } from "./control-authority";
 
@@ -42,120 +33,6 @@ const witnessSchema = z.strictObject({
 });
 const name = (id: string) => `configuration-source-${z.uuid().parse(id)}.json`;
 
-function handoffSourceBytes(
-  infraDir: string,
-  environmentNames: readonly string[],
-  files = currentSources(infraDir, {}),
-) {
-  // File values stay private/keyed, including credentials. Process-only helper
-  // transport variables are absent from the original inherited-name projection.
-  return canonicalJson({
-    files,
-    runtimeEnvironment: Object.fromEntries(
-      environmentNames.map((name) => [name, process.env[name] ?? null]),
-    ),
-  });
-}
-const helperSourceDomain = "openmapx-configuration-helper-host-sources-v1\0";
-/** The installed parent copies continuity of the already committed generation,
- * not fresh mutation authority. Its original source digest must still match after
- * substituting only this owner's exact intended platform-generation change. */
-export function captureConfigurationHandoffHostSources(
-  authority: VerifiedExecutionAuthority,
-  helper: ControlInstallation,
-  environmentNames: readonly string[],
-): string {
-  const state = executionAuthorityState(authority),
-    local = state.installation,
-    child = installationState(helper);
-  if (
-    state.kind !== "configurationHandoff.prepare" ||
-    local.fixedChildId ||
-    !child.fixedChildId ||
-    fixedControlChildId(local, controlIdentity(helper), state.execution) !== child.fixedChildId
-  )
-    throw Error("Original handoff source producer required");
-  assertControlExecutionForward(authority);
-  const admission = readPrivateRecord(
-    local,
-    "executions",
-    `${state.execution.operationKey}.json`,
-    65536,
-  ) as { operation?: unknown };
-  if (controlDigest(admission) !== state.receiptDigest)
-    throw Error("Original handoff admission changed");
-  const operation = configurationHandoffPrepareOperationSchema.parse(admission.operation),
-    ownerName = `${operation.maintenanceId}.json`,
-    raw = readPrivateRecord(local, "configuration-maintenance", ownerName),
-    owner = configurationMaintenanceOwnerRecordSchema.parse(raw),
-    infraDir = dirname(local.dataRoot),
-    witness = witnessSchema.parse(
-      readPrivateRecord(local, "observations", name(owner.plan.operation.expectedSourceRevision)),
-    );
-  if (
-    canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
-    owner.receipt.generation !== "committed" ||
-    owner.receipt.appliedRevisionId !== operation.expectedCurrentRevisionId ||
-    owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide ||
-    !owner.plan.steps.some(
-      (step) =>
-        step.phase === "maintenance-handoff" &&
-        canonicalJson(step.operation) === canonicalJson(operation),
-    ) ||
-    currentConfigurationGeneration(infraDir) !== operation.expectedCurrentRevisionId ||
-    witness.authorityRevision !== owner.plan.sourceAuthorityRevision ||
-    witness.inspection.sourceRevision !== owner.plan.operation.expectedSourceRevision ||
-    witness.inspection.revisionId !== owner.plan.operation.expectedCurrentRevisionId
-  )
-    throw Error("Original owned handoff generation required");
-  const { platform: _current, ...observed } = currentSources(infraDir, process.env),
-    original = {
-      ...observed,
-      ...(witness.inspection.platform ? { platform: witness.inspection.platform } : {}),
-    },
-    originalDigest = createHash("sha256")
-      .update(`${domain}\0`)
-      .update(canonicalJson(original))
-      .digest("hex");
-  if (originalDigest !== witness.observation)
-    throw Error("Original host sources changed before handoff");
-  return createHash("sha256")
-    .update(helperSourceDomain)
-    .update(handoffSourceBytes(infraDir, environmentNames))
-    .digest("hex");
-}
-/** Only the actual fixed child can check its own private keyed source copy.
- * No supplied hash, environment values, path or boolean is accepted. */
-export function assertConfigurationHandoffHostSources(authority: VerifiedExecutionAuthority): void {
-  const state = executionAuthorityState(authority),
-    local = state.installation;
-  if (state.kind !== "configuration-helper" || !local.fixedChildId)
-    throw Error("Original configuration helper required");
-  const raw = readPrivateRecord(
-    local,
-    "executions",
-    `${state.execution.operationKey}.json`,
-    65536,
-  ) as { operation?: { handoffId?: string } };
-  if (controlDigest(raw) !== state.receiptDigest || !raw.operation?.handoffId)
-    throw Error("Original helper admission changed");
-  const intent = readConfigurationHandoffSpawnIntent(
-      local.installation,
-      state.execution,
-      raw.operation.handoffId,
-    ),
-    infraDir = dirname(local.dataRoot),
-    keyed = (files?: ReturnType<typeof currentSources>) =>
-      createHash("sha256")
-        .update(helperSourceDomain)
-        .update(handoffSourceBytes(infraDir, intent.environmentNames, files))
-        .digest("hex"),
-    matches = (value: string) => value === intent.sourceDigest;
-  if (currentConfigurationGeneration(infraDir) !== intent.operation.expectedCurrentRevisionId)
-    throw Error("Helper host generation changed");
-  if (!matches(keyed())) throw Error("Helper host sources changed");
-}
 function hostEnv(infraDir: string, env: NodeJS.ProcessEnv) {
   const path = join(infraDir, ".env");
   let file: NodeJS.ProcessEnv = {};

@@ -44,17 +44,17 @@ export async function applyCoordinatorService(
   const operationKey = coordinatorLifecycleOperationKey(ctx.jobId, originalOrdinal);
   if (ctx.checkpointResult?._completedCoordinatorMaintenance && originalOrdinal !== null) {
     const { completedCoordinatorMaintenance } = await import(
-      "./configuration-maintenance-step-records"
+      "./configuration-maintenance-checkpoint"
     );
     const archived = completedCoordinatorMaintenance(ctx.checkpointResult, ctx.protocol);
     if (
       archived.originalOrdinal !== originalOrdinal ||
-      archived.receipt.apiJobId !== ctx.jobId ||
+      archived.record.apiJobId !== ctx.jobId ||
       archived.candidate.operationKey !== operationKey
     )
       throw new JobObservationPending("invalid_identity");
     const observed = await observeRetainedAdminJobOperation(ctx, archived.settlementOperationKey);
-    if (canonicalJson(observed) !== canonicalJson(archived.receipt))
+    if (canonicalJson(observed) !== canonicalJson(archived.record))
       throw new JobObservationPending("invalid_identity");
     return { changed: true as const, revisionId: archived.candidate.revisionId };
   }

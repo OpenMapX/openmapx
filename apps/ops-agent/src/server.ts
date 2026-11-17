@@ -7,7 +7,6 @@ import {
   assertControlStorageAvailable,
   assertFreshControlRoot,
   beginControlEffect,
-  bindBorrowedControlExecution,
   buildArtifactSpec,
   CONTROL_PRUNE_AFTER_MS,
   type ControlInstallation,
@@ -56,7 +55,6 @@ import {
   type ConfigurationApplyResult,
   canonicalJson,
   configurationApplyResultSchema,
-  controlTerminalReceiptDigest,
   type ExecutionRef,
   executionFingerprint,
   isTrustedConfigurationApplyOperation,
@@ -81,7 +79,6 @@ import {
   type OpsOperationKind,
   type OpsResourcePolicy,
   type OpsRole,
-  opsExecutionBudget,
   opsFailureResultSchema,
   opsKindRequiresControlAuthority,
   opsOperationFingerprint,
@@ -93,7 +90,6 @@ import {
   parseOpsRequest,
   processDiagnosticsSchema,
   redactedOpsError,
-  signMaintenanceRecoveryProof,
   type VerifiedParentExecution,
   verifyApiJobParentExecution,
 } from "@openmapx/core/ops";
@@ -113,40 +109,9 @@ import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
 import { configurationHandoffBlocksReplacement } from "./configuration-handoff";
 import {
-  assertPreparedConfigurationHandoff,
-  assertRetainedConfigurationHandoffPreparation,
-} from "./configuration-handoff-store";
-import {
   configurationDataManagerTransport,
   prepareConfigurationHardlinksAdmission,
 } from "./configuration-hardlinks-runtime";
-import {
-  configurationMaintenanceAdmissionState,
-  prepareConfigurationMaintenanceAdmission,
-  prepareMaintenanceContinueObservation,
-} from "./configuration-maintenance-runtime";
-import {
-  admitConfigurationMaintenanceControlOwner,
-  assertManagedCliConfigurationPreflight,
-  ConfigurationMaintenanceControlConflict,
-  ConfigurationMaintenanceControlUnauthorized,
-  configurationHandoffPendingMaintenanceIds,
-  configurationMaintenanceControlOwnerState,
-  inspectConfigurationMaintenanceDecisionControl,
-  inspectConfigurationMaintenanceSettleControl,
-  inspectConfigurationMaintenanceSettleRecovery,
-  normalizeConfigurationMaintenanceInspection,
-  normalizeConfigurationMaintenanceRecoveryControl,
-  prepareOwnedConfigurationMaintenanceStepAdmission,
-  readOwnedConfigurationMaintenance,
-  recordOwnedConfigurationMaintenanceStepTerminal,
-  recoverUnadmittedConfigurationMaintenance,
-  registerConfigurationMaintenanceJournal,
-  restoreConfigurationMaintenanceControlJournal,
-  retainConfigurationMaintenanceDecisionControl,
-  retainConfigurationMaintenanceSettleControl,
-  retainOwnedConfigurationMaintenance,
-} from "./configuration-maintenance-store";
 import { installCoordinatorStagedOwnershipSource } from "./coordinator-staged-ownership";
 import { prepareDataUpdateAdmission, resolveDataDefaultRegion } from "./data-workflow-runtime";
 import {
@@ -157,6 +122,13 @@ import { isReportedProcessFailure } from "./docker-runtime";
 import { registerOpsIngressRateLimit } from "./ingress-rate-limit";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
 import { LeaseRefused, runLeaseOperation } from "./lease-operations";
+import { createMaintenance, pendingHandoffs } from "./maintenance";
+import { createMaintenanceRuntime, type MaintenanceRuntime } from "./maintenance-runtime";
+import {
+  assertManagedCliConfigurationPreflight,
+  assertOwnedMaintenanceRecreateRuntime,
+  planConfigurationMaintenance,
+} from "./maintenance-source";
 import {
   type CoordinatorPullOwnershipObservation,
   consumeCoordinatorPullOwnershipCapture,
@@ -517,7 +489,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     registerArtifactTransferRoutes(app, {
       store: options.artifactTransfers,
       apiToken: options.tokens.api,
-      admissionsOpen: () => configurationHandoffPendingMaintenanceIds(runtime).size === 0,
+      admissionsOpen: () =>
+        !options.controlInstallation || pendingHandoffs(options.controlInstallation).size === 0,
     });
   }
   const runtime = options.runtime ?? createUnavailableRuntime();
@@ -536,12 +509,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const journal: OpsJobJournal =
     options.journal ??
     ({ records: () => [], replace: async () => undefined } satisfies OpsJobJournal);
-  const unregisterMaintenanceJournal = registerConfigurationMaintenanceJournal(
-    runtime,
-    journal,
-    options.controlInstallation,
-  );
-  app.addHook("onClose", async () => unregisterMaintenanceJournal());
   let literalProductionRuntime = false;
   try {
     productionOwnedServices(runtime);
@@ -553,6 +520,70 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     installCoordinatorStagedOwnershipSource(runtime, options.controlInstallation, journal);
   const resourceClaimer =
     options.resourceClaimer ?? createPolicyResourceClaimer(options.resourcePolicy ?? {});
+  /** The configuration maintenance runs its steps through the same claim and
+   * dispatch as any operation, each under its own lease child. */
+  const maintenanceRuntime: MaintenanceRuntime | undefined =
+    options.controlInstallation && options.leaseStore
+      ? createMaintenanceRuntime({
+          runtime,
+          installation: options.controlInstallation,
+          store: options.leaseStore,
+          journal,
+          ...(options.now ? { now: options.now } : {}),
+          otherActiveOperations: () =>
+            [...jobsById.values()].filter(
+              (job) =>
+                job.operation.kind !== "configurationMaintenance.apply" &&
+                configurationHandoffBlocksReplacement(job.operation.kind, job.state),
+            ).length + (options.artifactTransfers?.activeStreams ?? 0),
+          async runStepOperation(operation, context, payload) {
+            const fingerprint = opsOperationFingerprint(operation);
+            const claimed = await resourceClaimer.claim(operation, fingerprint, context.signal, {
+              role: "api",
+              operationKey: context.execution.operationKey,
+              maintenanceStep:
+                operation.kind === "service.recreate" ||
+                operation.kind === "service.recreateIsolated"
+                  ? {
+                      inspectServices: (signal) =>
+                        assertOwnedMaintenanceRecreateRuntime(runtime, operation, {
+                          ...context,
+                          signal,
+                        }),
+                    }
+                  : {},
+            });
+            if (!claimed || claimed.fingerprint !== fingerprint)
+              throw new OpsContractError("authorization", "Operation resource is not permitted");
+            const claim = immutableSnapshot({
+              fingerprint: claimed.fingerprint,
+              operation: claimed.operation,
+              source: claimed.source,
+              capability: payload
+                ? { ...claimed.capability, trustedConfiguration: payload }
+                : claimed.capability,
+            });
+            beginControlEffect(context.controlAuthority!);
+            return parseBoundedOpsResult(
+              operation.kind,
+              await dispatch(operation, runtime, { ...context, claim }),
+            );
+          },
+        })
+      : undefined;
+  /** Maintenance kinds run in the maintenance runtime; everything else in the runtime. */
+  const dispatchJob = (job: JobRecord, context: OpsExecutionContext) => {
+    const operation = job.operation;
+    if (maintenanceRuntime && operation.kind === "configurationMaintenance.prepare")
+      return maintenanceRuntime.prepare(operation, context);
+    if (maintenanceRuntime && operation.kind === "configurationMaintenance.apply") {
+      if (job.parent?.issuer !== "api") throw Error("API maintenance parent required");
+      return maintenanceRuntime.apply(operation, context, job.parent.apiJobId);
+    }
+    if (maintenanceRuntime && operation.kind === "configurationMaintenance.settle")
+      return maintenanceRuntime.settle(operation, context);
+    return dispatch(operation, runtime, context);
+  };
   const jobsById = new Map<string, JobRecord>();
   const jobsByKey = new Map<string, JobRecord>();
   const activeControllers = new Map<string, AbortController>();
@@ -626,15 +657,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   /** Jobs whose Docker command ended with a reported failure, so their outcome is known. */
   const reportedFailures = new Set<string>();
   const controlAuthorities = new Map<string, VerifiedExecutionAuthority>();
-  const maintenanceControls = new Map<
-    string,
-    import("./configuration-maintenance-store").ConfigurationMaintenanceControlOwner
-  >();
   app.addHook("onClose", async () => {
     for (const lease of controlLeases.values()) closeArtifactTargetLeaseHandle(lease);
     controlLeases.clear();
     controlAuthorities.clear();
-    maintenanceControls.clear();
   });
   const persisted = (job: JobRecord): PersistedOpsJob => ({
     ...(job.controlAdoption ? { controlAdoption: job.controlAdoption } : {}),
@@ -752,35 +778,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         return true;
     return false;
   };
-  /** Records a maintenance step's terminal with its owner. False only when a
-   * step's terminal could not be recorded. */
-  const recordStepTerminal = (job: JobRecord): boolean => {
-    if (
-      !options.controlInstallation ||
-      job.terminalAt === undefined ||
-      !(
-        isTrustedConfigurationApplyOperation(job.operation) ||
-        job.operation.kind === "configuration.hardlinks.apply" ||
-        job.operation.kind === "configurationHandoff.prepare" ||
-        job.operation.kind === "service.recreate" ||
-        job.operation.kind === "service.recreateIsolated"
-      ) ||
-      !job.operation.maintenanceId
-    )
-      return true;
-    try {
-      recordOwnedConfigurationMaintenanceStepTerminal(
-        options.controlInstallation,
-        job.operation,
-        executionFor(job),
-        statusFor(job),
-        job.terminalAt,
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  };
   /** Entries that need recovery are bounded separately, so they never use up
    * the capacity for new work. */
   const journalFull = (jobs: Iterable<JobRecord> = jobsById.values(), adding?: JobRecord) => {
@@ -840,65 +837,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     await withAdmissionLock(async () => {
       if (state === "termination_pending" && job.terminalAt !== undefined) return;
       let updatedAt = now().toISOString();
-      const maintenanceControl = maintenanceControls.get(job.operationId);
-      if (
-        maintenanceControl &&
-        job.operation.kind === "configurationMaintenance.decide" &&
-        ["succeeded", "failed", "timed_out"].includes(state)
-      ) {
-        const accepted = inspectConfigurationMaintenanceDecisionControl(
-          maintenanceControl,
-          job.operation,
-          executionFor(job),
-        );
-        state = "succeeded";
-        updatedAt = accepted.status.updatedAt;
-        updates = {
-          result: accepted.receipt,
-          terminalAt: accepted.terminalAt,
-          errorClass: undefined,
-          failureResult: undefined,
-          terminationRequestedAt: undefined,
-        };
-      }
-      if (
-        maintenanceControl &&
-        job.operation.kind === "configurationMaintenance.settle" &&
-        ["succeeded", "failed", "timed_out"].includes(state)
-      ) {
-        try {
-          const accepted = inspectConfigurationMaintenanceSettleControl(
-            maintenanceControl,
-            job.operation,
-            executionFor(job),
-          );
-          state = "succeeded";
-          updatedAt = accepted.status.updatedAt;
-          updates = {
-            result: accepted.receipt,
-            terminalAt: accepted.terminalAt,
-            errorClass: undefined,
-            failureResult: undefined,
-            terminationRequestedAt: undefined,
-          };
-        } catch (error) {
-          if (state === "succeeded") throw error;
-          const unresolved = inspectConfigurationMaintenanceSettleRecovery(
-            maintenanceControl,
-            job.operation,
-            executionFor(job),
-          );
-          state = "failed";
-          updatedAt = unresolved.updatedAt;
-          updates = {
-            result: undefined,
-            terminalAt: undefined,
-            errorClass: "recovery_required",
-            failureResult: undefined,
-            terminationRequestedAt: undefined,
-          };
-        }
-      }
       // A recorded terminal is final: the same outcome again changes nothing,
       // and only an outcome still needing recovery may be replaced by the one
       // recovery established.
@@ -945,16 +883,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (!options.controlInstallation) throw Error("Missing control settlement installation");
         // The fixed runtime's validated result is own-effect evidence. Failure alone is not containment.
         const committed = state === "succeeded" && updates.result !== undefined;
-        const preparedMaintenance =
-          committed && job.operation.kind === "configurationMaintenance.prepare";
-        const preparedHandoff = committed && job.operation.kind === "configurationHandoff.prepare";
-        if (preparedHandoff) assertPreparedConfigurationHandoff(authority, updates.result);
-        if (
-          preparedMaintenance &&
-          canonicalJson(readOwnedConfigurationMaintenance(authority).receipt) !==
-            canonicalJson(updates.result)
-        )
-          throw Error("Actual original prepared owner receipt required");
+        // A preparation that did not prepare is settled by its maintenance record,
+        // which released its lease when nothing ran and keeps it otherwise.
+        const unpreparedMaintenance =
+          !committed && job.operation.kind === "configurationMaintenance.prepare";
         let validationFailure: string | null = null;
         if (state === "failed" && job.operation.kind === "feedProxy.validateAndReload") {
           try {
@@ -1024,7 +956,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           !originalGenerationNonCommit &&
           !unstartedConfiguration &&
           !unstartedArtifact &&
-          !containedValidation
+          !containedValidation &&
+          !unpreparedMaintenance
         )
           retainControlEffectReceipt(authority, {
             outcome: artifactNonCommit
@@ -1049,31 +982,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   ? { kind: "reported-failure" }
                   : { kind: "unresolved" },
           });
-        if (lease && job.operation.kind === "configurationMaintenance.prepare" && !committed) {
-          try {
-            // Only the complete disjoint source gate permits a failed prepare
-            // to complete/release. Prepared or ambiguous guards stay fenced.
-            await settleArtifactTargetLeaseChild(
-              lease,
-              verifyControlEffectSettlement(options.controlInstallation, authority.execution),
-            );
-            if (lease.mode === "owner") {
-              await releaseArtifactTargetLease(lease);
-              verifyLocalArtifactTargetRootRelease(authority);
-              // Classify only this freshly proved, fully released never-prepared
-              // refusal before the immutable terminal is first committed.
-              // An unknown/partial release never takes this branch.
-              if (state === "failed" && updates.errorClass === "recovery_required")
-                updates = { ...updates, errorClass: "busy" };
-            }
-          } catch {
-            /* Original retained owner/recovery path remains mandatory. */
-          }
-        } else if (
-          lease &&
-          job.operation.kind !== "configurationMaintenance.prepare" &&
-          !preparedHandoff
-        ) {
+        if (lease && job.operation.kind !== "configurationMaintenance.prepare") {
           await settleArtifactTargetLeaseChild(
             lease,
             verifyControlEffectSettlement(options.controlInstallation, authority.execution),
@@ -1168,24 +1077,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       fingerprint: job.fingerprint,
       deadlineAt: job.deadlineAt,
     });
-  /** The secondary UNKNOWN projection may be repaired only from the actual
-   * original owner's completed canonical source, never a runtime retry. */
-  const refreshOriginalMaintenanceControl = async (job: JobRecord): Promise<void> => {
-    if (
-      job.operation.kind !== "configurationMaintenance.settle" ||
-      job.errorClass !== "recovery_required" ||
-      job.terminalAt !== undefined
-    )
-      return;
-    const control = maintenanceControls.get(job.operationId);
-    if (!control) return;
-    try {
-      inspectConfigurationMaintenanceSettleControl(control, job.operation, executionFor(job));
-    } catch {
-      return;
-    }
-    await transition(job, "succeeded");
-  };
   function borrowedLeaseFor(id: string) {
     const lease = controlLeases.get(id);
     return lease?.mode === "borrowed" ? lease : undefined;
@@ -1226,9 +1117,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             });
           },
         }
-      : {}),
-    ...(maintenanceControls.has(job.operationId)
-      ? { configurationMaintenanceControl: maintenanceControls.get(job.operationId) }
       : {}),
     ...(job.operation.kind === "feedProxy.validateAndReload"
       ? {
@@ -1373,7 +1261,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     activeControllers.set(job.operationId, controller);
     const timeoutMs = Math.max(0, (job.deadlineAt ?? now().getTime()) - now().getTime());
     let timedOut = false;
-    let terminalDurable = false;
+    let _terminalDurable = false;
     let configurationEvidence: ConfigurationApplyResult | undefined;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -1434,7 +1322,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             beginControlEffect(authority);
         }
         try {
-          return await dispatch(job.operation, runtime, contextFor(job, controller.signal, claim));
+          return await dispatchJob(job, contextFor(job, controller.signal, claim));
         } catch (error) {
           if (
             authority &&
@@ -1467,7 +1355,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 errorClass: undefined,
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -1481,7 +1369,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 errorClass: "recovery_required",
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -1494,6 +1382,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               (timedOut || job.state === "termination_pending") &&
               ((job.role === "api" &&
                 (job.operation.kind === "backup.prune" ||
+                  // A cancelled maintenance ends with the step that was in flight.
+                  job.operation.kind === "configurationMaintenance.apply" ||
                   (job.operation.kind === "artifactTransfer.import" &&
                     (rawResult as { outcome?: string }).outcome === "committed"))) ||
                 (job.role === "data-manager" &&
@@ -1516,14 +1406,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 errorClass: undefined,
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(job.role, job.operation.kind, job.resourceId, "late_completion", startedAt);
             } else if (timedOut) {
               await transition(job, "timed_out", {
                 errorClass: "timeout",
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -1538,7 +1428,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 errorClass: "runtime",
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -1554,7 +1444,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 errorClass: undefined,
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(job.role, job.operation.kind, job.resourceId, "success", startedAt);
             }
           } catch {
@@ -1581,7 +1471,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 terminalAt: now().getTime(),
               })
                 .then(() => {
-                  terminalDurable = true;
+                  _terminalDurable = true;
                 })
                 .catch(() => forceRecoveryRequired(job));
               audit(job.role, job.operation.kind, job.resourceId, "error", startedAt, "runtime");
@@ -1595,11 +1485,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 job.cursor += 1;
                 pushEvent(job, { cursor: job.cursor, type: "state", state: "succeeded" });
               }
-              const authority = controlAuthorities.get(job.operationId);
-              if (terminalDurable && authority && !recordStepTerminal(job))
-                // The step's terminal is not recorded with its owner; the
-                // maintenance stays held for recovery and nothing replays.
-                stickyRecoveryRequired.add(job.operationId);
             } finally {
               // The slot is returned even when terminal bookkeeping throws.
               activeControllers.delete(job.operationId);
@@ -1616,7 +1501,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 errorClass: "recovery_required",
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -1662,7 +1547,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 errorClass: classification.errorClass,
                 terminalAt: now().getTime(),
               });
-              terminalDurable = true;
+              _terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -1679,7 +1564,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               terminalAt: now().getTime(),
             })
               .then(() => {
-                terminalDurable = true;
+                _terminalDurable = true;
               })
               .catch(() => forceRecoveryRequired(job));
           } finally {
@@ -1848,86 +1733,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     // record the control prune removed is never looked up for them.
     await pruneJobs(now().getTime());
     let changed = false;
-    if (options.controlInstallation) {
-      const accepted = restoreConfigurationMaintenanceControlJournal(options.controlInstallation),
-        next = new Map(jobsById);
-      const acceptedKeys = new Set(accepted.map((source) => source.operationKey));
-      for (const job of jobsById.values())
-        if (
-          (job.operation.kind === "configurationMaintenance.decide" ||
-            job.operation.kind === "configurationMaintenance.settle") &&
-          !acceptedKeys.has(job.operationKey)
-        )
-          throw Error("Original maintenance control private source unavailable");
-      for (const source of accepted) {
-        const prior = jobsByKey.get(`api:${source.operationKey}`),
-          byId = next.get(source.operationId);
-        if (byId && byId !== prior) throw Error("Original maintenance control execution conflict");
-        if (prior) {
-          const identity = (record: PersistedOpsJob) => {
-            const {
-              state: _state,
-              result: _result,
-              updatedAt: _updated,
-              terminalAt: _terminal,
-              errorClass: _error,
-              failureResult: _failure,
-              terminationRequestedAt: _cancel,
-              diagnostics: _diagnostics,
-              ...binding
-            } = record;
-            return binding;
-          };
-          // Only the authenticated original owner can supply this unresolved
-          // projection. The secondary journal's interruption timestamp is not a
-          // canonical completion and cannot prevent read-only recovery.
-          const unresolvedSettle =
-            source.operation.kind === "configurationMaintenance.settle" &&
-            source.errorClass === "recovery_required" &&
-            source.terminalAt === undefined;
-          const priorUnresolvedSettle =
-            source.operation.kind === "configurationMaintenance.settle" &&
-            prior.state === "failed" &&
-            prior.errorClass === "recovery_required" &&
-            prior.result === undefined;
-          if (
-            canonicalJson(identity(persisted(prior))) !== canonicalJson(identity(source)) ||
-            (!unresolvedSettle &&
-              !priorUnresolvedSettle &&
-              prior.terminalAt !== undefined &&
-              canonicalJson(persisted(prior)) !== canonicalJson(source))
-          )
-            throw Error("Original maintenance control canonical conflict");
-          if (canonicalJson(persisted(prior)) === canonicalJson(source)) continue;
-        }
-        const restored: JobRecord = {
-          ...source,
-          terminalAt: source.terminalAt === undefined ? undefined : Date.parse(source.terminalAt),
-          cursor: prior?.cursor ?? 0,
-          events: prior?.events ?? [],
-          eventBytes: prior?.eventBytes ?? 0,
-          eventsTruncated: true,
-        };
-        if (!prior) {
-          // An entry already past its retention is not brought back, so it
-          // cannot keep the records it names from the prune.
-          if (!retainedJob(restored, now().getTime())) continue;
-          if (journalFull(next.values(), restored))
-            throw Error("Original maintenance control recovery capacity exceeded");
-        }
-        next.set(restored.operationId, restored);
-        changed = true;
-      }
-      // Publish the exact canonical secondary projection before making it
-      // visible to HTTP lookup. Failure leaves the original private source.
-      if (changed) {
-        await journal.replace([...next.values()].map(persisted));
-        for (const [id, restored] of next) {
-          jobsById.set(id, restored);
-          jobsByKey.set(`${restored.role}:${restored.operationKey}`, restored);
-        }
-      }
-    }
     for (const job of jobsById.values()) {
       if (
         job.operation.kind === "artifactTransfer.import" &&
@@ -1939,17 +1744,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         try {
           if (!options.controlInstallation) throw Error("Control trust unavailable");
           const execution = executionFor(job);
-          if (job.state === "succeeded" && job.operation.kind === "configurationHandoff.prepare") {
-            retainedControlAdoptionAssertion(
-              options.controlInstallation,
-              job.controlAdoption,
-              execution,
-            );
-            assertRetainedConfigurationHandoffPreparation(
-              restoreAdmittedControlExecution(options.controlInstallation, execution),
-              job.result,
-            );
-          } else if (job.state === "succeeded") {
+          if (job.state === "succeeded") {
             verifyRetainedArtifactTargetSettlement(
               options.controlInstallation,
               job.controlAdoption,
@@ -2036,11 +1831,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
     }
     if (changed) await journal.replace([...jobsById.values()].map(persisted));
-    // A step whose terminal was journaled before its owner record was updated
-    // (the agent stopped in between) is recorded now; recording is idempotent.
-    for (const job of jobsById.values())
-      if (job.terminalAt !== undefined && !recoveryRequired(job) && !recordStepTerminal(job))
-        console.warn("Maintenance step terminal not recorded", job.operationId);
+    // A maintenance stopped with an attempted step needs recovery; one whose
+    // helper runs is watched. Nothing is started again.
+    await maintenanceRuntime?.maintenance
+      .recover(AbortSignal.timeout(60_000))
+      .catch((error) => console.warn("Configuration maintenance recovery failed", error));
     if (options.controlInstallation) {
       const prune = startControlPrune(options.controlInstallation, {
         onError: (error) => console.warn("Control record prune failed", error),
@@ -2115,16 +1910,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         )
           throw new OpsExecutionFailure("configuration_prerequisite", {});
         let parent: VerifiedParentExecution | undefined;
-        let configurationMaintenanceControl:
-          | import("./configuration-maintenance-store").ConfigurationMaintenanceControlOwner
-          | undefined;
-        let maintenanceStepAdmission:
-          | Awaited<ReturnType<typeof prepareOwnedConfigurationMaintenanceStepAdmission>>
-          | undefined;
-        let controlAdmission:
-          | ReturnType<typeof inspectControlAdmission>
-          | Awaited<ReturnType<typeof prepareOwnedConfigurationMaintenanceStepAdmission>>
-          | undefined;
+        let controlAdmission: ReturnType<typeof inspectControlAdmission> | undefined;
         const parentHeader = request.headers["x-openmapx-parent-execution"];
         const delegationHeader = request.headers["x-openmapx-control-delegation"];
         // Approval is exclusively a borrowed activation leaf. Installing its
@@ -2167,72 +1953,23 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             throw new RequestGuardError("authorization", 403);
           }
         }
+        // Maintenance steps run inside the agent's own apply; the API never sends one.
         if (
-          operation.kind === "configurationMaintenance.inspect" ||
-          operation.kind === "configurationMaintenance.decide" ||
-          operation.kind === "configurationMaintenance.settle"
-        ) {
-          if (!options.controlInstallation || !parent)
-            throw new RequestGuardError("authorization", 403);
-          try {
-            configurationMaintenanceControl = admitConfigurationMaintenanceControlOwner(
-              options.controlInstallation,
-              operation,
-              parent,
-              {
-                operationKey: parsed.operationKey,
-                requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-              },
-            );
-          } catch (error) {
-            if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-              throw new RequestGuardError("authorization", 403);
-            throw new RequestGuardError(
-              (error as NodeJS.ErrnoException).code === "ENOENT"
-                ? "not_found"
-                : "recovery_required",
-              (error as NodeJS.ErrnoException).code === "ENOENT" ? 404 : 409,
-            );
-          }
-        }
-        if (
-          (isTrustedConfigurationApplyOperation(operation) ||
+          operation.kind === "configurationHandoff.prepare" ||
+          operation.kind === "configurationHandoff.inspect" ||
+          ((isTrustedConfigurationApplyOperation(operation) ||
             operation.kind === "configuration.hardlinks.apply" ||
-            operation.kind === "configurationHandoff.prepare" ||
             operation.kind === "service.recreate" ||
             operation.kind === "service.recreateIsolated") &&
-          operation.maintenanceId
-        ) {
-          if (
-            !options.controlInstallation ||
-            role !== "api" ||
-            !parent ||
-            typeof parentHeader !== "string"
-          )
-            throw new RequestGuardError("authorization", 403);
-          try {
-            maintenanceStepAdmission = await prepareOwnedConfigurationMaintenanceStepAdmission(
-              runtime,
-              options.controlInstallation,
-              operation,
-              parent,
-              {
-                operationKey: parsed.operationKey,
-                requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-                parentAssertion: parentHeader,
-                signal: AbortSignal.timeout(15000),
-              },
-            );
-            controlAdmission = maintenanceStepAdmission;
-            parent = maintenanceStepAdmission.parent;
-          } catch (error) {
-            if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-              throw new RequestGuardError("authorization", 403);
-            if (error instanceof ConfigurationMaintenanceControlConflict)
-              throw new RequestGuardError("recovery_required", 409);
-            throw error;
-          }
-        }
+            operation.maintenanceId)
+        )
+          throw new RequestGuardError("authorization", 403);
+        if (
+          (operation.kind === "configurationMaintenance.prepare" ||
+            operation.kind === "configurationMaintenance.apply") &&
+          parent?.issuer !== "api"
+        )
+          throw new RequestGuardError("authorization", 403);
         const normalize = (
           originalAdmittedAt: number,
           deploymentBudgetMs = Math.min(
@@ -2241,36 +1978,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           ),
         ) => {
           try {
-            if (maintenanceStepAdmission)
-              return {
-                admittedAt: maintenanceStepAdmission.boundAt,
-                deadlineAt: maintenanceStepAdmission.execution.deadlineAt,
-                fingerprint: maintenanceStepAdmission.execution.fingerprint,
-              };
-            if (
-              operation.kind === "configurationMaintenance.inspect" &&
-              configurationMaintenanceControl
-            )
-              return normalizeConfigurationMaintenanceInspection(
-                configurationMaintenanceControl,
-                operation,
-                parsed.operationKey,
-                originalAdmittedAt,
-                deploymentBudgetMs,
-              );
-            if (
-              configurationMaintenanceControl &&
-              (operation.kind === "configurationMaintenance.settle" ||
-                (operation.kind === "configurationMaintenance.decide" &&
-                  operation.decision === "abandon"))
-            )
-              return normalizeConfigurationMaintenanceRecoveryControl(
-                configurationMaintenanceControl,
-                operation,
-                parsed.operationKey,
-                originalAdmittedAt,
-                deploymentBudgetMs,
-              );
             return normalizeExecutionAdmission({
               kind,
               operationKey: parsed.operationKey,
@@ -2305,25 +2012,22 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           }
           if (journalFull()) throw new RequestGuardError("busy", 429);
         }
-        const pendingHandoffs = configurationHandoffPendingMaintenanceIds(runtime);
+        const handoffs = options.controlInstallation
+          ? pendingHandoffs(options.controlInstallation)
+          : new Set<string>();
         if (
-          pendingHandoffs.size &&
+          handoffs.size &&
           !RELEASE_RECOVERY_READ_KINDS.has(kind) &&
           !(
-            configurationMaintenanceControl &&
-            "maintenanceId" in operation &&
-            operation.maintenanceId &&
-            pendingHandoffs.has(operation.maintenanceId)
+            (operation.kind === "configurationMaintenance.apply" ||
+              operation.kind === "configurationMaintenance.settle") &&
+            handoffs.has(operation.maintenanceId)
           )
         )
           throw new RequestGuardError("busy", 409);
         if (options.releaseRecovery?.ready === false && !RELEASE_RECOVERY_READ_KINDS.has(kind))
           throw new RequestGuardError("recovery_required", 409);
-        if (
-          opsKindRequiresControlAuthority(operation.kind) &&
-          !controlAdmission &&
-          !configurationMaintenanceControl
-        ) {
+        if (opsKindRequiresControlAuthority(operation.kind) && !controlAdmission) {
           if (!options.controlInstallation) throw new RequestGuardError("recovery_required", 409);
           try {
             const key = parseControlRootOperationKey(parsed.operationKey);
@@ -2345,7 +2049,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           resourceClaimer.claim(operation, fingerprint, claimController.signal, {
             role,
             operationKey: parsed.operationKey,
-            ...(maintenanceStepAdmission ? { maintenanceStep: maintenanceStepAdmission } : {}),
           }),
         );
         let claimTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2483,9 +2186,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operationFingerprint,
               requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
               parent,
-              deploymentBudgetMs: maintenanceStepAdmission
-                ? opsExecutionBudget(operation.kind).processMs
-                : Math.min(policy.timeoutMs, options.operationTimeoutMs ?? policy.timeoutMs),
+              deploymentBudgetMs: Math.min(
+                policy.timeoutMs,
+                options.operationTimeoutMs ?? policy.timeoutMs,
+              ),
               resourceId,
               state: "queued",
               submittedAt: timestamp,
@@ -2495,82 +2199,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               eventBytes: 0,
               eventsTruncated: false,
             };
-            if (
-              configurationMaintenanceControl &&
-              operation.kind === "configurationMaintenance.decide"
-            ) {
-              try {
-                if (job.requestedDeadlineAt === undefined || typeof parentHeader !== "string")
-                  throw new ConfigurationMaintenanceControlUnauthorized(
-                    "Actual decision request source required",
-                  );
-                const continueObservation =
-                  operation.decision === "continue"
-                    ? await prepareMaintenanceContinueObservation(
-                        runtime,
-                        configurationMaintenanceControlOwnerState(
-                          configurationMaintenanceControl,
-                          operation,
-                          job.operationKey,
-                        ).authority,
-                        AbortSignal.any([
-                          claimController.signal,
-                          AbortSignal.timeout(Math.max(1, job.deadlineAt - Date.now())),
-                        ]),
-                      )
-                    : undefined;
-                retainConfigurationMaintenanceDecisionControl(
-                  configurationMaintenanceControl,
-                  operation,
-                  executionFor(job),
-                  {
-                    admittedAt: job.admittedAt,
-                    requestedDeadlineAt: job.requestedDeadlineAt,
-                    parentAssertion: parentHeader,
-                    requestVersion: job.requestVersion,
-                    deploymentBudgetMs: job.deploymentBudgetMs,
-                  },
-                  continueObservation,
-                );
-                maintenanceControls.set(job.operationId, configurationMaintenanceControl);
-              } catch (error) {
-                if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-                  throw new RequestGuardError("authorization", 403);
-                if (error instanceof ConfigurationMaintenanceControlConflict)
-                  throw new RequestGuardError("conflict", 409);
-                throw error;
-              }
-            }
-            if (
-              configurationMaintenanceControl &&
-              operation.kind === "configurationMaintenance.settle"
-            ) {
-              try {
-                if (job.requestedDeadlineAt === undefined || typeof parentHeader !== "string")
-                  throw new ConfigurationMaintenanceControlUnauthorized(
-                    "Actual settlement request source required",
-                  );
-                retainConfigurationMaintenanceSettleControl(
-                  configurationMaintenanceControl,
-                  operation,
-                  executionFor(job),
-                  {
-                    admittedAt: job.admittedAt,
-                    requestedDeadlineAt: job.requestedDeadlineAt,
-                    parentAssertion: parentHeader,
-                    requestVersion: job.requestVersion,
-                    deploymentBudgetMs: job.deploymentBudgetMs,
-                  },
-                );
-                maintenanceControls.set(job.operationId, configurationMaintenanceControl);
-              } catch (error) {
-                if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-                  throw new RequestGuardError("authorization", 403);
-                if (error instanceof ConfigurationMaintenanceControlConflict)
-                  throw new RequestGuardError("conflict", 409);
-                throw error;
-              }
-            }
             // Prepared compatibility checks are read-only and precede durable
             // root admission. A stale preview creates no uncertain host owner.
             const preparedArtifactImport =
@@ -2611,12 +2239,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             // maintenance plan, are read first; a failure there is raised once the
             // job is recorded, so the attempt stays visible.
             const rootAdmission =
-              !controlAdmission &&
-              !configurationMaintenanceControl &&
-              opsKindRequiresControlAuthority(operation.kind);
+              !controlAdmission && opsKindRequiresControlAuthority(operation.kind);
             let admissionFailure: { error: unknown } | undefined;
             let maintenanceAdmission:
-              | Awaited<ReturnType<typeof prepareConfigurationMaintenanceAdmission>>
+              | Awaited<ReturnType<typeof planConfigurationMaintenance>>
               | undefined;
             let targets: string[] = [];
             let admittedLease: string | undefined;
@@ -2625,15 +2251,16 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 if (!options.controlInstallation) throw Error("Control trust unavailable");
                 maintenanceAdmission =
                   job.operation.kind === "configurationMaintenance.prepare"
-                    ? await prepareConfigurationMaintenanceAdmission(runtime, {
+                    ? await planConfigurationMaintenance(runtime, {
                         installation: options.controlInstallation,
                         execution: executionFor(job),
                         operation: job.operation,
                         apiParent:
                           job.parent ??
                           (() => {
-                            throw Error("Original retained API maintenance parent required");
+                            throw Error("API maintenance parent required");
                           })(),
+                        journal,
                         signal: claimController.signal,
                       })
                     : undefined;
@@ -2643,8 +2270,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     await productionRegisteredServiceIds(runtime),
                   );
                 targets =
-                  (maintenanceAdmission &&
-                    configurationMaintenanceAdmissionState(maintenanceAdmission).plan.serviceIds) ??
+                  maintenanceAdmission?.plan.serviceIds ??
                   (operation.kind === "artifactTransfer.export"
                     ? [
                         ...new Set([
@@ -2704,9 +2330,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               try {
                 if (admissionFailure) throw admissionFailure.error;
                 if (!options.controlInstallation) throw Error("Control trust unavailable");
-                const maintenancePlan =
-                  maintenanceAdmission &&
-                  configurationMaintenanceAdmissionState(maintenanceAdmission).plan;
+                const maintenancePlan = maintenanceAdmission?.plan;
                 const fixedDataPlan = isFixedSingleDataCommand(job.operation.kind)
                   ? planFixedSingleDataCommand(
                       executionFor(job),
@@ -2778,7 +2402,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   });
                   controlLeases.set(job.operationId, lease);
                   if (maintenanceAdmission)
-                    retainOwnedConfigurationMaintenance(authority, lease, maintenanceAdmission);
+                    createMaintenance(options.controlInstallation, {
+                      ...maintenanceAdmission,
+                      apiJobId: maintenanceAdmission.plan.apiParent.apiJobId,
+                      leaseId: lease.leaseId,
+                      now: now(),
+                    });
                 }
               } catch (error) {
                 // Nothing has started yet, so a lease taken at admission holds nothing.
@@ -2808,24 +2437,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   requestedDeadlineAt: job.requestedDeadlineAt,
                   parent: job.parent,
                   serviceIds: lease.serviceIds,
-                  ...(maintenanceStepAdmission
-                    ? { reservations: maintenanceStepAdmission.reservations }
-                    : {}),
                 });
-                if (maintenanceStepAdmission) bindBorrowedControlExecution(lease, authority);
-                if (
-                  maintenanceStepAdmission &&
-                  job.operation.kind === "configuration.hardlinks.apply"
-                )
-                  retainGenerationHardlinksOwnerPlan(
-                    authority,
-                    prepareConfigurationHardlinksAdmission(
-                      runtime,
-                      executionFor(job),
-                      job.operation,
-                      lease.serviceIds,
-                    ),
-                  );
                 controlLeases.set(job.operationId, lease);
                 controlAuthorities.set(job.operationId, authority);
                 job.controlAdoption = { ...adoption, phase: "ready" };
@@ -2894,9 +2506,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const timeoutMs = Math.max(0, normalized.deadlineAt - now().getTime());
         const execution = Promise.resolve().then(() => {
           if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
-          return dispatch(operation, runtime, {
+          const context: OpsExecutionContext = {
             signal: controller.signal,
-            ...(configurationMaintenanceControl ? { configurationMaintenanceControl } : {}),
             execution: Object.freeze({
               executor: "ops-agent",
               principal: role,
@@ -2908,7 +2519,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             }),
             emitLog: () => undefined,
             claim,
-          });
+          };
+          return operation.kind === "configurationMaintenance.inspect" && maintenanceRuntime
+            ? maintenanceRuntime.inspect(operation)
+            : dispatch(operation, runtime, context);
         });
         let timeout: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -3000,35 +2614,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         requestedDeadlineAt < 0
       )
         return reply.code(400).send(redactedOpsError(requestId, "validation"));
-      let deadlineAt = Math.min(
+      const deadlineAt = Math.min(
         requestedDeadlineAt,
         job.parent?.deadlineAt ?? Infinity,
         job.admittedAt + job.deploymentBudgetMs,
       );
-      const originalControl = maintenanceControls.get(job.operationId);
-      if (
-        originalControl &&
-        (job.operation.kind === "configurationMaintenance.settle" ||
-          (job.operation.kind === "configurationMaintenance.decide" &&
-            job.operation.decision === "abandon"))
-      ) {
-        // These accepted metadata controls retained their own bounded clock
-        // under the original expired/canceled root. Lookup must authenticate
-        // that SAME intent, without applying the forward-parent clamp again.
-        if (requestedDeadlineAt !== job.requestedDeadlineAt)
-          return reply.code(409).send(redactedOpsError(requestId, "conflict"));
-        try {
-          deadlineAt = normalizeConfigurationMaintenanceRecoveryControl(
-            originalControl,
-            job.operation,
-            job.operationKey,
-            job.admittedAt,
-            job.deploymentBudgetMs,
-          ).deadlineAt;
-        } catch {
-          return reply.code(409).send(redactedOpsError(requestId, "recovery_required"));
-        }
-      }
       if (
         executionFingerprint({
           kind: job.operation.kind,
@@ -3039,7 +2629,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       )
         return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     }
-    await refreshOriginalMaintenanceControl(job);
     return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
   });
 
@@ -3057,7 +2646,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     const job = jobsById.get(operationId);
     if (!job || job.role !== role)
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));
-    await refreshOriginalMaintenanceControl(job);
     return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
   });
 
@@ -3078,43 +2666,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (request.headers["x-ops-operation-fingerprint"] !== job.fingerprint)
       return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     if (job.terminalAt !== undefined) {
-      if (
-        job.operation.kind === "configurationMaintenance.prepare" &&
-        job.state === "failed" &&
-        job.errorClass === "recovery_required" &&
-        options.controlInstallation
-      ) {
-        try {
-          const source = await recoverUnadmittedConfigurationMaintenance(
-              runtime,
-              restoreAdmittedControlExecution(options.controlInstallation, executionFor(job)),
-            ),
-            status = statusFor(job);
-          const proof = signMaintenanceRecoveryProof(options.tokens.api, {
-            version: 1,
-            kind: "configuration-maintenance-contained",
-            operationId: job.operationId,
-            operationKey: job.operationKey,
-            fingerprint: job.fingerprint,
-            terminalDigest: controlTerminalReceiptDigest(statusFor(job)),
-            ...source,
-          });
-          return reply.code(200).send(
-            opsSuccess(requestId, {
-              ...status,
-              diagnostics: {
-                tail: [],
-                truncated: Boolean(
-                  status.diagnostics?.truncated || status.diagnostics?.tail.length,
-                ),
-                maintenanceRecovery: proof,
-              },
-            }),
-          );
-        } catch {
-          return reply.code(409).send(redactedOpsError(requestId, "recovery_required"));
-        }
-      }
       if (
         job.operation.kind === "artifactTransfer.import" &&
         job.state !== "succeeded" &&

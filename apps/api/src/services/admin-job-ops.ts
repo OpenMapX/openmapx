@@ -213,12 +213,8 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   if (
     root.operationKey !==
     createControlRootOperationKey({ notAfter: root.requestedDeadlineAt, nonce: expectedNonce })
-  ) {
-    const { assertOwnedConfigurationMaintenanceStep } = await import(
-      "./configuration-maintenance-step"
-    );
-    await assertOwnedConfigurationMaintenanceStep(context, exactOperation, root.operationKey, root);
-  }
+  )
+    throw new JobObservationPending("invalid_identity");
   const operationKey = root.operationKey,
     attempt = prepareApiJobChildAttempt(context, exactOperation, operationKey, root);
   if (!attempt) throw Error("Fresh managed operation requires a durable job attempt");

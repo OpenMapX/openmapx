@@ -20,7 +20,6 @@ import {
   parseBoundedOpsResult,
   processDiagnosticsSchema,
   type RetainedExecutionAdmission,
-  validateRetainedConfigurationMaintenanceRecoveryControl,
   validateRetainedExecutionAdmission,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
@@ -181,19 +180,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   ) {
     throw new Error("invalid");
   }
-  if (
-    operation.kind === "configurationMaintenance.settle" ||
-    (operation.kind === "configurationMaintenance.decide" && operation.decision === "abandon")
-  )
-    validateRetainedConfigurationMaintenanceRecoveryControl(
-      operation,
-      raw as unknown as RetainedExecutionAdmission,
-    );
-  else
-    validateRetainedExecutionAdmission(
-      operation.kind,
-      raw as unknown as RetainedExecutionAdmission,
-    );
+  validateRetainedExecutionAdmission(operation.kind, raw as unknown as RetainedExecutionAdmission);
   if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
   if (raw.diagnostics !== undefined) processDiagnosticsSchema.parse(raw.diagnostics);
   if (raw.progressResult !== undefined) {
@@ -226,19 +213,7 @@ function parseJob(value: unknown): PersistedOpsJob {
       throw new Error("invalid");
     parseBoundedOpsResult(operation.kind, raw.result);
   } else if (state === "failed" || state === "timed_out") {
-    // This finite metadata control can retain an accepted intent without any
-    // conclusive completion. Startup rejoins it to the authenticated private
-    // owner before lookup; parsing this projection grants no completion/ACK.
-    const unresolvedSettle =
-      operation.kind === "configurationMaintenance.settle" &&
-      state === "failed" &&
-      raw.errorClass === "recovery_required" &&
-      raw.failureResult === undefined;
-    if (
-      raw.result !== undefined ||
-      raw.errorClass === undefined ||
-      (raw.terminalAt === undefined && !unresolvedSettle)
-    )
+    if (raw.result !== undefined || raw.errorClass === undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
   } else if (
     raw.result !== undefined ||

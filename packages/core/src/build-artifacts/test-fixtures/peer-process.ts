@@ -69,25 +69,6 @@ for await (const line of createInterface({ input: process.stdin })) {
       });
       process.stdout.write(`${JSON.stringify({ ok: true, assertion, leaseId: lease.leaseId })}\n`);
       await new Promise(() => setInterval(() => {}, 60000));
-    } else if (input.mode === "helper") {
-      const installation = c.openFixedChildInstallation({
-        infraDir: input.infraDir,
-        assertion: input.assertion,
-      });
-      const peer = c.verifyFixedCliControlPeer(installation, {
-        assertion: input.assertion,
-        execution: input.execution,
-        kind: "configuration-helper",
-        recipient: "configuration-helper",
-      });
-      const lease = await l.adoptArtifactTargetLease({
-        assertion: input.assertion,
-        peer,
-        execution: input.execution,
-        serviceIds: ["motis"],
-      });
-      l.verifyConfigurationHelperReady(lease);
-      process.stdout.write(`${JSON.stringify({ ok: true, drainPermitted: true })}\n`);
     } else if (input.mode === "fixed") {
       const installation = c.openFixedChildInstallation({
         infraDir: input.infraDir,

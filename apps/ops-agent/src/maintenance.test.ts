@@ -202,6 +202,9 @@ beforeEach(() => {
       return { containerId: helper.id };
     }),
     findHelper: vi.fn(async () => helper),
+    settleHandoff: vi.fn(async (_file, outcome) => {
+      order.push(`settle-handoff:${outcome}`);
+    }),
     removeHelper: vi.fn(async () => {
       order.push("remove-helper");
       helper = null;
@@ -317,7 +320,7 @@ describe("configuration maintenance in the agent", () => {
       AbortSignal.timeout(5000),
     );
     expect(applied.outcome).toBe("running");
-    expect(maintenance.handoffPending()).toBe(true);
+    expect(maintenance.handoffPending().has(maintenanceId)).toBe(true);
     progress("applying", "recreate_attempted");
     expect((await maintenance.inspect(maintenanceId)).steps.at(-1)?.state).toBe("attempted");
     await expect(
@@ -331,7 +334,7 @@ describe("configuration maintenance in the agent", () => {
     const inspected = await maintenance.inspect(maintenanceId);
     expect(inspected.steps.at(-1)).toMatchObject({ state: "terminal", outcome: "committed" });
     expect(inspected.followUp).toBe("complete");
-    expect(maintenance.handoffPending()).toBe(false);
+    expect(maintenance.handoffPending().size).toBe(0);
     expect(order).toContain("remove-helper");
     expect(
       (await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000))).state,

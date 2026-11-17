@@ -184,7 +184,7 @@ it("rejects arbitrary caller text as effect evidence", async () => {
     }),
   ).toThrow(/evidence|receipt/);
 });
-it("keeps a bare terminal maintenance summary fenced without the fixed owner source", async () => {
+it("issues no maintenance step from a bare terminal summary without the maintenance record", async () => {
   const c = await import("./control-authority");
   const a = await api();
   const { writeFileSync } = await import("node:fs");
@@ -297,15 +297,11 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
       childId: agent.role,
     }),
   ).rejects.toThrow();
-  // A private journal summary and ordinary own-effect settlement are not
-  // the actual fixed candidate/owner/decision/guard closure source.
+  // A journal summary and an own-effect settlement are not the maintenance
+  // record a step is issued from.
   await expect(
     a.delegateArtifactTargetLease(lease, { ...plan, childId: agent.role }),
   ).rejects.toThrow();
-  await expect(
-    a.settleArtifactTargetLeaseChild(lease, c.verifyControlEffectSettlement(agent, execution)),
-  ).rejects.toThrow();
-  await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow();
   a.closeArtifactTargetLeaseHandle(lease);
   c.closeControlInstallation(agent);
 });

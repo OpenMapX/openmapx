@@ -16,32 +16,22 @@ import {
   type MaintenanceRecord,
   type MaintenanceStepOutcome,
   MaintenanceTransitionRefused,
-  maintenanceRecordSchema,
   transitionMaintenance,
 } from "@openmapx/core/ops";
 import { z } from "zod";
 import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
 import {
-  coordinatorPullWitnessSchema,
-  stagedCoordinatorObservationSchema,
-} from "../../../packages/core/src/build-artifacts/coordinator-pull-records";
-import { fixedConfigurationMaintenancePlanSchema } from "../../../packages/core/src/build-artifacts/fixed-configuration-maintenance";
-import { ownedServiceSnapshotSchema } from "../../../packages/core/src/ops/owned-service-records";
+  maintenanceFileName as fileName,
+  type MaintenanceFile,
+  maintenanceFileSchema,
+  MAINTENANCE_NAMESPACE as NAMESPACE,
+  parseMaintenanceFile,
+} from "../../../packages/core/src/build-artifacts/maintenance-file";
 import type { DataConfigurationFenceReceipt } from "../../../packages/core/src/services/data-manager/contracts/configuration-maintenance";
 
-const NAMESPACE = "maintenance";
-const MAX_RECORDS = 64;
+export type { MaintenanceFile };
 
-/** The record plus what the agent planned at admission and runs its steps with. */
-const maintenanceFileSchema = z.strictObject({
-  version: z.literal(1),
-  record: maintenanceRecordSchema,
-  plan: z.lazy(() => fixedConfigurationMaintenancePlanSchema),
-  originalContainers: z.array(ownedServiceSnapshotSchema).max(256),
-  coordinatorPull: coordinatorPullWitnessSchema.optional(),
-  stagedCoordinatorProvenance: stagedCoordinatorObservationSchema.optional(),
-});
-export type MaintenanceFile = z.infer<typeof maintenanceFileSchema>;
+const MAX_RECORDS = 64;
 
 /** What one step reported. `result` is the generation step's apply result. */
 interface MaintenanceStepResult {
@@ -74,6 +64,8 @@ export interface MaintenanceAdapters {
     handoffId: string,
   ): Promise<{ id: string; running: boolean; exitCode: number | null } | null>;
   removeHelper(containerId: string): Promise<void>;
+  /** Settles the handoff's lease children from the helper's known outcome. */
+  settleHandoff(file: MaintenanceFile, outcome: MaintenanceStepOutcome): Promise<void>;
   cancelLease(file: MaintenanceFile): Promise<void>;
   releaseLease(file: MaintenanceFile): Promise<void>;
   now(): Date;
@@ -93,24 +85,45 @@ export interface MaintenanceApplyOutcome {
   generation: unknown;
 }
 
-const fileName = (maintenanceId: string) => `${z.uuid().parse(maintenanceId)}.json`;
 const progressName = (maintenanceId: string) => `${z.uuid().parse(maintenanceId)}.handoff.json`;
 
 export function readMaintenance(
   installation: ControlInstallation,
   maintenanceId: string,
 ): MaintenanceFile {
-  const file = maintenanceFileSchema.parse(
+  return parseMaintenanceFile(
     readPrivateRecord(installationState(installation), NAMESPACE, fileName(maintenanceId)),
+    maintenanceId,
   );
-  if (file.record.maintenanceId !== maintenanceId)
-    throw Error("Maintenance record identity changed");
-  return file;
+}
+
+/** Maintenances whose helper was launched and has not exited: other
+ * admissions are closed meanwhile, except reads and their own requests. */
+export function pendingHandoffs(installation: ControlInstallation): ReadonlySet<string> {
+  return new Set(
+    listMaintenance(installation)
+      .filter(
+        (file) =>
+          file.record.state === "applying" &&
+          file.record.handoff !== null &&
+          file.record.steps.some(
+            (step) => step.phase === "maintenance-handoff" && step.state === "attempted",
+          ),
+      )
+      .map((file) => file.record.maintenanceId),
+  );
 }
 
 function listMaintenance(installation: ControlInstallation): MaintenanceFile[] {
   const state = installationState(installation);
-  const directory = state.privateRoot.directory(NAMESPACE, true, true);
+  let directory: ReturnType<typeof state.privateRoot.directory>;
+  try {
+    directory = state.privateRoot.directory(NAMESPACE, false, true);
+  } catch (error) {
+    // No maintenance was ever admitted.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
   let names: string[];
   try {
     names = directory.list().filter((name) => /^[0-9a-f-]{36}\.json$/.test(name));
@@ -420,7 +433,9 @@ export class ConfigurationMaintenance {
     };
   }
 
-  /** `settle{complete}` or `settle{abandon}`; repeated, it repeats the fence settlement. */
+  /** `settle{complete}` or `settle{abandon}`; repeated, it repeats the fence settlement.
+   * Abandoning once a step started cancels the maintenance instead: the step in
+   * flight ends, no further step starts, and `complete` settles it afterwards. */
   async settle(
     maintenanceId: string,
     outcome: "complete" | "abandon",
@@ -429,6 +444,13 @@ export class ConfigurationMaintenance {
     const current = this.read(maintenanceId).record;
     if (current.state === "settled") return current;
     if (current.handoff && current.state === "applying") await this.observeHelper(maintenanceId);
+    const observed = this.read(maintenanceId).record;
+    if (
+      outcome === "abandon" &&
+      observed.state === "applying" &&
+      observed.steps.some((step) => step.state !== "pending")
+    )
+      return this.cancel(maintenanceId, signal);
     const next = await this.change(maintenanceId, {
       type:
         outcome === "abandon" && this.read(maintenanceId).record.state !== "settling"
@@ -459,7 +481,8 @@ export class ConfigurationMaintenance {
     if (!step || step.state !== "attempted" || !record.handoff) return step?.outcome ?? "running";
     const outcome = await readHandoffOutcome(this.installation, this.adapters, record);
     if (outcome === "running") return outcome;
-    await this.change(maintenanceId, { type: "helper_exited", outcome });
+    const { file } = await this.change(maintenanceId, { type: "helper_exited", outcome });
+    await this.adapters.settleHandoff(file, outcome);
     const container = await this.adapters.findHelper(record.handoff.handoffId);
     if (container && !container.running) await this.adapters.removeHelper(container.id);
     return outcome;
@@ -478,15 +501,7 @@ export class ConfigurationMaintenance {
     }
   }
 
-  /** A launched helper that has not exited closes admissions other than reads. */
-  handoffPending(): boolean {
-    return listMaintenance(this.installation).some(
-      (file) =>
-        file.record.state === "applying" &&
-        file.record.handoff !== null &&
-        file.record.steps.some(
-          (step) => step.phase === "maintenance-handoff" && step.state === "attempted",
-        ),
-    );
+  handoffPending(): ReadonlySet<string> {
+    return pendingHandoffs(this.installation);
   }
 }

@@ -62,7 +62,7 @@
       "configuration.sources.inspect",
       "configurationHandoff.inspect",
       "configurationHandoff.prepare",
-      "configurationMaintenance.decide",
+      "configurationMaintenance.apply",
       "configurationMaintenance.inspect",
       "configurationMaintenance.prepare",
       "configurationMaintenance.settle",
@@ -416,16 +416,15 @@
       "semanticSources": [
         "apps/api/src/services/prospective-configuration.ts#prepareConfigurationMaintenance",
         "apps/api/src/services/prospective-configuration.ts#inspectConfigurationMaintenance",
-        "apps/api/src/services/prospective-configuration.ts#decideConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#applyConfigurationMaintenance",
         "apps/api/src/services/prospective-configuration.ts#settleConfigurationMaintenance",
-        "apps/ops-agent/src/configuration-maintenance-store.ts#prepareConfigurationMaintenanceAdmission",
-        "apps/ops-agent/src/configuration-handoff-store.ts#launchPreparedConfigurationHandoff",
-        "apps/ops-agent/src/configuration-handoff-store.ts#inspectConfigurationHandoff"
+        "apps/ops-agent/src/maintenance-source.ts#planConfigurationMaintenance",
+        "apps/ops-agent/src/maintenance-runtime.ts#createMaintenanceRuntime"
       ],
       "typedKinds": [
         "configurationMaintenance.prepare",
         "configurationMaintenance.inspect",
-        "configurationMaintenance.decide",
+        "configurationMaintenance.apply",
         "configurationMaintenance.settle",
         "configurationHandoff.prepare",
         "configurationHandoff.inspect"

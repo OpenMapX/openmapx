@@ -29,17 +29,17 @@ import {
 import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
 import { assertConfigurationCoordinatorReady } from "./configuration-hardlinks-runtime";
 import {
-  assertStagedCoordinatorConfigurationWrite,
-  inspectOwnedMaintenanceGenerationRuntime,
-  readMaintenanceRelease,
-  readPreparedMaintenanceRelease,
-} from "./configuration-maintenance-store";
-import {
   preflightConfigurationRelease,
   verifyFrozenConfigurationRelease,
 } from "./configuration-release-preflight";
 import { configurationPolicyRevision } from "./configured-resource-authority";
 import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime";
+import {
+  assertStagedCoordinatorConfigurationWrite,
+  inspectOwnedMaintenanceGenerationRuntime,
+  readMaintenanceRelease,
+  readPreparedMaintenanceRelease,
+} from "./maintenance-source";
 import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsExecutionContext, OpsRuntime, OpsTrustedClaim } from "./runtime";
 import { OpsHostUpdateRequiredError } from "./runtime";
