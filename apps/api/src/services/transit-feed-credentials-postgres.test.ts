@@ -52,7 +52,7 @@ const enabled = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1";
 describe.skipIf(!enabled)(
   "actual pinned managed credentials / original configuration maintenance / PostgreSQL",
   () => {
-    let pauseKind = "vault.apply";
+    let pauseKind = "configurationMaintenance.apply";
     let faults = false;
     const dropped = new Set<string>();
     let stopCoordinator: () => void;
@@ -77,9 +77,10 @@ describe.skipIf(!enabled)(
       faults = context.task.name.startsWith("consumes one real");
       dropped.clear();
       nativeRecovery = context.task.name.includes("killed native");
+      // The saved case pauses at the agent's apply, whose first step writes the generation.
       pauseKind = context.task.name.includes("phase=prepared")
         ? "configurationMaintenance.prepare"
-        : "vault.apply";
+        : "configurationMaintenance.apply";
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       vi.stubEnv("OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL", migrated.connectionUri);
       vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
@@ -146,7 +147,7 @@ describe.skipIf(!enabled)(
             faults &&
             [
               "configurationMaintenance.prepare",
-              "configurationMaintenance.decide",
+              "configurationMaintenance.apply",
               "configurationMaintenance.settle",
             ].includes(kind) &&
             reply.statusCode === 202 &&
