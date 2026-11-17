@@ -246,7 +246,9 @@ pnpm openmapx system update \
 ```
 
 An accepted job is observed by its original ID; unknown POST outcomes replay only
-the original key and body. A definite refusal stops. An expired preview requires a
+the original key and body. The job itself survives an API restart: the restarted
+API runs its steps again under the same operation keys, so a step that already
+reached the operations agent returns its original operation. A definite refusal stops. An expired preview requires a
 new receipt (and a new backup unless skipped), rather than silently reviewing a different candidate.
 Activity shows `platform.apply` for this workflow. After completion, verify the
 actual running image digests and health; selected pins alone do not prove a
