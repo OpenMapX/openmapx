@@ -320,7 +320,7 @@ it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as c
             name.startsWith("phase-") &&
             text.includes('"grant_prepared"')) ||
             (point === "cancellation-index" &&
-              path.endsWith("/execution-lifecycle") &&
+              name.endsWith(".lifecycle.json") &&
               text.includes('"leaseIntents":{')) ||
             (point === "lease-outbox" &&
               path.endsWith("/parent-attempts") &&

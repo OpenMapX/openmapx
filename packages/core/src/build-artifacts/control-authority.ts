@@ -311,8 +311,6 @@ export function writePrivateRecord(
         "parent-attempts",
         "parent-adoptions",
         "execution-parents",
-        "execution-lifecycle",
-        "lifecycle-observations",
         "spawns",
         "spawn-started",
         "execution-adoptions",
@@ -2368,66 +2366,21 @@ function withExecutionWriter<T>(
     d.close();
   }
 }
-function readLifecycle(
-  state: InstallationState,
-  dir: AnchoredDirectory,
-  execution: ExecutionRef,
-  verifier: string,
-): ExecutionLifecycle {
-  const raw = JSON.parse(
-    dir.read(`${execution.operationKey}.lifecycle.json`, 65536).toString("utf8"),
+function readLifecycle(dir: AnchoredDirectory, execution: ExecutionRef): ExecutionLifecycle {
+  const current = lifecycleSchema.parse(
+    JSON.parse(dir.read(`${execution.operationKey}.lifecycle.json`, 65536).toString("utf8")),
   );
-  const current = lifecycleSchema.parse(raw);
   if (
     controlDigest(current.execution) !== controlDigest(execution) ||
     Object.keys(current.childIntents).length + Object.keys(current.leaseIntents ?? {}).length > 64
   )
     throw Error("Execution lifecycle identity/capacity mismatch");
-  const observationName = `${execution.executor}-${execution.operationKey}.json`;
-  function compare(old: ExecutionLifecycle) {
-    if (
-      current.sequence < old.sequence ||
-      (current.sequence === old.sequence && controlDigest(current) !== controlDigest(old))
-    )
-      throw Error("Execution lifecycle rollback or replacement");
-  }
-  if (verifier === controlIdentity(state.installation)) {
-    const local = lifecycleSchema.parse(
-      readPrivateRecord(state, "execution-lifecycle", `${execution.operationKey}.json`, 65536),
-    );
-    compare(local);
-  }
-  try {
-    compare(
-      lifecycleSchema.parse(
-        readPrivateRecord(state, "lifecycle-observations", observationName, 65536),
-      ),
-    );
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
-  readControlExecutionWitness(state, execution);
-  writePrivateRecord(state, "lifecycle-observations", observationName, current, false);
   return current;
 }
-function writeLifecycle(
-  state: InstallationState,
-  dir: AnchoredDirectory,
-  lifecycle: ExecutionLifecycle,
-  exclusive = false,
-) {
+function writeLifecycle(dir: AnchoredDirectory, lifecycle: ExecutionLifecycle, exclusive = false) {
   const bytes = canonicalJson(lifecycle);
   if (Buffer.byteLength(bytes) > 65536) throw Error("Execution lifecycle capacity");
-  // Persist the private fence first. A crash before shared publication fails closed.
-  writePrivateRecord(
-    state,
-    "execution-lifecycle",
-    `${lifecycle.execution.operationKey}.json`,
-    lifecycle,
-    exclusive,
-  );
   dir.write(`${lifecycle.execution.operationKey}.lifecycle.json`, bytes, exclusive);
-  readLifecycle(state, dir, lifecycle.execution, controlIdentity(state.installation));
 }
 function initializeLifecycle(
   state: InstallationState,
@@ -2436,20 +2389,12 @@ function initializeLifecycle(
 ) {
   withExecutionWriter(state, execution, (dir) => {
     try {
-      readLifecycle(state, dir, execution, controlIdentity(state.installation));
+      readLifecycle(dir, execution);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       if (!newlyAdmitted)
         throw Error("Missing retained execution lifecycle requires supervised recovery");
-      // Never replace a private fence after partial publication.
-      try {
-        readPrivateRecord(state, "execution-lifecycle", `${execution.operationKey}.json`);
-        throw Error("Incomplete execution lifecycle requires supervised recovery");
-      } catch (missing) {
-        if ((missing as NodeJS.ErrnoException).code !== "ENOENT") throw missing;
-      }
       writeLifecycle(
-        state,
         dir,
         {
           version: 1,
@@ -2488,7 +2433,7 @@ function withParentLifecycles<T>(
     const item = chain[index];
     if (!item) return run(forward);
     return withExecutionWriter(state, item.grant.parent, (dir) => {
-      const lifecycle = readLifecycle(state, dir, item.grant.parent, item.verifier);
+      const lifecycle = readLifecycle(dir, item.grant.parent);
       const parsed = parseParentAssertion(item.assertion);
       if (lifecycle.childIntents[parsed.attemptId] !== parsed.grantDigest)
         throw Error("Missing durable lifecycle child intent");
@@ -2509,12 +2454,7 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
   const s = executionAuthorityState(authority);
   const check = () =>
     withExecutionWriter(s.installation, s.execution, (dir) => {
-      const lifecycle = readLifecycle(
-        s.installation,
-        dir,
-        s.execution,
-        controlIdentity(s.installation.installation),
-      );
+      const lifecycle = readLifecycle(dir, s.execution);
       if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
         throw new ControlExecutionFencedError(
           "Execution cannot restart effects; observation/settlement only; forward phase fenced",
@@ -2564,12 +2504,7 @@ export function withControlDelegationPublication<T>(
   const s = executionAuthorityState(authority);
   const own = () =>
     withExecutionWriter(s.installation, s.execution, (directory) => {
-      const current = readLifecycle(
-        s.installation,
-        directory,
-        s.execution,
-        controlIdentity(s.installation.installation),
-      );
+      const current = readLifecycle(directory, s.execution);
       if (s.kind === "configurationMaintenance.prepare") {
         const admission = readPrivateRecord(
             s.installation,
@@ -2656,12 +2591,7 @@ export function withControlMaintenanceDecisionPublication<T>(
     throw Error("Original prepared maintenance decision owner required");
   const own = () =>
     withExecutionWriter(s.installation, s.execution, (directory) => {
-      const current = readLifecycle(
-        s.installation,
-        directory,
-        s.execution,
-        controlIdentity(s.installation.installation),
-      );
+      const current = readLifecycle(directory, s.execution);
       if (current.phase !== "settled" || Date.now() >= s.execution.deadlineAt)
         throw new ControlExecutionFencedError(
           "Original prepared maintenance forward decision is fenced",
@@ -2705,16 +2635,11 @@ export function cancelControlExecution(
 ): readonly ExecutionRef[] {
   const s = executionAuthorityState(authority);
   return withExecutionWriter(s.installation, s.execution, (dir) => {
-    const lifecycle = readLifecycle(
-      s.installation,
-      dir,
-      s.execution,
-      controlIdentity(s.installation.installation),
-    );
+    const lifecycle = readLifecycle(dir, s.execution);
     if (lifecycle.phase !== "settled" && lifecycle.phase !== "cancel_pending") {
       lifecycle.phase = "cancel_pending";
       lifecycle.sequence++;
-      writeLifecycle(s.installation, dir, lifecycle);
+      writeLifecycle(dir, lifecycle);
     }
     const children = Object.keys(lifecycle.childIntents).map((id) => {
       const saved = z
@@ -2780,12 +2705,7 @@ export function recordLeaseControlAttempt(
 ): void {
   const s = executionAuthorityState(authority),
     directory = assertControlPublicationScope(authority);
-  const lifecycle = readLifecycle(
-    s.installation,
-    directory,
-    s.execution,
-    controlIdentity(s.installation.installation),
-  );
+  const lifecycle = readLifecycle(directory, s.execution);
   const leases = lifecycle.leaseIntents ?? {};
   if (
     Object.keys(lifecycle.childIntents).length + Object.keys(leases).length >= 64 ||
@@ -2806,7 +2726,7 @@ export function recordLeaseControlAttempt(
   };
   lifecycle.leaseIntents = leases;
   lifecycle.sequence++;
-  writeLifecycle(s.installation, directory, lifecycle);
+  writeLifecycle(directory, lifecycle);
   writePrivateRecord(
     s.installation,
     "parent-attempts",
@@ -2817,16 +2737,11 @@ export function recordLeaseControlAttempt(
 }
 export function settleExecutionLifecycle(s: AuthorityState) {
   withExecutionWriter(s.installation, s.execution, (dir) => {
-    const lifecycle = readLifecycle(
-      s.installation,
-      dir,
-      s.execution,
-      controlIdentity(s.installation.installation),
-    );
+    const lifecycle = readLifecycle(dir, s.execution);
     if (lifecycle.phase !== "settled") {
       lifecycle.phase = "settled";
       lifecycle.sequence++;
-      writeLifecycle(s.installation, dir, lifecycle);
+      writeLifecycle(dir, lifecycle);
     }
   });
 }
@@ -2895,12 +2810,7 @@ export async function attestParentExecution(
   );
   parseParentAssertion(assertion);
   return withControlDelegationPublication(authority, child.phase, (dir) => {
-    const lifecycle = readLifecycle(
-      s.installation,
-      dir,
-      s.execution,
-      controlIdentity(s.installation.installation),
-    );
+    const lifecycle = readLifecycle(dir, s.execution);
     if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
       throw Error("Canceled/terminal execution cannot authorize forward children");
     const name = `${s.execution.operationKey}.children.json`;
@@ -2936,7 +2846,7 @@ export async function attestParentExecution(
     );
     lifecycle.childIntents[attemptId] = fields.grantDigest;
     lifecycle.sequence++;
-    writeLifecycle(s.installation, dir, lifecycle);
+    writeLifecycle(dir, lifecycle);
     dir.write(name, bytes);
     return assertion;
   });

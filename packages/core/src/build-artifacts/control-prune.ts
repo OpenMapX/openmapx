@@ -41,8 +41,6 @@ const NAMESPACES = [
   "parent-attempts",
   "parent-adoptions",
   "execution-parents",
-  "execution-lifecycle",
-  "lifecycle-observations",
   "spawns",
   "spawn-started",
   "execution-adoptions",
@@ -259,9 +257,16 @@ async function prunable(
       add(["parent-adoptions"], admitted.parent[field]);
   // As a parent: the attempts and leases it issued.
   const issued = ["attempts", "children", "parent-attempts", "leases"] as const;
-  const lifecycle = optional(() =>
-    lifecycleSchema.parse(readPrivateRecord(local, "execution-lifecycle", name, 65536)),
-  );
+  const lifecycle = optional(() => {
+    const witnesses = new AnchoredDirectory(witnessDirectory(local));
+    try {
+      return lifecycleSchema.parse(
+        JSON.parse(witnesses.read(`${key}.lifecycle.json`, 65536).toString("utf8")),
+      );
+    } finally {
+      witnesses.close();
+    }
+  });
   for (const id of [
     ...Object.keys(lifecycle?.childIntents ?? {}),
     ...Object.keys(lifecycle?.leaseIntents ?? {}),
