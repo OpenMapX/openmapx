@@ -950,13 +950,18 @@ export function createDataExecutionControlJournal(
       const childrenDigest = controlDigest(children),
         digest = dataTerminalReceiptDigest(terminal);
       return withPrivateEffectWriter(s, () => {
-        const raw = readPrivateRecord(
+        let raw: unknown = null;
+        try {
+          raw = readPrivateRecord(
             local,
             "observations",
             `terminal-${s.execution.operationKey}.json`,
             8192,
-          ),
-          prior = raw === null ? undefined : readProof(authority);
+          );
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        const prior = raw === null ? undefined : readProof(authority);
         const original = prior?.terminalAt ?? terminalAt;
         if (
           prior &&

@@ -836,10 +836,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   ): Promise<void> => {
     await withAdmissionLock(async () => {
       if (state === "termination_pending" && job.terminalAt !== undefined) return;
-      // A recorded terminal is final; only an outcome still needing recovery
-      // may be replaced by the one recovery established.
-      if (job.terminalAt !== undefined && !recoveryRequired(job))
-        throw Error("Recorded terminal state is final");
       let updatedAt = now().toISOString();
       const maintenanceControl = maintenanceControls.get(job.operationId);
       if (
@@ -899,6 +895,18 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             terminationRequestedAt: undefined,
           };
         }
+      }
+      // A recorded terminal is final: the same outcome again changes nothing,
+      // and only an outcome still needing recovery may be replaced by the one
+      // recovery established.
+      if (job.terminalAt !== undefined && !recoveryRequired(job)) {
+        if (
+          state === job.state &&
+          canonicalJson(updates.result ?? null) === canonicalJson(job.result ?? null) &&
+          (updates.errorClass ?? null) === (job.errorClass ?? null)
+        )
+          return;
+        throw Error("Recorded terminal state is final");
       }
       const lease = controlLeases.get(job.operationId);
       const authority = controlAuthorities.get(job.operationId);
