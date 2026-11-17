@@ -507,7 +507,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 DATABASE_URL: relay.databaseUrl,
                 OPENMAPX_ROOT_DIR: host.root,
                 NODE_ENV: "test",
-                BETTER_AUTH_SECRET: "synthetic-task012-native-api-auth-fixture",
+                // One installation's API processes share its secret.
+                BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
               },
             });
           children.push(child);
@@ -1025,7 +1026,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 OPENMAPX_ROOT_DIR: host.root,
                 OPS_AGENT_URL: `http://127.0.0.1:${address.port}`,
                 NODE_ENV: "test",
-                BETTER_AUTH_SECRET: "synthetic-task012-native-api-auth-fixture",
+                // One installation's API processes share its secret.
+                BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
               },
             });
           children.push(child);

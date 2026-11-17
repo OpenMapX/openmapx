@@ -372,7 +372,9 @@ async function nativeReleaseWorker(
         DATABASE_URL: databaseUrl,
         OPENMAPX_ROOT_DIR: host.root,
         NODE_ENV: "test",
-        BETTER_AUTH_SECRET: "synthetic-platform-worker-auth-fixture",
+        // Every API process of one installation shares its secret, which keys
+        // an immediate job's intent digest.
+        BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
       },
     },
   );
