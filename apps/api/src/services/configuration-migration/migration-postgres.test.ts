@@ -270,9 +270,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await state.fixture.db
           .update(adminJob)
           .set({
+            protocol: { ...row.protocol, observationLeaseUntil: new Date(0).toISOString() },
             result: {
               ...retained,
-              _observationLeaseUntil: new Date(0).toISOString(),
               observation: {
                 state: "unknown",
                 reason: "recovery_required",
@@ -539,9 +539,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await state.fixture.db
           .update(adminJob)
           .set({
+            protocol: { ...row!.protocol, observationLeaseUntil: new Date(0).toISOString() },
             result: {
               ...(row!.result as Record<string, unknown>),
-              _observationLeaseUntil: new Date(0).toISOString(),
               observation: {
                 state: "unknown",
                 reason: "recovery_required",

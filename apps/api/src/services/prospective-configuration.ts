@@ -61,7 +61,12 @@ import {
   prepareApiJobChildAttempt,
   prepareApiJobRoot,
 } from "./admin-job-parent";
-import { hasUnsettledManagedOperation, jobOwnership } from "./admin-job-state";
+import {
+  type AdminJobProtocol,
+  cancelRequestedAt,
+  hasUnsettledManagedOperation,
+  jobOwnership,
+} from "./admin-job-state";
 import {
   administrativeConfigurationFileObservations,
   closeAdministrativeConfigurationRead,
@@ -388,6 +393,7 @@ async function verifyConfigurationCommitParticipant(
           revisionId: candidate.revisionId,
           intent: state.record.privatePlatformIntent,
           checkpoint: owner.job.checkpointResult,
+          protocol: owner.job.protocol,
         },
         owner.connection,
       );
@@ -451,7 +457,7 @@ async function discardUnissuedMaintenanceCandidate(
   )
     throw new JobObservationPending("recovery_required");
   const fixed = record.coordinatorPrerequisite,
-    projection = readProjection(owner.job.checkpointResult);
+    projection = readProjection(owner.job.protocol, owner.job.checkpointResult);
   if (fixed && projection.operations[fixed.root.operationKey])
     await executeAdminJobOperation(
       owner.job,
@@ -464,7 +470,9 @@ async function discardUnissuedMaintenanceCandidate(
       ? record.privateCoordinatorLifecycle.pull
       : undefined;
   if (originalPull) {
-    const entry = readProjection(owner.job.checkpointResult).operations[originalPull.operationKey];
+    const entry = readProjection(owner.job.protocol, owner.job.checkpointResult).operations[
+      originalPull.operationKey
+    ];
     if (!entry) throw new JobObservationPending("recovery_required");
     if (entry.phase === "prepared")
       await closeUnissuedCoordinatorPull(owner.job, candidate.candidateId, record.operationKey);
@@ -483,6 +491,7 @@ async function discardUnissuedMaintenanceCandidate(
     const [row] = await tx
         .select({
           result: schema.adminJob.result,
+          protocol: schema.adminJob.protocol,
           payload: schema.adminJob.payload,
           type: schema.adminJob.type,
         })
@@ -490,8 +499,9 @@ async function discardUnissuedMaintenanceCandidate(
         .where(jobOwnership(owner.job.jobId, owner.job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined,
-      actual = readProjection(result),
+      actual = readProjection(protocol, result),
       helper = fixed && actual.operations[fixed.root.operationKey];
     if (
       !row ||
@@ -506,6 +516,7 @@ async function discardUnissuedMaintenanceCandidate(
               owner.job.jobId,
               row.payload,
               result,
+              protocol,
               lifecycle.originalOrdinal,
             )
           : { operationKeys: new Set<string>(), revisionId: candidate.expectedCurrentRevisionId };
@@ -525,7 +536,7 @@ async function discardUnissuedMaintenanceCandidate(
       result._configurationMaintenanceDecision !== undefined ||
       result._configurationMaintenanceRollback !== undefined ||
       actual.operations[record.prepareOperationKey!] ||
-      hasUnsettledManagedOperation(result) ||
+      hasUnsettledManagedOperation(result, protocol) ||
       (helper &&
         (canonicalJson(helper.operation) !== canonicalJson(fixed!.operation) ||
           !helper.receiptDelivery ||
@@ -586,6 +597,7 @@ async function completeUnissuedConfigurationCancellation(
     const [row] = await tx
         .select({
           result: schema.adminJob.result,
+          protocol: schema.adminJob.protocol,
           payload: schema.adminJob.payload,
           type: schema.adminJob.type,
         })
@@ -593,8 +605,9 @@ async function completeUnissuedConfigurationCancellation(
         .where(jobOwnership(owner.job.jobId, owner.job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined,
-      projection = readProjection(result),
+      projection = readProjection(protocol, result),
       fixed = record.coordinatorPrerequisite,
       helper = fixed && projection.operations[fixed.root.operationKey];
     if (
@@ -610,6 +623,7 @@ async function completeUnissuedConfigurationCancellation(
               owner.job.jobId,
               row.payload,
               result,
+              protocol,
               lifecycle.originalOrdinal,
             )
           : { operationKeys: new Set<string>(), revisionId: candidate.expectedCurrentRevisionId };
@@ -617,8 +631,7 @@ async function completeUnissuedConfigurationCancellation(
       throw new JobObservationPending("invalid_identity");
     if (
       !result ||
-      typeof result._cancelRequestedAt !== "string" ||
-      !Number.isFinite(Date.parse(result._cancelRequestedAt)) ||
+      !cancelRequestedAt(protocol) ||
       retained?.candidateId !== candidate.candidateId ||
       retained.operationKey !== candidate.operationKey ||
       retained.sealedOperationKey !== record.operationKey ||
@@ -631,7 +644,7 @@ async function completeUnissuedConfigurationCancellation(
       result._configurationMaintenanceDecision !== undefined ||
       result._configurationMaintenanceRollback !== undefined ||
       projection.operations[record.prepareOperationKey!] ||
-      hasUnsettledManagedOperation(result) ||
+      hasUnsettledManagedOperation(result, protocol) ||
       (helper &&
         (!helper.receiptDelivery ||
           helper.receiptDelivery.terminalReceipt.state !== "succeeded" ||
@@ -707,15 +720,16 @@ export async function discardNeverPreparedProspectiveConfiguration(
     await withConfigurationWriteTransaction(state.writer, async (tx) => {
       // The same owned row lock waits out any earlier save/checkpoint transaction.
       const [row] = await tx
-        .select({ result: schema.adminJob.result })
+        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
         .from(schema.adminJob)
         .where(jobOwnership(owner.job.jobId, owner.job.execution))
         .for("update");
       const result = row?.result as Record<string, unknown> | undefined,
+        protocol = row?.protocol as AdminJobProtocol | undefined,
         retained = result?._configurationCandidate as Record<string, unknown> | undefined,
         maintenance = result?._configurationMaintenance as Record<string, unknown> | undefined,
         inspection = maintenance?.inspection as Record<string, unknown> | undefined,
-        projected = readProjection(result).operations[state.record.prepareOperationKey!];
+        projected = readProjection(protocol, result).operations[state.record.prepareOperationKey!];
       if (
         !result ||
         retained?.candidateId !== candidate.candidateId ||
@@ -734,7 +748,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
         projected.kind !== "configurationMaintenance.prepare" ||
         projected.operationId !== closed.prepare.executionId ||
         projected.fingerprint !== closed.prepare.fingerprint ||
-        hasUnsettledManagedOperation(result)
+        hasUnsettledManagedOperation(result, protocol)
       )
         throw Error("Original unsaved candidate closure checkpoint required");
       checkpoint = {
@@ -742,7 +756,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
         _configurationCandidate: {
           ...retained,
           phase: "discarding_without_guard",
-          ...((await hasRecoveredMaintenanceCandidate(result, owner.job.jobId))
+          ...((await hasRecoveredMaintenanceCandidate(result, protocol, owner.job.jobId))
             ? {
                 neverPreparedCleanup: {
                   version: 1,
@@ -789,7 +803,9 @@ async function completeNeverPreparedConfiguration(
     owner = administrativeConfigurationState(state.writer),
     projected =
       state.record.prepareOperationKey &&
-      readProjection(owner.job.checkpointResult).operations[state.record.prepareOperationKey],
+      readProjection(owner.job.protocol, owner.job.checkpointResult).operations[
+        state.record.prepareOperationKey
+      ],
     terminal =
       projected && projected.receiptDelivery !== undefined
         ? projected.receiptDelivery.terminalReceipt
@@ -871,11 +887,12 @@ export async function discardUnusedPreparedProspectiveConfiguration(
   let committed: Record<string, unknown> | undefined;
   await withConfigurationWriteTransaction(state.writer, async (tx) => {
     const [row] = await tx
-        .select({ result: schema.adminJob.result })
+        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
         .from(schema.adminJob)
         .where(jobOwnership(owner.job.jobId, owner.job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined,
       remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
       decision = configurationMaintenanceDecisionCheckpointSchema.parse(
@@ -884,7 +901,7 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       settle = configurationMaintenanceSettleCheckpointSchema.parse(
         result?._configurationMaintenanceSettle,
       ),
-      projection = readProjection(result),
+      projection = readProjection(protocol, result),
       delivered = projection.operations[settle.delivery.root.operationKey]?.receiptDelivery,
       canonical =
         delivered?.terminalReceipt.state === "succeeded"
@@ -915,7 +932,7 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
       canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
-      hasUnsettledManagedOperation(result)
+      hasUnsettledManagedOperation(result, protocol)
     )
       throw Error("Original delivered unused candidate checkpoint required");
     committed = { ...result, _configurationCandidate: { ...retained, phase: "discarding_unused" } };
@@ -962,11 +979,12 @@ async function completeUnusedConfigurationCancellation(
   let committed: Record<string, unknown> | undefined;
   await withConfigurationWriteTransaction(state.writer, async (tx) => {
     const [row] = await tx
-        .select({ result: schema.adminJob.result })
+        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
         .from(schema.adminJob)
         .where(jobOwnership(owner.job.jobId, owner.job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined,
       remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
       decision = configurationMaintenanceDecisionCheckpointSchema.parse(
@@ -975,7 +993,7 @@ async function completeUnusedConfigurationCancellation(
       settle = configurationMaintenanceSettleCheckpointSchema.parse(
         result?._configurationMaintenanceSettle,
       ),
-      projection = readProjection(result),
+      projection = readProjection(protocol, result),
       delivered = projection.operations[settle.delivery.root.operationKey]?.receiptDelivery,
       canonical =
         delivered?.terminalReceipt.state === "succeeded"
@@ -983,8 +1001,7 @@ async function completeUnusedConfigurationCancellation(
           : null;
     if (
       !result ||
-      typeof result._cancelRequestedAt !== "string" ||
-      !Number.isFinite(Date.parse(result._cancelRequestedAt)) ||
+      !cancelRequestedAt(protocol) ||
       retained?.candidateId !== candidate.candidateId ||
       retained.operationKey !== candidate.operationKey ||
       retained.revisionId !== candidate.revisionId ||
@@ -1006,7 +1023,7 @@ async function completeUnusedConfigurationCancellation(
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
       canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
-      hasUnsettledManagedOperation(result)
+      hasUnsettledManagedOperation(result, protocol)
     )
       throw new JobObservationPending("recovery_required");
     const configuration: TrustedConfigurationApplyOutcome = {
@@ -1067,10 +1084,11 @@ export async function assertSettledConfigurationCandidate(
       throw Error("Actual original maintenance closure required before cleanup");
   }
   const [job] = await owner.connection
-    .select({ result: schema.adminJob.result })
+    .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
     .from(schema.adminJob)
     .where(jobOwnership(owner.job.jobId, owner.job.execution));
   const result = job?.result as Record<string, unknown> | undefined;
+  const protocol = job?.protocol as AdminJobProtocol | undefined;
   const receipt = result?._configurationCandidate as Record<string, unknown> | undefined;
   if (
     !result ||
@@ -1097,7 +1115,7 @@ export async function assertSettledConfigurationCandidate(
           ) &&
         (result.migration as MigrationResult | undefined)?.outcome !== "unknown"
       )) ||
-    hasUnsettledManagedOperation(result)
+    hasUnsettledManagedOperation(result, protocol)
   )
     throw Error("Configuration candidate settlement unavailable");
   const outcomes = result._configurationOutcomes as Record<string, unknown> | undefined;
@@ -1113,7 +1131,7 @@ export async function assertSettledConfigurationCandidate(
   if (state.record.maintenanceId) {
     const remote = result._configurationMaintenance as Record<string, unknown> | undefined,
       settled = configurationMaintenanceReceiptSchema.parse(remote?.receipt),
-      projection = readProjection(result),
+      projection = readProjection(protocol, result),
       delivered = Object.values(projection.operations).find(
         (value) =>
           value.operation?.kind === "configurationMaintenance.settle" &&
@@ -1188,7 +1206,7 @@ export async function retireSettledProspectiveConfiguration(
     // closure and API durable copy. A status flag cannot retire this preview.
     await withConfigurationWriteTransaction(state.writer, async (tx) => {
       const [current] = await tx
-          .select({ result: schema.adminJob.result })
+          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
           .from(schema.adminJob)
           .where(jobOwnership(job.jobId, job.execution))
           .for("update"),
@@ -1285,7 +1303,7 @@ export async function retireSettledProspectiveConfiguration(
         settlementOperationKey: settled.delivery.root.operationKey,
       });
       completedCoordinator = { _completedCoordinatorMaintenance: archived };
-      completedCoordinatorMaintenance({ ...original, ...completedCoordinator });
+      completedCoordinatorMaintenance({ ...original, ...completedCoordinator }, job.protocol);
     }
     // The original producer has verified every required follow-up and actual
     // canonical receipt. Retain that completion BEFORE unlink, so death at
@@ -1354,6 +1372,7 @@ async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
   const writer = currentAdministrativeConfigurationWriter(),
     { job } = administrativeConfigurationState(writer);
   let original: Record<string, unknown> | undefined;
+  let originalProtocol: AdminJobProtocol | undefined;
   await withConfigurationWriteTransaction(writer, async (tx) => {
     const [row] = await tx
       .select()
@@ -1361,6 +1380,7 @@ async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
       .where(jobOwnership(job.jobId, job.execution))
       .for("update");
     original = row?.result as Record<string, unknown> | undefined;
+    originalProtocol = row?.protocol as AdminJobProtocol | undefined;
     const retained = original?._configurationCandidate as Record<string, unknown> | undefined,
       cleanup = retirementSchema.parse(retained?.neverPreparedCleanup),
       immediate =
@@ -1401,15 +1421,17 @@ async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
       retained?.operationKey !== writer.operationKey ||
       !["discarding_without_guard", "discarded"].includes(String(retained?.phase)) ||
       canonicalJson(cleanup.integrationIds) !== canonicalJson(writer.integrationIds) ||
-      hasUnsettledManagedOperation(original) ||
-      !(await hasRecoveredMaintenanceCandidate(original, job.jobId))
+      hasUnsettledManagedOperation(original, originalProtocol) ||
+      !(await hasRecoveredMaintenanceCandidate(original, originalProtocol, job.jobId))
     )
       throw new JobObservationPending("recovery_required");
   });
   if (!original) throw new JobObservationPending("recovery_required");
   job.checkpointResult = original;
   const retained = original._configurationCandidate as Record<string, unknown>,
-    operation = readProjection(original).operations[String(retained.prepareOperationKey)]!,
+    operation = readProjection(originalProtocol, original).operations[
+      String(retained.prepareOperationKey)
+    ]!,
     closed = await inspectConfigurationMaintenance({
       maintenanceId: String(retained.maintenanceId),
       candidateId: String(retained.candidateId),
@@ -1466,6 +1488,7 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
   const writer = currentAdministrativeConfigurationWriter(),
     { job } = administrativeConfigurationState(writer);
   let original: Record<string, unknown> | undefined;
+  let originalProtocol: AdminJobProtocol | undefined;
   await withConfigurationWriteTransaction(writer, async (tx) => {
     const [row] = await tx
       .select()
@@ -1473,6 +1496,7 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
       .where(jobOwnership(job.jobId, job.execution))
       .for("update");
     original = row?.result as Record<string, unknown> | undefined;
+    originalProtocol = row?.protocol as AdminJobProtocol | undefined;
     const retained = original?._configurationCandidate as Record<string, unknown> | undefined,
       retirement = retirementSchema.parse(retained?.retirement);
     const queued =
@@ -1487,11 +1511,12 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
         writer.operationKey === coordinatorLifecycleOperationKey(job.jobId, null)) ||
         (row.type === "service.bulk" &&
           job.payload.action === "update" &&
-          completedCoordinatorMaintenance(original!).receipt.apiJobId === job.jobId &&
+          completedCoordinatorMaintenance(original!, originalProtocol).receipt.apiJobId ===
+            job.jobId &&
           writer.operationKey ===
             coordinatorLifecycleOperationKey(
               job.jobId,
-              completedCoordinatorMaintenance(original!).originalOrdinal,
+              completedCoordinatorMaintenance(original!, originalProtocol).originalOrdinal,
             )));
     const queuedRelease =
       row?.type === "system.update" &&
@@ -1513,7 +1538,7 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
       retained?.operationKey !== writer.operationKey ||
       retained.phase !== "settled" ||
       canonicalJson(retirement.integrationIds) !== canonicalJson(writer.integrationIds) ||
-      hasUnsettledManagedOperation(original)
+      hasUnsettledManagedOperation(original, originalProtocol)
     )
       throw new JobObservationPending("recovery_required");
   });
@@ -1897,6 +1922,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         .where(jobOwnership(job.jobId, job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined;
     if (
       !result ||
@@ -1940,7 +1966,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
       platform = record.privatePlatformIntent,
       operation = opsOperationSchema.parse(record.operation),
       overlay = overlaySchema.parse(record.privateOverlay),
-      projection = readProjection(result),
+      projection = readProjection(protocol, result),
       preparation = record.prepareOperationKey
         ? projection.operations[record.prepareOperationKey]
         : undefined,
@@ -2283,6 +2309,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
           revisionId: candidate.revisionId,
           intent: platform,
           checkpoint: result,
+          protocol,
         },
         tx,
       );
@@ -2324,6 +2351,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
               job.jobId,
               row!.payload,
               result,
+              protocol,
               coordinator.originalOrdinal,
             )
           : { operationKeys: new Set<string>(), revisionId: operation.expectedCurrentRevisionId };
@@ -2397,7 +2425,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
       )
         throw new JobObservationPending("recovery_required");
       if (
-        result._cancelRequestedAt !== undefined ||
+        protocol?.cancelRequestedAt !== undefined ||
         Date.now() >= record.parentDeadlineAt ||
         Date.now() >= parseControlRootOperationKey(record.prepareOperationKey!).notAfter ||
         inspected.snapshot.expiresAt <= new Date().toISOString() ||
@@ -2483,7 +2511,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
       )
         throw new JobObservationPending("recovery_required");
       if (
-        result._cancelRequestedAt !== undefined ||
+        protocol?.cancelRequestedAt !== undefined ||
         Date.now() >= record.parentDeadlineAt ||
         Date.now() >= parseControlRootOperationKey(record.prepareOperationKey!).notAfter ||
         inspected.snapshot.expiresAt <= new Date().toISOString() ||
@@ -2561,7 +2589,8 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
   const writer = currentAdministrativeConfigurationWriter(),
     { job } = administrativeConfigurationState(writer),
     publisher = publisherOptions(await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")));
-  let checkpoint: Record<string, unknown> | undefined;
+  let checkpoint: Record<string, unknown> | undefined,
+    cancelRequested = false;
   await withConfigurationWriteTransaction(writer, async (tx) => {
     const [row] = await tx
         .select()
@@ -2569,6 +2598,7 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
         .where(jobOwnership(job.jobId, job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined;
     if (
       !row ||
@@ -2586,8 +2616,8 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
       result._configurationMaintenance !== undefined ||
       result._configurationMaintenanceDecision !== undefined ||
       result._configurationMaintenanceRollback !== undefined ||
-      Object.keys(readProjection(result).operations).length !== 0 ||
-      hasUnsettledManagedOperation(result)
+      Object.keys(readProjection(protocol, result).operations).length !== 0 ||
+      hasUnsettledManagedOperation(result, protocol)
     )
       throw new JobObservationPending("recovery_required");
     if (retained.phase === "prepared") {
@@ -2615,6 +2645,7 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
       canonicalJson(writer.integrationIds)
     )
       throw new JobObservationPending("recovery_required");
+    cancelRequested = protocol?.cancelRequestedAt !== undefined;
     checkpoint = {
       ...result,
       _configurationCandidate: {
@@ -2663,7 +2694,7 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
       [writer.operationKey]: configuration,
     },
   });
-  if (checkpoint._cancelRequestedAt !== undefined) {
+  if (cancelRequested) {
     await withConfigurationWriteTransaction(writer, async (tx) => {
       const saved = await tx
         .update(schema.adminJob)
@@ -2690,11 +2721,12 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
   let checkpoint: Record<string, unknown> | undefined;
   const candidate = await withConfigurationWriteTransaction(writer, async (tx) => {
     const [row] = await tx
-        .select({ result: schema.adminJob.result })
+        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
         .from(schema.adminJob)
         .where(jobOwnership(job.jobId, job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined;
     if (
       !result ||
@@ -2716,7 +2748,7 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
         fingerprint: record.parentFingerprint,
         deadlineAt: record.parentDeadlineAt,
       },
-      projection = readProjection(result),
+      projection = readProjection(protocol, result),
       attempt = projection.operations[record.operationKey],
       allowed =
         (operation.kind === "stack.render" &&
@@ -2866,6 +2898,7 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
   )
     return;
   let original: Record<string, unknown> | undefined,
+    originalProtocol: AdminJobProtocol | undefined,
     entry: ReturnType<typeof readProjection>["operations"][string] | undefined;
   await withConfigurationWriteTransaction(writer, async (tx) => {
     const [row] = await tx
@@ -2880,6 +2913,7 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
     )
       throw new JobObservationPending("invalid_identity");
     original = (row.result ?? {}) as Record<string, unknown>;
+    originalProtocol = row.protocol as AdminJobProtocol;
     if (original._configurationCandidate !== undefined)
       throw new JobObservationPending("recovery_required");
     const { parseServiceUpdateBatch, completedServiceUpdatePrefix } = await import(
@@ -2887,11 +2921,17 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
       ),
       batch = parseServiceUpdateBatch(row.payload, original),
       ordinal = batch.serviceIds.indexOf("data-manager"),
-      projection = readProjection(original),
+      projection = readProjection(originalProtocol, original),
       address = createDurableOpsKey("configuration.coordinator-pull", `${job.jobId}:${ordinal}`);
     entry = projection.operations[projection.steps[address]?.operationKey ?? address];
     if (!entry) return;
-    const prefix = await completedServiceUpdatePrefix(job.jobId, row.payload, original, ordinal);
+    const prefix = await completedServiceUpdatePrefix(
+      job.jobId,
+      row.payload,
+      original,
+      originalProtocol,
+      ordinal,
+    );
     if (
       !["prepared", "unissued"].includes(entry.phase) ||
       entry.operation?.kind !== "service.pull" ||
@@ -3008,7 +3048,7 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
     maintenance = await configurationMaintenanceProtocol;
   if (stageOf(candidate) === "recovered_unissued") {
     await discardUnissuedMaintenanceCandidate(candidate);
-    if (job.checkpointResult?._cancelRequestedAt !== undefined)
+    if (job.protocol?.cancelRequestedAt !== undefined)
       return completeUnissuedConfigurationCancellation(candidate);
     const configuration: TrustedConfigurationApplyOutcome = {
       outcome: "not_committed",
@@ -3144,7 +3184,9 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
   } catch (error) {
     const preparation =
       state.record.prepareOperationKey &&
-      readProjection(job.checkpointResult).operations[state.record.prepareOperationKey];
+      readProjection(job.protocol, job.checkpointResult).operations[
+        state.record.prepareOperationKey
+      ];
     if (
       preparation &&
       preparation.terminal &&
@@ -3182,7 +3224,7 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
       : configurationMaintenanceSettleCheckpointSchema.parse(settlement).operation,
   );
   await discardUnusedPreparedProspectiveConfiguration(candidate);
-  if (job.checkpointResult?._cancelRequestedAt !== undefined)
+  if (job.protocol?.cancelRequestedAt !== undefined)
     return completeUnusedConfigurationCancellation(candidate);
   const configuration: TrustedConfigurationApplyOutcome = {
     outcome: "not_committed",
@@ -3895,7 +3937,7 @@ export async function prepareProspectiveConfiguration(input: {
           )
             throw Error("Configuration coordinator prerequisite unavailable");
           preflightStage = "capacity";
-          assertMaintenanceIntentCapacity(state, owner.job.checkpointResult);
+          assertMaintenanceIntentCapacity(state, owner.job.protocol, owner.job.checkpointResult);
         } catch (error) {
           if (coordinator?.action === "update")
             await closeUnissuedCoordinatorPull(owner.job, candidateId, record.operationKey);
@@ -4015,10 +4057,14 @@ async function reusePreparedCandidate(input: {
 /** Local count arithmetic only. No future decision body/root is allocated.
  * All exact known middle-owner addresses plus the two original controls must
  * fit the existing shared64 map before helper/pull; later CAS still rechecks. */
-function assertMaintenanceIntentCapacity(state: CandidateState, result: unknown): void {
+function assertMaintenanceIntentCapacity(
+  state: CandidateState,
+  protocol: unknown,
+  result: unknown,
+): void {
   const record = state.record;
   if (!record.maintenanceId || !record.prepareOperationKey) return;
-  const projection = readProjection(result),
+  const projection = readProjection(protocol, result),
     keys = new Set<string>([record.prepareOperationKey]);
   const platform = record.privatePlatformIntent;
   const recreate = platform
@@ -4515,12 +4561,14 @@ async function prepareMaintenanceCoordinator(
   // In particular never Compose up after Update has staged a new image.
   const beforePull =
     state.record.privateCoordinatorLifecycle?.action === "update"
-      ? readProjection(owner.job.checkpointResult).operations[
+      ? readProjection(owner.job.protocol, owner.job.checkpointResult).operations[
           state.record.privateCoordinatorLifecycle.pull.operationKey
         ]
       : undefined;
   if (state.record.privateCoordinatorLifecycle && beforePull && beforePull.phase !== "prepared") {
-    const helper = readProjection(owner.job.checkpointResult).operations[fixed.root.operationKey];
+    const helper = readProjection(owner.job.protocol, owner.job.checkpointResult).operations[
+      fixed.root.operationKey
+    ];
     if (helper)
       await executeAdminJobOperation(
         owner.job,
@@ -4636,7 +4684,9 @@ export async function stageProspectiveConfigurationMaintenance(
       await deliverCoordinatorPullSubmission(owner.job, candidate.candidateId);
     } catch (error) {
       const { ApiOpsError } = await import("./ops-client"),
-        pull = readProjection(owner.job.checkpointResult).operations[fixedPull.operationKey];
+        pull = readProjection(owner.job.protocol, owner.job.checkpointResult).operations[
+          fixedPull.operationKey
+        ];
       // Only this fixed delivery's confirmed original failure selects cleanup.
       // The locked nonissuance producer still re-observes its actual ACK and
       // excludes every maintenance/save attempt before removing the packet.
@@ -4653,7 +4703,10 @@ export async function stageProspectiveConfigurationMaintenance(
     }
   };
   const attemptedPull =
-    fixedPull && readProjection(owner.job.checkpointResult).operations[fixedPull.operationKey];
+    fixedPull &&
+    readProjection(owner.job.protocol, owner.job.checkpointResult).operations[
+      fixedPull.operationKey
+    ];
   if (attemptedPull && attemptedPull.phase !== "prepared" && attemptedPull.phase !== "unissued") {
     // Reclaim must finish the original lookup/ACK before current inventory
     // can recognize staged ownership. The fixed CAS makes this lookup-only;
@@ -4695,11 +4748,12 @@ export async function commitProspectiveConfigurationMaintenance(
     let observed: Record<string, unknown> | undefined;
     const operation = await withConfigurationWriteTransaction(state.writer, async (tx) => {
       const [row] = await tx
-          .select({ result: schema.adminJob.result })
+          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
           .from(schema.adminJob)
           .where(jobOwnership(owner.job.jobId, owner.job.execution))
           .for("update"),
         result = row?.result as Record<string, unknown> | undefined,
+        protocol = row?.protocol as AdminJobProtocol | undefined,
         retained = result?._configurationCandidate as Record<string, unknown> | undefined,
         source = configurationMaintenanceDecisionCheckpointSchema.parse(
           result?._configurationMaintenanceDecision,
@@ -4750,14 +4804,15 @@ export async function commitProspectiveConfigurationMaintenance(
   try {
     await withConfigurationWriteTransaction(state.writer, async (tx, context) => {
       const [row] = await tx
-          .select({ result: schema.adminJob.result })
+          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
           .from(schema.adminJob)
           .where(jobOwnership(owner.job.jobId, owner.job.execution))
           .for("update"),
         result = row?.result as Record<string, unknown> | undefined,
+        protocol = row?.protocol as AdminJobProtocol | undefined,
         retained = result?._configurationCandidate as Record<string, unknown> | undefined,
         remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
-        preparation = readProjection(result).operations[record.prepareOperationKey!];
+        preparation = readProjection(protocol, result).operations[record.prepareOperationKey!];
       if (
         !result ||
         retained?.candidateId !== candidate.candidateId ||
@@ -4770,7 +4825,7 @@ export async function commitProspectiveConfigurationMaintenance(
         canonicalJson(remote.receipt) !== canonicalJson(prepared) ||
         result._configurationMaintenanceDecision !== undefined ||
         result._configurationMaintenanceRollback !== undefined ||
-        hasUnsettledManagedOperation(result) ||
+        hasUnsettledManagedOperation(result, protocol) ||
         !preparation?.receiptDelivery ||
         preparation.receiptDelivery.terminalReceipt.state !== "succeeded" ||
         canonicalJson(preparation.receiptDelivery.terminalReceipt.result) !==
@@ -4817,7 +4872,7 @@ export async function commitProspectiveConfigurationMaintenance(
           attempt: "not_attempted",
         }),
         [latest] = await tx
-          .select({ result: schema.adminJob.result })
+          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
           .from(schema.adminJob)
           .where(jobOwnership(owner.job.jobId, owner.job.execution))
           .for("update");
@@ -4842,11 +4897,12 @@ export async function commitProspectiveConfigurationMaintenance(
       let rollbackCheckpoint: Record<string, unknown> | undefined;
       await withConfigurationWriteTransaction(state.writer, async (tx) => {
         const [row] = await tx
-            .select({ result: schema.adminJob.result })
+            .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
             .from(schema.adminJob)
             .where(jobOwnership(owner.job.jobId, owner.job.execution))
             .for("update"),
           actual = row?.result as Record<string, unknown> | undefined,
+          actualProtocol = row?.protocol as AdminJobProtocol | undefined,
           retained = actual?._configurationCandidate as Record<string, unknown> | undefined,
           remote = actual?._configurationMaintenance as Record<string, unknown> | undefined;
         if (
@@ -4861,7 +4917,7 @@ export async function commitProspectiveConfigurationMaintenance(
           actual._configurationMaintenanceRollback !== undefined ||
           remote?.phase !== "prepared" ||
           canonicalJson(remote.receipt) !== canonicalJson(prepared) ||
-          hasUnsettledManagedOperation(actual)
+          hasUnsettledManagedOperation(actual, actualProtocol)
         )
           throw new JobObservationPending("recovery_required");
         const proof = configurationMaintenanceRollbackCheckpointSchema.parse({
@@ -4952,7 +5008,9 @@ export async function persistAndApplyProspectiveConfiguration(
       }
       const preparation =
         state.record.prepareOperationKey &&
-        readProjection(owner.job.checkpointResult).operations[state.record.prepareOperationKey];
+        readProjection(owner.job.protocol, owner.job.checkpointResult).operations[
+          state.record.prepareOperationKey
+        ];
       if (
         stageOf(candidate) === "prepared" &&
         preparation &&
@@ -5222,11 +5280,12 @@ async function applyCommittedOrdinaryCandidate(
   let committed: Record<string, unknown> | undefined;
   const rowVersions = await withConfigurationWriteTransaction(state.writer, async (tx) => {
     const [row] = await tx
-        .select({ result: schema.adminJob.result })
+        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
         .from(schema.adminJob)
         .where(jobOwnership(owner.job.jobId, owner.job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       retained = result?._configurationCandidate as Record<string, unknown> | undefined;
     if (
       !result ||
@@ -5271,7 +5330,9 @@ async function applyCommittedOrdinaryCandidate(
         },
       },
     });
-  const attempted = readProjection(committed).operations[state.record.operationKey]?.attempt;
+  const attempted = readProjection(owner.job.protocol, committed).operations[
+    state.record.operationKey
+  ]?.attempt;
   if (!attempted) await assertConfigurationApplySubmittable(candidate);
   const result = (await execute()) as TrustedConfigurationApplyOutcome;
   let registryUpdateFailed = false;
@@ -5346,7 +5407,7 @@ export async function discardStagedMigrationPreview(candidate: ValidatedConfigur
     throw Error("Original staged preview required");
   if (
     state.persisted ||
-    Object.values(readProjection(owner.job.checkpointResult).operations).some(
+    Object.values(readProjection(owner.job.protocol, owner.job.checkpointResult).operations).some(
       (entry) =>
         entry.operationKey === state.record.prepareOperationKey ||
         entry.operationKey === state.record.operationKey,
@@ -5495,14 +5556,15 @@ export async function prepareConfigurationMaintenanceAbandon(
   try {
     await withConfigurationWriteTransaction(source.writer, async (tx) => {
       const [row] = await tx
-          .select({ result: schema.adminJob.result })
+          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
           .from(schema.adminJob)
           .where(jobOwnership(owner.job.jobId, owner.job.execution))
           .for("update"),
         result = row?.result as Record<string, unknown> | undefined,
+        protocol = row?.protocol as AdminJobProtocol | undefined,
         retained = result?._configurationCandidate as Record<string, unknown> | undefined,
         maintenance = result?._configurationMaintenance as Record<string, unknown> | undefined,
-        projected = readProjection(result).operations[record.prepareOperationKey!],
+        projected = readProjection(protocol, result).operations[record.prepareOperationKey!],
         delivery = projected?.receiptDelivery;
       if (retained?.phase === "rolled_back") {
         assertKnownRolledBackConfigurationCandidate(candidate);
@@ -5538,7 +5600,7 @@ export async function prepareConfigurationMaintenanceAbandon(
         !delivery ||
         delivery.terminalReceipt.state !== "succeeded" ||
         canonicalJson(delivery.terminalReceipt.result) !== canonicalJson(maintenance.receipt) ||
-        hasUnsettledManagedOperation(result) ||
+        hasUnsettledManagedOperation(result, protocol) ||
         canonicalJson(result._parentExecution) !==
           canonicalJson({
             operationKey: record.parentOperationKey,
@@ -5632,11 +5694,12 @@ export async function decideConfigurationMaintenance(
   try {
     await withConfigurationWriteTransaction(owner.writer, async (tx) => {
       const [row] = await tx
-          .select({ result: schema.adminJob.result })
+          .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
           .from(schema.adminJob)
           .where(jobOwnership(job.jobId, job.execution))
           .for("update"),
-        result = row?.result as Record<string, unknown> | undefined;
+        result = row?.result as Record<string, unknown> | undefined,
+        protocol = row?.protocol as AdminJobProtocol | undefined;
       if (!result) throw new MaintenanceUnsavedCheckpointConflict();
       const source = abandonCheckpointSchema.parse(result._configurationMaintenanceDecision),
         operation = source.operation,
@@ -5689,7 +5752,7 @@ export async function decideConfigurationMaintenance(
           `${job.jobId}:${exact.candidateId}`,
         ),
         root = prepareMaintenanceControlRequest(
-          { ...job, checkpointResult: result },
+          { ...job, checkpointResult: result, protocol },
           source.operation,
           stepAddress,
         );
@@ -5771,7 +5834,7 @@ export async function executeConfigurationMaintenanceStep(
       });
   if (
     prepared.step.phase !== "configuration-commit" ||
-    readProjection(job.checkpointResult).operations[prepared.step.operationKey]
+    readProjection(job.protocol, job.checkpointResult).operations[prepared.step.operationKey]
   )
     return execute();
   await assertConfigurationApplySubmittable(candidate);
@@ -5805,11 +5868,12 @@ export async function settleConfigurationMaintenance(
   let committed: Record<string, unknown> | undefined;
   const retained = await withConfigurationWriteTransaction(owner.writer, async (tx) => {
     const [row] = await tx
-        .select({ result: schema.adminJob.result })
+        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
         .from(schema.adminJob)
         .where(jobOwnership(job.jobId, job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol as AdminJobProtocol | undefined,
       maintenance = result?._configurationMaintenance as Record<string, unknown> | undefined,
       decision = abandonCheckpointSchema.parse(result?._configurationMaintenanceDecision);
     if (
@@ -5832,10 +5896,11 @@ export async function settleConfigurationMaintenance(
       committed = result;
       return original;
     }
-    if (!observed || hasUnsettledManagedOperation(result) || !decision.delivery)
+    if (!observed || hasUnsettledManagedOperation(result, protocol) || !decision.delivery)
       throw new JobObservationPending("recovery_required");
-    const delivered =
-      readProjection(result).operations[decision.delivery.root.operationKey]?.receiptDelivery;
+    const delivered = readProjection(protocol, result).operations[
+      decision.delivery.root.operationKey
+    ]?.receiptDelivery;
     if (
       !delivered ||
       delivered.terminalReceipt.state !== "succeeded" ||
@@ -5948,7 +6013,10 @@ export async function prepareConfigurationMaintenance(
     throw Error("Original maintenance attempt changed");
   // An attempted root is lookup-only. Its replay never reruns preparation,
   // helper admission or candidate validation against a newer desired state.
-  if (!readProjection(job.checkpointResult).operations[record.prepareOperationKey]?.attempt)
+  if (
+    !readProjection(job.protocol, job.checkpointResult).operations[record.prepareOperationKey]
+      ?.attempt
+  )
     await stageProspectiveConfigurationMaintenance(candidate, job.signal);
   if (!retained)
     await job.checkpoint({ ...job.checkpointResult, _configurationMaintenance: checkpoint });
@@ -6024,11 +6092,12 @@ async function checkpointMaintenanceInspection(
     throw Error("Actual original owned write inspection transaction required");
   assertAdministrativeConfigurationRead(owner.transactionContext);
   const [row] = await owner.connection
-      .select({ result: schema.adminJob.result })
+      .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
       .from(schema.adminJob)
       .where(jobOwnership(job.jobId, job.execution))
       .for("update"),
     result = row?.result as Record<string, unknown> | undefined,
+    protocol = row?.protocol as AdminJobProtocol | undefined,
     actual = result?._configurationMaintenance as Record<string, unknown> | undefined,
     attempt = inspection.attempt;
   if (
@@ -6152,7 +6221,7 @@ export async function inspectConfigurationMaintenance(
       administrativeConfigurationState(currentAdministrativeConfigurationWriter()).transactionActive
     )
       throw new JobObservationPending("transport");
-    const projection = readProjection(job.checkpointResult),
+    const projection = readProjection(job.protocol, job.checkpointResult),
       projected = projection.operations[receipt.prepare.operationKey];
     if (
       !projected?.attempt ||
@@ -6457,12 +6526,13 @@ async function advanceCompletedExtensionCandidate(
     )
       throw new JobObservationPending("recovery_required");
     const result = (row.result ?? {}) as Record<string, unknown>;
+    const protocol = row.protocol as AdminJobProtocol;
     if (
       canonicalJson(await readExtensionWorkflow(result._extensionWorkflow)) !==
         canonicalJson(frame) ||
       canonicalJson(result._configurationCandidate) !== canonicalJson(current) ||
       current.phase !== "settled" ||
-      hasUnsettledManagedOperation(result)
+      hasUnsettledManagedOperation(result, protocol)
     )
       throw new JobObservationPending("recovery_required");
     const outcome = parseTrustedConfigurationApplyOutcome(

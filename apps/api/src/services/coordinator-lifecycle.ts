@@ -10,7 +10,7 @@ import {
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { readProjection } from "./admin-job-projection";
-import { jobOwnership } from "./admin-job-state";
+import { type AdminJobProtocol, jobOwnership } from "./admin-job-state";
 import {
   type AdministrativeConfigurationWriter,
   administrativeConfigurationState,
@@ -191,7 +191,7 @@ export function assertRetainedCoordinatorLifecycleProvenance(
  * prepared pull into an attempted one. Old-owner attempt bytes are preserved. */
 export async function claimCoordinatorPullDelivery(context: JobContext, candidateId: string) {
   if (!context.execution || context.observationOnly) throw refuse();
-  let updated: Record<string, unknown> | undefined;
+  let updated: { result: Record<string, unknown>; protocol: AdminJobProtocol } | undefined;
   const delivery = await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
@@ -222,8 +222,9 @@ export async function claimCoordinatorPullDelivery(context: JobContext, candidat
       result._configurationMaintenance !== undefined
     )
       throw refuse();
-    const pull = fixed.pull,
-      projection = readProjection(result),
+    const protocol = row.protocol as AdminJobProtocol,
+      pull = fixed.pull,
+      projection = readProjection(protocol, result),
       entry = projection.operations[pull.operationKey];
     if (
       !entry ||
@@ -234,28 +235,29 @@ export async function claimCoordinatorPullDelivery(context: JobContext, candidat
       throw refuse();
     if (entry.phase === "unissued") throw refuse();
     if (entry.phase !== "prepared") {
-      updated = result;
+      updated = { result, protocol };
       return { operationKey: pull.operationKey, fresh: false };
     }
     if (
-      result._cancelRequestedAt !== undefined ||
+      protocol.cancelRequestedAt !== undefined ||
       Date.now() >= pull.requestedDeadlineAt ||
       Date.now() >= record.parentDeadlineAt ||
       retained.snapshot.expiresAtMs <= Date.now()
     )
       throw refuse();
     projection.operations[pull.operationKey] = { ...entry, phase: "admitting" };
-    updated = { ...result, opsProjection: projection };
+    updated = { result, protocol: { ...protocol, operations: projection } };
     const saved = await tx
       .update(adminJob)
-      .set({ result: updated })
+      .set({ protocol: updated.protocol as Record<string, unknown> })
       .where(jobOwnership(context.jobId, context.execution))
       .returning({ id: adminJob.id });
     if (saved.length !== 1) throw refuse();
     return { operationKey: pull.operationKey, fresh: true };
   });
   if (!updated) throw refuse();
-  context.checkpointResult = updated;
+  context.checkpointResult = updated.result;
+  context.protocol = updated.protocol;
   return delivery;
 }
 
@@ -284,14 +286,15 @@ export async function closeUnissuedCoordinatorPull(
     )
       throw refuse();
     const result = (row.result ?? {}) as Record<string, unknown>,
-      projection = readProjection(result),
+      protocol = row.protocol as AdminJobProtocol,
+      projection = readProjection(protocol, result),
       stepAddress = createDurableOpsKey(
         "configuration.coordinator-pull",
         `${context.jobId}:${ordinal}`,
       ),
       key = projection.steps[stepAddress]?.operationKey,
       entry = key ? projection.operations[key] : undefined;
-    if (!entry) return result;
+    if (!entry) return { result, protocol };
     if (
       entry.operation?.kind !== "service.pull" ||
       entry.operation.serviceId !== "data-manager" ||
@@ -306,7 +309,7 @@ export async function closeUnissuedCoordinatorPull(
       }) !== canonicalJson(result._parentExecution)
     )
       throw refuse();
-    if (entry.phase !== "prepared") return result;
+    if (entry.phase !== "prepared") return { result, protocol };
     if (
       result._configurationMaintenance !== undefined ||
       result._configurationMaintenanceDecision !== undefined ||
@@ -348,14 +351,15 @@ export async function closeUnissuedCoordinatorPull(
         checkedAt: Date.now(),
       },
     };
-    const next = { ...result, opsProjection: projection };
+    const next = { ...protocol, operations: projection };
     const saved = await tx
       .update(adminJob)
-      .set({ result: next })
+      .set({ protocol: next })
       .where(jobOwnership(context.jobId, context.execution))
       .returning({ id: adminJob.id });
     if (saved.length !== 1) throw refuse();
-    return next;
+    return { result, protocol: next };
   });
-  context.checkpointResult = updated;
+  context.checkpointResult = updated.result;
+  context.protocol = updated.protocol;
 }

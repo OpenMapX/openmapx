@@ -33,8 +33,9 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
     type: "data.operation",
     status: "running",
     payload: { operation: "link" },
-    result: {
-      opsProjection: {
+    result: {},
+    protocol: {
+      operations: {
         version: 3,
         steps: {},
         eventTotal: 0,
@@ -122,21 +123,23 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
         data: { total: 1, jobs: [{ id: row.id, status: "cancel_pending" }] },
       });
     }
-    expect
-      .soft(await getAdminActivityJob(row.id, { source: "application" }, { client }))
-      .toMatchObject({
-        status: 200,
-        data: {
-          ...row,
-          result: {}, // Internal operation/authority state is never public Activity data.
-          createdAt: "2026-10-19T10:00:00.000Z",
-          startedAt: "2026-10-19T10:00:00.000Z",
-          source: "application",
-          cancelable: false,
-          logs: [],
-          stages: [],
-        },
-      });
+    const { protocol: _protocol, ...publicRow } = row;
+    const detail = await getAdminActivityJob(row.id, { source: "application" }, { client });
+    // The runner's protocol state is never public Activity data.
+    expect(JSON.stringify(detail)).not.toContain('"protocol"');
+    expect.soft(detail).toMatchObject({
+      status: 200,
+      data: {
+        ...publicRow,
+        result: {},
+        createdAt: "2026-10-19T10:00:00.000Z",
+        startedAt: "2026-10-19T10:00:00.000Z",
+        source: "application",
+        cancelable: false,
+        logs: [],
+        stages: [],
+      },
+    });
   } finally {
     unsubscribe();
     await app.close();

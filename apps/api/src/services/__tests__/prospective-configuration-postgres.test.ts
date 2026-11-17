@@ -37,7 +37,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         id: jobId,
         type: "compose.render",
         status: "running",
-        result: { _execution: execution },
+        protocol: { execution },
       });
       const ctx: JobContext = {
         jobId,
@@ -45,15 +45,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         execution,
         payload: {},
         signal: new AbortController().signal,
-        checkpointResult: { _execution: execution },
+        checkpointResult: {},
+        protocol: { execution },
         log: async () => {},
         setProgress: async () => {},
-        checkpoint: async (result) => {
+        checkpoint: async (result, _progress, _key, _address, operations) => {
+          const protocol = operations ? { ...ctx.protocol, operations } : ctx.protocol;
           await fixture.db
             .update(schema.adminJob)
-            .set({ result })
+            .set({ result, protocol: protocol as Record<string, unknown> })
             .where(eq(schema.adminJob.id, jobId));
           ctx.checkpointResult = result;
+          ctx.protocol = protocol;
         },
       };
       return ctx;

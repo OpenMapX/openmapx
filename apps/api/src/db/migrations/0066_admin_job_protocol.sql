@@ -1,0 +1,1 @@
+ALTER TABLE "admin_job" ADD COLUMN "protocol" jsonb DEFAULT '{}'::jsonb NOT NULL;

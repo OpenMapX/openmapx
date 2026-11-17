@@ -22,7 +22,7 @@ const payload = row.payload as {
     source: { kind: "artifact"; url: string; sha256: string };
     bundle: string;
   },
-  execution = (row.result as { _execution: { owner: string; version: number } })._execution;
+  execution = (row.protocol as { execution: { owner: string; version: number } }).execution;
 const ctx: JobContext = {
   jobId: id,
   jobType: row.type,
@@ -30,20 +30,25 @@ const ctx: JobContext = {
   payload: row.payload as Record<string, unknown>,
   signal: new AbortController().signal,
   checkpointResult: row.result as Record<string, unknown>,
+  protocol: row.protocol,
   log: async () => {},
   setProgress: async () => {},
-  checkpoint: async (value, progress, key, address) => {
-    if (value.opsProjection)
-      ctx.checkpointResult = await checkpointOwnedAdminJob(
+  checkpoint: async (value, progress, key, address, operations) => {
+    const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+    if (recorded) {
+      const saved = await checkpointOwnedAdminJob(
         id,
         execution,
         value,
+        recorded,
         progress,
         key,
         address,
         ctx.checkpointResult ?? {},
       );
-    else {
+      ctx.checkpointResult = saved.result;
+      ctx.protocol = saved.protocol;
+    } else {
       const [saved] = await db
         .update(adminJob)
         .set({ result: value })

@@ -52,7 +52,8 @@ const run = (type: string, result: Record<string, unknown> = {}) =>
     jobId,
     type,
     {},
-    { ...result, _execution: execution },
+    result,
+    { execution },
     new AbortController().signal,
   );
 beforeEach(() => {
@@ -71,7 +72,7 @@ afterEach(() => {
   runner.pumpStopped = false;
 });
 
-it("merges AdminJobFailure evidence into DB/SSE without publishing ownership or admission proofs", async () => {
+it("merges AdminJobFailure evidence into DB/SSE without publishing the runner's protocol", async () => {
   const result = {
     serviceBatch: {
       outcome: "partial",
@@ -85,25 +86,21 @@ it("merges AdminJobFailure evidence into DB/SSE without publishing ownership or 
   jobRunner.register("test.evidence", async () => {
     throw new AdminJobFailure("Build failed", await Promise.resolve(result));
   });
-  await run("test.evidence", { phase: "build", opsProjection: { private: "proof" } });
+  await run("test.evidence", { phase: "build" });
   unsubscribe();
   expect(store.writes.at(-1)?.values).toMatchObject({
     status: "failed",
   });
   const patch = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.result as SQL);
-  expect(JSON.parse(patch.params[0] as string)).toEqual({
-    phase: "build",
-    _execution: execution,
-    ...result,
-  });
+  expect(JSON.parse(patch.params[0] as string)).toEqual({ phase: "build", ...result });
+  expect(store.writes.at(-1)?.values.protocol).toBeUndefined();
   expect(patch.sql).toContain("- 'observation'");
   expect(events.at(-1)).toMatchObject({
     type: "status",
     status: "failed",
     result: { phase: "build", ...result },
   });
-  expect(JSON.stringify(events)).not.toContain("_execution");
-  expect(JSON.stringify(events)).not.toContain("proof");
+  expect(JSON.stringify(events)).not.toContain(execution.owner);
 });
 
 it("publishes unknown observation without a terminal event and retains the original identity", async () => {
@@ -152,7 +149,7 @@ it("does not announce an old owner's completion when PostgreSQL rejects its CAS"
   });
   for (const write of store.writes) {
     const query = new PgDialect().sqlToQuery(write.where as SQL);
-    expect(query.sql).toContain("->'_execution'");
+    expect(query.sql).toContain("->'execution'");
     expect(query.params).toContain(JSON.stringify(execution));
     expect(query.params).toContain(jobId);
   }
@@ -165,54 +162,48 @@ it("rejects stale checkpoint writes before another child can be admitted", async
   store.accept = false;
   const effect = vi.fn();
   jobRunner.register("test.checkpoint", async (ctx) => {
-    await ctx.checkpoint({ _execution: { owner: "forged", version: 999 }, prepared: true });
+    await ctx.checkpoint({ execution: { owner: "forged", version: 999 }, prepared: true });
     effect();
     return {};
   });
   await run("test.checkpoint");
   expect(effect).not.toHaveBeenCalled();
-  expect(
-    JSON.parse(
-      new PgDialect().sqlToQuery(store.writes[0]?.values.result as SQL).params[0] as string,
-    ),
-  ).toMatchObject({ _execution: execution });
+  // A handler's checkpoint writes only the result; the claim is the runner's.
+  expect(store.writes[0]?.values.protocol).toBeUndefined();
+  expect(new PgDialect().sqlToQuery(store.writes[0]?.where as SQL).params).toContain(
+    JSON.stringify(execution),
+  );
 });
 
 it("changes owner and version together while retaining the complete result in PostgreSQL", async () => {
-  await claimAdminJob({ id: jobId, status: "running", result: { _execution: execution } });
+  await claimAdminJob({ id: jobId, status: "running", protocol: { execution } });
   const write = store.writes[0];
   if (!write) throw new Error("Missing claim");
-  const assignment = new PgDialect().sqlToQuery(write.values.result as SQL);
-  const next = JSON.parse(assignment.params[0] as string)._execution;
+  expect(write.values.result).toBeUndefined();
+  const assignment = new PgDialect().sqlToQuery(write.values.protocol as SQL);
+  const next = JSON.parse(assignment.params[0] as string).execution;
   expect(next.owner).not.toBe(execution.owner);
   expect(next.version).toBe(5);
-  expect(assignment.sql).toContain("coalesce(");
   expect(assignment.sql).toContain("||");
   const where = new PgDialect().sqlToQuery(jobOwnership(jobId, execution) as SQL);
   expect(where.params).toEqual([jobId, "running", JSON.stringify(execution)]);
   await expect(jobRunner.reconcile({ limit: 33 })).rejects.toThrow("Invalid reconciliation limit");
 });
 
-it("CAS binds a fresh child attempt to an absent key and the retained parent before signing", async () => {
+it("refuses a child reservation that does not carry its operations", async () => {
   const key = "opk1_abcdefghijklmnop";
+  const effect = vi.fn();
   jobRunner.register("test.child-intent", async (ctx) => {
     await ctx.checkpoint(
-      {
-        _parentExecution: { operationKey: "opk1_parentidentity1234" },
-        opsProjection: { operations: { [key]: { phase: "admitting" } } },
-      },
+      { _parentExecution: { operationKey: "opk1_parentidentity1234" } },
       undefined,
       key,
     );
+    effect();
     return {};
   });
   await run("test.child-intent");
-  const query = new PgDialect().sqlToQuery(store.writes[0]?.where as SQL);
-  expect(query.sql).toContain("->'opsProjection'->'operations'->");
-  expect(query.sql).toContain("IS NULL");
-  expect(query.sql).toContain("->'_parentExecution'");
-  expect(query.params).toContain(key);
-  expect(query.params).toContain(JSON.stringify(execution));
+  expect(effect).not.toHaveBeenCalled();
 });
 
 it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render"])(
@@ -223,7 +214,7 @@ it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render
       return { operation: type, completed: true };
     });
     jobRunner.register(type, handler);
-    store.rows = [{ id: jobId, status: "running", result: { _execution: execution } }];
+    store.rows = [{ id: jobId, status: "running", result: {}, protocol: { execution } }];
     await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
       jobId,
       type,
@@ -234,7 +225,8 @@ it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render
           digest: "a".repeat(64),
         },
       },
-      { _execution: execution },
+      {},
+      { execution },
       new AbortController().signal,
       true,
     );
@@ -248,7 +240,7 @@ it.each([false, true])(
   async (extra) => {
     const handler = vi.fn(async () => ({ continued: true }));
     jobRunner.register("service.apply", handler);
-    store.rows = [{ id: jobId, status: "running", result: { _execution: execution } }];
+    store.rows = [{ id: jobId, status: "running", result: {}, protocol: { execution } }];
     await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
       jobId,
       "service.apply",
@@ -261,10 +253,8 @@ it.each([false, true])(
         },
         ...(extra ? { unexpected: true } : {}),
       },
-      {
-        _execution: execution,
-        _configurationCandidate: { operationKey: coordinatorLifecycleOperationKey(jobId, null) },
-      },
+      { _configurationCandidate: { operationKey: coordinatorLifecycleOperationKey(jobId, null) } },
+      { execution },
       new AbortController().signal,
       true,
     );

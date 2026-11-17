@@ -60,7 +60,9 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
       | undefined,
     preparation =
       typeof candidate?.prepareOperationKey === "string"
-        ? readProjection(ctx.checkpointResult).operations[candidate.prepareOperationKey]
+        ? readProjection(ctx.protocol, ctx.checkpointResult).operations[
+            candidate.prepareOperationKey
+          ]
         : undefined,
     // Rows not yet saved, not cancelled and the maintenance preparation not
     // failed: the forward path below runs again and continues with the
@@ -68,7 +70,7 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
     // candidate's own recovery finishes or cleans it up.
     continued =
       ["prepared", "save_attempted"].includes(String(candidate?.phase)) &&
-      ctx.checkpointResult?._cancelRequestedAt === undefined &&
+      ctx.protocol?.cancelRequestedAt === undefined &&
       !(preparation?.terminal && preparation.errorClass),
     retained = candidate && !continued ? candidate : undefined;
   let fixed =

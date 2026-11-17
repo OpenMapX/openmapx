@@ -37,8 +37,10 @@ import {
 } from "./admin-job-parent";
 import {
   ADMIN_JOB_LOG_LIMITS,
+  cancelRequestedAt,
   JobOwnershipLost,
   JobStepAllocationConflict,
+  readAdminJobProtocol,
 } from "./admin-job-state";
 import { readArtifactPurposeObservation } from "./artifact-purpose-observation";
 import {
@@ -94,11 +96,12 @@ async function persistProjection(
   const value = {
     ...(context.checkpointResult ?? {}),
     ...(parentExecution ? { _parentExecution: parentExecution } : {}),
-    opsProjection: projection,
   };
-  if (admissionKey) await context.checkpoint(value, undefined, admissionKey, stepAddress);
-  else await context.checkpoint(value);
-  if (!context.execution) context.checkpointResult = value;
+  await context.checkpoint(value, undefined, admissionKey, stepAddress, projection);
+  if (!context.execution) {
+    context.checkpointResult = value;
+    context.protocol = { ...context.protocol, operations: projection };
+  }
 }
 
 /** Checkpoints the agent's terminal status copy before a caller returns or
@@ -163,8 +166,9 @@ export async function checkpointTerminalCopy(
     if (error instanceof JobOwnershipLost) throw error;
     throw new JobObservationPending("transport");
   }
-  const retained = readProjection(context.checkpointResult).operations[projected.operationKey]
-    ?.receiptDelivery;
+  const retained = readProjection(context.protocol, context.checkpointResult).operations[
+    projected.operationKey
+  ]?.receiptDelivery;
   if (!retained || retained.terminalCopyId !== projected.receiptDelivery.terminalCopyId)
     throw new JobObservationPending("transport");
   projected.receiptDelivery = retained;
@@ -185,7 +189,7 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
     ? `${context.jobId}:${options.durableIdentity}`
     : context.jobId;
   const stepAddress = options.operationKey ?? createDurableOpsKey(keyNamespace, durableIdentity);
-  let projection = readProjection(context.checkpointResult);
+  let projection = readProjection(context.protocol, context.checkpointResult);
   const retainedKey = projection.steps[stepAddress]?.operationKey ?? stepAddress;
   let restored = projection.operations[retainedKey];
   if (restored?.phase === "prepared" || restored?.phase === "unissued")
@@ -254,7 +258,7 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
     await persistProjection(context, reservation, operationKey, stepAddress, parentExecution);
   } catch (error) {
     if (!(error instanceof JobStepAllocationConflict)) throw error;
-    projection = readProjection(context.checkpointResult);
+    projection = readProjection(context.protocol, context.checkpointResult);
     restored = projection.operations[projection.steps[stepAddress]?.operationKey ?? stepAddress];
     if (!restored || restored.kind !== operation.kind)
       throw new JobObservationPending("recovery_required");
@@ -262,7 +266,7 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
       OpsResultFor<K>
     >;
   }
-  projection = readProjection(context.checkpointResult);
+  projection = readProjection(context.protocol, context.checkpointResult);
   const admitted = projection.operations[operationKey];
   if (!admitted) throw new JobObservationPending("recovery_required");
   return observeOperation(context, projection, admitted, client, options, true) as Promise<
@@ -320,7 +324,7 @@ export async function reserveCoordinatorPullSubmission(
       truncated: false,
       terminal: false,
     },
-    projection = readProjection(context.checkpointResult);
+    projection = readProjection(context.protocol, context.checkpointResult);
   await persistProjection(
     context,
     {
@@ -338,7 +342,9 @@ export async function reserveCoordinatorPullSubmission(
     stepAddress,
     parent,
   );
-  const retained = readProjection(context.checkpointResult).operations[root.operationKey];
+  const retained = readProjection(context.protocol, context.checkpointResult).operations[
+    root.operationKey
+  ];
   if (!retained || canonicalJson(retained.attempt) !== canonicalJson(attempt))
     throw new JobObservationPending("recovery_required");
   return submission;
@@ -347,7 +353,7 @@ export async function reserveCoordinatorPullSubmission(
  * normal pull for its first delivery, including after API owner reclaim. */
 export async function deliverCoordinatorPullSubmission(context: JobContext, candidateId: string) {
   const original = await claimCoordinatorPullDelivery(context, candidateId),
-    projection = readProjection(context.checkpointResult),
+    projection = readProjection(context.protocol, context.checkpointResult),
     entry = projection.operations[original.operationKey];
   if (!entry) throw new JobObservationPending("recovery_required");
   return observeOperation(context, projection, entry, createApiOpsClient(), {}, original.fresh);
@@ -358,24 +364,24 @@ export function prepareAdminJobOperationRoot(
   kind: OpsOperationKind,
   stepAddress: string,
 ): ApiPreparedRoot {
-  const p = readProjection(ctx.checkpointResult);
+  const p = readProjection(ctx.protocol, ctx.checkpointResult);
   if (p.operations[p.steps[stepAddress]?.operationKey ?? stepAddress])
     throw new JobObservationPending("recovery_required");
   return prepareApiJobRoot(ctx, kind, stepAddress);
 }
 export function retainedAdminJobOperation(ctx: JobContext, key: string): OpsOperation | undefined {
-  const p = readProjection(ctx.checkpointResult);
+  const p = readProjection(ctx.protocol, ctx.checkpointResult);
   return p.operations[p.steps[key]?.operationKey ?? key]?.operation;
 }
 export function hasRetainedAdminJobOperation(ctx: JobContext, key: string): boolean {
-  const p = readProjection(ctx.checkpointResult);
+  const p = readProjection(ctx.protocol, ctx.checkpointResult);
   return p.operations[p.steps[key]?.operationKey ?? key] !== undefined;
 }
 export async function observeRetainedAdminJobOperation(
   ctx: JobContext,
   key: string,
 ): Promise<unknown> {
-  const projection = readProjection(ctx.checkpointResult);
+  const projection = readProjection(ctx.protocol, ctx.checkpointResult);
   const retained = projection.operations[projection.steps[key]?.operationKey ?? key];
   if (!retained) throw new JobObservationPending("recovery_required");
   return observeOperation(ctx, projection, retained, createApiOpsClient(), {});
@@ -658,7 +664,7 @@ async function observeOperation(
 export async function resumeAdminJobObservation(
   ctx: JobContext,
 ): Promise<Record<string, unknown> | undefined> {
-  const projection = readProjection(ctx.checkpointResult);
+  const projection = readProjection(ctx.protocol, ctx.checkpointResult);
   const entries = Object.values(projection.operations);
   const firstEntry = entries[0];
   if (!firstEntry) throw new JobObservationPending("recovery_required");
@@ -790,6 +796,7 @@ async function verifiedOriginalMaintenanceRecovery(
  * that packet and finish its never-prepared cleanup under a replacement owner. */
 export async function hasRecoveredMaintenanceCandidate(
   result: unknown,
+  protocol: unknown,
   jobId: string,
 ): Promise<boolean> {
   try {
@@ -799,13 +806,14 @@ export async function hasRecoveredMaintenanceCandidate(
       !candidate ||
       !["prepared", "discarding_without_guard", "discarded"].includes(String(candidate.phase)) ||
       candidate.rowVersions !== undefined ||
-      typeof saved?._cancelRequestedAt !== "string" ||
-      !Number.isFinite(Date.parse(saved._cancelRequestedAt)) ||
-      saved._configurationMaintenanceDecision !== undefined ||
-      saved._configurationMaintenanceSettle !== undefined
+      !cancelRequestedAt(readAdminJobProtocol(protocol)) ||
+      saved?._configurationMaintenanceDecision !== undefined ||
+      saved?._configurationMaintenanceSettle !== undefined
     )
       return false;
-    const operation = readProjection(saved).operations[String(candidate.prepareOperationKey)],
+    const operation = readProjection(protocol, saved).operations[
+        String(candidate.prepareOperationKey)
+      ],
       delivery = operation?.receiptDelivery,
       terminal = delivery?.terminalReceipt,
       body = operation?.operation;
@@ -843,10 +851,11 @@ export async function hasRecoveredMaintenanceCandidate(
 
 export async function cancelAdminJobOperations(
   result: unknown,
+  protocol: unknown,
   client: Pick<ApiOpsClient, "cancel" | "status" | "lookup"> = createApiOpsClient(),
   options: CancelAdminJobOperationsOptions = {},
 ): Promise<AdminJobCancellationOutcome> {
-  const projection = readProjection(result);
+  const projection = readProjection(options.context?.protocol ?? protocol, result);
   const pending = Object.values(projection.operations);
   const backend = await cancelAdminDataChildren(result, pending, options);
   // Reconcile every known root even when a backend sibling remains pending.
@@ -1125,7 +1134,14 @@ export async function cancelAdminJobOperations(
     const { hasVerifiedStandaloneRestoration } = await import(
       "./standalone-integrations/settlement-checkpoint"
     );
-    if (await hasVerifiedStandaloneRestoration(standaloneResult, options.jobId)) return "canceled";
+    if (
+      await hasVerifiedStandaloneRestoration(
+        standaloneResult,
+        options.context?.protocol ?? protocol,
+        options.jobId,
+      )
+    )
+      return "canceled";
   }
   if (outcomes.includes("contained")) return "canceled";
   return outcomes.every((outcome) => outcome === "succeeded") ? "completed" : "already_terminal";

@@ -640,15 +640,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               dm: await dm.diagnostics(),
               projection: Object.values(
                 (
-                  row?.result as {
-                    opsProjection?: {
+                  row?.protocol as {
+                    operations?: {
                       operations?: Record<
                         string,
                         { kind?: string; phase?: string; errorClass?: string }
                       >;
                     };
                   }
-                )?.opsProjection?.operations ?? {},
+                )?.operations?.operations ?? {},
               ).map((value) => ({
                 kind: value.kind,
                 phase: value.phase,
@@ -739,10 +739,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .where(eq(schema.adminJob.id, id));
         const pull = Object.values(
           (
-            retained!.result as {
-              opsProjection: { operations: Record<string, { kind: string; operationKey: string }> };
+            retained!.protocol as {
+              operations: { operations: Record<string, { kind: string; operationKey: string }> };
             }
-          ).opsProjection.operations,
+          ).operations.operations,
         ).find((value) => value.kind === "service.pull")!;
         return {
           id,
@@ -904,8 +904,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }),
             row = await finished(reply.json().jobId),
             projection = (
-              row.result as {
-                opsProjection: {
+              row.protocol as {
+                operations: {
                   operations: Record<
                     string,
                     {
@@ -916,7 +916,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   >;
                 };
               }
-            ).opsProjection,
+            ).operations,
             pull = Object.values(projection.operations).find((op) => op.kind === "service.pull")!;
           expect(row.status, row.error ?? "No public error").toBe("failed");
           console.info(
@@ -1278,12 +1278,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .where(eq(schema.adminJob.id, startId)),
           root = Object.values(
             (
-              live!.result as {
-                opsProjection: {
+              live!.protocol as {
+                operations: {
                   operations: Record<string, { kind: string; operationKey: string }>;
                 };
               }
-            ).opsProjection.operations,
+            ).operations.operations,
           ).find((operation) => operation.kind === "service.start")!,
           owner = openLeaseStore({
             directory: leaseStoreDirectory(host.infraDir),
@@ -2298,18 +2298,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .select()
                 .from(schema.adminJob)
                 .where(eq(schema.adminJob.id, id)),
-              before = original!.result as Record<string, unknown>;
+              before = original!.result as Record<string, unknown>,
+              beforeProtocol = original!.protocol as Record<string, unknown>;
             expect(before._configurationCandidate).toBeUndefined();
             expect(
               Object.values(
-                (before.opsProjection as { operations: Record<string, { phase: string }> })
+                (beforeProtocol.operations as { operations: Record<string, { phase: string }> })
                   .operations,
               ).map((value) => value.phase),
             ).toEqual(["prepared"]);
             expect(readdirSync(host.candidates)).toHaveLength(point === "orphan candidate" ? 1 : 0);
             first.child.kill("SIGKILL");
             expect((await first.exited).signal).toBe("SIGKILL");
-            const lease = Date.parse(before._observationLeaseUntil as string);
+            const lease = Date.parse(beforeProtocol.observationLeaseUntil as string);
             while (Date.now() <= lease + 100) await delay(Math.min(1000, lease + 101 - Date.now()));
             const replacement = start({ action: "reconcile", jobId: id });
             await replacement.exited;
@@ -2321,10 +2322,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(
               Object.values(
                 (
-                  row!.result as {
-                    opsProjection: { operations: Record<string, { phase: string }> };
+                  row!.protocol as {
+                    operations: { operations: Record<string, { phase: string }> };
                   }
-                ).opsProjection.operations,
+                ).operations.operations,
               ).map((value) => value.phase),
             ).toEqual(["unissued"]);
             expect(posts.get("service.pull") ?? 0).toBe(0);
@@ -2414,7 +2415,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, id)),
             lease = Date.parse(
-              (retained!.result as Record<string, unknown>)._observationLeaseUntil as string,
+              (retained!.protocol as Record<string, unknown>).observationLeaseUntil as string,
             );
           expect(Number.isFinite(lease)).toBe(true);
           while (Date.now() <= lease + 100) await delay(Math.min(1000, lease + 101 - Date.now()));
@@ -2453,7 +2454,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               configuration: observation?.configuration,
               operations: Object.values(
                 (
-                  observation?.opsProjection as
+                  (observed?.protocol as Record<string, unknown> | undefined)?.operations as
                     | {
                         operations?: Record<
                           string,
@@ -2472,7 +2473,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const row = await finished(id),
             result = row.result as Record<string, unknown>;
           expect(row.status).toBe("success");
-          expect((result._execution as { version: number }).version).toBe(2);
+          expect((row.protocol as { execution: { version: number } }).execution.version).toBe(2);
           if (point === "decision")
             expect(JSON.stringify(result._configurationMaintenanceDecision)).toBe(decision);
           if (originalNormal && inspected.privateCoordinatorLifecycle?.action === "update") {
@@ -2701,15 +2702,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await delay(10);
       }
       expect(row!.status).toBe("failed");
-      const result = row!.result as {
-        opsProjection: {
+      const result = row!.protocol as {
+        operations: {
           operations: Record<
             string,
             { phase: string; terminal: boolean; operationId?: string; receiptDelivery?: unknown }
           >;
         };
       };
-      const entries = Object.values(result.opsProjection.operations);
+      const entries = Object.values(result.operations.operations);
       expect(entries).toHaveLength(1);
       expect(entries[0]!.phase).toBe("unissued");
       expect(entries[0]!.terminal).toBe(true);
@@ -2820,34 +2821,41 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .from(schema.adminJob)
             .where(eq(schema.adminJob.id, id)),
           original = row!.result as Record<string, unknown>,
-          stale = structuredClone(original);
+          originalProtocol = row!.protocol as Record<string, unknown>,
+          stale = structuredClone(originalProtocol.operations) as {
+            operations: Record<string, never>;
+          };
         type Entry = {
           phase: string;
           terminal: boolean;
           operation: { candidateId: string };
           nonissuance?: unknown;
         };
-        const entries = (stale.opsProjection as { operations: Record<string, Entry> }).operations,
+        const entries = (stale as unknown as { operations: Record<string, Entry> }).operations,
           key = Object.keys(entries)[0]!,
           entry = entries[key]!;
         expect(entry.phase).toBe("admitting");
         entry.phase = "prepared";
         const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint"),
-          execution = original._execution as { owner: string; version: number };
+          execution = originalProtocol.execution as { owner: string; version: number };
         const merged = await checkpointOwnedAdminJob(
           id,
           execution,
-          stale,
+          original,
+          stale as never,
           undefined,
           undefined,
           undefined,
           original,
         );
         expect(
-          (merged.opsProjection as { operations: Record<string, Entry> }).operations[key]!.phase,
+          (merged.protocol.operations as { operations: Record<string, Entry> }).operations[key]!
+            .phase,
         ).toBe("admitting");
-        const forged = structuredClone(original),
-          fake = (forged.opsProjection as { operations: Record<string, Entry> }).operations[key]!;
+        const forged = structuredClone(originalProtocol.operations) as {
+            operations: Record<string, Entry>;
+          },
+          fake = forged.operations[key]!;
         fake.phase = "unissued";
         fake.terminal = true;
         fake.nonissuance = {
@@ -2857,13 +2865,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           checkedAt: Date.now(),
         };
         await expect(
-          checkpointOwnedAdminJob(id, execution, forged, undefined, undefined, undefined, original),
+          checkpointOwnedAdminJob(
+            id,
+            execution,
+            original,
+            forged as never,
+            undefined,
+            undefined,
+            undefined,
+            original,
+          ),
         ).rejects.toThrow();
         const [unchanged] = await fixture.db
           .select()
           .from(schema.adminJob)
           .where(eq(schema.adminJob.id, id));
-        expect(JSON.stringify(unchanged!.result)).toBe(JSON.stringify(merged));
+        expect(JSON.stringify(unchanged!.result)).toBe(JSON.stringify(merged.result));
+        expect(JSON.stringify(unchanged!.protocol)).toBe(JSON.stringify(merged.protocol));
         pullAdmissionReplyGate = undefined;
         release.resolve();
         expect((await finished(id)).status).toBe("success");
@@ -2913,8 +2931,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           }
           const operations = Object.values(
             (
-              row!.result as {
-                opsProjection: {
+              row!.protocol as {
+                operations: {
                   operations: Record<
                     string,
                     {
@@ -2927,7 +2945,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   >;
                 };
               }
-            ).opsProjection.operations,
+            ).operations.operations,
           );
           console.info(
             "actual TTL boundary",
@@ -3117,10 +3135,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         let row: typeof schema.adminJob.$inferSelect | undefined;
         for (;;) {
           [row] = await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id));
-          const value = row?.result as
+          const value = { ...(row?.result as object), ...(row?.protocol as object) } as
             | {
                 observation?: { state?: string; reason?: string };
-                opsProjection?: {
+                operations?: {
                   operations?: Record<
                     string,
                     {
@@ -3145,7 +3163,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             diagnostic = true;
             const { readProjection } = await import("../admin-job-projection");
             try {
-              readProjection(value);
+              readProjection(row?.protocol, row?.result);
               console.info("actual bulk projection valid");
             } catch (e) {
               console.info(
@@ -3163,7 +3181,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 maintenancePhase: value?._configurationMaintenance?.phase,
                 arrivals: [...arrivals],
                 posts: [...posts],
-                operations: Object.values(value?.opsProjection?.operations ?? {}).map((op) => ({
+                operations: Object.values(value?.operations?.operations ?? {}).map((op) => ({
                   kind: op.kind,
                   phase: op.phase,
                   terminal: op.terminal,

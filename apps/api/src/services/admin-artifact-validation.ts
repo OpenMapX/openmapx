@@ -26,7 +26,7 @@ async function recoverArtifactPurpose(
   >,
   originalError: unknown,
 ) {
-  const projection = readProjection(ctx.checkpointResult),
+  const projection = readProjection(ctx.protocol, ctx.checkpointResult),
     projected = Object.values(projection.operations).find(
       (value) =>
         value.kind === operation.kind &&

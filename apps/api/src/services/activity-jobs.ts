@@ -240,8 +240,10 @@ export async function listActivityJobs(options: {
 
 export async function getActivityJob(id: string, source: ActivityJobSource) {
   if (source === "application") {
-    const [job] = await db.select().from(adminJob).where(eq(adminJob.id, id)).limit(1);
-    if (!job) return null;
+    const [row] = await db.select().from(adminJob).where(eq(adminJob.id, id)).limit(1);
+    if (!row) return null;
+    // The runner's protocol state never leaves the API.
+    const { protocol: _protocol, ...job } = row;
     const logs = await db
       .select()
       .from(adminJobLog)

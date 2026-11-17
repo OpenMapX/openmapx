@@ -33,8 +33,8 @@ it("checkpoints a stable address and final timed root together before signing or
     execute = vi.fn();
   let candidate: Record<string, unknown> | undefined;
   let address: string | undefined;
-  ctx.checkpoint = vi.fn(async (value, _progress, _key, stepAddress) => {
-    candidate = value;
+  ctx.checkpoint = vi.fn(async (_value, _progress, _key, stepAddress, operations) => {
+    candidate = operations as unknown as Record<string, unknown>;
     address = stepAddress;
     throw Error("uncertain CAS");
   });
@@ -46,13 +46,11 @@ it("checkpoints a stable address and final timed root together before signing or
   ).rejects.toThrow();
   expect(address).toBe("opk1_stableaddress12345");
   expect(candidate).toMatchObject({
-    opsProjection: {
-      version: 3,
-      steps: {
-        opk1_stableaddress12345: {
-          operationKey: expect.stringMatching(/^opk1_t1_/),
-          requestedDeadlineAt: expect.any(Number),
-        },
+    version: 3,
+    steps: {
+      opk1_stableaddress12345: {
+        operationKey: expect.stringMatching(/^opk1_t1_/),
+        requestedDeadlineAt: expect.any(Number),
       },
     },
   });
@@ -71,8 +69,9 @@ it("keeps a fixed pre-admission prerequisite separate from an agent terminal rec
   await writeFile(token, Buffer.alloc(32, 7).toString("base64url"), { mode: 0o600 });
   process.env.OPS_AGENT_TOKEN_FILE = token;
   const ctx = context();
-  ctx.checkpoint = async (value) => {
+  ctx.checkpoint = async (value, _progress, _key, _address, operations) => {
     ctx.checkpointResult = structuredClone(value);
+    if (operations) ctx.protocol = { operations: structuredClone(operations) };
   };
   const execute = vi.fn().mockRejectedValue(new OpsClientError("validation")),
     lookup = vi.fn();
@@ -82,7 +81,7 @@ it("keeps a fixed pre-admission prerequisite separate from an agent terminal rec
         client: { execute, lookup } as never,
       }),
     ).rejects.toMatchObject({ errorClass: "validation" });
-    const entries = Object.values(readProjection(ctx.checkpointResult).operations);
+    const entries = Object.values(readProjection(ctx.protocol).operations);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       phase: "refused",

@@ -13,6 +13,8 @@ export const adminJob = pgTable(
     status: text("status").notNull().default("queued"), // queued|running|success|failed|canceled
     payload: jsonb("payload"),
     result: jsonb("result"),
+    /** The runner's own state: claim, observation lease, cancel request and agent operations. */
+    protocol: jsonb("protocol").$type<Record<string, unknown>>().notNull().default({}),
     error: text("error"),
     progress: integer("progress"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),

@@ -65,11 +65,12 @@ export async function prepareOwnedConfigurationMaintenanceStep(
   let committed: Record<string, unknown> | undefined;
   const prepared = await withConfigurationWriteTransaction(owner.writer, async (tx) => {
     const [row] = await tx
-        .select({ result: schema.adminJob.result })
+        .select({ result: schema.adminJob.result, protocol: schema.adminJob.protocol })
         .from(schema.adminJob)
         .where(jobOwnership(job.jobId, job.execution))
         .for("update"),
       result = row?.result as Record<string, unknown> | undefined,
+      protocol = row?.protocol,
       remote = result?._configurationMaintenance as Record<string, unknown> | undefined,
       receipt = configurationMaintenanceReceiptSchema.parse(remote?.receipt),
       decision = configurationMaintenanceDecisionCheckpointSchema.parse(
@@ -92,7 +93,7 @@ export async function prepareOwnedConfigurationMaintenanceStep(
       !decision.delivery
     )
       throw Error("Actual committed maintenance decision required");
-    const projection = readProjection(result),
+    const projection = readProjection(protocol, result),
       control = projection.operations[decision.delivery.root.operationKey],
       delivered = control?.receiptDelivery;
     if (

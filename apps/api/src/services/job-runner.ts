@@ -26,8 +26,9 @@ import {
   hasRecoveredMaintenanceCandidate,
   resumeAdminJobObservation,
 } from "./admin-job-ops";
-import { readProjection } from "./admin-job-projection";
+import { type OpsProjection, readProjection } from "./admin-job-projection";
 import {
+  type AdminJobProtocol,
   adminJobObservationDue,
   claimAdminJob,
   hasUnsettledManagedOperation,
@@ -38,6 +39,7 @@ import {
   JobStepCapacityExceeded,
   jobOwnership,
   noUnsettledManagedOperation,
+  readAdminJobProtocol,
   readJobExecution,
   renewAdminJobClaim,
 } from "./admin-job-state";
@@ -87,31 +89,38 @@ export interface JobContext {
     progress?: number,
     admissionKey?: string,
     stepAddress?: string,
+    operations?: OpsProjection,
   ): Promise<void>;
   /** Last durable checkpoint loaded with the job and updated after each checkpoint. */
   checkpointResult?: Record<string, unknown> | null;
+  /** The runner's protocol state, loaded with the job and updated after each checkpoint. */
+  protocol?: AdminJobProtocol;
 }
 
 function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobContext {
   const context: JobContext = {
     jobId: job.id,
     jobType: job.type,
-    execution: readJobExecution(job.result),
+    execution: readJobExecution(job.protocol),
     checkpointResult: job.result as Record<string, unknown> | null,
+    protocol: readAdminJobProtocol(job.protocol),
     payload: {},
     signal: new AbortController().signal,
     log: async () => {},
     setProgress: async () => {},
-    checkpoint: async (value) => {
-      context.checkpointResult = await checkpointOwnedAdminJob(
+    checkpoint: async (value, _progress, _admissionKey, _stepAddress, operations) => {
+      const saved = await checkpointOwnedAdminJob(
         job.id,
         context.execution,
         value,
+        operations ?? readProjection(context.protocol, context.checkpointResult),
         undefined,
         undefined,
         undefined,
         context.checkpointResult ?? {},
       );
+      context.checkpointResult = saved.result;
+      context.protocol = saved.protocol;
     },
   };
   return context;
@@ -119,7 +128,7 @@ function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobConte
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
 function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string, unknown> {
   try {
-    const { opsProjection, ...output } = value;
+    const output = value;
     // Host-owned recovery packets are protocol state, not extension output.
     // Redacting their signatures/owner IDs would destroy original authority.
     const retained = Object.fromEntries(
@@ -134,11 +143,6 @@ function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string,
     if (serialized === undefined) return { value: "[redacted]" };
     const sanitized = sanitizeLogMetadata(JSON.parse(serialized) as unknown);
     Object.assign(sanitized, retained);
-    if (opsProjection === undefined) return sanitized;
-    sanitized.opsProjection = readProjection({ opsProjection }) as unknown as Record<
-      string,
-      unknown
-    >;
     return sanitized;
   } catch {
     return { value: "[redacted]" };
@@ -255,12 +259,13 @@ async function needsRecoveredCandidateCleanup(job: {
   type: string;
   payload: unknown;
   result: unknown;
+  protocol: unknown;
 }) {
   return (
     canResumeConfigurationCandidate(job) &&
     (job.result as { _configurationCandidate?: { phase?: string } } | null)?._configurationCandidate
       ?.phase !== "discarded" &&
-    (await hasRecoveredMaintenanceCandidate(job.result, job.id))
+    (await hasRecoveredMaintenanceCandidate(job.result, job.protocol, job.id))
   );
 }
 export class RetainedJobConflict extends Error {}
@@ -462,9 +467,11 @@ class AdminJobRunner {
               startedAt: new Date(),
               payload: { operationKey: options.operationKey },
               createdBy: dbActorId(options.actorId),
+              protocol: {
+                execution,
+                observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),
+              },
               result: {
-                _execution: execution,
-                _observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),
                 _immediateJobId: id,
                 _immediateActorId: actorId,
                 _immediateIntentDigest: intentDigest,
@@ -502,7 +509,7 @@ class AdminJobRunner {
       checkpoint = (claimed.result ?? {}) as Record<string, unknown>;
       recovering = true;
     }
-    const execution = readJobExecution(checkpoint)!;
+    const execution = readJobExecution(job.protocol)!;
     const controller = new AbortController(),
       signal = options.signal
         ? AbortSignal.any([controller.signal, options.signal])
@@ -519,6 +526,7 @@ class AdminJobRunner {
         options.type,
         { operationKey: options.operationKey },
         checkpoint,
+        job.protocol,
         signal,
         false,
         async (ctx) => {
@@ -948,7 +956,7 @@ class AdminJobRunner {
       .update(adminJob)
       .set({
         status: "cancel_pending",
-        result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('_cancelRequestedAt', coalesce(${adminJob.result}->>'_cancelRequestedAt', ${new Date().toISOString()}::text))`,
+        protocol: sql`${adminJob.protocol} || jsonb_build_object('cancelRequestedAt', coalesce(${adminJob.protocol}->>'cancelRequestedAt', ${new Date().toISOString()}::text))`,
       })
       .where(and(eq(adminJob.id, jobId), inArray(adminJob.status, ["running", "cancel_pending"])))
       .returning();
@@ -958,7 +966,7 @@ class AdminJobRunner {
     this.active.get(jobId)?.abort();
     let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>> = "pending";
     try {
-      outcome = await cancelAdminJobOperations(job.result, undefined, {
+      outcome = await cancelAdminJobOperations(job.result, job.protocol, undefined, {
         context: cancellationReceiptContext(job),
         jobId,
         onEvidence: async (evidence) => {
@@ -967,7 +975,7 @@ class AdminJobRunner {
             .set({
               result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
             })
-            .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
+            .where(jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]));
         },
       });
     } catch {
@@ -978,7 +986,7 @@ class AdminJobRunner {
       const [current] = await db
         .select()
         .from(adminJob)
-        .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
+        .where(jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]));
       if (current && (await needsRecoveredCandidateCleanup(current))) {
         // Keep the original cancel marker. It prevents forward admission while
         // the existing fixed producer observes closure and discards its packet.
@@ -986,9 +994,10 @@ class AdminJobRunner {
           .update(adminJob)
           .set({
             status: "running",
-            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('observation', jsonb_build_object('state','unknown','reason','recovery_required','nextCheckAt',${new Date().toISOString()}::text),'_observationLeaseUntil',null)`,
+            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('observation', jsonb_build_object('state','unknown','reason','recovery_required','nextCheckAt',${new Date().toISOString()}::text))`,
+            protocol: sql`${adminJob.protocol} || jsonb_build_object('observationLeaseUntil', null)`,
           })
-          .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]))
+          .where(jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]))
           .returning({ id: adminJob.id });
         // Acknowledge the retained cancellation request, not a terminal
         // canceled outcome. The original failed canonical remains unchanged.
@@ -1009,7 +1018,7 @@ class AdminJobRunner {
       })
       .where(
         and(
-          jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]),
+          jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]),
           noUnsettledManagedOperation(),
         ),
       )
@@ -1051,7 +1060,12 @@ class AdminJobRunner {
     // and are now running the exact image that the update pulled. Any other
     // interrupted job retains uncertainty until its original effect is observed.
     const interruptedUpdates = await db
-      .select({ id: adminJob.id, result: adminJob.result, status: adminJob.status })
+      .select({
+        id: adminJob.id,
+        result: adminJob.result,
+        protocol: adminJob.protocol,
+        status: adminJob.status,
+      })
       .from(adminJob)
       .where(and(eq(adminJob.status, "running"), eq(adminJob.type, "system.update")));
     const checkpointedUpdates = interruptedUpdates.flatMap((job) => {
@@ -1061,7 +1075,7 @@ class AdminJobRunner {
     for (const candidate of checkpointedUpdates) {
       const claimed = await claimAdminJob({ ...candidate, status: candidate.status ?? "running" });
       if (!claimed) continue;
-      const execution = readJobExecution(claimed.result);
+      const execution = readJobExecution(claimed.protocol);
       const outcome = await (options.resolveReplacementOutcome ?? (async () => null))(
         candidate.checkpoint.outcomeFile,
       );
@@ -1225,7 +1239,7 @@ class AdminJobRunner {
     const renew = async () => {
       if (closed || controller.signal.aborted) return;
       try {
-        await renewAdminJobClaim(job.id, readJobExecution(job.result));
+        await renewAdminJobClaim(job.id, readJobExecution(job.protocol));
       } catch (error) {
         controller.abort(error);
         return;
@@ -1244,6 +1258,7 @@ class AdminJobRunner {
       job.type,
       (job.payload as Record<string, unknown>) ?? {},
       (job.result as Record<string, unknown> | null) ?? null,
+      job.protocol,
       observe
         ? AbortSignal.any([
             controller.signal,
@@ -1273,6 +1288,7 @@ class AdminJobRunner {
     type: string,
     payload: Record<string, unknown>,
     checkpointResult: Record<string, unknown> | null,
+    protocol: unknown,
     signal: AbortSignal,
     observe = false,
     immediateHandler?: JobHandler,
@@ -1312,7 +1328,7 @@ class AdminJobRunner {
               ? observeExtensionJob
               : resumeAdminJobObservation
             : (immediateHandler ?? this.handlers.get(type));
-    const execution = readJobExecution(checkpointResult);
+    const execution = readJobExecution(protocol);
     let checkpointTail = Promise.resolve();
     let checkpointBaseline = structuredClone((checkpointResult ?? {}) as Record<string, unknown>);
     const sanitizeExtensionOutput = type === "extension.install";
@@ -1344,6 +1360,7 @@ class AdminJobRunner {
       payload: executionPayload,
       signal,
       checkpointResult: checkpointResult === null ? null : durableRecord(checkpointResult),
+      protocol: readAdminJobProtocol(protocol),
       log: async (line, stream = "stdout", sourceEventId, sourceSeq) => {
         const localSeq = this.logSeq.get(jobId) ?? 0;
         const seq = sourceSeq ?? localSeq;
@@ -1390,55 +1407,48 @@ class AdminJobRunner {
         if (!rows.length) lost();
         jobEventBus.publish(jobId, { type: "progress", progress });
       },
-      checkpoint: async (result, progress, admissionKey, stepAddress) => {
+      checkpoint: async (result, progress, admissionKey, stepAddress, operations) => {
         result = durableRecord(result);
         const write = checkpointTail.then(async () => {
-          const isV3 = (result.opsProjection as { version?: number } | undefined)?.version === 3;
-          if (isV3) {
+          // A job that records agent operations checkpoints them with its result.
+          const recorded =
+            operations ??
+            (ctx.protocol?.operations === undefined
+              ? undefined
+              : readProjection(ctx.protocol, ctx.checkpointResult));
+          if (recorded) {
             if (admissionKey) signal.throwIfAborted();
             try {
-              ctx.checkpointResult = await checkpointOwnedAdminJob(
+              const saved = await checkpointOwnedAdminJob(
                 jobId,
                 execution,
                 result,
+                recorded,
                 progress,
                 admissionKey,
                 stepAddress,
                 checkpointBaseline,
               );
+              ctx.checkpointResult = saved.result;
+              ctx.protocol = saved.protocol;
               checkpointBaseline = structuredClone(ctx.checkpointResult);
             } catch (error) {
-              if (error instanceof JobStepAllocationConflict)
+              if (error instanceof JobStepAllocationConflict) {
                 ctx.checkpointResult = error.checkpoint;
+                ctx.protocol = error.protocol;
+              }
               throw error;
             }
             if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
             return;
           }
+          if (admissionKey) throw Error("An operation reservation needs its operations");
           signal.throwIfAborted();
-          // A handler cannot replace the runner's ownership member.
-          const merged: Record<string, unknown> = {
-            ...ctx.checkpointResult,
-            ...result,
-            ...(execution ? { _execution: execution } : {}),
-          };
+          const merged: Record<string, unknown> = { ...ctx.checkpointResult, ...result };
           const rows = await db
             .update(adminJob)
-            .set({
-              result: sql`${JSON.stringify(merged)}::jsonb || jsonb_build_object('_observationLeaseUntil', ${adminJob.result}->'_observationLeaseUntil')`,
-              ...(progress === undefined ? {} : { progress }),
-            })
-            .where(
-              and(
-                jobOwnership(jobId, execution),
-                ...(admissionKey
-                  ? [
-                      sql`${adminJob.result}->'opsProjection'->'operations'->${admissionKey} IS NULL`,
-                      sql`(${adminJob.result}->'_parentExecution' IS NULL OR ${adminJob.result}->'_parentExecution' = ${JSON.stringify(merged._parentExecution ?? null)}::jsonb)`,
-                    ]
-                  : []),
-              ),
-            )
+            .set({ result: merged, ...(progress === undefined ? {} : { progress }) })
+            .where(jobOwnership(jobId, execution))
             .returning({ id: adminJob.id });
           if (!rows.length) lost();
           ctx.checkpointResult = merged;
@@ -1465,7 +1475,6 @@ class AdminJobRunner {
         const attempts = Math.min(12, Number(ctx.checkpointResult?._observationAttempts ?? 0) + 1);
         const observationPatch = {
           _observationAttempts: attempts,
-          _observationLeaseUntil: null,
           observation: {
             state: "unknown",
             reason,
@@ -1478,6 +1487,7 @@ class AdminJobRunner {
           .update(adminJob)
           .set({
             result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(observationPatch)}::jsonb`,
+            protocol: sql`${adminJob.protocol} || jsonb_build_object('observationLeaseUntil', null)`,
           })
           .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]))
           .returning({ status: adminJob.status, result: adminJob.result });
@@ -1498,14 +1508,10 @@ class AdminJobRunner {
       if (error !== undefined) error = durableLine(error);
       try {
         await checkpointTail;
-        const merged: Record<string, unknown> = {
-          ...ctx.checkpointResult,
-          ...result,
-          ...(execution ? { _execution: execution } : {}),
-        };
+        const merged: Record<string, unknown> = { ...ctx.checkpointResult, ...result };
         delete merged.observation;
         const safeMerged = durableRecord(merged);
-        if (hasUnsettledManagedOperation(ctx.checkpointResult)) {
+        if (hasUnsettledManagedOperation(ctx.checkpointResult, ctx.protocol)) {
           if (status === "success" || knownFailure)
             await db
               .update(adminJob)
@@ -1520,7 +1526,7 @@ class AdminJobRunner {
           .update(adminJob)
           .set({
             status,
-            result: sql`(coalesce(${adminJob.result}, '{}'::jsonb) - 'observation') || ${JSON.stringify(Object.fromEntries(Object.entries(safeMerged).filter(([key]) => !["opsProjection", "_opsLogEvents", "_opsLogBytes"].includes(key))))}::jsonb`,
+            result: sql`(coalesce(${adminJob.result}, '{}'::jsonb) - 'observation') || ${JSON.stringify(Object.fromEntries(Object.entries(safeMerged).filter(([key]) => !["_opsLogEvents", "_opsLogBytes"].includes(key))))}::jsonb`,
             error: error ?? null,
             finishedAt,
             ...(status === "success" ? { progress: 100 } : {}),
@@ -1564,7 +1570,7 @@ class AdminJobRunner {
           const artifactObservation =
             retainedMaintenance &&
             ["artifact.import", "artifact.validate"].includes(type) &&
-            Object.values(readProjection(original).operations).some(
+            Object.values(readProjection(current.protocol, original).operations).some(
               (operation) =>
                 operation.operationId &&
                 operation.attempt &&
@@ -1575,20 +1581,25 @@ class AdminJobRunner {
                     ? "artifactTransfer.import"
                     : "artifactTransfer.validate"),
             );
-          const outcome = await cancelAdminJobOperations(current.result, undefined, {
-            context: ctx,
-            jobId,
-            signal,
-            onEvidence: async (evidence) => {
-              ctx.checkpointResult = { ...ctx.checkpointResult, ...evidence };
-              await db
-                .update(adminJob)
-                .set({
-                  result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
-                })
-                .where(jobOwnership(jobId, execution, ["cancel_pending"]));
+          const outcome = await cancelAdminJobOperations(
+            current.result,
+            current.protocol,
+            undefined,
+            {
+              context: ctx,
+              jobId,
+              signal,
+              onEvidence: async (evidence) => {
+                ctx.checkpointResult = { ...ctx.checkpointResult, ...evidence };
+                await db
+                  .update(adminJob)
+                  .set({
+                    result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
+                  })
+                  .where(jobOwnership(jobId, execution, ["cancel_pending"]));
+              },
             },
-          }).catch((error) => {
+          ).catch((error) => {
             // Failed artifact canonicals require a durable purpose copy BEFORE
             // ACK. Let only their fixed read-only handler obtain that copy.
             if (artifactObservation && error instanceof JobObservationPending)
@@ -1600,7 +1611,7 @@ class AdminJobRunner {
             if (
               !artifactObservation &&
               (!retainedConfiguration ||
-                Object.keys(readProjection(original).operations).length !== 0 ||
+                Object.keys(readProjection(current.protocol, original).operations).length !== 0 ||
                 original?._dataExecutions !== undefined)
             ) {
               await pending("transport");
@@ -1621,6 +1632,7 @@ class AdminJobRunner {
                 type,
                 payload,
                 result: ctx.checkpointResult,
+                protocol: ctx.protocol,
               }))
             )
           ) {
@@ -1730,7 +1742,7 @@ class AdminJobRunner {
             eq(adminJob.status, "failed"),
             inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
             sql`${adminJob.result}->'_configurationCandidate'->>'phase' IN ('prepared','discarding_without_guard')`,
-            sql`${adminJob.result}->>'_cancelRequestedAt' IS NOT NULL`,
+            sql`${adminJob.protocol}->>'cancelRequestedAt' IS NOT NULL`,
             noUnsettledManagedOperation(),
           ),
         )

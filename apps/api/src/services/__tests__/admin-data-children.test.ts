@@ -20,7 +20,7 @@ vi.mock("../../db", () => ({
 
 import { cancelDataManagerActivityJob } from "../activity-jobs";
 import { cancelAdminDataChildren } from "../admin-data-children";
-import { hasUnsettledManagedOperation } from "../admin-job-state";
+import { type AdminJobProtocol, hasUnsettledManagedOperation } from "../admin-job-state";
 
 const key = "opk1_abcdefghijklmnop",
   at = Date.now(),
@@ -40,12 +40,13 @@ function child(index: number) {
     publication: "not_started" as const,
   };
 }
-function context(result: Record<string, unknown>): JobContext {
+function context(result: Record<string, unknown>, protocol: AdminJobProtocol = {}): JobContext {
   return {
     jobId: "fixture-job",
     payload: {},
     signal: new AbortController().signal,
     checkpointResult: result,
+    protocol,
     log: async () => {},
     setProgress: async () => {},
     checkpoint: async function (value) {
@@ -100,7 +101,7 @@ it("keeps an interrupted unknown durable Activity execution explicitly cancelabl
 it("cancels every registered backend with zero agent projections and retains pending after lost responses", async () => {
   vi.stubEnv("DATA_MANAGER_URL", "https://synthetic-dm.test");
   const children = [child(1), child(2)],
-    ctx = context({ _cancelRequestedAt: new Date().toISOString(), _dataExecutions: children }),
+    ctx = context({ _dataExecutions: children }, { cancelRequestedAt: new Date().toISOString() }),
     sent: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -135,14 +136,14 @@ it("cancels every registered backend with zero agent projections and retains pen
     }),
   ).toBe("pending");
   expect(sent).toEqual(children.map((child) => child.id));
-  expect(hasUnsettledManagedOperation(ctx.checkpointResult)).toBe(true);
+  expect(hasUnsettledManagedOperation(ctx.checkpointResult, ctx.protocol)).toBe(true);
 });
 it("discovers the exact fixed CLI descendant from its durable DM row before cancellation", async () => {
   vi.stubEnv("DATA_MANAGER_URL", "https://synthetic-dm.test");
   const cliKey = controlChildOperationKey(key, "data-workflow", 0),
     dataKey = controlChildOperationKey(cliKey, "data-step", 0),
     owned = { ...child(1), operationKey: dataKey },
-    ctx = context({ _cancelRequestedAt: new Date().toISOString() });
+    ctx = context({}, { cancelRequestedAt: new Date().toISOString() });
   fixture.rows = [
     {
       id: owned.id,
@@ -201,21 +202,27 @@ it("discovers the exact fixed CLI descendant from its durable DM row before canc
     ),
   ).toBe("contained");
   expect(canceled).toBe(true);
-  expect(hasUnsettledManagedOperation(ctx.checkpointResult)).toBe(false);
+  expect(hasUnsettledManagedOperation(ctx.checkpointResult, ctx.protocol)).toBe(false);
 });
 
 it("keeps malformed or unknown backend terminal metadata behind the finalization fence", () => {
   expect(
-    hasUnsettledManagedOperation({
-      _dataExecutions: [{ ...child(1), state: "terminal", publication: undefined }],
-    }),
+    hasUnsettledManagedOperation(
+      {
+        _dataExecutions: [{ ...child(1), state: "terminal", publication: undefined }],
+      },
+      {},
+    ),
   ).toBe(true);
   expect(
-    hasUnsettledManagedOperation({
-      _dataExecutions: [
-        { ...child(1), state: "terminal", publication: "committed", status: "running" },
-      ],
-    }),
+    hasUnsettledManagedOperation(
+      {
+        _dataExecutions: [
+          { ...child(1), state: "terminal", publication: "committed", status: "running" },
+        ],
+      },
+      {},
+    ),
   ).toBe(true);
 });
 
@@ -224,7 +231,7 @@ it("discovers and cancels Full Update's original nested generation leaf", async 
   const cliKey = controlChildOperationKey(key, "data-finalization", 1),
     dataKey = controlChildOperationKey(cliKey, "hardlinks", 0),
     owned = { ...child(1), operationKey: dataKey, kind: "generation-hardlinks" },
-    ctx = context({ _cancelRequestedAt: new Date().toISOString() });
+    ctx = context({}, { cancelRequestedAt: new Date().toISOString() });
   fixture.batches = [
     [],
     [],

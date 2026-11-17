@@ -5,9 +5,11 @@ import {
 } from "@openmapx/core/ops";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
-import { readProjection } from "./admin-job-projection";
+import { type OpsProjection, readProjection } from "./admin-job-projection";
 import {
   ADMIN_JOB_LOG_LIMITS,
+  type AdminJobProtocol,
+  cancelRequestedAt,
   type JobExecution,
   JobOwnershipLost,
   JobStepAllocationConflict,
@@ -19,16 +21,21 @@ import { assertConfigurationMaintenanceProjectedStep } from "./configuration-mai
 import { assertStandaloneSettlementCheckpoint } from "./standalone-integrations/settlement-checkpoint";
 
 const equal = (a: unknown, b: unknown) => canonicalJson(a ?? null) === canonicalJson(b ?? null);
-/** Called only for v3. The database row lock owns uniqueness, capacity and merges. */
+/**
+ * Checkpoints a job that records agent operations: the result and the
+ * operations in its protocol change in one row update. The database row lock
+ * owns uniqueness, capacity and merges.
+ */
 export async function checkpointOwnedAdminJob(
   id: string,
   execution: JobExecution | undefined,
   candidate: Record<string, unknown>,
+  operations: OpsProjection,
   progress?: number,
   admissionKey?: string,
   stepAddress?: string,
   baseline: Record<string, unknown> = {},
-): Promise<Record<string, unknown>> {
+): Promise<{ result: Record<string, unknown>; protocol: AdminJobProtocol }> {
   const result = await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
@@ -37,8 +44,9 @@ export async function checkpointOwnedAdminJob(
       .for("update");
     if (!row) throw new JobOwnershipLost();
     const current = (row.result ?? {}) as Record<string, unknown>,
-      old = readProjection(current),
-      next = readProjection(candidate);
+      currentProtocol = row.protocol as AdminJobProtocol,
+      old = readProjection(currentProtocol, current),
+      next = readProjection({ operations }, candidate);
     if (next.version !== 3) throw Error("Invalid managed checkpoint version");
     let mergedProjection = old;
     let maintenanceDecisionAttempt: Record<string, unknown> | undefined;
@@ -68,16 +76,16 @@ export async function checkpointOwnedAdminJob(
       )
         throw Error("Only the fixed coordinator pull can be preallocated");
       if (old.steps[stepAddress] || old.operations[stepAddress] || old.operations[admissionKey])
-        return { conflict: true as const, result: current };
+        return { conflict: true as const, result: current, protocol: currentProtocol };
       if (Object.keys(old.steps).length >= 64 || Object.keys(old.operations).length >= 64)
-        return { capacity: true as const, result: current };
+        return { capacity: true as const, result: current, protocol: currentProtocol };
       const standaloneSettlement =
         ["standalone.install", "standalone.adopt", "standalone.remove"].includes(row.type) &&
         operation.operation?.kind === "integration.settle";
       if (standaloneSettlement)
         await assertStandaloneSettlementCheckpoint(row, operation.operation!, tx);
       if (row.status !== "running" && !standaloneSettlement) throw new JobOwnershipLost();
-      if (current._cancelRequestedAt !== undefined && !standaloneSettlement) {
+      if (currentProtocol.cancelRequestedAt !== undefined && !standaloneSettlement) {
         // Cancellation never authorizes a forward phase. Only the original
         // no-effect Abandon/Settle controls may be checkpointed against the
         // actual already-delivered preparation in THIS owned job row.
@@ -86,8 +94,7 @@ export async function checkpointOwnedAdminJob(
           !body ||
           (body.kind !== "configurationMaintenance.settle" &&
             !(body.kind === "configurationMaintenance.decide" && body.decision === "abandon")) ||
-          typeof current._cancelRequestedAt !== "string" ||
-          !Number.isFinite(Date.parse(current._cancelRequestedAt))
+          !cancelRequestedAt(currentProtocol)
         )
           throw new JobOwnershipLost();
         const original = old.operations[body.prepareOperationKey],
@@ -126,7 +133,7 @@ export async function checkpointOwnedAdminJob(
         // unused/final eligibility and original-root control; no new grant.
       }
       if (current._parentExecution && !equal(current._parentExecution, candidate._parentExecution))
-        return { conflict: true as const, result: current };
+        return { conflict: true as const, result: current, protocol: currentProtocol };
       const parent = candidate._parentExecution as
         | { operationKey?: string; fingerprint?: string; deadlineAt?: number }
         | undefined;
@@ -190,6 +197,7 @@ export async function checkpointOwnedAdminJob(
       } catch {
         assertConfigurationMaintenanceProjectedStep(
           current,
+          currentProtocol,
           admissionKey,
           operation.operation,
           operation.attempt,
@@ -273,13 +281,7 @@ export async function checkpointOwnedAdminJob(
           old.byteTotal + byteDelta >= ADMIN_JOB_LOG_LIMITS.bytes,
       };
     }
-    const {
-      opsProjection: _p,
-      _execution: _e,
-      _parentExecution: _parent,
-      _observationLeaseUntil: _lease,
-      ...patch
-    } = candidate;
+    const { _parentExecution: _parent, ...patch } = candidate;
     const changed = admissionKey
       ? {}
       : Object.fromEntries(
@@ -319,17 +321,23 @@ export async function checkpointOwnedAdminJob(
       ...(admissionKey
         ? { _parentExecution: current._parentExecution ?? candidate._parentExecution }
         : {}),
-      opsProjection: mergedProjection,
     };
     const [updated] = await tx
       .update(adminJob)
-      .set({ result: merged, ...(progress === undefined ? {} : { progress }) })
+      .set({
+        result: merged,
+        protocol: { ...currentProtocol, operations: mergedProjection },
+        ...(progress === undefined ? {} : { progress }),
+      })
       .where(jobOwnership(id, execution, ["running", "cancel_pending"]))
-      .returning({ result: adminJob.result });
+      .returning({ result: adminJob.result, protocol: adminJob.protocol });
     if (!updated) throw new JobOwnershipLost();
-    return { result: updated.result as Record<string, unknown> };
+    return {
+      result: updated.result as Record<string, unknown>,
+      protocol: updated.protocol as AdminJobProtocol,
+    };
   });
-  if ("conflict" in result) throw new JobStepAllocationConflict(result.result);
+  if ("conflict" in result) throw new JobStepAllocationConflict(result.result, result.protocol);
   if ("capacity" in result) throw new JobStepCapacityExceeded();
-  return result.result;
+  return result;
 }

@@ -4,7 +4,7 @@
 import { connect, createServer, type Socket } from "node:net";
 
 /** The parameter that only an admin job lease renewal binds. */
-const LEASE_RENEWAL_PARAMETER = Buffer.from('{"_observationLeaseUntil"');
+const LEASE_RENEWAL_PARAMETER = Buffer.from('{"observationLeaseUntil"');
 /** How long after its client is gone a withheld renewal reaches PostgreSQL. */
 const LATE_RENEWAL_DELAY_MS = 1000;
 /** How long after its client is gone a held session stays connected to PostgreSQL. */

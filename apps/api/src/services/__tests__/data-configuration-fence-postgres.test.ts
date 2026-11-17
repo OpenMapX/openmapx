@@ -132,7 +132,7 @@ describe.skipIf(
           await vi.waitFor(
             async () =>
               expect(
-                await cancelAdminJobOperations(f.ctx.checkpointResult, undefined, {
+                await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, undefined, {
                   context: f.ctx,
                   jobId: f.ctx.jobId,
                   pollIntervalMs: 1,
@@ -144,16 +144,18 @@ describe.skipIf(
           // but the original private candidate has not been discarded.
           await f.sql`UPDATE admin_job SET status='failed', finished_at=now(),
             error='Maintenance preparation failed; original ownership was safely released.',
-            result=result || jsonb_build_object('_cancelRequestedAt',${new Date().toISOString()}::text)
+            protocol=protocol || jsonb_build_object('cancelRequestedAt',${new Date().toISOString()}::text)
             WHERE id=${f.ctx.jobId}`;
-          const [historical] = await f.sql`SELECT result FROM admin_job WHERE id=${f.ctx.jobId}`;
+          const [historical] =
+            await f.sql`SELECT result,protocol FROM admin_job WHERE id=${f.ctx.jobId}`;
           for (const changed of ["proof", "candidate", "job"] as const) {
             const altered = structuredClone(historical!.result),
-              entry = altered.opsProjection.operations[f.owner.operationKey];
+              alteredProtocol = structuredClone(historical!.protocol),
+              entry = alteredProtocol.operations.operations[f.owner.operationKey];
             if (changed === "proof") entry.receiptDelivery.maintenanceRecovery = "changed";
             if (changed === "candidate") altered._configurationCandidate.candidateId = randomUUID();
             if (changed === "job") entry.attempt.apiJobId = randomUUID();
-            await f.sql`UPDATE admin_job SET result=${JSON.stringify(altered)}::jsonb WHERE id=${f.ctx.jobId}`;
+            await f.sql`UPDATE admin_job SET result=${JSON.stringify(altered)}::jsonb, protocol=${JSON.stringify(alteredProtocol)}::jsonb WHERE id=${f.ctx.jobId}`;
             await jobRunner.reconcile({ limit: 32 });
             const [refused] =
               await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
@@ -162,7 +164,7 @@ describe.skipIf(
             expect(
               existsSync(join(f.host.candidates, `${candidate.sealedOperationKey}.json`)),
             ).toBe(true);
-            await f.sql`UPDATE admin_job SET result=${JSON.stringify(historical!.result)}::jsonb WHERE id=${f.ctx.jobId}`;
+            await f.sql`UPDATE admin_job SET result=${JSON.stringify(historical!.result)}::jsonb, protocol=${JSON.stringify(historical!.protocol)}::jsonb WHERE id=${f.ctx.jobId}`;
           }
           const agentUrl = process.env.OPS_AGENT_URL;
           vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
@@ -180,11 +182,16 @@ describe.skipIf(
             await vi.waitFor(
               async () => {
                 expect(
-                  await cancelAdminJobOperations(f.ctx.checkpointResult, undefined, {
-                    context: f.ctx,
-                    jobId: f.ctx.jobId,
-                    pollIntervalMs: 1,
-                  }),
+                  await cancelAdminJobOperations(
+                    f.ctx.checkpointResult,
+                    f.ctx.protocol,
+                    undefined,
+                    {
+                      context: f.ctx,
+                      jobId: f.ctx.jobId,
+                      pollIntervalMs: 1,
+                    },
+                  ),
                 ).toBe("recovered_failure");
               },
               { timeout: 15000, interval: 100 },
@@ -228,10 +235,12 @@ describe.skipIf(
           expect(existsSync(join(f.host.candidates, `${candidate.sealedOperationKey}.json`))).toBe(
             false,
           );
-          const [interrupted] = await f.sql`SELECT result FROM admin_job WHERE id=${f.ctx.jobId}`;
+          const [interrupted] =
+            await f.sql`SELECT result,protocol FROM admin_job WHERE id=${f.ctx.jobId}`;
           expect(
             await (await import("../admin-job-ops")).hasRecoveredMaintenanceCandidate(
               interrupted!.result,
+              interrupted!.protocol,
               f.ctx.jobId,
             ),
           ).toBe(true);
@@ -273,11 +282,12 @@ describe.skipIf(
             ...f.ctx,
             jobId: nextId,
             execution,
-            checkpointResult: { _execution: execution },
+            checkpointResult: {},
+            protocol: { execution },
           },
           writer = await import("../administrative-configuration-writer");
-        await f.sql`INSERT INTO admin_job(id,type,status,payload,result)
-          VALUES(${nextId},'service.apply','running','{}',${JSON.stringify(next.checkpointResult)}::jsonb)`;
+        await f.sql`INSERT INTO admin_job(id,type,status,payload,result,protocol)
+          VALUES(${nextId},'service.apply','running','{}','{}'::jsonb,${JSON.stringify(next.protocol)}::jsonb)`;
         await expect(
           writer.withAdministrativeConfigurationJob(next, () =>
             writer.withAdministrativeConfigurationWriter(
@@ -392,7 +402,7 @@ describe.skipIf(
       const { cancelAdminJobOperations } = await import("../admin-job-ops");
       vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:0");
       expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
+        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
           context: f.ctx,
           jobId: f.ctx.jobId,
           pollIntervalMs: 1,
@@ -406,7 +416,7 @@ describe.skipIf(
           return status; // an older agent cannot attest original ownership closure
         });
       expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
+        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
           context: f.ctx,
           jobId: f.ctx.jobId,
           pollIntervalMs: 1,
@@ -414,7 +424,7 @@ describe.skipIf(
       ).toBe("pending");
       expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
       expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
+        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
           context: f.ctx,
           jobId: f.ctx.jobId,
           pollIntervalMs: 1,
@@ -445,7 +455,7 @@ describe.skipIf(
         });
         try {
           expect(
-            await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
+            await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
               context: f.ctx,
               jobId: f.ctx.jobId,
               pollIntervalMs: 1,
@@ -456,7 +466,7 @@ describe.skipIf(
         }
       }
       expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
+        await cancelAdminJobOperations(f.ctx.checkpointResult, f.ctx.protocol, client, {
           context: f.ctx,
           jobId: f.ctx.jobId,
           pollIntervalMs: 1,
@@ -468,10 +478,10 @@ describe.skipIf(
       const { jobRunner } = await import("../job-runner");
       expect(await jobRunner.cancel(f.ctx.jobId)).toBe(true);
       const [finished] =
-        await f.sql`SELECT status,finished_at,result FROM admin_job WHERE id=${f.ctx.jobId}`;
+        await f.sql`SELECT status,finished_at,protocol FROM admin_job WHERE id=${f.ctx.jobId}`;
       expect(finished?.status).toBe("failed");
       expect(finished?.finished_at).not.toBeNull();
-      expect(finished?.result._cancelRequestedAt).toBeDefined();
+      expect(finished?.protocol.cancelRequestedAt).toBeDefined();
       expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
       expect(await client.status("configurationMaintenance.prepare", f.owner.executionId)).toEqual(
         original,
@@ -1037,7 +1047,6 @@ async function ownedFenceFixture(
         ? { operationKey }
         : {},
     initialResult = {
-      _execution: execution,
       ...(options.immediateRecovery
         ? {
             _immediateJobId: jobId,
@@ -1064,6 +1073,7 @@ async function ownedFenceFixture(
     payload,
     status: "running",
     result: initialResult,
+    protocol: { execution },
   });
   const ctx: JobContext = {
     jobId,
@@ -1072,22 +1082,27 @@ async function ownedFenceFixture(
     payload,
     signal: new AbortController().signal,
     checkpointResult: initialResult,
+    protocol: { execution },
     log: async () => {},
     setProgress: async () => {},
-    checkpoint: async (result, progress, admissionKey, stepAddress) => {
-      if ((result.opsProjection as { version?: number } | undefined)?.version === 3) {
+    checkpoint: async (result, progress, admissionKey, stepAddress, operations) => {
+      const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+      if (recorded) {
         const { checkpointOwnedAdminJob } = await import(
           "../../../../../apps/api/src/services/admin-job-checkpoint"
         );
-        ctx.checkpointResult = await checkpointOwnedAdminJob(
+        const saved = await checkpointOwnedAdminJob(
           jobId,
           execution,
           result,
+          recorded,
           progress,
           admissionKey,
           stepAddress,
           ctx.checkpointResult ?? {},
         );
+        ctx.checkpointResult = saved.result;
+        ctx.protocol = saved.protocol;
       } else {
         await fixture.db
           .update(apiSchema.adminJob)

@@ -70,6 +70,7 @@ const { createApiOpsClient, createDurableOpsKey, executeAndWait } = await import
 const { retainPlatformPreview } = await import("../platform-preview-store");
 const { loadAuthPolicy } = await import("../../account/auth-policy");
 const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint");
+const { readJobExecution } = await import("../admin-job-state");
 
 /** Only the Docker executable is replaced. The separate Node process runs the
  * actual production entrypoint, fixed grant/adoption, source and effect code. */
@@ -1012,8 +1013,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               const until = Date.now() + 65000;
               for (;;) {
                 const row = await readJob(),
-                  expiry = (row.result as { _observationLeaseUntil?: string } | null)
-                    ?._observationLeaseUntil;
+                  expiry = (row.protocol as { observationLeaseUntil?: string } | null)
+                    ?.observationLeaseUntil;
                 expect(typeof expiry).toBe("string");
                 if (Date.parse(expiry!) <= Date.now()) break;
                 expect(Date.now()).toBeLessThan(until);
@@ -1100,7 +1101,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               });
               const recovered = await readJob(),
                 result = recovered.result as Record<string, unknown>;
-              expect((result._execution as { version: number }).version).toBe(2);
+              expect(readJobExecution(recovered.protocol)?.version).toBe(2);
               expect(result.configuration).toMatchObject({
                 outcome: "not_committed",
                 cleanupFailed: false,
@@ -1149,12 +1150,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               for (;;) {
                 const row = await readJob(),
                   projection = (
-                    row.result as {
-                      opsProjection?: {
+                    row.protocol as {
+                      operations?: {
                         operations?: Record<string, { kind: string; receiptDelivery?: object }>;
                       };
                     } | null
-                  )?.opsProjection;
+                  )?.operations;
                 if (
                   Object.values(projection?.operations ?? {}).some(
                     (operation) =>
@@ -1277,11 +1278,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 signal: null,
                 result: { status: "success" },
               });
-              const recovered = (await readJob()).result as {
-                _execution?: { version: number };
-                _configurationCandidate?: { rowVersions?: unknown };
-              };
-              expect(recovered._execution?.version).toBe(2);
+              const recoveredJob = await readJob(),
+                recovered = recoveredJob.result as {
+                  _configurationCandidate?: { rowVersions?: unknown };
+                };
+              expect(readJobExecution(recoveredJob.protocol)?.version).toBe(2);
               expect(recovered._configurationCandidate?.rowVersions).toEqual(originalRows);
               expect(await readDesiredPlatform()).toEqual(originalPlatformRows);
             }
@@ -1367,7 +1368,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               expect(inspectionReplyLost).toBe(true);
             if (version === "launch-native-system-release-late-cancel")
               expect(
-                typeof (job.result as { _cancelRequestedAt?: unknown })._cancelRequestedAt,
+                typeof (job.protocol as { cancelRequestedAt?: unknown }).cancelRequestedAt,
               ).toBe("string");
             expect(job.payload).toEqual(
               systemRelease
@@ -1427,7 +1428,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             type: "platform.apply",
             status: "running",
             createdBy: actorId,
-            result: { _execution: execution },
+            protocol: { execution },
           });
           const ctx: JobContext = {
             jobId,
@@ -1435,21 +1436,26 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             execution,
             payload: {},
             signal: new AbortController().signal,
-            checkpointResult: { _execution: execution },
+            checkpointResult: {},
+            protocol: { execution },
             log: async () => {},
             setProgress: async () => {},
-            checkpoint: async (result, progress, key, address) => {
-              if ((result.opsProjection as { version?: number })?.version === 3)
-                ctx.checkpointResult = await checkpointOwnedAdminJob(
+            checkpoint: async (result, progress, key, address, operations) => {
+              const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+              if (recorded) {
+                const saved = await checkpointOwnedAdminJob(
                   jobId,
                   execution,
                   result,
+                  recorded,
                   progress,
                   key,
                   address,
                   ctx.checkpointResult ?? {},
                 );
-              else {
+                ctx.checkpointResult = saved.result;
+                ctx.protocol = saved.protocol;
+              } else {
                 await state.fixture.db
                   .update(schema.adminJob)
                   .set({ result })
@@ -1654,13 +1660,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   }
                   if (version === "launch-native-recovery") {
                     execution.version = 2;
-                    ctx.checkpointResult = {
-                      ...ctx.checkpointResult,
-                      _execution: { ...execution },
-                    };
+                    ctx.protocol = { ...ctx.protocol, execution: { ...execution } };
                     await state.fixture.db
                       .update(schema.adminJob)
-                      .set({ result: ctx.checkpointResult })
+                      .set({ protocol: ctx.protocol as Record<string, unknown> })
                       .where(eq(schema.adminJob.id, jobId));
                     const recovered = await prospective.resumeRetainedConfigurationCandidate();
                     expect(recovered).toMatchObject({

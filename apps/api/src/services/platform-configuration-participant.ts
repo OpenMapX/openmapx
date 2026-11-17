@@ -279,7 +279,7 @@ export async function preparePlatformConfigurationChange(
       )
         throw new PlatformPreviewConflict();
       const generation = Object.values(
-        readProjection(current.job.checkpointResult).operations,
+        readProjection(current.job.protocol, current.job.checkpointResult).operations,
       ).find(
         (entry) =>
           entry.operation?.kind === "stack.render" &&

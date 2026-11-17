@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { JobObservationPending } from "./admin-job-failure";
-import { jobOwnership } from "./admin-job-state";
+import { type AdminJobProtocol, jobOwnership } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 
@@ -112,6 +112,7 @@ export async function advanceCompletedBulkCandidate(
     )
       throw new JobObservationPending("invalid_identity");
     const result = (row.result ?? {}) as Record<string, unknown>,
+      protocol = row.protocol as AdminJobProtocol,
       batch = parseServiceUpdateBatch(row.payload, result),
       previous = result._configurationCandidate as Record<string, unknown> | undefined;
     if (!previous || previous.operationKey === writer.operationKey) return;
@@ -125,7 +126,7 @@ export async function advanceCompletedBulkCandidate(
         (previous.operationKey === coordinatorKey && writer.operationKey === seedKey)
       ) ||
       previous.phase !== "settled" ||
-      hasUnsettledManagedOperation(result)
+      hasUnsettledManagedOperation(result, protocol)
     )
       throw new JobObservationPending("recovery_required");
     const outcome = parseTrustedConfigurationApplyOutcome(
@@ -138,7 +139,7 @@ export async function advanceCompletedBulkCandidate(
     )
       throw new JobObservationPending("recovery_required");
     if (previous.maintenanceId) {
-      const archived = completedCoordinatorMaintenance(result);
+      const archived = completedCoordinatorMaintenance(result, protocol);
       if (
         archived.receipt.apiJobId !== job.jobId ||
         archived.originalOrdinal !== ordinal ||
@@ -175,11 +176,12 @@ export async function completedServiceUpdatePrefix(
   jobId: string,
   payload: unknown,
   result: Record<string, unknown>,
+  protocol: unknown,
   ordinal: number,
 ) {
   const batch = parseServiceUpdateBatch(payload, result),
     { readProjection } = await import("./admin-job-projection"),
-    projection = readProjection(result),
+    projection = readProjection(protocol, result),
     { configurationApplyResultSchema, parseOpsResult } = await import("@openmapx/core/ops"),
     keys = new Set<string>();
   if (

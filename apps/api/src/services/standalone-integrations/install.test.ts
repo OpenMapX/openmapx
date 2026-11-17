@@ -441,7 +441,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, String(accepted.body.jobId)));
       const { hasVerifiedStandaloneRestoration } = await import("./settlement-checkpoint");
-      expect(await hasVerifiedStandaloneRestoration(restored!.result, restored!.id)).toBe(true);
+      expect(
+        await hasVerifiedStandaloneRestoration(restored!.result, restored!.protocol, restored!.id),
+      ).toBe(true);
       const done = await completed(accepted.body.jobId, true);
       expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("canceled");
       expect(
@@ -677,7 +679,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("canceled");
       expect(existsSync(directory)).toBe(true);
       const { hasVerifiedStandaloneRestoration } = await import("./settlement-checkpoint");
-      expect(await hasVerifiedStandaloneRestoration(done.result, done.id)).toBe(true);
+      expect(await hasVerifiedStandaloneRestoration(done.result, done.protocol, done.id)).toBe(
+        true,
+      );
     }, 180000);
     it("preserves a delete/reinsert ownership race instead of deleting the replacement row", async () => {
       const id = "legacy-row-reinsert",

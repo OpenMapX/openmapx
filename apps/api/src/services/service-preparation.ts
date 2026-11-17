@@ -46,7 +46,7 @@ export async function applyCoordinatorService(
     const { completedCoordinatorMaintenance } = await import(
       "./configuration-maintenance-step-records"
     );
-    const archived = completedCoordinatorMaintenance(ctx.checkpointResult);
+    const archived = completedCoordinatorMaintenance(ctx.checkpointResult, ctx.protocol);
     if (
       archived.originalOrdinal !== originalOrdinal ||
       archived.receipt.apiJobId !== ctx.jobId ||

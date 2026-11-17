@@ -330,7 +330,7 @@ export function handleStandaloneInstall(ctx: JobContext): Promise<Record<string,
     if (
       state.phase === "prepared" &&
       (await cancellationRequested(ctx)) &&
-      !Object.values(readProjection(ctx.checkpointResult).operations).some(
+      !Object.values(readProjection(ctx.protocol, ctx.checkpointResult).operations).some(
         (operation) => operation.kind === "integration.install",
       )
     ) {

@@ -29,9 +29,7 @@ export class ConfigurationPrerequisiteFailure extends AdminJobFailure {
 /** Internal admission bodies, ownership and proofs never cross the activity boundary. */
 export function publicAdminJobResult<T>(result: T): T {
   if (!result || typeof result !== "object" || Array.isArray(result)) return result;
-  return Object.fromEntries(
-    Object.entries(result).filter(([key]) => !key.startsWith("_") && key !== "opsProjection"),
-  ) as T;
+  return Object.fromEntries(Object.entries(result).filter(([key]) => !key.startsWith("_"))) as T;
 }
 
 export class JobObservationPending extends Error {

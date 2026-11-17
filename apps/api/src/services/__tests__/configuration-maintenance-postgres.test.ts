@@ -275,7 +275,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         type: "service.apply",
         payload: {},
         status: "running",
-        result: { _execution: execution },
+        protocol: { execution },
       });
       const ctx: JobContext = {
         jobId,
@@ -283,21 +283,26 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         execution,
         payload: {},
         signal: new AbortController().signal,
-        checkpointResult: { _execution: execution },
+        checkpointResult: {},
+        protocol: { execution },
         log: async () => {},
         setProgress: async () => {},
-        checkpoint: async (result, progress, admissionKey, stepAddress) => {
-          if ((result.opsProjection as { version?: number } | undefined)?.version === 3)
-            ctx.checkpointResult = await checkpointOwnedAdminJob(
+        checkpoint: async (result, progress, admissionKey, stepAddress, operations) => {
+          const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+          if (recorded) {
+            const saved = await checkpointOwnedAdminJob(
               jobId,
               execution,
               result,
+              recorded,
               progress,
               admissionKey,
               stepAddress,
               ctx.checkpointResult ?? {},
             );
-          else {
+            ctx.checkpointResult = saved.result;
+            ctx.protocol = saved.protocol;
+          } else {
             await fixture.db
               .update(schema.adminJob)
               .set({ result })
@@ -381,15 +386,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           { claimAdminJob } = await import("../admin-job-state"),
           reclaimed = await claimAdminJob(original!);
         ctx.execution = (
-          reclaimed!.result as { _execution: NonNullable<JobContext["execution"]> }
-        )._execution;
+          reclaimed!.protocol as { execution: NonNullable<JobContext["execution"]> }
+        ).execution;
         ctx.checkpointResult = reclaimed!.result as Record<string, unknown>;
-        ctx.checkpoint = async (result) => {
+        ctx.protocol = reclaimed!.protocol;
+        ctx.checkpoint = async (result, _progress, _key, _address, operations) => {
+          const protocol = operations ? { ...ctx.protocol, operations } : ctx.protocol;
           await fixture.db
             .update(schema.adminJob)
-            .set({ result })
+            .set({ result, protocol: protocol as Record<string, unknown> })
             .where(eq(schema.adminJob.id, ctx.jobId));
           ctx.checkpointResult = result;
+          ctx.protocol = protocol;
         };
         if (phase === "save_attempted") {
           await expect(
@@ -468,7 +476,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             return false;
           return (
             (mode !== "applied" && !afterRecreate) ||
-            Object.values(rows[0]!.result?.opsProjection?.operations ?? {}).some((value) => {
+            Object.values(rows[0]!.protocol?.operations?.operations ?? {}).some((value) => {
               const operation = value as {
                 kind?: string;
                 terminal?: boolean;
@@ -569,7 +577,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, original!.id)),
             lease = Date.parse(
-              (retained!.result as Record<string, unknown>)._observationLeaseUntil as string,
+              (retained!.protocol as Record<string, unknown>).observationLeaseUntil as string,
             );
           expect(Number.isFinite(lease)).toBe(true);
           while (Date.now() <= lease + 100)
@@ -580,9 +588,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .select()
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, original!.id)),
-            result = finished!.result as Record<string, unknown>;
+            result = finished!.result as Record<string, unknown>,
+            protocol = finished!.protocol as Record<string, unknown>;
           expect(finished!.status).toBe(refused ? "running" : "success");
-          expect((result._execution as { version: number }).version).toBe(2);
+          expect((protocol.execution as { version: number }).version).toBe(2);
           if (refused) {
             expect(canonicalJson(result._configurationCandidate) === canonicalJson(candidate)).toBe(
               true,
@@ -792,10 +801,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               JSON.parse(body.toString()).operation?.kind === "configuration.hardlinks.preview"
             ) {
               const [original] =
-                await fixture.sql`SELECT result FROM admin_job WHERE payload->>'operationKey'=${key}`;
+                await fixture.sql`SELECT result,protocol FROM admin_job WHERE payload->>'operationKey'=${key}`;
               if (
                 original?.result?._configurationCandidate?.phase === "prepared" &&
-                !Object.values(original.result?.opsProjection?.operations ?? {}).some(
+                !Object.values(original.protocol?.operations?.operations ?? {}).some(
                   (value) => (value as { kind?: string }).kind === "service.start",
                 )
               ) {
@@ -1088,7 +1097,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             first.exited.then(async (exit) => {
               const [row] = await fixture.db.select().from(schema.adminJob),
                 result = row?.result as Record<string, unknown> | undefined;
-              const projection = (await import("../admin-job-projection")).readProjection(result);
+              const projection = (await import("../admin-job-projection")).readProjection(
+                row?.protocol,
+                result,
+              );
               console.info(
                 JSON.stringify({
                   proof: "native-before-interruption-diagnostic",
@@ -1206,7 +1218,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, original!.id));
             expect(canceled!.status).toBe("cancel_pending");
-            expect((canceled!.result as Record<string, unknown>)._cancelRequestedAt).toBeTypeOf(
+            expect((canceled!.protocol as Record<string, unknown>).cancelRequestedAt).toBeTypeOf(
               "string",
             );
           }
@@ -1219,7 +1231,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .from(schema.adminJob)
             .where(eq(schema.adminJob.id, original!.id));
           const lease = Date.parse(
-            (retained!.result as Record<string, unknown>)._observationLeaseUntil as string,
+            (retained!.protocol as Record<string, unknown>).observationLeaseUntil as string,
           );
           expect(Number.isFinite(lease)).toBe(true);
           while (Date.now() <= lease + 100)
@@ -1249,10 +1261,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .select()
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, original!.id)),
-            result = finished!.result as Record<string, unknown>;
+            result = finished!.result as Record<string, unknown>,
+            protocol = finished!.protocol as Record<string, unknown>;
           if (refusedPreparation) {
             expect(finished!.status).toBe("failed");
-            expect(result._execution).toMatchObject({ version: 2 });
+            expect(protocol.execution).toMatchObject({ version: 2 });
             expect(result._parentExecution).toEqual(parent);
             expect(result._configurationCandidate).toMatchObject({
               candidateId: candidate.candidateId,
@@ -1324,9 +1337,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           if (mode === "before-save-cancel-daemon") {
             expect(resumed.output).toContain('"state":"observed","status":"canceled"');
             expect(finished!.status).toBe("canceled");
-            expect(result._execution).toMatchObject({ version: 2 });
+            expect(protocol.execution).toMatchObject({ version: 2 });
             expect(result._parentExecution).toEqual(parent);
-            expect(result._cancelRequestedAt).toBeTypeOf("string");
+            expect(protocol.cancelRequestedAt).toBeTypeOf("string");
             expect(result._configurationCandidate).toMatchObject({
               candidateId: candidate.candidateId,
               phase: "discarded",
@@ -1402,9 +1415,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ) {
             expect(resumed.output).toContain('"state":"observed","status":"canceled"');
             expect(finished!.status).toBe("canceled");
-            expect(result._execution).toMatchObject({ version: 2 });
+            expect(protocol.execution).toMatchObject({ version: 2 });
             expect(result._parentExecution).toEqual(parent);
-            expect(result._cancelRequestedAt).toBeTypeOf("string");
+            expect(protocol.cancelRequestedAt).toBeTypeOf("string");
             expect(result._configurationCandidate).toMatchObject({
               candidateId: candidate.candidateId,
               phase: "discarded",
@@ -1462,7 +1475,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           }
           if (mode === "before-root-start-source") {
             expect(finished!.status).toBe("failed");
-            expect(result._execution).toMatchObject({ version: 2 });
+            expect(protocol.execution).toMatchObject({ version: 2 });
             expect(result._parentExecution).toEqual(parent);
             expect(result._configurationCandidate).toMatchObject({
               candidateId: candidate.candidateId,
@@ -1525,7 +1538,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               await fixture.sql`SELECT pid FROM pg_stat_activity WHERE pid=${originalBackendPid!}`,
             ).toHaveLength(0);
             expect(finished!.status).toBe("running");
-            expect(result._execution).toMatchObject({ version: 2 });
+            expect(protocol.execution).toMatchObject({ version: 2 });
             expect(canonicalJson(result._configurationCandidate) === canonicalJson(candidate)).toBe(
               true,
             );
@@ -1572,7 +1585,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             return;
           }
           expect(finished!.status).toBe(unused || contained ? "failed" : "success");
-          expect((result._execution as { version: number }).version).toBe(2);
+          expect((protocol.execution as { version: number }).version).toBe(2);
           expect(result._parentExecution).toEqual(parent);
           expect(result._configurationCandidate).toMatchObject({
             candidateId: candidate.candidateId,
@@ -2483,7 +2496,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         // coordinated maintenance admission and desired transaction.
         await prospective.stageProspectiveConfigurationMaintenance(candidate);
         expect(started).toBe(1);
-        const projection = ctx.checkpointResult!.opsProjection as {
+        const projection = ctx.protocol!.operations as {
           operations: Record<
             string,
             { operation: unknown; phase: string; receiptDelivery?: { phase?: string } }
@@ -3404,8 +3417,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(after?.targets).toEqual(before.targets);
         expect(readFileSync(originalAdmissionPath)).toEqual(originalAdmission);
         const step = prepared.steps[0]!,
-          projected = (await import("../admin-job-ops")).readProjection(ctx.checkpointResult)
-            .operations[step.operationKey];
+          projected = (await import("../admin-job-ops")).readProjection(
+            ctx.protocol,
+            ctx.checkpointResult,
+          ).operations[step.operationKey];
         expect(projected).toMatchObject({
           operation: step.operation,
           operationKey: step.operationKey,
@@ -3533,8 +3548,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ),
             ),
             target = join(host.infraDir, plan[0].target, "fixture.pbf"),
-            projected = (await import("../admin-job-ops")).readProjection(ctx.checkpointResult)
-              .operations[step.operationKey];
+            projected = (await import("../admin-job-ops")).readProjection(
+              ctx.protocol,
+              ctx.checkpointResult,
+            ).operations[step.operationKey];
           expect(statSync(target).ino).toBe(statSync(join(source, "fixture.pbf")).ino);
           expect(projected).toMatchObject({
             operation: step.operation,
@@ -5228,7 +5245,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               original = JSON.stringify(
                 store.readOwnedConfigurationMaintenance(authority).apiControls.decide,
               ),
-              projection = (await import("../admin-job-ops")).readProjection(ctx.checkpointResult),
+              projection = (await import("../admin-job-ops")).readProjection(
+                ctx.protocol,
+                ctx.checkpointResult,
+              ),
               [control] = Object.values(projection.operations).filter(
                 (operation) => operation.kind === "configurationMaintenance.decide",
               );
@@ -5586,7 +5606,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ).catch(async (error) => {
           const operation = Object.values(
             (
-              ctx.checkpointResult?.opsProjection as {
+              ctx.protocol?.operations as {
                 operations: Record<string, { operationKey: string }>;
               }
             ).operations,
@@ -5798,7 +5818,9 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
             if (Date.now() > until) throw Error("Actual fixed CLI pull not reached");
             await nativeDelay(20);
           }
-          const entry = Object.values(readProjection(ctx.checkpointResult).operations)[0];
+          const entry = Object.values(
+            readProjection(ctx.protocol, ctx.checkpointResult).operations,
+          )[0];
           expect(entry?.operationId).toBeTypeOf("string");
           await createApiOpsClient().cancel(entry!.operationId!, {
             signal: AbortSignal.timeout(15000),
@@ -5806,7 +5828,9 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
         }
         await running;
         expect(failure).toBeDefined();
-        const [entry] = Object.values(readProjection(ctx.checkpointResult).operations),
+        const [entry] = Object.values(
+            readProjection(ctx.protocol, ctx.checkpointResult).operations,
+          ),
           core = await import("@openmapx/core/build-artifacts"),
           root = restoreAdmittedControlExecution(installation, {
             executor: "ops-agent",
@@ -6056,7 +6080,7 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
       expect(lifecycleCalls[0]?.slice(-2)).toEqual(["pull", "motis"]);
       expect(lifecycleCalls[1]?.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
       expect(dm.posts).toBe(1);
-      const [entry] = Object.values(readProjection(ctx.checkpointResult).operations),
+      const [entry] = Object.values(readProjection(ctx.protocol, ctx.checkpointResult).operations),
         root = restoreAdmittedControlExecution(installation, {
           executor: "ops-agent",
           principal: "api",

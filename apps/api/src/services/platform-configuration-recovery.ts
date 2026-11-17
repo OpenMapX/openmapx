@@ -18,6 +18,7 @@ export async function assertSavedPlatformConfiguration(
     revisionId: string;
     intent: PlatformConfigurationIntentRecord;
     checkpoint: Record<string, unknown> | null | undefined;
+    protocol: unknown;
   },
   connection: Pick<AuthDatabase, "select">,
 ) {
@@ -60,7 +61,9 @@ export async function assertSavedPlatformConfiguration(
       })
   )
     throw new JobObservationPending("invalid_identity");
-  const generation = Object.values(readProjection(input.checkpoint).operations).find(
+  const generation = Object.values(
+    readProjection(input.protocol, input.checkpoint).operations,
+  ).find(
     (entry) =>
       entry.operation?.kind === "stack.render" &&
       entry.operation.candidateId === input.candidateId &&

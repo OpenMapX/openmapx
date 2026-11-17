@@ -98,7 +98,7 @@ export const adminActivityJobStageSchema = z.strictObject({
 // Historical JSON results remain supported; known evidence members are strict.
 export const adminActivityJobResultSchema = adminJsonValueSchema.superRefine((value, ctx) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
-  if (Object.keys(value).some((key) => key.startsWith("_") || key === "opsProjection"))
+  if (Object.keys(value).some((key) => key.startsWith("_")))
     ctx.addIssue({ code: "custom", message: "Internal administrative job state" });
   const evidence = Object.fromEntries(
     Object.entries(value).filter(([key]) =>

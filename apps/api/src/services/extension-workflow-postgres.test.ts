@@ -151,30 +151,35 @@ it.skipIf(!enabled)(
       type: "extension.install",
       payload,
       status: "running",
-      result: { _execution: execution },
+      protocol: { execution },
     });
-    let baseline: Record<string, unknown> = { _execution: execution };
+    let baseline: Record<string, unknown> = {};
     const ctx: JobContext = {
       jobId: id,
       jobType: "extension.install",
       execution,
       payload,
       signal: new AbortController().signal,
-      checkpointResult: { _execution: execution },
+      checkpointResult: {},
+      protocol: { execution },
       log: async () => {},
       setProgress: async () => {},
-      checkpoint: async (value, progress, key, address) => {
-        if (value.opsProjection)
-          ctx.checkpointResult = await checkpointOwnedAdminJob(
+      checkpoint: async (value, progress, key, address, operations) => {
+        const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+        if (recorded) {
+          const saved = await checkpointOwnedAdminJob(
             id,
             ctx.execution,
             value,
+            recorded,
             progress,
             key,
             address,
             baseline,
           );
-        else {
+          ctx.checkpointResult = saved.result;
+          ctx.protocol = saved.protocol;
+        } else {
           const rows = await fixture.db
             .update(schema.adminJob)
             .set({ result: value })
@@ -223,7 +228,7 @@ it.skipIf(!enabled)(
         type: "extension.install",
         status: "running",
         payload: { source, bundle },
-        result: { _execution: { owner: randomUUID(), version: 1 } },
+        protocol: { execution: { owner: randomUUID(), version: 1 } },
       });
       const count = publications;
       const start = (boundary: string) => {
@@ -336,29 +341,34 @@ it.skipIf(!enabled)(
         execution = { owner: randomUUID(), version: 1 };
       await fixture.db
         .insert(schema.adminJob)
-        .values({ id, type, status: "running", payload, result: { _execution: execution } });
-      let baseline: Record<string, unknown> = { _execution: execution };
+        .values({ id, type, status: "running", payload, protocol: { execution } });
+      let baseline: Record<string, unknown> = {};
       const ctx: JobContext = {
         jobId: id,
         jobType: type,
         payload,
         execution,
         signal: new AbortController().signal,
-        checkpointResult: { _execution: execution },
+        checkpointResult: {},
+        protocol: { execution },
         log: async () => {},
         setProgress: async () => {},
-        checkpoint: async (value, progress, key, address) => {
-          if (value.opsProjection)
-            ctx.checkpointResult = await checkpointOwnedAdminJob(
+        checkpoint: async (value, progress, key, address, operations) => {
+          const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+          if (recorded) {
+            const saved = await checkpointOwnedAdminJob(
               id,
               ctx.execution,
               value,
+              recorded,
               progress,
               key,
               address,
               baseline,
             );
-          else {
+            ctx.checkpointResult = saved.result;
+            ctx.protocol = saved.protocol;
+          } else {
             const [saved] = await fixture.db
               .update(schema.adminJob)
               .set({ result: value })
@@ -420,7 +430,7 @@ it.skipIf(!enabled)(
       throw error;
     }
     const operations = (
-      ctx.checkpointResult!.opsProjection as {
+      ctx.protocol!.operations as {
         operations: Record<
           string,
           {

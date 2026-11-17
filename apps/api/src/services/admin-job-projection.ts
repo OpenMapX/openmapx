@@ -87,9 +87,14 @@ function emptyProjection(): OpsProjection {
   return { version: 3, steps: {}, eventTotal: 0, byteTotal: 0, truncated: false, operations: {} };
 }
 
-export function readProjection(result: unknown): OpsProjection {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return emptyProjection();
-  const candidate = (result as Record<string, unknown>).opsProjection;
+/**
+ * The agent operations recorded in a job's protocol. A maintenance step is
+ * checked against the maintenance the job's result recorded.
+ */
+export function readProjection(protocol: unknown, result?: unknown): OpsProjection {
+  if (!protocol || typeof protocol !== "object" || Array.isArray(protocol))
+    return emptyProjection();
+  const candidate = (protocol as Record<string, unknown>).operations;
   if (candidate === undefined) return emptyProjection();
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     throw new JobObservationPending("invalid_identity");
@@ -297,7 +302,8 @@ export function readProjection(result: unknown): OpsProjection {
       const operation = operations[step.operationKey]!;
       try {
         assertConfigurationMaintenanceProjectedStep(
-          result as Record<string, unknown>,
+          (result ?? {}) as Record<string, unknown>,
+          protocol,
           step.operationKey,
           operation.operation,
           operation.attempt,

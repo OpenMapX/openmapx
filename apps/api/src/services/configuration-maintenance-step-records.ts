@@ -81,13 +81,16 @@ export const completedCoordinatorMaintenanceSchema = z.strictObject({
   steps: records,
   settlementOperationKey: key,
 });
-export function completedCoordinatorMaintenance(result: Record<string, unknown>) {
+export function completedCoordinatorMaintenance(
+  result: Record<string, unknown>,
+  protocol: unknown,
+) {
   const archived = completedCoordinatorMaintenanceSchema.parse(
       result._completedCoordinatorMaintenance,
     ),
     receipt = archived.receipt,
     operations = (
-      result.opsProjection as
+      (protocol as { operations?: unknown } | undefined)?.operations as
         | {
             operations?: Record<
               string,
@@ -147,6 +150,7 @@ export function completedCoordinatorMaintenance(result: Record<string, unknown>)
 }
 function projectedStep(
   result: Record<string, unknown>,
+  protocol: unknown,
   operationKey: string,
   operation: OpsOperation,
 ) {
@@ -159,7 +163,7 @@ function projectedStep(
     candidate.candidateId === remote?.receipt?.binding?.candidateId
   )
     return observedStep(result, operationKey, operation);
-  const archived = completedCoordinatorMaintenance(result);
+  const archived = completedCoordinatorMaintenance(result, protocol);
   return observedStep(
     {
       ...result,
@@ -174,12 +178,13 @@ function projectedStep(
 /** Parser consistency only. This never constructs a source/authority handle. */
 export function assertConfigurationMaintenanceProjectedStep(
   result: Record<string, unknown>,
+  protocol: unknown,
   operationKey: string,
   operation: OpsOperation | undefined,
   rawAttempt: unknown,
 ): void {
   if (!operation) throw Error("Original frozen maintenance body required");
-  const { source, receipt } = projectedStep(result, operationKey, operation),
+  const { source, receipt } = projectedStep(result, protocol, operationKey, operation),
     attempt = apiJobChildAttemptSchema.parse(rawAttempt);
   if (
     attempt.apiJobId !== receipt.apiJobId ||
@@ -195,10 +200,11 @@ export function assertConfigurationMaintenanceProjectedStep(
 /** Correlation address only, after the exact frozen projection has matched. */
 export function configurationMaintenanceProjectedStepOrigin(
   result: Record<string, unknown>,
+  protocol: unknown,
   operationKey: string,
   operation: OpsOperation,
   attempt: unknown,
 ): string {
-  assertConfigurationMaintenanceProjectedStep(result, operationKey, operation, attempt);
-  return projectedStep(result, operationKey, operation).receipt.prepare.operationKey;
+  assertConfigurationMaintenanceProjectedStep(result, protocol, operationKey, operation, attempt);
+  return projectedStep(result, protocol, operationKey, operation).receipt.prepare.operationKey;
 }

@@ -6,6 +6,7 @@ import {
   readProjection,
   resumeAdminJobObservation,
 } from "../admin-job-ops";
+import type { AdminJobProtocol } from "../admin-job-state";
 import type { JobContext } from "../job-runner";
 
 const previousAuthSecret = vi.hoisted(() => {
@@ -42,8 +43,9 @@ function context(): JobContext {
     signal: new AbortController().signal,
     log: vi.fn().mockResolvedValue(undefined),
     setProgress: vi.fn().mockResolvedValue(undefined),
-    checkpoint: vi.fn(async (value) => {
+    checkpoint: vi.fn(async (value, _progress, _key, _address, operations) => {
       ctx.checkpointResult = structuredClone(value);
+      if (operations) ctx.protocol = { ...ctx.protocol, operations: structuredClone(operations) };
     }),
   };
   return ctx;
@@ -56,8 +58,8 @@ const identity = {
   fingerprint: "a".repeat(64),
 };
 function seedProjection(ctx: JobContext, key: string, kind: OpsOperation["kind"], id?: string) {
-  ctx.checkpointResult = {
-    opsProjection: {
+  ctx.protocol = {
+    operations: {
       version: 3,
       steps: {},
       eventTotal: 0,
@@ -113,9 +115,12 @@ describe("administrative job operations broker", () => {
     const operationId = "job1_abcdefghijklmnop";
     const ctx = context();
     let durable: Record<string, unknown> | undefined;
-    ctx.checkpoint = vi.fn(async (value) => {
+    let durableProtocol: AdminJobProtocol | undefined;
+    ctx.checkpoint = vi.fn(async (value, _progress, _key, _address, operations) => {
       durable = structuredClone(value);
+      if (operations) durableProtocol = { operations: structuredClone(operations) };
       ctx.checkpointResult = structuredClone(value);
+      if (operations) ctx.protocol = { ...ctx.protocol, operations: structuredClone(operations) };
     });
     const client = {
       execute: vi.fn(async (_operation: OpsOperation) => {
@@ -133,7 +138,7 @@ describe("administrative job operations broker", () => {
       operationKey,
       pollIntervalMs: 1,
     }).catch(() => undefined);
-    const saved = (await import("../admin-job-ops")).readProjection(durable),
+    const saved = (await import("../admin-job-ops")).readProjection(durableProtocol),
       mapping = saved.steps[operationKey];
     if (!mapping) throw Error("Missing stable fixture mapping");
     const finalKey = mapping.operationKey;
@@ -143,6 +148,7 @@ describe("administrative job operations broker", () => {
     });
     const restarted = context();
     restarted.checkpointResult = durable;
+    restarted.protocol = durableProtocol;
     const status = {
       version: 2,
       admittedAt: mapping.requestedDeadlineAt - 300000,
@@ -183,8 +189,8 @@ describe("administrative job operations broker", () => {
       client.execute.mock.calls.filter(([operation]) => operation.kind === "backup.delete"),
     ).toHaveLength(1);
     expect(client.lookup.mock.calls.at(-1)?.[0]).toEqual(operation);
-    expect(restarted.checkpointResult).toMatchObject({
-      opsProjection: {
+    expect(restarted.protocol).toMatchObject({
+      operations: {
         operations: {
           [finalKey]: { operation, operationId, phase: "terminal" },
         },
@@ -244,7 +250,7 @@ describe("administrative job operations broker", () => {
       message: expect.stringContaining("host"),
     });
     expect(ctx.checkpointResult).toMatchObject({ errorCode: "host_update_required" });
-    expect(ctx.checkpoint).toHaveBeenLastCalledWith(
+    expect(vi.mocked(ctx.checkpoint).mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({ errorCode: "host_update_required" }),
     );
   });
@@ -306,9 +312,9 @@ describe("administrative job operations broker", () => {
       signal: expect.any(AbortSignal),
     });
     expect(cancel).not.toHaveBeenCalled();
-    expect(ctx.checkpoint).toHaveBeenCalledWith(
+    expect(ctx.protocol).toEqual(
       expect.objectContaining({
-        opsProjection: expect.objectContaining({
+        operations: expect.objectContaining({
           version: 3,
           eventTotal: 1,
           byteTotal: 4,
@@ -329,8 +335,8 @@ describe("administrative job operations broker", () => {
     const operationKey = "opk1_abcdefghijklmnop";
     const operationId = "job1_abcdefghijklmnop";
     const ctx = context();
-    ctx.checkpointResult = {
-      opsProjection: {
+    ctx.protocol = {
+      operations: {
         version: 3,
         steps: {},
         eventTotal: 1,
@@ -404,7 +410,7 @@ describe("administrative job operations broker", () => {
   it("requests exact agent cancellation and treats response loss as pending until terminal", async () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
-      opsProjection: {
+      operations: {
         version: 3,
         steps: {},
         eventTotal: 0,
@@ -444,9 +450,9 @@ describe("administrative job operations broker", () => {
         }),
     };
     const ctx = context();
-    ctx.checkpointResult = structuredClone(projection);
+    ctx.protocol = structuredClone(projection);
     await expect(
-      cancelAdminJobOperations(projection, client as never, {
+      cancelAdminJobOperations({}, projection, client as never, {
         context: ctx,
         pollIntervalMs: 1,
         sleep: async () => undefined,
@@ -456,7 +462,7 @@ describe("administrative job operations broker", () => {
       signal: expect.any(AbortSignal),
     });
     expect(client.status).toHaveBeenCalledTimes(2);
-    expect(readProjection(ctx.checkpointResult).operations.opk1_abcdefghijklmnop).toMatchObject({
+    expect(readProjection(ctx.protocol).operations.opk1_abcdefghijklmnop).toMatchObject({
       terminal: true,
       phase: "terminal",
       errorClass: "runtime",
@@ -466,7 +472,7 @@ describe("administrative job operations broker", () => {
   it("keeps a read operation's cancellation pending when its terminal cannot be checkpointed", async () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
-      opsProjection: {
+      operations: {
         version: 3,
         steps: {},
         eventTotal: 0,
@@ -499,13 +505,13 @@ describe("administrative job operations broker", () => {
     const options = { pollIntervalMs: 1, sleep: async () => undefined };
     // Without a context nothing can be checkpointed.
     await expect(
-      cancelAdminJobOperations(structuredClone(projection), client as never, options),
+      cancelAdminJobOperations({}, structuredClone(projection), client as never, options),
     ).resolves.toBe("pending");
     const ctx = context();
-    ctx.checkpointResult = structuredClone(projection);
+    ctx.protocol = structuredClone(projection);
     ctx.checkpoint = vi.fn().mockRejectedValue(new Error("CAS lost"));
     await expect(
-      cancelAdminJobOperations(structuredClone(projection), client as never, {
+      cancelAdminJobOperations({}, structuredClone(projection), client as never, {
         ...options,
         context: ctx,
       }),
@@ -516,7 +522,7 @@ describe("administrative job operations broker", () => {
     const succeededId = "job1_abcdefghijklmnop";
     const canceledId = "job1_bbbbbbbbbbbbbbbb";
     const projection = {
-      opsProjection: {
+      operations: {
         version: 3,
         steps: {},
         eventTotal: 0,
@@ -575,9 +581,9 @@ describe("administrative job operations broker", () => {
     // A succeeded sibling must not mask the operation this request contained:
     // reporting "completed" would restore the job to running.
     const ctx = context();
-    ctx.checkpointResult = structuredClone(projection);
+    ctx.protocol = structuredClone(projection);
     await expect(
-      cancelAdminJobOperations(projection, client as never, {
+      cancelAdminJobOperations({}, projection, client as never, {
         context: ctx,
         pollIntervalMs: 1,
         sleep: async () => undefined,
@@ -588,7 +594,7 @@ describe("administrative job operations broker", () => {
   it("does not claim a cancellation for a failure that predates the request", async () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
-      opsProjection: {
+      operations: {
         version: 3,
         steps: {},
         eventTotal: 0,
@@ -624,9 +630,9 @@ describe("administrative job operations broker", () => {
 
     client.status.mockImplementation(client.cancel);
     const ctx = context();
-    ctx.checkpointResult = structuredClone(projection);
+    ctx.protocol = structuredClone(projection);
     await expect(
-      cancelAdminJobOperations(projection, client as never, {
+      cancelAdminJobOperations({}, projection, client as never, {
         context: ctx,
         pollIntervalMs: 1,
         sleep: async () => undefined,
@@ -701,8 +707,8 @@ it("validates a resumed operation identity before reading its event stream", asy
   const ctx = context();
   const operationKey = "opk1_abcdefghijklmnop";
   const operationId = "job1_abcdefghijklmnop";
-  ctx.checkpointResult = {
-    opsProjection: {
+  ctx.protocol = {
+    operations: {
       version: 3,
       steps: {},
       eventTotal: 0,
@@ -829,12 +835,16 @@ it.each([false, true])(
     const client = () =>
       new OpsClient({ baseUrl: "http://ops-agent:4300", tokenFile, fetch: fetcher });
     let durable: Record<string, unknown> | undefined;
+    let durableProtocol: AdminJobProtocol | undefined;
     const first = context();
     first.signal = controller.signal;
     first.execution = { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 3 };
-    first.checkpoint = async (value) => {
+    first.checkpoint = async (value, _progress, _key, _address, operations) => {
       durable = structuredClone(value);
+      if (operations) durableProtocol = { operations: structuredClone(operations) };
       first.checkpointResult = structuredClone(value);
+      if (operations)
+        first.protocol = { ...first.protocol, operations: structuredClone(operations) };
     };
     const key = "opk1_restartAccepted1234";
     try {
@@ -868,9 +878,13 @@ it.each([false, true])(
       loseResponse = false;
       const restarted = context();
       restarted.checkpointResult = durable;
-      restarted.checkpoint = async (value) => {
+      restarted.protocol = durableProtocol;
+      restarted.checkpoint = async (value, _progress, _key, _address, operations) => {
         durable = structuredClone(value);
+        if (operations) durableProtocol = { operations: structuredClone(operations) };
         restarted.checkpointResult = structuredClone(value);
+        if (operations)
+          restarted.protocol = { ...restarted.protocol, operations: structuredClone(operations) };
       };
       restarted.execution = { owner: "5c0c9623-252c-41b6-8f99-41915ad38b12", version: 4 };
       const observation = executeAdminJobOperation(
@@ -894,6 +908,7 @@ it.each([false, true])(
       reconciled.observationOnly = true;
       reconciled.payload = { name: "newer-state" };
       reconciled.checkpointResult = durable;
+      reconciled.protocol = durableProtocol;
       const recovery = resumeAdminJobObservation(reconciled);
       if (failed)
         await expect(recovery).rejects.toMatchObject({
@@ -904,8 +919,8 @@ it.each([false, true])(
       expect(posts).toBe(1);
       expect(dispatch).toHaveBeenCalledTimes(1);
       expect(reloaded.records()[0]?.fingerprint).toBe(admitted.fingerprint);
-      expect(restarted.checkpointResult).toMatchObject({
-        opsProjection: {
+      expect(restarted.protocol).toMatchObject({
+        operations: {
           operations: {
             [admitted.operationKey]: {
               operationId: admitted.operationId,
@@ -961,8 +976,8 @@ it("does not read or cancel an attempted child belonging to another API job", as
   const ctx = context();
   const key = "opk1_foreignAttempt1234";
   const { opsOperationFingerprint } = await import("@openmapx/core/ops");
-  ctx.checkpointResult = {
-    opsProjection: {
+  ctx.protocol = {
+    operations: {
       version: 3,
       steps: {},
       eventTotal: 0,
@@ -1025,7 +1040,7 @@ it.each(["log", "checkpoint", "output"])(
     const entered = Promise.withResolvers<void>();
     const resume = Promise.withResolvers<void>();
     let writes = 0;
-    ctx.checkpoint = async (value) => {
+    ctx.checkpoint = async (value, _progress, _key, _address, operations) => {
       writes++;
       if (edge === "checkpoint" && writes >= 3) {
         entered.resolve();
@@ -1033,6 +1048,7 @@ it.each(["log", "checkpoint", "output"])(
         throw new JobOwnershipLost();
       }
       ctx.checkpointResult = structuredClone(value);
+      if (operations) ctx.protocol = { ...ctx.protocol, operations: structuredClone(operations) };
     };
     if (edge === "log" || edge === "output")
       ctx.log = async () => {

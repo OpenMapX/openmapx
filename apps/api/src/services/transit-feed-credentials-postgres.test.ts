@@ -717,7 +717,7 @@ describe.skipIf(!enabled)(
         await first.exited;
         releaseAdmission?.();
         releaseAdmission = undefined;
-        const lease = (before!.result as { _observationLeaseUntil: string })._observationLeaseUntil;
+        const lease = (before!.protocol as { observationLeaseUntil: string }).observationLeaseUntil;
         await new Promise((resolve) =>
           setTimeout(resolve, Math.max(0, Date.parse(lease) - Date.now() + 100)),
         );

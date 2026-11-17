@@ -18,7 +18,7 @@ vi.mock("../admin-job-ops", () => ({
   ),
 }));
 vi.mock("../admin-job-projection", () => ({
-  readProjection: (result: { opsProjection: unknown }) => result.opsProjection,
+  readProjection: (protocol: { operations: unknown }) => protocol.operations,
 }));
 
 import { executeAdminJobOperation } from "../admin-job-ops";
@@ -255,8 +255,8 @@ function context(): JobContext {
     log: vi.fn(),
     setProgress: vi.fn(),
     checkpoint: vi.fn(),
-    checkpointResult: {
-      opsProjection: {
+    protocol: {
+      operations: {
         steps: { original: { operationKey: "original" } },
         operations: {
           original: {
@@ -294,7 +294,7 @@ describe("reconcileCommunityRepositoryTransactions", () => {
         operation: { kind: "serviceRepository.publish", url, commit: COMMIT },
       };
     }
-    recoveryContext.checkpointResult = { opsProjection: { steps, operations } };
+    recoveryContext.protocol = { operations: { steps, operations } };
     executeMock.mockImplementation(async (_client, operation) => {
       const request = operation as {
         kind: string;
