@@ -657,6 +657,11 @@ describe.skipIf(!enabled)(
         const { input } = await authorizedInput(),
           database = new URL(migrated.connectionUri);
         database.searchParams.set("search_path", state.fixture.schema);
+        // Every API process of one installation shares its secret, which keys
+        // the immediate job's intent digest.
+        const authSecret =
+          process.env.BETTER_AUTH_SECRET ?? "synthetic-transit-native-auth-fixture";
+        vi.stubEnv("BETTER_AUTH_SECRET", authSecret);
         const loader = createRequire(new URL("../../package.json", import.meta.url)).resolve(
             "tsx/esm",
           ),
@@ -672,7 +677,7 @@ describe.skipIf(!enabled)(
               DATABASE_URL: database.toString(),
               OPENMAPX_ROOT_DIR: host.root,
               NODE_ENV: "test",
-              BETTER_AUTH_SECRET: "synthetic-transit-native-auth-fixture",
+              BETTER_AUTH_SECRET: authSecret,
             },
           });
           children.push(child);

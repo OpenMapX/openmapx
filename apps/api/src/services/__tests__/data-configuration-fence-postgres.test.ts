@@ -271,7 +271,7 @@ describe.skipIf(
         expect(existsSync(join(f.host.candidates, `${candidate.sealedOperationKey}.json`))).toBe(
           false,
         );
-        expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
+        expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).not.toThrow();
         expect(f.data.preparePosts).toBe(0);
         expect(f.host.calls.some((args) => args.includes("up") || args.includes("restart"))).toBe(
           false,
@@ -482,7 +482,7 @@ describe.skipIf(
       expect(finished?.status).toBe("failed");
       expect(finished?.finished_at).not.toBeNull();
       expect(finished?.protocol.cancelRequestedAt).toBeDefined();
-      expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
+      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).not.toThrow();
       expect(await client.status("configurationMaintenance.prepare", f.owner.executionId)).toEqual(
         original,
       );
@@ -561,7 +561,7 @@ describe.skipIf(
         fault.mockRestore();
         expect(faulted).toBe(true);
         await maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority);
-        expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
+        expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).not.toThrow();
         expect(f.data.preparePosts).toBe(0);
         expect(f.data.recoveryPosts).toBe(1);
         expect(
@@ -625,7 +625,7 @@ describe.skipIf(
       await expect(
         maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority),
       ).resolves.toMatchObject({ maintenanceId: f.input.maintenanceId });
-      expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
+      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).not.toThrow();
     } finally {
       clock?.mockRestore();
       await f.close();
