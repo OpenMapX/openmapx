@@ -472,10 +472,10 @@ async function observeOperation(
           ...(projected.attempt
             ? { execution: { requestedDeadlineAt: projected.attempt.requestedDeadlineAt } }
             : {}),
-          ...(fresh && projected.attempt
-            ? { parentAssertion: await issueApiJobChildAssertion(projected.attempt) }
+          ...(projected.attempt
+            ? { parentAssertion: issueApiJobChildAssertion(projected.attempt) }
             : {}),
-          ...(fresh && options.payload ? { payload: options.payload } : {}),
+          ...(options.payload ? { payload: options.payload } : {}),
         },
       );
       if (admission.execution === "sync") {

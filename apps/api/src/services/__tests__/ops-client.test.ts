@@ -148,23 +148,50 @@ describe("bounded async ops helpers", () => {
     expect(lookup).toHaveBeenCalled();
   });
 
-  it("does not create a follow when disconnected lookup proves no admission before its bound", async () => {
-    const execute = vi.fn();
+  it("sends an attempted request again under its key when the agent never received it", async () => {
+    const operationKey = "opk1_noOriginalAdmission000";
+    const execute = vi.fn().mockResolvedValue({
+      execution: "async",
+      ...identity,
+      operationId: "job1_noOriginalAdmission000",
+      operationKey,
+      kind: "service.logs.follow",
+      state: "queued",
+    });
     const lookup = vi.fn().mockRejectedValue(new ApiOpsError("not_found"));
+    const operation = {
+      kind: "service.logs.follow" as const,
+      serviceId: "redis",
+      tail: 20,
+      maxDurationSeconds: 900,
+    };
+    const { submitOpsOperationWithRecovery } = await import("../ops-client.js");
+    await expect(
+      submitOpsOperationWithRecovery(fakeClient({ execute, lookup }), operation, operationKey, {
+        admissionAlreadyAttempted: true,
+        recoveryTimeoutMs: 5,
+      }),
+    ).resolves.toMatchObject({ operationId: "job1_noOriginalAdmission000" });
+    expect(lookup).toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      operation,
+      expect.objectContaining({ operationKey }),
+    );
+  });
+
+  it("keeps an attempted request pending while the agent cannot be asked about it", async () => {
+    const execute = vi.fn();
+    const lookup = vi.fn().mockRejectedValue(new DOMException("Aborted", "AbortError"));
     const { submitOpsOperationWithRecovery } = await import("../ops-client.js");
     await expect(
       submitOpsOperationWithRecovery(
         fakeClient({ execute, lookup }),
         { kind: "service.logs.follow", serviceId: "redis", tail: 20, maxDurationSeconds: 900 },
-        "opk1_noOriginalAdmission000",
-        {
-          admissionAlreadyAttempted: true,
-          recoveryTimeoutMs: 5,
-        },
+        "opk1_unreachableAgent00000",
+        { admissionAlreadyAttempted: true, recoveryTimeoutMs: 5 },
       ),
     ).rejects.toMatchObject({ name: "OpsObservationPending" });
     expect(execute).not.toHaveBeenCalled();
-    expect(lookup).toHaveBeenCalled();
   });
   it("fails a synchronous operation at once instead of looking it up", async () => {
     const execute = vi.fn().mockRejectedValue(new ApiOpsError("runtime"));
