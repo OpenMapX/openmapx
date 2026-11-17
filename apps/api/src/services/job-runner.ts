@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
   adminIntegrationReloadResultSchema,
   integrationApplyReceiptSchema,
@@ -203,8 +203,8 @@ function hasRetainedImmediateConfiguration(job: {
     !!result._configurationCandidate
   );
 }
-/** Routing only. The fixed producer reauthenticates the original MAC packet,
- * actual owned row/payload and saved decision before any next phase. */
+/** Routing only. The handler checks the retained candidate, the owned row and
+ * its saved decision before any next phase. */
 function hasRetainedQueuedCoordinator(job: {
   id: string;
   type: string;
@@ -264,17 +264,16 @@ async function needsRecoveredCandidateCleanup(job: {
   );
 }
 export class RetainedJobConflict extends Error {}
-/** Routing only: the fixed handler authenticates the original request and sealed checkpoint before continuing. */
+/** Routing only: the handler checks the original request and its checkpoint before continuing. */
 function hasRetainedStandalone(job: { type: string; result: unknown }) {
   const value = job.result as {
-    _standalone?: { body?: unknown; mac?: unknown };
+    _standalone?: { body?: unknown };
     _standaloneSettled?: unknown;
   } | null;
   return (
     ["standalone.install", "standalone.adopt", "standalone.remove"].includes(job.type) &&
     value?._standaloneSettled !== true &&
-    typeof value?._standalone?.body === "string" &&
-    typeof value._standalone.mac === "string"
+    typeof value?._standalone?.body === "string"
   );
 }
 class JobPersistenceUnavailable extends Error {}
@@ -351,8 +350,7 @@ class AdminJobRunner {
   ): Promise<{ jobId: string; operationId: string }> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
       throw new RetainedJobConflict("Invalid mutation key");
-    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-    const digest = createHmac("sha256", token)
+    const digest = createHash("sha256")
       .update("openmapx-standalone-request-v1\0")
       .update(canonicalJson({ type, payload, actorId }))
       .digest("hex");

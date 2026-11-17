@@ -1,10 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import {
-  canonicalJson,
-  readOpsTokenFile,
-  standaloneOwnershipInspectionSchema,
-} from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
+import { createHash } from "node:crypto";
+import { canonicalJson, standaloneOwnershipInspectionSchema } from "@openmapx/core/ops";
 import z from "zod/v4";
 export const ownershipRequestSchema = z.strictObject({
   integrationId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
@@ -38,27 +33,11 @@ export const ownershipStateSchema = z.strictObject({
   outcome: z.enum(["committed", "restored"]).nullable(),
 });
 export type OwnershipState = z.infer<typeof ownershipStateSchema>;
-const token = () => readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-export async function sealOwnershipState(state: OwnershipState) {
-  const body = canonicalJson(ownershipStateSchema.parse(state));
-  return {
-    body,
-    mac: createHmac("sha256", await token())
-      .update("openmapx-standalone-ownership-v1\0")
-      .update(body)
-      .digest("hex"),
-  };
+export function sealOwnershipState(state: OwnershipState) {
+  return { body: canonicalJson(ownershipStateSchema.parse(state)) };
 }
-export async function readOwnershipState(input: unknown) {
-  const saved = z
-      .strictObject({ body: z.string().max(131072), mac: z.string().regex(/^[a-f0-9]{64}$/) })
-      .parse(input),
-    expected = createHmac("sha256", await token())
-      .update("openmapx-standalone-ownership-v1\0")
-      .update(saved.body)
-      .digest();
-  if (!timingSafeEqual(expected, Buffer.from(saved.mac, "hex")))
-    throw Error("Ownership checkpoint authentication failed");
+export function readOwnershipState(input: unknown) {
+  const saved = z.strictObject({ body: z.string().max(131072) }).parse(input);
   return ownershipStateSchema.parse(JSON.parse(saved.body));
 }
 export async function authenticateOwnershipRequest(type: string, payload: Record<string, unknown>) {
@@ -66,7 +45,7 @@ export async function authenticateOwnershipRequest(type: string, payload: Record
     integrationId: payload.integrationId,
     expectedContentDigest: payload.expectedContentDigest,
   });
-  const expected = createHmac("sha256", await token())
+  const expected = createHash("sha256")
     .update("openmapx-standalone-request-v1\0")
     .update(canonicalJson({ type, payload: request, actorId: payload.ownerId }))
     .digest("hex");

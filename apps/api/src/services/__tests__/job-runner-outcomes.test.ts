@@ -227,7 +227,13 @@ it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render
     await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
       jobId,
       type,
-      { _maintenanceRequest: { authorization: "a".repeat(64) } },
+      {
+        _maintenanceRequest: {
+          actorId: "admin-a",
+          key: "retained-maintenance-key-0001",
+          digest: "a".repeat(64),
+        },
+      },
       { _execution: execution },
       new AbortController().signal,
       true,
@@ -248,7 +254,11 @@ it.each([false, true])(
       "service.apply",
       {
         service: "data-manager",
-        _maintenanceRequest: { authorization: "a".repeat(64) },
+        _maintenanceRequest: {
+          actorId: "admin-a",
+          key: "retained-maintenance-key-0001",
+          digest: "a".repeat(64),
+        },
         ...(extra ? { unexpected: true } : {}),
       },
       {

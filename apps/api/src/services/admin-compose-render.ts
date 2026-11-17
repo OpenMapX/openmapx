@@ -17,7 +17,7 @@ import {
 } from "./trusted-config-outcome";
 
 export async function handleComposeRenderJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  await assertRetainedMaintenanceJob(ctx);
+  assertRetainedMaintenanceJob(ctx);
   const { expectedCurrentRevisionId } = adminComposeRenderInputSchema.parse({
     expectedCurrentRevisionId: ctx.payload.expectedCurrentRevisionId,
     confirmed: ctx.payload.confirmed,

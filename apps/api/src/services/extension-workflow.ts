@@ -1,8 +1,7 @@
 /** Private, bounded original-job cursor. This correlates installer phases; every
  * host effect still requires the normal typed broker and original deadline. */
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { canonicalJson, readOpsTokenFile } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@openmapx/core/ops";
 import { z } from "zod";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
@@ -36,27 +35,13 @@ const digest = (value: unknown) =>
 const fail = (): never => {
   throw new JobObservationPending("recovery_required");
 };
-const token = () => readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-async function seal(state: State) {
+function seal(state: State) {
   const body = canonicalJson(stateSchema.parse(state));
   if (Buffer.byteLength(body) > 1024 * 1024) return fail();
-  return {
-    body,
-    mac: createHmac("sha256", await token())
-      .update("openmapx-extension-workflow-v1\0")
-      .update(body)
-      .digest("hex"),
-  };
+  return { body };
 }
-async function read(value: unknown) {
-  const saved = z
-    .strictObject({ body: z.string().max(1024 * 1024), mac: z.string().regex(/^[a-f0-9]{64}$/) })
-    .parse(value);
-  const expected = createHmac("sha256", await token())
-    .update("openmapx-extension-workflow-v1\0")
-    .update(saved.body)
-    .digest();
-  if (!timingSafeEqual(expected, Buffer.from(saved.mac, "hex"))) return fail();
+function read(value: unknown) {
+  const saved = z.strictObject({ body: z.string().max(1024 * 1024) }).parse(value);
   return stateSchema.parse(JSON.parse(saved.body));
 }
 export async function openExtensionWorkflow(

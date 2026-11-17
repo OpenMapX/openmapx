@@ -309,8 +309,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       return ctx;
     }
     async function renderJob(expectedCurrentRevisionId: string | null = host.initial.revisionId) {
-      const ctx = await job(),
-        { maintenanceJobAuthorization } = await import("../retained-maintenance-authorization");
+      const ctx = await job();
       const payload = {
           expectedCurrentRevisionId,
           confirmed: true,
@@ -321,17 +320,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ctx.jobType = "compose.render";
       ctx.payload = {
         ...payload,
-        _maintenanceRequest: {
-          actorId,
-          key,
-          authorization: maintenanceJobAuthorization(host.token, {
-            jobId: ctx.jobId,
-            type: ctx.jobType,
-            payload,
-            actorId,
-            key,
-          }),
-        },
+        _maintenanceRequest: { actorId, key, digest: "d".repeat(64) },
       };
       await fixture.db
         .update(schema.adminJob)

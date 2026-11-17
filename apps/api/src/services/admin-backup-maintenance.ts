@@ -8,7 +8,7 @@ import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 import { assertRetainedMaintenanceJob } from "./retained-maintenance-authorization";
 export async function handleBackupPruneJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  await assertRetainedMaintenanceJob(ctx);
+  assertRetainedMaintenanceJob(ctx);
   if (ctx.payload.confirmation !== "PRUNE EXPIRED BACKUPS")
     throw Error("Confirm the backup prune preview");
   const proof = backupPruneProofSchema.parse(ctx.payload.proof),
