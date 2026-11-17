@@ -296,9 +296,9 @@ type CandidateStage =
   | "discarded"
   | "retired";
 const REJECTED = "Trusted configuration snapshot publish failed";
-/** The time a save leaves for the steps: a preparation closer to its deadline is
- * not saved under, so a saved candidate always gets to apply. */
-const MAINTENANCE_APPLY_MARGIN_MS = 15 * 60_000;
+/** A preparation this close to its deadline is not saved under: its apply could
+ * not be admitted any more, and the rows would wait for a maintenance that ends. */
+const MAINTENANCE_APPLY_MARGIN_MS = 60_000;
 const candidates = new WeakMap<ValidatedConfigurationCandidate, CandidateState>();
 function stageOf(candidate: ValidatedConfigurationCandidate): CandidateStage | undefined {
   return candidates.get(candidate)?.stage;
