@@ -3,9 +3,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import {
+  assertDataManagerTerminal,
   type ControlInstallation,
   controlDigest,
-  readDataControlTerminalObservation,
 } from "@openmapx/core/build-artifacts";
 import {
   type CatalogProposal,
@@ -42,6 +42,7 @@ import {
 } from "../../../../../packages/core/src/build-artifacts/filesystem";
 import { runOpsOperation } from "../../ops-client.js";
 import { withLegacyDataMutation } from "../execution/legacy-mutation.js";
+import type { DataExecutionStore } from "../execution/store.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
 import { CANDIDATE_MANIFEST_FILENAME } from "./candidate.js";
 import {
@@ -82,6 +83,8 @@ const safeUpstreamFetch: typeof fetch = async (input, init) => {
 export function createCatalogReviewService(options: {
   dataDir: string;
   installation: ControlInstallation;
+  /** Data-manager's own execution rows, where a validation's terminal is read. */
+  executions: Pick<DataExecutionStore, "lookup">;
   operationsPolicy: MotisOperationsPolicy;
 }) {
   const state = installationState(options.installation);
@@ -326,16 +329,17 @@ export function createCatalogReviewService(options: {
         );
         validation = retained.validation;
         if (validation.status === "passed") {
-          const completed = readDataControlTerminalObservation(
-              options.installation,
-              retained.sourceExecution,
-            ),
+          const row = await options.executions.lookup(retained.sourceExecution.operationKey),
+            completed = row
+              ? assertDataManagerTerminal(retained.sourceExecution, row.status)
+              : null,
             pointer = readCurrentCatalogValidation(options.installation),
             slots = readMotisSlotState(options.dataDir);
           if (
-            completed.status.status !== "ok" ||
-            completed.status.result?.kind !== "catalog.validate" ||
-            completed.status.result.status !== "passed" ||
+            !completed ||
+            completed.status !== "ok" ||
+            completed.result?.kind !== "catalog.validate" ||
+            completed.result.status !== "passed" ||
             pointer?.selected?.validationId !== validation.validationId ||
             pointer.selected.validationDigest !== controlDigest(retained) ||
             Date.now() >= Date.parse(validation.expiresAt) ||

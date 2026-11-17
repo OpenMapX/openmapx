@@ -21,11 +21,11 @@ import {
   controlDigest,
   executionAuthorityState,
   readPrivateRecord,
-  recordDataControlTerminalObservation,
   type VerifiedExecutionAuthority,
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
+import { assertDataManagerTerminal } from "./data-manager-terminal";
 
 const fixedDataKinds = [
   "data.downloadOsm",
@@ -261,12 +261,9 @@ export function verifyCliDataTerminal(
     binding.execution.fingerprint !== status.fingerprint
   )
     throw Error("Original bound data command required");
-  // The status was read from data-manager over its authenticated route.
-  return recordDataControlTerminalObservation(
-    s.installation.installation,
-    binding.execution,
-    status,
-  );
+  // The status was read from data-manager over its authenticated route; any
+  // later reader asks data-manager again.
+  return assertDataManagerTerminal(binding.execution, status);
 }
 
 export function cliDataReservation(

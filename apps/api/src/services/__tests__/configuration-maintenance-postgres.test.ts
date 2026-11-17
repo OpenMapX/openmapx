@@ -16,6 +16,7 @@ import { basename, dirname, join } from "node:path";
 import { setTimeout as nativeDelay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
+  assertDataManagerTerminal,
   closeControlInstallation,
   leaseStoreDirectory,
   lookupControlChildPhaseAttempt,
@@ -23,7 +24,6 @@ import {
   openControlInstallation,
   openLeaseStore,
   pruneControlRecords,
-  readDataControlTerminalObservation,
   restoreAdmittedControlExecution,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson } from "@openmapx/core/ops";
@@ -5605,11 +5605,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           if (bound) {
             const child = await dm!.store.lookup(bound.child.execution.operationKey);
             try {
-              readDataControlTerminalObservation(
-                installation,
-                bound.child.execution,
-                child?.status,
-              );
+              assertDataManagerTerminal(bound.child.execution, child!.status);
               witness = "verified";
             } catch (failure) {
               witness = String(failure);

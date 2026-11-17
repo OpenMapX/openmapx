@@ -432,7 +432,11 @@ export async function recoverPreparedImportFiles(
     });
   if (published.phase === "committed") {
     const followUp =
-      inspectOwnedGenerationHardlinks(authority, lease) === "complete"
+      (await inspectOwnedGenerationHardlinks(
+        authority,
+        configurationDataManagerTransport(),
+        lease,
+      )) === "complete"
         ? ("complete" as const)
         : ("failed" as const);
     const result = {

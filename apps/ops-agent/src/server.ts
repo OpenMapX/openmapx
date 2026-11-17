@@ -116,7 +116,10 @@ import {
   assertPreparedConfigurationHandoff,
   assertRetainedConfigurationHandoffPreparation,
 } from "./configuration-handoff-store";
-import { prepareConfigurationHardlinksAdmission } from "./configuration-hardlinks-runtime";
+import {
+  configurationDataManagerTransport,
+  prepareConfigurationHardlinksAdmission,
+} from "./configuration-hardlinks-runtime";
 import {
   configurationMaintenanceAdmissionState,
   prepareConfigurationMaintenanceAdmission,
@@ -1824,7 +1827,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
         if (job.operation.kind !== "artifactTransfer.import" || found.claim.use !== "import-build")
           return found;
-        const publication = inspectSettledArtifactImport(authority);
+        const publication = await inspectSettledArtifactImport(
+          authority,
+          configurationDataManagerTransport(),
+        );
         return { ...found, publication };
       } catch {
         return found;

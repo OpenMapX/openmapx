@@ -241,11 +241,7 @@ it.skipIf(
       expect(rows[0]?.status.status).toBe("ok");
       expect(rows[0]?.parent?.issuer).toBe("host-cli");
       expect(rows[0]?.execution.principal).toBe("host-cli");
-      control.readDataControlTerminalObservation(
-        agentInstallation,
-        rows[0]!.execution,
-        rows[0]!.status,
-      );
+      control.assertDataManagerTerminal(rows[0]!.execution, rows[0]!.status);
       expect(heldTargets(dirname(data)).includes("data-manager")).toBe(false);
     } finally {
       await runtime.close();

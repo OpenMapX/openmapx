@@ -97,6 +97,15 @@ const attempted = {
   leaseId: z.uuid(),
   dispatchState: z.enum(["pending", "claimed"]),
 };
+/** Kinds whose committed result a later step of the same execution reads. */
+const RESULT_KINDS = new Set(["transitousLock.approve", "feedProxy.validateAndReload"]);
+function committedResult(operation: { kind: string }, result: unknown) {
+  if (operation.kind === "transitousLock.approve")
+    return { result: pairedPinApprovalResultSchema.parse(result) };
+  if (operation.kind === "feedProxy.validateAndReload")
+    return { result: parseOpsResult("feedProxy.validateAndReload", result) };
+  return {};
+}
 export const dataOpsChildReservedSchema = z.strictObject({
   ...common,
   state: z.literal("reserved"),
@@ -121,7 +130,13 @@ export const dataOpsChildAttemptSchema = z
       ...attempted,
       state: z.literal("terminal"),
       acceptedId: receiverId,
-      approvalResult: pairedPinApprovalResultSchema.optional(),
+      /** The agent's terminal state of this child, as its operation status reported it. */
+      agentState: z.enum(["succeeded", "failed", "timed_out"]),
+      /** The committed result later steps build on; the lease settlement digest pins it. */
+      result: z
+        .unknown()
+        .refine((value) => JSON.stringify(value ?? null).length <= 8192, "Result too large")
+        .optional(),
       publication: z.enum(["not_started", "committed"]),
       settlement: z.strictObject({
         outcome: z.enum(["contained", "committed", "failed_without_effect"]),
@@ -138,12 +153,12 @@ export const dataOpsChildAttemptSchema = z
   .superRefine((child, ctx) => {
     if (
       child.state === "terminal" &&
-      child.approvalResult &&
-      child.operation.kind !== "transitousLock.approve"
+      child.result !== undefined &&
+      !RESULT_KINDS.has(child.operation.kind)
     )
       ctx.addIssue({
         code: "custom",
-        message: "Only paired approval retains its bounded committed result",
+        message: "Only paired approval and the proxy reload keep their committed result",
       });
     if (child.proxyRecovery && child.phase !== "proxy-restore")
       ctx.addIssue({
@@ -390,7 +405,6 @@ import {
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
   publishedDataTransitCandidate,
-  recordOpsControlTerminalObservation,
 } from "@openmapx/core/build-artifacts";
 import { type OpsJobStatus, type OpsResultFor, parseOpsResult } from "@openmapx/core/ops";
 import { opsClient } from "../../ops-client.js";
@@ -483,16 +497,14 @@ async function observeChild(
         continue;
       }
       if (evidence && evidence.outcome !== "unknown" && evidence.publication !== "unknown") {
-        // Recovery reads the terminal status back from this role's own record.
-        recordOpsControlTerminalObservation(context.installation, child.execution, status);
+        // Recovery reads the agent's terminal back from this row.
         child = await checkpointCurrent(context, {
           ...child,
           state: "terminal",
           acceptedId: status.operationId,
+          agentState: status.state as "succeeded" | "failed" | "timed_out",
           publication: evidence.publication,
-          ...(child.operation.kind === "transitousLock.approve" && status.state === "succeeded"
-            ? { approvalResult: pairedPinApprovalResultSchema.parse(status.result) }
-            : {}),
+          ...(status.state === "succeeded" ? committedResult(child.operation, status.result) : {}),
           settlement: {
             outcome: evidence.outcome,
             terminalReceiptDigest: evidence.terminalReceiptDigest,

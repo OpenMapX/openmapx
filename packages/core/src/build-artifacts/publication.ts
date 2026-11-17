@@ -12,6 +12,7 @@ import {
   currentConfigurationGeneration,
   withConfigurationGenerationWriter,
 } from "../services/configuration-generation";
+import type { DataManagerTransport } from "../services/data-manager/transport";
 import type { ValidatedBuildBundle } from "./archive";
 import { inspectControlChildPublication } from "./child-phase";
 import {
@@ -889,7 +890,10 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
 /** Close only this purpose's proved historical publication. The original
  * canonical status/digest/time remain unchanged even if delivery failed after
  * files committed; containment is a separate, source-verified fact. */
-export function inspectSettledArtifactImport(authority: VerifiedExecutionAuthority) {
+export async function inspectSettledArtifactImport(
+  authority: VerifiedExecutionAuthority,
+  transport: DataManagerTransport,
+) {
   const owner = executionAuthorityState(authority);
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import required");
   const journal = readJournal({ ...owner, origin: owner.origin });
@@ -906,7 +910,7 @@ export function inspectSettledArtifactImport(authority: VerifiedExecutionAuthori
   )
     throw Error("Original settled effect required");
   const followUp =
-    inspectOwnedGenerationHardlinks(authority) === "complete"
+    (await inspectOwnedGenerationHardlinks(authority, transport)) === "complete"
       ? ("complete" as const)
       : ("failed" as const);
   if (journal.phase === "restored")

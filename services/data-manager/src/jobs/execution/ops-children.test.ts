@@ -1115,18 +1115,11 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       if (crash === "after-terminal") {
         expect(status.state).toBe("failed");
         expect(status.errorClass).toBe("runtime");
-        // data-manager records the agent's terminal status it observed.
-        control.recordOpsControlTerminalObservation(dm, bound.execution, status);
-        expect(control.readOpsControlTerminalObservation(dm, bound.execution).state).toBe("failed");
         await expect(
           control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
         ).resolves.toMatchObject({ outcome: "contained", publication: "not_started" });
       } else {
         expect(status.errorClass).toBe("recovery_required");
-        // A status that is not terminal is never recorded.
-        expect(() =>
-          control.recordOpsControlTerminalObservation(dm, bound.execution, status),
-        ).toThrow();
       }
       const jobs = JSON.parse(readFileSync(join(root, "state/ops-agent/jobs-v1.json"), "utf8"));
       expect(JSON.stringify(jobs)).toContain(bound.execution.operationKey);

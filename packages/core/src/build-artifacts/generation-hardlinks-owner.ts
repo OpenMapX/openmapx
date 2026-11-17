@@ -38,12 +38,12 @@ import {
 import {
   assertControlExecutionForward,
   executionAuthorityState,
-  readDataControlTerminalObservation,
   readPrivateRecord,
   type VerifiedExecutionAuthority,
   writePrivateRecord,
 } from "./control-authority";
 import { controlDigest } from "./control-records";
+import { readDataManagerTerminal } from "./data-manager-terminal";
 import {
   assertArtifactTargetLeaseExecution,
   inspectLocalLeaseChildSettlement,
@@ -251,43 +251,41 @@ export async function executeOwnedGenerationHardlinks(options: {
 }
 
 /** Settlement-only observation. Never bind, issue, dispatch, cancel or replay a
- * hardlink leaf after its original owner has stopped forwarding. */
-export function inspectOwnedGenerationHardlinks(
+ * hardlink leaf after its original owner has stopped forwarding. The leaf's
+ * terminal is read from data-manager's authenticated route. */
+export async function inspectOwnedGenerationHardlinks(
   authority: VerifiedExecutionAuthority,
+  transport: DataManagerTransport,
   lease?: TargetLeaseAuthority,
 ) {
   if (!lease) verifyLocalArtifactTargetRootRelease(authority);
-  const owner = executionAuthorityState(authority),
-    plan = readGenerationHardlinksOwnerPlan(authority);
+  const plan = readGenerationHardlinksOwnerPlan(authority);
   if (!plan.reservation) return "complete" as const;
   const binding = lookupControlChildPhaseBinding(authority, plan.reservation);
   if (!binding) return "not_attempted" as const;
-  const proof = readDataControlTerminalObservation(
-      owner.installation.installation,
-      binding.child.execution,
-    ),
+  const status = await readDataManagerTerminal(binding.child.execution, transport),
     settled = lease ? inspectLocalLeaseChildSettlement(lease, binding.child.execution) : null;
   if (
     lease &&
     (!settled ||
       settled.outcome === "unknown" ||
       settled.publication === "unknown" ||
-      settled.publication !== proof.status.publication)
+      settled.publication !== status.publication)
   )
     throw Error("Original hardlink leaf remains unresolved");
   if (
-    proof.status.status === "ok" &&
-    proof.status.publication === "committed" &&
-    proof.status.result?.kind === "generation-hardlinks"
+    status.status === "ok" &&
+    status.publication === "committed" &&
+    status.result?.kind === "generation-hardlinks"
   ) {
     if (lease && settled?.outcome !== "committed")
       throw Error("Original hardlink commit remains unresolved");
-    hardlinkApplySummarySchema.parse(proof.status.result.hardlinks);
+    hardlinkApplySummarySchema.parse(status.result.hardlinks);
     return "complete" as const;
   }
   if (
-    proof.status.publication !== "unknown" &&
-    ["partial", "error", "canceled", "interrupted"].includes(proof.status.status)
+    status.publication !== "unknown" &&
+    ["partial", "error", "canceled", "interrupted"].includes(status.status)
   )
     return "failed" as const;
   throw Error("Original hardlink leaf remains unresolved");

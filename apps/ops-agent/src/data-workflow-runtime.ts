@@ -3,6 +3,7 @@ import * as control from "@openmapx/core/build-artifacts";
 import type { DataWorkflowReceipt, ExecutionRef, OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import type { FixedCliRunner } from "./administrative-runtime";
+import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
 import { assertStagedCoordinatorConfigurationWrite } from "./configuration-maintenance-runtime";
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
 import { OpsExecutionFailure, OpsHostUpdateRequiredError, type OpsRuntime } from "./runtime";
@@ -145,12 +146,17 @@ export function installDataWorkflowRuntime(
     await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
     await run("data-workflow");
     context.signal.throwIfAborted();
-    const initial = await control.verifyDataUpdatePrerequisites(authority);
+    const initial = await control.verifyDataUpdatePrerequisites(
+      authority,
+      configurationDataManagerTransport(),
+      context.signal,
+    );
     await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
     const lease = await control.acquireArtifactTargetLease({
       serviceIds: plan.dataReservation.serviceIds,
       owner: authority,
       signal: context.signal,
+      dataManager: configurationDataManagerTransport(),
     });
     context.ownDataFinalizationLease?.(lease);
     try {

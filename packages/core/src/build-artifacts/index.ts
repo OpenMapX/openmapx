@@ -63,13 +63,9 @@ export {
   prepareFixedControlChild,
   provisionControlDirectories,
   readConfigurationHandoffSpawnIntent,
-  readDataControlTerminalObservation,
   readFixedCliSpawnIntent,
-  readOpsControlTerminalObservation,
   readPrivateRecord,
   readVerifiedStagedCoordinatorOwnership,
-  recordDataControlTerminalObservation,
-  recordOpsControlTerminalObservation,
   replaceControlRegisteredServiceIds,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
@@ -125,6 +121,7 @@ export {
   type DataExecutionControlJournal,
   dataTerminalReceiptDigest,
 } from "./data-execution-journal";
+export { assertDataManagerTerminal, readDataManagerTerminal } from "./data-manager-terminal";
 export {
   assertDataUpdateSources,
   planDataUpdate,

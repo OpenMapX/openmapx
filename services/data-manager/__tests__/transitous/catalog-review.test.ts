@@ -201,6 +201,7 @@ it.skipIf(!enabled)(
     const reviewer = createCatalogReviewService({
       dataDir,
       installation: dmInstallation,
+      executions: { lookup: (key) => store.lookup(key) },
       operationsPolicy: resolveOperationsProfile({
         profile: "regional-assisted",
         countries: ["de"],

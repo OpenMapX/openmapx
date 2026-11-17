@@ -95,6 +95,7 @@ import {
 } from "../services/configuration-generation";
 import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import { dataExecutionStatusSchema } from "../services/data-manager/contracts/executions";
+import type { DataManagerTransport } from "../services/data-manager/transport";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   type ControlChildReservation,
@@ -123,6 +124,7 @@ import {
 // biome-ignore-start lint/suspicious/noImportCycles: Fixed proof verification uses this module's original nominal authority and effect writer after initialization.
 import { recordFeedProxyReloadAttempted } from "./data-execution-candidate";
 // biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
+import { readDataManagerTerminal } from "./data-manager-terminal";
 import { AnchoredDirectory, identity } from "./filesystem";
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
 const PRIVATE_RECORD_BYTES = 131072;
@@ -2186,145 +2188,6 @@ function executionWitnessDirectory(state: InstallationState, issuer: ControlIssu
     },
   };
 }
-const dataTerminalObservationSchema = z.strictObject({
-  version: z.literal(2),
-  execution: executionRefSchema,
-  status: dataExecutionStatusSchema,
-  observedAt: z.number().int().positive().safe(),
-  terminalDigest: digest,
-});
-const dataTerminalName = (execution: ExecutionRef) =>
-  `data-terminal-${execution.operationKey}.json`;
-/**
- * Records the terminal status data-manager reported for a child this role
- * issued, read over data-manager's authenticated route. Only a terminal status
- * with a known publication is recorded, and a recorded status never changes.
- */
-export function recordDataControlTerminalObservation(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  status: import("../services/data-manager/contracts/executions").DataExecutionStatus,
-) {
-  const local = installationState(installation),
-    parsed = dataExecutionStatusSchema.parse(status);
-  if (
-    parsed.operationKey !== execution.operationKey ||
-    parsed.fingerprint !== execution.fingerprint ||
-    !["ok", "partial", "error", "canceled", "interrupted"].includes(parsed.status) ||
-    parsed.publication === "unknown"
-  )
-    throw Error("Exact terminal data-manager status required");
-  const terminalDigest = controlDigest({ version: 1, status: parsed });
-  try {
-    const prior = dataTerminalObservationSchema.parse(
-      readPrivateRecord(local, "observations", dataTerminalName(execution)),
-    );
-    if (prior.terminalDigest !== terminalDigest) throw Error("Recorded data terminal changed");
-    return prior;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  const observation = dataTerminalObservationSchema.parse({
-    version: 2,
-    execution,
-    status: parsed,
-    observedAt: Date.now(),
-    terminalDigest,
-  });
-  writePrivateRecord(local, "observations", dataTerminalName(execution), observation, true);
-  return observation;
-}
-/** The terminal status this role recorded for its data-manager child. A dead
- * child process or an error alone is never containment evidence. */
-export function readDataControlTerminalObservation(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  status?: import("../services/data-manager/contracts/executions").DataExecutionStatus,
-) {
-  const proof = dataTerminalObservationSchema.parse(
-    readPrivateRecord(installationState(installation), "observations", dataTerminalName(execution)),
-  );
-  if (
-    controlDigest(proof.execution) !== controlDigest(execution) ||
-    (status &&
-      canonicalJson(dataExecutionStatusSchema.parse(status)) !== canonicalJson(proof.status))
-  )
-    throw Error("Exact data-manager terminal observation required");
-  return proof;
-}
-const opsTerminalObservationSchema = z.strictObject({
-  version: z.literal(2),
-  execution: executionRefSchema,
-  status: z.unknown(),
-  observedAt: z.number().int().positive().safe(),
-  terminalDigest: digest,
-});
-const opsTerminalName = (execution: ExecutionRef) => `ops-terminal-${execution.operationKey}.json`;
-/**
- * Records the terminal status the agent reported for a child this role issued,
- * read over the agent's authenticated route. A recorded status never changes.
- */
-export function recordOpsControlTerminalObservation(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  input: OpsJobStatus,
-): void {
-  const local = installationState(installation),
-    status = parseOpsJobStatus(input);
-  if (
-    status.operationId !== execution.executionId ||
-    status.operationKey !== execution.operationKey ||
-    status.fingerprint !== execution.fingerprint ||
-    !["succeeded", "failed", "timed_out"].includes(status.state) ||
-    // An outcome that still needs recovery is not known yet.
-    status.errorClass === "recovery_required"
-  )
-    throw Error("Exact terminal agent status required");
-  const terminalDigest = controlTerminalReceiptDigest(status);
-  try {
-    const prior = opsTerminalObservationSchema.parse(
-      readPrivateRecord(local, "observations", opsTerminalName(execution)),
-    );
-    if (prior.terminalDigest !== terminalDigest) throw Error("Recorded agent terminal changed");
-    return;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  writePrivateRecord(
-    local,
-    "observations",
-    opsTerminalName(execution),
-    opsTerminalObservationSchema.parse({
-      version: 2,
-      execution,
-      // Diagnostics are observational and excluded from the terminal digest.
-      status: { ...status, diagnostics: { tail: [], truncated: false } },
-      observedAt: Date.now(),
-      terminalDigest,
-    }),
-    true,
-  );
-}
-/** The terminal status this role recorded for its agent child. */
-export function readOpsControlTerminalObservation(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-): OpsJobStatus {
-  const proof = opsTerminalObservationSchema.parse(
-      readPrivateRecord(
-        installationState(installation),
-        "observations",
-        opsTerminalName(execution),
-      ),
-    ),
-    status = parseOpsJobStatus(proof.status);
-  if (
-    controlDigest(proof.execution) !== controlDigest(execution) ||
-    controlTerminalReceiptDigest(status) !== proof.terminalDigest
-  )
-    throw Error("Exact agent terminal observation required");
-  return status;
-}
 const lifecycleSchema = z.strictObject({
   version: z.literal(1),
   execution: executionRefSchema,
@@ -3484,7 +3347,11 @@ export function verifyControlPreparedTerminal(
 
 /** Target acquisition observes only its original data-phase owner and all three
  * signed, physically settled DM children. No progress object is authority. */
-export async function verifyDataUpdatePrerequisites(authority: VerifiedExecutionAuthority) {
+export async function verifyDataUpdatePrerequisites(
+  authority: VerifiedExecutionAuthority,
+  transport: DataManagerTransport | undefined,
+  signal?: AbortSignal,
+) {
   const s = executionAuthorityState(authority);
   if (s.kind !== "data.update" || s.installation.fixedChildId)
     throw Error("Original Full Update root required");
@@ -3519,30 +3386,27 @@ export async function verifyDataUpdatePrerequisites(authority: VerifiedExecution
       if (settlement.outcome !== "committed" || settlement.publication !== "committed")
         throw Error("Full Update data phase unsettled");
     }
-    const dataState = executionAuthorityState(dataAuthority),
-      receipt = readDataWorkflowProgress(dataAuthority);
+    const receipt = readDataWorkflowProgress(dataAuthority);
     if (
       receipt.phase !== "build" ||
       receipt.children.length !== 3 ||
       receipt.children.some((c) => c.status !== "succeeded")
     )
       throw Error("Full Update data checkpoint missing");
+    if (!transport) throw Error("Full Update prerequisites are read from data-manager");
     for (const [index, slot] of plan.dataChildren.entries()) {
       const bound = lookupControlChildPhase(dataAuthority, slot);
       if (!bound) throw Error("Full Update prerequisite missing");
       const child = receipt.children[index],
-        witness = readDataControlTerminalObservation(
-          dataState.installation.installation,
-          bound.execution,
-        );
+        terminal = await readDataManagerTerminal(bound.execution, transport, signal);
       if (
         !child ||
         child.operationKey !== bound.execution.operationKey ||
         child.jobId !== bound.execution.executionId ||
         child.fingerprint !== bound.execution.fingerprint ||
         child.deadlineAt !== bound.execution.deadlineAt ||
-        witness.status.status !== "ok" ||
-        witness.status.publication !== "committed"
+        terminal.status !== "ok" ||
+        terminal.publication !== "committed"
       )
         throw Error("Full Update prerequisite did not complete");
     }

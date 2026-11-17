@@ -122,8 +122,8 @@ it.skipIf(
       journal = control.createDataExecutionControlJournal(dm, sql),
       fence = createDataConfigurationMaintenance(sql, dm);
     const publicationFailures: Record<string, string> = {};
-    const publishContained = journal.recordContainedTerminal;
-    journal.recordContainedTerminal = async (execution) => {
+    const publishContained = journal.verifyContainedTerminal;
+    journal.verifyContainedTerminal = async (execution) => {
       try {
         return await publishContained(execution);
       } catch (error) {
@@ -364,7 +364,7 @@ it.skipIf(
         )
           continue;
         try {
-          control.readDataControlTerminalObservation(agentInstallation, row.execution, row.status);
+          control.assertDataManagerTerminal(row.execution, row.status);
           witnessProblems[row.input.kind] = "verified";
         } catch (problem) {
           witnessProblems[row.input.kind] =

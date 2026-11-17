@@ -185,12 +185,12 @@ export function installCatalogApprovalRuntime(
       currentValidation.selected.validationDigest !== controlDigest(validation)
     )
       throw Error("Validation was invalidated before slot reuse");
-    const validated = await dataManagerTerminal(installation, validation.sourceExecution);
+    const validated = await dataManagerTerminal(validation.sourceExecution, context.signal);
     if (
-      validated.status.status !== "ok" ||
-      validated.status.result?.kind !== "catalog.validate" ||
-      validated.status.result.status !== "passed" ||
-      validated.status.result.validationId !== passed.validationId
+      validated.status !== "ok" ||
+      validated.result?.kind !== "catalog.validate" ||
+      validated.result.status !== "passed" ||
+      validated.result.validationId !== passed.validationId
     )
       throw Error("Successful original validation completion required");
     const admission = catalogApprovalAdmissionSchema.parse(

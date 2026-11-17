@@ -11,6 +11,7 @@ import { opsOperationFingerprint } from "../ops/fingerprint";
 // biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
 import { leaseTargetsSchema } from "../ops/lease-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
+import type { DataManagerTransport } from "../services/data-manager/transport";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   inspectControlChildPublication,
@@ -51,9 +52,7 @@ import {
   installationState,
   parseControlAssertion,
   readCompletedConfigurationHandoff,
-  readDataControlTerminalObservation,
   readPrivateRecord,
-  recordDataControlTerminalObservation,
   recordLeaseControlAttempt,
   recoveryAuthorityState,
   restoreAdmittedControlExecution,
@@ -75,6 +74,7 @@ import {
 } from "./control-authority";
 import { controlChildOperationKey } from "./control-child-records";
 import { controlDigest, targetSchema, uuid } from "./control-records";
+import { assertDataManagerTerminal } from "./data-manager-terminal";
 import { assertFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
 import {
   knownSettlement,
@@ -513,6 +513,8 @@ export async function acquireArtifactTargetLease(options: {
   serviceIds: readonly string[];
   owner: VerifiedExecutionAuthority;
   signal?: AbortSignal;
+  /** Where a Full Update reads its data children's terminals. */
+  dataManager?: DataManagerTransport;
 }): Promise<ArtifactTargetLease> {
   const authority = executionAuthorityState(options.owner);
   if (authority.installation.fixedChildId)
@@ -523,7 +525,8 @@ export async function acquireArtifactTargetLease(options: {
     Date.now() >= authority.execution.deadlineAt
   )
     throw Error("Target closure or execution deadline mismatch");
-  if (authority.kind === "data.update") await verifyDataUpdatePrerequisites(options.owner);
+  if (authority.kind === "data.update")
+    await verifyDataUpdatePrerequisites(options.owner, options.dataManager, options.signal);
   assertControlExecutionForward(options.owner);
   options.signal?.throwIfAborted();
   const name = `${authority.execution.operationKey}.json`;
@@ -1213,13 +1216,7 @@ export async function settleDataManagerLeaseChild(
     status.publication === "unknown"
   )
     return settledKnown(child) ? (child.settlement as ChildSettlement) : null;
-  // Recorded even when data-manager already settled the child itself: later
-  // steps of this owner build on the status it observed.
-  const observed = recordDataControlTerminalObservation(
-    s.installation.installation,
-    execution,
-    status,
-  );
+  const terminal = assertDataManagerTerminal(execution, status);
   if (settledKnown(child)) return child.settlement as ChildSettlement;
   return settleIssuedLeaseChild(lease, execution, {
     outcome:
@@ -1229,7 +1226,7 @@ export async function settleDataManagerLeaseChild(
           ? "committed"
           : "contained",
     publication: status.publication,
-    terminalReceiptDigest: observed.terminalDigest,
+    terminalReceiptDigest: controlDigest({ version: 1, status: terminal }),
   });
 }
 /**
@@ -1667,21 +1664,16 @@ export function readOriginalMaintenanceFinalChildren(
         ),
         binding = lookupControlChildPhaseBinding(child, owner.plan.nestedHardlinks);
       if (!binding) throw Error("Original middle owner's DM leaf unavailable");
-      const terminal = readDataControlTerminalObservation(
-          state.installation.installation,
-          binding.child.execution,
-        ),
-        physical = tree.children.find((value) =>
-          sameExecution(value.execution, binding.child.execution),
-        );
+      // The middle owner commits its hardlinks step only after data-manager
+      // reported the leaf ok and committed, so the leaf's committed settlement
+      // stands for that terminal.
+      const physical = tree.children.find((value) =>
+        sameExecution(value.execution, binding.child.execution),
+      );
       if (
         !physical ||
         physical.settlement.outcome !== "committed" ||
-        physical.settlement.publication !== "committed" ||
-        terminal.status.kind !== "generation-hardlinks" ||
-        terminal.status.status !== "ok" ||
-        terminal.status.publication !== "committed" ||
-        terminal.status.result?.kind !== "generation-hardlinks"
+        physical.settlement.publication !== "committed"
       )
         throw Error("Original exact DM generation leaf settlement unavailable");
       allowed.add(controlDigest(binding.child.execution));
@@ -1689,8 +1681,8 @@ export function readOriginalMaintenanceFinalChildren(
         configurationChildEvidenceSchema.parse({
           planIndex: step.ordinal,
           execution: binding.child.execution,
-          terminalDigest: terminal.terminalDigest,
-          terminalAt: terminal.observedAt,
+          terminalDigest: physical.settlement.terminalReceiptDigest,
+          terminalAt: actual.terminalAt,
           effectSettlementDigest: controlDigest(physical.settlement),
           publication: "committed",
         }),

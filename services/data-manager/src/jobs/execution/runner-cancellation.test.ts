@@ -657,32 +657,14 @@ it.skipIf(
       const terminal = await store.inspect(id);
       if (!terminal) throw Error("Original terminal row missing");
       expect(motisLease(root)).toBeDefined();
-      expect(() =>
-        control.readDataControlTerminalObservation(
-          installation,
-          terminal.execution,
-          terminal.status,
-        ),
-      ).toThrow(/ENOENT/);
       expect(terminal.status.publication).toBe("not_started");
       expect(terminal.finishedAt).not.toBeNull();
       expect(posts).toBe(1);
       expect(cancels).toBeGreaterThanOrEqual(1);
       resumeCleanup();
-      // The contained terminal is recorded only after lease release; the
-      // canceled database row above is visible before that point.
-      await expect
-        .poll(
-          () =>
-            control.readDataControlTerminalObservation(
-              installation,
-              terminal.execution,
-              terminal.status,
-            ).status,
-          { timeout: 15000 },
-        )
-        .toEqual(terminal.status);
-      expect(motisLease(root)).toBeUndefined();
+      // The lease is released only after cleanup; the canceled database row
+      // above is visible before that point.
+      await expect.poll(() => motisLease(root), { timeout: 15000 }).toBeUndefined();
     } finally {
       resumeCleanup();
       writeFileSync(released, "release");

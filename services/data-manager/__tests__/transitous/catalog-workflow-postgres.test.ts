@@ -806,13 +806,15 @@ it
       const proof = readCatalogValidation(installation, proposalId, validation.id);
       expect(proof.validation.status).toBe("passed");
       expect(readCatalogPinSet(f.root)).toEqual(active);
-      // Like the review eligibility reader, require the real immutable contained
-      // completion, not merely the earlier visible SQL terminal projection.
+      // Like the review eligibility reader, require data-manager's own row to
+      // hold the exact terminal of the validation the proof names.
       await vi.waitFor(
-        () =>
+        async () => {
+          const row = await store.lookup(proof.sourceExecution.operationKey);
           expect(() =>
-            control.readDataControlTerminalObservation(installation!, proof.sourceExecution),
-          ).not.toThrow(),
+            control.assertDataManagerTerminal(proof.sourceExecution, row!.status),
+          ).not.toThrow();
+        },
         { timeout: 10000, interval: 100 },
       );
       const completedValidation = await store.inspect(validation.id);

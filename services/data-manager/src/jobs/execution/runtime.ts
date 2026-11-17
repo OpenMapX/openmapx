@@ -98,27 +98,26 @@ export interface DataExecutionRuntime {
   close(): Promise<void>;
 }
 /** Settles the execution's own lease after its terminal record, or, for a
- * hardlink leaf, its child in the issuer's lease; records the terminal for
- * later steps that build on it, while the lease still shows how its children
- * settled; then releases the lease. */
+ * hardlink leaf, its child in the issuer's lease; checks the terminal while
+ * the lease still shows how its children settled; then releases the lease. */
 async function releaseOwnLease(
   journal: {
     installation: ControlInstallation;
-    recordContainedTerminal(e: ExecutionRef): Promise<void>;
+    verifyContainedTerminal(e: ExecutionRef): Promise<void>;
   },
   execution: ExecutionRef,
   lease: ArtifactTargetLease | undefined,
 ) {
   if (!lease) {
     await settleOwnLeaseChild(journal.installation, execution);
-    await journal.recordContainedTerminal(execution);
+    await journal.verifyContainedTerminal(execution);
     return;
   }
   await settleArtifactTargetLeaseChild(
     lease,
     verifyControlEffectSettlement(journal.installation, execution),
   );
-  await journal.recordContainedTerminal(execution);
+  await journal.verifyContainedTerminal(execution);
   await releaseArtifactTargetLease(lease);
 }
 /** Agent answers that refuse a lease acquisition before it records anything. */
@@ -477,7 +476,6 @@ export function createDataExecutionRuntime(deps: {
         if (isDataExecutionTerminal(entry.record.status)) {
           await owner.assertOwnedProxyRecoverySettled(record.execution);
           if (!refusal) await releaseOwnLease(owner, record.execution, lease);
-          else await owner.recordContainedTerminal(record.execution);
         }
       } catch (error) {
         // An I/O/CAS/containment gap is not a terminal receipt or permission to

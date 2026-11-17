@@ -334,10 +334,6 @@ describe.skipIf(
       expect((await store.inspect(id))?.finishedAt).not.toBeNull();
       expect(dispatches).toBe(1);
       expect(heldTargets(root).includes("data-manager")).toBe(false);
-      const recovered = await store.inspect(id);
-      expect(
-        control.readDataControlTerminalObservation(installation, recovered!.execution).status,
-      ).toEqual(recovered!.status);
       await runtime.reconcile();
       expect(dispatches).toBe(1);
     } finally {
@@ -564,9 +560,6 @@ describe.skipIf(
       });
       expect(retained?.triggeredBy).toBe("cron");
       expect(retained?.finishedAt).not.toBeNull();
-      expect(
-        control.readDataControlTerminalObservation(installation, retained!.execution).status,
-      ).toEqual(retained!.status);
       expect(dispatches).toBe(1);
     } finally {
       await runtime.close();

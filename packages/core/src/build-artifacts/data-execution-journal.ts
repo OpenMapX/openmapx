@@ -28,9 +28,7 @@ import {
   controlDigest,
   executionAuthorityState,
   installationState,
-  readOpsControlTerminalObservation,
   readPrivateRecord,
-  recordDataControlTerminalObservation,
   restoreAdmittedControlExecution,
   settleExecutionLifecycle,
   type VerifiedExecutionAuthority,
@@ -242,6 +240,8 @@ export function createDataExecutionControlJournal(
           operation: z.unknown(),
           state: z.string(),
           execution: executionRefSchema.optional(),
+          agentState: z.enum(["succeeded", "failed", "timed_out"]).optional(),
+          result: z.unknown().optional(),
           proxyRecovery: z.object({ version: z.literal(1), backupDigest: z.string() }).optional(),
         })
         .passthrough()
@@ -270,14 +270,10 @@ export function createDataExecutionControlJournal(
           authority,
           child.execution,
         );
-        const canonical = readOpsControlTerminalObservation(
-          s.installation.installation,
-          child.execution,
-        );
         if (
           restore &&
           child.phase !== "proxy-restore" &&
-          canonical.state === "failed" &&
+          child.agentState === "failed" &&
           shared?.outcome === "contained" &&
           shared.publication === "not_started"
         )
@@ -299,18 +295,17 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original proxy restore obligation remains pending");
       const shared = await inspectRetainedOwnedArtifactTargetChildSettlement(
-          authority,
-          child.execution,
-        ),
-        canonical = readOpsControlTerminalObservation(s.installation.installation, child.execution);
+        authority,
+        child.execution,
+      );
       const result = z
         .strictObject({ candidateId: z.string(), reloaded: z.literal(true) })
-        .parse(canonical.result);
+        .parse(child.result);
       const operation = z
         .strictObject({ kind: z.literal("feedProxy.validateAndReload"), candidateId: z.string() })
         .parse(child.operation);
       if (
-        canonical.state !== "succeeded" ||
+        child.agentState !== "succeeded" ||
         shared?.outcome !== "committed" ||
         shared.publication !== "committed" ||
         result.candidateId !== operation.candidateId ||
@@ -346,7 +341,7 @@ export function createDataExecutionControlJournal(
           parentExecution: executionRefSchema,
           execution: executionRefSchema,
           operation: z.unknown(),
-          approvalResult: z.unknown().optional(),
+          result: z.unknown().optional(),
         })
         .passthrough()
         .parse(raw),
@@ -371,7 +366,7 @@ export function createDataExecutionControlJournal(
     if (matches.length !== 1) throw Error("Original paired approval required");
     const child = matches[0]!,
       operation = pairedPinApprovalInputSchema.parse(child.operation),
-      result = pairedPinApprovalResultSchema.parse(child.approvalResult);
+      result = pairedPinApprovalResultSchema.parse(child.result);
     const physical = await inspectRetainedOwnedArtifactTargetChildSettlement(
       authority,
       child.execution,
@@ -1037,11 +1032,10 @@ export function createDataExecutionControlJournal(
       });
       contained.set(execution.operationKey, proof.terminalDigest);
     },
-    /** Records the committed terminal once the execution's own lease is released,
-     * for later steps of this role that build on it. */
-    async recordContainedTerminal(execution: ExecutionRef) {
-      const { value } = await verifyStored(execution);
-      recordDataControlTerminalObservation(installation, execution, value.status);
+    /** Checks the committed terminal and every child's terminal before the
+     * execution's own lease is released. */
+    async verifyContainedTerminal(execution: ExecutionRef) {
+      await verifyStored(execution);
     },
     repairTerminal: async (execution: ExecutionRef) => {
       await assertOwnedProxyRecoverySettled(execution);

@@ -117,6 +117,7 @@ const catalogReview = controlStartup.installation
   ? createCatalogReviewService({
       dataDir,
       installation: controlStartup.installation,
+      executions: executionStore,
       operationsPolicy,
     })
   : undefined;
