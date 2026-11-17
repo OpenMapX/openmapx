@@ -122,6 +122,7 @@ import {
   typeaheadApiLimit,
   unmatchedRouteLimit,
 } from "./utils/rate-limit";
+import { registerResponseCompression } from "./utils/response-compression";
 import { createSafePinoOptions } from "./utils/safe-log-fields";
 
 /** How the process entry point reaches a migration that is still running. */
@@ -249,6 +250,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
 
   await server.register(helmet);
   await server.register(cors, corsOptions(trustedWebOrigins));
+  // JSON responses only; registered before any route so every core and
+  // integration route is covered.
+  await registerResponseCompression(server);
 
   server.addHook("onRequest", makeSecurityResponseHeaderHook());
   server.addHook("onRequest", makeCsrfGuardHook(trustedWebOrigins));
