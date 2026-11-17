@@ -104,15 +104,15 @@ function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobConte
     signal: new AbortController().signal,
     log: async () => {},
     setProgress: async () => {},
-    checkpoint: async (value, _progress, _admissionKey, _stepAddress, operations) => {
+    checkpoint: async (value, _progress, admissionKey, stepAddress, operations) => {
       const saved = await checkpointOwnedAdminJob(
         job.id,
         context.execution,
         value,
         operations ?? readProjection(context.protocol, context.checkpointResult),
         undefined,
-        undefined,
-        undefined,
+        admissionKey,
+        stepAddress,
         context.checkpointResult ?? {},
       );
       context.checkpointResult = saved.result;
@@ -943,19 +943,34 @@ class AdminJobRunner {
     // Stops only this observer/forward handler. Backend containment is independently verified.
     this.active.get(jobId)?.abort();
     let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>> = "pending";
+    const context = cancellationReceiptContext(job);
     try {
-      outcome = await cancelAdminJobOperations(job.result, job.protocol, undefined, {
-        context: cancellationReceiptContext(job),
-        jobId,
-        onEvidence: async (evidence) => {
-          await db
-            .update(adminJob)
-            .set({
-              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
-            })
-            .where(jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]));
+      // A helper the agent's apply left running is stopped before this returns.
+      const { abandonAppliedConfigurationMaintenance } = await import(
+        "./prospective-configuration"
+      );
+      await abandonAppliedConfigurationMaintenance(context);
+    } catch {
+      /* The job's next run sends the same abandonment. */
+    }
+    try {
+      outcome = await cancelAdminJobOperations(
+        context.checkpointResult,
+        context.protocol,
+        undefined,
+        {
+          context,
+          jobId,
+          onEvidence: async (evidence) => {
+            await db
+              .update(adminJob)
+              .set({
+                result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
+              })
+              .where(jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]));
+          },
         },
-      });
+      );
     } catch {
       /* Retain intent. */
     }

@@ -5134,9 +5134,33 @@ export async function settleConfigurationMaintenance(
   maintenanceId: string,
   outcome: "complete" | "abandon",
 ): Promise<MaintenanceRecord> {
-  const owner = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),
-    { job } = owner,
-    retained = maintenanceCheckpoint(job),
+  const { job } = administrativeConfigurationState(currentAdministrativeConfigurationWriter());
+  return settleJobMaintenance(job, maintenanceId, outcome);
+}
+
+/** A cancel that arrives after the agent's `apply` returned, while its helper
+ * may still replace services, stops the maintenance at once: the helper ends
+ * the target in flight and starts no other. The job stays pending until the
+ * steps are terminal; its next run settles the maintenance. */
+export async function abandonAppliedConfigurationMaintenance(job: JobContext): Promise<void> {
+  const retained = maintenanceCheckpoint(job);
+  if (retained?.phase !== "applying") return;
+  const { maintenanceId } = configurationMaintenancePrepareSchema.parse(retained.operation);
+  const applied = Object.values(readProjection(job.protocol, job.checkpointResult).operations).some(
+    (operation) =>
+      operation.kind === "configurationMaintenance.apply" &&
+      operation.terminal &&
+      (operation.result as { outcome?: unknown } | undefined)?.outcome === "running",
+  );
+  if (applied) await settleJobMaintenance(job, maintenanceId, "abandon");
+}
+
+async function settleJobMaintenance(
+  job: JobContext,
+  maintenanceId: string,
+  outcome: "complete" | "abandon",
+): Promise<MaintenanceRecord> {
+  const retained = maintenanceCheckpoint(job),
     prepared = configurationMaintenancePrepareSchema.parse(retained?.operation);
   if (prepared.maintenanceId !== maintenanceId || typeof retained?.prepareOperationKey !== "string")
     throw Error("Original prepared maintenance required");

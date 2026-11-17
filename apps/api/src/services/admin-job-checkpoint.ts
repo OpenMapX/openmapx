@@ -77,19 +77,22 @@ export async function checkpointOwnedAdminJob(
         operation.operation?.kind === "integration.settle";
       if (standaloneSettlement)
         await assertStandaloneSettlementCheckpoint(row, operation.operation!, tx);
-      if (row.status !== "running" && !standaloneSettlement) throw new JobOwnershipLost();
-      if (currentProtocol.cancelRequestedAt !== undefined && !standaloneSettlement) {
-        // Cancellation never authorizes a forward phase. Only the settlement of
-        // this job's own configuration maintenance may still be sent.
-        const body = operation.operation,
-          maintenance = current._configurationMaintenance as Record<string, unknown> | undefined;
-        if (
-          body?.kind !== "configurationMaintenance.settle" ||
-          !cancelRequestedAt(currentProtocol) ||
-          maintenance?.maintenanceId !== body.maintenanceId
-        )
-          throw new JobOwnershipLost();
-      }
+      // Cancellation never authorizes a forward phase. Only the settlement of
+      // this job's own configuration maintenance may still be sent.
+      const body = operation.operation,
+        maintenance = current._configurationMaintenance as Record<string, unknown> | undefined,
+        cancelledMaintenanceSettlement =
+          body?.kind === "configurationMaintenance.settle" &&
+          cancelRequestedAt(currentProtocol) !== undefined &&
+          maintenance?.maintenanceId === body.maintenanceId;
+      if (row.status !== "running" && !standaloneSettlement && !cancelledMaintenanceSettlement)
+        throw new JobOwnershipLost();
+      if (
+        currentProtocol.cancelRequestedAt !== undefined &&
+        !standaloneSettlement &&
+        !cancelledMaintenanceSettlement
+      )
+        throw new JobOwnershipLost();
       if (current._parentExecution && !equal(current._parentExecution, candidate._parentExecution))
         return { conflict: true as const, result: current, protocol: currentProtocol };
       const parent = candidate._parentExecution as

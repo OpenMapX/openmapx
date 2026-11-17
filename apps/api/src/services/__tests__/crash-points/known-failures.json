@@ -1,6 +1,1 @@
-{
-  "finishes the recreate in flight, starts no further effect and never succeeds": {
-    "reason": "A cancelled update's helper keeps recreating services, including the agent, and the update succeeds.",
-    "fails": "^expected 'success' not to be 'success'"
-  }
-}
+{}
