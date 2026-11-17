@@ -2139,7 +2139,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(dm.preparePosts).toBe(1);
       expect(posts.get("service.update") ?? 0).toBe(0);
       expect(posts.get("service.pull")).toBe(1);
-      expect(posts.get("stack.render")).toBe(1);
+      // The generation is a step of the maintenance's apply, run inside the agent.
+      expect(posts.get("stack.render") ?? 0).toBe(0);
+      expect(posts.get("configurationMaintenance.apply")).toBe(1);
       expect(posts.get("service.start") ?? 0).toBe(0);
       const checkpoint = row.result as {
           _configurationMaintenance: { maintenanceId: string };
