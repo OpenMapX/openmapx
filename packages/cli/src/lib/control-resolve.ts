@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import {
+  AnchoredDirectory,
   controlPrivateRoot,
   type LeaseRecord,
   MAINTENANCE_NAMESPACE,
@@ -14,7 +12,11 @@ import {
   DataManagerHttpError,
   settleDataConfigurationFence,
 } from "@openmapx/core/data-manager-sdk";
-import { type MaintenanceFenceOutcome, transitionMaintenance } from "@openmapx/core/ops";
+import {
+  canonicalJson,
+  type MaintenanceFenceOutcome,
+  transitionMaintenance,
+} from "@openmapx/core/ops";
 import { z } from "zod";
 import { cliDataManagerToken } from "./data-manager-token";
 import { dataManagerUrl } from "./data-manager-url";
@@ -26,21 +28,39 @@ const fenceEvidenceSchema = z.object({
   planDigest: z.string(),
 });
 
-/** The agent's record of the maintenance, written only when it needs recovery:
- * the agent changes a record in that state only through this resolution. */
+/** The agent's record of the maintenance, read and written with the agent's own
+ * anchored, no-follow I/O. It is written only while it needs recovery: the
+ * agent changes a record in that state only through this resolution. */
 function maintenanceRecord(infraDir: string, maintenanceId: string) {
-  const path = join(
-    controlPrivateRoot(infraDir, "ops-agent"),
-    MAINTENANCE_NAMESPACE,
-    maintenanceFileName(maintenanceId),
-  );
-  if (!existsSync(path)) return undefined;
-  const file = parseMaintenanceFile(JSON.parse(readFileSync(path, "utf8")), maintenanceId);
+  const name = maintenanceFileName(maintenanceId);
+  const withDirectory = <T>(run: (directory: AnchoredDirectory) => T): T => {
+    const root = new AnchoredDirectory(controlPrivateRoot(infraDir, "ops-agent"));
+    try {
+      const directory = root.directory(MAINTENANCE_NAMESPACE, false, true);
+      try {
+        return run(directory);
+      } finally {
+        directory.close();
+      }
+    } finally {
+      root.close();
+    }
+  };
+  let file: ReturnType<typeof parseMaintenanceFile>;
+  try {
+    file = withDirectory((directory) =>
+      parseMaintenanceFile(
+        JSON.parse(directory.read(name, 131072).toString("utf8")),
+        maintenanceId,
+      ),
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
   const write = (record: typeof file.record) => {
     const next = maintenanceFileSchema.parse({ ...file, record });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    writeFileSync(temporary, JSON.stringify(next), { mode: 0o600, flag: "wx" });
-    renameSync(temporary, path);
+    withDirectory((directory) => directory.write(name, canonicalJson(next)));
     file.record = next.record;
   };
   return { file, write };
