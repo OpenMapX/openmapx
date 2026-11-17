@@ -7,6 +7,7 @@ import {
   scopeSkippedJobs,
   selectiveScopes,
   validationJobs,
+  verifyMergeQueueResults,
   verifyMetadataResults,
   verifyResults,
 } from "./ci-impact-plan.mjs";
@@ -349,5 +350,75 @@ describe("executing metadata gate", () => {
     expect(() =>
       verifyMetadataResults(plan, { ...needs, unknown: { result: "skipped" } }),
     ).toThrow();
+  });
+});
+
+describe("main push reusing the merge queue's validation", () => {
+  const mergeQueueSource = { version: 1, runId: 900, attempt: 1, workflowId: 55, head: sha };
+  const push = (extra = {}) =>
+    createImpactPlan({
+      event: "push",
+      action: undefined,
+      head: sha,
+      base: "",
+      paths: [],
+      mergeQueueSource,
+      ...extra,
+    });
+  const skipped = (plan: ReturnType<typeof push>) =>
+    Object.fromEntries(
+      ["select", ...Object.keys(plan.jobs), "docker-changes", "docker-build"].map((id) => [
+        id,
+        { result: id === "select" ? "success" : "skipped" },
+      ]),
+    );
+
+  it("skips validation for a current main commit the merge queue validated", () => {
+    const plan = push();
+    expect(plan.code).toBe(false);
+    expect(plan.reason).toBe("merge-queue-validated");
+    expect(plan.scope).toBe("full");
+    expect(plan.validationSource).toEqual(mergeQueueSource);
+    expect(plan.deferredDatabaseGroups).toEqual([]);
+  });
+
+  it("validates in full without matching evidence or outside a current main push", () => {
+    for (const source of [
+      null,
+      {},
+      { ...mergeQueueSource, head: "c".repeat(40) },
+      { ...mergeQueueSource, runId: 0 },
+      { ...mergeQueueSource, pullRequest: 12 },
+    ]) {
+      const plan = push({ mergeQueueSource: source });
+      expect(plan.code).toBe(true);
+      expect(plan.validationSource).toBeNull();
+    }
+    for (const event of ["schedule", "workflow_dispatch", "merge_group"])
+      expect(push({ event }).code).toBe(true);
+    const superseded = push({ mainCurrent: false });
+    expect(superseded.reason).toBe("superseded-main");
+    expect(superseded.validationSource).toBeNull();
+  });
+
+  it("passes the gate only with exactly the skipped dependencies and the receipt", () => {
+    const plan = push();
+    const needs = skipped(plan);
+    expect(() => verifyMergeQueueResults(plan, needs)).not.toThrow();
+    expect(() => verifyMergeQueueResults({ ...plan, validationSource: null }, needs)).toThrow();
+    expect(() => verifyMergeQueueResults({ ...plan, reason: "metadata-only" }, needs)).toThrow();
+    expect(() => verifyMergeQueueResults({ ...plan, event: "schedule" }, needs)).toThrow();
+    expect(() => verifyMergeQueueResults({ ...plan, code: true }, needs)).toThrow();
+    for (const result of ["failure", "cancelled", "success", undefined])
+      expect(() => verifyMergeQueueResults(plan, { ...needs, database: { result } })).toThrow();
+    expect(() =>
+      verifyMergeQueueResults(plan, { ...needs, select: { result: "failure" } }),
+    ).toThrow();
+    expect(() =>
+      verifyMergeQueueResults(plan, { ...needs, unknown: { result: "skipped" } }),
+    ).toThrow();
+    // The metadata gate never accepts a merge-queue receipt, nor the reverse.
+    expect(() => verifyMetadataResults(plan, needs)).toThrow();
+    expect(() => verifyResults(plan, needs, "push")).toThrow();
   });
 });

@@ -83,7 +83,8 @@ the incident-specific recovery procedure below when necessary.
 The five required workflows also run for the `merge_group` event, so the ruleset
 can require a merge queue without a check staying pending. A queue entry is
 main plus the entries ahead of it plus one pull request. CI gives it the
-complete validation that main gets; `Validate conventional commit title` and
+complete validation that main gets, and the push of a queue-validated commit to
+main reuses that run instead of repeating it; `Validate conventional commit title` and
 `check / record signature` report without repeating work that needs a pull
 request, because every queued pull request already passed them.
 

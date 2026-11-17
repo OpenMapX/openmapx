@@ -27,8 +27,12 @@ They are not fresh CI measurements or production latency percentiles.
 ## API cache export policy
 
 API validation and trusted image builds export the minimal cache (`mode=min`).
-They keep the existing `api` scope and cache imports. Other image targets retain
-`mode=max`; the comparison measured the API only. Release provenance, SBOMs,
+They keep the existing `api` scope and cache imports. Other trusted image targets
+retain `mode=max`; the comparison measured the API only. Pull-request validation
+exports `mode=min` for every target: a pull request's cache serves only that pull
+request, and on 17 November 2026 full exports of four open pull requests held
+5.5 GB of the 10 GB Actions cache, evicted each other before reuse, and took up
+to 145 seconds per web build to write. Release provenance, SBOMs,
 scans and the full required validation gate remain in place. The release planner
 still cold-builds an image when its last cold refresh is at least seven days old.
 
@@ -354,13 +358,42 @@ drops a group from a pull request's database matrix when trusted main's
 those three groups can be listed. The plan records the result as
 `deferredDatabaseGroups`; the aggregate gate checks the shard receipts against
 the same plan and rejects a deferral on any event other than `pull_request`.
-Merge-queue, `main`, scheduled and manual runs always run every group.
+Merge-queue, scheduled and manual runs always run every group; a push to `main`
+runs every group unless it reuses a merge-queue run, as described below.
 
 The ruleset requires the merge queue since 16 November 2026 and the list names
 all three groups. A pull request that breaks one of them passes its own run and
 is refused by the queue. Empty the list before removing the queue requirement:
 with the list set and no queue, a recovery regression would be found on `main`
 after the merge instead of before it.
+
+## Main reuses the merge queue's validation
+
+The merge queue moves `main` to the exact commit an entry validated. The push of
+that commit used to run the complete validation a second time: between 16 November 18:00 and 17 November 12:30 UTC, ten such pushes
+used about 2,000 runner-minutes, about a quarter of all CI time in that window.
+
+A push to `main` now looks for a `merge_group` CI run of the same workflow for
+the same commit, on a `gh-readonly-queue/main/` branch, whose run, selector and
+`lint / types / test` gate succeeded and whose every job succeeded or was
+skipped. A merge-queue run has the full scope and defers no database group, which
+its own gate enforced. When the push is still current `main` and such a run
+exists, the plan records it as `validationSource` with reason
+`merge-queue-validated`, and every validation job is skipped. The aggregate gate
+reads the run's provider records again before it passes, so the release below it
+publishes only a commit that a complete run validated.
+
+Anything else keeps the complete validation: a force-merged commit, which has no
+queue run, a merge-queue run that is not finished or not entirely green, a
+re-run, a scheduled or manual run, or any lookup failure. Because such a push
+installs nothing, the `keep main's dependency cache` job installs once when the
+pnpm store for the current lockfile is missing, so pull requests keep restoring
+it from `main`. The Turbo build cache is saved only from `main`, keeping just
+the artifacts of the tasks in that build's run summaries, so the entry no longer
+grows with every save; entries from pull requests and merge-queue refs could be
+read by no other run. Because reused pushes skip the build, that cache is saved
+by the daily scheduled run and by pushes that validate in full, so it can be up
+to a day behind `main`.
 
 ## Stopping a pull request's run after a lint failure
 

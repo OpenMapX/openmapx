@@ -137,6 +137,55 @@ describe("CI scheduling and context preservation", () => {
       ci.jobs.types.steps.some((step: { run?: string }) => step.run?.includes("unenforced")),
     ).toBe(false);
   });
+  it("lets a main push reuse merge-queue validation only through a verifying gate", () => {
+    type Step = {
+      name?: string;
+      if?: string;
+      run?: string;
+      uses?: string;
+      with?: Record<string, string>;
+    };
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, not a JS template
+    expect(ci.jobs.select.outputs.reason).toBe("${{ steps.select.outputs['reason'] }}");
+    expect(ci.jobs.ci.if).toContain("needs.select.outputs.reason == 'merge-queue-validated'");
+    const steps: Step[] = ci.jobs.ci.steps;
+    const verifier = (run: string) =>
+      steps.find((step) => step.run === `node scripts/ci-impact-plan.mjs ${run}`);
+    // With code false exactly one verifier runs, so the gate is never a green no-op.
+    expect(verifier("verify")?.if).toBe(
+      "needs.select.outputs.code != 'false' || needs.select.result != 'success'",
+    );
+    expect(verifier("verify-reuse")?.if).toBe(
+      "needs.select.result == 'success' && needs.select.outputs.code == 'false' && needs.select.outputs.reason != 'merge-queue-validated'",
+    );
+    expect(verifier("verify-merge-queue")?.if).toBe(
+      "needs.select.result == 'success' && needs.select.outputs.code == 'false' && needs.select.outputs.reason == 'merge-queue-validated'",
+    );
+    expect(ci.jobs.release.needs).toBe("ci");
+
+    const warm = ci.jobs["warm-dependency-cache"];
+    expect(warm.if).toBe(
+      "github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.select.outputs.reason == 'merge-queue-validated'",
+    );
+    expect(warm.permissions).toEqual({ contents: "read" });
+    expect(ci.jobs.ci.needs).not.toContain("warm-dependency-cache");
+  });
+  it("saves Actions caches only where another run can restore them", () => {
+    type Step = { name?: string; if?: string; uses?: string; with?: Record<string, string> };
+    const build: Step[] = ci.jobs.build.steps;
+    const main =
+      "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule')";
+    expect(build.some((step) => /^actions\/cache@/.test(step.uses ?? ""))).toBe(false);
+    const save = build.find((step) => step.uses?.startsWith("actions/cache/save@"));
+    expect(save?.if).toBe(main);
+    expect(
+      build.find((step) => step.name === "Prune Turbo build outputs this build did not use")?.if,
+    ).toBe(main);
+    const docker: Step[] = ci.jobs["docker-build"].steps;
+    const image = docker.find((step) => step.uses?.startsWith("docker/build-push-action@"));
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, not a JS template
+    expect(image?.with?.["cache-to"]).toBe("type=gha,mode=min,scope=${{ matrix.app }}");
+  });
   it("reports every required check for a merge-queue entry", () => {
     const load = (name: string) =>
       parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
