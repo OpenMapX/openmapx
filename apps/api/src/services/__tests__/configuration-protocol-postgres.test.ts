@@ -640,6 +640,42 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(await dm!.fenceStates()).toEqual(["settled"]);
     }, 120000);
 
+    it("settles a preparation data-manager refuses, releases its targets and saves nothing", async () => {
+      await coordinator();
+      // A running data job keeps data-manager from preparing the fence. Data-
+      // manager's tables are shared by every fixture, so the job is removed after.
+      const dataJob = randomUUID();
+      await fixture.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key)
+        VALUES(${dataJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`})`;
+      const ctx = await job();
+      const outcome = await owned(ctx, async () => {
+        const candidate = await credentialCandidate(ctx, "synthetic-refused-credential");
+        return prospective.persistAndApplyProspectiveConfiguration(candidate, {
+          coordinatorMode: "require-running",
+          signal: ctx.signal,
+        });
+      })
+        .then(
+          (value) => ({ value }),
+          (error: Error & { errorClass?: unknown }) => ({ error: error.errorClass }),
+        )
+        .finally(() => fixture.sql`DELETE FROM data_manager.jobs WHERE id=${dataJob}`);
+      // The job fails busy without recovery: no fence, no rows, no generation.
+      expect(outcome).toEqual({ error: "busy" });
+      expect(await dm!.fenceStates()).toEqual([]);
+      expect(phase(ctx.checkpointResult ?? {})).toBe("discarded");
+      expect(readdirSync(host.candidates)).toEqual([]);
+      expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
+      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
+      expect(agentRecord(ctx)).toMatchObject({
+        state: "settled",
+        generation: "not_started",
+        fence: null,
+      });
+      expect(admitted("configurationMaintenance.apply")).toHaveLength(0);
+      expect(heldTargets(host.infraDir)).toEqual([]);
+    }, 120000);
+
     it("refuses the same immediate key with a different intent before any effect", async () => {
       await coordinator();
       const { jobRunner } = await import("../job-runner");
