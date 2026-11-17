@@ -327,7 +327,8 @@ describe("producer → Fastify JSON → generated runtime metadata SDK", () => {
       expect(unchanged.headers.get("etag")).toBe(etag);
       expect(wire.at(-1)?.body).toBe("");
     }
-    rich.strings.en = { name: "Changed public name" };
+    // The host replaces an integration's strings; it never edits them in place.
+    rich.strings = { ...rich.strings, en: { name: "Changed public name" } };
     const changed = await getApiIntegrations({ "if-none-match": etag }, { client });
     expect(changed.status).toBe(200);
     if (changed.status !== 200) throw new Error("Expected changed metadata response");
