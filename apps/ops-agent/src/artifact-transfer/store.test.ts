@@ -277,11 +277,25 @@ it("protects accepted writer against simultaneous upload and delete, then awaits
   const { store } = await fixture();
   const stage = await store.createStage({ ...input(), declaredBytes: 4 });
   let controller!: ReadableStreamDefaultController<Uint8Array>;
-  const body = new ReadableStream<Uint8Array>({
-    start(c) {
-      controller = c;
-    },
+  let reading!: () => void;
+  // The store reads the body only after it has acquired the Linux byte owner
+  // (an async flock child) and registered the accepted stream, so the first
+  // pull marks the accepted writer instead of a wall-clock guess.
+  const readStarted = new Promise<void>((resolve) => {
+    reading = resolve;
   });
+  const body = new ReadableStream<Uint8Array>(
+    {
+      start(c) {
+        controller = c;
+      },
+      pull() {
+        reading();
+        return new Promise<void>(() => {});
+      },
+    },
+    { highWaterMark: 0 },
+  );
   const abort = new AbortController();
   const first = store.upload({
     stageId: stage.stageId,
@@ -292,7 +306,8 @@ it("protects accepted writer against simultaneous upload and delete, then awaits
     body,
     signal: abort.signal,
   });
-  await new Promise((r) => setTimeout(r, 10));
+  // Surface an early upload refusal instead of waiting for a read that never comes.
+  await Promise.race([readStarted, first]);
   expect(store.activeStreams).toBe(1);
   await expect(store.deleteStage({ stageId: stage.stageId, ownerId })).rejects.toMatchObject({
     statusCode: 409,
