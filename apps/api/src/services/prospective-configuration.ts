@@ -393,7 +393,8 @@ async function verifyConfigurationCommitParticipant(
       state.record.apiFollowUp !== "platform-apply" ||
       state.source?.sourceRevision !== intent.sourceRevision ||
       canonicalJson(state.payload.platform) !== canonicalJson(intent.configuration) ||
-      canonicalJson(state.record.privatePlatformIntent) !== canonicalJson(intent)
+      canonicalJson({ ...state.record.privatePlatformIntent, authorization: undefined }) !==
+        canonicalJson({ ...intent, authorization: undefined })
     )
       throw Error("Original platform candidate required");
   }
@@ -3578,6 +3579,19 @@ export async function prepareProspectiveConfiguration(input: {
           if (!coreServices.validateTrustedConfigurationValues(entry.values, manifest.configSchema))
             throw Error("Configuration schema rejected");
         }
+        const reused = await reusePreparedCandidate({
+          writer,
+          operationKey: input.operationKey,
+          expectedCurrentRevisionId: input.expectedCurrentRevisionId,
+          overlay,
+          payload,
+          fingerprint,
+          source,
+          rows: merged,
+          sourceRows: context,
+          integrationReloadSnapshot,
+        });
+        if (reused) return reused;
         const candidateId = coordinator?.candidateId ?? randomUUID();
         const affectedServiceIds = platformIntent
           ? [...platformIntent.affectedServiceIds]
@@ -3911,6 +3925,84 @@ export async function prepareProspectiveConfiguration(input: {
     throw error;
   });
   return result;
+}
+
+/** A rerun of a job step continues with the maintenance candidate the step
+ * prepared before a restart, keeping its identifiers and operation keys, as
+ * long as its rows were not saved and still build exactly the same payload. */
+async function reusePreparedCandidate(input: {
+  writer: AdministrativeConfigurationWriter;
+  operationKey: string;
+  expectedCurrentRevisionId: string | null;
+  overlay: Overlay;
+  payload: TrustedConfigurationPayload;
+  fingerprint: string;
+  source: ConfigurationSourcesInspection;
+  rows: NonNullable<CandidateState["rows"]>;
+  sourceRows: NonNullable<CandidateState["sourceRows"]>;
+  integrationReloadSnapshot: CandidateState["integrationReloadSnapshot"];
+}): Promise<ValidatedConfigurationCandidate | undefined> {
+  const { job } = administrativeConfigurationState(input.writer),
+    retained = job.checkpointResult?._configurationCandidate as Record<string, unknown> | undefined;
+  if (
+    !retained ||
+    retained.operationKey !== input.operationKey ||
+    typeof retained.maintenanceId !== "string" ||
+    typeof retained.sealedOperationKey !== "string" ||
+    !["prepared", "save_attempted"].includes(String(retained.phase)) ||
+    job.checkpointResult?._configurationMaintenanceDecision !== undefined ||
+    job.checkpointResult?._configurationMaintenanceRollback !== undefined
+  )
+    return undefined;
+  const { record, payload, snapshot } = await readConfigurationCandidate(
+    retained.sealedOperationKey,
+  );
+  if (
+    record.candidateId !== retained.candidateId ||
+    record.maintenanceId !== retained.maintenanceId ||
+    record.apiJobId !== job.jobId ||
+    record.sourceFingerprint !== input.fingerprint ||
+    record.expectedSourceRevision !== input.source.sourceRevision ||
+    canonicalJson(record.privateOverlay) !== canonicalJson(input.overlay) ||
+    canonicalJson(payload) !== canonicalJson(input.payload)
+  )
+    throw new JobObservationPending("recovery_required");
+  const candidate = Object.freeze({
+    candidateId: record.candidateId,
+    operationKey: input.operationKey,
+    expectedCurrentRevisionId: input.expectedCurrentRevisionId,
+    revisionId: snapshot.revisionId,
+    sourceFingerprint: record.sourceFingerprint,
+    payloadBytes: Buffer.byteLength(JSON.stringify(payload)),
+    affectedServiceIds: Object.freeze([...record.affectedServiceIds]),
+  }) as ValidatedConfigurationCandidate;
+  candidates.set(candidate, {
+    writer: input.writer,
+    overlay: input.overlay,
+    payload,
+    sealed: {
+      revisionId: snapshot.revisionId,
+      operation: opsOperationSchema.parse(record.operation),
+      operationFingerprint: snapshot.operationFingerprint,
+      snapshot,
+    },
+    record,
+    publisher: publisherOptions(await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""))),
+    source: input.source,
+    preview: configurationHardlinksPreviewSchema.parse(retained.preview),
+    rows: input.rows,
+    sourceRows: {
+      serviceRows: input.sourceRows.serviceRows,
+      integrationRows: input.sourceRows.integrationRows,
+      serviceSecretRows: input.sourceRows.serviceSecretRows,
+      integrationSecretRows: input.sourceRows.integrationSecretRows,
+    },
+    persisted: false,
+    integrationReloadSnapshot: input.integrationReloadSnapshot,
+  });
+  candidateStages.set(candidate, "prepared");
+  await verifyConfigurationCommitParticipant(candidate, input.writer);
+  return candidate;
 }
 
 /** Local count arithmetic only. No future decision body/root is allocated.

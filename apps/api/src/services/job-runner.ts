@@ -217,18 +217,11 @@ function hasRetainedQueuedCoordinator(job: {
   if (!payload) return false;
   const batch = (job.result as Record<string, unknown> | null)?._serviceUpdateBatch;
   if (job.type === "service.bulk" && payload.action === "update" && batch) return true; // Routing only; the fixed handler validates the actual owned batch/ACK chain.
+  // A reclaimed update runs its handler again: every step it takes is keyed by
+  // the job, so a step already sent to the agent returns its original operation.
+  if (job.type === "system.update")
+    return guardedSystemReleasePayloadSchema.safeParse(payload).success;
   if (!candidate) return false;
-  if (job.type === "system.update") {
-    const fixed = (job.result as Record<string, unknown> | null)?._systemRelease;
-    return (
-      guardedSystemReleasePayloadSchema.safeParse(payload).success &&
-      !!fixed &&
-      typeof fixed === "object" &&
-      (fixed as { operationKey?: unknown }).operationKey ===
-        createDurableOpsKey("admin-job.guarded-release", job.id) &&
-      candidate.operationKey === createDurableOpsKey("admin-job.guarded-release", job.id)
-    );
-  }
   const ordinal =
     job.type === "service.apply" &&
     payload.service === "data-manager" &&
