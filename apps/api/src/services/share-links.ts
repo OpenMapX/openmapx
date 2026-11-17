@@ -22,6 +22,7 @@ import {
   type SavedPlaceFieldContributors,
 } from "@openmapx/core/saved-place-contributors";
 import type { ExportPlace } from "@openmapx/core/saved-place-export";
+import { shareLink } from "../db/share-link-schema";
 
 export type {
   OwnerShare,
@@ -244,6 +245,18 @@ export function toPublicListShare(mode: ShareMode, snap: StoredListSnapshot): Pu
 export function toPublicRouteShare(route: RouteSharePayload): PublicRouteShare {
   return { type: "route", mode: "snapshot", route };
 }
+
+/** Columns `toOwnerShare` reads, so owner queries never load the hash or snapshot. */
+export const ownerShareColumns = {
+  id: shareLink.id,
+  targetType: shareLink.targetType,
+  targetId: shareLink.targetId,
+  mode: shareLink.mode,
+  label: shareLink.label,
+  createdAt: shareLink.createdAt,
+  updatedAt: shareLink.updatedAt,
+  expiresAt: shareLink.expiresAt,
+};
 
 /** Owner projection: every field copied explicitly — never the hash or snapshot. */
 export function toOwnerShare(row: {
