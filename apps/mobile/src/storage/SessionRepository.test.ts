@@ -1,4 +1,4 @@
-import type { MobileNavigationSession } from "@openmapx/core/navigation";
+import { type MobileNavigationSession, parseMobileSession } from "@openmapx/core/navigation";
 import type { Database } from "./database";
 import { migrateSessionSchema } from "./migrations";
 import {
@@ -8,9 +8,15 @@ import {
   type RepositoryMutation,
   SessionRepository,
 } from "./SessionRepository";
-import { UPSERT_ACTIVE } from "./sql";
+import { DELETE_ACTIVE, UPSERT_ACTIVE } from "./sql";
 import { openTestDatabase } from "./testing/nodeSqliteDatabase";
 import { groundSessionFixture, nextRevision } from "./testing/sessionFixture";
+
+jest.mock("@openmapx/core/navigation", () => {
+  const actual = jest.requireActual("@openmapx/core/navigation");
+  return { ...actual, parseMobileSession: jest.fn(actual.parseMobileSession) };
+});
+const parseSpy = jest.mocked(parseMobileSession);
 
 const NOW = 1_700_000_100_000;
 const databases: Database[] = [];
@@ -469,6 +475,119 @@ describe("SessionRepository", () => {
       expect(usage?.bytes).toBeGreaterThan(0);
       expect(usage?.bytes).toBeLessThanOrEqual(1024 * 1024);
       expect((await repository.listDiagnostics()).at(-1)?.createdAtMs).toBe(NOW + 11);
+    });
+  });
+
+  describe("parse memo", () => {
+    beforeEach(() => parseSpy.mockClear());
+
+    it("validates unchanged stored text once and returns independent copies", async () => {
+      const { repository } = await freshRepository();
+      await repository.createPreparing(groundSessionFixture({ status: "active" }));
+
+      const first = await repository.loadActive(NOW);
+      const second = await repository.loadActive(NOW);
+      await expect(repository.inspectActive(NOW)).resolves.toEqual({
+        kind: "active",
+        session: first,
+      });
+
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+      expect(second).toEqual(first);
+      expect(second).not.toBe(first);
+      const fresh = parseMobileSession(JSON.stringify(groundSessionFixture({ status: "active" })));
+      expect(fresh.ok && fresh.session).toEqual(first);
+    });
+
+    it("keeps a caller's mutation out of the next read", async () => {
+      const { repository } = await freshRepository();
+      await repository.createPreparing(groundSessionFixture({ status: "active" }));
+
+      // Mutate both the decoded read and a remembered one.
+      for (let read = 0; read < 2; read += 1) {
+        const session = await repository.loadActive(NOW);
+        if (session?.kind !== "ground") throw new Error("expected a ground session");
+        session.status = "stopped";
+        session.payload.startPackage.route.geometry.push([9, 51]);
+        session.cueLedger.spoken.push("mutated");
+      }
+
+      const next = await repository.loadActive(NOW);
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+      const fresh = parseMobileSession(JSON.stringify(groundSessionFixture({ status: "active" })));
+      expect(fresh.ok && fresh.session).toEqual(next);
+    });
+
+    it("reuses the read parse inside compare-and-swap and reflects every new write", async () => {
+      const { database, repository } = await freshRepository();
+      await repository.createPreparing(groundSessionFixture());
+      await repository.loadActive(NOW);
+
+      const committed = await repository.compareAndSwap(
+        "session-1",
+        1,
+        (current) => {
+          current.locale = "de";
+          return activate(current);
+        },
+        NOW,
+      );
+      expect(committed.ok).toBe(true);
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+
+      const afterWrite = await repository.loadActive(NOW);
+      expect(afterWrite).toMatchObject({ revision: 2, status: "active", locale: "de" });
+      expect(parseSpy).toHaveBeenCalledTimes(2);
+
+      // Another context replacing the row is seen on the next read.
+      const elsewhere = groundSessionFixture({ sessionId: "session-9", revision: 7 });
+      await database.runAsync(UPSERT_ACTIVE, [
+        "session-9",
+        7,
+        "ground",
+        "preparing",
+        elsewhere.startedAtMs,
+        elsewhere.updatedAtMs,
+        elsewhere.expiresAtMs,
+        JSON.stringify(elsewhere),
+      ]);
+      expect(await repository.loadActive(NOW)).toMatchObject({
+        sessionId: "session-9",
+        revision: 7,
+      });
+      expect(parseSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it("never remembers a corrupt row and still quarantines it", async () => {
+      const { database, repository } = await freshRepository();
+      await database.runAsync(UPSERT_ACTIVE, ["session-1", 3, "ground", "active", 1, 1, 2, "{bad"]);
+
+      expect(await repository.loadActive(NOW)).toBeNull();
+      expect(await repository.listQuarantined()).toHaveLength(1);
+
+      await database.runAsync(UPSERT_ACTIVE, ["session-1", 3, "ground", "active", 1, 1, 2, "{bad"]);
+      expect(await repository.loadActive(NOW)).toBeNull();
+      expect(await repository.listQuarantined()).toHaveLength(2);
+      expect(parseSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns nothing once the row is gone, then reads the next session afresh", async () => {
+      const { database, repository } = await freshRepository();
+      await repository.createPreparing(groundSessionFixture({ status: "active" }));
+      expect(await repository.loadActive(NOW)).not.toBeNull();
+
+      await database.runAsync(DELETE_ACTIVE);
+      expect(await repository.loadActive(NOW)).toBeNull();
+
+      await repository.createPreparing(groundSessionFixture({ status: "active" }));
+      await repository.terminate("session-1", "stopped", NOW);
+      expect(await repository.loadActive(NOW)).toBeNull();
+
+      // The same text again is decoded afresh: nothing survived the deletes.
+      await repository.createPreparing(groundSessionFixture({ status: "active" }));
+      parseSpy.mockClear();
+      expect(await repository.loadActive(NOW)).toMatchObject({ sessionId: "session-1" });
+      expect(parseSpy).toHaveBeenCalledTimes(1);
     });
   });
 
