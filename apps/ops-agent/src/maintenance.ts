@@ -33,7 +33,7 @@ const NAMESPACE = "maintenance";
 const MAX_RECORDS = 64;
 
 /** The record plus what the agent planned at admission and runs its steps with. */
-export const maintenanceFileSchema = z.strictObject({
+const maintenanceFileSchema = z.strictObject({
   version: z.literal(1),
   record: maintenanceRecordSchema,
   plan: z.lazy(() => fixedConfigurationMaintenancePlanSchema),
@@ -44,7 +44,7 @@ export const maintenanceFileSchema = z.strictObject({
 export type MaintenanceFile = z.infer<typeof maintenanceFileSchema>;
 
 /** What one step reported. `result` is the generation step's apply result. */
-export interface MaintenanceStepResult {
+interface MaintenanceStepResult {
   outcome: MaintenanceStepOutcome;
   appliedRevisionId?: string;
   result?: unknown;
@@ -108,19 +108,7 @@ export function readMaintenance(
   return file;
 }
 
-export function findMaintenance(
-  installation: ControlInstallation,
-  maintenanceId: string,
-): MaintenanceFile | undefined {
-  try {
-    return readMaintenance(installation, maintenanceId);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-}
-
-export function listMaintenance(installation: ControlInstallation): MaintenanceFile[] {
+function listMaintenance(installation: ControlInstallation): MaintenanceFile[] {
   const state = installationState(installation);
   const directory = state.privateRoot.directory(NAMESPACE, true, true);
   let names: string[];

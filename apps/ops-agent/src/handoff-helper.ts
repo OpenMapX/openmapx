@@ -2,11 +2,13 @@
  * progress before each effect, stops before the next target once its child is
  * cancel_pending and settles its own child. Docker effects come from the host. */
 import { createHash } from "node:crypto";
-import type {
-  ControlInstallation,
-  LeaseChild,
-  LeaseRecord,
-  LocalLeaseBackend,
+import {
+  type ControlInstallation,
+  type LeaseChild,
+  type LeaseRecord,
+  type LeaseStore,
+  leaseRules,
+  localLeaseBackend,
 } from "@openmapx/core/build-artifacts";
 import type { HandoffProgress } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -27,7 +29,7 @@ export interface HandoffHelperHost {
   verifyAll(file: MaintenanceFile, signal: AbortSignal): Promise<void>;
 }
 
-export class HandoffCancelled extends Error {
+class HandoffCancelled extends Error {
   constructor() {
     super("Configuration handoff cancelled");
     this.name = "HandoffCancelled";
@@ -48,7 +50,7 @@ function childOf(lease: LeaseRecord | undefined, key: string): LeaseChild {
 
 export async function runConfigurationHandoff(input: {
   installation: ControlInstallation;
-  leases: LocalLeaseBackend;
+  store: LeaseStore;
   host: HandoffHelperHost;
   maintenanceId: string;
   handoffId: string;
@@ -73,13 +75,21 @@ export async function runConfigurationHandoff(input: {
     record.leaseId !== input.leaseId
   )
     throw Error("Original active configuration handoff required");
-  const initial = childOf(input.leases.readSync(input.leaseId), input.leaseChild);
-  // A child adopted before is a helper that ran already: its outcome is read, never repeated.
-  if (initial.adopted) throw Error("Configuration helper already started");
-  await input.leases.adopt({
-    leaseId: input.leaseId,
-    key: input.leaseChild,
-    execution: initial.execution,
+  const leases = localLeaseBackend(input.store);
+  // Adoption is checked and recorded in one locked store update: a child adopted
+  // before is a helper that ran already, whose outcome is read, never repeated.
+  const initial = await input.store.update((records) => {
+    const child = childOf(
+      records.find((lease) => lease.leaseId === input.leaseId),
+      input.leaseChild,
+    );
+    if (child.adopted) throw Error("Configuration helper already started");
+    leaseRules.adopt(
+      records,
+      { leaseId: input.leaseId, key: input.leaseChild, execution: child.execution },
+      Date.now(),
+    );
+    return structuredClone(child);
   });
   let progress: HandoffProgress = {
     version: 1,
@@ -109,7 +119,7 @@ export async function runConfigurationHandoff(input: {
       value.serviceId === serviceId ? { ...value, ...change } : value,
     );
   const settle = (outcome: "committed" | "contained") =>
-    input.leases.settle({
+    leases.settle({
       leaseId: input.leaseId,
       key: input.leaseChild,
       settlement: {
@@ -121,7 +131,7 @@ export async function runConfigurationHandoff(input: {
     });
   /** A cancel stops before the next target; the targets done so far stay done. */
   const forward = () => {
-    const current = childOf(input.leases.readSync(input.leaseId), input.leaseChild);
+    const current = childOf(leases.readSync(input.leaseId), input.leaseChild);
     if (current.state === "cancel_pending") throw new HandoffCancelled();
     if (current.state !== "held" || Date.now() >= current.execution.deadlineAt)
       throw Error("Configuration helper lease no longer permits effects");

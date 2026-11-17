@@ -5,6 +5,7 @@ import {
   type ControlInstallation,
   closeControlInstallation,
   controlChildOperationKey,
+  type LeaseStore,
   type LocalLeaseBackend,
   leaseStoreDirectory,
   localLeaseBackend,
@@ -125,6 +126,7 @@ function execution(operationKey: string, executor: ExecutionRef["executor"]): Ex
 let root: string;
 let installation: ControlInstallation;
 let leases: LocalLeaseBackend;
+let store: LeaseStore;
 let maintenance: ConfigurationMaintenance;
 let replaced: string[];
 
@@ -234,9 +236,8 @@ beforeEach(() => {
   mkdirSync(join(infraDir, "data"), { recursive: true });
   provisionControlDirectories(infraDir);
   installation = openControlInstallation({ infraDir, role: "ops-agent" });
-  leases = localLeaseBackend(
-    openLeaseStore({ directory: leaseStoreDirectory(infraDir), purpose: "test" }),
-  );
+  store = openLeaseStore({ directory: leaseStoreDirectory(infraDir), purpose: "test" });
+  leases = localLeaseBackend(store);
   replaced = [];
 });
 afterEach(() => {
@@ -247,7 +248,7 @@ afterEach(() => {
 const run = (leaseId: string, helperHost = host()) =>
   runConfigurationHandoff({
     installation,
-    leases,
+    store,
     host: helperHost,
     maintenanceId,
     handoffId,
@@ -321,6 +322,16 @@ describe("configuration helper", () => {
     const child = leases.readSync(leaseId)?.children.find((value) => value.key === handoffId);
     expect(child).toMatchObject({ adopted: true, state: "held" });
     expect(child?.settlement).toBeUndefined();
+  });
+
+  it("lets only one of two concurrent helpers adopt the child", async () => {
+    const leaseId = await launched();
+    const results = await Promise.allSettled([run(leaseId), run(leaseId)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      reason: expect.objectContaining({ message: "Configuration helper already started" }),
+    });
+    expect(replaced).toHaveLength(targets.length);
   });
 
   it("refuses to run a second time once its child was adopted", async () => {
