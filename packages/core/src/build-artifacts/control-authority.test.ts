@@ -52,7 +52,7 @@ it("renewal refuses an expired timed root after all original identity details we
         serviceIds: ["osrm"],
       }),
     ).toThrow(/expired|expiry|deadline/i);
-    expect(existsSync(join(root, `control-private/host-cli/executions/${operationKey}.json`))).toBe(
+    expect(existsSync(join(root, `state/host-cli/control/executions/${operationKey}.json`))).toBe(
       false,
     );
   } finally {

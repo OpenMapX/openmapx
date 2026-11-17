@@ -2157,8 +2157,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           readFileSync(
             join(
               host.infraDir,
-              "control-private",
-              "ops-agent",
+              "state/ops-agent/control",
               "configuration-maintenance",
               `${checkpoint._configurationMaintenance.receipt.binding.maintenanceId}.json`,
             ),
