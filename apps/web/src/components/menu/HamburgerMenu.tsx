@@ -33,19 +33,53 @@ import {
 } from "@openmapx/core";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { type ChangeEvent, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type ComponentProps,
+  type ComponentType,
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { useSignOut } from "@/components/auth/useSignOut";
 import { InstallEntry, IosInstallHintDialog } from "@/components/pwa/InstallEntry";
-import { SettingsDialog } from "@/components/settings/SettingsDialog";
-import { StorageDialog } from "@/components/settings/StorageDialog";
+import type { SettingsDialog as SettingsDialogComponent } from "@/components/settings/SettingsDialog";
+import type { StorageDialog as StorageDialogComponent } from "@/components/settings/StorageDialog";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { IMPORT_ACCEPT, importGeoFromFile } from "@/lib/importGeoFile";
 import { useBackDismiss } from "@/lib/useBackDismiss";
 import { useFinePointer } from "@/lib/useFinePointer";
+import { useOpenedOnce } from "@/lib/useOpenedOnce";
+import { warmChunksOnIdle } from "@/lib/warmChunksOnIdle";
 import { useAccountSettingsStore } from "@/stores/accountSettingsStore";
 import { MenuAccountHeader } from "./MenuAccountHeader";
 import { MenuRow } from "./MenuRow";
+
+// Settings and Storage are opened rarely, but Settings alone carries the EV
+// vehicle table (~300 kB of source). Load each on its first opening; once loaded
+// it stays mounted, exactly like the always-rendered dialog it replaces.
+const loadSettingsDialog = () => import("@/components/settings/SettingsDialog");
+const loadStorageDialog = () => import("@/components/settings/StorageDialog");
+
+// A chunk that fails to load (offline before warm-up, or a deploy removed it)
+// renders nothing instead of taking the map down, as PanelHost does.
+const NoDialog = () => null;
+
+const SettingsDialog = lazy<ComponentType<ComponentProps<typeof SettingsDialogComponent>>>(() =>
+  loadSettingsDialog().then(
+    (m) => ({ default: m.SettingsDialog }),
+    () => ({ default: NoDialog }),
+  ),
+);
+const StorageDialog = lazy<ComponentType<ComponentProps<typeof StorageDialogComponent>>>(() =>
+  loadStorageDialog().then(
+    (m) => ({ default: m.StorageDialog }),
+    () => ({ default: NoDialog }),
+  ),
+);
 
 const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
@@ -75,6 +109,10 @@ export function HamburgerMenu() {
   const [storageOpen, setStorageOpen] = useState(false);
   const [iosHintOpen, setIosHintOpen] = useState(false);
   const [importFailed, setImportFailed] = useState(false);
+  const settingsLoaded = useOpenedOnce(settingsOpen);
+  const storageLoaded = useOpenedOnce(storageOpen);
+  // An offline session must still be able to open these (sw.ts precaches no chunks).
+  useEffect(() => warmChunksOnIdle([loadSettingsDialog, loadStorageDialog]), []);
   // The command palette is a keyboard tool; touch screens don't list it.
   const finePointer = useFinePointer();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -297,8 +335,16 @@ export function HamburgerMenu() {
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <StorageDialog open={storageOpen} onClose={() => setStorageOpen(false)} />
+      {settingsLoaded && (
+        <Suspense fallback={null}>
+          <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        </Suspense>
+      )}
+      {storageLoaded && (
+        <Suspense fallback={null}>
+          <StorageDialog open={storageOpen} onClose={() => setStorageOpen(false)} />
+        </Suspense>
+      )}
       <IosInstallHintDialog open={iosHintOpen} onClose={() => setIosHintOpen(false)} />
     </>
   );

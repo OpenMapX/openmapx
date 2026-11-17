@@ -29,24 +29,28 @@ vi.mock("./AccountMenu", () => ({
     </div>
   ),
 }));
-vi.mock("./AccountSettingsDialog", () => ({
-  AccountSettingsDialog: ({
-    open,
-    initialSection,
-    user,
-  }: {
-    open: boolean;
-    initialSection: string | null;
-    user: { id: string };
-  }) =>
-    open ? (
-      <div
-        data-testid="account-settings-dialog"
-        data-section={initialSection ?? ""}
-        data-user-id={user.id}
-      />
-    ) : null,
-}));
+const accountSettingsLoads = vi.hoisted(() => ({ current: 0 }));
+vi.mock("./AccountSettingsDialog", () => {
+  accountSettingsLoads.current += 1;
+  return {
+    AccountSettingsDialog: ({
+      open,
+      initialSection,
+      user,
+    }: {
+      open: boolean;
+      initialSection: string | null;
+      user: { id: string };
+    }) =>
+      open ? (
+        <div
+          data-testid="account-settings-dialog"
+          data-section={initialSection ?? ""}
+          data-user-id={user.id}
+        />
+      ) : null,
+  };
+});
 vi.mock("./ResetPasswordDialog", () => ({ ResetPasswordDialog: () => null }));
 
 const { AccountAvatarButton } = await import("./AccountAvatarButton");
@@ -73,6 +77,21 @@ afterEach(() => {
 });
 
 describe("AccountAvatarButton", () => {
+  it("does not load the account settings dialog until the store opens it", async () => {
+    sessionState.current = {
+      data: signedInSession("user-a", "session-a", "Alice"),
+      isPending: false,
+    };
+    render(<AuthorityBoundAvatar />);
+    await screen.findByTestId("private-account-menu");
+    expect(accountSettingsLoads.current).toBe(0);
+
+    act(() => useAccountSettingsStore.getState().show());
+
+    expect(await screen.findAllByTestId("account-settings-dialog")).toHaveLength(1);
+    expect(accountSettingsLoads.current).toBe(1);
+  });
+
   it("does not submit a surrounding form when tapped", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
@@ -107,7 +126,7 @@ describe("AccountAvatarButton", () => {
     );
     await user.click(await screen.findByRole("button", { name: "open account settings" }));
 
-    expect(screen.getAllByTestId("account-settings-dialog")).toHaveLength(1);
+    expect(await screen.findAllByTestId("account-settings-dialog")).toHaveLength(1);
     expect(screen.getByTestId("account-settings-dialog")).toHaveAttribute("data-section", "");
   });
 
@@ -121,7 +140,7 @@ describe("AccountAvatarButton", () => {
 
     act(() => useAccountSettingsStore.getState().show("timeline"));
 
-    expect(screen.getAllByTestId("account-settings-dialog")).toHaveLength(1);
+    expect(await screen.findAllByTestId("account-settings-dialog")).toHaveLength(1);
     expect(screen.getByTestId("account-settings-dialog")).toHaveAttribute(
       "data-section",
       "timeline",

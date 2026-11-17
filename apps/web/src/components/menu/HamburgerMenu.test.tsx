@@ -1,5 +1,5 @@
 import { PANEL, useMenuStore, useSidebarStore } from "@openmapx/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, userEvent } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -15,8 +15,46 @@ vi.mock("@/components/pwa/InstallEntry", () => ({
   InstallEntry: () => null,
   IosInstallHintDialog: () => null,
 }));
-vi.mock("@/components/settings/SettingsDialog", () => ({ SettingsDialog: () => null }));
-vi.mock("@/components/settings/StorageDialog", () => ({ StorageDialog: () => null }));
+// Module evaluations and component mounts, to prove each dialog loads on first
+// open and then stays mounted across close/reopen like the always-rendered one did.
+const dialogLoads = vi.hoisted(() => ({ settings: 0, storage: 0 }));
+const dialogMounts = vi.hoisted(() => ({ settings: 0, storage: 0 }));
+vi.mock("@/components/settings/SettingsDialog", async () => {
+  dialogLoads.settings += 1;
+  const { useEffect } = await import("react");
+  return {
+    SettingsDialog: ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+      useEffect(() => {
+        dialogMounts.settings += 1;
+      }, []);
+      return open ? (
+        <div data-testid="settings-dialog">
+          <button type="button" onClick={onClose}>
+            close settings
+          </button>
+        </div>
+      ) : null;
+    },
+  };
+});
+vi.mock("@/components/settings/StorageDialog", async () => {
+  dialogLoads.storage += 1;
+  const { useEffect } = await import("react");
+  return {
+    StorageDialog: ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+      useEffect(() => {
+        dialogMounts.storage += 1;
+      }, []);
+      return open ? (
+        <div data-testid="storage-dialog">
+          <button type="button" onClick={onClose}>
+            close storage
+          </button>
+        </div>
+      ) : null;
+    },
+  };
+});
 vi.mock("@/lib/deepLink", () => ({ shareCurrentUrl: vi.fn() }));
 vi.mock("@/lib/importGeoFile", () => ({
   IMPORT_ACCEPT: ".gpx",
@@ -49,6 +87,45 @@ function openMenu() {
   act(() => useMenuStore.getState().open());
   return render(<HamburgerMenu />);
 }
+
+// Kept first: a mocked module is evaluated once per file, so the "not loaded
+// yet" assertion must run before any test opens a dialog. jsdom has no
+// navigator.serviceWorker, so the idle warm-up never loads them here.
+describe("HamburgerMenu dialogs load on first open", () => {
+  beforeEach(() => {
+    dialogMounts.settings = 0;
+    dialogMounts.storage = 0;
+  });
+
+  it("does not load the Settings or Storage dialog before it is opened", () => {
+    openMenu();
+    expect(screen.getByRole("button", { name: "menu.settings" })).toBeInTheDocument();
+    expect(dialogLoads).toEqual({ settings: 0, storage: 0 });
+  });
+
+  it.each([
+    ["menu.settings", "settings-dialog", "close settings", "settings"],
+    ["menu.storage", "storage-dialog", "close storage", "storage"],
+  ] as const)(
+    "opens %s on first click and keeps one instance across close and reopen",
+    async (row, testId, closeLabel, key) => {
+      const user = userEvent.setup();
+      openMenu();
+      await user.click(screen.getByRole("button", { name: row }));
+      expect(useMenuStore.getState().isOpen).toBe(false);
+      expect(await screen.findByTestId(testId)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: closeLabel }));
+      expect(screen.queryByTestId(testId)).toBeNull();
+
+      act(() => useMenuStore.getState().open());
+      await user.click(await screen.findByRole("button", { name: row }));
+      expect(await screen.findByTestId(testId)).toBeInTheDocument();
+      expect(dialogLoads[key]).toBe(1);
+      expect(dialogMounts[key]).toBe(1);
+    },
+  );
+});
 
 describe("HamburgerMenu personal timeline navigation", () => {
   it("hides Your timeline while signed out or while session identity is pending", () => {
