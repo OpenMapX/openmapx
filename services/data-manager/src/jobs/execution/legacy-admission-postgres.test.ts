@@ -76,9 +76,10 @@ it.skipIf(!enabled)(
     );
     const owned: string[] = [];
     try {
+      // An agent that gives no answer is unreachable, not one needing an update.
       await expect(
         withLegacyDataMutation("traffic-maintenance", () => ensureTrafficExtract(), rawSql),
-      ).rejects.toThrow("Update the ops-agent before submitting version2 operations");
+      ).rejects.toThrow("Ops agent request failed");
       const rows = (
         await rawSql`SELECT id,status,finished_at,metadata,ownership_version FROM data_manager.jobs WHERE kind='traffic-maintenance'`
       ).filter((row) => !before.has(String(row.id)));
