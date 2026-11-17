@@ -89,15 +89,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await state.fixture?.stop();
     });
 
+    // The held wrong-configuration job keeps its slot in this process's job
+    // runner, so it runs last.
     it.each<Mode>([
       "platform",
       "launch-reply-lost",
       "resource",
       "release",
       "release-slow-pull",
-      "release-wrong-config",
       "system-release",
       "system-release-pull-failure",
+      "release-wrong-config",
     ])(
       "applies or holds a %s change through one maintenance",
       async (mode) => {
