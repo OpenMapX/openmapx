@@ -873,7 +873,7 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       retained.sealedOperationKey !== state.record.operationKey ||
       retained.maintenanceId !== state.record.maintenanceId ||
       retained.prepareOperationKey !== state.record.prepareOperationKey ||
-      !["prepared", "rolled_back", "discarding_unused", "discarded"].includes(
+      !["prepared", "save_attempted", "rolled_back", "discarding_unused", "discarded"].includes(
         String(retained.phase),
       ) ||
       retained.rowVersions !== undefined ||
@@ -1721,7 +1721,9 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
     if (
       !result ||
       !retained ||
-      !["prepared", "saved", "rolled_back"].includes(String(retained.phase)) ||
+      // The saved phase shares the rows' transaction: prepared or save_attempted
+      // in the database means the rows were not saved.
+      !["prepared", "save_attempted", "saved", "rolled_back"].includes(String(retained.phase)) ||
       retained.operationKey !== writer.operationKey ||
       typeof retained.sealedOperationKey !== "string" ||
       (retained.phase !== "rolled_back" && result._configurationMaintenanceRollback !== undefined)
@@ -5204,8 +5206,13 @@ async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurat
     { job } = administrativeConfigurationState(state.writer),
     maintenanceId = state.record.maintenanceId!;
   const cancelled = () => job.protocol?.cancelRequestedAt !== undefined;
+  // A cancelled job starts no apply, but observes the one it already sent: its
+  // result carries the generation the agent committed.
+  const attempted = Object.values(
+    readProjection(job.protocol, job.checkpointResult).operations,
+  ).some((operation) => operation.kind === "configurationMaintenance.apply");
   let applied: OpsResultFor<"configurationMaintenance.apply"> | undefined;
-  if (!cancelled()) applied = await applyConfigurationMaintenance(candidate);
+  if (!cancelled() || attempted) applied = await applyConfigurationMaintenance(candidate);
   let record = applied?.record ?? (await inspectConfigurationMaintenance(maintenanceId));
   let cancelSent = false;
   for (;;) {
