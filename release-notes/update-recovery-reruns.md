@@ -1,5 +1,5 @@
 ---
-impacts: [breaking]
+impacts: [breaking, migration]
 ---
 
 ## What changes
@@ -11,6 +11,15 @@ operations agent returns its original operation instead of being repeated, and a
 step whose request never reached the agent is sent again. Before, such an update
 was held for recovery even when its download had finished, or was abandoned with
 a conflict after the agent had prepared maintenance.
+
+An administrative job whose agent operation was interrupted by an agent restart
+now ends failed with the error code `recovery_required` instead of staying
+running. The agent keeps that operation's services held until an operator
+records the outcome with `openmapx control resolve`.
+
+The API database gains an `admin_job.protocol` column (migration `0066`) that
+holds the job runner's own state. The migration copies nothing: install from an
+empty database, as the update-system replacement requires.
 
 Configuration results in the administration API no longer contain
 `publisherCleanupFailed`; the publisher it described was removed with the sealed
@@ -25,4 +34,6 @@ credentials and configuration job results).
 
 ## Required action
 
-None for updates. API clients should stop reading `publisherCleanupFailed`.
+None for updates. API clients should stop reading `publisherCleanupFailed`. A job
+that ends with `recovery_required` needs `openmapx control status` and
+`openmapx control resolve` as described in the services administration guide.

@@ -491,7 +491,9 @@ hooks, including any running prune pass. Its shutdown deadline is 30 seconds;
 the shipped Compose manifest allows 45 seconds before Docker forces termination.
 Re-render and recreate the agent to adopt that Compose setting. A forced stop,
 process crash or power failure can still leave an operation whose outcome is
-unknown, or a lock whose holder cannot be proved gone.
+unknown, or a lock whose holder cannot be proved gone. The administrative job
+that requested such an operation ends failed with the error code
+`recovery_required`; the operation's services stay held until you resolve it.
 
 If a service reports a busy target, writer or lock after a crash, recover from the
 host:
