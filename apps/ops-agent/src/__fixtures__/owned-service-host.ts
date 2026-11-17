@@ -146,7 +146,10 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const unpulledImages = new Set<string>();
   let registryDown = false;
   const optionsForHelperLaunchResponseLoss = options.configurationHelperLaunchResponseLoss;
-  const helperContainers = new Map<string, unknown>();
+  const helperContainers = new Map<string, { Id: string; Image: string; State: { Running: boolean; ExitCode: number }; Config: { Labels: Record<string, string> } }>();
+  // Runs the helper a `docker run` started; resolves with its exit code.
+  let helperProcess: ((env: Record<string, string>) => Promise<number>) | undefined;
+  const helperById = (id: string) => [...helperContainers.values()].find((value) => value.Id === id);
   const releaseMetadata = options.configurationReleaseMetadata;
   const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args, options) => {
     calls.push([...args]);
@@ -156,9 +159,27 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       if (!name.startsWith("openmapx-configuration-handoff-") || !label.startsWith("openmapx.configuration-handoff=")) throw Error("Unexpected helper launch");
       if (helperContainers.has(name)) throw Error("Duplicate helper launch");
       const Id = "e".repeat(64);
-      helperContainers.set(name, { Id, Image: imageId, Config: { Labels: { "openmapx.configuration-handoff": label.split("=")[1] } } });
+      const container = { Id, Image: imageId, State: { Running: helperProcess !== undefined, ExitCode: 0 }, Config: { Labels: { "openmapx.configuration-handoff": label.split("=")[1]! } } };
+      helperContainers.set(name, container);
+      if (helperProcess) {
+        const env: Record<string, string> = {};
+        args.forEach((value, index) => {
+          const pair = args[index - 1] === "--env" ? value.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s) : null;
+          if (pair) env[pair[1]!] = pair[2]!;
+        });
+        void helperProcess(env).catch(() => 1).then((code) => {
+          container.State = { Running: false, ExitCode: code };
+        });
+      }
       stdout = Id;
       if (optionsForHelperLaunchResponseLoss) throw Error("Named lost Docker launch response");
+    } else if (args[0] === "ps" && args.includes("--filter")) {
+      const label = args[args.indexOf("--filter") + 1]!.replace(/^label=/, "").split("=");
+      stdout = [...helperContainers.values()].filter((value) => value.Config.Labels[label[0]!] === label[1]).map((value) => value.Id).join("\n");
+    } else if (args[0] === "container" && args[1] === "inspect" && args[3] === "{{json .State}}" && helperById(args[4]!)) {
+      stdout = JSON.stringify(helperById(args[4]!)!.State);
+    } else if (args[0] === "rm" && helperById(args[1]!)) {
+      for (const [name, value] of helperContainers) if (value.Id === args[1]) helperContainers.delete(name);
     } else if (args[0] === "container" && args[1] === "inspect" && helperContainers.has(args.at(-1)!)) {
       stdout = JSON.stringify(helperContainers.get(args.at(-1)!));
     } else if(configurationHelperVersion!==undefined && args[0]==="container" && args[1]==="inspect" && args[2]==="--format" && (["{{.Image}}","{{.Config.User}}","{{json .HostConfig.GroupAdd}}","{{json .Mounts}}"].includes(args[3]??"") || args[3]?.includes("range .Config.Env"))) {
@@ -395,6 +416,9 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       creatingProcess = value;
     },
     setRemovingProcess(value: typeof removingProcess) { removingProcess = value; },
+    /** Runs the configuration helper each helper `docker run` starts. */
+    setHelperProcess(value: typeof helperProcess) { helperProcess = value; },
+    helperContainers: () => [...helperContainers.values()],
     setInventoryProcess(value: typeof inventoryProcess) {
       inventoryProcess = value;
     },
