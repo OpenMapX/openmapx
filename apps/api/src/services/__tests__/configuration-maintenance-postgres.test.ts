@@ -88,7 +88,7 @@ async function nativeApiRenewalBlocked(sql: import("postgres").Sql): Promise<voi
       await sql`SELECT 1 FROM pg_stat_activity
         WHERE datname = current_database() AND application_name = ${NATIVE_API_APPLICATION_NAME}
           AND wait_event_type = 'Lock'
-          AND query LIKE ${'update "admin_job" set "result" = coalesce("admin_job"."result", %'}`
+          AND query LIKE ${'update "admin_job" set "protocol" = "admin_job"."protocol" || %'}`
     ).length
   ) {
     if (Date.now() > endBy) {
@@ -466,7 +466,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               : fixture.sql`SELECT xmin::text AS version FROM service_config WHERE service_id='motis'`;
         const relay = await postgresCommitRelay(database, async () => {
           const rows =
-            await fixture.sql`SELECT result FROM admin_job WHERE payload->>'operationKey'=${key} LIMIT 2`;
+            await fixture.sql`SELECT result,protocol FROM admin_job WHERE payload->>'operationKey'=${key} LIMIT 2`;
           if (
             rows.length !== 1 ||
             rows[0]!.result?._configurationCandidate?.phase !==
@@ -853,7 +853,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 database,
                 async (observation) => {
                   const rows =
-                    await fixture.sql`SELECT result FROM admin_job WHERE payload->>'operationKey'=${key} LIMIT 2`;
+                    await fixture.sql`SELECT result,protocol FROM admin_job WHERE payload->>'operationKey'=${key} LIMIT 2`;
                   if (rows.length !== 1) return false;
                   if (knownRollback) {
                     if (observation.command === "BEFORE_SERVICE_SECRET_INSERT") {
@@ -4878,6 +4878,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await fixture.sql`SELECT state,outcome,settled_at,xmin::text AS xmin FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`;
         expect(owner.receipt.state).toBe("settled");
         expect(owner.apiControls.settle!.result).toBeNull();
+        core.verifyLocalArtifactTargetRootRelease(authority);
+        // The restarted agent may complete the settle while it starts.
+        const completedFrom = Date.now();
         await app.close();
         closeControlInstallation(installation);
         const journal = await openOpsJobJournal(
@@ -4900,9 +4903,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           controlInstallation: installation,
         });
         vi.stubEnv("OPS_AGENT_URL", await app.listen({ host: "127.0.0.1", port: 0 }));
-        core.verifyLocalArtifactTargetRootRelease(authority);
-        const completedFrom = Date.now(),
-          result = await maintenance.settleConfigurationMaintenance(request),
+        const result = await maintenance.settleConfigurationMaintenance(request),
           recovered = store.readOwnedConfigurationMaintenance(
             restoreAdmittedControlExecution(installation, prepared.prepare),
           );
