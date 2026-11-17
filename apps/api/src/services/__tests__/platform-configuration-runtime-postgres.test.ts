@@ -1076,6 +1076,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 jobId: accepted.jobId,
               });
               nativeWorkers.push(replacement);
+              if (systemRelease) {
+                // A reclaimed update continues with the candidate it prepared
+                // before the restart: the same preparation, its rows saved and a
+                // continue decision, never an abandon or a second preparation.
+                expect(await replacement.done).toMatchObject({ signal: null });
+                const continued = await readJob(),
+                  result = continued.result as Record<string, unknown>;
+                expect(continued.status).not.toBe("failed");
+                expect((result._configurationCandidate as { phase: string }).phase).toBe("saved");
+                expect(
+                  (result._configurationMaintenanceDecision as { operation: { decision: string } })
+                    .operation.decision,
+                ).toBe("continue");
+                expect(dm.preparePosts).toBe(1);
+                expect(dm.settlePosts).toBe(0);
+                return;
+              }
               expect(await replacement.done).toMatchObject({
                 code: 2,
                 signal: null,
@@ -1088,7 +1105,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 outcome: "not_committed",
                 cleanupFailed: false,
               });
-              if (systemRelease) expect(result.phase).toBe("not_applied");
               expect(await readDesiredPlatform()).toEqual([]);
               expect(dm.preparePosts).toBe(1);
               expect(dm.settlePosts).toBe(1);
