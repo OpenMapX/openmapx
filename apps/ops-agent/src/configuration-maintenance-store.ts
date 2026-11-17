@@ -2339,6 +2339,24 @@ function readFenceNonAdmission(
 function retainConfigurationFenceNotPrepared(authority: VerifiedExecutionAuthority): void {
   const owner = read(authority);
   if (owner.preparedFence || owner.receipt.dmFence) throw Error("A prepared fence is held");
+  const reservation = owner.plan.reservations.find((slot) => slot.phase === "configuration-fence");
+  if (!reservation) throw Error("Original fence preparation reservation required");
+  const binding = lookupControlChildPhaseBinding(authority, reservation);
+  if (binding) {
+    const lease = restoreArtifactTargetLeaseForSettlement(authority);
+    try {
+      if (
+        inspectLocalLeaseChildSettlement(lease, binding.child.execution)?.outcome !==
+        "failed_without_effect"
+      )
+        throw Error("The data-manager has not settled the fence child without effect");
+    } finally {
+      closeArtifactTargetLeaseHandle(lease);
+    }
+  } else if (
+    inspectControlChildPublication(authority, reservation).publication.state !== "unissued"
+  )
+    throw Error("Original fence preparation binding required");
   retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
