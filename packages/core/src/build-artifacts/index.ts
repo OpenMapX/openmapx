@@ -178,6 +178,7 @@ export {
   remoteLeaseBackend,
 } from "./lease-remote";
 export * from "./lease-store";
+export * from "./maintenance-file";
 export * from "./manifest";
 export {
   CANDIDATE_MANIFEST_FILENAME,

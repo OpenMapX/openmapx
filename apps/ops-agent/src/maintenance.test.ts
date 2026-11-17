@@ -16,6 +16,7 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { settleMaintenanceFence } from "../../../packages/cli/src/lib/control-resolve";
 import { buildFixedConfigurationMaintenancePlan } from "../../../packages/core/src/build-artifacts/fixed-configuration-maintenance";
 import {
   ConfigurationMaintenance,
@@ -27,6 +28,11 @@ import {
   readMaintenance,
   writeHandoffProgress,
 } from "./maintenance";
+
+vi.mock("@openmapx/core/data-manager-sdk", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/data-manager-sdk")>()),
+  settleDataConfigurationFence: vi.fn(),
+}));
 
 const maintenanceId = "33333333-3333-4333-8333-333333333333";
 const candidateId = "44444444-4444-4444-8444-444444444444";
@@ -285,6 +291,66 @@ describe("configuration maintenance in the agent", () => {
       maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000)),
     ).rejects.toThrow(MaintenanceTransitionRefused);
     expect(order).toEqual(["prepare-fence"]);
+  });
+
+  it("moves a record needing recovery to settled through the operator's resolve", async () => {
+    const file = admit();
+    adapters.runStep = async () => {
+      throw Error("lost");
+    };
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("recovery_required");
+    const sdk = await import("@openmapx/core/data-manager-sdk");
+    vi.mocked(sdk.settleDataConfigurationFence).mockResolvedValue(fence("settled", file));
+    vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:1");
+    vi.stubEnv("DATA_MANAGER_TOKEN", "x".repeat(43));
+    const evidence = { maintenanceId, candidateId, planDigest: file.plan.planDigest };
+    await settleMaintenanceFence(
+      join(root, "infra", "docker"),
+      {
+        leaseId: "88888888-8888-4888-8888-888888888888",
+        owner: file.plan.prepare,
+        ownerKind: "configurationMaintenance.prepare",
+        targets: ["data-manager"],
+        state: "held",
+        createdAt: Date.now(),
+        children: [
+          {
+            key: "99999999-9999-4999-8999-999999999999",
+            parentKey: null,
+            parent: file.plan.prepare,
+            execution: {
+              ...file.plan.prepare,
+              executor: "data-manager",
+              principal: "data-manager",
+            },
+            kind: "configuration-maintenance.prepare",
+            phase: "configuration-fence",
+            recipient: "data-manager",
+            targets: ["data-manager"],
+            evidence,
+            adopted: true,
+            state: "settled",
+          },
+        ],
+      },
+      "failed",
+    );
+    // The record decides the fence's outcome: the generation was unknown and
+    // is resolved as not committed.
+    expect(vi.mocked(sdk.settleDataConfigurationFence).mock.calls[0]?.[0]).toEqual({
+      ...evidence,
+      outcome: "contained",
+    });
+    expect(readMaintenance(installation, maintenanceId).record).toMatchObject({
+      state: "settled",
+      generation: "not_committed",
+      fenceOutcome: "contained",
+      fence: { state: "settled" },
+    });
+    vi.unstubAllEnvs();
   });
 
   it("gives recovery_required on restart with a step attempted and runs nothing again", async () => {
