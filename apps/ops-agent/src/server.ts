@@ -254,11 +254,8 @@ const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "transitCredentials.inspect",
   "transitousLock.inspect",
   "gbfsCatalogLock.inspect",
-  // The API's own candidate bookkeeping, which recovery reads and cleans up
-  // while a handoff is pending; none of these touches Docker or the generation.
-  "configuration.candidate.retain",
+  // The API's recovery reads its prepared candidate while a handoff is pending.
   "configuration.candidate.read",
-  "configuration.candidate.discard",
 ]);
 const FALLBACK_REQUEST_ID = "ops1_unavailable000000";
 const OPERATION_KIND_SET = new Set<string>(OPS_OPERATION_KINDS);
