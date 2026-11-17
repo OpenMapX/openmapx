@@ -433,7 +433,11 @@ export class CrashHost {
     );
   }
 
-  /** The agent's state directory on its own small tmpfs, so a test can fill it. */
+  /**
+   * The agent's state directory on its own small tmpfs, so a test can fill it.
+   * The agent's control records live there too, and it refuses new work with
+   * less than 64 MiB free, so the filesystem leaves room above that.
+   */
   private mountStateFilesystem() {
     const state = join(this.infraDir, "state");
     mkdirSync(state, { recursive: true, mode: 0o755 });
@@ -447,7 +451,7 @@ export class CrashHost {
         "-t",
         "tmpfs",
         "-o",
-        `size=64m,mode=0755,uid=${uid},gid=${gid}`,
+        `size=128m,mode=0755,uid=${uid},gid=${gid}`,
         "tmpfs",
         state,
       ],
