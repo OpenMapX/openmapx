@@ -369,6 +369,59 @@ describe("configuration maintenance in the agent", () => {
     vi.unstubAllEnvs();
   });
 
+  it("resolves with the record's fence outcome and never while the helper may run", async () => {
+    const file = admit({ handoff: true });
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    const sdk = await import("@openmapx/core/data-manager-sdk");
+    vi.mocked(sdk.settleDataConfigurationFence).mockReset();
+    vi.mocked(sdk.settleDataConfigurationFence).mockResolvedValue(fence("settled", file));
+    vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:1");
+    vi.stubEnv("DATA_MANAGER_TOKEN", "x".repeat(43));
+    const evidence = { maintenanceId, candidateId, planDigest: file.plan.planDigest };
+    const held = {
+      leaseId: "88888888-8888-4888-8888-888888888888",
+      owner: file.plan.prepare,
+      ownerKind: "configurationMaintenance.prepare",
+      targets: ["data-manager"],
+      state: "held" as const,
+      createdAt: Date.now(),
+      children: [
+        {
+          key: "99999999-9999-4999-8999-999999999999",
+          parentKey: null,
+          parent: file.plan.prepare,
+          execution: { ...file.plan.prepare, executor: "data-manager", principal: "data-manager" },
+          kind: "configuration-maintenance.prepare",
+          phase: "configuration-fence",
+          recipient: "data-manager",
+          targets: ["data-manager"],
+          evidence,
+          adopted: true,
+          state: "settled" as const,
+        },
+      ],
+    } as Parameters<typeof settleMaintenanceFence>[1];
+    const infraDir = join(root, "infra", "docker");
+    await expect(
+      settleMaintenanceFence(infraDir, held, "committed", async () => true),
+    ).rejects.toThrow("may still replace services");
+    expect(sdk.settleDataConfigurationFence).not.toHaveBeenCalled();
+    // A record that settled with its outcome fixed decides the fence's outcome.
+    progress("cancelled", "pending");
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 1 };
+    await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
+    const settled = readMaintenance(installation, maintenanceId).record;
+    expect(settled).toMatchObject({ state: "settled", fenceOutcome: "applied" });
+    await settleMaintenanceFence(infraDir, held, "failed", async () => true);
+    expect(vi.mocked(sdk.settleDataConfigurationFence).mock.calls[0]?.[0]).toEqual({
+      ...evidence,
+      outcome: "applied",
+    });
+    vi.unstubAllEnvs();
+  });
+
   it("gives recovery_required on restart with a step attempted and runs nothing again", async () => {
     admit();
     const maintenance = new ConfigurationMaintenance(installation, adapters);

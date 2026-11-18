@@ -62,6 +62,24 @@ export async function dockerDaemonReachable(): Promise<boolean> {
   return result.exitCode === 0;
 }
 
+/** Whether the configuration helper of a handoff may still run: Docker lists
+ * it running, or Docker did not answer. */
+export async function configurationHelperMayRun(handoffId: string): Promise<boolean> {
+  const result = await execa(
+    "docker",
+    [
+      "ps",
+      "--quiet",
+      "--filter",
+      `label=openmapx.configuration-handoff=${handoffId}`,
+      "--filter",
+      "status=running",
+    ],
+    { ...cliProcessOptions(), reject: false, timeout: 15_000 },
+  );
+  return result.exitCode !== 0 || (result.stdout ?? "").trim() !== "";
+}
+
 /**
  * Return the subset of the given compose-service ids that have a container
  * currently running. Uses `docker compose ps` against the generated compose
