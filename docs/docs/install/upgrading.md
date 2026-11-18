@@ -289,17 +289,18 @@ the retry converges on them. The locks stay in place when the failure could not 
 recorded, or when a hardlink request had already been issued to Data Manager. A
 later command that finds a service locked names the operation holding it.
 
-A read-only traffic inspection failure is terminal. Data Manager also settles an
-interrupted legacy data job by observation, at startup and then every minute. It
-looks up each host operation the job recorded by its operation key, and it never
-resubmits or cancels one. A job that recorded no operation, or whose recorded
-operations have all finished, becomes `error` and stops blocking later data jobs.
-A job with an operation that is still running stays interrupted. So does a job
-whose operations the ops-agent cannot answer for, for example while the agent is
-down; it clears on the first pass after the agent answers. When the agent
-restarted mid-operation it reports the operation as failed with a
-recovery-required outcome, which does not prove the host effect ended, so the job
-stays interrupted until the operation's deadline plus 30 seconds has passed.
+A read-only traffic inspection failure is terminal. When Data Manager restarts
+during a traffic, catalog proposal, dataset reload or ambient publication job, the
+new process settles that job by observation, at startup and then every 10 seconds.
+It looks up each host operation the job attempted by its operation key, asks the
+agent to cancel one that is still running, and never resubmits one. Once every
+attempted operation has finished, or none was attempted, the job ends as
+`interrupted` and stops blocking later data jobs. While an operation is still
+running, or the ops-agent cannot answer for it, for example while the agent is
+down, the job keeps data work fenced. When the agent restarted mid-operation it
+reports the operation as failed with a recovery-required outcome, which does not
+prove the host effect ended, so the job waits until the operation's deadline plus
+30 seconds has passed.
 
 ### Operations whose outcome is unknown
 
