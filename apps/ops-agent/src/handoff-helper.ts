@@ -97,7 +97,7 @@ export async function runConfigurationHandoff(input: {
     version: 1,
     maintenanceId: input.maintenanceId,
     handoffId: input.handoffId,
-    phase: "draining",
+    phase: "applying",
     targets: handoff.serviceIds.map((serviceId) => {
       const old = file.originalContainers.find((value) => value.serviceId === serviceId);
       if (!old || old.provenance.imageId !== handoff.expectedImageIdentities[serviceId])
@@ -144,7 +144,6 @@ export async function runConfigurationHandoff(input: {
       forward();
       await input.host.verifyRelease(file, input.signal);
     }
-    save({ phase: "applying" });
     for (const serviceId of services.selfUpdateServiceOrder(handoff.serviceIds)) {
       input.signal.throwIfAborted();
       forward();

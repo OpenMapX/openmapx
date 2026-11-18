@@ -69,26 +69,12 @@ export const handoffProgressSchema = z
     version: z.literal(1),
     maintenanceId: z.uuid(),
     handoffId: z.uuid(),
-    phase: z.enum([
-      "draining",
-      "applying",
-      "verifying",
-      "applied",
-      "rolled_back",
-      "cancelled",
-      "failed",
-    ]),
+    phase: z.enum(["applying", "verifying", "applied", "cancelled", "failed"]),
     targets: z
       .array(
         z.strictObject({
           serviceId: id,
-          phase: z.enum([
-            "pending",
-            "recreate_attempted",
-            "verified",
-            "restore_attempted",
-            "restored",
-          ]),
+          phase: z.enum(["pending", "recreate_attempted", "verified"]),
           oldContainerId: z.string().regex(/^[a-f0-9]{64}$/),
           newContainerId: z
             .string()
