@@ -36,6 +36,7 @@ import { registerAuth } from "../../src/auth";
 import { installDataMutationAdmission } from "../../src/jobs/execution/admission";
 import { createDataConfigurationMaintenance } from "../../src/jobs/execution/configuration-maintenance";
 import { createDataExecutionDispatcher } from "../../src/jobs/execution/dispatch";
+import { installLocalDataExecutions } from "../../src/jobs/execution/local";
 import { createDataExecutionReceiver } from "../../src/jobs/execution/receiver";
 import { createDataExecutionRuntime } from "../../src/jobs/execution/runtime";
 import { createPostgresDataExecutionStore } from "../../src/jobs/execution/store";
@@ -198,6 +199,28 @@ it.skipIf(!enabled)(
     const fence = createDataConfigurationMaintenance(state.fixture.sql, dmInstallation);
     await fence.startup();
     installDataMutationAdmission(fence);
+    // A catalog proposal runs as an in-process durable data job.
+    const proposalRuntime = createDataExecutionRuntime({
+      store: createPostgresDataExecutionStore(state.fixture.sql, {
+        controlJournal: createDataExecutionControlJournal(dmInstallation, state.fixture.sql),
+        configurationFence: fence,
+      }),
+      dispatch: async () => {
+        throw Error("Unexpected dispatched data job");
+      },
+    });
+    installLocalDataExecutions(
+      createDataExecutionReceiver({
+        runtime: proposalRuntime,
+        installation: dmInstallation,
+        configurationFence: fence,
+        dispatcher: {} as never,
+        operationsPolicy: resolveOperationsProfile({
+          profile: "regional-assisted",
+          countries: ["de"],
+        }),
+      }),
+    );
     const reviewer = createCatalogReviewService({
       dataDir,
       installation: dmInstallation,
@@ -371,6 +394,7 @@ it.skipIf(!enabled)(
       else process.env.MOTIS_TWO_SLOT = oldTwoSlot;
       await api.close();
       await runtime.close();
+      await proposalRuntime.close();
     }
   },
   90000,
