@@ -92597,7 +92597,13 @@
                                 "search-index-build",
                                 "notable-places-build",
                                 "generation-hardlinks",
-                                "transit-maintenance"
+                                "transit-maintenance",
+                                "traffic-live",
+                                "traffic-maintenance",
+                                "traffic-predicted",
+                                "transit-proposal",
+                                "data-reload",
+                                "ambient-publication"
                               ]
                             },
                             "status": {
@@ -93389,6 +93395,96 @@
                                     "kind",
                                     "action",
                                     "changed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "traffic-live"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "traffic-maintenance"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "traffic-predicted"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "transit-proposal"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "data-reload"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "ambient-publication"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -94223,7 +94319,13 @@
                         "search-index-build",
                         "notable-places-build",
                         "generation-hardlinks",
-                        "transit-maintenance"
+                        "transit-maintenance",
+                        "traffic-live",
+                        "traffic-maintenance",
+                        "traffic-predicted",
+                        "transit-proposal",
+                        "data-reload",
+                        "ambient-publication"
                       ]
                     },
                     "status": {
@@ -95015,6 +95117,96 @@
                             "kind",
                             "action",
                             "changed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "traffic-live"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "traffic-maintenance"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "traffic-predicted"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "transit-proposal"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "data-reload"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "ambient-publication"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
                           ],
                           "additionalProperties": false
                         }
@@ -95765,7 +95957,13 @@
                         "search-index-build",
                         "notable-places-build",
                         "generation-hardlinks",
-                        "transit-maintenance"
+                        "transit-maintenance",
+                        "traffic-live",
+                        "traffic-maintenance",
+                        "traffic-predicted",
+                        "transit-proposal",
+                        "data-reload",
+                        "ambient-publication"
                       ]
                     },
                     "status": {
@@ -96557,6 +96755,96 @@
                             "kind",
                             "action",
                             "changed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "traffic-live"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "traffic-maintenance"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "traffic-predicted"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "transit-proposal"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "data-reload"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "ambient-publication"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
                           ],
                           "additionalProperties": false
                         }

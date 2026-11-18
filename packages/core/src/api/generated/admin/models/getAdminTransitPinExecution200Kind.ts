@@ -20,4 +20,10 @@ export const GetAdminTransitPinExecution200Kind = {
   "notable-places-build": "notable-places-build",
   "generation-hardlinks": "generation-hardlinks",
   "transit-maintenance": "transit-maintenance",
+  "traffic-live": "traffic-live",
+  "traffic-maintenance": "traffic-maintenance",
+  "traffic-predicted": "traffic-predicted",
+  "transit-proposal": "transit-proposal",
+  "data-reload": "data-reload",
+  "ambient-publication": "ambient-publication",
 } as const;
