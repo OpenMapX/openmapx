@@ -12,6 +12,13 @@ step whose request never reached the agent is sent again. Before, such an update
 was held for recovery even when its download had finished, or was abandoned with
 a conflict after the agent had prepared maintenance.
 
+A configuration change applied directly from the admin panel or API (settings,
+credentials, integration bindings, platform changes, migrations) whose API
+process restarts before the new settings were saved ends without the change and
+gives back any maintenance it had prepared; one that had saved them finishes
+applying them. A queued job (service updates, releases, extension installs)
+continues its configuration change in either case.
+
 An administrative job whose agent operation was interrupted by an agent restart
 now ends failed with the error code `recovery_required` instead of staying
 running. The agent keeps that operation's services held until an operator
