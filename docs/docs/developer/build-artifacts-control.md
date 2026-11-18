@@ -293,15 +293,19 @@ A configuration change is an administrative job whose candidate lives in
 `admin_job.protocol.candidate` and moves through three phases. Each phase runs
 the same forward code after an API restart.
 
-| From                 | Event                                                                                                                                        | To                                                                    |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| (none)               | Payload built, sealed and retained at the agent; hardlink preview and coordinator and capacity preflights pass                               | `candidate_prepared`                                                  |
-| (none)               | A preflight refuses                                                                                                                          | no candidate; the record is discarded                                 |
-| `candidate_prepared` | One transaction: job row locked and still running, source fingerprint unchanged, maintenance still prepared, rows saved by row-version check | `rows_saved`                                                          |
-| `candidate_prepared` | Cancelled, stale or the save rolled back                                                                                                     | abandoned: `settle{abandon}`, record discarded, outcome not committed |
-| `rows_saved`         | Apply operation (or maintenance apply) terminal with a known outcome                                                                         | `generation_applied`                                                  |
-| `rows_saved`         | Apply outcome unknown                                                                                                                        | stays `rows_saved`; the job waits for `control resolve`               |
-| `generation_applied` | Follow-ups finished                                                                                                                          | candidate retired, record discarded                                   |
+| From                 | Event                                                                                                                                                             | To                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| (none)               | Payload built and retained at the agent; hardlink preview and coordinator and capacity preflights pass                                                            | `candidate_prepared`                                                           |
+| (none)               | A preflight refuses                                                                                                                                               | no candidate; the record is discarded                                          |
+| `candidate_prepared` | A change that recreates services: the coordinator image pull and the old revision's coordinator prerequisite, then the agent's `configurationMaintenance.prepare` | `candidate_prepared`, maintenance prepared                                     |
+| `candidate_prepared` | The agent refuses the preparation (`busy` or failed) and settles it itself                                                                                        | no candidate; the record is discarded, outcome not committed (`busy`/`failed`) |
+| `candidate_prepared` | The candidate expired before the preparation, or the coordinator pull failed                                                                                      | abandoned, outcome not committed (`conflict`)                                  |
+| `candidate_prepared` | The commit participant's verification refuses                                                                                                                     | abandoned with the participant's conflict                                      |
+| `candidate_prepared` | One transaction: job row locked and still running, source fingerprint unchanged, maintenance still prepared, rows saved by row-version check                      | `rows_saved`                                                                   |
+| `candidate_prepared` | Cancelled, stale or the save rolled back                                                                                                                          | abandoned: `settle{abandon}`, record discarded, outcome not committed          |
+| `rows_saved`         | Apply operation (or maintenance apply) terminal with a known outcome                                                                                              | `generation_applied`                                                           |
+| `rows_saved`         | Apply outcome unknown                                                                                                                                             | stays `rows_saved`; the job waits for `control resolve`                        |
+| `generation_applied` | Follow-ups finished                                                                                                                                               | candidate retired, record discarded                                            |
 
 A recovered job before `rows_saved` continues from the agent's record when it was
 queued and abandons when it was an immediate request, a cancelled job or a
@@ -507,7 +511,9 @@ maintenance leaves the data-manager's configuration fence prepared; `control
 resolve` of the same operation settles it through the CLI's data-manager token,
 also after a clear, with the fence outcome the agent's maintenance record already
 fixed if it has one, and ends the maintenance when data-manager has no such fence
-or settled it otherwise. It is refused while the agent still drives the
+or settled it otherwise. When data-manager refuses the settlement while its fence
+is still prepared (the agent's record and the fence row disagree), the resolution
+fails and prints the fence's state instead of ending the maintenance. It is refused while the agent still drives the
 maintenance (preparing, prepared or applying): the agent finishes it, or records
 that it needs recovery, which it also does for a settlement data-manager refuses
 for good. `control resolve` refuses a lease data-manager owns:

@@ -392,13 +392,15 @@ export function createDataConfigurationFenceStore(
         }),
       );
     },
-    /** The fence row of `maintenanceId`, for the agent only. */
+    /** The fence row of `maintenanceId`, for the agent and for the operator's
+     * `openmapx control resolve`. */
     async inspect(
       maintenanceId: string,
       expected: { candidateId: string },
       transportPrincipal: ControlTransportPrincipal,
     ) {
-      if (transportPrincipal !== "ops-agent") throw forbidden("Agent transport required");
+      if (transportPrincipal !== "ops-agent" && transportPrincipal !== "host-cli")
+        throw forbidden("Agent or host CLI transport required");
       const saved = await row(sql, "maintenance_id", maintenanceId);
       if (!saved) return null;
       if (saved.candidate_id !== expected.candidateId)

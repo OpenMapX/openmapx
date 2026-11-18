@@ -40,6 +40,7 @@ import { OpsExecutionFailure } from "./runtime";
 vi.mock("@openmapx/core/data-manager-sdk", async (original) => ({
   ...(await original<typeof import("@openmapx/core/data-manager-sdk")>()),
   settleDataConfigurationFence: vi.fn(),
+  inspectDataConfigurationFence: vi.fn(),
 }));
 
 const maintenanceId = "33333333-3333-4333-8333-333333333333";
@@ -492,6 +493,36 @@ describe("configuration maintenance in the agent", () => {
     await maintenance.recover(AbortSignal.timeout(5000));
     expect(lease.held).toBe(false);
     expect(adapters.settleFence).toHaveBeenCalledOnce();
+    vi.unstubAllEnvs();
+  });
+
+  it("refuses to end a maintenance whose fence data-manager still holds prepared after a conflicting settle", async () => {
+    const file = admit();
+    adapters.runStep = async () => {
+      throw Error("lost");
+    };
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    const sdk = await import("@openmapx/core/data-manager-sdk");
+    vi.mocked(sdk.settleDataConfigurationFence).mockReset();
+    vi.mocked(sdk.settleDataConfigurationFence).mockRejectedValue(
+      new DataManagerHttpError("Configuration fence settlement conflict", 409),
+    );
+    vi.mocked(sdk.inspectDataConfigurationFence).mockResolvedValue(fence("prepared", file));
+    vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:1");
+    vi.stubEnv("DATA_MANAGER_TOKEN", "x".repeat(43));
+    const infraDir = join(root, "infra", "docker");
+    await expect(settleMaintenanceFence(infraDir, fenceLease(file), "failed")).rejects.toThrow(
+      "still holds it prepared",
+    );
+    expect(vi.mocked(sdk.inspectDataConfigurationFence).mock.calls[0]?.[0]).toBe(maintenanceId);
+    // The record keeps waiting for the fence; nothing claims it was settled.
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settling");
+    // Once data-manager reports the fence settled otherwise, the resolution ends it.
+    vi.mocked(sdk.inspectDataConfigurationFence).mockResolvedValue(fence("settled", file));
+    await settleMaintenanceFence(infraDir, fenceLease(file), "failed");
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settled");
     vi.unstubAllEnvs();
   });
 

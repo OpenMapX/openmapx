@@ -10,6 +10,7 @@ import {
 import {
   createDataManagerTransport,
   DataManagerHttpError,
+  inspectDataConfigurationFence,
   settleDataConfigurationFence,
 } from "@openmapx/core/data-manager-sdk";
 import {
@@ -78,7 +79,8 @@ function maintenanceRecord(infraDir: string, maintenanceId: string) {
  * record has fixed the fence's outcome, that outcome is sent, whatever the
  * operator answered. The record is settled once data-manager answers, or once
  * it refuses the settlement for good (it has no such fence, or settled it
- * otherwise). A fence that was never prepared needs nothing.
+ * otherwise). A refusal that leaves the fence prepared fails the resolution.
+ * A fence that was never prepared needs nothing.
  */
 export async function settleMaintenanceFence(
   infraDir: string,
@@ -104,25 +106,33 @@ export async function settleMaintenanceFence(
     maintenance.write(resolved.record);
   }
   if (maintenance?.file.record.fenceOutcome) outcome = maintenance.file.record.fenceOutcome;
+  const transport = createDataManagerTransport({
+    baseUrl: dataManagerUrl(),
+    authToken: cliDataManagerToken(),
+    requestTimeoutMs: 15000,
+    maxJsonBytes: 65536,
+  });
   let event: MaintenanceEvent;
   try {
-    const settled = await settleDataConfigurationFence(
-      { ...evidence, outcome },
-      {
-        transport: createDataManagerTransport({
-          baseUrl: dataManagerUrl(),
-          authToken: cliDataManagerToken(),
-          requestTimeoutMs: 15000,
-          maxJsonBytes: 65536,
-        }),
-      },
-    );
+    const settled = await settleDataConfigurationFence({ ...evidence, outcome }, { transport });
     event = { type: "fence_settled", fence: settled };
   } catch (error) {
-    // No fence row (the preparation never reached data-manager), or one
-    // settled with another outcome: the operator's resolution ends it.
     if (!(error instanceof DataManagerHttpError) || (error.status !== 404 && error.status !== 409))
       throw error;
+    // A refusal for good ends the maintenance only when nothing is left
+    // fenced: no fence row (the preparation never reached data-manager), or a
+    // row data-manager settled otherwise. A row still prepared keeps every data
+    // job refused, so the resolution stops and says so.
+    if (error.status === 409) {
+      const current = await inspectDataConfigurationFence(evidence.maintenanceId, {
+        transport,
+        candidateId: evidence.candidateId,
+      });
+      if (current.state !== "settled")
+        throw new Error(
+          `Data-manager refused to settle the fence of maintenance ${evidence.maintenanceId} (${error.message}) and still holds it ${current.state} for revision ${current.revisionId}: no data job runs until it is settled. The agent's record of this maintenance no longer matches data-manager's fence; inspect both before resolving it again.`,
+        );
+    }
     event = { type: "operator_settled" };
   }
   if (maintenance?.file.record.state === "settling")
