@@ -22,10 +22,12 @@ on:
       - scripts/ci/install-smoke.sh
       - .github/workflows/install-smoke.yml
 
-# A newer push replaces a running pull-request check; main and the nightly run
-# always finish.
+# A newer push replaces a running pull-request check. Pushes to main share one
+# group: the running check always finishes and a newer merge replaces only the
+# pending one, so a burst of merges smokes the newest commit instead of each.
+# Nightly, manual and re-run main checks keep their own group and always finish.
 concurrency:
-  group: install-smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: install-smoke-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && github.run_attempt == 1 && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

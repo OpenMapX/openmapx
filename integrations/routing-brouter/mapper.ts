@@ -5,6 +5,7 @@ import {
   type RouteStep,
   type RoutingOptions,
 } from "@openmapx/core";
+// biome-ignore lint/style/noRestrictedImports: backend routing provider; never bundled for the browser
 import { createTranslator } from "@openmapx/i18n";
 
 function record(value: unknown): Record<string, unknown> {

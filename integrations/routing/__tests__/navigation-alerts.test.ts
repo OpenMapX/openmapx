@@ -344,6 +344,239 @@ describe("mapAlertElements — other hazards", () => {
   });
 });
 
+describe("mapAlertElements — hazards beside the road", () => {
+  /** A position `x` metres east and `y` metres north of (lng, lat) in the projection's frame. */
+  function near(lat: number, lng: number, x: number, y: number): { lat: number; lon: number } {
+    const kx = Math.cos((lat * Math.PI) / 180) * 111_320;
+    return { lat: lat + y / M_PER_DEG_LAT, lon: lng + x / kx };
+  }
+  function camera(id: number, position: { lat: number; lon: number }): AlertOverpassElement {
+    return { type: "node", id, ...position, tags: { highway: "speed_camera" } };
+  }
+  function road(id: number, positions: { lat: number; lon: number }[]): AlertOverpassElement {
+    return {
+      type: "way",
+      id,
+      tags: { highway: "residential" },
+      nodes: positions.map((_, index) => id * 1000 + index),
+      geometry: positions,
+    };
+  }
+
+  it("attaches a camera near the far end of a long way at its projection", () => {
+    const vertices = Array.from({ length: 101 }, (_, i) => at(-5000 + i * 100, 0));
+    const alerts = mapAlertElements([
+      node(50, 4990, 8, { highway: "speed_camera" }),
+      road(1, vertices),
+    ]);
+    const roadAlert = byId(alerts, "speed_camera:50")?.roads[0];
+    expect(roadAlert?.wayId).toBe(1);
+    if (!roadAlert) return;
+    const anchor = roadAlert.line[roadAlert.anchorIndex];
+    const expected = at(4990, 0);
+    expect(haversineDistance(anchor, [expected.lon, expected.lat])).toBeLessThan(0.1);
+    expect(haversineDistance(roadAlert.line[0], anchor)).toBeCloseTo(ROAD_CONTEXT_REACH_M, 0);
+  });
+
+  it("does not attach a camera close to a way's bounding box but far from the way", () => {
+    // A diagonal way: its box corner at (100, 0) lies 70 m from the line itself.
+    const diagonal = road(1, [at(0, 0), at(100, 100)]);
+    expect(mapAlertElements([node(50, 105, 5, { highway: "speed_camera" }), diagonal])).toEqual([]);
+    expect(mapAlertElements([node(50, 95, 5, { highway: "speed_camera" }), diagonal])).toEqual([]);
+  });
+
+  it("attaches up to the snap distance and not beyond", () => {
+    const street = road(1, [at(-100, 0), at(100, 0)]);
+    expect(
+      byId(
+        mapAlertElements([node(50, 0, 14.95, { highway: "speed_camera" }), street]),
+        "speed_camera:50",
+      )?.roads[0]?.wayId,
+    ).toBe(1);
+    expect(mapAlertElements([node(50, 0, 15.05, { highway: "speed_camera" }), street])).toEqual([]);
+    // Off the end of the way: the distance to its end node counts.
+    expect(
+      byId(
+        mapAlertElements([node(51, 110, 10, { highway: "speed_camera" }), street]),
+        "speed_camera:51",
+      )?.roads[0]?.wayId,
+    ).toBe(1);
+    expect(mapAlertElements([node(51, 112, 10, { highway: "speed_camera" }), street])).toEqual([]);
+  });
+
+  it("measures longitude in metres at high latitude", () => {
+    // At 69° N a degree of longitude is about 40 km, so 14 m east spans far
+    // more degrees than 15 m would at the equator.
+    const lat = 69;
+    const lng = 18.95;
+    const northbound = road(1, [near(lat, lng, 0, -100), near(lat, lng, 0, 100)]);
+    const attached = mapAlertElements([camera(50, near(lat, lng, 14, 0)), northbound]);
+    expect(byId(attached, "speed_camera:50")?.roads[0]?.wayId).toBe(1);
+    expect(mapAlertElements([camera(50, near(lat, lng, 16, 0)), northbound])).toEqual([]);
+    const westbound = road(2, [near(lat, lng, -200, 0), near(lat, lng, -20, 0)]);
+    expect(
+      byId(mapAlertElements([camera(51, near(lat, lng, -6, 0)), westbound]), "speed_camera:51")
+        ?.roads[0]?.wayId,
+    ).toBe(2);
+    expect(mapAlertElements([camera(51, near(lat, lng, -4, 0)), westbound])).toEqual([]);
+  });
+
+  describe("matches the full projection against every road", () => {
+    /** The original selection: project onto every road, then keep the nearest ones. */
+    function referenceOffRoad(
+      type: string,
+      position: LngLat,
+      roads: { id: number; coords: LngLat[] }[],
+    ): { wayId: number; anchor: LngLat; along: number }[] {
+      const kx = Math.cos((position[1] * Math.PI) / 180) * 111_320;
+      const ky = 110_574;
+      const nearRoads = roads
+        .map((r) => {
+          const cum = [0];
+          for (let i = 1; i < r.coords.length; i++) {
+            cum.push(cum[i - 1] + haversineDistance(r.coords[i - 1], r.coords[i]));
+          }
+          let best = { distance: Number.POSITIVE_INFINITY, along: 0, point: r.coords[0] };
+          for (let i = 0; i < r.coords.length - 1; i++) {
+            const [a, b] = [r.coords[i], r.coords[i + 1]];
+            const ax = (a[0] - position[0]) * kx;
+            const ay = (a[1] - position[1]) * ky;
+            const dx = (b[0] - position[0]) * kx - ax;
+            const dy = (b[1] - position[1]) * ky - ay;
+            const lengthSquared = dx * dx + dy * dy;
+            const t =
+              lengthSquared > 0
+                ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / lengthSquared))
+                : 0;
+            const distance = Math.hypot(ax + t * dx, ay + t * dy);
+            if (distance < best.distance) {
+              best = {
+                distance,
+                along: cum[i] + t * (cum[i + 1] - cum[i]),
+                point: [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])],
+              };
+            }
+          }
+          return { r, best };
+        })
+        .filter(({ best }) => best.distance <= 15)
+        .sort((a, b) => a.best.distance - b.best.distance);
+      if (nearRoads.length === 0) return [];
+      const candidates = nearRoads.filter(
+        ({ best }) => best.distance <= nearRoads[0].best.distance + 3,
+      );
+      if (type === "stop" && candidates.length > 1) return [];
+      return candidates.map(({ r, best }) => ({
+        wayId: r.id,
+        anchor: best.point,
+        along: best.along,
+      }));
+    }
+
+    /** mulberry32 */
+    function prng(seed: number): () => number {
+      let a = seed;
+      return () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const round7 = (value: number) => Math.round(value * 1e7) / 1e7;
+
+    it("on randomised layouts", () => {
+      const random = prng(147);
+      let attachedCount = 0;
+      let rejectedCount = 0;
+      for (let layout = 0; layout < 300; layout++) {
+        const lat = -75 + random() * 150;
+        const lng = -179 + random() * 358;
+        const elements: AlertOverpassElement[] = [];
+        const trafficRoads: { id: number; coords: LngLat[] }[] = [];
+        const wayCount = 1 + Math.floor(random() * 8);
+        for (let w = 0; w < wayCount; w++) {
+          const id = layout * 100 + w + 1;
+          const previous = trafficRoads[trafficRoads.length - 1];
+          let positions: { lat: number; lon: number }[];
+          if (previous && random() < 0.2) {
+            // Same geometry under another id: ties must keep input order.
+            positions = previous.coords.map(([lon, plat]) => ({ lat: plat, lon }));
+          } else {
+            const length = 2 + Math.floor(random() * 10);
+            let x = (random() - 0.5) * 300;
+            let y = (random() - 0.5) * 300;
+            const step = 5 + random() * (random() < 0.2 ? 2000 : 80);
+            positions = [];
+            for (let i = 0; i < length; i++) {
+              positions.push(near(lat, lng, x, y));
+              const heading = random() * 2 * Math.PI;
+              x += Math.cos(heading) * step;
+              y += Math.sin(heading) * step;
+            }
+          }
+          const highway = ["residential", "cycleway", "footway", "primary"][
+            Math.floor(random() * 4)
+          ];
+          elements.push({ ...road(id, positions), tags: { highway } });
+          if (highway !== "footway") {
+            trafficRoads.push({ id, coords: positions.map((p) => [p.lon, p.lat]) });
+          }
+        }
+        const nodeCount = 1 + Math.floor(random() * 6);
+        const expected: {
+          id: string;
+          roads: { wayId: number; anchor: LngLat; along: number }[];
+        }[] = [];
+        for (let n = 0; n < nodeCount; n++) {
+          // Outside the way node ids, so the node stands beside every road.
+          const id = 9_000_000_000 + layout * 100 + n;
+          const wayElement = elements[Math.floor(random() * elements.length)];
+          const vertex =
+            wayElement.geometry?.[Math.floor(random() * (wayElement.geometry?.length ?? 1))];
+          if (!vertex) continue;
+          const kx = Math.cos((vertex.lat * Math.PI) / 180) * 111_320;
+          const offset = random() * 30;
+          const heading = random() * 2 * Math.PI;
+          const position = {
+            lat: vertex.lat + (Math.sin(heading) * offset) / M_PER_DEG_LAT,
+            lon: vertex.lon + (Math.cos(heading) * offset) / kx,
+          };
+          const type = random() < 0.25 ? "stop" : "speed_camera";
+          elements.push({ type: "node", id, ...position, tags: { highway: type } });
+          const roads = referenceOffRoad(type, [position.lon, position.lat], trafficRoads);
+          if (roads.length > 0) expected.push({ id: `${type}:${id}`, roads });
+          else rejectedCount++;
+        }
+        const alerts = mapAlertElements(elements);
+        expect(alerts.map((alert) => alert.id)).toEqual(expected.map((e) => e.id));
+        alerts.forEach((alert, i) => {
+          expect(alert.roads.map((r) => r.wayId)).toEqual(expected[i].roads.map((r) => r.wayId));
+          alert.roads.forEach((r, j) => {
+            const reference = expected[i].roads[j];
+            expect(r.line[r.anchorIndex]).toEqual([
+              round7(reference.anchor[0]),
+              round7(reference.anchor[1]),
+            ]);
+            // The slice reaches back along the road from the reference's along-distance.
+            let back = 0;
+            for (let k = 1; k <= r.anchorIndex; k++)
+              back += haversineDistance(r.line[k - 1], r.line[k]);
+            expect(Math.abs(back - Math.min(reference.along, ROAD_CONTEXT_REACH_M))).toBeLessThan(
+              0.2,
+            );
+            attachedCount++;
+          });
+        });
+      }
+      // The layouts exercise both outcomes.
+      expect(attachedCount).toBeGreaterThan(200);
+      expect(rejectedCount).toBeGreaterThan(100);
+    });
+  });
+});
+
 describe("buildNavigationAlertsQuery", () => {
   it("queries hazards in the box with their road context", () => {
     const query = buildNavigationAlertsQuery({ south: 51.2, west: 6.6, north: 51.3, east: 6.7 });

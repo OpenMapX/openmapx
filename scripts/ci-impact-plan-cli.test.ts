@@ -323,3 +323,182 @@ describe("complete immutable Git diff selection", () => {
     }
   });
 });
+
+describe("main push reusing a merge-queue run", () => {
+  const validation = [
+    "lint",
+    "types",
+    "test-node",
+    "test-linux-user",
+    "test-agent-image",
+    "test-web",
+    "mobile",
+    "database",
+    "build",
+    "docker-changes",
+    "docker-build",
+  ];
+  function scenario(queueExtra = {}, pushExtra = {}) {
+    const f = fixture();
+    f.write("packages/core/src/merged.ts", "export const merged = true");
+    const head = f.commit();
+    f.git("update-ref", "refs/remotes/origin/main", head);
+    const job = (name: string, extra = {}) => ({
+      name,
+      run_id: 900,
+      run_attempt: 1,
+      head_sha: head,
+      status: "completed",
+      conclusion: "success",
+      ...extra,
+    });
+    const queue = {
+      id: 900,
+      workflow_id: 55,
+      event: "merge_group",
+      head_branch: `gh-readonly-queue/main/pr-12-${f.base}`,
+      path: ".github/workflows/ci.yml",
+      head_sha: head,
+      run_attempt: 1,
+      run_started_at: "2026-11-17T00:00:00Z",
+      status: "completed",
+      conclusion: "success",
+      ...queueExtra,
+    };
+    const push = {
+      id: 500,
+      workflow_id: 55,
+      event: "push",
+      head_branch: "main",
+      path: ".github/workflows/ci.yml",
+      head_sha: head,
+      run_attempt: 1,
+      ...pushExtra,
+    };
+    const providerData = {
+      "repos/fixture/repo/actions/runs/500": push,
+      "repos/fixture/repo/actions/runs/900": queue,
+      "repos/fixture/repo/actions/workflows/55/runs": { total_count: 1, workflow_runs: [queue] },
+      "repos/fixture/repo/actions/runs/900/jobs": {
+        total_count: 3,
+        jobs: [
+          job("select required validation"),
+          job("test (database, crash-points, 1/4)"),
+          job("lint / types / test"),
+        ],
+      },
+    };
+    f.write("provider.json", JSON.stringify(providerData));
+    const env = {
+      ...process.env,
+      GITHUB_ACTIONS: "false",
+      GITHUB_REPOSITORY: "fixture/repo",
+      GITHUB_RUN_ID: "500",
+      GITHUB_RUN_ATTEMPT: "1",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_SHA: head,
+      GITHUB_EVENT_PATH: join(f.root, "event.json"),
+      PATH: `${join(f.root, "bin")}:${process.env.PATH}`,
+    };
+    const select = () => {
+      const output = join(f.root, "output.txt");
+      writeFileSync(join(f.root, "event.json"), JSON.stringify({ after: head }));
+      writeFileSync(output, "");
+      const result = spawnSync(process.execPath, [launcher, "select"], {
+        cwd: f.root,
+        encoding: "utf8",
+        env: { ...env, GITHUB_OUTPUT: output },
+      });
+      const entries = Object.fromEntries(
+        readFileSync(output, "utf8")
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+      );
+      return { result, entries, plan: entries.plan ? JSON.parse(entries.plan) : null };
+    };
+    const verify = (plan: object, extraEnv = {}) =>
+      spawnSync(process.execPath, [launcher, "verify-merge-queue"], {
+        cwd: f.root,
+        encoding: "utf8",
+        env: {
+          ...env,
+          CI_PLAN: JSON.stringify(plan),
+          CI_HEAD: head,
+          CI_NEEDS: JSON.stringify(
+            Object.fromEntries(
+              ["select", ...validation].map((id) => [
+                id,
+                { result: id === "select" ? "success" : "skipped" },
+              ]),
+            ),
+          ),
+          ...extraEnv,
+        },
+      });
+    const replaceProvider = (patch: Record<string, unknown>) =>
+      f.write("provider.json", JSON.stringify({ ...providerData, ...patch }));
+    return { f, head, queue, select, verify, replaceProvider };
+  }
+
+  it("selects no validation and passes the gate only against the live provider record", () => {
+    const s = scenario();
+    try {
+      const selected = s.select();
+      expect(selected.result.status, selected.result.stderr).toBe(0);
+      expect(selected.entries.code).toBe("false");
+      expect(selected.entries.reason).toBe("merge-queue-validated");
+      expect(selected.plan.validationSource).toEqual({
+        version: 1,
+        runId: 900,
+        attempt: 1,
+        workflowId: 55,
+        head: s.head,
+      });
+      const ok = s.verify(selected.plan);
+      expect(ok.status, ok.stderr).toBe(0);
+      // Plans that do not match this push or the provider are refused.
+      expect(s.verify(selected.plan, { GITHUB_SHA: "c".repeat(40) }).status).not.toBe(0);
+      expect(s.verify(selected.plan, { GITHUB_REF: "refs/heads/release" }).status).not.toBe(0);
+      expect(s.verify(selected.plan, { GITHUB_EVENT_NAME: "schedule" }).status).not.toBe(0);
+      expect(
+        s.verify({
+          ...selected.plan,
+          validationSource: { ...selected.plan.validationSource, runId: 901 },
+        }).status,
+      ).not.toBe(0);
+      // A merge-queue run re-run after selection no longer lends its success.
+      s.replaceProvider({
+        "repos/fixture/repo/actions/runs/900": {
+          ...s.queue,
+          run_attempt: 2,
+          status: "in_progress",
+        },
+      });
+      expect(s.verify(selected.plan).status).not.toBe(0);
+    } finally {
+      s.f.close();
+    }
+  });
+
+  it("validates in full without a green merge-queue run or on a re-run", () => {
+    for (const [queueExtra, pushExtra] of [
+      [{ conclusion: "failure" }, {}],
+      [{ status: "in_progress", conclusion: null }, {}],
+      [{ head_branch: "feature" }, {}],
+      [{}, { run_attempt: 2 }],
+    ]) {
+      const s = scenario(queueExtra, pushExtra);
+      try {
+        const selected = s.select();
+        expect(selected.result.status, selected.result.stderr).toBe(0);
+        expect(selected.entries.code).toBe("true");
+        expect(selected.plan.validationSource).toBeNull();
+      } finally {
+        s.f.close();
+      }
+    }
+  });
+});

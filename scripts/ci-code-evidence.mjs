@@ -143,6 +143,77 @@ export async function findReusableCodeValidation({ current, source, runs, readJo
   return best;
 }
 
+/** The merge queue fast-forwards main to the commit its entry validated, so a
+ * push of that commit to main can reuse the entry's complete CI run. Merge-queue
+ * runs select the full scope and never defer database groups; their required
+ * gate already enforced that. Anything unusual returns null: full validation. */
+export async function findMergeQueueValidation({ current, head, runs, readJobs }) {
+  if (
+    !positive(current.id) ||
+    !positive(current.workflow_id) ||
+    current.event !== "push" ||
+    current.head_branch !== "main" ||
+    // A re-run is a request to validate again.
+    current.run_attempt !== 1 ||
+    current.head_sha !== head ||
+    current.path !== ".github/workflows/ci.yml" ||
+    !sha.test(head)
+  )
+    return null;
+  const candidates = runs
+    .filter(
+      (run) =>
+        run.id !== current.id &&
+        run.event === "merge_group" &&
+        run.head_sha === head &&
+        run.status === "completed" &&
+        run.conclusion === "success",
+    )
+    .sort((a, b) => Date.parse(b.run_started_at) - Date.parse(a.run_started_at));
+  for (const run of candidates) {
+    if (
+      !positive(run.id) ||
+      !positive(run.run_attempt) ||
+      run.workflow_id !== current.workflow_id ||
+      run.path !== current.path ||
+      typeof run.head_branch !== "string" ||
+      !run.head_branch.startsWith("gh-readonly-queue/main/")
+    )
+      continue;
+    const jobs = await readJobs(run.id);
+    if (
+      !Array.isArray(jobs) ||
+      !jobs.length ||
+      jobs.some(
+        (job) =>
+          job.run_id !== run.id ||
+          job.head_sha !== head ||
+          job.status !== "completed" ||
+          !["success", "skipped"].includes(job.conclusion),
+      )
+    )
+      continue;
+    const selectors = jobs.filter((job) => job.name === "select required validation");
+    const gates = jobs.filter((job) => job.name === "lint / types / test");
+    if (
+      selectors.length !== 1 ||
+      selectors[0].conclusion !== "success" ||
+      gates.length !== 1 ||
+      gates[0].conclusion !== "success" ||
+      gates[0].run_attempt !== run.run_attempt
+    )
+      continue;
+    return {
+      version: 1,
+      runId: run.id,
+      attempt: run.run_attempt,
+      workflowId: run.workflow_id,
+      head,
+    };
+  }
+  return null;
+}
+
 export function sourceFromEvent(event) {
   const pr = event.pull_request;
   const source = {
@@ -220,4 +291,33 @@ export async function resolveCodeEvidence({ repository, runId, source }) {
       return null;
   }
   return matches(api(`${prefix}/pulls/${source.number}`)) ? evidence : null;
+}
+
+/** Read-only, like resolveCodeEvidence: provider-owned run and job records only. */
+export async function resolveMergeQueueEvidence({ repository, runId, head }) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !positive(runId) || !sha.test(head))
+    throw Error("Invalid GitHub validation identity");
+  const prefix = `repos/${repository}`;
+  const current = api(`${prefix}/actions/runs/${runId}`);
+  if (!positive(current.workflow_id)) return null;
+  const runs = collection(
+    `${prefix}/actions/workflows/${current.workflow_id}/runs?head_sha=${head}&event=merge_group&per_page=100`,
+    "workflow_runs",
+  );
+  const evidence = await findMergeQueueValidation({
+    current,
+    head,
+    runs,
+    readJobs: (id) =>
+      collection(`${prefix}/actions/runs/${id}/jobs?filter=latest&per_page=100`, "jobs"),
+  });
+  if (!evidence) return null;
+  // A re-run after the lookup must not lend its predecessor's success.
+  const latest = api(`${prefix}/actions/runs/${evidence.runId}`);
+  return latest.status === "completed" &&
+    latest.conclusion === "success" &&
+    latest.run_attempt === evidence.attempt &&
+    latest.head_sha === head
+    ? evidence
+    : null;
 }

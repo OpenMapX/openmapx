@@ -394,12 +394,16 @@ function resolveOffRoad(
   type: RoadAlertType,
   tags: Record<string, string>,
   position: LngLat,
-  roads: (Way & { coords: LngLat[] })[],
+  roads: readonly BoundedRoad[],
 ): Placement[] {
-  const near = roads
-    .map((way) => ({ way, projection: projectOntoLine(way.coords, position) }))
-    .filter(({ projection }) => projection.distance <= OFF_ROAD_SNAP_M)
-    .sort((a, b) => a.projection.distance - b.projection.distance);
+  const kx = Math.cos((position[1] * Math.PI) / 180) * METERS_PER_DEGREE_LNG_EQUATOR;
+  const near: { way: Way & { coords: LngLat[] }; projection: LineProjection }[] = [];
+  for (const road of roads) {
+    if (beyondSnapReach(road, position, kx)) continue;
+    const projection = nearestOnLine(road.way.coords, position, kx);
+    if (projection.distance <= OFF_ROAD_SNAP_M) near.push({ way: road.way, projection });
+  }
+  near.sort((a, b) => a.projection.distance - b.projection.distance);
   if (near.length === 0) return [];
   const nearest = near[0].projection.distance;
   const candidates = near.filter(
@@ -411,9 +415,47 @@ function resolveOffRoad(
   return candidates.map(({ way, projection }) => ({
     way,
     flags: { forward: true, backward: true },
-    anchorAlong: projection.along,
+    anchorAlong: alongLine(way.coords, projection),
     anchor: projection.point,
   }));
+}
+
+/** A road with geometry and the lon/lat box enclosing it. */
+interface BoundedRoad {
+  way: Way & { coords: LngLat[] };
+  minLng: number;
+  minLat: number;
+  maxLng: number;
+  maxLat: number;
+}
+
+function withBounds(way: Way & { coords: LngLat[] }): BoundedRoad {
+  let minLng = Number.POSITIVE_INFINITY;
+  let minLat = Number.POSITIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  for (const [lng, lat] of way.coords) {
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  }
+  return { way, minLng, minLat, maxLng, maxLat };
+}
+
+/**
+ * Whether `road` certainly lies farther than {@link OFF_ROAD_SNAP_M} from
+ * `position` in the frame {@link nearestOnLine} measures in. Every point of the
+ * road lies inside its box, so its distance on either axis is at least the
+ * position's gap to the box on that axis; a metre of margin absorbs rounding.
+ * A NaN coordinate compares false and leaves the road to the full projection.
+ */
+function beyondSnapReach(road: BoundedRoad, position: LngLat, kx: number): boolean {
+  const reach = OFF_ROAD_SNAP_M + 1;
+  const [lng, lat] = position;
+  const gapLng = Math.max(road.minLng - lng, lng - road.maxLng);
+  const gapLat = Math.max(road.minLat - lat, lat - road.maxLat);
+  return gapLng * kx > reach || gapLat * METERS_PER_DEGREE_LAT > reach;
 }
 
 /**
@@ -450,6 +492,11 @@ export function mapAlertElements(elements: readonly AlertOverpassElement[]): Raw
     }
   }
   const roadsWithGeometry = [...ways.values()].filter(carriesTraffic);
+  let boundedRoads: BoundedRoad[] | undefined;
+  const offRoadCandidates = (): BoundedRoad[] => {
+    boundedRoads ??= roadsWithGeometry.map(withBounds);
+    return boundedRoads;
+  };
 
   const out: RawRoadAlert[] = [];
   for (const node of alertNodes) {
@@ -470,7 +517,7 @@ export function mapAlertElements(elements: readonly AlertOverpassElement[]): Raw
     const placements =
       parents.length > 0
         ? resolveOnRoad(type, tags, node.id, parents, waysByNode)
-        : resolveOffRoad(type, tags, [node.lon, node.lat], roadsWithGeometry);
+        : resolveOffRoad(type, tags, [node.lon, node.lat], offRoadCandidates());
 
     const roads: RoadAlertRoad[] = [];
     for (const placement of placements) {
@@ -519,15 +566,26 @@ function cumulative(coords: LngLat[]): number[] {
 const METERS_PER_DEGREE_LAT = 110_574;
 const METERS_PER_DEGREE_LNG_EQUATOR = 111_320;
 
-/** Nearest point of a polyline to `position`, in a local equirectangular frame. */
-function projectOntoLine(
-  coords: LngLat[],
-  position: LngLat,
-): { distance: number; along: number; point: LngLat } {
-  const kx = Math.cos((position[1] * Math.PI) / 180) * METERS_PER_DEGREE_LNG_EQUATOR;
+interface LineProjection {
+  distance: number;
+  /** Index of the segment holding the nearest point, and the fraction along it. */
+  segment: number;
+  t: number;
+  point: LngLat;
+}
+
+/**
+ * Nearest point of a polyline to `position`, in a local equirectangular frame
+ * centred on `position` whose metres per degree of longitude are `kx`.
+ */
+function nearestOnLine(coords: LngLat[], position: LngLat, kx: number): LineProjection {
   const ky = METERS_PER_DEGREE_LAT;
-  const cum = cumulative(coords);
-  let best = { distance: Number.POSITIVE_INFINITY, along: 0, point: coords[0] };
+  let best: LineProjection = {
+    distance: Number.POSITIVE_INFINITY,
+    segment: 0,
+    t: 0,
+    point: coords[0],
+  };
   for (let i = 0; i < coords.length - 1; i++) {
     const ax = (coords[i][0] - position[0]) * kx;
     const ay = (coords[i][1] - position[1]) * ky;
@@ -544,7 +602,8 @@ function projectOntoLine(
     if (distance < best.distance) {
       best = {
         distance,
-        along: cum[i] + t * (cum[i + 1] - cum[i]),
+        segment: i,
+        t,
         point: [
           coords[i][0] + t * (coords[i + 1][0] - coords[i][0]),
           coords[i][1] + t * (coords[i + 1][1] - coords[i][1]),
@@ -553,6 +612,12 @@ function projectOntoLine(
     }
   }
   return best;
+}
+
+/** Distance along the polyline, from its start, to a projection onto it. */
+function alongLine(coords: LngLat[], { segment, t }: LineProjection): number {
+  const cum = cumulative(coords);
+  return cum[segment] + t * (cum[segment + 1] - cum[segment]);
 }
 
 const round7 = (value: number): number => Math.round(value * 1e7) / 1e7;

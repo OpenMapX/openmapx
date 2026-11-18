@@ -4,6 +4,7 @@ import {
   parseMobileSession,
 } from "@openmapx/core/navigation";
 import type { Database } from "./database";
+import { SessionParseMemo } from "./sessionParseMemo";
 import {
   DELETE_ACTIVE,
   DELETE_ALL_DIAGNOSTICS,
@@ -120,6 +121,9 @@ interface ActiveRow {
 }
 
 export class SessionRepository {
+  /** Skips re-validating the active row while its stored text is unchanged. */
+  private readonly parseMemo = new SessionParseMemo();
+
   constructor(private readonly database: Database) {}
 
   /* ------------------------------------------------------------- reading --- */
@@ -143,9 +147,12 @@ export class SessionRepository {
    */
   async inspectActive(nowMs: number): Promise<ActiveSessionInspection> {
     const row = await this.database.getFirstAsync<ActiveRow>(SELECT_ACTIVE);
-    if (!row) return { kind: "none" };
+    if (!row) {
+      this.parseMemo.clear();
+      return { kind: "none" };
+    }
 
-    const parsed = parseMobileSession(row.session_json);
+    const parsed = this.parseMemo.parse(row.session_json);
     if (parsed.ok) return { kind: "active", session: parsed.session };
 
     await this.quarantineCorruptSession(row.session_id, parsed.code, nowMs);
@@ -190,6 +197,7 @@ export class SessionRepository {
           return;
         }
         await deleteSessionRows(tx, existing.session_id);
+        this.parseMemo.clear();
       }
       await writeActive(tx, session);
       result = { ok: true, session, effects: [] };
@@ -217,7 +225,7 @@ export class SessionRepository {
         result = { ok: false, code: "no-active-session" };
         return;
       }
-      const parsed = parseMobileSession(row.session_json);
+      const parsed = this.parseMemo.parse(row.session_json);
       if (!parsed.ok) {
         result = { ok: false, code: "corrupt-session" };
         return;
@@ -279,6 +287,7 @@ export class SessionRepository {
         next.completedAtMs,
       ]);
       await deleteSessionRows(tx, sessionId);
+      this.parseMemo.clear();
       ack = next;
     });
 
@@ -428,6 +437,7 @@ export class SessionRepository {
     reason: string,
     nowMs: number,
   ): Promise<void> {
+    this.parseMemo.clear();
     await this.database.withExclusiveTransactionAsync(async (tx) => {
       await tx.runAsync(INSERT_QUARANTINE, [
         nowMs,
