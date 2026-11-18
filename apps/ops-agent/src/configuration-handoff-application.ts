@@ -62,13 +62,15 @@ export async function createConfigurationHandoffHost(input: {
       builtInAuthorityDigest: capture.digest,
     }),
     owned = createOwnedServiceResolver({ stack, execFile, loadAuthority });
-  /** The maintenance still applies the generation this helper replaces services with. */
+  /** The maintenance still applies the generation this helper replaces services
+   * with, and has not recorded the handoff's outcome. */
   const current = (file: MaintenanceFile) => {
     const now = readMaintenance(input.installation, file.record.maintenanceId);
     if (
       now.record.state !== "applying" ||
       now.record.generation !== "committed" ||
-      now.record.handoff?.handoffId !== file.record.handoff?.handoffId
+      now.record.handoff?.handoffId !== file.record.handoff?.handoffId ||
+      now.record.steps.at(-1)?.state !== "attempted"
     )
       throw Error("Configuration maintenance is no longer applying");
     return now;

@@ -207,9 +207,11 @@ async function launched() {
       });
       return { containerId: "c".repeat(64) };
     },
-    findHelper: async () => ({ id: "c".repeat(64), running: true, exitCode: null }),
+    findHelper: async () => ({ id: "c".repeat(64), running: true, created: false, exitCode: null }),
     removeHelper: vi.fn(),
+    helperAdopted: () => false,
     cancelLease: vi.fn(),
+    leaseHeld: () => true,
     releaseLease: vi.fn(),
   };
   maintenance = new ConfigurationMaintenance(installation, adapters);
@@ -333,6 +335,49 @@ describe("configuration helper", () => {
       reason: expect.objectContaining({ message: "Configuration helper already started" }),
     });
     expect(replaced).toHaveLength(targets.length);
+  });
+
+  it("starts nothing once the agent settled its child as never launched", async () => {
+    const leaseId = await launched();
+    const child = leases.readSync(leaseId)!.children.find((value) => value.key === handoffId)!;
+    await leases.settle({
+      leaseId,
+      key: handoffId,
+      settlement: {
+        identity: child.execution,
+        outcome: "failed_without_effect",
+        publication: "not_started",
+        terminalReceiptDigest: "e".repeat(64),
+      },
+    });
+    await expect(run(leaseId)).rejects.toThrow("already started");
+    expect(replaced).toEqual([]);
+    expect(readHandoffProgress(installation, maintenanceId)).toBeUndefined();
+  });
+
+  it("reports applied when its own settle fails after every target was verified", async () => {
+    const leaseId = await launched();
+    let updates = 0;
+    // The adoption is written; the settle after the last target hits a lock timeout.
+    const failingStore: LeaseStore = Object.assign(Object.create(store), {
+      update: (change: Parameters<LeaseStore["update"]>[0]) =>
+        updates++ === 0 ? store.update(change) : Promise.reject(Error("lease store lock timeout")),
+    });
+    expect(
+      await runConfigurationHandoff({
+        installation,
+        store: failingStore,
+        host: host(),
+        maintenanceId,
+        handoffId,
+        leaseId,
+        leaseChild: handoffId,
+        signal: AbortSignal.timeout(5000),
+      }),
+    ).toBe("applied");
+    expect(readHandoffProgress(installation, maintenanceId)?.phase).toBe("applied");
+    const child = leases.readSync(leaseId)?.children.find((value) => value.key === handoffId);
+    expect(child).toMatchObject({ adopted: true, state: "held" });
   });
 
   it("refuses to run a second time once its child was adopted", async () => {

@@ -83,7 +83,9 @@ export async function runConfigurationHandoff(input: {
       records.find((lease) => lease.leaseId === input.leaseId),
       input.leaseChild,
     );
-    if (child.adopted) throw Error("Configuration helper already started");
+    // A child the agent settled records a launch it counted as never made.
+    if (child.adopted || child.state === "settled")
+      throw Error("Configuration helper already started");
     leaseRules.adopt(
       records,
       { leaseId: input.leaseId, key: input.leaseChild, execution: child.execution },
@@ -162,8 +164,6 @@ export async function runConfigurationHandoff(input: {
     }
     await input.host.verifyAll(file, input.signal);
     save({ phase: "applied" });
-    await settle("committed");
-    return "applied";
   } catch (error) {
     if (error instanceof HandoffCancelled) {
       save({ phase: "cancelled" });
@@ -178,4 +178,12 @@ export async function runConfigurationHandoff(input: {
     }
     throw error;
   }
+  // Every target is verified and recorded: the handoff applied. A child this
+  // settle leaves held is settled by the agent from that progress.
+  try {
+    await settle("committed");
+  } catch {
+    /* The agent settles it once the helper exited. */
+  }
+  return "applied";
 }
