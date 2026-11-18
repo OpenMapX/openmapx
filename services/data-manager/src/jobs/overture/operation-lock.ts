@@ -1,10 +1,10 @@
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import { sql } from "../../db/index.js";
 import { withDataSqlSettlement } from "../execution/worker-scope.js";
 
-// Stable, application-owned two-key advisory lock. Every operation that can
-// replace the Overture schema or its OSM snapshot uses the same lock.
-export const OVERTURE_LOCK_NAMESPACE = 1_330_466_120;
-export const OVERTURE_LOCK_KEY = 1;
+// Every operation that can replace the Overture schema or its OSM snapshot
+// uses the same lock.
+export const [OVERTURE_LOCK_NAMESPACE, OVERTURE_LOCK_KEY] = DATA_ADVISORY_LOCKS.overture;
 
 const LOCK_RETRY_MS = 250;
 

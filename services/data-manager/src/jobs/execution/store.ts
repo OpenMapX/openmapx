@@ -14,6 +14,7 @@ import {
   isDataExecutionTerminal,
   normalizeDataExecutionInput,
 } from "@openmapx/core/data-manager-contracts";
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import {
   canonicalJson,
   type ExecutionRef,
@@ -44,7 +45,7 @@ const reservationContinuations = new WeakMap<
 >();
 
 import type { DataConfigurationMaintenance } from "./configuration-maintenance.js";
-export const DATA_ADMISSION_LOCK = [0x4f4d58, 2] as const;
+export const DATA_ADMISSION_LOCK = DATA_ADVISORY_LOCKS.dataAdmission;
 export class DataExecutionConflict extends Error {
   readonly statusCode = 409;
 }

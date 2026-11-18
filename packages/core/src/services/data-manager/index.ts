@@ -1,3 +1,4 @@
+export { DATA_ADVISORY_LOCKS } from "./advisory-locks";
 export {
   inspectDataConfigurationFence,
   prepareDataConfigurationFence,

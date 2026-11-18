@@ -1,10 +1,10 @@
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
 
 import { withDataSqlSettlement } from "../execution/worker-scope.js";
 
-export const SEARCH_INDEX_LOCK_NAMESPACE = 1_330_466_120;
-export const SEARCH_INDEX_LOCK_KEY = 2;
-const NOTABLE_PLACES_LOCK_KEY = 3;
+export const [SEARCH_INDEX_LOCK_NAMESPACE, SEARCH_INDEX_LOCK_KEY] = DATA_ADVISORY_LOCKS.searchIndex;
+const [, NOTABLE_PLACES_LOCK_KEY] = DATA_ADVISORY_LOCKS.notablePlaces;
 
 export interface SearchIndexOperationLock {
   readonly inFlight: boolean;

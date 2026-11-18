@@ -1,6 +1,7 @@
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
 
-export const AMBIENT_WRITE_LOCK = 139399;
+export const AMBIENT_WRITE_LOCK = DATA_ADVISORY_LOCKS.ambientPublication;
 export class AmbientPublicationBusyError extends Error {
   constructor(message = "Another ambient publication or pointer change is running") {
     super(message);

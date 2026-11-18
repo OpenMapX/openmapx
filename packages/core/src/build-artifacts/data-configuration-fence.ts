@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { executionFingerprint, type VerifiedParentExecution } from "../ops/execution-identity";
+import { DATA_ADVISORY_LOCKS } from "../services/data-manager/advisory-locks";
 import {
   type DataConfigurationFencePrepare,
   type DataConfigurationFencePrepareRequest,
@@ -102,10 +103,9 @@ export function createDataConfigurationFenceStore(
     throw Error("Fixed DM fence receiver required");
   let open = false;
   async function lock(tx: Tx) {
-    const rows = await tx.unsafe(
-      "SELECT pg_try_advisory_xact_lock($1::int,$2::int) AS held",
-      [0x4f4d58, 2],
-    );
+    const rows = await tx.unsafe("SELECT pg_try_advisory_xact_lock($1::int,$2::int) AS held", [
+      ...DATA_ADVISORY_LOCKS.dataAdmission,
+    ]);
     if (rows[0]?.held !== true) throw new DataFenceBusy();
   }
   async function row(tx: Tx, where: "maintenance_id" | "state", value: string) {
