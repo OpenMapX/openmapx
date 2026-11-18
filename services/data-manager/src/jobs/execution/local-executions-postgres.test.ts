@@ -423,6 +423,8 @@ describe.skipIf(
       mode: 0o700,
     });
     symlinkSync(`generations/${revisionId}`, join(infra, services.CURRENT_CONFIGURATION));
+    // Removed last, after the harness has closed the installation inside it.
+    cleanups.push(async () => rmSync(repo, { recursive: true, force: true }));
     const h = await harness({ infraDir: infra, fence: options.fence }),
       runtime = h.runtime();
     const entries = options.entries ?? [
@@ -466,7 +468,6 @@ describe.skipIf(
       await app.close();
       await h.sql`DELETE FROM data_manager.jobs WHERE kind='generation-link'`;
       await h.sql`DELETE FROM data_manager.configuration_fence`;
-      rmSync(repo, { recursive: true, force: true });
     });
     const send = (
       caller: "host-cli" | "ops-agent",
@@ -524,7 +525,7 @@ describe.skipIf(
   }, 60_000);
 
   it("applies a plan under the lease its sender holds, which refuses data-manager's own lease", async () => {
-    const { h, data, send } = await linkFixture();
+    const { h, data, send } = await linkFixture({ fence: true });
     // A host operation holding every service, as `control rollback` does.
     const deadline = Date.now() + 60_000,
       owner = {
@@ -557,6 +558,17 @@ describe.skipIf(
       ["error", null],
       ["ok", held.leaseId],
     ]);
+    // The sender settles its own lease from the answer it got.
+    await leases.settle({
+      leaseId: held.leaseId,
+      key: null,
+      settlement: {
+        identity: owner,
+        outcome: "committed",
+        publication: "committed",
+        terminalReceiptDigest: "0".repeat(64),
+      },
+    });
     await leases.release({ leaseId: held.leaseId });
   }, 60_000);
 
