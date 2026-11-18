@@ -22,6 +22,8 @@ export async function ownedDataManager(options: {
   pausePrepareResponse?: boolean;
   /** Drops the first successful settle reply after the row was settled. */
   loseSettleResponseOnce?: boolean;
+  /** Answers every settle with 503 while it returns true, before anything is settled. */
+  refuseSettles?: () => boolean;
   /** Called once the fence has been prepared successfully. */
   onPrepared?: () => void;
   loseRecoveryResponseOnce?: boolean;
@@ -50,6 +52,9 @@ export async function ownedDataManager(options: {
   const fenceInspectionReplies: { status: number; body: unknown }[] = [];
   let originalInspection: { url: string; headers: Record<string, string> } | undefined;
   const keys = new Set<string>(), replies: { status: number; body: unknown }[] = [];
+  app.addHook("onRequest", async (request, reply) => {
+    if (options.refuseSettles?.() && request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) await reply.code(503).send({ error: "unavailable" });
+  });
   app.addHook("onSend", async (request, reply, payload) => {
     if (request.method === "POST" && request.url === "/executions/configuration-maintenance/recovery") {
       recoveryPosts++;

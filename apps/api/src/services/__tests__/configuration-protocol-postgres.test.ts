@@ -192,7 +192,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
     }
     /** A running data-manager the maintenance replaces, and the container that replaces it. */
-    async function coordinator(options: { loseSettleResponseOnce?: boolean } = {}) {
+    async function coordinator(
+      options: { loseSettleResponseOnce?: boolean; refuseSettles?: () => boolean } = {},
+    ) {
       dm = await ownedDataManager({
         sql: fixture.sql,
         infraDir: host.infraDir,
@@ -378,6 +380,38 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       180000,
     );
+
+    it("settles through the agent's own check when data-manager answers the settlement only later", async () => {
+      let refuse = true;
+      const dmRow = await coordinator({ refuseSettles: () => refuse });
+      const ctx = await job();
+      await owned(ctx, async () => {
+        const candidate = await credentialCandidate(ctx, "synthetic-late-settle-credential");
+        replaceOnRecreate(dmRow, () => candidate.revisionId);
+        const applying = prospective.persistAndApplyProspectiveConfiguration(candidate, {
+          coordinatorMode: "require-running",
+          signal: ctx.signal,
+        });
+        // The settle under the job's one key answers the record as settling once
+        // the agent's own retries end; the job keeps reading the record.
+        await vi.waitFor(
+          () =>
+            expect(operations(ctx, "configurationMaintenance.settle")[0]?.result).toMatchObject({
+              state: "settling",
+              fenceOutcome: "applied",
+            }),
+          { timeout: 60_000, interval: 250 },
+        );
+        expect(heldTargets(host.infraDir)).not.toEqual([]);
+        refuse = false;
+        const { application } = await applying;
+        expect(application).toMatchObject({ outcome: "committed", followUp: "complete" });
+        expect(operations(ctx, "configurationMaintenance.settle")).toHaveLength(1);
+        expect(agentRecord(ctx)).toMatchObject({ state: "settled", fenceOutcome: "applied" });
+        expect(await dm!.fenceStates()).toEqual(["settled"]);
+        expect(heldTargets(host.infraDir)).toEqual([]);
+      });
+    }, 180000);
 
     it("abandons the prepared maintenance unused when the save rolls back", async () => {
       await coordinator();

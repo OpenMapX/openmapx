@@ -738,13 +738,14 @@ async function applyPhase(candidate: ValidatedConfigurationCandidate): Promise<v
     return;
   }
   const { applied, settled } = await applySavedConfigurationMaintenance(candidate);
-  // A cancel before the maintenance applied anything leaves the generation as it was.
+  // A cancel, or an apply the agent refused, before the maintenance applied
+  // anything leaves the generation as it was.
   if (!applied?.generation) {
     if (settled.generation !== "not_started") throw new JobObservationPending("recovery_required");
     await recordOutcome(notCommitted("failed"));
     await writePhase(candidate, "generation_applied");
     await retireSettledProspectiveConfiguration(candidate);
-    throw new AdminJobFailure("Configuration maintenance was cancelled", {
+    throw new AdminJobFailure("Configuration maintenance ended before it applied anything", {
       configuration: notCommitted("failed"),
     });
   }
@@ -2660,12 +2661,20 @@ async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurat
   );
   let applied: OpsResultFor<"configurationMaintenance.apply"> | undefined;
   if (!cancelled() || attempted)
-    applied = await executeAdminJobOperation(
-      job,
-      { kind: "configurationMaintenance.apply", maintenanceId },
-      "configuration-maintenance.apply",
-      { durableIdentity: maintenanceId },
-    );
+    try {
+      applied = await executeAdminJobOperation(
+        job,
+        { kind: "configurationMaintenance.apply", maintenanceId },
+        "configuration-maintenance.apply",
+        { durableIdentity: maintenanceId },
+      );
+    } catch (error) {
+      // The agent refused the apply: its deadline passed (`stale`) or the
+      // maintenance no longer takes one. The record says what ran; it is
+      // settled below like a cancelled one.
+      if (!(error instanceof ApiOpsError) || !["stale", "conflict"].includes(error.errorClass))
+        throw error;
+    }
   let record = applied?.record ?? (await inspectConfigurationMaintenance(maintenanceId));
   let cancelSent = false;
   for (;;) {
@@ -2681,10 +2690,17 @@ async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurat
     await new Promise((resolve) => setTimeout(resolve, 1000));
     record = await inspectConfigurationMaintenance(maintenanceId);
   }
-  const settled = await settleConfigurationMaintenance(
+  let settled = await settleConfigurationMaintenance(
     maintenanceId,
     record.state === "prepared" ? "abandon" : "complete",
   );
+  // Data-manager has not answered the fence settlement yet; the agent sends it
+  // again itself, and the job reads the record until it is settled.
+  while (settled.state === "settling") {
+    job.signal.throwIfAborted();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    settled = await inspectConfigurationMaintenance(maintenanceId);
+  }
   if (settled.state !== "settled") throw new JobObservationPending("transport");
   return { applied, settled };
 }
