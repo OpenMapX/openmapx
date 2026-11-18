@@ -56,7 +56,6 @@ import {
   type ExecutionRef,
   executionFingerprint,
   isTrustedConfigurationApplyOperation,
-  type MaintenanceRecord,
   normalizeExecutionAdmission,
   OPS_KIND_POLICIES,
   OPS_MAX_CLOCK_SKEW_MS,
@@ -689,6 +688,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     ...(job.terminationRequestedAt === undefined
       ? {}
       : { terminationRequestedAt: job.terminationRequestedAt }),
+    ...(job.interrupted && job.state === "failed" ? { interrupted: true as const } : {}),
   });
 
   const flushDiagnostics = async () => {
@@ -1831,36 +1831,36 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       await maintenance
         .recover(AbortSignal.timeout(60_000))
         .catch((error) => console.warn("Configuration maintenance recovery failed", error));
-      // A settle the restart interrupted ends as its record now stands: the
-      // record carries the settlement's effects, which recovery finished.
-      const timestamp = now();
-      for (const job of jobsById.values()) {
-        if (
-          job.operation.kind !== "configurationMaintenance.settle" ||
-          job.state !== "failed" ||
-          job.errorClass !== "recovery_required"
-        )
-          continue;
-        let record: MaintenanceRecord;
-        try {
-          record = maintenance.read(job.operation.maintenanceId).record;
-        } catch {
-          continue;
+      // A settle a restart interrupted ends with its record once that record
+      // settled, now or in a later check.
+      const completeInterruptedSettles = async () => {
+        for (const job of jobsById.values()) {
+          const record = maintenance.interruptedSettleResult(job);
+          if (!record) continue;
+          const timestamp = now();
+          Object.assign(job, {
+            state: "succeeded",
+            result: record,
+            errorClass: undefined,
+            failureResult: undefined,
+            interrupted: undefined,
+            terminalAt: timestamp.getTime(),
+            updatedAt: timestamp.toISOString(),
+          });
+          stickyRecoveryRequired.delete(job.operationId);
+          await journal.replace([...jobsById.values()].map(persisted));
         }
-        if (record.state !== "settling" && record.state !== "settled") continue;
-        Object.assign(job, {
-          state: "succeeded",
-          result: record,
-          errorClass: undefined,
-          failureResult: undefined,
-          terminalAt: timestamp.getTime(),
-          updatedAt: timestamp.toISOString(),
-        });
-        stickyRecoveryRequired.delete(job.operationId);
-        await journal.replace([...jobsById.values()].map(persisted));
-      }
+      };
+      await completeInterruptedSettles().catch((error) =>
+        console.warn("Interrupted maintenance settle completion failed", error),
+      );
+      // A failing check is logged; the agent keeps running and checks again.
       maintenanceCheck = setInterval(
-        () => void maintenance.tick(AbortSignal.timeout(60_000)),
+        () =>
+          void maintenance
+            .tick(AbortSignal.timeout(60_000))
+            .then(() => withAdmissionLock(completeInterruptedSettles))
+            .catch((error) => console.warn("Configuration maintenance check failed", error)),
         MAINTENANCE_CHECK_INTERVAL_MS,
       );
       maintenanceCheck.unref();

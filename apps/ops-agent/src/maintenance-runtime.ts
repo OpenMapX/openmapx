@@ -75,6 +75,7 @@ import {
   type MaintenanceAdapters,
   MaintenanceFenceRefused,
   type MaintenanceFile,
+  MaintenanceSettlementRefused,
   readMaintenance,
 } from "./maintenance";
 import { maintenanceSource, planConfigurationMaintenance } from "./maintenance-source";
@@ -333,7 +334,11 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
             signal,
           },
         ),
-      );
+      ).catch((error: unknown) => {
+        if (error instanceof DataManagerHttpError && (error.status === 404 || error.status === 409))
+          throw new MaintenanceSettlementRefused(error);
+        throw error;
+      });
       if (receipt.state !== "settled") throw Error("Data-manager did not settle the fence");
       return receipt;
     },
@@ -722,14 +727,19 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           .catch(() => undefined);
       context.signal.addEventListener("abort", cancel, { once: true });
       try {
-        const out = await refusals(() =>
-          maintenance.applySteps(
+        const out = await maintenance
+          .applySteps(
             operation.maintenanceId,
             apiJobId,
             AbortSignal.timeout(Math.max(1, context.execution.deadlineAt - Date.now())),
             (stream, message) => context.emitLog(stream, message),
-          ),
-        );
+          )
+          .catch((error: unknown) => {
+            throw applyFailure(
+              error,
+              readMaintenance(installation, operation.maintenanceId).record,
+            );
+          });
         if (out.outcome === "unknown") throw new OpsExecutionFailure("recovery_required", {});
         return {
           outcome: out.outcome,
@@ -772,4 +782,13 @@ export function maintenanceFailure(error: unknown): unknown {
   return error instanceof MaintenanceTransitionRefused
     ? new OpsExecutionFailure(REFUSAL_CLASSES[error.reason], {})
     : error;
+}
+
+/** An apply's failure. Only a refusal before any step started tells the API
+ * that nothing ran; after that the maintenance follows the recovery path. */
+export function applyFailure(error: unknown, record: MaintenanceRecord): unknown {
+  return error instanceof MaintenanceTransitionRefused &&
+    record.steps.some((step) => step.state !== "pending")
+    ? new OpsExecutionFailure("recovery_required", {})
+    : maintenanceFailure(error);
 }

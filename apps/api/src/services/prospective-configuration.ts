@@ -2701,6 +2701,8 @@ async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurat
     await new Promise((resolve) => setTimeout(resolve, 1000));
     settled = await inspectConfigurationMaintenance(maintenanceId);
   }
+  // Data-manager refused the settlement for good: the operator resolves it.
+  if (settled.state === "recovery_required") throw new JobObservationPending("recovery_required");
   if (settled.state !== "settled") throw new JobObservationPending("transport");
   return { applied, settled };
 }

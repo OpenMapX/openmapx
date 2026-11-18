@@ -7,7 +7,9 @@ import {
   controlChildOperationKey,
   openControlInstallation,
   provisionControlDirectories,
+  writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
+import { DataManagerHttpError } from "@openmapx/core/data-manager-sdk";
 import {
   createControlRootOperationKey,
   executionFingerprint,
@@ -18,19 +20,21 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { settleMaintenanceFence } from "../../../packages/cli/src/lib/control-resolve";
 import { buildFixedConfigurationMaintenancePlan } from "../../../packages/core/src/build-artifacts/fixed-configuration-maintenance";
+import { installationState } from "../../../packages/core/src/build-artifacts/private-records";
 import {
   ConfigurationMaintenance,
   createMaintenance,
   type MaintenanceAdapters,
   MaintenanceFenceRefused,
   type MaintenanceFile,
+  MaintenanceSettlementRefused,
   maintenanceCapacityReached,
   pendingHandoffs,
   readHandoffOutcome,
   readMaintenance,
   writeHandoffProgress,
 } from "./maintenance";
-import { maintenanceFailure } from "./maintenance-runtime";
+import { applyFailure, maintenanceFailure } from "./maintenance-runtime";
 import { OpsExecutionFailure } from "./runtime";
 
 vi.mock("@openmapx/core/data-manager-sdk", async (original) => ({
@@ -150,6 +154,32 @@ function admit(options: { handoff?: boolean; maintenanceId?: string } = {}) {
     leaseId: "88888888-8888-4888-8888-888888888888",
     now: new Date(),
   });
+}
+/** The maintenance's lease as `openmapx control resolve` reads it from the store. */
+function fenceLease(file: MaintenanceFile) {
+  return {
+    leaseId: "88888888-8888-4888-8888-888888888888",
+    owner: file.plan.prepare,
+    ownerKind: "configurationMaintenance.prepare",
+    targets: ["data-manager"],
+    state: "held" as const,
+    createdAt: Date.now(),
+    children: [
+      {
+        key: "99999999-9999-4999-8999-999999999999",
+        parentKey: null,
+        parent: file.plan.prepare,
+        execution: { ...file.plan.prepare, executor: "data-manager", principal: "data-manager" },
+        kind: "configuration-maintenance.prepare",
+        phase: "configuration-fence",
+        recipient: "data-manager",
+        targets: ["data-manager"],
+        evidence: { maintenanceId, candidateId, planDigest: file.plan.planDigest },
+        adopted: true,
+        state: "settled" as const,
+      },
+    ],
+  } as Parameters<typeof settleMaintenanceFence>[1];
 }
 function progress(
   phase: HandoffProgress["phase"],
@@ -369,7 +399,7 @@ describe("configuration maintenance in the agent", () => {
     vi.unstubAllEnvs();
   });
 
-  it("resolves with the record's fence outcome and never while the helper may run", async () => {
+  it("resolves with the record's fence outcome and never while the agent drives the maintenance", async () => {
     const file = admit({ handoff: true });
     const maintenance = new ConfigurationMaintenance(installation, adapters);
     await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
@@ -404,22 +434,87 @@ describe("configuration maintenance in the agent", () => {
       ],
     } as Parameters<typeof settleMaintenanceFence>[1];
     const infraDir = join(root, "infra", "docker");
-    await expect(
-      settleMaintenanceFence(infraDir, held, "committed", async () => true),
-    ).rejects.toThrow("may still replace services");
+    // Applying, whether its helper still runs or exited unobserved: the agent
+    // finishes it, so the operator is told to wait.
+    await expect(settleMaintenanceFence(infraDir, held, "committed")).rejects.toThrow(
+      "The agent is still driving this maintenance (applying)",
+    );
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 1 };
+    await expect(settleMaintenanceFence(infraDir, held, "committed")).rejects.toThrow(
+      "still driving",
+    );
     expect(sdk.settleDataConfigurationFence).not.toHaveBeenCalled();
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("applying");
     // A record that settled with its outcome fixed decides the fence's outcome.
     progress("cancelled", "pending");
-    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 1 };
     await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
     const settled = readMaintenance(installation, maintenanceId).record;
     expect(settled).toMatchObject({ state: "settled", fenceOutcome: "applied" });
-    await settleMaintenanceFence(infraDir, held, "failed", async () => true);
+    await settleMaintenanceFence(infraDir, held, "failed");
     expect(vi.mocked(sdk.settleDataConfigurationFence).mock.calls[0]?.[0]).toEqual({
       ...evidence,
       outcome: "applied",
     });
     vi.unstubAllEnvs();
+  });
+
+  it("stops sending a settlement data-manager refuses for good, until the operator resolves it", async () => {
+    const file = admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    const infraDir = join(root, "infra", "docker");
+    await expect(settleMaintenanceFence(infraDir, fenceLease(file), "failed")).rejects.toThrow(
+      "The agent is still driving this maintenance (prepared)",
+    );
+    adapters.settleFence = vi.fn(async () => {
+      throw new MaintenanceSettlementRefused(Error("404"));
+    });
+    const refused = await maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000));
+    expect(refused).toMatchObject({ state: "recovery_required", fenceOutcome: "unused" });
+    await maintenance.tick(AbortSignal.timeout(5000));
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+    expect(lease.held).toBe(true);
+    // Data-manager has no such fence for the operator either; the resolution ends it.
+    const sdk = await import("@openmapx/core/data-manager-sdk");
+    vi.mocked(sdk.settleDataConfigurationFence).mockReset();
+    vi.mocked(sdk.settleDataConfigurationFence).mockRejectedValue(
+      new DataManagerHttpError("Configuration maintenance identity is unknown", 404),
+    );
+    vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:1");
+    vi.stubEnv("DATA_MANAGER_TOKEN", "x".repeat(43));
+    await settleMaintenanceFence(infraDir, fenceLease(file), "failed");
+    expect(readMaintenance(installation, maintenanceId).record).toMatchObject({
+      state: "settled",
+      fenceOutcome: "unused",
+    });
+    // Settled, it is released and receipted like any other, and never sent again.
+    await maintenance.recover(AbortSignal.timeout(5000));
+    expect(lease.held).toBe(false);
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+    vi.unstubAllEnvs();
+  });
+
+  it("records a step whose result the record refuses as unknown, not as an apply refusal", async () => {
+    admit();
+    // The generation step commits another revision than the bound one.
+    adapters.runStep = vi.fn(async () => ({
+      outcome: "committed" as const,
+      appliedRevisionId: `cfg1_${"b".repeat(43)}`,
+      result: { outcome: "committed" },
+    }));
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    const applied = await maintenance.applySteps(
+      maintenanceId,
+      apiJobId,
+      AbortSignal.timeout(5000),
+    );
+    expect(applied.outcome).toBe("unknown");
+    expect(applied.record).toMatchObject({ state: "recovery_required", generation: "unknown" });
+    expect(applied.record.steps[0]).toMatchObject({ state: "terminal", outcome: "unknown" });
+    expect(adapters.runStep).toHaveBeenCalledOnce();
+    expect(lease.held).toBe(true);
   });
 
   it("gives recovery_required on restart with a step attempted and runs nothing again", async () => {
@@ -782,5 +877,66 @@ describe("maintenance records the agent keeps", () => {
     expect(failure("busy")).toBeInstanceOf(OpsExecutionFailure);
     const crash = Error("lost");
     expect(maintenanceFailure(crash)).toBe(crash);
+  });
+
+  it("tells the API an apply was refused only while no step started", () => {
+    const { record } = admit();
+    const conflict = new MaintenanceTransitionRefused("conflict");
+    expect(applyFailure(conflict, record)).toMatchObject({ errorClass: "conflict" });
+    const started = {
+      ...record,
+      state: "applying" as const,
+      steps: record.steps.map((step, index) =>
+        index === 0 ? { ...step, state: "attempted" as const } : step,
+      ),
+    };
+    expect(applyFailure(conflict, started)).toMatchObject({ errorClass: "recovery_required" });
+    const crash = Error("lost");
+    expect(applyFailure(crash, started)).toBe(crash);
+  });
+
+  it("completes only a settle the agent's stop interrupted, once its record settled", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    const row = (interrupted: boolean) => ({
+      operation: {
+        kind: "configurationMaintenance.settle" as const,
+        maintenanceId,
+        outcome: "complete" as const,
+      },
+      state: "failed" as const,
+      ...(interrupted ? { interrupted: true as const } : {}),
+    });
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    adapters.settleFence = async () => {
+      throw Error("data-manager unreachable");
+    };
+    await maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000));
+    // Settling proves no settlement yet.
+    expect(maintenance.interruptedSettleResult(row(true))).toBeUndefined();
+    adapters.settleFence = async (file) => fence("settled", file);
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(maintenance.interruptedSettleResult(row(true))).toMatchObject({ state: "settled" });
+    // A settle that failed by itself keeps its failure.
+    expect(maintenance.interruptedSettleResult(row(false))).toBeUndefined();
+  });
+
+  it("logs a record it cannot read and keeps checking", async () => {
+    admit();
+    writePrivateRecord(
+      installationState(installation),
+      "maintenance",
+      "33333333-3333-4333-8333-000000000099.json",
+      { version: 99 },
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await expect(maintenance.tick(AbortSignal.timeout(5000))).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "Configuration maintenance records are unreadable",
+      expect.anything(),
+    );
+    await expect(maintenance.tick(AbortSignal.timeout(5000))).resolves.toBeUndefined();
+    warn.mockRestore();
   });
 });

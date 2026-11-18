@@ -28,6 +28,7 @@ import {
 } from "../../../packages/core/src/build-artifacts/maintenance-file";
 import { installationState } from "../../../packages/core/src/build-artifacts/private-records";
 import type { DataConfigurationFenceReceipt } from "../../../packages/core/src/services/data-manager/contracts/configuration-maintenance";
+import type { PersistedOpsJob } from "./journal";
 
 export type { MaintenanceFile };
 
@@ -85,6 +86,15 @@ export class MaintenanceFenceRefused extends Error {
   constructor() {
     super("Data-manager refused the configuration fence");
     this.name = "MaintenanceFenceRefused";
+  }
+}
+
+/** Data-manager refused the fence settlement for good: it has no such fence or
+ * settled it otherwise. Sending it again cannot succeed. */
+export class MaintenanceSettlementRefused extends Error {
+  constructor(cause: unknown) {
+    super("Data-manager refused the configuration fence settlement", { cause });
+    this.name = "MaintenanceSettlementRefused";
   }
 }
 
@@ -389,18 +399,26 @@ export class ConfigurationMaintenance {
             result = { outcome: "unknown" };
           }
           if (step.phase === "configuration-commit") outcome.generation = result.result;
-          queue.unshift(
-            ...(
-              await this.change(maintenanceId, {
-                type: "step_terminal",
-                ordinal: effect.ordinal,
-                outcome: result.outcome,
-                ...(result.appliedRevisionId
-                  ? { appliedRevisionId: result.appliedRevisionId }
-                  : {}),
-              })
-            ).effects,
-          );
+          let terminal: Awaited<ReturnType<typeof this.change>>;
+          try {
+            terminal = await this.change(maintenanceId, {
+              type: "step_terminal",
+              ordinal: effect.ordinal,
+              outcome: result.outcome,
+              ...(result.appliedRevisionId ? { appliedRevisionId: result.appliedRevisionId } : {}),
+            });
+          } catch (error) {
+            // The step ran, but its result does not fit the record (another
+            // revision committed): its outcome is unknown.
+            if (!(error instanceof MaintenanceTransitionRefused)) throw error;
+            result = { outcome: "unknown" };
+            terminal = await this.change(maintenanceId, {
+              type: "step_terminal",
+              ordinal: effect.ordinal,
+              outcome: "unknown",
+            });
+          }
+          queue.unshift(...terminal.effects);
           if (result.outcome === "unknown") outcome.value = "unknown";
           break;
         }
@@ -415,9 +433,13 @@ export class ConfigurationMaintenance {
           try {
             fence = await this.adapters.settleFence(file, effect.outcome, signal);
           } catch (error) {
-            // The record stays settling with its outcome fixed; the agent's own
-            // check sends the same idempotent settlement again.
             console.warn("Configuration fence settlement failed", maintenanceId, error);
+            // A settlement refused for good is not sent again: the maintenance
+            // waits for `openmapx control resolve`.
+            if (error instanceof MaintenanceSettlementRefused)
+              await this.change(maintenanceId, { type: "settlement_refused" });
+            // Otherwise the record stays settling with its outcome fixed; the
+            // agent's own check sends the same idempotent settlement again.
             break;
           }
           queue.unshift(
@@ -602,7 +624,15 @@ export class ConfigurationMaintenance {
   }
 
   private async check(signal: AbortSignal, everySettled: boolean): Promise<void> {
-    for (const file of listMaintenance(this.installation)) {
+    let files: MaintenanceFile[];
+    try {
+      files = listMaintenance(this.installation);
+    } catch (error) {
+      // A record the agent cannot read stops this check, not the agent.
+      console.warn("Configuration maintenance records are unreadable", error);
+      return;
+    }
+    for (const file of files) {
       const { record } = file;
       const maintenanceId = record.maintenanceId;
       try {
@@ -624,5 +654,25 @@ export class ConfigurationMaintenance {
 
   handoffPending(): ReadonlySet<string> {
     return pendingHandoffs(this.installation);
+  }
+
+  /** The result of a settle the agent's stop interrupted, once its record
+   * settled: the settle has no effect of its own beyond the record's
+   * transitions. A settle that failed by itself keeps its failure. */
+  interruptedSettleResult(
+    job: Pick<PersistedOpsJob, "operation" | "state" | "interrupted">,
+  ): MaintenanceRecord | undefined {
+    if (
+      job.operation.kind !== "configurationMaintenance.settle" ||
+      job.state !== "failed" ||
+      !job.interrupted
+    )
+      return undefined;
+    try {
+      const { record } = this.read(job.operation.maintenanceId);
+      return record.state === "settled" ? record : undefined;
+    } catch {
+      return undefined;
+    }
   }
 }

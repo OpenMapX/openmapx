@@ -131,8 +131,13 @@ export type MaintenanceEvent =
   | { type: "cancel" }
   | { type: "settle_complete" }
   | { type: "fence_settled"; fence: DataConfigurationFenceReceipt }
+  /** Data-manager refused the settlement for good (it has no such fence, or
+   * settled it otherwise): the agent stops sending it; an operator resolves. */
+  | { type: "settlement_refused" }
   /** `openmapx control resolve` after the operator checked the host. */
-  | { type: "resolve"; as: "committed" | "failed" };
+  | { type: "resolve"; as: "committed" | "failed" }
+  /** The operator's resolution ends a settlement data-manager refused for good. */
+  | { type: "operator_settled" };
 
 export type MaintenanceEffect =
   | { type: "prepare_fence" }
@@ -396,6 +401,16 @@ export function transitionMaintenance(
         refuse("conflict");
       if (record.steps.some(unresolved)) refuse("busy");
       record.fence = dataConfigurationFenceReceiptSchema.parse(event.fence);
+      settleRelease();
+      break;
+    case "settlement_refused":
+      if (record.state === "recovery_required") return unchanged();
+      if (record.state !== "settling") refuse("conflict");
+      record.state = "recovery_required";
+      break;
+    case "operator_settled":
+      if (record.state === "settled") return unchanged();
+      if (record.state !== "settling") refuse("conflict");
       settleRelease();
       break;
     case "resolve":

@@ -76,6 +76,9 @@ export interface PersistedOpsJob {
   // Durable proof that a cancellation request moved this job into
   // `termination_pending`, retained through its terminal state.
   terminationRequestedAt?: string;
+  /** The job failed because the agent stopped while it ran, not by its own
+   * failure: its outcome is unknown. */
+  interrupted?: true;
 }
 
 export interface OpsJobJournal {
@@ -151,6 +154,7 @@ function parseJob(value: unknown): PersistedOpsJob {
       "errorClass",
       "terminalAt",
       "terminationRequestedAt",
+      "interrupted",
     ]) ||
     raw.executionVersion !== 2 ||
     raw.requestVersion !== OPS_PROTOCOL_VERSION ||
@@ -168,6 +172,7 @@ function parseJob(value: unknown): PersistedOpsJob {
     !iso(raw.updatedAt) ||
     (raw.terminalAt !== undefined && !iso(raw.terminalAt)) ||
     (raw.terminationRequestedAt !== undefined && !iso(raw.terminationRequestedAt)) ||
+    (raw.interrupted !== undefined && (raw.interrupted !== true || raw.state !== "failed")) ||
     (raw.errorClass !== undefined &&
       (typeof raw.errorClass !== "string" || !ERROR_CLASSES.has(raw.errorClass as OpsErrorClass)))
   ) {
@@ -437,6 +442,7 @@ export async function openOpsJobJournal(
                 updatedAt: timestamp,
                 terminalAt: timestamp,
                 errorClass: "recovery_required" as const,
+                interrupted: true as const,
               }
             : entry,
         ),
