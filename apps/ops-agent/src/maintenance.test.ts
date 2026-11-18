@@ -24,10 +24,14 @@ import {
   type MaintenanceAdapters,
   MaintenanceFenceRefused,
   type MaintenanceFile,
+  maintenanceCapacityReached,
+  pendingHandoffs,
   readHandoffOutcome,
   readMaintenance,
   writeHandoffProgress,
 } from "./maintenance";
+import { maintenanceFailure } from "./maintenance-runtime";
+import { OpsExecutionFailure } from "./runtime";
 
 vi.mock("@openmapx/core/data-manager-sdk", async (original) => ({
   ...(await original<typeof import("@openmapx/core/data-manager-sdk")>()),
@@ -42,7 +46,8 @@ const revisionId = `cfg1_${"a".repeat(43)}`;
 const oldContainer = "1".repeat(64);
 const image = `sha256:${"2".repeat(64)}`;
 
-function plan(options: { handoff?: boolean } = {}) {
+function plan(options: { handoff?: boolean; maintenanceId?: string } = {}) {
+  const id = options.maintenanceId ?? maintenanceId;
   const deadlineAt = Date.now() + 600_000,
     root = createControlRootOperationKey({ notAfter: deadlineAt, nonce: Buffer.alloc(16, 9) });
   const parent = {
@@ -57,7 +62,7 @@ function plan(options: { handoff?: boolean } = {}) {
   };
   const apply = {
     kind: "stack.render" as const,
-    maintenanceId,
+    maintenanceId: id,
     candidateId,
     revisionId,
     payloadDigest: "d".repeat(64),
@@ -67,7 +72,7 @@ function plan(options: { handoff?: boolean } = {}) {
   };
   const operation = {
     kind: "configurationMaintenance.prepare" as const,
-    maintenanceId,
+    maintenanceId: id,
     candidateId,
     applyOperationKey: controlChildOperationKey(root, "configuration-commit", 0),
     applyOperationFingerprint: opsOperationFingerprint(apply),
@@ -137,7 +142,7 @@ let lease: { held: boolean; handoff: "none" | "held" | "settled"; adopted: boole
 let order: string[];
 let adapters: MaintenanceAdapters;
 
-function admit(options: { handoff?: boolean } = {}) {
+function admit(options: { handoff?: boolean; maintenanceId?: string } = {}) {
   return createMaintenance(installation, {
     plan: plan(options),
     originalContainers: [],
@@ -699,5 +704,30 @@ describe("helper outcome", () => {
     helper = { id: "c".repeat(64), running: false, created: true, exitCode: 0 };
     lease.adopted = true;
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("unknown");
+  });
+});
+
+describe("maintenance records the agent keeps", () => {
+  it("refuses a new preparation at the bound and still lists every record", () => {
+    for (let index = 0; index < 64; index++) {
+      expect(maintenanceCapacityReached(installation)).toBe(false);
+      admit({ maintenanceId: `33333333-3333-4333-8333-${String(index).padStart(12, "0")}` });
+    }
+    expect(maintenanceCapacityReached(installation)).toBe(true);
+    // A record written past the bound breaks no other admission.
+    admit({ maintenanceId: "33333333-3333-4333-8333-999999999999" });
+    expect(pendingHandoffs(installation).size).toBe(0);
+  });
+
+  it("fails a refused transition with its own class, distinct from a crash", () => {
+    const failure = (reason: ConstructorParameters<typeof MaintenanceTransitionRefused>[0]) =>
+      maintenanceFailure(new MaintenanceTransitionRefused(reason));
+    expect(failure("expired")).toMatchObject({ errorClass: "stale" });
+    expect(failure("busy")).toMatchObject({ errorClass: "busy" });
+    expect(failure("conflict")).toMatchObject({ errorClass: "conflict" });
+    expect(failure("recovery_required")).toMatchObject({ errorClass: "recovery_required" });
+    expect(failure("busy")).toBeInstanceOf(OpsExecutionFailure);
+    const crash = Error("lost");
+    expect(maintenanceFailure(crash)).toBe(crash);
   });
 });

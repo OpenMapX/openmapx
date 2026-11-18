@@ -46,6 +46,8 @@ import {
   isTrustedConfigurationApplyOperation,
   type MaintenanceRecord,
   type MaintenanceStepOutcome,
+  MaintenanceTransitionRefused,
+  type OpsErrorClass,
   type OpsOperation,
   type OpsResultFor,
   type TrustedConfigurationPayload,
@@ -682,6 +684,14 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       throw new OpsExecutionFailure("recovery_required", {});
     return record;
   };
+  /** Runs a handler; a transition the record refuses fails with its own class. */
+  const refusals = async <T>(work: () => Promise<T>): Promise<T> => {
+    try {
+      return await work();
+    } catch (error) {
+      throw maintenanceFailure(error);
+    }
+  };
 
   return {
     maintenance,
@@ -693,7 +703,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       preparing.set(operation.maintenanceId, context.ownedTargetLease);
       let record: MaintenanceRecord;
       try {
-        record = await maintenance.prepare(operation.maintenanceId, context.signal);
+        record = await refusals(() => maintenance.prepare(operation.maintenanceId, context.signal));
       } finally {
         preparing.delete(operation.maintenanceId);
       }
@@ -715,11 +725,13 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           .catch(() => undefined);
       context.signal.addEventListener("abort", cancel, { once: true });
       try {
-        const out = await maintenance.applySteps(
-          operation.maintenanceId,
-          apiJobId,
-          AbortSignal.timeout(Math.max(1, context.execution.deadlineAt - Date.now())),
-          (stream, message) => context.emitLog(stream, message),
+        const out = await refusals(() =>
+          maintenance.applySteps(
+            operation.maintenanceId,
+            apiJobId,
+            AbortSignal.timeout(Math.max(1, context.execution.deadlineAt - Date.now())),
+            (stream, message) => context.emitLog(stream, message),
+          ),
         );
         if (out.outcome === "unknown") throw new OpsExecutionFailure("recovery_required", {});
         return {
@@ -736,7 +748,9 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       context: OpsExecutionContext,
     ): Promise<OpsResultFor<"configurationMaintenance.settle">> {
       return failIf(
-        await maintenance.settle(operation.maintenanceId, operation.outcome, context.signal),
+        await refusals(() =>
+          maintenance.settle(operation.maintenanceId, operation.outcome, context.signal),
+        ),
       );
     },
     async inspect(
@@ -747,3 +761,18 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
   };
 }
 export type MaintenanceRuntime = ReturnType<typeof createMaintenanceRuntime>;
+
+const REFUSAL_CLASSES = {
+  busy: "busy",
+  conflict: "conflict",
+  expired: "stale",
+  recovery_required: "recovery_required",
+} as const satisfies Record<MaintenanceTransitionRefused["reason"], OpsErrorClass>;
+
+/** A refused transition as the operation's failure, so the API tells a refusal
+ * (an apply after the deadline is `stale`) from a crash; anything else as is. */
+export function maintenanceFailure(error: unknown): unknown {
+  return error instanceof MaintenanceTransitionRefused
+    ? new OpsExecutionFailure(REFUSAL_CLASSES[error.reason], {})
+    : error;
+}

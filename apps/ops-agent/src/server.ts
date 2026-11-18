@@ -58,6 +58,7 @@ import {
   type ExecutionRef,
   executionFingerprint,
   isTrustedConfigurationApplyOperation,
+  type MaintenanceRecord,
   normalizeExecutionAdmission,
   OPS_KIND_POLICIES,
   OPS_MAX_CLOCK_SKEW_MS,
@@ -122,7 +123,7 @@ import { isReportedProcessFailure } from "./docker-runtime";
 import { registerOpsIngressRateLimit } from "./ingress-rate-limit";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
 import { LeaseRefused, runLeaseOperation } from "./lease-operations";
-import { createMaintenance, pendingHandoffs } from "./maintenance";
+import { createMaintenance, maintenanceCapacityReached, pendingHandoffs } from "./maintenance";
 import { createMaintenanceRuntime, type MaintenanceRuntime } from "./maintenance-runtime";
 import {
   assertManagedCliConfigurationPreflight,
@@ -157,6 +158,8 @@ const DEFAULT_REPLAY_ENTRIES = 10_000;
 const DEFAULT_JOB_ENTRIES = 256;
 const DEFAULT_JOB_RETENTION_MS = 60 * 60_000;
 const DEFAULT_ADMISSION_TIMEOUT_MS = 15_000;
+/** How often the agent checks maintenances no request drives any more. */
+const MAINTENANCE_CHECK_INTERVAL_MS = 5_000;
 const DEFAULT_CLAIM_TIMEOUT_MS = 5_000;
 const MAX_JOB_ID_ATTEMPTS = 8;
 const MAX_RETAINED_EVENTS_PER_JOB = 64;
@@ -585,7 +588,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const activeControllers = new Map<string, AbortController>();
   const activeSettlements = new Map<string, Promise<void>>();
   let stopControlPrune: (() => Promise<void>) | undefined;
+  let maintenanceCheck: ReturnType<typeof setInterval> | undefined;
   app.addHook("preClose", async () => {
+    clearInterval(maintenanceCheck);
     await stopControlPrune?.();
   });
   const stickyRecoveryRequired = new Set<string>();
@@ -1829,9 +1834,45 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (changed) await journal.replace([...jobsById.values()].map(persisted));
     // A maintenance stopped with an attempted step needs recovery; one whose
     // helper runs is watched. Nothing is started again.
-    await maintenanceRuntime?.maintenance
-      .recover(AbortSignal.timeout(60_000))
-      .catch((error) => console.warn("Configuration maintenance recovery failed", error));
+    if (maintenanceRuntime) {
+      const { maintenance } = maintenanceRuntime;
+      await maintenance
+        .recover(AbortSignal.timeout(60_000))
+        .catch((error) => console.warn("Configuration maintenance recovery failed", error));
+      // A settle the restart interrupted ends as its record now stands: the
+      // record carries the settlement's effects, which recovery finished.
+      const timestamp = now();
+      for (const job of jobsById.values()) {
+        if (
+          job.operation.kind !== "configurationMaintenance.settle" ||
+          job.state !== "failed" ||
+          job.errorClass !== "recovery_required"
+        )
+          continue;
+        let record: MaintenanceRecord;
+        try {
+          record = maintenance.read(job.operation.maintenanceId).record;
+        } catch {
+          continue;
+        }
+        if (record.state !== "settling" && record.state !== "settled") continue;
+        Object.assign(job, {
+          state: "succeeded",
+          result: record,
+          errorClass: undefined,
+          failureResult: undefined,
+          terminalAt: timestamp.getTime(),
+          updatedAt: timestamp.toISOString(),
+        });
+        stickyRecoveryRequired.delete(job.operationId);
+        await journal.replace([...jobsById.values()].map(persisted));
+      }
+      maintenanceCheck = setInterval(
+        () => void maintenance.tick(AbortSignal.timeout(60_000)),
+        MAINTENANCE_CHECK_INTERVAL_MS,
+      );
+      maintenanceCheck.unref();
+    }
     if (options.controlInstallation) {
       const prune = startControlPrune(options.controlInstallation, {
         onError: (error) => console.warn("Control record prune failed", error),
@@ -2017,6 +2058,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operation.kind === "configurationMaintenance.settle") &&
             handoffs.has(operation.maintenanceId)
           )
+        )
+          throw new RequestGuardError("busy", 409);
+        // The agent keeps a bounded number of maintenance records: a new
+        // preparation past that bound is refused before anything is written.
+        if (
+          operation.kind === "configurationMaintenance.prepare" &&
+          options.controlInstallation &&
+          maintenanceCapacityReached(options.controlInstallation)
         )
           throw new RequestGuardError("busy", 409);
         if (options.releaseRecovery?.ready === false && !RELEASE_RECOVERY_READ_KINDS.has(kind))
