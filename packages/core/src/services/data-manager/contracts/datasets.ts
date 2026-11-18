@@ -40,7 +40,9 @@ export const hardlinkEntrySchema = z.strictObject({
   instance: linkIdentity.optional(),
   targetFilename: linkIdentity.optional(),
 });
+/** A generation's hardlink plan, named by that generation's revision. */
 export const linkRequestSchema = z.strictObject({
+  revisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
   plan: z.array(hardlinkEntrySchema).max(2000),
   prune: z.boolean().optional(),
 });

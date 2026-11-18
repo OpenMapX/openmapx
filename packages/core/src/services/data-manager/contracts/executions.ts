@@ -59,9 +59,9 @@ const maintenance = z.discriminatedUnion("action", [
       .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
   }),
 ]);
-/** Work data-manager starts itself and runs in its own process. The three
- * traffic kinds are short and periodic: they hold no agent lease and run beside
- * other executions. The other three are exclusive like every durable kind. */
+/** Work data-manager runs in its own process. The three traffic kinds are short
+ * and periodic: they hold no agent lease and run beside other executions. The
+ * others are exclusive like every durable kind. */
 export const LOCAL_DATA_EXECUTION_KINDS = [
   "traffic-live",
   "traffic-maintenance",
@@ -69,6 +69,7 @@ export const LOCAL_DATA_EXECUTION_KINDS = [
   "transit-proposal",
   "data-reload",
   "ambient-publication",
+  "generation-link",
 ] as const;
 export type LocalDataExecutionKind = (typeof LOCAL_DATA_EXECUTION_KINDS)[number];
 export const SHORT_DATA_EXECUTION_KINDS: readonly string[] = [
@@ -88,6 +89,12 @@ const localInputs = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("ambient-publication"),
     action: z.enum(["build", "resume", "discard", "enable", "disable", "rollback"]),
+  }),
+  // A host CLI's `compose up`, `services start|update` or `data link`.
+  z.strictObject({
+    kind: z.literal("generation-link"),
+    revisionId: dataRevisionSchema,
+    planDigest: dataFingerprintSchema,
   }),
 ]);
 export const ordinaryDataExecutionInputSchema = z.discriminatedUnion("kind", ordinaryInputs);

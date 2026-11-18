@@ -26,4 +26,5 @@ export const CancelDataExecution200Kind = {
   "transit-proposal": "transit-proposal",
   "data-reload": "data-reload",
   "ambient-publication": "ambient-publication",
+  "generation-link": "generation-link",
 } as const;

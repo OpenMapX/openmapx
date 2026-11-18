@@ -584,14 +584,31 @@ describe("data-manager API", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("POST /link closes a legacy unsigned plan before effects", async () => {
+  it("POST /link applies a generation's plan in the data directory and refuses an unnamed one", async () => {
     const dataDir = createDataDir();
+    mkdirSync(join(dataDir, "osm"), { recursive: true });
+    writeFileSync(join(dataDir, "osm", "planet.osm.pbf"), "PBF");
     const app = createTestApp();
     registerApi(app, { dataDir });
+    const plan = [
+      {
+        source: "data/osm",
+        target: "data/valhalla/osm-pbf",
+        consumerService: "valhalla",
+        dataType: "osm-pbf",
+      },
+    ];
 
-    const res = await app.inject({ method: "POST", url: "/link", payload: { plan: [] } });
+    const unnamed = await app.inject({ method: "POST", url: "/link", payload: { plan } });
+    expect(unnamed.statusCode).toBe(400);
+    const res = await app.inject({
+      method: "POST",
+      url: "/link",
+      payload: { revisionId: `cfg1_${"a".repeat(43)}`, plan, prune: true },
+    });
 
-    expect(res.statusCode).toBe(503);
-    expect(res.json()).toEqual({ error: "A signed generation-hardlinks execution is required" });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toEqual({ ok: true, linked: 1, skipped: 0, pruned: 0 });
+    expect(existsSync(join(dataDir, "valhalla", "osm-pbf", "planet.osm.pbf"))).toBe(true);
   });
 });

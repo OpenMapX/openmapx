@@ -390,4 +390,7 @@ export type StartDataExecution202Result =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

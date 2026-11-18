@@ -390,4 +390,7 @@ export type GetAdminTransitPinExecution200Result =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

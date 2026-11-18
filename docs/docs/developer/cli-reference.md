@@ -108,11 +108,13 @@ For the difference between `services start` (a subset) and `compose up` (the
 whole stack), and how `--services` overrides the persisted selection for a single
 render, see [Rendering the stack](../install/managing-services.md#rendering-the-stack).
 
-`compose up` applies hardlinks through data-manager's `/link` route, which
-refuses with `A signed generation-hardlinks execution is required` when the plan
-has links to make or prune. With nothing prepared it succeeds. When engines have
-built data, use `services start <ids>`, which applies the plan through a signed
-execution.
+`compose up` applies the applied generation's hardlink plan through
+data-manager's `/link` route. Data-manager links and prunes inside its own
+container as a data job named by the generation, so no configuration change or
+other data job runs meanwhile; the same plan again links nothing new. With
+nothing to link or prune, data-manager is not asked. While a configuration change
+or another data job runs, data-manager answers busy: `compose up` warns and starts
+the stack anyway, and `data link` applies the plan once that job has finished.
 
 ## `control`
 
@@ -163,10 +165,10 @@ hardlinks, authenticated feeds — lives in
 | `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                                                                                                             |
 | `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                                                                                                  |
 
-`data link` and `services build` use the same `/link` route as
-`compose up` and refuse the same way when the plan has links to make or prune;
-a build's artifacts are complete by then. `services start` and `services update`
-apply the plan through a signed execution.
+`data link` and `services build` use the same `/link` route as `compose up`; a
+build's artifacts are complete by then. Both fail instead of warning while
+data-manager is busy. `services start` and `services update` apply the plan
+through their own generation-hardlinks job.
 
 `data download osm`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing

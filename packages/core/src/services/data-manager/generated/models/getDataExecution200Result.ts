@@ -390,4 +390,7 @@ export type GetDataExecution200Result =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

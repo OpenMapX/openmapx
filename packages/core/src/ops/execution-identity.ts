@@ -75,6 +75,7 @@ const futureBudgets: Readonly<Record<string, number>> = {
   "transit-proposal": 3600_000,
   "data-reload": 10 * 60_000,
   "ambient-publication": 24 * 3600_000,
+  "generation-link": 10 * 60_000,
   "system.update": 48 * 3600_000,
 };
 /** Future policies are budgets only; they register no executable operations. */

@@ -390,4 +390,7 @@ export type StartGenerationHardlinksExecution202Result =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

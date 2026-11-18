@@ -390,4 +390,7 @@ export type InspectCatalogReview200ExecutionResult =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

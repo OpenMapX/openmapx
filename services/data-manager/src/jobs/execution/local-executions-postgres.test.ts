@@ -1,5 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
@@ -16,10 +24,21 @@ import {
   OpsClientError,
   type OpsJobStatus,
 } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
+import Fastify from "fastify";
 import postgres from "postgres";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  applyGeneratedHardlinks,
+  DataManagerBusyError,
+} from "../../../../../packages/cli/src/lib/hardlinks.js";
+import { registerApi } from "../../api.js";
+import { registerAuth } from "../../auth.js";
 import { resetOpsClient, runOpsOperation } from "../../ops-client.js";
+import { resolveOperationsProfile } from "../transitous/operations-profile.js";
+import { installLocalDataExecutions } from "./local.js";
 import { removePrunedDataRows } from "./prune-rows.js";
+import { createDataExecutionReceiver } from "./receiver.js";
 import { createDataExecutionRuntime, type DataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore } from "./store.js";
 import { dataExecutionWorkerContext } from "./worker-scope.js";
@@ -34,6 +53,11 @@ const inputs: Record<(typeof LOCAL_DATA_EXECUTION_KINDS)[number], DataExecutionI
   },
   "data-reload": { kind: "data-reload" },
   "ambient-publication": { kind: "ambient-publication", action: "enable" },
+  "generation-link": {
+    kind: "generation-link",
+    revisionId: `cfg1_${"g".repeat(43)}`,
+    planDigest: "d".repeat(64),
+  },
 };
 const reserved: Record<string, string[]> = {
   "traffic-maintenance": ["valhalla.traffic.maintain", "valhalla.traffic.refreshWaysToEdges"],
@@ -368,4 +392,80 @@ describe.skipIf(
       ).toHaveLength(0);
     }
   }, 120_000);
+
+  it("applies a generation's hardlink plan with real work from the host CLI through data-manager", async () => {
+    const h = await harness(),
+      runtime = h.runtime();
+    // A checkout whose applied generation has a plan with work.
+    const repo = mkdtempSync(join(tmpdir(), "omx-link-checkout-")),
+      infra = join(repo, "infra", "docker"),
+      data = join(infra, "data"),
+      revisionId = `cfg1_${"g".repeat(43)}`;
+    writeFileSync(join(repo, "pnpm-workspace.yaml"), "packages: []\n");
+    mkdirSync(join(repo, "services"));
+    mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS), { recursive: true });
+    mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS, revisionId), { mode: 0o700 });
+    symlinkSync(`generations/${revisionId}`, join(infra, services.CURRENT_CONFIGURATION));
+    const entry = {
+      source: "data/osm",
+      target: "data/valhalla/osm-pbf",
+      consumerService: "valhalla",
+      dataType: "osm-pbf",
+    };
+    writeFileSync(
+      join(infra, services.CURRENT_CONFIGURATION, services.GENERATED_HARDLINK_PLAN_FILE),
+      JSON.stringify([entry]),
+      { mode: 0o600 },
+    );
+    mkdirSync(join(data, "osm"), { recursive: true });
+    writeFileSync(join(data, "osm", "planet.osm.pbf"), "PBF");
+    // Data-manager's route on the durable runtime. The receiver's fence and
+    // dispatcher are never reached by in-process work.
+    const receiver = createDataExecutionReceiver({
+      runtime,
+      installation: h.installation,
+      configurationFence: {} as never,
+      dispatcher: {} as never,
+      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+    });
+    installLocalDataExecutions(receiver);
+    const token = "link-fixture-host-cli-token-0123456789abcdef",
+      tokenFile = join(repo, "data-manager-token"),
+      previousToken = process.env.DATA_MANAGER_TOKEN_FILE;
+    writeFileSync(tokenFile, token, { mode: 0o600 });
+    const app = Fastify();
+    registerAuth(app, { api: `${token}-api`, "ops-agent": `${token}-agent`, "host-cli": token });
+    registerApi(app, { dataDir: data, executionReceiver: receiver });
+    const dataManagerUrl = await app.listen({ host: "127.0.0.1", port: 0 });
+    process.env.DATA_MANAGER_TOKEN_FILE = tokenFile;
+    cleanups.push(async () => {
+      if (previousToken === undefined) delete process.env.DATA_MANAGER_TOKEN_FILE;
+      else process.env.DATA_MANAGER_TOKEN_FILE = previousToken;
+      await app.close();
+      await h.sql`DELETE FROM data_manager.jobs WHERE kind='generation-link'`;
+      rmSync(repo, { recursive: true, force: true });
+    });
+    const apply = () =>
+      applyGeneratedHardlinks({ rootDir: repo, requirePlan: true, prune: true, dataManagerUrl });
+
+    expect(await apply()).toMatchObject({ applied: true, linked: 1, via: "data-manager" });
+    expect(statSync(join(data, "valhalla", "osm-pbf", "planet.osm.pbf")).ino).toBe(
+      statSync(join(data, "osm", "planet.osm.pbf")).ino,
+    );
+    // The same generation's plan again links nothing new.
+    expect(await apply()).toMatchObject({ applied: true, linked: 0, skipped: 1 });
+    const runs =
+      await h.sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind='generation-link' ORDER BY admitted_at`;
+    expect(runs.map((row) => [row.status, row.execution_input.revisionId])).toEqual([
+      ["ok", revisionId],
+      ["ok", revisionId],
+    ]);
+    // Another data job keeps the plan out until it finishes.
+    const fonts = await h.admit(runtime, { kind: "download-fonts" });
+    await h.fonts.started.promise;
+    await expect(apply()).rejects.toBeInstanceOf(DataManagerBusyError);
+    h.fonts.release.resolve();
+    expect((await h.terminal(runtime, fonts.id)).status).toBe("ok");
+    await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
+  }, 60_000);
 });

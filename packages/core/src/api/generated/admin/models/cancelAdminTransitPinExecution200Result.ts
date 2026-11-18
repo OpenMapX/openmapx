@@ -390,4 +390,7 @@ export type CancelAdminTransitPinExecution200Result =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

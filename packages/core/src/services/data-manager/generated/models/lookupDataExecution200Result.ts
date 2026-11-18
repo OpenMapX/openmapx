@@ -390,4 +390,7 @@ export type LookupDataExecution200Result =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

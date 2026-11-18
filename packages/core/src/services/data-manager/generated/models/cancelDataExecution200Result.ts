@@ -390,4 +390,7 @@ export type CancelDataExecution200Result =
     }
   | {
       kind: "ambient-publication";
+    }
+  | {
+      kind: "generation-link";
     };

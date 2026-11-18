@@ -42,6 +42,16 @@ export class DataManagerUnavailableError extends Error {
   }
 }
 
+/** Data-manager refused the plan while a configuration change or another data job runs. */
+export class DataManagerBusyError extends Error {
+  constructor(entries: number) {
+    super(
+      `The hardlink plan (${entries} ${entries === 1 ? "entry" : "entries"}) was not applied: data-manager is running another data job or a configuration change. Run pnpm openmapx data link once it has finished.`,
+    );
+    this.name = "DataManagerBusyError";
+  }
+}
+
 export interface ApplyGeneratedHardlinkOptions {
   rootDir?: string;
   prune?: boolean;
@@ -175,12 +185,16 @@ export async function applyGeneratedHardlinks(
   }
   assertCliExecutionAvailable();
   assertCliRemoteMutationSupported();
+  const revisionId = coreServices.currentConfigurationGeneration(paths.infraDir);
+  if (!revisionId) throw new Error(`No applied configuration generation names ${planPath}`);
   const transport = createDataManagerTransport({
     ...cliAcquisitionOptions(),
     baseUrl,
     authToken: cliDataManagerToken(),
   });
-  const result = unwrapDataManagerResponse(await link({ plan, prune: opts.prune }, { transport }));
+  const response = await link({ revisionId, plan, prune: opts.prune }, { transport });
+  if (response.status === 409) throw new DataManagerBusyError(plan.length);
+  const result = unwrapDataManagerResponse(response);
   return {
     applied: true,
     entries: plan.length,
@@ -193,9 +207,9 @@ export async function applyGeneratedHardlinks(
 }
 
 /**
- * Applies the plan before containers start. When data-manager is down, the
- * start goes ahead without it: the links made before stay in place, and the
- * warning says how to apply the rest once data-manager runs.
+ * Applies the plan before containers start. When data-manager is down or busy,
+ * the start goes ahead without it: the links made before stay in place, and the
+ * warning says how to apply the rest.
  */
 export async function applyGeneratedHardlinksBeforeStart(
   opts: ApplyGeneratedHardlinkOptions = {},
@@ -204,7 +218,8 @@ export async function applyGeneratedHardlinksBeforeStart(
     const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true, ...opts });
     logAppliedHardlinks(linked);
   } catch (error) {
-    if (!(error instanceof DataManagerUnavailableError)) throw error;
+    if (!(error instanceof DataManagerUnavailableError || error instanceof DataManagerBusyError))
+      throw error;
     log.warn(error.message);
   }
 }

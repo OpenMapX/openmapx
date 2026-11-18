@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -17,6 +18,7 @@ import {
   applyGeneratedHardlinks,
   applyGeneratedHardlinksBeforeStart,
   DATA_ROOT_MODE,
+  DataManagerBusyError,
   DataManagerUnavailableError,
 } from "../src/lib/hardlinks";
 
@@ -47,7 +49,7 @@ const OSM_FOR_VALHALLA = {
 };
 
 function writePlan(plan: unknown[]): void {
-  writeFileSync(planPath(), JSON.stringify(plan), "utf-8");
+  writeFileSync(planPath(), JSON.stringify(plan), { encoding: "utf-8", mode: 0o600 });
 }
 
 function writeOsm(): void {
@@ -56,12 +58,14 @@ function writeOsm(): void {
 }
 
 /** A data-manager that answers `/status` and records each `/link` request. */
-async function fakeDataManager(options: { linkRefusal?: string } = {}): Promise<{
+async function fakeDataManager(
+  options: { linkRefusal?: string; linkStatus?: number } = {},
+): Promise<{
   url: string;
-  requests: Array<{ plan: unknown; prune: unknown }>;
+  requests: Array<{ revisionId: unknown; plan: unknown; prune: unknown }>;
   server: Server;
 }> {
-  const requests: Array<{ plan: unknown; prune: unknown }> = [];
+  const requests: Array<{ revisionId: unknown; plan: unknown; prune: unknown }> = [];
   const server = createServer((req, res) => {
     if (req.url === "/status") {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -73,9 +77,9 @@ async function fakeDataManager(options: { linkRefusal?: string } = {}): Promise<
       req.on("data", (c) => chunks.push(Buffer.from(c)));
       req.on("end", () => {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
-        requests.push({ plan: body.plan, prune: body.prune });
+        requests.push({ revisionId: body.revisionId, plan: body.plan, prune: body.prune });
         if (options.linkRefusal) {
-          res.writeHead(503, { "Content-Type": "application/json" });
+          res.writeHead(options.linkStatus ?? 503, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: options.linkRefusal }));
           return;
         }
@@ -92,12 +96,18 @@ async function fakeDataManager(options: { linkRefusal?: string } = {}): Promise<
   return { url: `http://127.0.0.1:${port}`, requests, server };
 }
 
+const REVISION = `cfg1_${"r".repeat(43)}`;
+
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-hardlinks-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(tmp, "services"), { recursive: true });
   mkdirSync(dataRoot(), { recursive: true });
-  mkdirSync(join(tmp, "infra", "docker", services.CURRENT_CONFIGURATION), { recursive: true });
+  // The applied generation and the `current` pointer to it.
+  const infra = join(tmp, "infra", "docker");
+  mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS), { recursive: true });
+  mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS, REVISION), { mode: 0o700 });
+  symlinkSync(`generations/${REVISION}`, join(infra, services.CURRENT_CONFIGURATION));
 });
 
 afterEach(() => {
@@ -138,7 +148,9 @@ describe("applyGeneratedHardlinks", () => {
         skipped: 2,
         pruned: 1,
       });
-      expect(dataManager.requests).toEqual([{ plan: [OSM_FOR_VALHALLA], prune: true }]);
+      expect(dataManager.requests).toEqual([
+        { revisionId: REVISION, plan: [OSM_FOR_VALHALLA], prune: true },
+      ]);
       // data-manager links; the CLI made nothing in the data directory.
       expect(existsSync(join(dataRoot(), "valhalla"))).toBe(false);
     } finally {
@@ -174,11 +186,11 @@ describe("applyGeneratedHardlinks", () => {
     }
   });
 
-  it("still reaches /link for a plan with work and surfaces the route's error", async () => {
+  it("surfaces the route's error for a plan with work", async () => {
     writeOsm();
     writePlan([OSM_FOR_VALHALLA]);
     const dataManager = await fakeDataManager({
-      linkRefusal: "A signed generation-hardlinks execution is required",
+      linkRefusal: "Durable data receiver is unavailable",
     });
     try {
       await expect(
@@ -188,8 +200,34 @@ describe("applyGeneratedHardlinks", () => {
           prune: true,
           dataManagerUrl: dataManager.url,
         }),
-      ).rejects.toThrow(/signed generation-hardlinks execution is required/);
-      expect(dataManager.requests).toEqual([{ plan: [OSM_FOR_VALHALLA], prune: true }]);
+      ).rejects.toThrow(/Durable data receiver is unavailable/);
+      expect(dataManager.requests).toHaveLength(1);
+    } finally {
+      await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
+    }
+  });
+
+  it("reports a data-manager busy with another data job, and a start goes ahead", async () => {
+    writeOsm();
+    writePlan([OSM_FOR_VALHALLA]);
+    const dataManager = await fakeDataManager({
+      linkRefusal: "configuration_maintenance_busy",
+      linkStatus: 409,
+    });
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        applyGeneratedHardlinks({
+          rootDir: tmp,
+          requirePlan: true,
+          prune: true,
+          dataManagerUrl: dataManager.url,
+        }),
+      ).rejects.toBeInstanceOf(DataManagerBusyError);
+      await expect(
+        applyGeneratedHardlinksBeforeStart({ rootDir: tmp, dataManagerUrl: dataManager.url }),
+      ).resolves.toBeUndefined();
+      expect(warn.mock.calls.flat().join("\n")).toMatch(/another data job.*data link/);
     } finally {
       await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
     }

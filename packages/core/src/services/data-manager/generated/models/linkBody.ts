@@ -3,6 +3,8 @@
 import type { LinkBodyPlanItem } from "./linkBodyPlanItem";
 
 export type LinkBody = {
+  /** @pattern ^cfg1_[A-Za-z0-9_-]{43}$ */
+  revisionId: string;
   /** @maxItems 2000 */
   plan: LinkBodyPlanItem[];
   prune?: boolean;

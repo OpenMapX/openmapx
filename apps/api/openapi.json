@@ -92603,7 +92603,8 @@
                                 "traffic-predicted",
                                 "transit-proposal",
                                 "data-reload",
-                                "ambient-publication"
+                                "ambient-publication",
+                                "generation-link"
                               ]
                             },
                             "status": {
@@ -93487,6 +93488,21 @@
                                     "kind"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "generation-link"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             }
@@ -94325,7 +94341,8 @@
                         "traffic-predicted",
                         "transit-proposal",
                         "data-reload",
-                        "ambient-publication"
+                        "ambient-publication",
+                        "generation-link"
                       ]
                     },
                     "status": {
@@ -95202,6 +95219,21 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "generation-link"
                               ]
                             }
                           },
@@ -95963,7 +95995,8 @@
                         "traffic-predicted",
                         "transit-proposal",
                         "data-reload",
-                        "ambient-publication"
+                        "ambient-publication",
+                        "generation-link"
                       ]
                     },
                     "status": {
@@ -96840,6 +96873,21 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "generation-link"
                               ]
                             }
                           },

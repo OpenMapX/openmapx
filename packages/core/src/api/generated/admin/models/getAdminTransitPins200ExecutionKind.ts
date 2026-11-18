@@ -26,4 +26,5 @@ export const GetAdminTransitPins200ExecutionKind = {
   "transit-proposal": "transit-proposal",
   "data-reload": "data-reload",
   "ambient-publication": "ambient-publication",
+  "generation-link": "generation-link",
 } as const;

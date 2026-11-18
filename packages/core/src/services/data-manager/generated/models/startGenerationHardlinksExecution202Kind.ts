@@ -26,4 +26,5 @@ export const StartGenerationHardlinksExecution202Kind = {
   "transit-proposal": "transit-proposal",
   "data-reload": "data-reload",
   "ambient-publication": "ambient-publication",
+  "generation-link": "generation-link",
 } as const;
