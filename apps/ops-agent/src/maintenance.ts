@@ -60,13 +60,22 @@ export interface MaintenanceAdapters {
   ): Promise<MaintenanceStepResult>;
   /** Starts the helper container; returns its id when Docker answered. */
   launchHelper(file: MaintenanceFile, signal: AbortSignal): Promise<{ containerId: string | null }>;
-  findHelper(
-    handoffId: string,
-  ): Promise<{ id: string; running: boolean; exitCode: number | null } | null>;
+  /** The helper container; `created` when Docker created it and never started it. */
+  findHelper(handoffId: string): Promise<{
+    id: string;
+    running: boolean;
+    created: boolean;
+    exitCode: number | null;
+  } | null>;
   removeHelper(containerId: string): Promise<void>;
+  /** Whether the helper adopted its lease child, which it does before its first effect. */
+  helperAdopted(record: MaintenanceRecord): boolean;
   /** Settles the handoff's lease children from the helper's known outcome. */
   settleHandoff(file: MaintenanceFile, outcome: MaintenanceStepOutcome): Promise<void>;
   cancelLease(file: MaintenanceFile): Promise<void>;
+  /** Whether the maintenance's lease is still in the store. */
+  leaseHeld(file: MaintenanceFile): boolean;
+  /** Releases the lease once every child settled; does nothing when it is gone. */
   releaseLease(file: MaintenanceFile): Promise<void>;
   now(): Date;
 }
@@ -114,7 +123,7 @@ export function pendingHandoffs(installation: ControlInstallation): ReadonlySet<
   );
 }
 
-function listMaintenance(installation: ControlInstallation): MaintenanceFile[] {
+function recordNames(installation: ControlInstallation): string[] {
   const state = installationState(installation);
   let directory: ReturnType<typeof state.privateRoot.directory>;
   try {
@@ -124,14 +133,21 @@ function listMaintenance(installation: ControlInstallation): MaintenanceFile[] {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
-  let names: string[];
   try {
-    names = directory.list().filter((name) => /^[0-9a-f-]{36}\.json$/.test(name));
+    return directory.list().filter((name) => /^[0-9a-f-]{36}\.json$/.test(name));
   } finally {
     directory.close();
   }
-  if (names.length > MAX_RECORDS) throw Error("Too many configuration maintenance records");
-  return names.map((name) => readMaintenance(installation, name.slice(0, -5)));
+}
+
+function listMaintenance(installation: ControlInstallation): MaintenanceFile[] {
+  return recordNames(installation).map((name) => readMaintenance(installation, name.slice(0, -5)));
+}
+
+/** Whether a new preparation would exceed the records the agent keeps. A record
+ * goes with its preparation's control records once both are past retention. */
+export function maintenanceCapacityReached(installation: ControlInstallation): boolean {
+  return recordNames(installation).length >= MAX_RECORDS;
 }
 
 function writeMaintenance(
@@ -231,15 +247,24 @@ export function createMaintenance(
 /** The helper's outcome once its container exited; "running" while it runs. */
 export async function readHandoffOutcome(
   installation: ControlInstallation,
-  adapters: Pick<MaintenanceAdapters, "findHelper">,
+  adapters: Pick<MaintenanceAdapters, "findHelper" | "removeHelper" | "helperAdopted">,
   record: MaintenanceRecord,
 ): Promise<MaintenanceStepOutcome | "running"> {
   if (!record.handoff) throw Error("Configuration handoff was not started");
-  const container = await adapters.findHelper(record.handoff.handoffId);
+  let container = await adapters.findHelper(record.handoff.handoffId);
   // A running helper still writes its progress: nothing is read, pruned or settled.
   if (container?.running) return "running";
+  const adopted = adapters.helperAdopted(record);
+  // An interrupted launch can leave a container Docker created and never
+  // started; once removed it never runs, so the launch counts as not made.
+  if (container?.created && !adopted) {
+    await adapters.removeHelper(container.id);
+    container = null;
+  }
   const progress = readHandoffProgress(installation, record.maintenanceId);
-  if (!container && !progress) return "failed_without_effect";
+  // A helper adopts its lease child before anything else: without that, a
+  // container or progress, it never started.
+  if (!container && !progress && !adopted) return "failed_without_effect";
   if (
     progress &&
     (progress.handoffId !== record.handoff.handoffId ||
@@ -252,10 +277,14 @@ export async function readHandoffOutcome(
     progress.targets.every((target) => target.phase === "verified")
   )
     return "committed";
+  // A cancelled helper stopped between targets; a failed one that replaced
+  // nothing left every target as it was.
   if (
     progress &&
-    (progress.phase === "rolled_back" || progress.phase === "cancelled") &&
-    progress.targets.every((target) => ["pending", "verified", "restored"].includes(target.phase))
+    ((progress.phase === "cancelled" &&
+      progress.targets.every((target) => target.phase !== "recreate_attempted")) ||
+      (progress.phase === "failed" &&
+        progress.targets.every((target) => target.phase === "pending")))
   )
     return "contained";
   return "unknown";
@@ -276,6 +305,11 @@ async function withRecord<T>(maintenanceId: string, work: () => Promise<T> | T):
 }
 
 export class ConfigurationMaintenance {
+  /** Maintenances whose helper launch runs in this process: not observed meanwhile. */
+  private readonly launching = new Set<string>();
+  private readonly observing = new Map<string, Promise<MaintenanceStepOutcome | "running">>();
+  private ticking: Promise<void> | undefined;
+
   constructor(
     private readonly installation: ControlInstallation,
     private readonly adapters: MaintenanceAdapters,
@@ -321,21 +355,26 @@ export class ConfigurationMaintenance {
         case "dispatch_step": {
           const step = file.record.steps[effect.ordinal]!;
           if (step.phase === "maintenance-handoff") {
-            let launched: { containerId: string | null };
+            this.launching.add(maintenanceId);
             try {
-              launched = await this.adapters.launchHelper(file, signal);
-            } catch {
-              // The attempt is recorded; the restarted agent resolves it from the container.
-              launched = { containerId: null };
+              let launched: { containerId: string | null };
+              try {
+                launched = await this.adapters.launchHelper(file, signal);
+              } catch {
+                // The attempt is recorded; its outcome is read from the container.
+                launched = { containerId: null };
+              }
+              queue.unshift(
+                ...(
+                  await this.change(maintenanceId, {
+                    type: "handoff_launched",
+                    containerId: launched.containerId,
+                  })
+                ).effects,
+              );
+            } finally {
+              this.launching.delete(maintenanceId);
             }
-            queue.unshift(
-              ...(
-                await this.change(maintenanceId, {
-                  type: "handoff_launched",
-                  containerId: launched.containerId,
-                })
-              ).effects,
-            );
             break;
           }
           let result: MaintenanceStepResult;
@@ -367,14 +406,22 @@ export class ConfigurationMaintenance {
           outcome.value = effect.outcome === "unknown" ? "unknown" : "contained";
           break;
         case "settle_fence": {
-          const fence = await this.adapters.settleFence(file, effect.outcome, signal);
+          let fence: DataConfigurationFenceReceipt;
+          try {
+            fence = await this.adapters.settleFence(file, effect.outcome, signal);
+          } catch (error) {
+            // The record stays settling with its outcome fixed; the agent's own
+            // check sends the same idempotent settlement again.
+            console.warn("Configuration fence settlement failed", maintenanceId, error);
+            break;
+          }
           queue.unshift(
             ...(await this.change(maintenanceId, { type: "fence_settled", fence })).effects,
           );
           break;
         }
         case "release_lease":
-          await this.adapters.releaseLease(file);
+          await this.finish(file);
           break;
         case "cancel_lease":
           await this.adapters.cancelLease(file);
@@ -433,7 +480,19 @@ export class ConfigurationMaintenance {
     };
   }
 
-  /** `settle{complete}` or `settle{abandon}`; repeated, it repeats the fence settlement.
+  /** Releases the lease of a settled record. A failure leaves the lease for the
+   * agent's own check, which releases it later: the record already settled. */
+  private async finish(file: MaintenanceFile): Promise<void> {
+    try {
+      await this.adapters.releaseLease(file);
+    } catch (error) {
+      console.warn("Configuration maintenance release failed", file.record.maintenanceId, error);
+    }
+  }
+
+  /** `settle{complete}` or `settle{abandon}`; repeated, it repeats the fence
+   * settlement, or the release of a settled record's lease. The result may be
+   * settling while data-manager does not answer; the agent finishes it itself.
    * Abandoning once a step started cancels the maintenance instead: the step in
    * flight ends, no further step starts, and `complete` settles it afterwards. */
   async settle(
@@ -441,8 +500,12 @@ export class ConfigurationMaintenance {
     outcome: "complete" | "abandon",
     signal: AbortSignal,
   ): Promise<MaintenanceRecord> {
-    const current = this.read(maintenanceId).record;
-    if (current.state === "settled") return current;
+    const file = this.read(maintenanceId);
+    const current = file.record;
+    if (current.state === "settled") {
+      await this.finish(file);
+      return current;
+    }
     if (current.handoff && current.state === "applying") await this.observeHelper(maintenanceId);
     const observed = this.read(maintenanceId).record;
     if (
@@ -474,22 +537,42 @@ export class ConfigurationMaintenance {
     return this.read(maintenanceId).record;
   }
 
-  /** Records the helper's outcome once its container exited, then removes the container. */
+  /** Records the helper's outcome once its container exited, then removes the
+   * container. One observation per maintenance runs at a time. */
   async observeHelper(maintenanceId: string): Promise<MaintenanceStepOutcome | "running"> {
-    const record = this.read(maintenanceId).record;
+    if (this.launching.has(maintenanceId)) return "running";
+    const running = this.observing.get(maintenanceId);
+    if (running) return running;
+    const observation = this.observeOnce(maintenanceId).finally(() =>
+      this.observing.delete(maintenanceId),
+    );
+    this.observing.set(maintenanceId, observation);
+    return observation;
+  }
+
+  private async observeOnce(maintenanceId: string): Promise<MaintenanceStepOutcome | "running"> {
+    const file = this.read(maintenanceId);
+    const { record } = file;
     const step = record.steps.find((value) => value.phase === "maintenance-handoff");
     if (!step || step.state !== "attempted" || !record.handoff) return step?.outcome ?? "running";
     const outcome = await readHandoffOutcome(this.installation, this.adapters, record);
     if (outcome === "running") return outcome;
-    const { file } = await this.change(maintenanceId, { type: "helper_exited", outcome });
+    // The lease children settle before the record names the outcome: a restart
+    // in between reads the same outcome again and settles what is left.
     await this.adapters.settleHandoff(file, outcome);
-    const container = await this.adapters.findHelper(record.handoff.handoffId);
-    if (container && !container.running) await this.adapters.removeHelper(container.id);
+    await this.change(maintenanceId, { type: "helper_exited", outcome });
+    try {
+      const container = await this.adapters.findHelper(record.handoff.handoffId);
+      if (container && !container.running) await this.adapters.removeHelper(container.id);
+    } catch (error) {
+      console.warn("Configuration helper container removal failed", maintenanceId, error);
+    }
     return outcome;
   }
 
   /** Startup: a preparation without a delegated fence settles; an attempted step
-   * other than the handoff needs recovery; a handoff is observed. */
+   * other than the handoff needs recovery; a handoff is observed. Then the
+   * agent's own check runs, including every settled record's release. */
   async recover(signal: AbortSignal): Promise<void> {
     for (const file of listMaintenance(this.installation)) {
       if (file.record.state === "settled") continue;
@@ -498,6 +581,39 @@ export class ConfigurationMaintenance {
         fenceDelegated: this.adapters.fenceDelegated(file),
       });
       await this.run(file.record.maintenanceId, next.effects, signal).catch(() => undefined);
+    }
+    await this.tick(signal, true);
+  }
+
+  /** The agent's own check, on a timer and after startup, of what no request
+   * drives any more: a helper that exited, a settlement data-manager did not
+   * answer, a lease a settled record still holds, and a maintenance with no
+   * step attempted whose deadline passed. One check runs at a time. */
+  tick(signal: AbortSignal, everySettled = false): Promise<void> {
+    this.ticking ??= this.check(signal, everySettled).finally(() => {
+      this.ticking = undefined;
+    });
+    return this.ticking;
+  }
+
+  private async check(signal: AbortSignal, everySettled: boolean): Promise<void> {
+    for (const file of listMaintenance(this.installation)) {
+      const { record } = file;
+      const maintenanceId = record.maintenanceId;
+      try {
+        if (record.state === "applying" && record.handoff) await this.observeHelper(maintenanceId);
+        else if (
+          record.state === "settling" ||
+          (record.state === "settled" && (everySettled || this.adapters.leaseHeld(file)))
+        )
+          await this.settle(maintenanceId, "complete", signal);
+        else if (record.state === "prepared" || record.state === "applying") {
+          const next = await this.change(maintenanceId, { type: "deadline_passed" });
+          await this.run(maintenanceId, next.effects, signal);
+        }
+      } catch (error) {
+        console.warn("Configuration maintenance check failed", maintenanceId, error);
+      }
     }
   }
 

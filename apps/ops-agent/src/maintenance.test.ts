@@ -130,7 +130,10 @@ const fence = (state: "prepared" | "settled", file: MaintenanceFile) => ({
 
 let root: string;
 let installation: ControlInstallation;
-let helper: { id: string; running: boolean; exitCode: number | null } | null;
+let helper: { id: string; running: boolean; created: boolean; exitCode: number | null } | null;
+/** The maintenance's lease as the store keeps it: the store refuses to release
+ * it while a handoff child it recorded is unsettled. */
+let lease: { held: boolean; handoff: "none" | "held" | "settled"; adopted: boolean };
 let order: string[];
 let adapters: MaintenanceAdapters;
 
@@ -172,6 +175,7 @@ beforeEach(() => {
   provisionControlDirectories(infraDir);
   installation = openControlInstallation({ infraDir, role: "ops-agent" });
   helper = null;
+  lease = { held: true, handoff: "none", adopted: false };
   order = [];
   adapters = {
     now: () => new Date(),
@@ -204,12 +208,15 @@ beforeEach(() => {
         containerId: null,
       });
       order.push("launch");
-      helper = { id: "c".repeat(64), running: true, exitCode: null };
+      lease.handoff = "held";
+      helper = { id: "c".repeat(64), running: true, created: false, exitCode: null };
       return { containerId: helper.id };
     }),
     findHelper: vi.fn(async () => helper),
+    helperAdopted: () => lease.adopted,
     settleHandoff: vi.fn(async (_file, outcome) => {
       order.push(`settle-handoff:${outcome}`);
+      if (outcome !== "unknown" && lease.handoff === "held") lease.handoff = "settled";
     }),
     removeHelper: vi.fn(async () => {
       order.push("remove-helper");
@@ -218,7 +225,11 @@ beforeEach(() => {
     cancelLease: vi.fn(async () => {
       order.push("cancel-lease");
     }),
+    leaseHeld: () => lease.held,
     releaseLease: vi.fn(async () => {
+      if (!lease.held) return;
+      if (lease.handoff === "held") throw Error("Every attempted descendant must settle");
+      lease.held = false;
       order.push("release");
     }),
   };
@@ -396,7 +407,7 @@ describe("configuration maintenance in the agent", () => {
     await new ConfigurationMaintenance(installation, adapters).recover(AbortSignal.timeout(5000));
     expect(readMaintenance(installation, maintenanceId).record.state).toBe("applying");
     progress("applied", "verified");
-    helper = { id: "c".repeat(64), running: false, exitCode: 0 };
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 0 };
     const inspected = await maintenance.inspect(maintenanceId);
     expect(inspected.steps.at(-1)).toMatchObject({ state: "terminal", outcome: "committed" });
     expect(inspected.followUp).toBe("complete");
@@ -418,7 +429,7 @@ describe("configuration maintenance in the agent", () => {
     expect(adapters.runStep).not.toHaveBeenCalled();
   });
 
-  it("keeps the record settling when the fence settlement fails, and a later settle retries", async () => {
+  it("answers settling when data-manager does not settle, and settles it in its own check", async () => {
     admit();
     const maintenance = new ConfigurationMaintenance(installation, adapters);
     await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
@@ -426,15 +437,152 @@ describe("configuration maintenance in the agent", () => {
     adapters.settleFence = async () => {
       throw Error("data-manager unreachable");
     };
-    await expect(
-      maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000)),
-    ).rejects.toThrow();
+    // The settle operation succeeds with the record as it stands; the API
+    // reads the record until it is settled.
+    expect(
+      (await maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000))).state,
+    ).toBe("settling");
+    expect(readMaintenance(installation, maintenanceId).record.fenceOutcome).toBe("unused");
+    await maintenance.tick(AbortSignal.timeout(5000));
     expect(readMaintenance(installation, maintenanceId).record.state).toBe("settling");
     adapters.settleFence = settleFence;
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settled");
+    expect(order).toEqual(["prepare-fence", "settle-fence:unused", "release"]);
+    expect(lease.held).toBe(false);
+  });
+
+  it("settles a settling record left by a restart, once the agent is back", async () => {
+    admit();
+    await new ConfigurationMaintenance(installation, adapters).prepare(
+      maintenanceId,
+      AbortSignal.timeout(5000),
+    );
+    // The agent stops while data-manager settles the fence.
+    adapters.settleFence = vi.fn(() => new Promise<never>(() => undefined));
+    void new ConfigurationMaintenance(installation, adapters).settle(
+      maintenanceId,
+      "abandon",
+      AbortSignal.timeout(5000),
+    );
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settling");
+    adapters.settleFence = vi.fn(async (file) => fence("settled", file));
+    await new ConfigurationMaintenance(installation, adapters).recover(AbortSignal.timeout(5000));
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settled");
+    expect(lease.held).toBe(false);
+  });
+
+  it("releases the lease of a record that settled just before the agent stopped", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    // The agent is killed after the record settled, before the release.
+    const release = adapters.releaseLease;
+    adapters.releaseLease = vi.fn(async () => {
+      throw Error("agent killed");
+    });
     expect(
       (await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000))).state,
     ).toBe("settled");
+    expect(lease.held).toBe(true);
+    adapters.releaseLease = release;
+    await new ConfigurationMaintenance(installation, adapters).recover(AbortSignal.timeout(5000));
+    expect(lease.held).toBe(false);
+    // Without a restart the agent's own check releases it too.
+    lease.held = true;
+    await new ConfigurationMaintenance(installation, adapters).tick(AbortSignal.timeout(5000));
+    expect(lease.held).toBe(false);
+    // And a repeated settle, as the API sends after a lost reply.
+    lease.held = true;
+    await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
+    expect(lease.held).toBe(false);
+  });
+
+  it("settles the handoff children before recording the helper's outcome, across a restart", async () => {
+    admit({ handoff: true });
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    progress("applied", "verified");
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 0 };
+    // The agent is killed between settling the children and recording the outcome.
+    const settleHandoff = adapters.settleHandoff;
+    adapters.settleHandoff = vi.fn(async (file, outcome) => {
+      await settleHandoff(file, outcome);
+      throw Error("agent killed");
+    });
+    await expect(maintenance.inspect(maintenanceId)).rejects.toThrow("agent killed");
+    expect(readMaintenance(installation, maintenanceId).record.steps.at(-1)?.state).toBe(
+      "attempted",
+    );
+    adapters.settleHandoff = settleHandoff;
+    const restarted = new ConfigurationMaintenance(installation, adapters);
+    await restarted.recover(AbortSignal.timeout(5000));
+    expect(readMaintenance(installation, maintenanceId).record.steps.at(-1)).toMatchObject({
+      state: "terminal",
+      outcome: "committed",
+    });
+    expect(
+      (await restarted.settle(maintenanceId, "complete", AbortSignal.timeout(5000))).state,
+    ).toBe("settled");
+    expect(lease.held).toBe(false);
+  });
+
+  it("records a helper that exited in its own check, without a request", async () => {
+    admit({ handoff: true });
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(maintenance.handoffPending().has(maintenanceId)).toBe(true);
+    progress("applied", "verified");
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 0 };
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(maintenance.handoffPending().size).toBe(0);
+    expect(order).toContain("remove-helper");
+  });
+
+  it("observes no helper while its launch runs in the agent", async () => {
+    admit({ handoff: true });
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    let launch!: () => void;
+    const launchHelper = adapters.launchHelper;
+    adapters.launchHelper = vi.fn(async (file, signal) => {
+      await new Promise<void>((resolve) => (launch = resolve));
+      return launchHelper(file, signal);
+    });
+    const applied = maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.launchHelper).toHaveBeenCalledOnce());
+    // No container yet, and the check runs: the launch is not counted as never made.
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(readMaintenance(installation, maintenanceId).record.steps.at(-1)?.state).toBe(
+      "attempted",
+    );
+    launch();
+    expect((await applied).outcome).toBe("running");
+  });
+
+  it("abandons a prepared maintenance at its deadline in its own check", async () => {
+    const file = admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("prepared");
+    adapters.now = () => new Date(file.plan.prepare.deadlineAt + 1);
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(readMaintenance(installation, maintenanceId).record).toMatchObject({
+      state: "settled",
+      fenceOutcome: "unused",
+    });
     expect(order).toEqual(["prepare-fence", "settle-fence:unused", "release"]);
+    expect(adapters.runStep).not.toHaveBeenCalled();
+    // An apply that comes after the deadline is refused, distinguishable from a crash.
+    await expect(
+      maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000)),
+    ).rejects.toMatchObject({ reason: "conflict" });
   });
 
   it("stops after the step in flight when cancelled", async () => {
@@ -473,7 +621,7 @@ describe("configuration maintenance in the agent", () => {
       maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000)),
     ).rejects.toThrow(MaintenanceTransitionRefused);
     progress("cancelled", "verified");
-    helper = { id: "c".repeat(64), running: false, exitCode: 1 };
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 1 };
     const settled = await maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
     expect(settled).toMatchObject({ state: "settled", followUp: "contained" });
     expect(order.at(-1)).toBe("release");
@@ -497,7 +645,7 @@ describe("helper outcome", () => {
       handoff: { handoffId, containerId: null },
     };
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("failed_without_effect");
-    helper = { id: "c".repeat(64), running: true, exitCode: null };
+    helper = { id: "c".repeat(64), running: true, created: false, exitCode: null };
     progress("applied", "verified");
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("running");
   });
@@ -508,18 +656,48 @@ describe("helper outcome", () => {
       ...readMaintenance(installation, maintenanceId).record,
       handoff: { handoffId, containerId: null },
     };
-    helper = { id: "c".repeat(64), running: false, exitCode: 0 };
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 0 };
     progress("applied", "verified");
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("committed");
-    helper = { id: "c".repeat(64), running: false, exitCode: 1 };
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 1 };
     progress("cancelled", "pending");
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("contained");
     progress("cancelled", "recreate_attempted");
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("unknown");
+    // A helper that failed before any recreate replaced nothing.
     progress("failed", "pending");
+    expect(await readHandoffOutcome(installation, adapters, record)).toBe("contained");
+    progress("failed", "recreate_attempted");
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("unknown");
     helper = null;
     progress("applying", "recreate_attempted");
+    expect(await readHandoffOutcome(installation, adapters, record)).toBe("unknown");
+  });
+
+  it("is unknown when the helper adopted its child but left no container or progress", async () => {
+    admit({ handoff: true });
+    const record = {
+      ...readMaintenance(installation, maintenanceId).record,
+      handoff: { handoffId, containerId: null },
+    };
+    lease.adopted = true;
+    expect(await readHandoffOutcome(installation, adapters, record)).toBe("unknown");
+    helper = { id: "c".repeat(64), running: false, created: false, exitCode: 1 };
+    expect(await readHandoffOutcome(installation, adapters, record)).toBe("unknown");
+  });
+
+  it("removes a container Docker created and never started, and counts no launch", async () => {
+    admit({ handoff: true });
+    const record = {
+      ...readMaintenance(installation, maintenanceId).record,
+      handoff: { handoffId, containerId: null },
+    };
+    helper = { id: "c".repeat(64), running: false, created: true, exitCode: 0 };
+    expect(await readHandoffOutcome(installation, adapters, record)).toBe("failed_without_effect");
+    expect(adapters.removeHelper).toHaveBeenCalledWith("c".repeat(64));
+    // Adopted, it started after all: its outcome is not known.
+    helper = { id: "c".repeat(64), running: false, created: true, exitCode: 0 };
+    lease.adopted = true;
     expect(await readHandoffOutcome(installation, adapters, record)).toBe("unknown");
   });
 });

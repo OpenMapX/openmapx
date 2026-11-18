@@ -18,6 +18,7 @@ import {
   localLeases,
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
+  readPrivateRecord,
   releaseArtifactTargetLease,
   restoreAdmittedControlExecution,
   restoreArtifactTargetLeaseForSettlement,
@@ -72,6 +73,7 @@ import {
   type MaintenanceAdapters,
   MaintenanceFenceRefused,
   type MaintenanceFile,
+  readMaintenance,
 } from "./maintenance";
 import { maintenanceSource, planConfigurationMaintenance } from "./maintenance-source";
 import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
@@ -316,7 +318,8 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       return receipt;
     },
     async settleFence(file, outcome, signal) {
-      const receipt = await retryDataManager(signal, Date.now() + 30_000, () =>
+      // A settlement data-manager does not answer now is sent again by the agent's own check.
+      const receipt = await retryDataManager(signal, Date.now() + 10_000, () =>
         settleDataConfigurationFence(
           {
             maintenanceId: file.plan.operation.maintenanceId,
@@ -499,6 +502,15 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         signal.throwIfAborted();
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
+      // A cancel while draining starts no helper: the launch fails without effect.
+      const helperChild = leaseBackend()
+        .readSync(file.record.leaseId)
+        ?.children.find((child) => child.key === keys.helper);
+      if (
+        helperChild?.state !== "held" ||
+        readMaintenance(installation, file.record.maintenanceId).record.cancelRequestedAt
+      )
+        throw Error("Configuration handoff cancelled before launch");
       const started = await source.execFile(
         "docker",
         configurationHandoffRunArgs(facts, source.rootDir, {
@@ -538,12 +550,28 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         ["container", "inspect", "--format", "{{json .State}}", ids[0]],
         { signal: AbortSignal.timeout(15000), timeout: 15000, maxBuffer: 65536 },
       );
-      const state = JSON.parse(inspected.stdout) as { Running?: boolean; ExitCode?: number };
+      const state = JSON.parse(inspected.stdout) as {
+        Running?: boolean;
+        Status?: string;
+        ExitCode?: number;
+      };
       return {
         id: ids[0],
         running: state.Running === true,
+        created: state.Status === "created",
         exitCode: typeof state.ExitCode === "number" ? state.ExitCode : null,
       };
+    },
+    helperAdopted(record) {
+      const handoffId = record.handoff?.handoffId;
+      return (
+        leaseBackend()
+          .readSync(record.leaseId)
+          ?.children.find((child) => child.key === handoffId)?.adopted === true
+      );
+    },
+    leaseHeld(file) {
+      return leaseBackend().readSync(file.record.leaseId) !== undefined;
     },
     async removeHelper(containerId) {
       await maintenanceSource(deps.runtime).execFile("docker", ["rm", containerId], {
@@ -604,20 +632,35 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
     },
     async releaseLease(file) {
       const authority = root(file);
-      // The root's own effect is the preparation's: committed once it prepared,
-      // otherwise nothing ran under it.
-      try {
-        verifyControlEffectSettlement(installation, file.plan.prepare);
-      } catch {
-        retainControlEffectReceipt(authority, {
-          outcome: "failed_without_effect",
-          publication: "not_started",
-          receipt: {
-            kind: "configuration-fence-not-prepared",
-            maintenanceId: file.record.maintenanceId,
-          },
-        });
-      }
+      const { record } = file;
+      // The root's own effect is the preparation's, receipted when its operation
+      // ends. A preparation that ended without one is receipted from the record:
+      // a fence data-manager prepared, or one settled through recovery, is its
+      // effect; otherwise nothing ran under it. The receipt lets the records go.
+      if (
+        readPrivateRecord(
+          installationState(installation),
+          "effects",
+          `${file.plan.prepare.operationKey}.json`,
+        ) === null
+      )
+        retainControlEffectReceipt(
+          authority,
+          record.fence || record.fenceOutcome
+            ? {
+                outcome: "committed",
+                publication: "committed",
+                receipt: { kind: "ops-result", result: record },
+              }
+            : {
+                outcome: "failed_without_effect",
+                publication: "not_started",
+                receipt: {
+                  kind: "configuration-fence-not-prepared",
+                  maintenanceId: record.maintenanceId,
+                },
+              },
+        );
       if (!leaseBackend().readSync(file.record.leaseId)) return;
       const lease = restoreArtifactTargetLeaseForSettlement(authority);
       try {
