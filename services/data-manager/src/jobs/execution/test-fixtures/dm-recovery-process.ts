@@ -4,7 +4,7 @@ import * as control from "@openmapx/core/build-artifacts";
 import Fastify from "fastify";
 import { registerApi } from "../../../api.js";
 import { registerAuth } from "../../../auth.js";
-import { db, rawSql } from "../../../db/index.js";
+import { rawSql } from "../../../db/index.js";
 import { StateStore } from "../../../state.js";
 import { resolveOperationsProfile } from "../../transitous/operations-profile.js";
 import { createDefaultTransitousScriptRunner } from "../../transitous/script-runner.js";
@@ -42,7 +42,7 @@ const store = createPostgresDataExecutionStore(rawSql, {
   controlJournal: journal,
   configurationFence: fence,
 });
-const singleFlight = createSingleFlightController({ db, admissionSql: rawSql });
+const singleFlight = createSingleFlightController();
 const policy = resolveOperationsProfile({ countries: ["de"] });
 const dispatcher = createDataExecutionDispatcher({
   dataDir: join(root, "data"),
@@ -99,7 +99,6 @@ const app = Fastify();
 registerAuth(app, { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` });
 registerApi(app, {
   dataDir: join(root, "data"),
-  singleFlight,
   operationsPolicy: policy,
   executionReceiver: receiver,
   searchIndexSql: rawSql,

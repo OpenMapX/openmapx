@@ -5,7 +5,8 @@ import type { DataManagerReadiness } from "./readiness.js";
 export interface RequiredStartupDependencies {
   readiness: DataManagerReadiness;
   initializeOfflineStorage: () => Promise<void>;
-  reconcileJobs: () => Promise<string[]>;
+  /** Reconciles the data executions a previous process left unsettled. */
+  reconcileJobs: () => Promise<void>;
   setupCronSchedulers: () => CronHandles;
   controlInstallation?: ControlInstallation;
   onControlPruneError?: (error: unknown) => void;
@@ -16,7 +17,6 @@ export interface RequiredStartupDependencies {
 
 export interface RequiredStartupResult {
   cronHandles: CronHandles;
-  interruptedJobIds: string[];
   stopControlPrune?: () => Promise<void>;
 }
 
@@ -30,7 +30,7 @@ export async function initializeRequiredSubsystems(
     await dependencies.initializeOfflineStorage();
 
     dependencies.readiness.setPhase("job-reconciliation");
-    const interruptedJobIds = await dependencies.reconcileJobs();
+    await dependencies.reconcileJobs();
 
     if (dependencies.controlInstallation) {
       const prune = startControlPrune(dependencies.controlInstallation, {
@@ -55,7 +55,6 @@ export async function initializeRequiredSubsystems(
 
     return {
       cronHandles,
-      interruptedJobIds,
       ...(stopControlPrune ? { stopControlPrune } : {}),
     };
   } catch (error) {

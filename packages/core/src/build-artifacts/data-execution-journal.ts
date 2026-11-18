@@ -16,6 +16,8 @@ import {
   dataExecutionStatusSchema,
   generationHardlinksPlanSchema,
   isDataExecutionTerminal,
+  LOCAL_DATA_EXECUTION_KINDS,
+  SHORT_DATA_EXECUTION_KINDS,
 } from "../services/data-manager/contracts/executions";
 import {
   transitousRunnerRequestSchema,
@@ -170,6 +172,12 @@ function statusOf(raw: unknown) {
     throw Error("Data journal identity conflict");
   return { row, status, execution };
 }
+/** Whether an execution of this kind holds a lease of its own in the agent's
+ * store. A hardlink leaf runs under its issuer's lease, and the short traffic
+ * kinds run under none. */
+export function dataExecutionHoldsLease(kind: string): boolean {
+  return kind !== "generation-hardlinks" && !SHORT_DATA_EXECUTION_KINDS.includes(kind);
+}
 export function createDataExecutionControlJournal(
   installation: ControlInstallation,
   database: DataExecutionJournalDatabase,
@@ -177,7 +185,6 @@ export function createDataExecutionControlJournal(
   const local = installationState(installation);
   if (installation.role !== "data-manager" || local.fixedChildId)
     throw Error("Fixed data-manager journal required");
-  const contained = new Map<string, string>();
   async function load(execution: ExecutionRef) {
     const rows = await database.unsafe(
       "SELECT * FROM data_manager.jobs WHERE execution_version=2 AND operation_key=$1",
@@ -848,11 +855,9 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original worker child snapshot changed");
       await assertOwnedProxyRecoverySettled(execution);
-      // A hardlink leaf runs under its caller's lease; it holds none of its own.
-      const lease =
-          value.status.kind === "generation-hardlinks"
-            ? undefined
-            : restoreArtifactTargetLeaseForSettlement(authority),
+      const lease = dataExecutionHoldsLease(value.status.kind)
+          ? restoreArtifactTargetLeaseForSettlement(authority)
+          : undefined,
         error = proof.outcome === "failed" ? Error("Original contained worker failed") : undefined;
       const completion = Object.freeze({ [completionBrand]: true as const });
       completions.set(completion, {
@@ -874,6 +879,51 @@ export function createDataExecutionControlJournal(
         publication: proof.publication,
         partial: proof.outcome === "partial",
       };
+    },
+    /** Records the end of a worker that ran inside a previous data-manager
+     * process and died with it. Only work data-manager runs in its own process
+     * qualifies, and only once no completion exists. The caller has settled every
+     * agent operation the worker attempted; `publication` says whether the
+     * worker may have changed data. */
+    async containAbandoned(execution: ExecutionRef, publication: "not_started" | "committed") {
+      const value = await load(execution),
+        authority = restoreAdmittedControlExecution(installation, execution),
+        state = executionAuthorityState(authority),
+        name = `worker-${execution.operationKey}.json`;
+      if (!(LOCAL_DATA_EXECUTION_KINDS as readonly string[]).includes(value.status.kind))
+        throw Error("Only an in-process data worker can be abandoned");
+      try {
+        readPrivateRecord(local, "observations", name, 65536);
+        throw Error("Original worker completion exists");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      const proof = workerSchema.parse({
+        version: 1,
+        origin: state.origin,
+        execution: state.execution,
+        admissionDigest: state.receiptDigest,
+        workerId: randomUUID(),
+        containedAt: Date.now(),
+        outcome: "failed",
+        publication,
+        childrenDigest: controlDigest(value.row.execution_children),
+        proxyRecovery: "not_required",
+      });
+      writePrivateRecord(local, "observations", name, proof, true);
+      const lease = dataExecutionHoldsLease(value.status.kind)
+          ? restoreArtifactTargetLeaseForSettlement(authority)
+          : undefined,
+        completion = Object.freeze({ [completionBrand]: true as const });
+      completions.set(completion, {
+        authority,
+        workerId: proof.workerId,
+        publication,
+        childrenDigest: proof.childrenDigest,
+        error: Error("Data worker ended with its process"),
+        lease,
+      });
+      return { completion, lease };
     },
     async prepareTerminal(
       completion: ContainedDataExecution,
@@ -1031,7 +1081,6 @@ export function createDataExecutionControlJournal(
             false,
           );
       });
-      contained.set(execution.operationKey, proof.terminalDigest);
     },
     /** Checks the committed terminal and every child's terminal before the
      * execution's own lease is released. */
@@ -1049,9 +1098,6 @@ export function createDataExecutionControlJournal(
       })();
       // Use the same exact tuple/time verifier and publisher above via the fixed method.
       return authority;
-    },
-    close() {
-      contained.clear();
     },
   };
 }

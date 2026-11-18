@@ -470,6 +470,13 @@
       "when": 1794919767404,
       "tag": "0066_admin_job_protocol",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1794996842050,
+      "tag": "0067_data_execution_agent_operations",
+      "breakpoints": true
     }
   ]
 }

@@ -10,8 +10,7 @@ const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
   canceled: "warning",
   partial: "warning",
   stale: "warning",
-  // A job orphaned in `running` by a data-manager restart, reconciled on the
-  // next boot (services/data-manager reconcileOrphanedJobs).
+  // A data job a data-manager restart ended, or one awaiting recovery.
   interrupted: "warning",
   skipped: "default",
 };

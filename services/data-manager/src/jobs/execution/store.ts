@@ -13,6 +13,7 @@ import {
   dataExecutionStatusSchema,
   isDataExecutionTerminal,
   normalizeDataExecutionInput,
+  SHORT_DATA_EXECUTION_KINDS,
 } from "@openmapx/core/data-manager-contracts";
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import {
@@ -28,6 +29,11 @@ import {
 } from "@openmapx/core/ops";
 import type postgres from "postgres";
 import z from "zod/v4";
+import {
+  type DataAgentOperation,
+  dataAgentOperationSchema,
+  reserveAgentOperations,
+} from "./agent-operations.js";
 import {
   type DataOpsChildAttempt,
   type DataOpsChildReserved,
@@ -66,6 +72,7 @@ export interface DataExecutionRecord {
   version: number;
   children: DataOpsChildAttempt[];
   reservations: DataOpsChildReserved[];
+  agentOperations: DataAgentOperation[];
   finishedAt: number | null;
 }
 export interface DataExecutionAdmissionOptions {
@@ -75,7 +82,6 @@ export interface DataExecutionAdmissionOptions {
   parent?: VerifiedParentExecution;
   id?: string;
   principal?: ExecutionRef["principal"];
-  sourceJobId?: string;
   triggeredBy?: string;
   idempotencyKey?: string;
 }
@@ -119,6 +125,11 @@ export interface DataExecutionStore {
     expectedVersion: number,
     attempt: DataOpsChildAttempt,
   ): Promise<DataExecutionRecord | null>;
+  checkpointAgentOperation(
+    id: string,
+    expectedVersion: number,
+    entry: DataAgentOperation,
+  ): Promise<DataExecutionRecord | null>;
   reserveChild(
     id: string,
     expectedVersion: number,
@@ -157,6 +168,7 @@ interface Row extends Record<string, unknown> {
   execution_input: unknown;
   execution_state: unknown;
   execution_children: unknown;
+  execution_agent_operations: unknown;
   ownership_version: number;
   finished_at: Date | string | null;
   metadata: unknown;
@@ -242,6 +254,7 @@ function decode(row: Row): DataExecutionRecord {
       if (parsed.state !== "reserved") throw Error("Invalid reserved body");
       return parsed;
     }),
+    agentOperations: z.array(dataAgentOperationSchema).max(8).parse(row.execution_agent_operations),
     finishedAt:
       row.finished_at === null ? null : retainedDataDatabaseTimestamp(row.finished_at).getTime(),
   };
@@ -303,10 +316,24 @@ export function createPostgresDataExecutionStore(
   const update = async (
     tx: postgres.TransactionSql,
     record: DataExecutionRecord,
-    status: DataExecutionStatus,
-    children: DataOpsChildAttempt[],
-    terminalAt?: number,
+    change: {
+      status?: DataExecutionStatus;
+      children?: DataOpsChildAttempt[];
+      agentOperations?: DataAgentOperation[];
+      terminalAt?: number;
+    },
   ) => {
+    const {
+      status = record.status,
+      children = record.children,
+      agentOperations = record.agentOperations,
+      terminalAt,
+    } = change;
+    if (
+      isDataExecutionTerminal(status) &&
+      agentOperations.some((entry) => entry.state === "attempted")
+    )
+      throw new DataExecutionConflict("An attempted agent operation retains the execution");
     const { cancellationRequestedAt, progress, diagnostics, publication, result } = status;
     const finishedAt = isDataExecutionTerminal(status)
       ? (record.finishedAt ?? terminalAt ?? now())
@@ -315,7 +342,7 @@ export function createPostgresDataExecutionStore(
       Row[]
     >`UPDATE data_manager.jobs SET status=${status.status},ownership_version=ownership_version+1,
       execution_state=${canonicalJson({ cancellationRequestedAt, progress, diagnostics, publication, ...(result ? { result } : {}) })}::text::jsonb,
-      execution_children=${canonicalJson(children)}::text::jsonb,finished_at=${finishedAt === null ? null : new Date(finishedAt).toISOString()}::text::timestamptz
+      execution_children=${canonicalJson(children)}::text::jsonb,execution_agent_operations=${canonicalJson(agentOperations)}::text::jsonb,finished_at=${finishedAt === null ? null : new Date(finishedAt).toISOString()}::text::timestamptz
       WHERE id=${status.id} AND ownership_version=${record.version} RETURNING *`;
     return rows[0] ? decode(rows[0]) : null;
   };
@@ -408,7 +435,40 @@ export function createPostgresDataExecutionStore(
       throw new DataExecutionConflict("A live confirmed reservation is required to claim dispatch");
     const children = [...record.children];
     children[at] = child;
-    return update(tx, record, record.status, validateChildren(children));
+    return update(tx, record, { children: validateChildren(children) });
+  }
+  /** Reserved → attempted (never after cancellation or a terminal) → terminal.
+   * The attempted body never changes; only its cancellation time is added. */
+  function nextAgentOperations(record: DataExecutionRecord, entry: DataAgentOperation) {
+    const at = record.agentOperations.findIndex((op) => op.operationKey === entry.operationKey),
+      previous = record.agentOperations[at];
+    if (!previous || previous.kind !== entry.kind)
+      throw new DataExecutionConflict("Agent operation is absent from the original reservations");
+    if (canonicalJson(previous) === canonicalJson(entry)) return null;
+    const body = (op: DataAgentOperation) =>
+      op.state === "reserved"
+        ? null
+        : canonicalJson({
+            operation: op.operation,
+            fingerprint: op.fingerprint,
+            admittedAt: op.admittedAt,
+            deadlineAt: op.deadlineAt,
+          });
+    const allowed =
+      previous.state === "reserved"
+        ? entry.state === "attempted" &&
+          entry.cancellationRequestedAt === null &&
+          record.status.cancellationRequestedAt === null &&
+          !isDataExecutionTerminal(record.status)
+        : previous.state === "attempted" &&
+          entry.state !== "reserved" &&
+          body(previous) === body(entry) &&
+          (previous.cancellationRequestedAt === null ||
+            previous.cancellationRequestedAt === entry.cancellationRequestedAt);
+    if (!allowed) throw new DataExecutionConflict("Agent operation state conflict");
+    const next = [...record.agentOperations];
+    next[at] = entry;
+    return next;
   }
   return {
     controlJournal: options.controlJournal,
@@ -469,9 +529,22 @@ export function createPostgresDataExecutionStore(
         )
           throw new DataExecutionConflict("A fresh dated data execution root is required");
       }
+      const short = SHORT_DATA_EXECUTION_KINDS.includes(input.kind);
       const admitTransaction = async <T>(
         run: (tx: postgres.TransactionSql) => Promise<T>,
       ): Promise<T> => {
+        // A short traffic run only needs configuration maintenance kept out,
+        // so it shares the lock that maintenance takes exclusively.
+        if (short)
+          return sql
+            .begin(async (tx) => {
+              const lock =
+                await tx`SELECT pg_try_advisory_xact_lock_shared(${DATA_ADMISSION_LOCK[0]},${DATA_ADMISSION_LOCK[1]}) AS held`;
+              if (lock[0]?.held !== true) throw new DataConfigurationMaintenanceBusy();
+              await options.configurationFence?.assertAdmission(tx);
+              return { value: await run(tx) };
+            })
+            .then((result) => result.value);
         if (!admission.preparedGeneration) return withDataAdmissionTransaction(sql, run);
         if (input.kind !== "generation-hardlinks" || !options.configurationFence)
           throw new DataConfigurationMaintenanceBusy();
@@ -494,19 +567,16 @@ export function createPostgresDataExecutionStore(
           const original = await findByIdempotencyKey(tx, idempotencyKey);
           if (original) return matchIdempotent(original);
         }
-        if (!admission.preparedGeneration) await options.configurationFence?.assertAdmission(tx);
+        if (!admission.preparedGeneration && !short)
+          await options.configurationFence?.assertAdmission(tx);
         const retained = await find(tx, "operation_key", admission.operationKey);
         if (retained) return match(retained);
-        if (options.controlJournal) {
+        // One exclusive execution at a time; short traffic runs neither count
+        // nor wait.
+        if (options.controlJournal && !short) {
           const active =
-            await tx`SELECT id FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NULL LIMIT 1`;
+            await tx`SELECT id FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NULL AND kind <> ALL(${[...SHORT_DATA_EXECUTION_KINDS]}) LIMIT 1`;
           if (active.length) throw new DataConfigurationMaintenanceBusy();
-        }
-        if (admission.sourceJobId) {
-          const source =
-            await tx`SELECT id FROM data_manager.jobs WHERE id=${admission.sourceJobId} AND kind LIKE 'transit-source-%' AND status='running' AND finished_at IS NULL FOR UPDATE`;
-          if (source.length !== 1)
-            throw new DataExecutionConflict("Original source reservation is not current");
         }
         const normalized = normalizeExecutionAdmission({
           kind: input.kind,
@@ -536,17 +606,16 @@ export function createPostgresDataExecutionStore(
           fingerprint: status.fingerprint,
           deadlineAt: status.deadlineAt,
         });
-        const childReservations = reserveTransitChildOperations(execution, input);
+        const childReservations = reserveTransitChildOperations(execution, input),
+          agentOperations = reserveAgentOperations(input, status.deadlineAt);
         const rows = await tx<
           Row[]
         >`INSERT INTO data_manager.jobs(id,kind,status,triggered_by,idempotency_key,started_at,execution_version,operation_key,operation_fingerprint,
-          execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,metadata)
+          execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,execution_agent_operations,metadata)
           VALUES(${status.id},${input.kind},'queued',${admission.triggeredBy ?? null},${idempotencyKey ?? null},${new Date(status.admittedAt).toISOString()}::text::timestamptz,2,${status.operationKey},${operationFingerprint},
           ${status.fingerprint},${status.admittedAt},${status.deadlineAt},${admission.requestedDeadlineAt ?? null},
-          ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson({ dataExecution: { version: 1, execution, childReservations } })}::text::jsonb) RETURNING *`;
+          ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson(agentOperations)}::text::jsonb,${canonicalJson({ dataExecution: { version: 1, execution, childReservations } })}::text::jsonb) RETURNING *`;
         if (!rows[0]) throw Error("Execution admission did not return its durable row");
-        if (admission.sourceJobId)
-          await tx`UPDATE data_manager.jobs SET metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{durableExecution}',${canonicalJson({ id: status.id, operationKey: status.operationKey, fingerprint: status.fingerprint })}::text::jsonb),ownership_version=ownership_version+1 WHERE id=${admission.sourceJobId}`;
         return { created: true, record: decode(rows[0]) };
       }).catch(async (error) => {
         if (idempotencyKey && error instanceof DataConfigurationMaintenanceBusy) {
@@ -597,7 +666,7 @@ export function createPostgresDataExecutionStore(
         if (record.status.publication === "committed" && status.publication === "not_started")
           throw new DataExecutionConflict("Committed publication cannot change");
         if (canonicalJson(status) === canonicalJson(record.status)) return record;
-        return update(tx, record, status, record.children);
+        return update(tx, record, { status });
       });
     },
     async checkpointChild(id, version, value) {
@@ -606,6 +675,15 @@ export function createPostgresDataExecutionStore(
         const record = await find(tx, "id", id, true);
         if (!record || record.version !== version) return null;
         return writeChild(tx, record, child, false);
+      });
+    },
+    async checkpointAgentOperation(id, version, value) {
+      const entry = dataAgentOperationSchema.parse(value);
+      return sql.begin(async (tx) => {
+        const record = await find(tx, "id", id, true);
+        if (!record || record.version !== version) return null;
+        const agentOperations = nextAgentOperations(record, entry);
+        return agentOperations ? update(tx, record, { agentOperations }) : record;
       });
     },
     async reserveChild(id, version, value) {
@@ -628,12 +706,9 @@ export function createPostgresDataExecutionStore(
         if (record.status.cancellationRequestedAt || isDataExecutionTerminal(record.status))
           throw new DataExecutionConflict("Canceled execution cannot reserve a phase");
         validateOwnedChild(record, child);
-        const updated = await update(
-          tx,
-          record,
-          record.status,
-          validateChildren([...record.children, child]),
-        );
+        const updated = await update(tx, record, {
+          children: validateChildren([...record.children, child]),
+        });
         return updated ? { record: updated, created: true } : null;
       });
       if (!saved) return null;
@@ -680,16 +755,13 @@ export function createPostgresDataExecutionStore(
           throw new DataExecutionConflict("Cancellation identity conflict");
         if (isDataExecutionTerminal(record.status) || record.status.cancellationRequestedAt)
           return record;
-        return update(
-          tx,
-          record,
-          {
+        return update(tx, record, {
+          status: {
             ...record.status,
             status: "cancel_pending",
             cancellationRequestedAt: new Date(now()).toISOString(),
           },
-          record.children,
-        );
+        });
       });
     },
     async listUnsettled() {
@@ -706,25 +778,13 @@ export function createPostgresDataExecutionStore(
         ...record.status,
         ...validateDataExecutionPatch(patch),
       });
+      if (record.agentOperations.some((entry) => entry.state === "attempted"))
+        throw new DataExecutionConflict("An attempted agent operation retains the execution");
       const terminalAt = await options.controlJournal.prepareTerminal(completion, status, now());
       const result = await sql.begin(async (tx) => {
         const current = await find(tx, "id", id, true);
         if (!current || current.version !== version) return null;
-        const saved = await update(tx, current, status, current.children, terminalAt);
-        if (saved && current.input.kind === "transit-sync" && current.input.sourceMutation) {
-          // The original source reservation is a linked observer, not a second
-          // worker. Settle it atomically with the actual contained sync result.
-          const linked = canonicalJson({
-            id: current.status.id,
-            operationKey: current.execution.operationKey,
-            fingerprint: current.execution.fingerprint,
-          });
-          await tx`UPDATE data_manager.jobs SET status=${status.status},finished_at=${new Date(terminalAt).toISOString()}::text::timestamptz
-            WHERE execution_version IS NULL AND finished_at IS NULL
-              AND kind=${`transit-source-${current.input.sourceMutation.action}`}
-              AND metadata->'durableExecution'=${linked}::text::jsonb`;
-        }
-        return saved;
+        return update(tx, current, { status, terminalAt });
       });
       if (result) await options.controlJournal.publishTerminal(result.execution);
       return result;

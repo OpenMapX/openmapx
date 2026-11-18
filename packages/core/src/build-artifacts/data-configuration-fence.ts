@@ -56,10 +56,9 @@ const fenceRowSchema = z.object({
   outcome: dataConfigurationFenceOutcomeSchema.nullable(),
 });
 type FenceRow = z.infer<typeof fenceRowSchema>;
-/** Data jobs whose effects are unknown keep the data plane fenced: their
- * publication was not observed, or a legacy job was interrupted unfinished. */
+/** Data jobs whose publication was not observed keep the data plane fenced. */
 const UNKNOWN_DATA_JOB =
-  "SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown' OR (execution_version IS NULL AND finished_at IS NULL AND status='interrupted') LIMIT 1";
+  "SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown' LIMIT 1";
 export class DataFenceBusy extends Error {
   readonly statusCode = 409;
   constructor() {

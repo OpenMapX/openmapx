@@ -155,7 +155,6 @@ it.skipIf(
     });
     registerApi(app, {
       dataDir: data,
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -254,7 +253,6 @@ it.skipIf(
           )
         )
           await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id}`;
-      journal.close();
       control.closeControlInstallation(dm);
       control.closeControlInstallation(agentInstallation);
       await sql.end();

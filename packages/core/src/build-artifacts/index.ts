@@ -33,6 +33,7 @@ export {
   type ContainedDataExecution,
   createDataExecutionControlJournal,
   type DataExecutionControlJournal,
+  dataExecutionHoldsLease,
   dataTerminalReceiptDigest,
 } from "./data-execution-journal";
 export { assertDataManagerTerminal, readDataManagerTerminal } from "./data-manager-terminal";

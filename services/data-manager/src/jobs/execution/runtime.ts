@@ -9,6 +9,7 @@ import {
   cancelArtifactTargetLease,
   cancelControlExecution,
   closeArtifactTargetLeaseHandle,
+  dataExecutionHoldsLease,
   releaseArtifactTargetLease,
   restoreAdmittedControlExecution,
   restoreArtifactTargetLeaseForSettlement,
@@ -27,6 +28,7 @@ import {
   type DataExecutionStatus,
   dataExecutionResultSchema,
   isDataExecutionTerminal,
+  LOCAL_DATA_EXECUTION_KINDS,
 } from "@openmapx/core/data-manager-contracts";
 import {
   type ExecutionRef,
@@ -34,7 +36,9 @@ import {
   type VerifiedParentExecution,
 } from "@openmapx/core/ops";
 import { jobChildLogger } from "../../logger.js";
+import { opsClient } from "../../ops-client.js";
 import { cancelAndSettleRetainedTransitousScripts } from "../transitous/script-runner.js";
+import { type DataAgentOperation, settleAgentOperations } from "./agent-operations.js";
 import { dataExecutionDiagnostic } from "./diagnostics.js";
 import {
   cancelAndSettleOwnedDataOpsChildren,
@@ -56,7 +60,7 @@ export interface DataExecutionContext {
   readonly executionVersion: number;
   readonly signal: AbortSignal;
   /** The execution's own lease in the agent's store. A hardlink leaf runs under
-   * its caller's lease and has none. */
+   * its caller's lease, and a short traffic run under none. */
   readonly targetAuthority?: ArtifactTargetLease;
   readonly authority: VerifiedExecutionAuthority;
   readonly installation: ControlInstallation;
@@ -65,6 +69,7 @@ export interface DataExecutionContext {
   record(): Promise<DataExecutionRecord>;
   checkpoint(patch: DataExecutionProgressPatch): Promise<void>;
   checkpointChild(attempt: DataOpsChildAttempt): Promise<void>;
+  checkpointAgentOperation(entry: DataAgentOperation): Promise<void>;
   write<T>(
     run: (record: DataExecutionRecord) => Promise<{ record: DataExecutionRecord; value: T }>,
   ): Promise<T>;
@@ -83,13 +88,16 @@ export interface DataExecutionRuntime {
       hardlinkPlan?: unknown;
       /** For a hardlink leaf: the targets of the issuer's lease it runs under. */
       serviceIds?: readonly string[];
-      sourceJobId?: string;
       triggeredBy?: string;
       idempotencyKey?: string;
       /** Checks the normalized identity against what the caller named. */
       adopt?: (execution: ExecutionRef) => Promise<undefined>;
+      /** The in-process work of a local kind, run instead of the dispatcher. */
+      work?: () => Promise<DataExecutionResult>;
     },
   ): Promise<DataExecutionStatus>;
+  /** Resolves once this process has nothing more to do for the execution. */
+  settled(id: string): Promise<void>;
   inspect(id: string): Promise<DataExecutionStatus | null>;
   lookup(key: string): Promise<DataExecutionStatus | null>;
   lookupByIdempotencyKey?(key: string): Promise<DataExecutionRecord | null>;
@@ -99,7 +107,8 @@ export interface DataExecutionRuntime {
 }
 /** Settles the execution's own lease after its terminal record, or, for a
  * hardlink leaf, its child in the issuer's lease; checks the terminal while
- * the lease still shows how its children settled; then releases the lease. */
+ * the lease still shows how its children settled; then releases the lease.
+ * A short traffic run holds no lease and only checks its terminal. */
 async function releaseOwnLease(
   journal: {
     installation: ControlInstallation;
@@ -107,9 +116,10 @@ async function releaseOwnLease(
   },
   execution: ExecutionRef,
   lease: ArtifactTargetLease | undefined,
+  kind: DataExecutionInput["kind"],
 ) {
   if (!lease) {
-    await settleOwnLeaseChild(journal.installation, execution);
+    if (kind === "generation-hardlinks") await settleOwnLeaseChild(journal.installation, execution);
     await journal.verifyContainedTerminal(execution);
     return;
   }
@@ -151,6 +161,7 @@ export function createDataExecutionRuntime(deps: {
   const active = new Map<string, LiveEntry>();
   const recovering = new Map<string, Promise<void>>();
   let closed = false;
+  const closing = new AbortController();
   function requireJournal() {
     if (!journal)
       throw new DataExecutionRuntimeUnavailable("Durable control prerequisites are unavailable");
@@ -159,10 +170,9 @@ export function createDataExecutionRuntime(deps: {
   function observationContext(record: DataExecutionRecord): DataExecutionContext {
     const owner = requireJournal(),
       authority = restoreAdmittedControlExecution(owner.installation, record.execution),
-      lease =
-        record.input.kind === "generation-hardlinks"
-          ? undefined
-          : restoreArtifactTargetLeaseForSettlement(authority);
+      lease = dataExecutionHoldsLease(record.input.kind)
+        ? restoreArtifactTargetLeaseForSettlement(authority)
+        : undefined;
     let tail: Promise<unknown> = Promise.resolve(),
       version = record.version;
     const context: DataExecutionContext = {
@@ -207,6 +217,17 @@ export function createDataExecutionRuntime(deps: {
           return { record: saved, value: undefined };
         });
       },
+      async checkpointAgentOperation(entry) {
+        await context.write(async (current) => {
+          const saved = await store.checkpointAgentOperation(
+            current.status.id,
+            current.version,
+            entry,
+          );
+          if (!saved) throw new DataExecutionOwnershipLost("Recovery agent operation CAS lost");
+          return { record: saved, value: undefined };
+        });
+      },
       assertForward() {
         throw new DataExecutionOwnershipLost("Recovery permits observation/settlement only");
       },
@@ -244,6 +265,7 @@ export function createDataExecutionRuntime(deps: {
           await Promise.allSettled([
             cancelOwnership(),
             cancelAndSettleOwnedDataOpsChildren(context),
+            settleAgentOperations(context, true, opsClient),
             cancelAndSettleRetainedTransitousScripts(context),
           ]);
           // Remote containment cannot manufacture the dead local worker's proof.
@@ -257,16 +279,82 @@ export function createDataExecutionRuntime(deps: {
       .finally(() => recovering.delete(record.status.id));
     recovering.set(record.status.id, task);
   }
+  /** In-process work of a previous process ended with it. Once every agent
+   * operation it attempted has a terminal answer, the execution ends as
+   * interrupted; until then it keeps the data plane fenced and is retried. */
+  function recoverAbandoned(record: DataExecutionRecord): void {
+    if (recovering.has(record.status.id)) return;
+    const owner = requireJournal();
+    const task = (async () => {
+      for (let pause = 0; !closed; pause = 10_000) {
+        let context: DataExecutionContext | undefined, lease: ArtifactTargetLease | undefined;
+        try {
+          if (pause) await settleDelay(pause, undefined, { signal: closing.signal });
+          context = observationContext(record);
+          if (
+            (await settleAgentOperations(context, true, opsClient)) !== "settled" ||
+            (await cancelAndSettleOwnedDataOpsChildren(context)) !== "settled"
+          )
+            continue;
+          const current = await context.record();
+          if (isDataExecutionTerminal(current.status)) return;
+          // The worker may have changed data once it published or an agent
+          // operation it asked for was admitted.
+          const publication =
+            current.status.publication !== "not_started" ||
+            current.agentOperations.some(
+              (entry) => entry.state === "terminal" && entry.agentState !== "not_admitted",
+            )
+              ? "committed"
+              : "not_started";
+          let completion: Awaited<ReturnType<typeof owner.containAbandoned>>["completion"];
+          try {
+            ({ completion, lease } = await owner.restoreCompletion(record.execution));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            ({ completion, lease } = await owner.containAbandoned(record.execution, publication));
+          }
+          const saved = await store.finalize(
+            current.status.id,
+            current.version,
+            { status: "interrupted", publication },
+            completion,
+          );
+          if (!saved) throw new DataExecutionOwnershipLost("Recovery terminal CAS lost");
+          await releaseOwnLease(owner, record.execution, lease, record.input.kind);
+          return;
+        } catch (error) {
+          if (closed) return;
+          jobChildLogger({ job: "data-execution-recovery", jobId: record.status.id }).warn(
+            {
+              reason: dataExecutionDiagnostic(
+                error instanceof Error ? error.message : "Recovery evidence unavailable",
+              ).message,
+            },
+            "Interrupted in-process execution remains fenced",
+          );
+        } finally {
+          if (lease) closeArtifactTargetLeaseHandle(lease);
+          if (context?.targetAuthority) closeArtifactTargetLeaseHandle(context.targetAuthority);
+        }
+      }
+    })().finally(() => recovering.delete(record.status.id));
+    recovering.set(record.status.id, task);
+  }
   async function start(
     record: DataExecutionRecord,
     adopt?: (execution: ExecutionRef) => Promise<undefined>,
     parent?: VerifiedParentExecution,
     hardlinkPlan?: unknown,
     leafTargets?: readonly string[],
+    work?: () => Promise<DataExecutionResult>,
   ) {
     const owner = requireJournal(),
       leaf = record.input.kind === "generation-hardlinks",
+      leased = dataExecutionHoldsLease(record.input.kind),
       targets = leaf && leafTargets ? [...leafTargets] : dataExecutionTargetIds(record.input);
+    if (LOCAL_DATA_EXECUTION_KINDS.includes(record.input.kind as never) !== (work !== undefined))
+      throw Error("In-process work runs only as a local data execution");
     await adopt?.(record.execution);
     const authority = retainAdmittedControlExecution(owner.installation, {
       execution: record.execution,
@@ -284,8 +372,9 @@ export function createDataExecutionRuntime(deps: {
       if (hardlinkPlan === undefined) throw Error("Durable generation plan required");
       await owner.retainHardlinksPlan(authority, hardlinkPlan);
     }
-    // A hardlink leaf runs under the lease of the agent or host CLI that issued it.
-    // Other executions claim their targets first: a held target, or an agent
+    // A hardlink leaf runs under the lease of the agent or host CLI that issued
+    // it, and a short traffic run under none. Other executions claim their
+    // targets first: a held target, or an agent
     // that cannot answer, ends the execution as failed before any effect, with
     // its publication unchanged.
     // A timeout or transport failure may come after the agent recorded the lease,
@@ -293,7 +382,7 @@ export function createDataExecutionRuntime(deps: {
     // about 30 seconds, long enough for the agent to restart.
     let lease: ArtifactTargetLease | undefined;
     let refusal: unknown;
-    for (let attempt = 0; !leaf && !lease && !refusal; attempt += 1)
+    for (let attempt = 0; leased && !lease && !refusal; attempt += 1)
       try {
         lease = await acquireArtifactTargetLease({ serviceIds: targets, owner: authority });
       } catch (error) {
@@ -350,6 +439,17 @@ export function createDataExecutionRuntime(deps: {
           return { record: saved, value: undefined };
         });
       },
+      async checkpointAgentOperation(entry) {
+        await context.write(async (current) => {
+          const saved = await store.checkpointAgentOperation(
+            current.status.id,
+            current.version,
+            entry,
+          );
+          if (!saved) throw new DataExecutionOwnershipLost("Data agent operation CAS lost");
+          return { record: saved, value: undefined };
+        });
+      },
       assertForward() {
         controller.signal.throwIfAborted();
         assertControlExecutionForward(authority);
@@ -399,7 +499,9 @@ export function createDataExecutionRuntime(deps: {
             .then(() => {
               if (refusal) throw refusal;
               context.assertForward();
-              return withDataExecutionScope(context, () => deps.dispatch(record.input, context));
+              return withDataExecutionScope(context, () =>
+                work ? work() : deps.dispatch(record.input, context),
+              );
             })
             .then(
               async (result) => {
@@ -423,6 +525,13 @@ export function createDataExecutionRuntime(deps: {
           lease,
         );
         async function settleChildren() {
+          // An attempted agent operation keeps the execution from its terminal
+          // until the agent reports one for it.
+          while (
+            (await settleAgentOperations(context, controller.signal.aborted, opsClient)) !==
+            "settled"
+          )
+            await settleDelay(1000);
           for (;;) {
             if ((await cancelAndSettleOwnedDataOpsChildren(context)) === "settled") return;
             await context.checkpoint({ publication: "unknown" });
@@ -475,7 +584,7 @@ export function createDataExecutionRuntime(deps: {
         });
         if (isDataExecutionTerminal(entry.record.status)) {
           await owner.assertOwnedProxyRecoverySettled(record.execution);
-          if (!refusal) await releaseOwnLease(owner, record.execution, lease);
+          if (!refusal) await releaseOwnLease(owner, record.execution, lease, record.input.kind);
         }
       } catch (error) {
         // An I/O/CAS/containment gap is not a terminal receipt or permission to
@@ -560,6 +669,7 @@ export function createDataExecutionRuntime(deps: {
             options.parent,
             options.hardlinkPlan,
             options.serviceIds,
+            options.work,
           );
         } catch (cause) {
           await store.checkpoint(record.status.id, record.version, { publication: "unknown" });
@@ -568,6 +678,9 @@ export function createDataExecutionRuntime(deps: {
           });
         }
       return record.status;
+    },
+    settled: async (id) => {
+      await (active.get(id)?.task ?? recovering.get(id));
     },
     inspect: async (id) => (await store.inspect(id))?.status ?? null,
     lookup: async (key) => (await store.lookup(key))?.status ?? null,
@@ -583,12 +696,11 @@ export function createDataExecutionRuntime(deps: {
             await owner.repairTerminal(record.execution);
             await owner.publishTerminal(record.execution);
             const authority = restoreAdmittedControlExecution(owner.installation, record.execution),
-              lease =
-                record.input.kind === "generation-hardlinks"
-                  ? undefined
-                  : restoreArtifactTargetLeaseForSettlement(authority);
+              lease = dataExecutionHoldsLease(record.input.kind)
+                ? restoreArtifactTargetLeaseForSettlement(authority)
+                : undefined;
             try {
-              await releaseOwnLease(owner, record.execution, lease);
+              await releaseOwnLease(owner, record.execution, lease, record.input.kind);
             } finally {
               if (lease) closeArtifactTargetLeaseHandle(lease);
             }
@@ -608,6 +720,13 @@ export function createDataExecutionRuntime(deps: {
             recovered = await owner.restoreCompletion(record.execution);
           } catch (error) {
             if (
+              LOCAL_DATA_EXECUTION_KINDS.includes(record.input.kind as never) &&
+              (error as NodeJS.ErrnoException).code === "ENOENT"
+            ) {
+              recoverAbandoned(record);
+              continue;
+            }
+            if (
               record.input.kind !== "catalog.activate" ||
               (error as NodeJS.ErrnoException).code !== "ENOENT"
             )
@@ -625,6 +744,7 @@ export function createDataExecutionRuntime(deps: {
           const context = observation;
           if (
             (await cancelAndSettleOwnedDataOpsChildren(context)) !== "settled" ||
+            (await settleAgentOperations(context, true, opsClient)) !== "settled" ||
             recovered.publication === "unknown"
           )
             throw Error("Original containment/publication remains unknown");
@@ -655,7 +775,7 @@ export function createDataExecutionRuntime(deps: {
           );
           if (!saved) throw new DataExecutionOwnershipLost("Recovery terminal CAS lost");
           await owner.assertOwnedProxyRecoverySettled(record.execution);
-          await releaseOwnLease(owner, record.execution, recovered.lease);
+          await releaseOwnLease(owner, record.execution, recovered.lease, record.input.kind);
         } catch (error) {
           jobChildLogger({ job: "data-execution-recovery", jobId: record.status.id }).warn(
             {
@@ -693,6 +813,7 @@ export function createDataExecutionRuntime(deps: {
     },
     async close() {
       closed = true;
+      closing.abort();
       await Promise.allSettled(
         [...active.values()].map((entry) =>
           cancel({

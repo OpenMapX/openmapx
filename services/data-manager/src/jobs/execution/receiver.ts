@@ -4,6 +4,8 @@ import {
   inspectDataExecutionAdmission,
 } from "@openmapx/core/build-artifacts";
 import {
+  type DataExecutionInput,
+  LOCAL_DATA_EXECUTION_KINDS,
   normalizeDataExecutionInput,
   startGenerationHardlinksExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
@@ -45,6 +47,20 @@ export function createDataExecutionReceiver(deps: {
       });
     return input;
   };
+  const admitRoot = (
+    input: DataExecutionInput,
+    source: Pick<
+      Parameters<DataExecutionRuntime["admit"]>[1],
+      "triggeredBy" | "idempotencyKey" | "work"
+    >,
+  ) => {
+    const requestedDeadlineAt = Date.now() + opsExecutionBudget(input.kind).processMs,
+      operationKey = createControlRootOperationKey({
+        notAfter: requestedDeadlineAt,
+        nonce: randomBytes(16),
+      });
+    return runtime.admit(input, { operationKey, requestedDeadlineAt, ...source });
+  };
   return {
     async observeReviewedTransit(request) {
       const record = await runtime.lookupByIdempotencyKey?.(request.key);
@@ -63,7 +79,11 @@ export function createDataExecutionReceiver(deps: {
     },
     async admit(value, options) {
       const input = validate(value);
-      if (input.kind === "generation-hardlinks" || input.kind === "transit-maintenance")
+      if (
+        input.kind === "generation-hardlinks" ||
+        input.kind === "transit-maintenance" ||
+        (LOCAL_DATA_EXECUTION_KINDS as readonly string[]).includes(input.kind)
+      )
         throw Object.assign(Error("Service-internal data input"), { statusCode: 403 });
       const verified = inspectDataExecutionAdmission(installation, {
         ...options,
@@ -109,14 +129,36 @@ export function createDataExecutionReceiver(deps: {
         serviceIds: verified.serviceIds,
       });
     },
-    async admitLocal(value, source) {
-      const input = validate(value),
-        requestedDeadlineAt = Date.now() + opsExecutionBudget(input.kind).processMs,
-        operationKey = createControlRootOperationKey({
-          notAfter: requestedDeadlineAt,
-          nonce: randomBytes(16),
-        });
-      return runtime.admit(input, { operationKey, requestedDeadlineAt, ...source });
+    admitLocal: (value, source) => admitRoot(validate(value), source ?? {}),
+    async runLocal(input, run, options) {
+      let outcome: { value: Awaited<ReturnType<typeof run>> } | { error: unknown } | undefined;
+      const status = await admitRoot(normalizeDataExecutionInput(input), {
+        ...options,
+        work: async () => {
+          try {
+            outcome = { value: await run() };
+          } catch (error) {
+            outcome = { error };
+            throw error;
+          }
+          return { kind: input.kind };
+        },
+      });
+      const completion = runtime.settled(status.id).then(async () => {
+        if (outcome && "error" in outcome) throw outcome.error;
+        const final = await runtime.inspect(status.id);
+        if (!outcome || !final || (final.status !== "ok" && final.status !== "partial"))
+          throw Object.assign(
+            Error(
+              final?.diagnostics.tail.at(-1)?.message ??
+                `Data execution ${status.id} ended ${final?.status ?? "unobserved"}`,
+            ),
+            { statusCode: 409 },
+          );
+        return outcome.value;
+      });
+      void completion.catch(() => {});
+      return { status, completion };
     },
     async admitMaintenance(action, options) {
       const requestedDeadlineAt = Date.now() + 120000,

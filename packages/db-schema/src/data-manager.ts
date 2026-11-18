@@ -55,6 +55,9 @@ export const jobs = dataManager.table(
     executionInput: jsonb("execution_input"),
     executionState: jsonb("execution_state"),
     executionChildren: jsonb("execution_children").notNull().default([]),
+    /** Agent operations of in-process work: reserved at admission, recorded as
+     * attempted before the request and as terminal once the agent answers. */
+    executionAgentOperations: jsonb("execution_agent_operations").notNull().default([]),
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [

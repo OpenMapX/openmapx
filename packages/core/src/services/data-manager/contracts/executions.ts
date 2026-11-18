@@ -59,11 +59,43 @@ const maintenance = z.discriminatedUnion("action", [
       .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
   }),
 ]);
+/** Work data-manager starts itself and runs in its own process. The three
+ * traffic kinds are short and periodic: they hold no agent lease and run beside
+ * other executions. The other three are exclusive like every durable kind. */
+export const LOCAL_DATA_EXECUTION_KINDS = [
+  "traffic-live",
+  "traffic-maintenance",
+  "traffic-predicted",
+  "transit-proposal",
+  "data-reload",
+  "ambient-publication",
+] as const;
+export type LocalDataExecutionKind = (typeof LOCAL_DATA_EXECUTION_KINDS)[number];
+export const SHORT_DATA_EXECUTION_KINDS: readonly string[] = [
+  "traffic-live",
+  "traffic-maintenance",
+  "traffic-predicted",
+] satisfies LocalDataExecutionKind[];
+const localInputs = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("traffic-live") }),
+  z.strictObject({
+    kind: z.literal("traffic-maintenance"),
+    task: z.enum(["extract-startup", "extract-guard", "ways-to-edges"]),
+  }),
+  z.strictObject({ kind: z.literal("traffic-predicted") }),
+  z.strictObject({ kind: z.literal("transit-proposal"), proposalId: z.uuid() }),
+  z.strictObject({ kind: z.literal("data-reload") }),
+  z.strictObject({
+    kind: z.literal("ambient-publication"),
+    action: z.enum(["build", "resume", "discard", "enable", "disable", "rollback"]),
+  }),
+]);
 export const ordinaryDataExecutionInputSchema = z.discriminatedUnion("kind", ordinaryInputs);
 export const dataExecutionInputSchema = z.union([
   ordinaryDataExecutionInputSchema,
   generationHardlinksInputSchema,
   maintenance,
+  localInputs,
 ]);
 export type DataExecutionInput = z.output<typeof dataExecutionInputSchema>;
 export function normalizeDataExecutionInput(value: unknown): DataExecutionInput {
@@ -154,6 +186,7 @@ export const dataExecutionResultSchema = z
       action: z.enum(["restart-primary", "reload-feed-proxy"]),
       changed: z.literal(true),
     }),
+    ...LOCAL_DATA_EXECUTION_KINDS.map((kind) => z.strictObject({ kind: z.literal(kind) })),
   ])
   .refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 32 * 1024);
 export type DataExecutionResult = z.infer<typeof dataExecutionResultSchema>;
@@ -180,6 +213,7 @@ export const dataExecutionStatusSchema = z
       "notable-places-build",
       "generation-hardlinks",
       "transit-maintenance",
+      ...LOCAL_DATA_EXECUTION_KINDS,
     ]),
     status: z.enum([
       "queued",

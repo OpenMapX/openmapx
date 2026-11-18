@@ -263,9 +263,10 @@ export async function pruneControlRecords(
     onFull?: () => void;
   } = {},
 ): Promise<string[]> {
+  // Data-manager's short traffic runs alone admit about 30 executions an hour.
   const local = installationState(installation),
     now = options.now ?? Date.now(),
-    limit = options.limit ?? 64;
+    limit = options.limit ?? 256;
   let reported = false;
   const onFull = () => {
     if (!reported) options.onFull?.();

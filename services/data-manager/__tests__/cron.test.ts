@@ -75,12 +75,8 @@ import {
   type SingleFlightController,
 } from "../src/jobs/transitous/single-flight.js";
 
-vi.mock("../src/jobs/execution/legacy-mutation.js", () => ({
-  beginLegacyCatalogPreflight: async () => {},
-  rejectLegacyMissingCatalog: async () => {},
-  markLegacyCatalogFetchAttempt: async () => {},
-  withLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
-  independentLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
+vi.mock("../src/jobs/execution/local.js", () => ({
+  runLocalDataExecution: async (_input: unknown, run: () => Promise<unknown>) => run(),
 }));
 function receipt(patch: Partial<DataExecutionStatus> = {}): DataExecutionStatus {
   return {
@@ -104,6 +100,7 @@ function receiverFixture(patch: Partial<DataExecutionReceiver> = {}): DataExecut
   };
   return {
     admitLocal: async () => receipt(),
+    runLocal: unsupported,
     admitMaintenance: async () => receipt({ kind: "transit-maintenance" }),
     subscribe: () => () => {},
     legacyResult: () => undefined,
@@ -120,28 +117,6 @@ function receiverFixture(patch: Partial<DataExecutionReceiver> = {}): DataExecut
 }
 function setupCron(options: CronSetupOptions) {
   return setupProductionCron({ executionReceiver: receiverFixture(), ...options });
-}
-
-/** Controlled storage results for the real controller; SQL predicates are covered by PostgreSQL. */
-function buildSingleFlightDb(opts: { uuid: () => string }) {
-  const selectRows = vi.fn().mockResolvedValue([]);
-  const stub = {
-    select() {
-      return {
-        from() {
-          return {
-            where() {
-              return { orderBy: () => ({ limit: selectRows }) };
-            },
-          };
-        },
-      };
-    },
-    insert() {
-      return { values: () => ({ returning: async () => [{ id: opts.uuid() }] }) };
-    },
-  };
-  return { stub, selectRows };
 }
 
 describe("setupCron", () => {
@@ -162,13 +137,7 @@ describe("setupCron", () => {
     vi.restoreAllMocks();
   });
 
-  function makeController(): SingleFlightController {
-    let counter = 0;
-    const { stub } = buildSingleFlightDb({
-      uuid: () => `job-${++counter}`,
-    });
-    return createSingleFlightController({ db: stub as never });
-  }
+  const makeController = (): SingleFlightController => createSingleFlightController();
 
   describe("protected schedule lifetimes", () => {
     const everySecond = "* * * * * *";
@@ -1035,205 +1004,28 @@ describe("setupCron", () => {
   });
 });
 
-describe("tryStartSync", () => {
-  function makeController() {
-    let counter = 0;
-    const built = buildSingleFlightDb({
-      uuid: () => `job-${++counter}`,
-    });
-    return {
-      controller: createSingleFlightController({ db: built.stub as never }),
-      selectRows: built.selectRows,
-    };
-  }
-
-  /**
-   * A controller whose INSERT can be held open, so tests can simulate two
-   * `tryStartSync` calls racing inside the same in-flight window.
-   */
-  function makeGatedController() {
-    let counter = 0;
-    let releaseInsert: (() => void) | undefined;
-    let failNextInsert = false;
-    const gate = () =>
-      new Promise<void>((resolve) => {
-        releaseInsert = resolve;
-      });
-    let pendingGate: Promise<void> | null = null;
-
-    const stub = {
-      select() {
-        return {
-          from() {
-            return {
-              where() {
-                return {
-                  orderBy() {
-                    return { limit: () => Promise.resolve([]) };
-                  },
-                };
-              },
-            };
-          },
-        };
-      },
-      insert() {
-        return {
-          values() {
-            return {
-              returning: async () => {
-                if (pendingGate) await pendingGate;
-                if (failNextInsert) {
-                  failNextInsert = false;
-                  throw new Error("insert failed");
-                }
-                return [{ id: `job-${++counter}` }];
-              },
-            };
-          },
-        };
-      },
-    };
-
-    return {
-      controller: createSingleFlightController({ db: stub as never }),
-      holdInserts: () => {
-        pendingGate = gate();
-      },
-      releaseInserts: () => {
-        releaseInsert?.();
-        pendingGate = null;
-      },
-      failNext: () => {
-        failNextInsert = true;
-      },
-    };
-  }
-
-  it("only lets one of two concurrent calls start (latches before the first await)", async () => {
-    const { controller, holdInserts, releaseInserts } = makeGatedController();
-    holdInserts();
-
-    const first = controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });
-    const second = await controller.tryStartSync({ trigger: "api", triggeredBy: "y" });
-
-    expect(second.ok).toBe(false);
-    if (!second.ok) {
-      expect(second.reason).toBe("in-flight");
-      expect(second.existingJobId).toBeNull();
-    }
-
-    releaseInserts();
-    const firstResult = await first;
-    expect(firstResult.ok).toBe(true);
-  });
-
-  it("clears the latch when the INSERT rejects, so the next call can start", async () => {
-    const { controller, failNext } = makeGatedController();
-    failNext();
-
-    await expect(controller.tryStartSync({ trigger: "cron", triggeredBy: "x" })).rejects.toThrow(
-      "insert failed",
-    );
-    expect(controller.getInflight()).toBeNull();
-
-    const retry = await controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });
-    expect(retry.ok).toBe(true);
-  });
-
-  it("surfaces concurrent same-idempotency-key calls as in-flight, not duplicate-idempotency-key", async () => {
-    const { controller, holdInserts, releaseInserts } = makeGatedController();
-    holdInserts();
-
-    const first = controller.tryStartSync({
-      trigger: "api",
-      triggeredBy: "alice",
-      idempotencyKey: "same-key",
-    });
-    const second = await controller.tryStartSync({
-      trigger: "api",
-      triggeredBy: "bob",
-      idempotencyKey: "same-key",
-    });
-
-    // The `duplicate-idempotency-key` reason is reserved for replays that
-    // arrive after the first insert has already landed; a concurrent
-    // collision inside the starting window surfaces as "in-flight".
-    expect(second.ok).toBe(false);
-    if (!second.ok) {
-      expect(second.reason).toBe("in-flight");
-      expect(second.existingJobId).toBeNull();
-    }
-
-    releaseInserts();
-    const firstResult = await first;
-    expect(firstResult.ok).toBe(true);
-  });
-
-  it("returns in-flight error when a prior call has not finished", async () => {
-    const { controller } = makeController();
-    const first = await controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });
-    expect(first.ok).toBe(true);
-    const second = await controller.tryStartSync({ trigger: "manual", triggeredBy: "y" });
-    expect(second.ok).toBe(false);
-    if (!second.ok) {
-      expect(second.reason).toBe("in-flight");
-      if (first.ok) expect(second.existingJobId).toBe(first.jobId);
-    }
-  });
-
-  it("returns the original job identity when storage reports a duplicate key", async () => {
-    const { controller, selectRows } = makeController();
-    const first = await controller.tryStartSync({
-      trigger: "api",
-      triggeredBy: "alice",
-      idempotencyKey: "dedup-key",
-    });
-    expect(first.ok).toBe(true);
-    controller.markSyncFinished();
-
-    if (!first.ok) throw Error("Expected the first reservation to succeed");
-    selectRows.mockResolvedValueOnce([{ id: first.jobId }]);
-    const replay = await controller.tryStartSync({
-      trigger: "api",
-      triggeredBy: "alice",
-      idempotencyKey: "dedup-key",
-    });
-    expect(replay).toEqual({
-      ok: false,
-      reason: "duplicate-idempotency-key",
-      existingJobId: first.jobId,
-    });
-  });
-
-  it("markSyncFinished clears the lock so the next call succeeds", async () => {
-    const { controller } = makeController();
-    const first = await controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });
-    expect(first.ok).toBe(true);
-    controller.markSyncFinished();
-    const second = await controller.tryStartSync({ trigger: "manual", triggeredBy: "y" });
-    expect(second.ok).toBe(true);
+describe("single-flight latch", () => {
+  it("holds one sync until it is marked finished", () => {
+    const controller = createSingleFlightController();
+    expect(controller.reserveOwned("job-1")).toBe(true);
+    expect(controller.reserveOwned("job-2")).toBe(false);
+    controller.markSyncFinished("job-2");
+    expect(controller.getInflight()?.jobId).toBe("job-1");
+    controller.markSyncFinished("job-1");
+    expect(controller.reserveOwned("job-2")).toBe(true);
   });
 });
 
 describe("awaitInflightSync", () => {
   it("returns 'finished' immediately when nothing is in-flight", async () => {
-    let counter = 0;
-    const { stub } = buildSingleFlightDb({
-      uuid: () => `job-${++counter}`,
-    });
-    const controller = createSingleFlightController({ db: stub as never });
+    const controller = createSingleFlightController();
     const status = await awaitInflightSync(controller, 100);
     expect(status).toBe("finished");
   });
 
   it("times out when the inflight flag is never cleared", async () => {
-    let counter = 0;
-    const { stub } = buildSingleFlightDb({
-      uuid: () => `job-${++counter}`,
-    });
-    const controller = createSingleFlightController({ db: stub as never });
-    await controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });
+    const controller = createSingleFlightController();
+    controller.reserveOwned("job-1");
     const status = await awaitInflightSync(controller, 150, 25);
     expect(status).toBe("timeout");
   });

@@ -24,6 +24,11 @@ export function receiverFixture(patch: Partial<DataExecutionReceiver> = {}): Dat
   };
   return {
     admitLocal: async () => dataReceipt(),
+    // Runs the work inline, as the durable runtime would once admitted.
+    runLocal: async (input, work) => ({
+      status: dataReceipt({ kind: input.kind }),
+      completion: work(),
+    }),
     admitMaintenance: unsupported,
     subscribe: () => () => {},
     legacyResult: () => undefined,

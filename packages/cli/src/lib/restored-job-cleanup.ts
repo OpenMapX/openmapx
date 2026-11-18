@@ -8,15 +8,16 @@ export const RESTORED_JOB_FAILURE_REASON = "restored from backup";
  *
  * A data-manager row counts as open when any of these holds: its status is
  * queued, running or cancel-pending; it was interrupted without ever finishing
- * (a legacy worker marked by startup, or a current execution awaiting recovery);
- * its publication outcome is unknown, which keeps an execution non-terminal
- * whatever its status says; or a child operation has not settled.
+ * (an execution awaiting recovery); its publication outcome is unknown, which
+ * keeps an execution non-terminal whatever its status says; or a child or
+ * agent operation has not settled.
  *
  * An open row becomes `error` unless it already carries a final status. Its
- * unknown publication is recorded as not started, and its retained child
- * attempts are dropped: they could only be settled with receipts from a host
- * timeline that the restore replaced, and an unsettled child lets the
- * recovery pass pull a closed execution back to interrupted/unknown. A row
+ * unknown publication is recorded as not started, and its retained child and
+ * agent operation attempts are dropped: they could only be settled with
+ * receipts from a host timeline that the restore replaced, and an unsettled
+ * child lets the recovery pass pull a closed execution back to
+ * interrupted/unknown. A row
  * that is already settled, including its children, is left untouched.
  * Offline packages still being prepared are failed the same way; a finished
  * package stays available.
@@ -39,13 +40,18 @@ SET status = CASE WHEN status IN ('ok', 'partial', 'error', 'canceled') THEN sta
         THEN jsonb_set(execution_state, '{publication}', '"not_started"'::jsonb)
       ELSE execution_state
     END,
-    execution_children = '[]'::jsonb
+    execution_children = '[]'::jsonb,
+    execution_agent_operations = '[]'::jsonb
 WHERE status IN ('queued', 'running', 'cancel_pending')
    OR (status = 'interrupted' AND finished_at IS NULL)
    OR execution_state->>'publication' = 'unknown'
    OR EXISTS (
      SELECT 1 FROM jsonb_array_elements(execution_children) AS child
      WHERE child->>'state' IS DISTINCT FROM 'terminal'
+   )
+   OR EXISTS (
+     SELECT 1 FROM jsonb_array_elements(execution_agent_operations) AS operation
+     WHERE operation->>'state' = 'attempted'
    );
 UPDATE data_manager.offline_package_jobs
 SET status = 'failed',

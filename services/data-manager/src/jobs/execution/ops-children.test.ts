@@ -375,7 +375,6 @@ it.skipIf(
     });
     registerApi(app, {
       dataDir: join(root, "data"),
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -493,7 +492,6 @@ it.skipIf(
           .map((row) => row.status.id),
       ]);
       for (const ownId of ownIds) await sql`DELETE FROM data_manager.jobs WHERE id=${ownId}`;
-      journal.close();
       control.closeControlInstallation(dm);
       await sql.end();
       lines.close();
@@ -712,7 +710,6 @@ it
     });
     registerApi(app, {
       dataDir: data,
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -926,7 +923,6 @@ it
       await exited;
       resetOpsClient();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(dm);
       await sql.end();
       lines.close();

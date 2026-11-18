@@ -282,19 +282,7 @@ it.skipIf(!enabled)(
     // negative validation deliberately has no installed host prerequisites;
     // it must finish as error without fabricating passed evidence or pins.
     const policy = resolveOperationsProfile({ profile: "regional-assisted", countries: ["de"] });
-    const singleFlight = createSingleFlightController({
-      db: drizzle(state.fixture.sql, {
-        schema: {
-          jobs,
-          jobStages,
-          feedState,
-          offlinePackageJobs,
-          offlinePackageJobOwners,
-          offlinePackageArtifactReferences,
-        },
-      }),
-      admissionSql: state.fixture.sql,
-    });
+    const singleFlight = createSingleFlightController();
     const dispatcher = createDataExecutionDispatcher({
       dataDir,
       state: new StateStore(dataDir),
@@ -327,7 +315,6 @@ it.skipIf(!enabled)(
     registerApi(api, {
       dataDir,
       operationsPolicy: policy,
-      singleFlight,
       catalogReview: reviewer,
       executionReceiver: receiver,
     });

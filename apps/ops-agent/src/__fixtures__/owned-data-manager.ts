@@ -83,7 +83,7 @@ export async function ownedDataManager(options: {
     app,
     { api: `${token}-api`, "ops-agent": token, "host-cli": `${token}-cli` }
   );
-  registerApi(app, { dataDir, singleFlight, operationsPolicy, executionReceiver: receiver });
+  registerApi(app, { dataDir, operationsPolicy, executionReceiver: receiver });
   const baseUrl = await app.listen({ host: "127.0.0.1", port: 0 });
   const resumeHttp=async()=>{
     if(app.server.listening)return;
@@ -102,7 +102,7 @@ export async function ownedDataManager(options: {
     if (stopped) return;
     continuePrepareReply.resolve();
     await runtime.close(); app.server.closeAllConnections(); await app.close();
-    journal.close(); closeControlInstallation(installation); stopped = true;
+    closeControlInstallation(installation); stopped = true;
   };
   return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; },
     prepareReplyEntered: prepareReplyEntered.promise, releasePrepareResponse: () => continuePrepareReply.resolve(),

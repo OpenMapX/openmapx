@@ -4,52 +4,15 @@ interface InsertCall {
   values: Record<string, unknown>;
 }
 
-interface UpdateCall {
-  values: Record<string, unknown>;
-  predicate?: unknown;
-}
-
 const insertCalls: InsertCall[] = [];
-const updateCalls: UpdateCall[] = [];
-let returnedRows: Array<{ id: string }> = [];
 let insertError: Error | null = null;
-let admissionError: Error | null = null;
-let admissionChecks = 0;
-vi.mock("../src/jobs/execution/admission.js", () => ({
-  assertDataMutationAdmission: async () => {
-    admissionChecks++;
-    if (admissionError) throw admissionError;
-  },
-}));
 
 vi.mock("../src/db/index.js", () => ({
-  rawSql: {
-    begin: async (run: (tx: unknown) => Promise<unknown>) => {
-      const tx = Object.assign(
-        async (_query: TemplateStringsArray, ...values: unknown[]) => {
-          insertCalls.push({
-            values: {
-              kind: values[0],
-              status: "running",
-              triggeredBy: values[1],
-              metadata: typeof values[2] === "string" ? JSON.parse(values[2]) : values[2],
-            },
-          });
-          if (insertError) throw insertError;
-          return returnedRows;
-        },
-        { json: (value: unknown) => value },
-      );
-      return run(tx);
-    },
-  },
   db: {
     insert: () => ({
       values: (values: Record<string, unknown>) => {
         insertCalls.push({ values });
         return {
-          returning: () =>
-            insertError ? Promise.reject(insertError) : Promise.resolve(returnedRows),
           // biome-ignore lint/suspicious/noThenProperty: models Drizzle's thenable query builder
           then: (
             onFulfilled: (value: unknown) => unknown,
@@ -62,80 +25,15 @@ vi.mock("../src/db/index.js", () => ({
         };
       },
     }),
-    update: () => ({
-      set: (values: Record<string, unknown>) => {
-        const call: UpdateCall = { values };
-        updateCalls.push(call);
-        return {
-          where: (predicate: unknown) => {
-            call.predicate = predicate;
-            return Promise.resolve();
-          },
-        };
-      },
-    }),
   },
 }));
 
 beforeEach(() => {
   insertCalls.length = 0;
-  updateCalls.length = 0;
-  returnedRows = [];
   insertError = null;
-  admissionError = null;
-  admissionChecks = 0;
 });
 
 describe("job persistence", () => {
-  it("creates a running job with the requested identity", async () => {
-    const { createJobRow } = await import("../src/jobs/persistence.js");
-    returnedRows = [{ id: "job-1" }];
-
-    await expect(
-      createJobRow({
-        kind: "example-sync",
-        triggeredBy: "cron",
-        metadata: { sourceId: "example" },
-      }),
-    ).resolves.toBe("job-1");
-    expect(admissionChecks).toBe(1);
-    expect(insertCalls[0]?.values).toEqual({
-      kind: "example-sync",
-      status: "running",
-      triggeredBy: "cron",
-      metadata: { sourceId: "example" },
-    });
-  });
-
-  it("checks the durable maintenance admission before any legacy insertion", async () => {
-    const { createJobRow } = await import("../src/jobs/persistence.js");
-    admissionError = Error("configuration_maintenance_busy");
-    await expect(createJobRow({ kind: "example-sync" })).rejects.toThrow(
-      "configuration_maintenance_busy",
-    );
-    expect(insertCalls).toEqual([]);
-  });
-
-  it("fails when no job row is returned", async () => {
-    const { createJobRow } = await import("../src/jobs/persistence.js");
-    await expect(createJobRow({ kind: "example-sync" })).rejects.toThrow(
-      "Failed to create data_manager.jobs row",
-    );
-  });
-
-  it("finalizes a job with a completion timestamp", async () => {
-    const { finalizeJobRow } = await import("../src/jobs/persistence.js");
-    const before = Date.now();
-
-    await finalizeJobRow("job-1", "partial");
-
-    expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0]?.values.status).toBe("partial");
-    const finishedAt = updateCalls[0]?.values.finishedAt;
-    expect(finishedAt).toBeInstanceOf(Date);
-    expect((finishedAt as Date).getTime()).toBeGreaterThanOrEqual(before);
-  });
-
   it("converts timestamps and scrubs diagnostics without mutating the result", async () => {
     const { makePersistingOnStageComplete } = await import("../src/jobs/persistence.js");
     const result = {

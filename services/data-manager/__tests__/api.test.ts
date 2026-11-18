@@ -1,21 +1,11 @@
 import { transitSourceRevision } from "../src/transit-sources.js";
 
-vi.mock("../src/jobs/execution/legacy-mutation.js", () => ({
-  beginLegacyCatalogPreflight: async () => {},
-  rejectLegacyMissingCatalog: async () => {},
-  markLegacyCatalogFetchAttempt: async () => {},
-  startLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => ({
-    id: "unit-writer",
+vi.mock("../src/jobs/execution/local.js", () => ({
+  runLocalDataExecution: async (_input: unknown, run: () => Promise<unknown>) => run(),
+  startLocalDataExecution: async (_input: unknown, run: () => Promise<unknown>) => ({
+    status: {},
     completion: run(),
   }),
-  withLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
-  independentLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
-}));
-vi.mock("../src/jobs/persistence.js", async () => ({
-  ...(await vi.importActual<typeof import("../src/jobs/persistence.js")>(
-    "../src/jobs/persistence.js",
-  )),
-  finalizeJobRow: vi.fn(async () => {}),
 }));
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -25,9 +15,9 @@ import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
+import { DataConfigurationMaintenanceBusy } from "../src/jobs/execution/store.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
-import type { SingleFlightController } from "../src/jobs/transitous/single-flight.js";
 import { dataReceipt, receiverFixture } from "./helpers/execution-receiver.js";
 
 vi.mock("../src/jobs/download-osm.js", () => ({
@@ -194,7 +184,7 @@ describe("data-manager API", () => {
     expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
   });
 
-  it("continues a legacy observer through running unknown publication without canceling its worker", async () => {
+  it("continues an observer through running unknown publication without canceling its worker", async () => {
     const status = dataReceipt({
         kind: "transit-maintenance",
         status: "running",
@@ -273,22 +263,15 @@ describe("data-manager API", () => {
     });
   });
 
-  it("returns 409 without changing the overlay when single-flight is occupied", async () => {
+  it("returns 409 without changing the overlay while another data job holds admission", async () => {
     const dataDir = createDataDir();
     sourceCatalog(dataDir);
     const overlayPath = join(dataDir, "overrides", "feeds-overlay.json");
-    const singleFlight: SingleFlightController = {
-      tryStartSync: vi.fn(async () => ({
-        ok: false as const,
-        reason: "in-flight" as const,
-        existingJobId: "running-job",
-      })),
-      reserveOwned: vi.fn(() => true),
-      markSyncFinished: vi.fn(),
-      getInflight: () => ({ jobId: "running-job", startedAt: new Date() }),
-    };
+    const admitLocal = vi.fn(async () => {
+      throw new DataConfigurationMaintenanceBusy();
+    });
     const app = createTestApp();
-    registerApi(app, { dataDir, singleFlight, executionReceiver: receiverFixture() });
+    registerApi(app, { dataDir, executionReceiver: receiverFixture({ admitLocal }) });
     const res = await app.inject({
       method: "POST",
       url: "/transit/sources",
@@ -304,21 +287,16 @@ describe("data-manager API", () => {
       },
     });
     expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ ok: false, reason: "in-flight", existingJobId: null });
     expect(existsSync(overlayPath)).toBe(false);
   });
 
-  it("rejects oversized source metadata before reserving a job or admitting work", async () => {
+  it("rejects oversized source metadata before admitting work", async () => {
     const dataDir = createDataDir();
     sourceCatalog(dataDir);
-    const singleFlight: SingleFlightController = {
-        tryStartSync: vi.fn(),
-        reserveOwned: vi.fn(() => true),
-        markSyncFinished: vi.fn(),
-        getInflight: () => null,
-      },
-      admitLocal = vi.fn();
+    const admitLocal = vi.fn();
     const app = createTestApp();
-    registerApi(app, { dataDir, singleFlight, executionReceiver: receiverFixture({ admitLocal }) });
+    registerApi(app, { dataDir, executionReceiver: receiverFixture({ admitLocal }) });
     const response = await app.inject({
       method: "POST",
       url: "/transit/sources",
@@ -334,29 +312,15 @@ describe("data-manager API", () => {
       },
     });
     expect(response.statusCode, response.body).toBe(413);
-    expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
     expect(admitLocal).not.toHaveBeenCalled();
     expect(existsSync(join(dataDir, "overrides/feeds-overlay.json"))).toBe(false);
   });
-  it("returns a reserved visible job before launching an accepted source mutation", async () => {
+  it("answers with the admitted sync's job and leaves the overlay to its worker", async () => {
     const dataDir = createDataDir();
     sourceCatalog(dataDir);
-    const events: string[] = [];
-    const singleFlight: SingleFlightController = {
-      tryStartSync: vi.fn(async () => {
-        events.push("job-inserted");
-        return { ok: true as const, jobId: "job-visible" };
-      }),
-      reserveOwned: vi.fn(() => true),
-      markSyncFinished: vi.fn(),
-      getInflight: () => ({ jobId: "job-visible", startedAt: new Date() }),
-    };
-    const admitLocal = vi.fn(async () => {
-      events.push("durable-admitted");
-      return dataReceipt({ kind: "transit-sync" });
-    });
+    const admitLocal = vi.fn(async () => dataReceipt({ kind: "transit-sync" }));
     const app = createTestApp();
-    registerApi(app, { dataDir, singleFlight, executionReceiver: receiverFixture({ admitLocal }) });
+    registerApi(app, { dataDir, executionReceiver: receiverFixture({ admitLocal }) });
     const res = await app.inject({
       method: "POST",
       url: "/transit/sources",
@@ -377,7 +341,6 @@ describe("data-manager API", () => {
       sourceId: "operator:de:operator-feed",
       status: "started",
     });
-    expect(events).toEqual(["job-inserted", "durable-admitted"]);
     expect(existsSync(join(dataDir, "overrides/feeds-overlay.json"))).toBe(false);
     expect(admitLocal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -387,7 +350,7 @@ describe("data-manager API", () => {
           source: expect.objectContaining({ name: "operator-feed" }),
         }),
       }),
-      expect.objectContaining({ sourceJobId: "job-visible" }),
+      { triggeredBy: "api" },
     );
   });
 
@@ -396,17 +359,12 @@ describe("data-manager API", () => {
     { countries: ["-x"], label: "a leading-dash country token" },
   ])("POST /transit/sync rejects $label", async ({ countries }) => {
     const dataDir = createDataDir();
-    const singleFlight: SingleFlightController = {
-      tryStartSync: vi.fn(),
-      reserveOwned: vi.fn(() => true),
-      markSyncFinished: vi.fn(),
-      getInflight: () => null,
-    };
+    const admitLocal = vi.fn();
     const app = createTestApp();
     registerApi(app, {
       dataDir,
       operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
-      singleFlight,
+      executionReceiver: receiverFixture({ admitLocal }),
     });
 
     const res = await app.inject({
@@ -416,7 +374,7 @@ describe("data-manager API", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
+    expect(admitLocal).not.toHaveBeenCalled();
   });
 
   it.each([{ countries: [] }, { countries: ["de"], freeDiskBytes: 10 ** 15, feedCount: 1 }])(
@@ -491,18 +449,11 @@ describe("data-manager API", () => {
 
   it("POST /transit/sync starts an in-scope country", async () => {
     const dataDir = createDataDir();
-    const singleFlight: SingleFlightController = {
-      tryStartSync: vi.fn(async () => ({ ok: true as const, jobId: "job-sync" })),
-      reserveOwned: vi.fn(() => true),
-      markSyncFinished: vi.fn(),
-      getInflight: () => ({ jobId: "job-sync", startedAt: new Date() }),
-    };
     const admitLocal = vi.fn(async () => dataReceipt({ kind: "transit-sync" }));
     const app = createTestApp();
     registerApi(app, {
       dataDir,
       operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
-      singleFlight,
       executionReceiver: receiverFixture({ admitLocal }),
     });
 

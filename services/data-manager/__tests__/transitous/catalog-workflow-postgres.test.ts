@@ -627,18 +627,7 @@ it
           controlJournal: journal,
           configurationFence: fence,
         }),
-        singleFlight = createSingleFlightController({
-          db: drizzle(state.db.sql, {
-            schema: {
-              jobs,
-              jobStages,
-              feedState,
-              offlinePackageJobs,
-              offlinePackageJobOwners,
-              offlinePackageArtifactReferences,
-            },
-          }),
-        }),
+        singleFlight = createSingleFlightController(),
         dispatcher = createDataExecutionDispatcher({
           dataDir: data,
           state: new StateStore(data),
@@ -661,7 +650,6 @@ it
       registerAuth(dm, { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` });
       registerApi(dm, {
         dataDir: data,
-        singleFlight,
         operationsPolicy: policy,
         executionReceiver: receiver,
       });
@@ -1012,7 +1000,6 @@ it
       await runner?.close();
       await bridge.close();
       await motis.close();
-      journal?.close();
       if (installation) control.closeControlInstallation(installation);
       if (agentInstallation) control.closeControlInstallation(agentInstallation);
       if (host) rmSync(host.cleanupRoot, { recursive: true, force: true });

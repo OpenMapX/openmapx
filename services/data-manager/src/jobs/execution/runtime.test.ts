@@ -186,7 +186,6 @@ describe.skipIf(
         await runtime.close();
         if (!id && key) id = (await store.lookup(key))?.status.id;
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -258,7 +257,6 @@ describe.skipIf(
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -309,7 +307,6 @@ describe.skipIf(
         .poll(async () => (await store.inspect(id!))?.status.publication, { timeout: 15000 })
         .toBe("unknown");
       await runtime.close();
-      journal.close();
       control.closeControlInstallation(installation);
       installation = control.openControlInstallation({
         infraDir: root,
@@ -340,7 +337,6 @@ describe.skipIf(
       await runtime.close();
       if (!id && key) id = (await store.lookup(key))?.status.id;
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -477,7 +473,6 @@ describe.skipIf(
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
         await sql.unsafe(`DROP TABLE data_manager.${child}`);
         await sql.unsafe(`DROP TABLE data_manager.${parent}`);
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -535,7 +530,6 @@ describe.skipIf(
       await expect.poll(async () => (await store.inspect(id!))?.status.publication).toBe("unknown");
       expect((await store.inspect(id))?.finishedAt).toBeNull();
       await runtime.close();
-      journal.close();
       control.closeControlInstallation(installation);
       installation = control.openControlInstallation({
         infraDir: root,
@@ -564,7 +558,6 @@ describe.skipIf(
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -644,7 +637,6 @@ describe.skipIf(
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -716,7 +708,7 @@ describe.skipIf(
           readiness: new DataManagerReadiness(),
           controlInstallation: installation,
           initializeOfflineStorage: async () => {},
-          reconcileJobs: async () => [],
+          reconcileJobs: async () => {},
           setupCronSchedulers: () => ({ stop() {} }) as never,
           removePrunedRows: (keys) => removePrunedDataRows(sql, keys),
         });
@@ -742,7 +734,6 @@ describe.skipIf(
         clock?.mockRestore();
         await runtime.close();
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -935,7 +926,6 @@ describe.skipIf(
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
         await workerRaw.end();
         await proxy.close();
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
         await sql.unsafe(`DROP TABLE data_manager.${table}`);
@@ -1092,7 +1082,6 @@ describe.skipIf(
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
         await sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
         await sql.unsafe(`DROP TABLE data_manager.${tableName}`);
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });

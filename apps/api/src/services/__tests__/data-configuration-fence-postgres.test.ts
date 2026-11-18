@@ -75,11 +75,10 @@ import { setupCron } from "../../../../../services/data-manager/src/cron.js";
 import { installDataMutationAdmission } from "../../../../../services/data-manager/src/jobs/execution/admission.js";
 import { createDataConfigurationMaintenance } from "../../../../../services/data-manager/src/jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "../../../../../services/data-manager/src/jobs/execution/dispatch.js";
-import { startLegacyDataMutation } from "../../../../../services/data-manager/src/jobs/execution/legacy-mutation.js";
+import { installLocalDataExecutions } from "../../../../../services/data-manager/src/jobs/execution/local.js";
 import { createDataExecutionReceiver } from "../../../../../services/data-manager/src/jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "../../../../../services/data-manager/src/jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "../../../../../services/data-manager/src/jobs/execution/store.js";
-import { createJobRow } from "../../../../../services/data-manager/src/jobs/persistence.js";
 import { resolveOperationsProfile } from "../../../../../services/data-manager/src/jobs/transitous/operations-profile.js";
 import { createSingleFlightController } from "../../../../../services/data-manager/src/jobs/transitous/single-flight.js";
 import { PostgresOfflinePackageAccountingStore } from "../../../../../services/data-manager/src/offline-packages/postgres-accounting.js";
@@ -174,7 +173,7 @@ describe.skipIf(
             offlinePackageArtifactReferences,
           },
         }),
-        singleFlight = createSingleFlightController({ db: actualDb, admissionSql: sql }),
+        singleFlight = createSingleFlightController(),
         journal = control.createDataExecutionControlJournal(dm, sql),
         ownedStore = createPostgresDataExecutionStore(sql, {
           controlJournal: journal,
@@ -207,6 +206,7 @@ describe.skipIf(
           operationsPolicy,
         }),
         app = Fastify();
+      installLocalDataExecutions(receiver);
       registerAuth(app, {
         api: "guard-fixture-token-api",
         "ops-agent": "guard-fixture-token",
@@ -215,7 +215,6 @@ describe.skipIf(
       registerApi(app, {
         executionReceiver: receiver,
         dataDir: join(root, "data"),
-        singleFlight,
         operationsPolicy,
         searchIndexSql: sql,
         bakePredicted: async () => {
@@ -244,21 +243,13 @@ describe.skipIf(
           });
           expect(response.statusCode, url + response.body).toBe(409);
         }
-        await expect(
-          singleFlight.tryStartSync({ trigger: "cron", triggeredBy: "fixture" }),
-        ).rejects.toThrow("configuration_maintenance_busy");
-        await expect(createJobRow({ kind: "traffic-predicted" }, sql)).rejects.toThrow(
-          "configuration_maintenance_busy",
-        );
-        await expect(
-          startLegacyDataMutation(
-            "traffic-predicted",
-            async () => {
+        // In-process work of both classes is refused at admission.
+        for (const input of [{ kind: "traffic-predicted" }, { kind: "data-reload" }] as const)
+          await expect(
+            receiver.runLocal(input, async () => {
               dataEffects++;
-            },
-            sql,
-          ),
-        ).rejects.toThrow("configuration_maintenance_busy");
+            }),
+          ).rejects.toThrow("configuration_maintenance_busy");
         const offline = new PostgresOfflinePackageAccountingStore(sql),
           candidate: OfflinePackageJobRecord = {
             jobId: randomUUID(),
@@ -326,7 +317,6 @@ describe.skipIf(
       } finally {
         await app.close();
         await runtime.close();
-        journal.close();
       }
       const restarted = createDataConfigurationMaintenance(sql, dm);
       await restarted.startup();

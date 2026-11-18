@@ -8,7 +8,7 @@ import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import type { FastifyInstance } from "fastify";
 import type postgres from "postgres";
 import { registerDataManagerRoute } from "../../route-contract.js";
-import { withLegacyDataMutation } from "../execution/legacy-mutation.js";
+import { runLocalDataExecution } from "../execution/local.js";
 import {
   buildAmbientPlaces,
   discardPlanetPlaces,
@@ -80,6 +80,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     };
   });
   async function start(
+    action: "build" | "resume",
     job: (
       claim: () => void,
       options: { onProgress: (p: AmbientBuildProgress) => void },
@@ -99,21 +100,18 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       accept = resolve;
       reject = rejectPromise;
     });
-    void withLegacyDataMutation(
-      "ambient-publication",
-      () =>
-        job(
-          () => {
-            claimed = true;
-            accept();
+    void runLocalDataExecution({ kind: "ambient-publication", action }, () =>
+      job(
+        () => {
+          claimed = true;
+          accept();
+        },
+        {
+          onProgress: (value) => {
+            if (building === attempt) progress = value;
           },
-          {
-            onProgress: (value) => {
-              if (building === attempt) progress = value;
-            },
-          },
-        ),
-      sql,
+        },
+      ),
     )
       .catch((error) => {
         if (!claimed) {
@@ -147,7 +145,11 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     } catch (error) {
       return reply.code(400).send({ error: (error as Error).message });
     }
-    return start((claim, options) => buildAmbientPlaces(sql, region, claim, options), reply);
+    return start(
+      "build",
+      (claim, options) => buildAmbientPlaces(sql, region, claim, options),
+      reply,
+    );
   });
   for (const action of ["resume", "discard"] as const) {
     registerDataManagerRoute(
@@ -157,15 +159,14 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
         const { generation } = request.body;
         if (action === "resume")
           return start(
+            "resume",
             (claim, options) => resumePlanetPlaces(sql, generation, claim, options),
             reply,
           );
         if (building) return reply.code(409).send({ error: "An ambient build is already running" });
         try {
-          await withLegacyDataMutation(
-            "ambient-publication",
-            () => discardPlanetPlaces(sql, generation),
-            sql,
+          await runLocalDataExecution({ kind: "ambient-publication", action: "discard" }, () =>
+            discardPlanetPlaces(sql, generation),
           );
           return { ok: true };
         } catch (error) {
@@ -176,10 +177,9 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
   }
   registerDataManagerRoute(app, "setAmbientPlacesEnabled", async (request, reply) => {
     try {
-      await withLegacyDataMutation(
-        "ambient-publication",
+      await runLocalDataExecution(
+        { kind: "ambient-publication", action: request.body.enabled ? "enable" : "disable" },
         () => setAmbientEnabled(sql, request.body.enabled),
-        sql,
       );
       return { ok: true };
     } catch (error) {
@@ -188,7 +188,9 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
   });
   registerDataManagerRoute(app, "rollbackAmbientPlaces", async (_request, reply) => {
     try {
-      await withLegacyDataMutation("ambient-publication", () => rollbackAmbientPlaces(sql), sql);
+      await runLocalDataExecution({ kind: "ambient-publication", action: "rollback" }, () =>
+        rollbackAmbientPlaces(sql),
+      );
       return { ok: true };
     } catch (error) {
       return reply.code(409).send({ error: (error as Error).message });

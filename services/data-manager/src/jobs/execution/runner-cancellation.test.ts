@@ -674,7 +674,6 @@ it.skipIf(
       await runner.close();
       if (!id && operationKey) id = (await store.lookup(operationKey))?.status.id;
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });

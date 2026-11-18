@@ -41,7 +41,7 @@ import {
 } from "../../../../../packages/core/src/build-artifacts/filesystem";
 import { installationState } from "../../../../../packages/core/src/build-artifacts/private-records";
 import { runOpsOperation } from "../../ops-client.js";
-import { withLegacyDataMutation } from "../execution/legacy-mutation.js";
+import { runLocalDataExecution } from "../execution/local.js";
 import type { DataExecutionStore } from "../execution/store.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
 import { CANDIDATE_MANIFEST_FILENAME } from "./candidate.js";
@@ -161,7 +161,7 @@ export function createCatalogReviewService(options: {
   }): Promise<CatalogProposal> {
     const branch = resolutionSchema.shape.branch.parse(input.branch),
       proposalId = input.proposalId ?? randomUUID();
-    return withLegacyDataMutation("transit-proposal", async () => {
+    return runLocalDataExecution({ kind: "transit-proposal", proposalId }, async () => {
       input.signal?.throwIfAborted();
       let resolution = retainedResolution(proposalId);
       if (resolution && resolution.branch !== branch)

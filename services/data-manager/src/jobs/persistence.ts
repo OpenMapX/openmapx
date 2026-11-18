@@ -1,16 +1,6 @@
-import { jobStages, jobs } from "@openmapx/db-schema";
-import { and, eq, isNull } from "drizzle-orm";
-import type postgres from "postgres";
-import z from "zod/v4";
-import { db, rawSql } from "../db/index.js";
+import { jobStages } from "@openmapx/db-schema";
+import { db } from "../db/index.js";
 import { scrubDiagnosticValue, scrubSecrets } from "../utils/scrub-secrets.js";
-import { assertDataMutationAdmission } from "./execution/admission.js";
-
-export interface CreateJobRowOptions {
-  kind: string;
-  triggeredBy?: string | null;
-  metadata?: Record<string, unknown> | null;
-}
 
 export interface PersistableStageResult {
   stage: string;
@@ -25,30 +15,6 @@ export interface PersistableStageResult {
 
 export interface PersistenceLogger {
   warn(message: string): unknown;
-}
-
-export async function createJobRow(
-  options: CreateJobRowOptions,
-  database: postgres.Sql = rawSql,
-): Promise<string> {
-  const { inserted } = await database.begin(async (tx) => {
-    await assertDataMutationAdmission(tx);
-    const inserted = await tx<
-      { id: string }[]
-    >`INSERT INTO data_manager.jobs(kind,status,triggered_by,metadata)
-    VALUES(${options.kind},'running',${options.triggeredBy ?? null},${options.metadata ? JSON.stringify(z.json().parse(options.metadata)) : null}::text::jsonb) RETURNING id`;
-    return { inserted };
-  });
-  const row = inserted[0];
-  if (!row) throw new Error("Failed to create data_manager.jobs row");
-  return row.id;
-}
-
-export async function finalizeJobRow(jobId: string, status: string): Promise<void> {
-  await db
-    .update(jobs)
-    .set({ status, finishedAt: new Date() })
-    .where(and(eq(jobs.id, jobId), isNull(jobs.executionVersion)));
 }
 
 export function makePersistingOnStageComplete<TStage extends PersistableStageResult>(

@@ -419,6 +419,8 @@ export function createDataExecutionDispatcher(deps: {
         });
         return { kind: input.kind, action: input.action, changed: true };
       }
+      default:
+        throw Error(`${input.kind} runs only as in-process work`);
     }
   }
   return {

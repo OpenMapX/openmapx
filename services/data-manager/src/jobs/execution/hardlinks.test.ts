@@ -204,7 +204,6 @@ it
     });
     registerApi(app, {
       dataDir: data,
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -304,7 +303,6 @@ it
       if (own) await sql`DELETE FROM data_manager.jobs WHERE id=${own.status.id}`;
       resetOpsClient();
       control.closeArtifactTargetLeaseHandle(lease);
-      journal.close();
       control.closeControlInstallation(host);
       control.closeControlInstallation(dm);
       await sql.end();

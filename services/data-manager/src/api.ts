@@ -28,10 +28,8 @@ import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
 import { type DataExecutionReceiver, registerDataExecutionApi } from "./jobs/execution/api.js";
-import {
-  startLegacyDataMutation,
-  withLegacyDataMutation,
-} from "./jobs/execution/legacy-mutation.js";
+import { runLocalDataExecution, startLocalDataExecution } from "./jobs/execution/local.js";
+import { DataConfigurationMaintenanceBusy, DataExecutionConflict } from "./jobs/execution/store.js";
 import {
   createNotablePlacesRuntimeState,
   getNotablePlacesStatus,
@@ -59,10 +57,7 @@ import {
   OperatorFeedRelayCapabilityError,
   type OperatorFeedRelayStore,
 } from "./jobs/transitous/operator-feed-relay.js";
-import { finalizeJobRow } from "./jobs/transitous/persistence.js";
 import { runMotisPreflight } from "./jobs/transitous/preflight.js";
-import { getSingleFlightController } from "./jobs/transitous/runtime.js";
-import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import {
   OFFLINE_PACKAGE_PRINCIPAL_PATTERN,
   OfflinePackagePrincipalQuotaError,
@@ -94,11 +89,6 @@ export interface ApiOptions {
   >;
   executionReceiver?: DataExecutionReceiver;
   dataDir?: string;
-  /**
-   * Single-flight controller. Defaults to the process-wide singleton so the
-   * cron + `/transit/sync` share state; tests inject an isolated controller.
-   */
-  singleFlight?: SingleFlightController;
   operationsPolicy?: MotisOperationsPolicy;
   /**
    * Runs the predicted-traffic bake. Wired in `service.ts` only when
@@ -436,7 +426,6 @@ function registerOfflinePackageRoutes(
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   registerDataExecutionApi(app, opts.executionReceiver);
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
-  const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
   const searchIndexSql = opts.searchIndexSql ?? sql;
   registerAmbientPlacesApi(app, searchIndexSql);
@@ -474,7 +463,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     );
   }
 
-  async function admitLegacyData(
+  async function admitData(
     input: DataExecutionInput,
     source?: { triggeredBy?: string; idempotencyKey?: string },
   ) {
@@ -482,7 +471,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
     return opts.executionReceiver.admitLocal(input, source);
   }
-  async function observeLegacyData(status: DataExecutionStatus, reply: FastifyReply) {
+  async function observeData(status: DataExecutionStatus, reply: FastifyReply) {
     const receiver = opts.executionReceiver;
     if (!receiver)
       throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
@@ -543,40 +532,30 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       countries: transitAllowedCountries(operationsPolicy),
       sourceMutation: options.mutation,
     });
-    const start = await singleFlight.tryStartSync({
-      trigger: "api",
-      triggeredBy: options.triggeredBy,
-      idempotencyKey: options.idempotencyKey,
-      kind: `transit-source-${options.action}`,
-      metadata: {
-        source: "source-mutation",
-        action: options.action,
-        sourceId: options.sourceId,
-        countries: transitAllowedCountries(operationsPolicy),
-      },
-    });
-    if (!start.ok) {
-      return {
-        ok: false,
-        status: 409,
-        body: {
-          ok: false,
-          reason: start.reason,
-          existingJobId: start.existingJobId,
-        },
-      };
-    }
-    // Desired state is written only by the fixed dispatcher under this sync's
-    // original admitted target authority, never by the HTTP observer.
-    singleFlight.markSyncFinished(start.jobId);
+    // Desired state is written only by the sync's worker under its admitted
+    // target authority, never by this HTTP handler. Admission is exclusive, so
+    // a running data job refuses the mutation.
     try {
       const admitted = await opts.executionReceiver.admitLocal(input, {
-        sourceJobId: start.jobId,
         triggeredBy: options.triggeredBy,
+        ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
       });
       return { ok: true, jobId: admitted.id };
     } catch (error) {
-      await finalizeJobRow(start.jobId, "error");
+      if (
+        error instanceof DataConfigurationMaintenanceBusy ||
+        error instanceof DataExecutionConflict
+      )
+        return {
+          ok: false,
+          status: 409,
+          body: {
+            ok: false,
+            reason:
+              error instanceof DataExecutionConflict ? "duplicate-idempotency-key" : "in-flight",
+            existingJobId: null,
+          },
+        };
       throw error;
     }
   }
@@ -849,11 +828,10 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   registerDataManagerRoute(app, "reloadDatasets", async () => {
-    return withLegacyDataMutation(
-      "data-reload",
-      async () => ({ ok: true, ...store.reload() }),
-      searchIndexSql,
-    );
+    return runLocalDataExecution({ kind: "data-reload" }, async () => ({
+      ok: true as const,
+      ...store.reload(),
+    }));
   });
 
   // Single-flight: the bake shells out to a slow tile-rewriting tool and
@@ -870,13 +848,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return { error: "a predicted bake is already running" };
     }
     bakeInFlight = true;
-    let owned: Awaited<ReturnType<typeof startLegacyDataMutation>>;
+    let owned: Awaited<ReturnType<typeof startLocalDataExecution>>;
     try {
-      owned = await startLegacyDataMutation(
-        "traffic-predicted",
-        opts.bakePredicted,
-        searchIndexSql,
-      );
+      owned = await startLocalDataExecution({ kind: "traffic-predicted" }, opts.bakePredicted);
     } catch (error) {
       bakeInFlight = false;
       throw error;
@@ -1025,7 +999,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
             });
       }
     }
-    const admitted = await admitLegacyData(
+    const admitted = await admitData(
       {
         kind: "transit-sync",
         countries,
@@ -1047,7 +1021,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         message: "Durable data receiver is unavailable",
       });
     const admitted = await opts.executionReceiver.admitMaintenance("restart-primary");
-    await observeLegacyData(admitted, reply);
+    await observeData(admitted, reply);
     if (!reply.raw.destroyed) return { ok: true, status: "restart-initiated" };
     return undefined;
   });

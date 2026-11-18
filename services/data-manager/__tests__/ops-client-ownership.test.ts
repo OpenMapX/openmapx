@@ -67,7 +67,7 @@ it("refuses an unowned synchronous proposal before the actual client POST", asyn
     }),
   );
   try {
-    await expect(runOpsOperation(operation)).rejects.toThrow(/retained.*owner|retained.*mutation/i);
+    await expect(runOpsOperation(operation)).rejects.toThrow(/only inside a data execution/);
     expect(posts).toBe(0);
   } finally {
     resetOpsClient();

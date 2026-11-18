@@ -40,6 +40,7 @@ import {
   type DataControlDelegation,
   dataControlDelegationSchema,
   dataExecutionStatusSchema,
+  LOCAL_DATA_EXECUTION_KINDS,
 } from "../services/data-manager/contracts/executions";
 import type { DataManagerTransport } from "../services/data-manager/transport";
 import {
@@ -232,6 +233,7 @@ export function retainAdmittedControlExecution(
       "artifactTransfer.export",
       "artifactTransfer.validate",
       "transit-maintenance",
+      ...LOCAL_DATA_EXECUTION_KINDS,
       "generation-hardlinks",
       "configuration-maintenance.prepare",
       "configuration-maintenance.settle",

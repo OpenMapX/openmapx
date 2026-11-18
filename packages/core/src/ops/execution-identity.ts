@@ -69,6 +69,12 @@ const futureBudgets: Readonly<Record<string, number>> = {
   "generation-hardlinks": 10 * 60_000,
   "configuration-maintenance.prepare": 60_000,
   "transit-maintenance": 120_000,
+  "traffic-live": 15 * 60_000,
+  "traffic-maintenance": 2 * 3600_000,
+  "traffic-predicted": 2 * 3600_000,
+  "transit-proposal": 3600_000,
+  "data-reload": 10 * 60_000,
+  "ambient-publication": 24 * 3600_000,
   "system.update": 48 * 3600_000,
 };
 /** Future policies are budgets only; they register no executable operations. */

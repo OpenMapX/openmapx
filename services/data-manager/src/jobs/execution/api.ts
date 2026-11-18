@@ -6,6 +6,7 @@ import type {
   DataExecutionIdentity,
   DataExecutionInput,
   DataExecutionStatus,
+  LocalDataExecutionKind,
   startGenerationHardlinksExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -26,8 +27,16 @@ export interface DataExecutionReceiver {
   }): Promise<DataExecutionStatus | null>;
   admitLocal(
     input: DataExecutionInput,
-    options?: { sourceJobId?: string; triggeredBy?: string; idempotencyKey?: string },
+    options?: { triggeredBy?: string; idempotencyKey?: string },
   ): Promise<DataExecutionStatus>;
+  /** Admits in-process work as a durable execution. Admission is awaited; the
+   * completion settles once the execution is terminal, with the work's value
+   * or its failure. */
+  runLocal<T>(
+    input: Extract<DataExecutionInput, { kind: LocalDataExecutionKind }>,
+    work: () => Promise<T>,
+    options?: { triggeredBy?: string },
+  ): Promise<{ status: DataExecutionStatus; completion: Promise<T> }>;
   admitMaintenance(
     action: "restart-primary" | "reload-feed-proxy",
     options?: { triggeredBy: "cron" },

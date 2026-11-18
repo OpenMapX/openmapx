@@ -839,7 +839,7 @@ VALUES
       expect(isDataExecutionTerminal(execution as never), `execution ${execution.id}`).toBe(true);
     expect(
       await psql(
-        "SELECT count(*) FROM data_manager.jobs WHERE (finished_at IS NULL OR execution_state->>'publication' = 'unknown' OR (execution_version IS NULL AND finished_at IS NULL AND status = 'interrupted'));",
+        "SELECT count(*) FROM data_manager.jobs WHERE (finished_at IS NULL OR execution_state->>'publication' = 'unknown');",
       ),
     ).toBe("0");
     expect(
@@ -847,21 +847,6 @@ VALUES
         "SELECT right(id::text, 2) || '=' || jsonb_array_length(execution_children) FROM data_manager.jobs WHERE execution_version = 2 AND right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
       ),
     ).toBe(["08=0", "09=0", "0d=0", "0e=1"].join("\n"));
-    const dataJobs = "SELECT md5(string_agg(j::text, '|' ORDER BY id)) FROM data_manager.jobs j;";
-    const closed = await psql(dataJobs);
-    // The data manager opens its client when first imported, so point it at the
-    // address the restored database has now rather than the one from setup.
-    process.env.DATABASE_URL = await livePostgresUrl();
-    const { reconcileOrphanedJobs } = await import(
-      "../../../services/data-manager/src/jobs/reconcile"
-    );
-    const dataManagerDatabase = await import("../../../services/data-manager/src/db/index");
-    try {
-      expect(await reconcileOrphanedJobs()).toEqual([]);
-    } finally {
-      await dataManagerDatabase.rawSql.end({ timeout: 2 });
-    }
-    expect(await psql(dataJobs)).toBe(closed);
     expect(
       await psql(
         "SELECT right(id::text, 2) || '=' || status || '|' || coalesce(error_message, '') || '|' || (lease_owner IS NULL)::text FROM data_manager.offline_package_jobs ORDER BY id;",
