@@ -428,8 +428,11 @@ to `state/ops-agent/control-audit.jsonl` and printed. Clearing a configuration
 maintenance leaves the data-manager's configuration fence prepared; `control
 resolve` of the same operation settles it through the CLI's data-manager token,
 also after a clear, with the fence outcome the agent's maintenance record already
-fixed if it has one, and is refused while the maintenance's configuration helper
-may still run. `control resolve` refuses a lease data-manager owns:
+fixed if it has one, and ends the maintenance when data-manager has no such fence
+or settled it otherwise. It is refused while the agent still drives the
+maintenance (preparing, prepared or applying): the agent finishes it, or records
+that it needs recovery, which it also does for a settlement data-manager refuses
+for good. `control resolve` refuses a lease data-manager owns:
 data-manager settles its own jobs at startup and in recovery, and `control clear`
 is the explicit release. `control status` leaves out agent operations the audit
 file records as resolved or cleared; they stay in the agent's journal until it is

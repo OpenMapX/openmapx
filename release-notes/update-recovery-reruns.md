@@ -17,9 +17,12 @@ longer drives: it records a configuration helper that exited and reopens other
 operations without waiting for the job, settles data-manager's configuration
 fence again when data-manager did not answer, releases the services of a
 maintenance that settled just before a restart, and gives back a prepared
-maintenance whose deadline passed before anything was applied.
-`openmapx control resolve` refuses a maintenance whose configuration helper may
-still run, and settles the fence with the outcome the agent already recorded.
+maintenance whose deadline passed before anything was applied. When
+data-manager refuses the fence settlement for good, the agent stops sending it
+and marks the maintenance as needing recovery. `openmapx control resolve`
+refuses a maintenance the agent still drives (preparing, prepared or applying),
+settles the fence with the outcome the agent already recorded, and ends the
+maintenance when data-manager has no such fence or settled it otherwise.
 
 A configuration change applied directly from the admin panel or API (settings,
 credentials, integration bindings, platform changes, migrations) whose API
