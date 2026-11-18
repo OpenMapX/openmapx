@@ -12,6 +12,15 @@ step whose request never reached the agent is sent again. Before, such an update
 was held for recovery even when its download had finished, or was abandoned with
 a conflict after the agent had prepared maintenance.
 
+The operations agent now finishes a configuration maintenance that its job no
+longer drives: it records a configuration helper that exited and reopens other
+operations without waiting for the job, settles data-manager's configuration
+fence again when data-manager did not answer, releases the services of a
+maintenance that settled just before a restart, and gives back a prepared
+maintenance whose deadline passed before anything was applied.
+`openmapx control resolve` refuses a maintenance whose configuration helper may
+still run, and settles the fence with the outcome the agent already recorded.
+
 A configuration change applied directly from the admin panel or API (settings,
 credentials, integration bindings, platform changes, migrations) whose API
 process restarts before the new settings were saved ends without the change and
