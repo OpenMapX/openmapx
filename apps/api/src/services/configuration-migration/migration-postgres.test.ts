@@ -242,15 +242,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               (value.payload as { operationKey?: string })?.operationKey === input.operationKey,
           );
           const retained = row?.result as Record<string, unknown> | undefined;
-          expect(retained?._configurationCandidate).toMatchObject({
-            phase: "settled",
-            retirement: { version: 1 },
-          });
-          expect((retained?._completion as { result?: unknown } | undefined)?.result).toMatchObject(
-            {
-              migration: { outcome: "applied", operationId: row!.id },
-            },
+          expect((row?.protocol as { candidate?: { phase?: string } })?.candidate?.phase).toBe(
+            "generation_applied",
           );
+          expect(retained?.migration).toMatchObject({ outcome: "applied", operationId: row!.id });
           await originalUnlink(path);
           interrupted = true;
           throw Error("API interrupted after migration packet unlink");
@@ -295,8 +290,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           },
           { timeout: 30000 },
         );
-        const result = (retained._completion as { result: { migration: unknown } }).result
-          .migration;
+        const result = retained.migration;
         expect(await jobRunner.runImmediateConfigurationMigration(input)).toEqual(result);
         const next = await jobRunner.runImmediateConfigurationMigrationPreview({
           actorId: "migration-admin",

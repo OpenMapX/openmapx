@@ -4,6 +4,7 @@
 import { getAllIntegrations } from "../integration-host";
 import { AdminJobFailure } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
+import { readAdminJobProtocol } from "./admin-job-state";
 import {
   currentAdministrativeConfigurationWriter,
   withAdministrativeConfigurationJob,
@@ -53,7 +54,7 @@ export async function runPlatformConfigurationChange(
 ) {
   // A release selection is downloaded before anything is committed, so a
   // registry outage fails the change while every service still runs as before.
-  if (!ctx.checkpointResult?._configurationCandidate) {
+  if (!readAdminJobProtocol(ctx.protocol).candidate) {
     const readPreview = () =>
       readPlatformPreview({
         actorId: input.actorId,

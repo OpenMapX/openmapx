@@ -64,6 +64,19 @@ import * as schema from "../../db/schema";
 import { createConfigurationPostgresFixture } from "../../test/configuration-postgres-fixture";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
 
+/** The maintenance a job prepared, as its recorded prepare operation names it. */
+function maintenanceIdOf(job: { protocol: unknown }): string | undefined {
+  const recorded = (
+    job.protocol as {
+      operations?: { operations?: Record<string, { kind?: string; operation?: unknown }> };
+    }
+  )?.operations?.operations;
+  const prepare = Object.values(recorded ?? {}).find(
+    (operation) => operation.kind === "configurationMaintenance.prepare",
+  );
+  return (prepare?.operation as { maintenanceId?: string } | undefined)?.maintenanceId;
+}
+
 const coordinatorReferenceCases = [
   {
     name: "qualified sibling coordinator image alias",
@@ -155,10 +168,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         if (typeof value !== "string" || !value.startsWith("{")) return false;
                         try {
                           const v = JSON.parse(value);
-                          return (
-                            v._configurationCandidate?.phase === "saved" &&
-                            Array.isArray(v._configurationCandidate?.rowVersions)
-                          );
+                          return v.phase === "rows_saved" && Array.isArray(v.rowVersions);
                         } catch {
                           return false;
                         }
@@ -654,10 +664,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 phase: value.phase,
                 errorClass: value.errorClass,
               })),
-              candidate: (row?.result as { _configurationCandidate?: { phase?: string } })
-                ?._configurationCandidate?.phase,
-              maintenance: (row?.result as { _configurationMaintenance?: { phase?: string } })
-                ?._configurationMaintenance?.phase,
+              candidate: (row?.protocol as { candidate?: { phase?: string } })?.candidate?.phase,
             }),
           );
         }
@@ -1219,18 +1226,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(dm.settlementResponseStatuses).toEqual([200]);
       expect(readFileSync(pullPath).equals(original)).toBe(true);
       const jobs = await fixture.db.select().from(schema.adminJob),
-        ownerJob = jobs.find(
-          (job) => (job.result as Record<string, unknown>)?._configurationMaintenance,
-        ),
-        checkpoint = ownerJob!.result as {
-          _configurationMaintenance: { maintenanceId: string };
-        },
+        ownerJob = jobs.find((job) => maintenanceIdOf(job)),
         owner = JSON.parse(
           readFileSync(
             join(
               host.infraDir,
               "state/ops-agent/control/maintenance",
-              `${checkpoint._configurationMaintenance.maintenanceId}.json`,
+              `${maintenanceIdOf(ownerJob!)}.json`,
             ),
             "utf8",
           ),
@@ -2143,20 +2145,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("stack.render") ?? 0).toBe(0);
       expect(posts.get("configurationMaintenance.apply")).toBe(1);
       expect(posts.get("service.start") ?? 0).toBe(0);
-      const checkpoint = row.result as {
-          _configurationMaintenance: { maintenanceId: string };
-        },
-        owner = JSON.parse(
-          readFileSync(
-            join(
-              host.infraDir,
-              "state/ops-agent/control",
-              "maintenance",
-              `${checkpoint._configurationMaintenance.maintenanceId}.json`,
-            ),
-            "utf8",
+      const owner = JSON.parse(
+        readFileSync(
+          join(
+            host.infraDir,
+            "state/ops-agent/control",
+            "maintenance",
+            `${maintenanceIdOf(row)}.json`,
           ),
-        );
+          "utf8",
+        ),
+      );
       expect(owner.coordinatorPull.imageId).toBe(pulledImageId);
       expect(owner.coordinatorPull.version).toBe(2);
       expect(owner.record.state).toBe("settled");
@@ -2300,7 +2299,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .where(eq(schema.adminJob.id, id)),
               before = original!.result as Record<string, unknown>,
               beforeProtocol = original!.protocol as Record<string, unknown>;
-            expect(before._configurationCandidate).toBeUndefined();
+            expect(beforeProtocol.candidate).toBeUndefined();
             expect(
               Object.values(
                 (beforeProtocol.operations as { operations: Record<string, { phase: string }> })
@@ -2367,17 +2366,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .select()
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, id)),
-            prior = before!.result as Record<string, unknown>,
-            candidate = prior._configurationCandidate as Record<string, unknown>,
+            candidate = (before!.protocol as { candidate: Record<string, unknown> }).candidate,
             path = join(host.candidates, `${candidate.sealedOperationKey}.json`),
             // The native unlink hook publishes these exact bytes only after unlink succeeds.
             bytes =
               point === "candidate unlink"
                 ? readFileSync(join(host.root, "coordinator-retirement-unlinked"))
                 : readFileSync(path),
-            decision = JSON.stringify(
-              (prior._configurationCandidate as { rowVersions?: unknown }).rowVersions,
-            ),
+            decision = JSON.stringify(candidate.rowVersions),
             inspected = inspectPreparedConfigurationRecord(
               JSON.parse(bytes.toString("utf8")),
             ).record,
@@ -2392,12 +2388,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   )
                 : undefined;
           expect(candidate.phase).toBe(
-            point === "candidate unlink" ? "settled" : !pullBoundary ? "saved" : "prepared",
+            point === "candidate unlink"
+              ? "generation_applied"
+              : !pullBoundary
+                ? "rows_saved"
+                : "candidate_prepared",
           );
           if (point === "candidate unlink") {
             expect(inspected.operationKey).toBe(candidate.sealedOperationKey);
             expect(existsSync(path)).toBe(false);
-            expect(candidate.retirement).toMatchObject({ version: 1, integrationIds: [] });
             expect(posts.get("configurationMaintenance.settle")).toBe(1);
           }
           expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
@@ -2450,9 +2449,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             JSON.stringify({
               status: observed?.status,
               error: observed?.error,
-              candidatePhase: (
-                observation?._configurationCandidate as { phase?: string } | undefined
-              )?.phase,
+              candidatePhase: (observed?.protocol as { candidate?: { phase?: string } } | undefined)
+                ?.candidate?.phase,
               configuration: observation?.configuration,
               operations: Object.values(
                 (
@@ -2472,14 +2470,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               })),
             }),
           ).toBe(0);
-          const row = await finished(id),
-            result = row.result as Record<string, unknown>;
+          const row = await finished(id);
           expect(row.status).toBe("success");
           expect((row.protocol as { execution: { version: number } }).execution.version).toBe(2);
           if (point === "decision")
             expect(
               JSON.stringify(
-                (result._configurationCandidate as { rowVersions?: unknown }).rowVersions,
+                (row.protocol as { candidate?: { rowVersions?: unknown } }).candidate?.rowVersions,
               ),
             ).toBe(decision);
           if (originalNormal && inspected.privateCoordinatorLifecycle?.action === "update") {
@@ -2761,17 +2758,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(refusedDecisionWrites).toBe(1);
       expect(issuedKnownRollbacks).toBeGreaterThan(0);
       expect(row.status).toBe("failed");
-      const result = row.result as {
-        _configurationMaintenance: { maintenanceId: string };
-        _configurationCandidate: { phase: string };
-      };
-      expect(result._configurationCandidate.phase).toBe("discarded");
+      // Nothing was saved: the job carries no candidate any more.
+      expect((row.protocol as { candidate?: unknown }).candidate).toBeUndefined();
       const owner = JSON.parse(
         readFileSync(
           join(
             host.infraDir,
             "state/ops-agent/control/maintenance",
-            `${result._configurationMaintenance.maintenanceId}.json`,
+            `${maintenanceIdOf(row)}.json`,
           ),
           "utf8",
         ),
@@ -3157,8 +3151,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     }
                   >;
                 };
-                _configurationCandidate?: { phase?: string };
-                _configurationMaintenance?: { phase?: string };
+                candidate?: { phase?: string };
               }
             | undefined;
           if (
@@ -3182,8 +3175,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 order: serviceIds,
                 jobState: row?.status,
                 observation: value?.observation,
-                candidatePhase: value?._configurationCandidate?.phase,
-                maintenancePhase: value?._configurationMaintenance?.phase,
+                candidatePhase: value?.candidate?.phase,
                 arrivals: [...arrivals],
                 posts: [...posts],
                 operations: Object.values(value?.operations?.operations ?? {}).map((op) => ({

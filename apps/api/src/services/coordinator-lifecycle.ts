@@ -200,11 +200,11 @@ export async function claimCoordinatorPullDelivery(context: JobContext, candidat
       .for("update");
     if (!row) throw refuse();
     const result = row.result as Record<string, unknown>,
-      checkpoint = result?._configurationCandidate as Record<string, unknown>;
+      protocol = row.protocol as AdminJobProtocol,
+      checkpoint = protocol.candidate;
     if (
       !checkpoint ||
       checkpoint.candidateId !== candidateId ||
-      typeof checkpoint.sealedOperationKey !== "string" ||
       checkpoint.operationKey !==
         coordinatorLifecycleOperationKey(
           context.jobId,
@@ -218,12 +218,13 @@ export async function claimCoordinatorPullDelivery(context: JobContext, candidat
     if (
       fixed.action !== "update" ||
       record.candidateId !== candidateId ||
-      checkpoint.phase !== "prepared" ||
-      result._configurationMaintenance !== undefined
+      checkpoint.phase !== "candidate_prepared" ||
+      Object.values(readProjection(protocol).operations).some(
+        (operation) => operation.kind === "configurationMaintenance.prepare",
+      )
     )
       throw refuse();
-    const protocol = row.protocol as AdminJobProtocol,
-      pull = fixed.pull,
+    const pull = fixed.pull,
       projection = readProjection(protocol, result),
       entry = projection.operations[pull.operationKey];
     if (
@@ -311,16 +312,13 @@ export async function closeUnissuedCoordinatorPull(
       throw refuse();
     if (entry.phase !== "prepared") return { result, protocol };
     if (
-      result._configurationMaintenance !== undefined ||
-      result._configurationMaintenanceDecision !== undefined ||
-      result._configurationMaintenanceRollback !== undefined
+      Object.values(projection.operations).some(
+        (operation) => operation.kind === "configurationMaintenance.prepare",
+      )
     )
       throw refuse();
     try {
-      const checkpoint = result._configurationCandidate as
-        | { sealedOperationKey?: string }
-        | undefined;
-      const originalPacket = checkpoint?.sealedOperationKey ?? packetOperationKey;
+      const originalPacket = protocol.candidate?.sealedOperationKey ?? packetOperationKey;
       if (!originalPacket) {
         // This caller failed before constructing any private packet. A first
         // delivery still required both that packet and the staged checkpoint.

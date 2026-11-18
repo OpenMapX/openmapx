@@ -3,6 +3,7 @@
 import type { db } from "../db";
 import { apiKeyedDigest } from "./admin-job-digest";
 import { JobObservationPending } from "./admin-job-failure";
+import { readAdminJobProtocol } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 import type { ProspectiveConfigurationOverlay } from "./prospective-configuration";
 import { readRetainedFeedCredentialPreview } from "./transit-credential-preview";
@@ -57,9 +58,7 @@ export async function recoveredTransitCredentialResult(
   });
   if (digest !== ctx.checkpointResult?._immediateIntentDigest)
     throw new JobObservationPending("invalid_identity");
-  const checkpoint = ctx.checkpointResult?._configurationCandidate as
-    | { candidateId?: string }
-    | undefined;
+  const checkpoint = readAdminJobProtocol(ctx.protocol).candidate;
   if (
     retained.row.consumedAt &&
     (retained.row.candidateId !== checkpoint?.candidateId || !retained.row.credentialsRevision)

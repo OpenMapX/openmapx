@@ -78,7 +78,7 @@ describe.skipIf(!enabled)(
       dropped.clear();
       nativeRecovery = context.task.name.includes("killed native");
       // The saved case pauses at the agent's apply, whose first step writes the generation.
-      pauseKind = context.task.name.includes("phase=prepared")
+      pauseKind = context.task.name.includes("phase=candidate_prepared")
         ? "configurationMaintenance.prepare"
         : "configurationMaintenance.apply";
       vi.stubEnv("OPENMAPX_RELEASE", "local");
@@ -509,7 +509,7 @@ describe.skipIf(!enabled)(
                 type: j.type,
                 failure: r?._migrationFailure,
                 configuration: r?.configuration,
-                phase: (r?._configurationCandidate as { phase?: unknown })?.phase,
+                phase: (j.protocol as { candidate?: { phase?: unknown } })?.candidate?.phase,
               };
             }),
           );
@@ -652,7 +652,7 @@ describe.skipIf(!enabled)(
         "synthetic-private-key",
       );
     }, 120000);
-    it.each(["prepared", "saved"])(
+    it.each(["candidate_prepared", "rows_saved"])(
       "recovers a killed native credential producer without consuming or applying twice (phase=%s)",
       async (phase) => {
         const { input } = await authorizedInput(),
@@ -714,11 +714,8 @@ describe.skipIf(!enabled)(
         const [before] = await state.fixture.db.select().from(schema.adminJob),
           [proof] = await state.fixture.db.select().from(schema.adminActionReauthentication),
           [secret] = await state.fixture.db.select().from(schema.serviceSecret);
-        expect(proof?.state).toBe(phase === "saved" ? "consumed" : "completed");
-        expect(
-          (before!.result as { _configurationCandidate: { phase: string } })._configurationCandidate
-            .phase,
-        ).toBe(phase);
+        expect(proof?.state).toBe(phase === "rows_saved" ? "consumed" : "completed");
+        expect((before!.protocol as { candidate: { phase: string } }).candidate.phase).toBe(phase);
         first.child.kill("SIGKILL");
         await first.exited;
         releaseAdmission?.();
@@ -733,19 +730,19 @@ describe.skipIf(!enabled)(
           "Native recovery result",
           JSON.stringify({ code, output: replacement.output() }),
         );
-        expect(code).toBe(phase === "saved" ? 0 : 2);
+        expect(code).toBe(phase === "rows_saved" ? 0 : 2);
         const [after] = await state.fixture.db.select().from(schema.adminJob),
           [afterProof] = await state.fixture.db.select().from(schema.adminActionReauthentication),
           [afterSecret] = await state.fixture.db.select().from(schema.serviceSecret);
         expect(after?.id).toBe(before!.id);
-        expect(after?.status).toBe(phase === "saved" ? "success" : "failed");
+        expect(after?.status).toBe(phase === "rows_saved" ? "success" : "failed");
         expect(afterProof?.consumedAt).toEqual(proof?.consumedAt);
         expect(afterSecret).toEqual(secret);
         expect(dm.preparePosts).toBe(1);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(
-          phase === "saved" ? 1 : 0,
+          phase === "rows_saved" ? 1 : 0,
         );
-        if (phase === "prepared") {
+        if (phase === "candidate_prepared") {
           const replay = await jobRunner.applyImmediateTransitCredentials(input);
           expect(replay.configuration.outcome).toBe("not_committed");
         }

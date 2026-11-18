@@ -448,9 +448,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           };
           /** The agent's record of the job's maintenance. */
           const maintenanceOf = async (jobId: string) => {
-            const { result } = await readJob(jobId),
-              id = (result as { _configurationMaintenance?: { maintenanceId?: string } } | null)
-                ?._configurationMaintenance?.maintenanceId;
+            const { protocol } = await readJob(jobId),
+              recorded = (
+                protocol as {
+                  operations?: {
+                    operations?: Record<string, { kind?: string; operation?: unknown }>;
+                  };
+                } | null
+              )?.operations?.operations,
+              id = (
+                Object.values(recorded ?? {}).find(
+                  (operation) => operation.kind === "configurationMaintenance.prepare",
+                )?.operation as { maintenanceId?: string } | undefined
+              )?.maintenanceId;
             return readMaintenance(installation, String(id)).record;
           };
           const untouched = async () => {

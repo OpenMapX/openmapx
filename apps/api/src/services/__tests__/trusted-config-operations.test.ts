@@ -86,7 +86,7 @@ beforeEach(() => {
   ports.prepare.mockReset().mockResolvedValue(candidate);
   ports.state.mockReset().mockReturnValue({
     payload,
-    sealed: { operation: { kind: "stack.render" } },
+    operation: { kind: "stack.render" },
     record: {},
     overlay: { purpose: "render", changes: [] },
   });
@@ -137,13 +137,13 @@ describe("retained trusted configuration producer", () => {
   });
 
   it.each<{
-    sealed?: { operation: { kind: string; serviceId?: string } };
+    operation?: { kind: string; serviceId?: string };
     record?: { apiFollowUp: string };
     followUp?: "service-apply";
     message: string;
   }>([
     {
-      sealed: { operation: { kind: "vault.apply", serviceId: "photon" } },
+      operation: { kind: "vault.apply", serviceId: "photon" },
       message: "candidate intent",
     },
     {
@@ -153,10 +153,10 @@ describe("retained trusted configuration producer", () => {
     },
   ])(
     "rejects mismatched immutable $message before submission",
-    async ({ sealed, record, followUp, message }) => {
+    async ({ operation, record, followUp, message }) => {
       ports.state.mockReturnValue({
         payload,
-        sealed: sealed ?? { operation: { kind: "stack.render" } },
+        operation: operation ?? { kind: "stack.render" },
         record: record ?? {},
         overlay: { purpose: "render", changes: [] },
       });

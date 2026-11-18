@@ -155,10 +155,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         type: "credential.import",
         status: "running",
         createdBy: "migration-admin",
-        result: {
-          _migrationStage: { id: active.previewId },
-          _configurationCandidate: { phase: "prepared" },
-        },
+        result: { _migrationStage: { id: active.previewId } },
+        protocol: { candidate: { phase: "candidate_prepared" } },
       });
       expect((await pruneMigrationStages()).map((r) => r.id)).toContain(unused.previewId);
       expect(
@@ -171,10 +169,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .set({
           status: "failed",
           finishedAt: new Date(),
-          result: {
-            _migrationStage: { id: active.previewId },
-            _configurationCandidate: { phase: "unknown" },
-          },
+          // The rows were saved and the apply has not concluded.
+          protocol: { candidate: { phase: "rows_saved" } },
         })
         .where(eq(adminJob.id, jobId));
       await pruneMigrationStages();
@@ -186,10 +182,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await state.fixture.db
         .update(adminJob)
         .set({
-          result: {
-            _migrationStage: { id: active.previewId },
-            _configurationCandidate: { phase: "discarded" },
-          },
+          // The candidate was given up: the job carries none any more.
+          protocol: {},
         })
         .where(eq(adminJob.id, jobId));
       expect((await pruneMigrationStages()).map((r) => r.id)).toContain(active.previewId);

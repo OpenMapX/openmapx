@@ -80,11 +80,10 @@ export async function checkpointOwnedAdminJob(
       // Cancellation never authorizes a forward phase. Only the settlement of
       // this job's own configuration maintenance may still be sent.
       const body = operation.operation,
-        maintenance = current._configurationMaintenance as Record<string, unknown> | undefined,
         cancelledMaintenanceSettlement =
           body?.kind === "configurationMaintenance.settle" &&
           cancelRequestedAt(currentProtocol) !== undefined &&
-          maintenance?.maintenanceId === body.maintenanceId;
+          currentProtocol.candidate?.maintenanceId === body.maintenanceId;
       if (row.status !== "running" && !standaloneSettlement && !cancelledMaintenanceSettlement)
         throw new JobOwnershipLost();
       if (

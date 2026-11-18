@@ -10,6 +10,7 @@ import {
 import { getAllIntegrations } from "../integration-host";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import { hasRetainedAdminJobOperation, observeRetainedAdminJobOperation } from "./admin-job-ops";
+import { readAdminJobProtocol } from "./admin-job-state";
 import {
   withAdministrativeConfigurationJob,
   withAdministrativeConfigurationWriter,
@@ -90,31 +91,25 @@ export async function applyTrustedConfigurationWithEvidence(
   integrationReload?: CapturedIntegrationReloadResult;
   integrationApplication?: IntegrationApplyReceipt;
 }> {
+  // A rerun step whose candidate is still open continues it from its phase.
+  const retained = options.ctx && readAdminJobProtocol(options.ctx.protocol).candidate;
   if (
     options.ctx &&
-    ["extension.install", "extension.remove"].includes(options.ctx.jobType ?? "") &&
-    options.ctx.checkpointResult?._extensionWorkflow
+    retained?.operationKey === options.operationKey &&
+    retained.phase !== "generation_applied"
   ) {
-    const ctx = options.ctx,
-      retained = ctx.checkpointResult?._configurationCandidate as
-        | Record<string, unknown>
-        | undefined;
-    if (retained?.operationKey === options.operationKey && retained.phase !== "settled") {
-      const { retainedConfigurationIntegrationIds, resumeRetainedConfigurationCandidate } =
-        await import("./prospective-configuration");
-      const actorId = options.actorId ?? ctx.jobId;
-      const integrationIds = await retainedConfigurationIntegrationIds(
-        ctx,
-        actorId,
-        options.operationKey,
-      );
-      await withAdministrativeConfigurationJob(ctx, () =>
-        withAdministrativeConfigurationWriter(
-          { actorId, operationKey: options.operationKey, integrationIds, signal: ctx.signal },
-          () => resumeRetainedConfigurationCandidate(),
-        ),
-      );
-    }
+    const ctx = options.ctx;
+    const { retainedConfigurationIntegrationIds, resumeConfigurationCandidate } = await import(
+      "./prospective-configuration"
+    );
+    const actorId = options.actorId ?? ctx.jobId;
+    const integrationIds = await retainedConfigurationIntegrationIds(ctx, options.operationKey);
+    await withAdministrativeConfigurationJob(ctx, () =>
+      withAdministrativeConfigurationWriter(
+        { actorId, operationKey: options.operationKey, integrationIds, signal: ctx.signal },
+        () => resumeConfigurationCandidate(),
+      ),
+    );
   }
   if (options.ctx && hasRetainedAdminJobOperation(options.ctx, options.operationKey)) {
     const outcome = configurationApplyResultSchema.parse(
@@ -189,7 +184,7 @@ export async function applyTrustedConfigurationWithEvidence(
         );
         const candidateState = validatedConfigurationCandidateState(candidate),
           payload = candidateState.payload;
-        const operation = candidateState.sealed.operation;
+        const operation = candidateState.operation;
         if (
           operation.kind !== options.kind ||
           ("serviceId" in operation &&
@@ -261,15 +256,12 @@ export async function applyTrustedConfigurationWithEvidence(
               revisionId: candidate.revisionId,
             },
           });
+          let integrationReload: CapturedIntegrationReloadResult;
           try {
             const { reloadProspectiveIntegrations } = await import("./prospective-configuration");
-            const integrationReload = await reloadProspectiveIntegrations(candidate);
+            integrationReload = await reloadProspectiveIntegrations(candidate);
             await ctx.checkpoint({
               ...ctx.checkpointResult,
-              _configurationCandidate: {
-                ...(ctx.checkpointResult?._configurationCandidate as Record<string, unknown>),
-                phase: "settled",
-              },
               integrationReload: {
                 state: "complete",
                 candidateId: candidate.candidateId,
@@ -277,15 +269,9 @@ export async function applyTrustedConfigurationWithEvidence(
                 result: integrationReload,
               },
             });
-            await retireSettledProspectiveConfiguration(candidate);
-            return { payload, previousApplied, outcome: receipt.application, integrationReload };
           } catch {
             await ctx.checkpoint({
               ...ctx.checkpointResult,
-              _configurationCandidate: {
-                ...(ctx.checkpointResult?._configurationCandidate as Record<string, unknown>),
-                phase: "unknown",
-              },
               integrationReload: {
                 state: "failed",
                 candidateId: candidate.candidateId,
@@ -297,6 +283,8 @@ export async function applyTrustedConfigurationWithEvidence(
               integrationReload: { state: "failed" },
             });
           }
+          await retireSettledProspectiveConfiguration(candidate);
+          return { payload, previousApplied, outcome: receipt.application, integrationReload };
         }
         return { payload, previousApplied, outcome: receipt.application };
       },

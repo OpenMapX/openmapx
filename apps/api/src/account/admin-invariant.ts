@@ -1,7 +1,7 @@
 import { APIError } from "better-auth/api";
 import { and, eq, or, sql } from "drizzle-orm";
 import { accountAdminGuard, adminJob, user } from "../db/schema";
-import { noUnsettledManagedOperation } from "../services/admin-job-state";
+import { noUnsettledManagedOperation, openCandidateCondition } from "../services/admin-job-state";
 import { currentAccountMutation } from "./account-context";
 import { type AuthDatabase, currentAuthDatabase } from "./auth-database";
 export function isActiveFullAdmin(value: { role: string | null; banned: boolean | null }) {
@@ -60,7 +60,7 @@ export async function assertAccountDeletionAllowed(targetId: string) {
           sql`${adminJob.status} NOT IN ('success','failed','canceled')`,
           sql`${adminJob.finishedAt} IS NULL`,
           sql`NOT (${noUnsettledManagedOperation()})`,
-          sql`${adminJob.result}->'_configurationCandidate' IS NOT NULL AND coalesce(${adminJob.result}->'_configurationCandidate'->>'phase','unknown') NOT IN ('settled','discarded')`,
+          openCandidateCondition(),
         ),
       ),
     )

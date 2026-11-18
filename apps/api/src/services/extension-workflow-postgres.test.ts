@@ -423,7 +423,7 @@ it.skipIf(!enabled)(
       console.error(
         "extension-phase",
         JSON.stringify({
-          candidate: ctx.checkpointResult?._configurationCandidate,
+          candidate: (ctx.protocol as { candidate?: unknown } | undefined)?.candidate,
           configuration: ctx.checkpointResult?.configuration,
         }),
       );

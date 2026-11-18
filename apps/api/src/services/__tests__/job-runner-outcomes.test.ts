@@ -236,29 +236,32 @@ it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render
 );
 
 it.each([false, true])(
-  "routes a keyed coordinator Apply recovery without accepting extra business fields (%s)",
-  async (extra) => {
+  "reruns the handler of a reclaimed queued job that carries a configuration candidate (%s)",
+  async (carried) => {
     const handler = vi.fn(async () => ({ continued: true }));
-    jobRunner.register("service.apply", handler);
-    store.rows = [{ id: jobId, status: "running", result: {}, protocol: { execution } }];
+    jobRunner.register("service.bulk", handler);
+    const protocol = {
+      execution,
+      ...(carried
+        ? {
+            candidate: {
+              phase: "rows_saved",
+              operationKey: coordinatorLifecycleOperationKey(jobId, 0),
+            },
+          }
+        : {}),
+    };
+    store.rows = [{ id: jobId, status: "running", result: {}, protocol }];
     await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
       jobId,
-      "service.apply",
-      {
-        service: "data-manager",
-        _maintenanceRequest: {
-          actorId: "admin-a",
-          key: "retained-maintenance-key-0001",
-          digest: "a".repeat(64),
-        },
-        ...(extra ? { unexpected: true } : {}),
-      },
-      { _configurationCandidate: { operationKey: coordinatorLifecycleOperationKey(jobId, null) } },
-      { execution },
+      "service.bulk",
+      { action: "start", serviceIds: ["data-manager"] },
+      {},
+      protocol,
       new AbortController().signal,
       true,
     );
-    expect(handler).toHaveBeenCalledTimes(extra ? 0 : 1);
+    expect(handler).toHaveBeenCalledTimes(carried ? 1 : 0);
   },
 );
 

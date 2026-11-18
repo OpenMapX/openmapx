@@ -43,7 +43,6 @@ import {
   configurationRejection,
   restoreConfigurationRejection,
 } from "./configuration-ownership-view";
-import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
 import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { hasRetainedExtensionWorkflow } from "./extension-workflow";
 import { IntegrationBindingConflict as RetainedBindingConflict } from "./integration-binding-participant";
@@ -199,55 +198,26 @@ function hasRetainedImmediateConfiguration(job: {
     typeof result._immediateIntentDigest === "string" &&
     /^[a-f0-9]{64}$/.test(result._immediateIntentDigest) &&
     typeof payload?.operationKey === "string" &&
-    /^opk1_[A-Za-z0-9_-]{16,64}$/.test(payload.operationKey) &&
-    !!result._configurationCandidate
+    /^opk1_[A-Za-z0-9_-]{16,64}$/.test(payload.operationKey)
   );
 }
-/** Routing only. The handler checks the retained candidate, the owned row and
- * its saved decision before any next phase. */
+/** Routing only: a queued job that carries a configuration candidate, a
+ * service batch or a release runs its handler again on reclaim. Every step it
+ * takes is keyed by the job, so a step already sent to the agent returns its
+ * original operation, and its candidate continues from the recorded phase. */
 function hasRetainedQueuedCoordinator(job: {
-  id: string;
   type: string;
   payload: unknown;
   result: unknown;
+  protocol: unknown;
 }) {
-  const payload = job.payload as Record<string, unknown> | null,
-    candidate = (job.result as { _configurationCandidate?: { operationKey?: unknown } } | null)
-      ?._configurationCandidate;
+  const payload = job.payload as Record<string, unknown> | null;
   if (!payload) return false;
   const batch = (job.result as Record<string, unknown> | null)?._serviceUpdateBatch;
-  if (job.type === "service.bulk" && payload.action === "update" && batch) return true; // Routing only; the fixed handler validates the actual owned batch/ACK chain.
-  // A reclaimed update runs its handler again: every step it takes is keyed by
-  // the job, so a step already sent to the agent returns its original operation.
+  if (job.type === "service.bulk" && payload.action === "update" && batch) return true;
   if (job.type === "system.update")
     return guardedSystemReleasePayloadSchema.safeParse(payload).success;
-  if (!candidate) return false;
-  const ordinal =
-    job.type === "service.apply" &&
-    payload.service === "data-manager" &&
-    Object.keys(payload).every((k) => k === "service" || k === "_maintenanceRequest")
-      ? null
-      : job.type === "service.bulk" &&
-          payload.action === "update" &&
-          Array.isArray(payload.serviceIds)
-        ? payload.serviceIds.indexOf("data-manager")
-        : -1;
-  return (
-    ordinal !== -1 && candidate.operationKey === coordinatorLifecycleOperationKey(job.id, ordinal)
-  );
-}
-
-function _canResumeConfigurationCandidate(job: {
-  id: string;
-  type: string;
-  payload: unknown;
-  result: unknown;
-}) {
-  return (
-    hasRetainedImmediateConfiguration(job) ||
-    hasRetainedQueuedCoordinator(job) ||
-    retainedMaintenanceJob(job)
-  );
+  return readAdminJobProtocol(job.protocol).candidate !== undefined;
 }
 
 export class RetainedJobConflict extends Error {}
@@ -477,7 +447,6 @@ class AdminJobRunner {
       }
       if (
         !["running", "cancel_pending"].includes(job.status) ||
-        !checkpoint._configurationCandidate ||
         !IMMEDIATE_CONFIGURATION_JOB_TYPES.some((type) => type === options.type)
       )
         throw new JobObservationPending("recovery_required");
@@ -556,14 +525,14 @@ class AdminJobRunner {
       { withAdministrativeConfigurationJob, withAdministrativeConfigurationWriter } = await import(
         "./administrative-configuration-writer"
       ),
-      { resumeRetainedConfigurationCandidate, retainedConfigurationIntegrationIds } = await import(
+      { resumeConfigurationCandidate, retainedConfigurationIntegrationIds } = await import(
         "./prospective-configuration"
       ),
-      integrationIds = await retainedConfigurationIntegrationIds(ctx, actorId, operationKey),
+      integrationIds = await retainedConfigurationIntegrationIds(ctx, operationKey),
       originalResult = await withAdministrativeConfigurationJob(ctx, () =>
         withAdministrativeConfigurationWriter(
           { actorId, operationKey, integrationIds, signal: ctx.signal },
-          () => resumeRetainedConfigurationCandidate(),
+          () => resumeConfigurationCandidate(),
         ),
       ),
       result = await (
@@ -1272,7 +1241,7 @@ class AdminJobRunner {
         hasRetainedImmediateConfiguration({ id: jobId, type, payload, result: checkpointResult }),
       retainedQueuedCoordinator =
         observe &&
-        hasRetainedQueuedCoordinator({ id: jobId, type, payload, result: checkpointResult }),
+        hasRetainedQueuedCoordinator({ type, payload, result: checkpointResult, protocol }),
       retainedStandalone = observe && hasRetainedStandalone({ type, result: checkpointResult }),
       retainedExtension =
         observe && hasRetainedExtensionWorkflow({ type, result: checkpointResult }),

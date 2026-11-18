@@ -122,15 +122,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       vi.unstubAllEnvs();
       state.services = [];
     });
-    async function job(): Promise<JobContext> {
+    /** A queued job, or an immediate one: the API ran it for an HTTP request and
+     * keeps only its intent's digest. */
+    async function job(options: { immediate?: boolean } = {}): Promise<JobContext> {
       const jobId = randomUUID(),
-        execution = { owner: randomUUID(), version: 1 };
+        execution = { owner: randomUUID(), version: 1 },
+        result = options.immediate ? { _immediateIntentDigest: "0".repeat(64) } : {};
       await fixture.db.insert(schema.adminJob).values({
         id: jobId,
         type: "service.apply",
         payload: {},
         status: "running",
         protocol: { execution },
+        result,
       });
       const ctx: JobContext = {
         jobId,
@@ -138,7 +142,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         execution,
         payload: {},
         signal: new AbortController().signal,
-        checkpointResult: {},
+        checkpointResult: result,
         protocol: { execution },
         log: async () => {},
         setProgress: async () => {},
@@ -158,11 +162,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ctx.checkpointResult = saved.result;
             ctx.protocol = saved.protocol;
           } else {
-            await fixture.db
+            const [saved] = await fixture.db
               .update(schema.adminJob)
               .set({ result })
-              .where(eq(schema.adminJob.id, jobId));
+              .where(eq(schema.adminJob.id, jobId))
+              .returning({ protocol: schema.adminJob.protocol });
             ctx.checkpointResult = result;
+            ctx.protocol = saved!.protocol as JobContext["protocol"];
           }
         },
       };
@@ -221,12 +227,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         },
       });
     }
-    /** The record the job's maintenance checkpoint names, read from the agent's state. */
+    /** The job's agent operations of one kind. */
+    function operations(ctx: JobContext, kind: string) {
+      const recorded = (
+        ctx.protocol?.operations as {
+          operations?: Record<string, { kind: string; operation?: unknown; result?: unknown }>;
+        }
+      )?.operations;
+      return Object.values(recorded ?? {}).filter((operation) => operation.kind === kind);
+    }
+    /** The record of the maintenance the job prepared, read from the agent's state. */
     function agentRecord(ctx: JobContext) {
-      const checkpoint = ctx.checkpointResult?._configurationMaintenance as
-        | { maintenanceId?: string }
-        | undefined;
-      return readMaintenance(installation, String(checkpoint?.maintenanceId)).record;
+      const maintenanceId = (
+        operations(ctx, "configurationMaintenance.prepare")[0]?.operation as
+          | { maintenanceId?: string }
+          | undefined
+      )?.maintenanceId;
+      return readMaintenance(installation, String(maintenanceId)).record;
     }
     /** After a recreate the replacing container runs the new generation. */
     function replaceOnRecreate(
@@ -257,11 +274,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       return journal.records().filter((record) => record.operation.kind === kind);
     }
     /** The API process stops right after a checkpoint the predicate names is written. */
-    function stopAfter(ctx: JobContext, stops: (result: Record<string, unknown>) => boolean) {
+    function stopAfter(ctx: JobContext, stops: (ctx: JobContext) => boolean) {
       const checkpoint = ctx.checkpoint;
       ctx.checkpoint = async (...args) => {
         await checkpoint(...args);
-        if (stops(ctx.checkpointResult ?? {})) throw Error("API stopped");
+        if (stops(ctx)) throw Error("API stopped");
+      };
+    }
+    /** The API process stops at the first checkpoint it would write in a state the predicate names. */
+    function stopBefore(ctx: JobContext, stops: (ctx: JobContext) => boolean) {
+      const checkpoint = ctx.checkpoint;
+      ctx.checkpoint = async (...args) => {
+        if (stops(ctx)) throw Error("API stopped");
+        await checkpoint(...args);
       };
     }
     /** Another API process claims the job, as the job runner does once the claim lapsed. */
@@ -293,8 +318,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
       return original!;
     }
-    const phase = (result: Record<string, unknown>) =>
-      (result._configurationCandidate as { phase?: string } | undefined)?.phase;
+    const phase = (ctx: { protocol?: unknown }) =>
+      (ctx.protocol as { candidate?: { phase?: string } } | undefined)?.candidate?.phase;
 
     it.each([false, true])(
       "applies a coordinator credential through one record, each step once (lost settle reply=%s)",
@@ -325,12 +350,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             fence: { state: "settled" },
           });
           expect(record.steps.every((step) => step.outcome === "committed")).toBe(true);
-          // The API's copy is the agent's record, as the settle returned it.
+          // The job's copy is the agent's record, as the settle returned it.
           expect(
             maintenanceRecordSchema.parse(
-              (ctx.checkpointResult?._configurationMaintenance as { record?: unknown }).record,
+              operations(ctx, "configurationMaintenance.settle")[0]?.result,
             ),
           ).toEqual(record);
+          expect(phase(ctx)).toBe("generation_applied");
           expect(await dm!.fenceStates()).toEqual(["settled"]);
           if (loseSettleResponseOnce) expect(dm!.settlementResponseStatuses).toEqual([200, 200]);
           expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
@@ -363,11 +389,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
         );
-        expect(ctx.checkpointResult).toMatchObject({
-          _configurationCandidate: { phase: "discarded" },
-          _configurationMaintenanceSettle: { outcome: "abandon" },
-          _configurationMaintenance: { phase: "settled" },
-        });
+        // The job carries no candidate any more; it settled its maintenance `abandon`.
+        expect(phase(ctx)).toBeUndefined();
+        expect(
+          operations(ctx, "configurationMaintenance.settle").map(
+            (operation) => (operation.operation as { outcome?: string }).outcome,
+          ),
+        ).toEqual(["abandon"]);
         expect(agentRecord(ctx)).toMatchObject({
           state: "settled",
           generation: "not_started",
@@ -394,7 +422,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       let revisionId = "";
       replaceOnRecreate(dmRow, () => revisionId);
       // The API stops right after the rows were saved, before it applies.
-      stopAfter(ctx, (result) => phase(result) === "saved");
+      stopBefore(ctx, (current) => phase(current) === "rows_saved");
       await expect(
         owned(ctx, async () => {
           const candidate = await credentialCandidate(ctx, "synthetic-recovered-credential");
@@ -407,8 +435,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).rejects.toThrow("API stopped");
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
       const original = await reclaim(ctx);
-      expect(phase(original.result as Record<string, unknown>)).toBe("saved");
-      const resumed = await owned(ctx, () => prospective.resumeRetainedConfigurationCandidate());
+      expect(phase(original)).toBe("rows_saved");
+      expect(admitted("configurationMaintenance.apply")).toHaveLength(0);
+      const resumed = await owned(ctx, () => prospective.resumeConfigurationCandidate());
       expect(resumed).toMatchObject({
         configuration: { outcome: "committed", revisionId, followUp: "complete" },
       });
@@ -428,7 +457,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await fixture.sql.unsafe(`
         CREATE FUNCTION fixture_refuse_saved_phase() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
-          IF NEW.result->'_configurationCandidate'->>'phase' = 'saved' THEN
+          IF NEW.protocol->'candidate'->>'phase' = 'rows_saved' THEN
             RAISE EXCEPTION 'synthetic phase write failure';
           END IF;
           RETURN NEW;
@@ -448,7 +477,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, ctx.jobId));
-      expect(phase(row!.result as Record<string, unknown>)).toBe("discarded");
+      expect(phase(row!)).toBeUndefined();
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
       expect(agentRecord(ctx)).toMatchObject({
         state: "settled",
@@ -461,8 +490,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it("abandons an immediate job's prepared maintenance unused when the API stopped before the save", async () => {
       await coordinator();
-      const ctx = await job();
-      stopAfter(ctx, (result) => phase(result) === "save_attempted");
+      const ctx = await job({ immediate: true });
+      // The API stops once the maintenance is prepared, before the save.
+      stopAfter(
+        ctx,
+        (current) =>
+          phase(current) === "candidate_prepared" &&
+          operations(current, "configurationMaintenance.prepare").some(
+            (operation) => (operation as { terminal?: boolean }).terminal,
+          ),
+      );
       await expect(
         owned(ctx, async () => {
           const candidate = await credentialCandidate(ctx, "synthetic-abandoned-credential");
@@ -471,12 +508,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             signal: ctx.signal,
           });
         }),
-      ).rejects.toThrow("API stopped");
+        // The stop lands in the preparation's terminal checkpoint, which the
+        // operation's observer reports as an observation still pending.
+      ).rejects.toThrow("Administrative job observation is pending");
+      expect(phase(ctx)).toBe("candidate_prepared");
+      expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
       expect(agentRecord(ctx).state).toBe("prepared");
       expect(heldTargets(host.infraDir)).not.toEqual([]);
       await reclaim(ctx);
       // An immediate job keeps no intent to rerun: it ends without the change.
-      const resumed = await owned(ctx, () => prospective.resumeRetainedConfigurationCandidate());
+      const resumed = await owned(ctx, () => prospective.resumeConfigurationCandidate());
       expect(resumed).toMatchObject({
         configuration: { outcome: "not_committed", reason: "conflict" },
       });
@@ -492,6 +533,84 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(await dm!.fenceStates()).toEqual(["settled"]);
       expect(heldTargets(host.infraDir)).toEqual([]);
       expect(readdirSync(host.candidates)).toEqual([]);
+    }, 180000);
+
+    it("continues a queued job's prepared candidate after the API stopped before the save", async () => {
+      const dmRow = await coordinator();
+      const ctx = await job();
+      let revisionId = "";
+      replaceOnRecreate(dmRow, () => revisionId);
+      stopAfter(
+        ctx,
+        (current) =>
+          phase(current) === "candidate_prepared" &&
+          operations(current, "configurationMaintenance.prepare").some(
+            (operation) => (operation as { terminal?: boolean }).terminal,
+          ),
+      );
+      await expect(
+        owned(ctx, async () => {
+          const candidate = await credentialCandidate(ctx, "synthetic-continued-credential");
+          revisionId = candidate.revisionId;
+          await prospective.persistAndApplyProspectiveConfiguration(candidate, {
+            coordinatorMode: "require-running",
+            signal: ctx.signal,
+          });
+        }),
+      ).rejects.toThrow("Administrative job observation is pending");
+      expect(phase(ctx)).toBe("candidate_prepared");
+      expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
+      await reclaim(ctx);
+      // A queued job's candidate continues: the same preparation, then the save and the apply.
+      const resumed = await owned(ctx, () => prospective.resumeConfigurationCandidate());
+      expect(resumed).toMatchObject({
+        configuration: { outcome: "committed", revisionId, followUp: "complete" },
+      });
+      expect(admitted("configurationMaintenance.prepare")).toHaveLength(1);
+      expect(admitted("configurationMaintenance.apply")).toHaveLength(1);
+      expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(1);
+      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(revisionId);
+      expect(phase(ctx)).toBe("generation_applied");
+      expect(heldTargets(host.infraDir)).toEqual([]);
+      expect(readdirSync(host.candidates)).toEqual([]);
+    }, 180000);
+
+    it("records the apply's outcome once when the API stopped before the applied phase", async () => {
+      const dmRow = await coordinator();
+      const ctx = await job({ immediate: true });
+      let revisionId = "";
+      replaceOnRecreate(dmRow, () => revisionId);
+      stopAfter(
+        ctx,
+        (current) =>
+          phase(current) === "rows_saved" && current.checkpointResult?.configuration !== undefined,
+      );
+      await expect(
+        owned(ctx, async () => {
+          const candidate = await credentialCandidate(ctx, "synthetic-outcome-credential");
+          revisionId = candidate.revisionId;
+          await prospective.persistAndApplyProspectiveConfiguration(candidate, {
+            coordinatorMode: "require-running",
+            signal: ctx.signal,
+          });
+        }),
+      ).rejects.toThrow("API stopped");
+      await reclaim(ctx);
+      // From the saved rows on an immediate job finishes: the apply and the
+      // settle it already sent are observed again, never sent again.
+      const resumed = await owned(ctx, () => prospective.resumeConfigurationCandidate());
+      expect(resumed).toMatchObject({ configuration: { outcome: "committed", revisionId } });
+      expect(admitted("configurationMaintenance.apply")).toHaveLength(1);
+      expect(admitted("configurationMaintenance.settle")).toHaveLength(1);
+      expect(phase(ctx)).toBe("generation_applied");
+      expect(readdirSync(host.candidates)).toEqual([]);
+      // A further run of a finished candidate sends nothing to the agent.
+      const before = journal.records().length;
+      await reclaim(ctx);
+      expect(await owned(ctx, () => prospective.resumeConfigurationCandidate())).toMatchObject({
+        configuration: { outcome: "committed", revisionId },
+      });
+      expect(journal.records()).toHaveLength(before);
     }, 180000);
 
     it("settles an applied maintenance once when the API stopped before the settle", async () => {
@@ -519,7 +638,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(revisionId);
       expect(agentRecord(ctx).state).toBe("applying");
       await reclaim(ctx);
-      const resumed = await owned(ctx, () => prospective.resumeRetainedConfigurationCandidate());
+      const resumed = await owned(ctx, () => prospective.resumeConfigurationCandidate());
       expect(resumed).toMatchObject({
         configuration: { outcome: "committed", revisionId, followUp: "complete" },
       });
@@ -577,7 +696,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .update(schema.adminJob)
         .set({ status: "running" })
         .where(eq(schema.adminJob.id, ctx.jobId));
-      const resumed = await owned(ctx, () => prospective.resumeRetainedConfigurationCandidate());
+      const resumed = await owned(ctx, () => prospective.resumeConfigurationCandidate());
       // The step in flight was the last one: it completed once and nothing else started.
       expect(resumed).toMatchObject({ configuration: { outcome: "committed", revisionId } });
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
@@ -612,7 +731,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       // The job's next run neither settles nor releases it.
       await reclaim(ctx);
       await expect(
-        owned(ctx, () => prospective.resumeRetainedConfigurationCandidate()),
+        owned(ctx, () => prospective.resumeConfigurationCandidate()),
       ).rejects.toMatchObject({ reason: "recovery_required" });
       expect(agentRecord(ctx).state).toBe("recovery_required");
       expect(heldTargets(host.infraDir)).toContain("data-manager");
@@ -663,7 +782,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       // The job fails busy without recovery: no fence, no rows, no generation.
       expect(outcome).toEqual({ error: "busy" });
       expect(await dm!.fenceStates()).toEqual([]);
-      expect(phase(ctx.checkpointResult ?? {})).toBe("discarded");
+      expect(phase(ctx)).toBeUndefined();
       expect(readdirSync(host.candidates)).toEqual([]);
       expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);

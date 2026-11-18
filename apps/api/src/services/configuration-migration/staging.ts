@@ -9,7 +9,7 @@ import {
   integrationBindingRevision,
   systemSettings,
 } from "../../db/schema";
-import { noUnsettledManagedOperation } from "../admin-job-state";
+import { noUnsettledManagedOperation, openCandidateCondition } from "../admin-job-state";
 import type { ConfigurationWriteTransaction } from "../administrative-configuration-writer-owner";
 import { decrypt, encrypt } from "../secrets";
 
@@ -60,9 +60,9 @@ export async function pruneMigrationStages() {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or (${adminJob.result}->'_configurationCandidate' is not null and coalesce(${adminJob.result}->'_configurationCandidate'->>'phase','unknown') not in ('settled','discarded'))))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
-        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and ${adminJob.result}->'_configurationCandidate'->>'phase' in ('settled','discarded') and ${noUnsettledManagedOperation()})`,
+        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and not ${openCandidateCondition()} and ${noUnsettledManagedOperation()})`,
       ),
     )
     .returning({ id: configurationMigrationPreview.id });
@@ -96,7 +96,7 @@ export async function retainMigrationStage(input: {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or (${adminJob.result}->'_configurationCandidate' is not null and coalesce(${adminJob.result}->'_configurationCandidate'->>'phase','unknown') not in ('settled','discarded'))))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
       );
     const [counts] = await tx

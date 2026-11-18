@@ -257,15 +257,19 @@ describe("administrative job operations broker", () => {
 
   it.each([
     ["ends its job with that error code", undefined],
-    ["ends its job after the job's configuration candidate settled", "settled"],
-    ["stays with an open configuration candidate's own recovery", "saved"],
+    ["ends its job after the job's configuration candidate applied", "generation_applied"],
+    ["stays with an open configuration candidate's own recovery", "rows_saved"],
   ])("an agent operation that ended recovery_required %s", async (_name, phase) => {
     const ctx = context();
     const operationKey = "opk1_abcdefghijklmnop";
     const operationId = "job1_abcdefghijklmnop";
     seedProjection(ctx, operationKey, "backup.delete", operationId);
-    if (phase) ctx.checkpointResult = { _configurationCandidate: { phase } };
-    const candidate = phase === "saved";
+    if (phase)
+      ctx.protocol = {
+        ...ctx.protocol,
+        candidate: { phase } as NonNullable<NonNullable<JobContext["protocol"]>["candidate"]>,
+      };
+    const candidate = phase === "rows_saved";
     const terminal = {
       ...identity,
       operationId,

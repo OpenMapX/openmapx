@@ -703,10 +703,10 @@ async function ownedFenceFixture(
                 ],
               },
             });
-            await prospective.stageProspectiveConfigurationMaintenance(candidate);
-            return (await import("../prospective-configuration")).prepareConfigurationMaintenance(
-              candidate,
-            );
+            // The fixture holds the preparation's data-manager request below.
+            return prospective.persistAndApplyProspectiveConfiguration(candidate, {
+              coordinatorMode: "ensure-running",
+            });
           },
         ),
       );

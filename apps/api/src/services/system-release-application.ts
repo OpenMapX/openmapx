@@ -8,8 +8,8 @@ import { db } from "../db";
 import { adminJob, user } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
-import { executeAdminJobOperation, readProjection } from "./admin-job-ops";
-import { jobOwnership } from "./admin-job-state";
+import { executeAdminJobOperation } from "./admin-job-ops";
+import { cancelRequestedAt, jobOwnership, readAdminJobProtocol } from "./admin-job-state";
 import {
   withAdministrativeConfigurationJob,
   withAdministrativeConfigurationWriter,
@@ -27,7 +27,7 @@ import {
 } from "./platform-configuration-view";
 import { readPlatformPreview } from "./platform-preview-store";
 import {
-  resumeRetainedConfigurationCandidate,
+  resumeConfigurationCandidate,
   retainedConfigurationIntegrationIds,
 } from "./prospective-configuration";
 import {
@@ -55,23 +55,12 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
     throw new JobObservationPending("invalid_identity");
   const actorId = job.createdBy,
     operationKey = createDurableOpsKey("admin-job.guarded-release", ctx.jobId),
-    candidate = ctx.checkpointResult?._configurationCandidate as
-      | { phase?: unknown; prepareOperationKey?: unknown }
-      | undefined,
-    preparation =
-      typeof candidate?.prepareOperationKey === "string"
-        ? readProjection(ctx.protocol, ctx.checkpointResult).operations[
-            candidate.prepareOperationKey
-          ]
-        : undefined,
-    // Rows not yet saved, not cancelled and the maintenance preparation not
-    // failed: the forward path below runs again and continues with the
-    // candidate it prepared before the restart. Otherwise the retained
-    // candidate's own recovery finishes or cleans it up.
+    candidate = readAdminJobProtocol(ctx.protocol).candidate,
+    // Rows not yet saved and not cancelled: the forward path below runs again
+    // and continues with the candidate it prepared before the restart. From
+    // the saved rows on, the candidate continues as the agent holds it.
     continued =
-      ["prepared", "save_attempted"].includes(String(candidate?.phase)) &&
-      ctx.protocol?.cancelRequestedAt === undefined &&
-      !(preparation?.terminal && preparation.errorClass),
+      candidate?.phase === "candidate_prepared" && cancelRequestedAt(ctx.protocol) === undefined,
     retained = candidate && !continued ? candidate : undefined;
   let fixed =
     ctx.checkpointResult?._systemRelease === undefined
@@ -133,14 +122,14 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
       throw new JobObservationPending("invalid_identity");
   }
   const integrationIds = retained
-    ? await retainedConfigurationIntegrationIds(ctx, actorId, operationKey)
+    ? await retainedConfigurationIntegrationIds(ctx, operationKey)
     : getAllIntegrations().map((value) => value.id);
   const input = fixed;
   const result = await withAdministrativeConfigurationJob(ctx, () =>
     withAdministrativeConfigurationWriter(
       { actorId, operationKey, integrationIds, signal: ctx.signal },
       async () => {
-        if (retained) return resumeRetainedConfigurationCandidate();
+        if (retained) return resumeConfigurationCandidate();
         const applied = await applyPlatformConfigurationIntent(input);
         return { configuration: applied.application };
       },

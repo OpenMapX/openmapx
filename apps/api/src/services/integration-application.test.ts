@@ -363,7 +363,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .sql`UPDATE admin_job SET protocol=jsonb_set(protocol,'{observationLeaseUntil}',to_jsonb('2000-01-01T00:00:00.000Z'::text)) WHERE type='integration.binding.apply'`;
       const resumed = await set(body, key);
       const diagnostic = await state.fixture
-        .sql`SELECT status,result->'_configurationCandidate'->>'phase' AS phase,protocol->'execution' AS execution,result->'observation' AS observation,result->'integrationReload' AS reload,error FROM admin_job WHERE type='integration.binding.apply'`;
+        .sql`SELECT status,protocol->'candidate'->>'phase' AS phase,protocol->'execution' AS execution,result->'observation' AS observation,result->'integrationReload' AS reload,error FROM admin_job WHERE type='integration.binding.apply'`;
       expect(resumed.statusCode, JSON.stringify(diagnostic)).toBe(200);
       expect(resumed.json().runtime).toBe("applied");
       expect(reload).toHaveBeenCalledTimes(1);

@@ -19,6 +19,57 @@ export interface AdminJobProtocol {
   cancelRequestedAt?: string;
   /** Read and validated with `readProjection`. */
   operations?: unknown;
+  /** The configuration candidate the job is carrying through its three phases. */
+  candidate?: AdminJobCandidate;
+}
+/**
+ * A configuration candidate's progress. `candidate_prepared`: the candidate is
+ * held at the agent, nothing is saved. `rows_saved`: the desired rows were
+ * written in the same transaction as this phase. `generation_applied`: the
+ * apply concluded and its outcome is in the job's result.
+ */
+export type CandidatePhase = "candidate_prepared" | "rows_saved" | "generation_applied";
+export interface AdminJobCandidate {
+  phase: CandidatePhase;
+  candidateId: string;
+  /** The job step's key, the writer's operation key. */
+  operationKey: string;
+  /** The key the agent holds the candidate record under. */
+  sealedOperationKey: string;
+  revisionId: string;
+  sourceFingerprint: string;
+  maintenanceId: string | null;
+  coordinatorMode: "ensure-running" | "require-running";
+  preview?: unknown;
+  rowVersions?: unknown[];
+}
+/** Whether the job carries a candidate whose apply has not concluded. */
+export function hasOpenCandidate(protocol: AdminJobProtocol | undefined): boolean {
+  return protocol?.candidate !== undefined && protocol.candidate.phase !== "generation_applied";
+}
+/** SQL twin of `hasOpenCandidate`. */
+export function openCandidateCondition() {
+  return sql`(${adminJob.protocol}->'candidate' IS NOT NULL AND coalesce(${adminJob.protocol}->'candidate'->>'phase','') <> 'generation_applied')`;
+}
+/** Writes the job's candidate (or removes it) under the job's claim. */
+export async function writeAdminJobCandidate(
+  connection: Pick<typeof db, "update">,
+  id: string,
+  execution: JobExecution | undefined,
+  candidate: AdminJobCandidate | null,
+  statuses = ["running", "cancel_pending"],
+): Promise<AdminJobProtocol> {
+  const [row] = await connection
+    .update(adminJob)
+    .set({
+      protocol: candidate
+        ? sql`${adminJob.protocol} || jsonb_build_object('candidate', ${JSON.stringify(candidate)}::jsonb)`
+        : sql`${adminJob.protocol} - 'candidate'`,
+    })
+    .where(jobOwnership(id, execution, statuses))
+    .returning({ protocol: adminJob.protocol });
+  if (!row) throw new JobOwnershipLost();
+  return row.protocol as AdminJobProtocol;
 }
 export function readAdminJobProtocol(value: unknown): AdminJobProtocol {
   if (value === null || value === undefined) return {};

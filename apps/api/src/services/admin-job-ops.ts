@@ -35,6 +35,7 @@ import {
 } from "./admin-job-parent";
 import {
   ADMIN_JOB_LOG_LIMITS,
+  hasOpenCandidate,
   JobOwnershipLost,
   JobStepAllocationConflict,
 } from "./admin-job-state";
@@ -658,8 +659,6 @@ async function observeOperation(
   }
 }
 
-/** Candidate phases after which the candidate's own recovery has nothing left to do. */
-const CLOSED_CANDIDATE_PHASES = new Set(["settled", "discarded", "rolled_back"]);
 /**
  * Whether an agent operation that ended `recovery_required` ends its job.
  * The agent keeps the operation's targets held with an unknown outcome until
@@ -668,11 +667,8 @@ const CLOSED_CANDIDATE_PHASES = new Set(["settled", "discarded", "rolled_back"])
  * to its own recovery, which settles the maintenance they belong to.
  */
 function endsWithRecoveryRequired(context: JobContext, projected: ProjectedOperation): boolean {
-  const candidate = context.checkpointResult?._configurationCandidate as
-    | { phase?: unknown }
-    | undefined;
   return (
-    (candidate === undefined || CLOSED_CANDIDATE_PHASES.has(String(candidate.phase))) &&
+    !hasOpenCandidate(context.protocol) &&
     !projected.kind.startsWith("configuration") &&
     !isTrustedConfigurationApplyOperation({ kind: projected.kind } as OpsOperation)
   );
