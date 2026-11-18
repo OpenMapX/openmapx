@@ -89,8 +89,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await state.fixture?.stop();
     });
 
-    // The held wrong-configuration job keeps its slot in this process's job
-    // runner, so it runs last.
     it.each<Mode>([
       "platform",
       "launch-reply-lost",
@@ -534,7 +532,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           }
           const job = await settledJob(
             accepted.jobId,
-            (status) => !["running", "cancel_pending"].includes(status),
+            (status) => !["queued", "running", "cancel_pending"].includes(status),
           );
           expect(
             job.status,
