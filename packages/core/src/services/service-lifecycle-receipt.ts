@@ -6,7 +6,7 @@ import {
   closeControlInstallation,
   controlIdentity,
   executionAuthorityState,
-  fixedControlChildId,
+  fixedChildSpawn,
   installationState,
   openControlInstallation,
   readPrivateRecord,
@@ -80,22 +80,19 @@ export type VerifiedLifecycleOwnership = Readonly<{
 const ownerships = new WeakMap<VerifiedLifecycleOwnership, VerifiedExecutionAuthority>();
 const authorities = new AsyncLocalStorage<{
   authority: VerifiedExecutionAuthority;
-  child?: { execution: ExecutionRef; childId: string };
+  child?: { execution: ExecutionRef; childKey: string };
 }>();
 
 /** Source-only scope: child identity is checked against its existing private spawn challenge. */
 export function withServiceLifecycleReceiptAuthority<T>(
   authority: VerifiedExecutionAuthority,
   run: () => Promise<T>,
-  child?: { execution: ExecutionRef; childId: string },
+  child?: { execution: ExecutionRef; childKey: string },
 ): Promise<T> {
   const state = executionAuthorityState(authority);
   if (child) {
-    const id = fixedControlChildId(state.installation, child.childId, authority.execution);
-    const spawn = z
-      .object({ execution: executionRefSchema })
-      .parse(readPrivateRecord(state.installation, "spawns", `${id}.json`, 65536));
-    if (controlDigest(spawn.execution) !== controlDigest(child.execution))
+    const spawn = fixedChildSpawn(state.installation, child.childKey, child.execution);
+    if (controlDigest(spawn.parent) !== controlDigest(authority.execution))
       throw Error("Lifecycle child challenge mismatch");
   }
   return authorities.run({ authority, child }, run);
@@ -398,7 +395,7 @@ export async function openServiceLifecycleReceipt(options: {
         coordinatorMode: options.coordinatorMode,
         expectedRevisionId: options.expectedRevisionId,
         seedRevisionId: options.seedRevisionId,
-        childId: scope.child?.childId ?? controlIdentity(local.installation),
+        childId: scope.child?.childKey ?? controlIdentity(local.installation),
       });
       const seedDigest = controlDigest(seed),
         current = { seedDigest, receipt };

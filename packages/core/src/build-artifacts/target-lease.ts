@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { opsOperationSchema } from "../ops/contract";
+import { controlOriginSchema } from "../ops/control-root-key";
 import {
   type ExecutionRef,
   executionRefSchema,
@@ -17,22 +18,20 @@ import { prepareControlChildPublication, resolveControlChildPlan } from "./child
 // biome-ignore-end lint/suspicious/noImportCycles: Same exact deferred guard import.
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
-  type ArtifactDelegationAssertion,
   assertControlExecutionForward,
   type ChildSettlement,
   type ControlChildPhase,
+  type ControlDelegation,
   type ControlRecipient,
   childPhaseKinds,
   childSettlementState,
   controlPeerState,
-  encodeControlAssertion,
   executionAuthorityState,
-  fixedControlChildId,
+  fixedChildSpawn,
   type InstallationState,
   installationState,
-  parseControlAssertion,
+  type LeaseChildRef,
   readPrivateRecord,
-  recordLeaseControlAttempt,
   recoveryAuthorityState,
   retainedControlParent,
   type VerifiedChildSettlement,
@@ -43,7 +42,6 @@ import {
   verifyControlPreparedTerminal,
   verifyDataUpdatePrerequisites,
   withControlDelegationPublication,
-  writePrivateRecord,
 } from "./control-authority";
 import { controlChildOperationKey } from "./control-child-records";
 import { controlDigest, targetSchema } from "./control-records";
@@ -547,10 +545,11 @@ export async function delegateArtifactTargetLease(
     phase: ControlChildPhase;
     serviceIds: readonly string[];
     recipient: ControlRecipient;
-    childId: string;
+    /** A fixed CLI child's key, chosen with its spawn record; others get a fresh one. */
+    childKey?: string;
     evidence?: Record<string, unknown>;
   },
-): Promise<ArtifactDelegationAssertion> {
+): Promise<ControlDelegation> {
   const s = stateOf(lease);
   if (s.settlementOnly) throw Error("Recovered lease permits settlement only");
   const authority = s.authority;
@@ -587,12 +586,12 @@ export async function delegateArtifactTargetLease(
     ].includes(child.phase)
   )
     verifyControlPreparedTerminal(owner.installation, s.execution);
-  const delegationId =
-    child.recipient === "fixed-cli" || child.recipient === "configuration-helper"
-      ? fixedControlChildId(owner.installation, child.childId, s.execution)
+  const childKey =
+    child.recipient === "fixed-cli"
+      ? fixedChildSpawn(owner.installation, child.childKey ?? "", child.execution).childKey
       : randomUUID();
   const row = {
-    key: delegationId,
+    key: childKey,
     parentKey: s.node,
     parent: s.execution,
     execution: child.execution,
@@ -600,66 +599,42 @@ export async function delegateArtifactTargetLease(
     phase: child.phase,
     recipient: child.recipient,
     targets: [...child.serviceIds],
-  };
-  // What the child acts on stays in the store row, out of the header; a
-  // recipient that needs it reads the store.
-  const grantDigest = controlDigest(row);
-  const assertion = encodeControlAssertion({
-    leaseId: s.leaseId,
-    delegationId,
-    owner: s.owner,
     origin: owner.origin,
-    grant: row,
-  });
-  // The private outbox is written before the store row: a child is attempted
-  // only once both say so, and recovery reads the outbox first.
+  };
+  const delegation: ControlDelegation = {
+    leaseId: s.leaseId,
+    childKey,
+    owner: s.owner,
+    parent: s.execution,
+    execution: child.execution,
+    kind: plan.kind,
+    phase: child.phase,
+    targets: [...child.serviceIds],
+    origin: owner.origin,
+  };
+  // The reserved phase records the child before its store row: a child is
+  // attempted once the phase says so, and recovery reads the phase first.
   withControlDelegationPublication(authority, child.phase, () => {
-    prepareControlChildPublication(authority, plan, {
-      delegationId,
-      grantDigest,
-      leaseId: s.leaseId,
-    });
-    recordLeaseControlAttempt(authority, {
-      child: child.execution,
-      leaseId: s.leaseId,
-      delegationId,
-      grantDigest,
-    });
-    writePrivateRecord(
-      owner.installation,
-      "attempts",
-      `${delegationId}.json`,
-      { grant: row, assertion },
-      true,
-    );
+    prepareControlChildPublication(authority, plan, delegation);
   });
   s.seen = await s.backend.delegate({
     leaseId: s.leaseId,
     child: { ...row, ...(child.evidence ? { evidence: child.evidence } : {}) },
   });
-  return assertion;
+  return delegation;
 }
 
-/** Verification-only preview for receivers that can read the store. No adoption or effect authority. */
+/** The store row of a child, for a receiver that reads the store. No adoption or effect authority. */
 export function inspectArtifactDelegation(options: {
-  assertion: string;
+  leaseChild: LeaseChildRef;
   installation: import("./control-authority").ControlInstallation;
 }) {
-  const parsed = parseControlAssertion(options.assertion);
   const local = installationState(options.installation);
-  const lease = requireLocalLeases(local.leases).readSync(parsed.leaseId),
-    grant = lease?.children.find((child) => child.key === parsed.delegationId);
+  const lease = requireLocalLeases(local.leases).readSync(options.leaseChild.leaseId),
+    grant = lease?.children.find((child) => child.key === options.leaseChild.childKey);
   if (!lease || !grant) throw Error("Unanchored delegation");
-  const {
-    state: _state,
-    adopted: _adopted,
-    settlement: _settlement,
-    evidence: _evidence,
-    ...row
-  } = grant;
-  if (controlDigest(row) !== parsed.grantDigest) throw Error("Grant digest mismatch");
   return Object.freeze({
-    leaseId: parsed.leaseId,
+    leaseId: lease.leaseId,
     owner: lease.owner,
     parent: grant.parent,
     execution: grant.execution,
@@ -667,7 +642,8 @@ export function inspectArtifactDelegation(options: {
     serviceIds: Object.freeze([...grant.targets]),
     recipient: grant.recipient,
     phase: grant.phase,
-    delegationId: grant.key,
+    childKey: grant.key,
+    origin: grant.origin,
     retained: grant.adopted,
   });
 }
@@ -675,34 +651,29 @@ export function inspectArtifactDelegation(options: {
 /** The parent that issued a delegation, for a recipient that reads the store. */
 export function verifiedParentForArtifactDelegation(
   installation: import("./control-authority").ControlInstallation,
-  assertion: string,
+  leaseChild: LeaseChildRef,
   execution: ExecutionRef,
 ): VerifiedParentExecution {
-  const inspected = inspectArtifactDelegation({ assertion, installation });
+  const inspected = inspectArtifactDelegation({ leaseChild, installation });
   if (!sameExecution(inspected.execution, execution)) throw Error("Wrong delegated execution");
   const parent = Object.freeze(retainedControlParent(inspected.parent)) as VerifiedParentExecution;
   verifiedParents.add(parent);
-  verifiedParentOrigins.set(parent, parseControlAssertion(assertion).origin);
+  verifiedParentOrigins.set(parent, controlOriginSchema.parse(inspected.origin));
   return parent;
 }
 export async function adoptArtifactTargetLease(options: {
-  assertion: string;
   peer: VerifiedControlPeer;
   execution: ExecutionRef;
   serviceIds: readonly string[];
 }): Promise<BorrowedArtifactTargetLease> {
   const peer = controlPeerState(options.peer);
-  if (
-    options.assertion !== peer.assertion ||
-    controlDigest(options.execution) !== controlDigest(peer.execution)
-  )
+  if (controlDigest(options.execution) !== controlDigest(peer.execution))
     throw Error("Peer execution binding mismatch");
-  const assertion = parseControlAssertion(options.assertion);
   const inspected = inspectArtifactDelegation({
-    assertion: options.assertion,
+    leaseChild: peer.leaseChild,
     installation: peer.installation.installation,
   });
-  const lease = localLeases(peer.installation.leases)?.readSync(assertion.leaseId);
+  const lease = localLeases(peer.installation.leases)?.readSync(inspected.leaseId);
   if (!lease) throw Error("Unanchored delegation");
   if (
     !sameExecution(inspected.execution, options.execution) ||
@@ -711,7 +682,7 @@ export async function adoptArtifactTargetLease(options: {
     canonicalJson(inspected.serviceIds) !== canonicalJson(targetSchema.parse(options.serviceIds))
   )
     throw Error("Wrong peer principal, kind, key, fingerprint, or subset");
-  const parent = lease.children.find((child) => child.key === inspected.delegationId)?.parentKey;
+  const parent = lease.children.find((child) => child.key === inspected.childKey)?.parentKey;
   const issuer =
     (parent && lease.children.find((child) => child.key === parent)?.recipient) ??
     lease.owner.executor;
@@ -730,39 +701,16 @@ export async function adoptArtifactTargetLease(options: {
     )
   )
     throw Error("Wrong peer principal");
-  const name = `${inspected.delegationId}.json`;
-  const pending = {
-    version: 2,
-    grantDigest: assertion.grantDigest,
-    execution: inspected.execution,
-    state: "pending-adoption",
-    assertion: options.assertion,
-  };
-  let local: unknown;
-  try {
-    local = readPrivateRecord(peer.installation, "adoptions", name);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  if (local) {
-    const old = z.object({ grantDigest: z.string(), execution: executionRefSchema }).parse(local);
-    if (
-      old.grantDigest !== assertion.grantDigest ||
-      !sameExecution(old.execution, inspected.execution)
-    )
-      throw Error("Durable duplicate admission conflict");
-  } else writePrivateRecord(peer.installation, "adoptions", name, pending, true);
   const adopted = await requireLocalLeases(peer.installation.leases).adopt({
-    leaseId: assertion.leaseId,
-    key: inspected.delegationId,
+    leaseId: inspected.leaseId,
+    key: inspected.childKey,
     execution: inspected.execution,
   });
-  writePrivateRecord(peer.installation, "adoptions", name, { ...pending, state: "ready" }, false);
   return handleFor({
     backend: peer.installation.leases,
     installation: peer.installation,
-    leaseId: assertion.leaseId,
-    node: inspected.delegationId,
+    leaseId: inspected.leaseId,
+    node: inspected.childKey,
     owner: adopted.owner,
     execution: inspected.execution,
     serviceIds: inspected.serviceIds,
@@ -1116,22 +1064,21 @@ export function catalogPinTargetOwner(lease: TargetLeaseAuthority) {
 /** The delegation's root lease is still held by its owner. Observation only. */
 export function assertArtifactDelegationRootHeld(
   installation: import("./control-authority").ControlInstallation,
-  assertion: string,
+  leaseChild: LeaseChildRef,
 ): void {
   const local = installationState(installation),
-    parsed = parseControlAssertion(assertion),
-    lease = localLeases(local.leases)?.readSync(parsed.leaseId);
+    lease = localLeases(local.leases)?.readSync(leaseChild.leaseId);
   if (!lease || lease.state === "settled") throw Error("Original owner lease is no longer held");
 }
 /** Read-only terminal evidence of a borrowed child after the agent restarted. */
 export function verifyRetainedArtifactTargetSettlement(
   installation: import("./control-authority").ControlInstallation,
-  adoption: import("./control-authority").ControlAdoption,
+  leaseChild: LeaseChildRef,
   execution: ExecutionRef,
 ): void {
   const local = installationState(installation);
-  const lease = localLeases(local.leases)?.readSync(adoption.leaseId);
-  const child = lease?.children.find((value) => value.key === adoption.delegationId);
+  const lease = localLeases(local.leases)?.readSync(leaseChild.leaseId);
+  const child = lease?.children.find((value) => value.key === leaseChild.childKey);
   const proof = childSettlementState(verifyControlEffectSettlement(installation, execution));
   if (
     lease &&

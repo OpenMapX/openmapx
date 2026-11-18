@@ -9,7 +9,6 @@ import {
   issueControlChildPhase,
   openFixedChildInstallation,
   planFixedServiceUpdate,
-  prepareFixedControlChild,
   readFixedServiceLifecyclePlan,
   restoreAdmittedControlExecution,
   retainFixedCliSpawnIntent,
@@ -43,10 +42,9 @@ export function installServiceLifecycleRuntime(
     if (!authority || !lease) throw new OpsHostUpdateRequiredError();
     const plan = readFixedServiceLifecyclePlan(authority);
     const child = await bindControlChildPhase(authority, { phase: "lifecycle", ordinal: 0 });
-    const childId = prepareFixedControlChild(authority, plan.delegationId),
-      args = fixedCliArguments(operation);
+    const args = fixedCliArguments(operation);
     retainFixedCliSpawnIntent(authority, {
-      delegationId: plan.delegationId,
+      childKey: plan.delegationId,
       execution: child.execution,
       operation,
       args,
@@ -55,9 +53,10 @@ export function installServiceLifecycleRuntime(
     const issued = await issueControlChildPhase(authority, {
       phase: "lifecycle",
       ordinal: 0,
-      childId,
+      childKey: plan.delegationId,
       lease,
     });
+    const fixedChild = { leaseId: lease.leaseId, childKey: issued.delegation.childKey };
     await services.withServiceLifecycleReceiptAuthority(
       authority,
       () =>
@@ -71,7 +70,7 @@ export function installServiceLifecycleRuntime(
           expectedRevisionId: operation.expectedConfigurationRevisionId,
           seedRevisionId: operation.expectedConfigurationRevisionId,
         }),
-      { execution: child.execution, childId },
+      { execution: child.execution, childKey: plan.delegationId },
     );
     consumeControlChildDispatch(issued.dispatchTicket);
     let failure: unknown;
@@ -80,14 +79,14 @@ export function installServiceLifecycleRuntime(
         ...context,
         execution: child.execution,
         operationKind: "service.update",
-        controlAssertion: issued.assertion,
+        child: fixedChild,
       });
     } catch (error) {
       failure = error;
     }
     const installation = openFixedChildInstallation({
       infraDir: options.infraDir,
-      assertion: issued.assertion,
+      child: fixedChild,
     });
     try {
       const childAuthority = restoreAdmittedControlExecution(installation, child.execution);

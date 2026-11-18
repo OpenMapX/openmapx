@@ -69,10 +69,6 @@
     },
     {
       "method": "POST",
-      "path": "/executions/configuration-maintenance/recovery"
-    },
-    {
-      "method": "POST",
       "path": "/executions/generation-hardlinks"
     },
     {

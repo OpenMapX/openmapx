@@ -71,11 +71,7 @@ export async function retainCatalogActivationRecord(
     promotion: {
       execution: promotion.execution,
       terminalReceiptDigest: physical.terminalReceiptDigest,
-      adoption: {
-        leaseId: promotion.leaseId,
-        delegationId: promotion.delegationId,
-        phase: "ready",
-      },
+      leaseChild: { leaseId: promotion.leaseId, childKey: promotion.childKey },
     },
     approval,
   });

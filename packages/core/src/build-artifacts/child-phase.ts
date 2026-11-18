@@ -21,11 +21,14 @@ import {
   normalizeExecutionAdmission,
   opsExecutionBudget,
 } from "../ops/execution-identity";
+// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
+import { dataControlDelegationSchema } from "../services/data-manager/contracts/executions";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   assertControlDelegationForward,
   assertControlPublicationScope,
   attestParentExecution,
+  type ControlDelegation,
   type ControlPlannedChild,
   executionAuthorityState,
   readPrivateRecord,
@@ -36,13 +39,10 @@ import {
   withControlDelegationPublication,
   writePrivateRecord,
 } from "./control-authority";
-// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
-import { controlDigest, controlOriginSchema, digest, uuid } from "./control-records";
+import { controlDigest, controlOriginSchema, digest } from "./control-records";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   delegateArtifactTargetLease,
-  inspectArtifactDelegation,
-  localLeases,
   type TargetLeaseAuthority,
   verifyFiniteControlEdge,
 } from "./target-lease";
@@ -102,9 +102,7 @@ const publicationSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("unissued") }),
   z.strictObject({
     state: z.literal("grant_prepared"),
-    delegationId: uuid,
-    grantDigest: digest,
-    leaseId: uuid.nullable(),
+    delegation: dataControlDelegationSchema,
   }),
 ]);
 const cellSchema = z.strictObject({
@@ -221,6 +219,15 @@ export function initializeControlChildReservations(authority: VerifiedExecutionA
   // Bound exact identities, decimal epoch lengths and UUID/digest publication
   // fields have fixed maxima. Budget their complete records up front.
   const maximum = cells.reduce((total, { r, cell }) => {
+    const largestExecution = {
+      executor: "ops-agent",
+      principal: "data-manager",
+      executionId: "f".repeat(68),
+      operationKey: "f".repeat(69),
+      operationFingerprint: "f".repeat(64),
+      fingerprint: "f".repeat(64),
+      deadlineAt: Number.MAX_SAFE_INTEGER,
+    };
     const largest = {
       ...cell,
       binding: {
@@ -242,9 +249,17 @@ export function initializeControlChildReservations(authority: VerifiedExecutionA
       },
       publication: {
         state: "grant_prepared",
-        delegationId: "f".repeat(36),
-        grantDigest: "f".repeat(64),
-        leaseId: "f".repeat(36),
+        delegation: {
+          leaseId: "f".repeat(36),
+          childKey: "f".repeat(36),
+          owner: largestExecution,
+          parent: largestExecution,
+          execution: largestExecution,
+          kind: r.kind,
+          phase: r.phase,
+          targets: r.serviceIds,
+          origin: state.origin,
+        },
       },
     };
     const size = Buffer.byteLength(canonicalJson(largest));
@@ -307,7 +322,7 @@ export async function bindControlChildPhase(
 export function prepareControlChildPublication(
   authority: VerifiedExecutionAuthority,
   input: { phase: ControlChildPhase; ordinal: number },
-  reference: { delegationId: string; grantDigest: string; leaseId: string | null },
+  delegation: ControlDelegation,
 ): void {
   assertControlPublicationScope(authority);
   const state = executionAuthorityState(authority);
@@ -318,7 +333,7 @@ export function prepareControlChildPublication(
     throw Error("Reserved phase publication requires observation");
   writeCell(authority, input.ordinal, {
     ...cell,
-    publication: { state: "grant_prepared", ...reference },
+    publication: { state: "grant_prepared", delegation },
   });
 }
 export function inspectControlChildPublication(
@@ -341,8 +356,8 @@ export function lookupControlChildPhaseBinding(
     ? Object.freeze({ ...cell.binding, bindingDigest: controlDigest(cell.binding) })
     : null;
 }
-/** Restore the original private outbox for observation/cancellation only. This
- * returns no ticket and never repairs or republishes a missing attempt. */
+/** The child an attempted phase issued, for observation and cancellation only.
+ * This returns no ticket and never repairs or reissues a missing attempt. */
 export function lookupControlChildPhaseAttempt(
   authority: VerifiedExecutionAuthority,
   input: { phase: ControlChildPhase; ordinal: number },
@@ -351,62 +366,20 @@ export function lookupControlChildPhaseAttempt(
     s = executionAuthorityState(authority);
   if (cell.publication.state === "unissued") return null;
   if (!cell.binding) throw Error("Attempted phase has no exact binding");
-  const reference = cell.publication,
-    channel = reference.leaseId === null ? ("parent" as const) : ("delegation" as const);
-  const saved = z
-    .object({ grant: z.unknown(), assertion: z.string().max(4096) })
-    .parse(
-      readPrivateRecord(
-        s.installation,
-        channel === "parent" ? "parent-attempts" : "attempts",
-        `${reference.delegationId}.json`,
-        65536,
-      ),
-    );
-  if (controlDigest(saved.grant) !== reference.grantDigest)
-    throw Error("Original phase outbox digest changed");
-  // A role that reaches the lease store only through the agent relies on its
-  // own outbox; the agent checked the row when it recorded it.
-  if (channel === "delegation" && localLeases(s.installation.leases)) {
-    const observed = inspectArtifactDelegation({
-      assertion: saved.assertion,
-      installation: s.installation.installation,
-    });
-    if (
-      observed.leaseId !== reference.leaseId ||
-      observed.delegationId !== reference.delegationId ||
-      observed.kind !== cell.binding.child.kind ||
-      controlDigest(observed.execution) !== controlDigest(cell.binding.child.execution) ||
-      controlDigest(observed.parent) !== controlDigest(s.execution)
-    )
-      throw Error("Original phase grant identity changed");
-  } else {
-    const observed = z
-      .object({
-        version: z.literal(2),
-        origin: controlOriginSchema,
-        parent: executionRefSchema,
-        child: executionRefSchema,
-        kind: z.string(),
-        attemptId: uuid,
-      })
-      .passthrough()
-      .parse(saved.grant);
-    if (
-      observed.attemptId !== reference.delegationId ||
-      observed.kind !== cell.binding.child.kind ||
-      controlDigest(observed.origin) !== controlDigest(s.origin) ||
-      controlDigest(observed.child) !== controlDigest(cell.binding.child.execution) ||
-      controlDigest(observed.parent) !== controlDigest(s.execution)
-    )
-      throw Error("Original parent phase identity changed");
-  }
+  const delegation = cell.publication.delegation;
+  if (
+    delegation.kind !== cell.binding.child.kind ||
+    controlDigest(delegation.execution) !== controlDigest(cell.binding.child.execution) ||
+    controlDigest(delegation.parent) !== controlDigest(s.execution)
+  )
+    throw Error("Original phase child identity changed");
   return Object.freeze({
-    channel,
-    assertion: saved.assertion,
+    channel: delegation.leaseId === null ? ("parent" as const) : ("delegation" as const),
+    delegation,
+    leaseId: delegation.leaseId,
+    childKey: delegation.childKey,
     execution: cell.binding.child.execution,
     bindingDigest: controlDigest(cell.binding),
-    ...reference,
   });
 }
 export function resolveControlChildPlan(
@@ -450,7 +423,8 @@ export async function issueControlChildPhase(
   input: {
     phase: ControlChildPhase;
     ordinal: number;
-    childId: string;
+    /** A fixed CLI child's key, chosen with its spawn record. */
+    childKey?: string;
     lease?: TargetLeaseAuthority;
     /** What the child acts on, recorded with its grant for the recipient. */
     evidence?: Record<string, unknown>;
@@ -466,13 +440,16 @@ export async function issueControlChildPhase(
       controlDigest(authority.execution)
   )
     throw Error("Foreign phase target authority");
-  const assertion = input.lease
+  const delegation = input.lease
     ? await delegateArtifactTargetLease(input.lease, {
         ...child,
-        childId: input.childId,
+        ...(input.childKey ? { childKey: input.childKey } : {}),
         ...(input.evidence ? { evidence: input.evidence } : {}),
       })
-    : await attestParentExecution(authority, { ...child, childId: input.childId });
+    : await attestParentExecution(authority, {
+        ...child,
+        ...(input.childKey ? { childKey: input.childKey } : {}),
+      });
   const saved = inspectControlChildPublication(authority, input);
   if (saved.publication.state !== "grant_prepared")
     throw Error("Child publication was not retained");
@@ -485,7 +462,7 @@ export async function issueControlChildPhase(
   });
   return {
     channel: input.lease ? ("delegation" as const) : ("parent" as const),
-    assertion,
+    delegation,
     dispatchTicket,
   };
 }

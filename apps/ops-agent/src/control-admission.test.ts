@@ -66,10 +66,9 @@ it("refuses paired approval as a bearer-only root before reserving a worker", as
   }
 });
 
-it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-failure"])(
+it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
   "adopts at authenticated HTTP admission without replay (%s)",
   async (scenario) => {
-    const failReadyWrite = scenario === "ready-failure";
     const serviceIds = scenario === "wrong-target" ? ["osrm"] : ["motis"];
     const root = mkdtempSync(join(tmpdir(), "omx-control-http-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
@@ -138,10 +137,7 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
       serviceIds,
       owner: authority,
     });
-    const assertion = await control.delegateArtifactTargetLease(lease, {
-      ...plan,
-      childId: agent.role,
-    });
+    const delegation = await control.delegateArtifactTargetLease(lease, plan);
     let calls = 0;
     let releaseWorker = () => {};
     const worker = new Promise<void>((resolve) => {
@@ -162,11 +158,9 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
       },
     };
     const journal = await openOpsJobJournal(journalFile);
-    let writes = 0;
     const controlledJournal: OpsJobJournal = {
       records: () => journal.records(),
       replace: async (records) => {
-        if (failReadyWrite && ++writes === 2) throw Error("synthetic ready journal failure");
         if (
           scenario === "cancel-journal-failure" &&
           records.some((record) => record.state === "termination_pending")
@@ -183,7 +177,6 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
         headers: {
           authorization: `Bearer ${token}`,
           "x-ops-protocol-version": "2",
-          "x-openmapx-control-delegation": assertion,
         },
         payload: {
           version: 2,
@@ -193,6 +186,7 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
           expiresAt: new Date(Date.now() + 10000).toISOString(),
           operation: { kind: "motis.primary.stop" },
           execution: { requestedDeadlineAt: deadlineAt },
+          leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
         },
       });
     try {
@@ -201,18 +195,6 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
         expect(result.statusCode, result.body).toBe(403);
         expect(calls).toBe(0);
         expect(journal.records()).toHaveLength(0);
-        return;
-      }
-      if (failReadyWrite) {
-        expect(result.statusCode).toBe(500);
-        expect(calls).toBe(0);
-        expect((await request()).statusCode).toBe(202);
-        expect(journal.records()[0]).toMatchObject({
-          state: "failed",
-          errorClass: "recovery_required",
-          controlAdoption: { phase: "recovery_required" },
-        });
-        await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
         return;
       }
       expect(result.statusCode, result.body).toBe(202);

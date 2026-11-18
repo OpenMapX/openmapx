@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { controlOriginSchema } from "../../../ops/control-root-key";
 import { executionRefSchema } from "../../../ops/execution-ref";
 import { processDiagnosticsSchema } from "../../../ops/job-evidence";
 import { hardlinkApplySummarySchema } from "../../../ops/service-results";
@@ -201,10 +202,33 @@ export const dataExecutionStatusSchema = z
       value.deadlineAt > value.admittedAt && (!value.result || value.result.kind === value.kind),
   );
 export type DataExecutionStatus = z.infer<typeof dataExecutionStatusSchema>;
+/**
+ * A child the agent or the host CLI runs on data-manager, as the caller its
+ * token authenticated states it. Data-manager cannot read the agent's lease
+ * store, so the caller names the child's lease row and what the row records; a
+ * child of a parent that holds no lease has no lease id, and its parent is
+ * its owner.
+ */
+export const dataControlDelegationSchema = z.strictObject({
+  leaseId: z.uuid().nullable(),
+  childKey: z.uuid(),
+  owner: executionRefSchema,
+  parent: executionRefSchema,
+  execution: executionRefSchema,
+  kind: z.string().min(1).max(128),
+  phase: z.string().min(1).max(64),
+  targets: z
+    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+    .max(256)
+    .refine((values) => values.every((value, i) => i === 0 || (values[i - 1] ?? value) < value)),
+  origin: controlOriginSchema,
+});
+export type DataControlDelegation = z.infer<typeof dataControlDelegationSchema>;
 export const startDataExecutionSchema = z.strictObject({
   operationKey: dataOperationKeySchema,
   input: ordinaryDataExecutionInputSchema,
   requestedDeadlineAt: dataEpochSchema.optional(),
+  delegation: dataControlDelegationSchema.optional(),
 });
 export const generationHardlinksPlanSchema = z.strictObject({
   plan: z.array(hardlinkEntrySchema).max(256),
@@ -216,6 +240,7 @@ export const startGenerationHardlinksExecutionSchema = z
     requestedDeadlineAt: dataEpochSchema,
     input: generationHardlinksInputSchema,
     plan: generationHardlinksPlanSchema,
+    delegation: dataControlDelegationSchema,
   })
   .refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 1024 * 1024);
 export const dataExecutionIdentitySchema = z.strictObject({

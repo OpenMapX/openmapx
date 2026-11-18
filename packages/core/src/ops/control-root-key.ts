@@ -1,3 +1,5 @@
+import z from "zod/v4";
+
 /** Browser-safe format only. A timed key restricts validity; it grants no authority. */
 export interface ControlExecutionOrigin {
   version: 1;
@@ -5,6 +7,21 @@ export interface ControlExecutionOrigin {
   issuer: "ops-agent" | "data-manager" | "host-cli";
   notAfter: number;
 }
+/** The root an execution descends from; its key carries the root's expiry. */
+export const controlOriginSchema = z
+  .strictObject({
+    version: z.literal(1),
+    rootKey: z.string().max(69),
+    issuer: z.enum(["ops-agent", "data-manager", "host-cli"]),
+    notAfter: z.number().int().positive().safe(),
+  })
+  .refine((o) => {
+    try {
+      return parseControlRootOperationKey(o.rootKey).notAfter === o.notAfter;
+    } catch {
+      return false;
+    }
+  });
 function encode(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")

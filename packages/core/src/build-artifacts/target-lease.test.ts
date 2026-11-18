@@ -261,9 +261,7 @@ it("issues no maintenance step from a bare terminal summary without the maintena
     serviceIds: ["motis"],
     owner: authority,
   });
-  await expect(
-    a.delegateArtifactTargetLease(lease, { ...plan, childId: agent.role }),
-  ).rejects.toThrow();
+  await expect(a.delegateArtifactTargetLease(lease, plan)).rejects.toThrow();
   mkdirSync(join(root, "state/ops-agent"), { recursive: true, mode: 0o700 });
   writeFileSync(
     join(root, "state/ops-agent/jobs-v1.json"),
@@ -294,14 +292,11 @@ it("issues no maintenance step from a bare terminal summary without the maintena
     a.delegateArtifactTargetLease(lease, {
       ...plan,
       serviceIds: ["osrm"],
-      childId: agent.role,
     }),
   ).rejects.toThrow();
   // A journal summary and an own-effect settlement are not the maintenance
   // record a step is issued from.
-  await expect(
-    a.delegateArtifactTargetLease(lease, { ...plan, childId: agent.role }),
-  ).rejects.toThrow();
+  await expect(a.delegateArtifactTargetLease(lease, plan)).rejects.toThrow();
   a.closeArtifactTargetLeaseHandle(lease);
   c.closeControlInstallation(agent);
 });

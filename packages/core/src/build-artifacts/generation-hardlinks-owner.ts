@@ -195,7 +195,6 @@ export async function executeOwnedGenerationHardlinks(options: {
     const issued = await issueControlChildPhase(authority, {
       phase: "hardlinks",
       ordinal: plan.reservation.ordinal,
-      childId: "data-manager",
       lease,
     });
     consumeControlChildDispatch(issued.dispatchTicket);
@@ -208,8 +207,9 @@ export async function executeOwnedGenerationHardlinks(options: {
               requestedDeadlineAt: bound.execution.deadlineAt,
               input,
               plan: plan.plan,
+              delegation: issued.delegation,
             },
-            { transport, signal, headers: { "x-openmapx-control-delegation": issued.assertion } },
+            { transport, signal },
           ),
         ),
       );

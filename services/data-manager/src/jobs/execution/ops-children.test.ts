@@ -139,9 +139,8 @@ it.each(["promotion", "reload"] as const)(
       linkProxyFixture(join(root, "data"));
       control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
     }
-    const assertion = await control.delegateArtifactTargetLease(lease, {
+    const delegation = await control.delegateArtifactTargetLease(lease, {
       ...plan,
-      childId: agentVerifier.role,
       evidence: control.publishedDataTransitCandidate(authority, { phase, ordinal: 0 }),
     });
     const token = "b".repeat(43),
@@ -200,7 +199,7 @@ it.each(["promotion", "reload"] as const)(
         client.execute(operation, {
           operationKey: child.operationKey,
           execution: { requestedDeadlineAt: deadlineAt },
-          controlAssertion: assertion,
+          leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
         }),
       ).rejects.toThrow();
       expect((await next()).type).toBe("effect");
@@ -369,15 +368,11 @@ it.skipIf(
       }),
     );
     const app = Fastify();
-    registerAuth(
-      app,
-      {
-        api: "synthetic-dm-token-api",
-        "ops-agent": "synthetic-dm-token",
-        "host-cli": "synthetic-dm-token-cli",
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: "synthetic-dm-token-api",
+      "ops-agent": "synthetic-dm-token",
+      "host-cli": "synthetic-dm-token-cli",
+    });
     registerApi(app, {
       dataDir: join(root, "data"),
       singleFlight,
@@ -710,15 +705,11 @@ it
       }),
     );
     const app = Fastify();
-    registerAuth(
-      app,
-      {
-        api: "late-fixture-token-api",
-        "ops-agent": "late-fixture-token",
-        "host-cli": "late-fixture-token-cli",
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: "late-fixture-token-api",
+      "ops-agent": "late-fixture-token",
+      "host-cli": "late-fixture-token-cli",
+    });
     registerApi(app, {
       dataDir: data,
       singleFlight,
@@ -1051,7 +1042,6 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       issued = await control.issueControlChildPhase(authority, {
         ...reservation,
         lease,
-        childId: agentVerifier.role,
         evidence: control.publishedDataTransitCandidate(authority, reservation),
       });
     const token = "e".repeat(43),
@@ -1102,7 +1092,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         .execute(operation, {
           operationKey: bound.execution.operationKey,
           execution: { requestedDeadlineAt: bound.execution.deadlineAt },
-          controlAssertion: issued.assertion,
+          leaseChild: { leaseId: lease.leaseId, childKey: issued.delegation.childKey },
         })
         .catch(() => undefined);
       expect(await first.exited).toBe(86);

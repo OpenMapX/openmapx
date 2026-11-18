@@ -138,10 +138,7 @@ it
         serviceIds: services,
         owner: authority,
       }),
-      assertion = await control.delegateArtifactTargetLease(lease, {
-        ...slot,
-        childId: dm.role,
-      });
+      delegation = await control.delegateArtifactTargetLease(lease, slot);
     let lifecycle = 0,
       applies = 0;
     const tokenFile = join(root, "token");
@@ -200,15 +197,11 @@ it
       }
       return payload;
     });
-    registerAuth(
-      app,
-      {
-        api: "synthetic-gen-token-api",
-        "ops-agent": "synthetic-gen-token",
-        "host-cli": "synthetic-gen-token-cli",
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: "synthetic-gen-token-api",
+      "ops-agent": "synthetic-gen-token",
+      "host-cli": "synthetic-gen-token-cli",
+    });
     registerApi(app, {
       dataDir: data,
       singleFlight,
@@ -228,8 +221,14 @@ it
       );
       await expect(
         startGenerationHardlinksExecution(
-          { operationKey: child.operationKey, requestedDeadlineAt: deadline, input, plan },
-          { transport, headers: { "x-openmapx-control-delegation": assertion } },
+          {
+            operationKey: child.operationKey,
+            requestedDeadlineAt: deadline,
+            input,
+            plan,
+            delegation,
+          },
+          { transport },
         ),
       ).rejects.toThrow();
       const admitted = unwrapDataManagerResponse(

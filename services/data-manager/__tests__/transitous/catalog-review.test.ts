@@ -319,15 +319,11 @@ it.skipIf(!enabled)(
     });
     const api = Fastify(),
       serviceToken = "catalog-service-fixture-token";
-    registerAuth(
-      api,
-      {
-        api: serviceToken,
-        "ops-agent": `${serviceToken}-agent`,
-        "host-cli": `${serviceToken}-cli`,
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(api, {
+      api: serviceToken,
+      "ops-agent": `${serviceToken}-agent`,
+      "host-cli": `${serviceToken}-cli`,
+    });
     registerApi(api, {
       dataDir,
       operationsPolicy: policy,

@@ -599,6 +599,246 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "delegation": {
+                    "type": "object",
+                    "properties": {
+                      "leaseId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "childKey": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "owner": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "parent": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "execution": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "phase": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "targets": {
+                        "maxItems": 256,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        }
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "rootKey": {
+                            "type": "string",
+                            "maxLength": 69
+                          },
+                          "issuer": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "notAfter": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "rootKey",
+                          "issuer",
+                          "notAfter"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "leaseId",
+                      "childKey",
+                      "owner",
+                      "parent",
+                      "execution",
+                      "kind",
+                      "phase",
+                      "targets",
+                      "origin"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -2149,13 +2389,254 @@
                       "prune"
                     ],
                     "additionalProperties": false
+                  },
+                  "delegation": {
+                    "type": "object",
+                    "properties": {
+                      "leaseId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "childKey": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "owner": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "parent": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "execution": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "phase": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "targets": {
+                        "maxItems": 256,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        }
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "rootKey": {
+                            "type": "string",
+                            "maxLength": 69
+                          },
+                          "issuer": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "notAfter": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "rootKey",
+                          "issuer",
+                          "notAfter"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "leaseId",
+                      "childKey",
+                      "owner",
+                      "parent",
+                      "execution",
+                      "kind",
+                      "phase",
+                      "targets",
+                      "origin"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
                   "operationKey",
                   "requestedDeadlineAt",
                   "input",
-                  "plan"
+                  "plan",
+                  "delegation"
                 ],
                 "additionalProperties": false
               }
@@ -3697,6 +4178,246 @@
                       "ensure-running",
                       "require-running"
                     ]
+                  },
+                  "delegation": {
+                    "type": "object",
+                    "properties": {
+                      "leaseId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "childKey": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "owner": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "parent": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "execution": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "phase": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "targets": {
+                        "maxItems": 256,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        }
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "rootKey": {
+                            "type": "string",
+                            "maxLength": 69
+                          },
+                          "issuer": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "notAfter": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "rootKey",
+                          "issuer",
+                          "notAfter"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "leaseId",
+                      "childKey",
+                      "owner",
+                      "parent",
+                      "execution",
+                      "kind",
+                      "phase",
+                      "targets",
+                      "origin"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -3707,7 +4428,8 @@
                   "revisionId",
                   "hardlinkPlanDigest",
                   "serviceIds",
-                  "coordinatorMode"
+                  "coordinatorMode",
+                  "delegation"
                 ],
                 "additionalProperties": false
               }
@@ -3841,907 +4563,6 @@
                     "fenceId",
                     "sequence",
                     "state"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Response",
-            "headers": {
-              "retry-after": {
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[1-9]\\d*$"
-                },
-                "description": "Required response header"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/executions/configuration-maintenance/recovery": {
-      "post": {
-        "operationId": "recoverUnadmittedConfigurationPreparation",
-        "tags": [
-          "data-manager"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "maintenanceId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "candidateId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "ownerPrepare": {
-                    "type": "object",
-                    "properties": {
-                      "executor": {
-                        "type": "string",
-                        "enum": [
-                          "ops-agent",
-                          "data-manager",
-                          "host-cli"
-                        ]
-                      },
-                      "principal": {
-                        "type": "string",
-                        "enum": [
-                          "api",
-                          "data-manager",
-                          "host-cli"
-                        ]
-                      },
-                      "executionId": {
-                        "type": "string"
-                      },
-                      "operationKey": {
-                        "type": "string",
-                        "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
-                      },
-                      "operationFingerprint": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{64}$"
-                      },
-                      "fingerprint": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{64}$"
-                      },
-                      "deadlineAt": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 9007199254740991
-                      }
-                    },
-                    "required": [
-                      "executor",
-                      "principal",
-                      "executionId",
-                      "operationKey",
-                      "operationFingerprint",
-                      "fingerprint",
-                      "deadlineAt"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "planDigest": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "revisionId": {
-                    "type": "string",
-                    "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
-                  },
-                  "hardlinkPlanDigest": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{64}$"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "serviceIds": {
-                    "minItems": 1,
-                    "maxItems": 256,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
-                    }
-                  },
-                  "coordinatorMode": {
-                    "type": "string",
-                    "enum": [
-                      "ensure-running",
-                      "require-running"
-                    ]
-                  }
-                },
-                "required": [
-                  "maintenanceId",
-                  "candidateId",
-                  "ownerPrepare",
-                  "planDigest",
-                  "revisionId",
-                  "hardlinkPlanDigest",
-                  "serviceIds",
-                  "coordinatorMode"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "serviceBearer": []
-          },
-          {
-            "serviceToken": []
-          }
-        ],
-        "x-openmapx-contract-id": "recoverUnadmittedConfigurationPreparation",
-        "x-openmapx-auth": "service",
-        "x-openmapx-api-caller": false,
-        "responses": {
-          "200": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "version": {
-                      "type": "number",
-                      "enum": [
-                        2
-                      ]
-                    },
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "configuration-prepare-not-admitted"
-                      ]
-                    },
-                    "leaseId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "delegationId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "child": {
-                      "type": "object",
-                      "properties": {
-                        "executor": {
-                          "type": "string",
-                          "enum": [
-                            "ops-agent",
-                            "data-manager",
-                            "host-cli"
-                          ]
-                        },
-                        "principal": {
-                          "type": "string",
-                          "enum": [
-                            "api",
-                            "data-manager",
-                            "host-cli"
-                          ]
-                        },
-                        "executionId": {
-                          "type": "string"
-                        },
-                        "operationKey": {
-                          "type": "string",
-                          "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
-                        },
-                        "operationFingerprint": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        },
-                        "fingerprint": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        },
-                        "deadlineAt": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "required": [
-                        "executor",
-                        "principal",
-                        "executionId",
-                        "operationKey",
-                        "operationFingerprint",
-                        "fingerprint",
-                        "deadlineAt"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "input": {
-                      "type": "object",
-                      "properties": {
-                        "maintenanceId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "candidateId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "ownerPrepare": {
-                          "type": "object",
-                          "properties": {
-                            "executor": {
-                              "type": "string",
-                              "enum": [
-                                "ops-agent",
-                                "data-manager",
-                                "host-cli"
-                              ]
-                            },
-                            "principal": {
-                              "type": "string",
-                              "enum": [
-                                "api",
-                                "data-manager",
-                                "host-cli"
-                              ]
-                            },
-                            "executionId": {
-                              "type": "string"
-                            },
-                            "operationKey": {
-                              "type": "string",
-                              "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
-                            },
-                            "operationFingerprint": {
-                              "type": "string",
-                              "pattern": "^[a-f0-9]{64}$"
-                            },
-                            "fingerprint": {
-                              "type": "string",
-                              "pattern": "^[a-f0-9]{64}$"
-                            },
-                            "deadlineAt": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            }
-                          },
-                          "required": [
-                            "executor",
-                            "principal",
-                            "executionId",
-                            "operationKey",
-                            "operationFingerprint",
-                            "fingerprint",
-                            "deadlineAt"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "planDigest": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        },
-                        "revisionId": {
-                          "type": "string",
-                          "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
-                        },
-                        "hardlinkPlanDigest": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "pattern": "^[a-f0-9]{64}$"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "serviceIds": {
-                          "minItems": 1,
-                          "maxItems": 256,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
-                          }
-                        },
-                        "coordinatorMode": {
-                          "type": "string",
-                          "enum": [
-                            "ensure-running",
-                            "require-running"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "maintenanceId",
-                        "candidateId",
-                        "ownerPrepare",
-                        "planDigest",
-                        "revisionId",
-                        "hardlinkPlanDigest",
-                        "serviceIds",
-                        "coordinatorMode"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "observedAt": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
-                    }
-                  },
-                  "required": [
-                    "version",
-                    "kind",
-                    "leaseId",
-                    "delegationId",
-                    "child",
-                    "input",
-                    "observedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -6047,6 +5868,246 @@
                       "unused",
                       "contained"
                     ]
+                  },
+                  "delegation": {
+                    "type": "object",
+                    "properties": {
+                      "leaseId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "childKey": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "owner": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "parent": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "execution": {
+                        "type": "object",
+                        "properties": {
+                          "executor": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "principal": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "operationKey": {
+                            "type": "string",
+                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
+                          },
+                          "operationFingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "deadlineAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "executor",
+                          "principal",
+                          "executionId",
+                          "operationKey",
+                          "operationFingerprint",
+                          "fingerprint",
+                          "deadlineAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "phase": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "targets": {
+                        "maxItems": 256,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        }
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "rootKey": {
+                            "type": "string",
+                            "maxLength": 69
+                          },
+                          "issuer": {
+                            "type": "string",
+                            "enum": [
+                              "ops-agent",
+                              "data-manager",
+                              "host-cli"
+                            ]
+                          },
+                          "notAfter": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "rootKey",
+                          "issuer",
+                          "notAfter"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "leaseId",
+                      "childKey",
+                      "owner",
+                      "parent",
+                      "execution",
+                      "kind",
+                      "phase",
+                      "targets",
+                      "origin"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [

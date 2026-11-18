@@ -26,7 +26,6 @@ export async function ownedDataManager(options: {
   refuseSettles?: () => boolean;
   /** Called once the fence has been prepared successfully. */
   onPrepared?: () => void;
-  loseRecoveryResponseOnce?: boolean;
 }) {
   const prepareReplyEntered = Promise.withResolvers<void>(), continuePrepareReply = Promise.withResolvers<void>();
   const installation = openControlInstallation({ infraDir: options.infraDir, role: "data-manager", serviceIds: options.serviceIds });
@@ -45,7 +44,7 @@ export async function ownedDataManager(options: {
   const dispatcher = createDataExecutionDispatcher({ dataDir, state: new StateStore(dataDir), sql: options.sql, singleFlight, operationsPolicy, runHardlinks: applyOwnedGenerationHardlinks });
   const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
   const receiver = createDataExecutionReceiver({ runtime, installation, configurationFence: fence, dispatcher, operationsPolicy });
-  const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0, recoveryPosts = 0;
+  const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0;
   const maintenanceIds = new Set<string>();
   const maintenanceReplies: { status: number; error: unknown }[] = [];
   const settlementResponseStatuses:number[]=[];
@@ -56,10 +55,6 @@ export async function ownedDataManager(options: {
     if (options.refuseSettles?.() && request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) await reply.code(503).send({ error: "unavailable" });
   });
   app.addHook("onSend", async (request, reply, payload) => {
-    if (request.method === "POST" && request.url === "/executions/configuration-maintenance/recovery") {
-      recoveryPosts++;
-      if (options.loseRecoveryResponseOnce && recoveryPosts === 1 && reply.statusCode === 200) reply.raw.destroy();
-    }
     if (request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) {settlePosts++;settlementResponseStatuses.push(reply.statusCode);if(options.loseSettleResponseOnce&&reply.statusCode===200&&settlementResponseStatuses.filter(status=>status===200).length===1)reply.raw.destroy();}
     if (request.method === "GET" && request.url.startsWith("/executions/configuration-maintenance/")) {
       fenceInspectionReplies.push({ status: reply.statusCode, body: typeof payload === "string" ? JSON.parse(payload) : null });
@@ -86,8 +81,7 @@ export async function ownedDataManager(options: {
   // The operations agent's own token; the API's and host CLI's differ.
   registerAuth(
     app,
-    { api: `${token}-api`, "ops-agent": token, "host-cli": `${token}-cli` },
-    { executionReceiver: () => receiver },
+    { api: `${token}-api`, "ops-agent": token, "host-cli": `${token}-cli` }
   );
   registerApi(app, { dataDir, singleFlight, operationsPolicy, executionReceiver: receiver });
   const baseUrl = await app.listen({ host: "127.0.0.1", port: 0 });
@@ -110,7 +104,7 @@ export async function ownedDataManager(options: {
     await runtime.close(); app.server.closeAllConnections(); await app.close();
     journal.close(); closeControlInstallation(installation); stopped = true;
   };
-  return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; }, get recoveryPosts() { return recoveryPosts; },
+  return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; },
     prepareReplyEntered: prepareReplyEntered.promise, releasePrepareResponse: () => continuePrepareReply.resolve(),
     get fenceInspections() { return structuredClone(fenceInspectionReplies); }, stopForRestart,
     get startupRecoveryRequired() { return startupRecoveryRequired; },

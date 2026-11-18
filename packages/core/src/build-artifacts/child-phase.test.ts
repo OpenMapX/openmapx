@@ -118,7 +118,6 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     const issued = await control.issueControlChildPhase(authority, {
       phase: "stop-primary",
       ordinal: 0,
-      childId: agent.role,
       lease,
     });
     expect(issued.channel).toBe("delegation");
@@ -137,7 +136,6 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
       control.issueControlChildPhase(authority, {
         phase: "stop-primary",
         ordinal: 0,
-        childId: agent.role,
         lease,
       }),
     ).rejects.toThrow();
@@ -288,7 +286,7 @@ it("keeps an old exact admission's signed bytes when a duplicate supplies empty 
 
 import { AnchoredDirectory } from "./filesystem";
 
-it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as const)(
+it.each(["reference"] as const)(
   "retains the exact phase and refuses another dispatch after a crash at %s",
   async (point) => {
     const f = await fixture(),
@@ -315,17 +313,10 @@ it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as c
           path = this.path;
         const selected =
           !fired &&
-          ((point === "reference" &&
-            path.endsWith("/observations") &&
-            name.startsWith("phase-") &&
-            text.includes('"grant_prepared"')) ||
-            (point === "cancellation-index" &&
-              name.endsWith(".lifecycle.json") &&
-              text.includes('"leaseIntents":{')) ||
-            (point === "lease-outbox" &&
-              path.endsWith("/parent-attempts") &&
-              text.includes('"kind":"lease"')) ||
-            (point === "grant-outbox" && path.endsWith("/attempts")));
+          point === "reference" &&
+          path.endsWith("/observations") &&
+          name.startsWith("phase-") &&
+          text.includes('"grant_prepared"');
         const value = Reflect.apply(original, this, args);
         if (selected) {
           fired = true;
@@ -337,7 +328,6 @@ it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as c
         control.issueControlChildPhase(f.authority, {
           ...phase,
           lease,
-          childId: agent.role,
         }),
       ).rejects.toThrow();
       fault.mockRestore();
@@ -355,7 +345,6 @@ it.each(["reference", "cancellation-index", "lease-outbox", "grant-outbox"] as c
         control.issueControlChildPhase(f.authority, {
           ...phase,
           lease,
-          childId: agent.role,
         }),
       ).rejects.toThrow();
       try {
@@ -450,7 +439,6 @@ it("rechecks durable cancellation inside publication after the outside identity 
       control.issueControlChildPhase(f.authority, {
         ...phase,
         lease,
-        childId: agent.role,
       }),
     ).rejects.toThrow(/fenced|cancel/i);
     expect(fired).toBe(true);
@@ -651,10 +639,9 @@ async function deadlineFixture(
     });
   control.retainFixedSingleDataPlan(authority, plan);
   const bound = await control.bindControlChildPhase(authority, plan.rootReservation),
-    childId = control.prepareFixedControlChild(authority, plan.delegationId),
     args = control.fixedCliArguments(operation);
   control.retainFixedCliSpawnIntent(authority, {
-    delegationId: plan.delegationId,
+    childKey: plan.delegationId,
     execution: bound.execution,
     operation,
     args,
@@ -662,21 +649,15 @@ async function deadlineFixture(
   });
   const issued = await control.issueControlChildPhase(authority, {
     ...plan.rootReservation,
-    childId,
+    childKey: plan.delegationId,
   });
   control.consumeControlChildDispatch(issued.dispatchTicket);
-  const cli = control.openFixedChildInstallation({ infraDir: root, assertion: issued.assertion }),
+  const cli = control.openFixedChildInstallation({
+      infraDir: root,
+      child: { leaseId: null, childKey: issued.delegation.childKey },
+    }),
     intent = control.readFixedCliSpawnIntent(cli, bound.execution, args),
-    peer = control.verifyFixedCliControlPeer(cli, {
-      assertion: issued.assertion,
-      execution: bound.execution,
-      kind: operation.kind,
-    }),
-    parent = control.verifyParentExecution(issued.assertion, peer, {
-      execution: bound.execution,
-      kind: operation.kind,
-      requestedDeadlineAt: bound.execution.deadlineAt,
-    }),
+    parent = control.verifiedRetainedControlParent(cli, intent.parent),
     cliAuthority = control.retainAdmittedControlExecution(cli, {
       execution: bound.execution,
       kind: operation.kind,
@@ -733,7 +714,6 @@ it.each(["cancel-first", "grant-first"] as const)(
         await expect(
           control.issueControlChildPhase(f.cliAuthority, {
             ...f.slot,
-            childId: f.dm.role,
           }),
         ).rejects.toThrow(/cancel|fenced/i);
         expect(fired).toBe(true);
@@ -744,7 +724,6 @@ it.each(["cancel-first", "grant-first"] as const)(
       } else {
         const issued = await control.issueControlChildPhase(f.cliAuthority, {
           ...f.slot,
-          childId: f.dm.role,
         });
         control.cancelControlExecution(f.authority);
         expect(control.cancelControlExecution(f.cliAuthority)).toEqual([bound.execution]);
@@ -787,7 +766,6 @@ it.each(["Pull", "Ingest", "Extract"] as const)(
       ).toThrow();
       const issued = await control.issueControlChildPhase(f.cliAuthority, {
         ...f.slot,
-        childId: f.dm.role,
       });
       control.consumeControlChildDispatch(issued.dispatchTicket);
       expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow();

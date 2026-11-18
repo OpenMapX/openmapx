@@ -1,7 +1,6 @@
 export {
   inspectDataConfigurationFence,
   prepareDataConfigurationFence,
-  recoverUnadmittedDataConfigurationFence,
   settleDataConfigurationFence,
 } from "./configuration-maintenance";
 export type {

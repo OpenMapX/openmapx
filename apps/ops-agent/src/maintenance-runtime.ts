@@ -31,7 +31,7 @@ import {
   type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
   verifyControlEffectSettlement,
-  verifyRetainedLocalControlPeer,
+  verifyLocalControlPeer,
 } from "@openmapx/core/build-artifacts";
 import {
   DataManagerHttpError,
@@ -162,13 +162,13 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
     if (!found) throw Error("Maintenance reservation missing");
     return found;
   };
-  const fenceAssertion = (file: MaintenanceFile): string => {
+  const fenceDelegation = (file: MaintenanceFile) => {
     const attempt = lookupControlChildPhaseAttempt(
       root(file),
       reservationOf(file, "configuration-fence"),
     );
     if (!attempt || attempt.channel !== "delegation") throw Error("Fence child was not issued");
-    return attempt.assertion;
+    return attempt.delegation;
   };
   const handoffKeys = (file: MaintenanceFile) => {
     const handoffId = file.plan.handoff?.handoffId;
@@ -258,7 +258,6 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         phase: reserved.phase,
         ordinal: reserved.ordinal,
         lease,
-        childId: "data-manager",
         // What an operator's `openmapx control resolve` needs to settle the fence.
         evidence: {
           maintenanceId: file.plan.dmPrepare.maintenanceId,
@@ -267,7 +266,6 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         },
       });
       consumeControlChildDispatch(issued.dispatchTicket);
-      const assertion = issued.assertion;
       let receipt: Awaited<ReturnType<typeof prepareDataConfigurationFence>>;
       try {
         receipt = await retryDataManager(
@@ -276,7 +274,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           () =>
             prepareDataConfigurationFence(file.plan.dmPrepare, {
               transport: configurationDataManagerTransport(),
-              controlAssertion: assertion,
+              delegation: issued.delegation,
               signal,
             }),
         );
@@ -331,7 +329,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           },
           {
             transport: configurationDataManagerTransport(),
-            controlAssertion: fenceAssertion(file),
+            delegation: fenceDelegation(file),
             signal,
           },
         ),
@@ -352,28 +350,26 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         step.phase as Parameters<typeof restoreConfigurationMaintenancePhaseIssuer>[1],
       );
       let child: Awaited<ReturnType<typeof bindControlChildPhase>>;
-      let assertion: string;
+      let leaseChild: { leaseId: string; childKey: string };
       try {
         child = await bindControlChildPhase(authority, reservation);
         const issued = await issueControlChildPhase(authority, {
           phase: reservation.phase,
           ordinal,
           lease: issuer,
-          childId: "ops-agent",
         });
         consumeControlChildDispatch(issued.dispatchTicket);
-        assertion = issued.assertion;
+        leaseChild = { leaseId: issuer.leaseId, childKey: issued.delegation.childKey };
       } finally {
         closeArtifactTargetLeaseHandle(issuer);
       }
       // The child is attempted from here: anything that fails is unknown.
       const execution = child.execution;
       const binding = lookupControlChildPhaseBinding(authority, reservation)!;
-      const inspected = inspectArtifactDelegation({ installation, assertion });
+      const inspected = inspectArtifactDelegation({ installation, leaseChild });
       const lease = await adoptArtifactTargetLease({
-        assertion,
-        peer: verifyRetainedLocalControlPeer(installation, {
-          assertion,
+        peer: verifyLocalControlPeer(installation, {
+          leaseChild,
           execution,
           kind: operation.kind,
         }),
@@ -387,7 +383,8 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           operation,
           admittedAt: binding.boundAt,
           requestedDeadlineAt: binding.requestedDeadlineAt,
-          parent: verifiedParentForArtifactDelegation(installation, assertion, execution),
+          parent: verifiedParentForArtifactDelegation(installation, leaseChild, execution),
+          leaseChild,
           serviceIds: lease.serviceIds,
           reservations:
             step.phase === "maintenance-hardlinks" && file.plan.nestedHardlinks

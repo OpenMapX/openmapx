@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
   type ControlInstallation,
-  controlHeaders,
   inspectDataExecutionAdmission,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -47,8 +46,6 @@ export function createDataExecutionReceiver(deps: {
     return input;
   };
   return {
-    recoverUnadmittedPreparation: (request, rawHeaders, transportPrincipal) =>
-      configurationFence.recoverUnadmittedPreparation(request, rawHeaders, transportPrincipal),
     async observeReviewedTransit(request) {
       const record = await runtime.lookupByIdempotencyKey?.(request.key);
       if (!record) return null;
@@ -86,19 +83,17 @@ export function createDataExecutionReceiver(deps: {
           : {}),
       });
     },
-    async admitHardlinks(value, rawHeaders, transportPrincipal) {
+    async admitHardlinks(value, transportPrincipal) {
       const request = startGenerationHardlinksExecutionSchema.parse(value),
         verified = inspectDataExecutionAdmission(installation, {
           ...request,
-          rawHeaders,
           transportPrincipal,
           operationFingerprint: dataExecutionInputFingerprint(request.input),
         });
-      if (!verified || !controlHeaders(rawHeaders).delegation)
+      if (!verified)
         throw Object.assign(Error("Delegated generation leaf required"), { statusCode: 403 });
       const preparedGeneration = await configurationFence.assertGenerationAdmission(
         request,
-        rawHeaders,
         transportPrincipal,
         verified.parent,
       );
@@ -142,12 +137,12 @@ export function createDataExecutionReceiver(deps: {
     inspect: runtime.inspect,
     lookup: runtime.lookup,
     requestCancel: runtime.requestCancel,
-    prepareFence: (input, headers, transportPrincipal) =>
-      configurationFence.prepare(input, headers, transportPrincipal),
+    prepareFence: (input, transportPrincipal) =>
+      configurationFence.prepare(input, transportPrincipal),
     inspectFence: (id, expected, transportPrincipal) =>
       configurationFence.inspect(id, expected, transportPrincipal),
-    settleFence: (input, headers, transportPrincipal) =>
-      configurationFence.settle(input, headers, transportPrincipal),
+    settleFence: (input, transportPrincipal) =>
+      configurationFence.settle(input, transportPrincipal),
     subscribe: deps.dispatcher.subscribe,
     legacyResult: deps.dispatcher.legacyResult,
   };

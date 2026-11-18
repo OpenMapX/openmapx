@@ -767,6 +767,8 @@ const opsRequestSchema = z.strictObject({
   execution: z
     .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
     .optional(),
+  /** A data-manager child: its row in the agent's lease store. */
+  leaseChild: z.strictObject({ leaseId: z.uuid(), childKey: z.uuid() }).optional(),
 });
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 

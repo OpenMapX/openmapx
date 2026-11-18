@@ -139,7 +139,8 @@ One row per maintenance in `data_manager.configuration_fence`. `prepare` inserts
 it under the data-admission advisory lock; `settle` is a conditional update
 (`WHERE state='prepared'`) read back in the same transaction, so a racing data
 admission sees the row either prepared or settled. Only the operations agent calls
-`prepare` and `settle`, each with its signed prepare delegation; settle also
+`prepare` and `settle`, each naming the fence child the agent recorded under the
+maintenance's lease (the request's `delegation` field); settle also
 requires the agent's own data-manager token and the agent's maintenance lease
 still held. A repeated prepare also settles the data-manager's lease child again,
 which heals a crash between its effect record and that child.
@@ -236,10 +237,22 @@ the network is still schema-checked. Docker and host administrators remain trust
 Data-manager authenticates each HTTP caller by its own bearer token: `api`,
 `ops-agent` (including the fixed CLI children the agent runs) or `host-cli`. The
 route contract lists the callers each route admits; the configuration fence is
-`ops-agent` only. Control receivers pass that authenticated caller to
-`verifyControlPeer` as the transport principal. The API names the job a child
-operation belongs to in the `x-openmapx-parent-execution` header of its own
-authenticated request; the agent accepts that header only from the API's token.
+`ops-agent` only. The API names the job a child operation belongs to in the
+`x-openmapx-parent-execution` header of its own authenticated request; the agent
+accepts that header only from the API's token.
+
+A child names its row in the lease store as `{leaseId, childKey}`. The agent's
+fixed CLI children receive it in `OPENMAPX_CONTROL_CHILD`, data-manager's
+delegated operations send it as the operation request's `leaseChild`, and the
+configuration helper in its environment; each reads its row from the store and
+adopts it there. Data-manager cannot read the store, so the agent or the host CLI
+sends the row's fields (lease, child key, owner, parent, child execution, kind,
+phase, targets) as the `delegation` field of a start or fence request, and
+data-manager trusts the caller its token authenticated. A child of a parent that
+holds no lease (a Full Update's data phases) has no lease id and follows its
+parent's deadline and lifecycle. Nothing else records a delegation: the issuer's
+reserved phase records the child before the store row, and the row is the only
+adoption record.
 
 ## Execution and lease lifecycle
 
@@ -259,7 +272,7 @@ The data-manager-to-agent HTTP receiver derives the required targets from the
 parsed operation: primary stop/restart/promotion require `motis`, staging
 stop/restart require `motis-staging`, and proxy validation/reload requires
 `motis-feed-proxy`. Restart does not start dependencies and promotion uses
-`--no-deps`. The signed grant must contain those targets, independently of its
+`--no-deps`. The child's lease row must contain those targets, independently of its
 body fingerprint and resource policy. Other operation families remain unavailable
 through this receiver until their fixed manifest/generation resolver exists.
 
@@ -289,7 +302,8 @@ fence before shared publication under the execution writer guard. Terminal effec
 receipts fence new grants; `cancelControlExecution` persists cancellation and
 returns the original attempted identities for the authenticated cancellation and
 lookup adapter. `assertControlExecutionForward` and
-`beginControlEffect` validate the complete deadline-only ancestry. New adoption
+`beginControlEffect` also check the lifecycle of a fixed child's parent when the
+child holds no lease. New adoption
 and effect-start intent share the lifecycle guard with cancellation. Exact
 already-adopted duplicates remain usable for observation/settlement after cancel,
 terminal state or expiry, and do not renew forward permission.

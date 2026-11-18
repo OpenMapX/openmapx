@@ -92,8 +92,7 @@ const bound = {
 };
 const attempted = {
   ...bound,
-  delegationId: z.uuid(),
-  grantDigest: digest,
+  childKey: z.uuid(),
   leaseId: z.uuid(),
   dispatchState: z.enum(["pending", "claimed"]),
 };
@@ -607,7 +606,6 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
         phase: slot.phase,
         ordinal: slot.ordinal,
         lease: ownedLease(context),
-        childId: "ops-agent",
         evidence: publishedDataTransitCandidate(context.authority, slot),
       });
       const reference = lookupControlChildPhaseAttempt(context.authority, slot);
@@ -615,8 +613,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
       const attempted: DataOpsChildAttempt = {
         ...bound,
         state: "attempted",
-        delegationId: reference.delegationId,
-        grantDigest: reference.grantDigest,
+        childKey: reference.childKey,
         leaseId: reference.leaseId,
         dispatchState: "claimed",
         publication: "unknown",
@@ -639,7 +636,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
         const admitted = await opsClient().execute(operation, {
           operationKey: child.operationKey,
           execution: { requestedDeadlineAt: child.execution.deadlineAt },
-          controlAssertion: issued.assertion,
+          leaseChild: { leaseId: attempted.leaseId, childKey: attempted.childKey },
           signal: context.signal,
         });
         if (admitted.execution !== "async" || admitted.operationId !== child.proposedId)
@@ -726,8 +723,7 @@ export async function cancelAndSettleOwnedDataOpsChildren(
         child = {
           ...bound,
           state: "attempted",
-          delegationId: reference.delegationId,
-          grantDigest: reference.grantDigest,
+          childKey: reference.childKey,
           leaseId: reference.leaseId,
           dispatchState: "pending",
           publication: "unknown",

@@ -1,6 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import rateLimit, { normalizeIP } from "@fastify/rate-limit";
-import { controlHeaders } from "@openmapx/core/build-artifacts";
 import { assertProductionApplicationSecret } from "@openmapx/core/deployment-secret-policy";
 import { readServiceSecretFile } from "@openmapx/core/service-secret-files";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -120,13 +119,7 @@ function admitsApi(req: FastifyRequest): boolean {
  * and cross-service discovery keep working. Each caller presents its own
  * token and reaches only the routes its contract lists for it.
  */
-export function registerAuth(
-  app: FastifyInstance,
-  tokens: DataManagerCallerTokens,
-  options: {
-    executionReceiver?: () => import("./jobs/execution/api.js").DataExecutionReceiver | undefined;
-  } = {},
-): void {
+export function registerAuth(app: FastifyInstance, tokens: DataManagerCallerTokens): void {
   assertDistinct(tokens);
   // Register the maintained limiter in this root scope, while invoking it only
   // for failed credentials. Successful long-running jobs and probes have no
@@ -157,28 +150,5 @@ export function registerAuth(
     if (principal === "api" && (req.routeOptions.url === undefined || !admitsApi(req)))
       return reply.code(403).send({ error: "This caller may not use this route" });
     principals.set(req, principal);
-    // Durable receiver admission only. Never silently ignore an internal authority header.
-    try {
-      const headers = controlHeaders(req.raw.rawHeaders);
-      const path = req.url.split("?")[0] ?? "";
-      const admission =
-        req.method === "POST" &&
-        ([
-          "/executions",
-          "/executions/generation-hardlinks",
-          "/executions/configuration-maintenance/prepare",
-          "/executions/configuration-maintenance/recovery",
-        ].includes(path) ||
-          /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(path));
-      if (
-        (headers.delegation !== undefined || headers.parent !== undefined) &&
-        (!admission || !options.executionReceiver?.())
-      )
-        return reply
-          .code(503)
-          .send({ error: "Managed data-manager execution requires the durable receiver upgrade" });
-    } catch {
-      return reply.code(403).send({ error: "Invalid control authority" });
-    }
   });
 }

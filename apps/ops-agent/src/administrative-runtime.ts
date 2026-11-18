@@ -23,7 +23,6 @@ import {
   isFixedSingleDataCommand,
   issueControlChildPhase,
   openFixedChildInstallation,
-  prepareFixedControlChild,
   readFixedCliSpawnIntent,
   readFixedSingleDataPlan,
   retainFixedCliSpawnIntent,
@@ -94,8 +93,8 @@ type BackupInventoryEntry = OpsResultFor<"backup.list">["backups"][number];
 interface FixedCliOptions {
   operationKind?: OpsOperationKind;
   execution?: ExecutionRef;
-  controlAssertion?: string;
-  parentAssertion?: string;
+  /** The child the agent issued for this command; without a lease it runs under its parent's deadline. */
+  child?: { leaseId: string | null; childKey: string };
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
 }
@@ -832,34 +831,27 @@ export function createDefaultFixedCli(
       env.OPENMAPX_REGION =
         coreServices.resolvePlatformConfiguration({ saved: platform, env }).values.defaultRegion ??
         undefined;
-    for (const key of [
-      "OPENMAPX_CONTROL_EXECUTION",
-      "OPENMAPX_CONTROL_DELEGATION",
-      "OPENMAPX_PARENT_EXECUTION",
-    ])
-      delete env[key];
+    for (const key of ["OPENMAPX_CONTROL_EXECUTION", "OPENMAPX_CONTROL_CHILD"]) delete env[key];
     if (options.execution) {
       const encoded = JSON.stringify(executionRefSchema.parse(options.execution));
       if (Buffer.byteLength(encoded) > 2048) throw new Error("Execution context exceeds budget");
       env.OPENMAPX_CONTROL_EXECUTION = encoded;
-      if (options.controlAssertion || options.parentAssertion) {
-        if (options.controlAssertion && options.parentAssertion)
-          throw Error("Ambiguous CLI authority");
-        const assertion = (options.controlAssertion ?? options.parentAssertion)!;
+      if (options.child) {
         const installation = openFixedChildInstallation({
           infraDir: join(_rootDir, "infra/docker"),
-          assertion,
+          child: options.child,
         });
         try {
           readFixedCliSpawnIntent(installation, options.execution, args);
         } finally {
           closeControlInstallation(installation);
         }
-        if (options.controlAssertion) env.OPENMAPX_CONTROL_DELEGATION = assertion;
-        else env.OPENMAPX_PARENT_EXECUTION = assertion;
+        env.OPENMAPX_CONTROL_CHILD = JSON.stringify({
+          leaseId: options.child.leaseId,
+          childKey: options.child.childKey,
+        });
       }
-    } else if (options.controlAssertion || options.parentAssertion)
-      throw new Error("Execution context is required");
+    } else if (options.child) throw new Error("Execution context is required");
     await runContainedStreamingProcess(executable as string, [...prefix, ...args], {
       env,
       signal: options.signal,
@@ -1042,9 +1034,8 @@ export function createAdministrativeRuntime(
       throw new OpsHostUpdateRequiredError();
     const plan = readFixedSingleDataPlan(context.controlAuthority),
       bound = await bindControlChildPhase(context.controlAuthority, plan.rootReservation);
-    const childId = prepareFixedControlChild(context.controlAuthority, plan.delegationId);
     retainFixedCliSpawnIntent(context.controlAuthority, {
-      delegationId: plan.delegationId,
+      childKey: plan.delegationId,
       execution: bound.execution,
       operation,
       args: coreFixedCliArguments(operation),
@@ -1053,18 +1044,19 @@ export function createAdministrativeRuntime(
     const issued = await issueControlChildPhase(context.controlAuthority, {
       phase: "data-workflow",
       ordinal: 0,
-      childId,
+      childKey: plan.delegationId,
     });
     consumeControlChildDispatch(issued.dispatchTicket);
+    const fixedChild = { leaseId: null, childKey: issued.delegation.childKey };
     await runFixedCli(coreFixedCliArguments(operation), {
       ...context,
       execution: bound.execution,
-      parentAssertion: issued.assertion,
+      child: fixedChild,
       operationKind: operation.kind,
     });
     const child = openFixedChildInstallation({
       infraDir: join(options.rootDir, "infra/docker"),
-      assertion: issued.assertion,
+      child: fixedChild,
     });
     try {
       verifyControlEffectSettlement(child, bound.execution);

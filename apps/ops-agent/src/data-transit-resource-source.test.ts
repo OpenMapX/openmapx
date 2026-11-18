@@ -111,7 +111,6 @@ async function fixture(
     issued = await control.issueControlChildPhase(authority, {
       ...slot,
       lease,
-      childId: agent.role,
       evidence: control.publishedDataTransitCandidate(authority, slot),
     });
   const claimer = createProductionRegistryResourceClaimer({
@@ -229,7 +228,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
       const accepted = await f.client.execute(f.operation, {
         operationKey: f.slot.execution.operationKey,
         execution: { requestedDeadlineAt: f.bound.execution.deadlineAt },
-        controlAssertion: f.issued.assertion,
+        leaseChild: { leaseId: f.lease.leaseId, childKey: f.issued.delegation.childKey },
       });
       if (accepted.execution !== "async") throw Error("Expected actual agent admission");
       await expect
@@ -298,7 +297,7 @@ it("accepts the production hardlinked proxy candidate through validation and rel
     const accepted = await f.client.execute(f.operation, {
       operationKey: f.slot.execution.operationKey,
       execution: { requestedDeadlineAt: f.bound.execution.deadlineAt },
-      controlAssertion: f.issued.assertion,
+      leaseChild: { leaseId: f.lease.leaseId, childKey: f.issued.delegation.childKey },
     });
     if (accepted.execution !== "async") throw Error("Expected actual agent admission");
     await expect
@@ -402,7 +401,7 @@ it.each([
         f.client.execute(operation, {
           operationKey: key,
           execution: { requestedDeadlineAt: f.bound.execution.deadlineAt },
-          controlAssertion: f.issued.assertion,
+          leaseChild: { leaseId: f.lease.leaseId, childKey: f.issued.delegation.childKey },
         }),
       ).rejects.toThrow();
       expect(f.calls()).toBe(0);
@@ -419,7 +418,7 @@ it("rechecks the retained snapshot after nginx validation and before reload", as
     const accepted = await f.client.execute(f.operation, {
       operationKey: f.slot.execution.operationKey,
       execution: { requestedDeadlineAt: f.bound.execution.deadlineAt },
-      controlAssertion: f.issued.assertion,
+      leaseChild: { leaseId: f.lease.leaseId, childKey: f.issued.delegation.childKey },
     });
     if (accepted.execution !== "async") throw Error("Expected actual asynchronous agent admission");
     await expect
@@ -444,7 +443,7 @@ it.each(["stricter", "late"] as const)(
         f.client.execute(f.operation, {
           operationKey: original.operationKey,
           execution: { requestedDeadlineAt: original.deadlineAt },
-          controlAssertion: f.issued.assertion,
+          leaseChild: { leaseId: f.lease.leaseId, childKey: f.issued.delegation.childKey },
         }),
       ).rejects.toThrow();
       expect(f.calls()).toBe(0);

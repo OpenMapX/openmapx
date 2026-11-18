@@ -658,11 +658,7 @@ it
         operationsPolicy: policy,
       });
       dm = Fastify();
-      registerAuth(
-        dm,
-        { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` },
-        { executionReceiver: () => receiver },
-      );
+      registerAuth(dm, { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` });
       registerApi(dm, {
         dataDir: data,
         singleFlight,

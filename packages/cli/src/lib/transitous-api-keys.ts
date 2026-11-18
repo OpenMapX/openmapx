@@ -258,8 +258,7 @@ export async function generateTransitousApiKeys(
   if (
     cliControlContext() ||
     process.env.OPENMAPX_CONTROL_EXECUTION ||
-    process.env.OPENMAPX_CONTROL_DELEGATION ||
-    process.env.OPENMAPX_PARENT_EXECUTION
+    process.env.OPENMAPX_CONTROL_CHILD
   )
     throw Error("Credential templates require an explicit local host command");
   if (options.transitousRepoUrl && options.transitousRepoUrl !== DEFAULT_TRANSITOUS_REPO_URL)

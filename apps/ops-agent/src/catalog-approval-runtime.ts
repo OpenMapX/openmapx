@@ -13,7 +13,6 @@ import {
   inspectArtifactDelegation,
   inspectDataTransitCandidate,
   restoreAdmittedControlExecution,
-  retainedControlAdoptionAssertion,
   retainedControlParent,
   verifyControlEffectSettlement,
   verifyRetainedArtifactTargetSettlement,
@@ -210,15 +209,13 @@ export function installCatalogApprovalRuntime(
       promotion = executionAuthorityState(promoted);
     if (
       promotion.kind !== "motis.primary.promote" ||
-      activation.promotion.adoption.leaseId !== lease.leaseId
+      activation.promotion.leaseChild.leaseId !== lease.leaseId
     )
       throw Error("Promotion must belong to this exact original physical root");
-    const assertion = retainedControlAdoptionAssertion(
-        installation,
-        activation.promotion.adoption,
-        activation.promotion.execution,
-      ),
-      grant = inspectArtifactDelegation({ installation, assertion });
+    const grant = inspectArtifactDelegation({
+      installation,
+      leaseChild: activation.promotion.leaseChild,
+    });
     if (
       grant.phase !== "promote-primary" ||
       controlDigest(grant.parent) !== controlDigest(activation.parent) ||
@@ -227,7 +224,7 @@ export function installCatalogApprovalRuntime(
       throw Error("Original promotion grant required");
     verifyRetainedArtifactTargetSettlement(
       installation,
-      activation.promotion.adoption,
+      activation.promotion.leaseChild,
       activation.promotion.execution,
     );
     const settlement = childSettlementState(

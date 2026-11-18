@@ -18,7 +18,6 @@ export const DATA_MANAGER_API_ROUTES: {
   startDataExecution: true,
   startGenerationHardlinksExecution: false,
   prepareDataConfigurationFence: false,
-  recoverUnadmittedConfigurationPreparation: false,
   inspectDataConfigurationFence: false,
   settleDataConfigurationFence: false,
   lookupDataExecution: true,

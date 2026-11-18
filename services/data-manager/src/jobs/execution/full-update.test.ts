@@ -211,15 +211,11 @@ it.skipIf(
       }
       return payload;
     });
-    registerAuth(
-      app,
-      {
-        api: `${agentToken}-api`,
-        "ops-agent": agentToken,
-        "host-cli": `${agentToken}-cli`,
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: `${agentToken}-api`,
+      "ops-agent": agentToken,
+      "host-cli": `${agentToken}-cli`,
+    });
     registerApi(app, {
       dataDir: data,
       singleFlight,

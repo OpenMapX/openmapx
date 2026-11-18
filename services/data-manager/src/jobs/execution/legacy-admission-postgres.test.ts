@@ -578,15 +578,11 @@ async function legacyFixture(
     operationsPolicy: policy,
   });
   const app = Fastify();
-  registerAuth(
-    app,
-    {
-      api: "fix1-synthetic-token-api",
-      "ops-agent": "fix1-synthetic-token",
-      "host-cli": "fix1-synthetic-token-cli",
-    },
-    { executionReceiver: () => receiver },
-  );
+  registerAuth(app, {
+    api: "fix1-synthetic-token-api",
+    "ops-agent": "fix1-synthetic-token",
+    "host-cli": "fix1-synthetic-token-cli",
+  });
   registerApi(app, {
     dataDir: join(root, "data"),
     singleFlight,

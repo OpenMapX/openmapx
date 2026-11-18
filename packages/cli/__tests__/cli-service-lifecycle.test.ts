@@ -599,7 +599,6 @@ describe("actual CLI service lifecycle preparation", () => {
         await control.issueControlChildPhase(authority, {
           phase: "hardlinks",
           ordinal: reservation.ordinal,
-          childId: "data-manager",
           lease,
         });
         return { applied: true, entries: 1, linked: 1, skipped: 0, pruned: 0, via: "data-manager" };

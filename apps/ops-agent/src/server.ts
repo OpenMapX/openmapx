@@ -23,7 +23,6 @@ import {
   localLeaseBackend,
   markFeedProxyReloadAttempted,
   planFixedSingleDataCommand,
-  controlHeaders as readControlHeaders,
   releaseArtifactTargetLease,
   replaceControlRegisteredServiceIds,
   reserveFeedProxyValidation,
@@ -33,7 +32,6 @@ import {
   retainConfigurationPreEffectRefusal,
   retainControlEffectReceipt,
   retainDataUpdatePlan,
-  retainedControlAdoptionAssertion,
   retainFixedServiceLifecyclePlan,
   retainFixedSingleDataPlan,
   retainGenerationHardlinksOwnerPlan,
@@ -664,7 +662,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     controlAuthorities.clear();
   });
   const persisted = (job: JobRecord): PersistedOpsJob => ({
-    ...(job.controlAdoption ? { controlAdoption: job.controlAdoption } : {}),
+    ...(job.leaseChild ? { leaseChild: job.leaseChild } : {}),
     executionVersion: 2,
     requestVersion: job.requestVersion,
     admittedAt: job.admittedAt,
@@ -1741,24 +1739,19 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         options.controlInstallation
       )
         await reconcileOriginalPreparedImport(job);
-      if (job.controlAdoption) {
+      if (job.leaseChild) {
         try {
           if (!options.controlInstallation) throw Error("Control trust unavailable");
           const execution = executionFor(job);
           if (job.state === "succeeded") {
             verifyRetainedArtifactTargetSettlement(
               options.controlInstallation,
-              job.controlAdoption,
+              job.leaseChild,
               execution,
             );
           } else {
-            const assertion = retainedControlAdoptionAssertion(
-              options.controlInstallation,
-              job.controlAdoption,
-              execution,
-            );
             const admission = inspectControlAdmission(options.controlInstallation, {
-              rawHeaders: ["x-openmapx-control-delegation", assertion],
+              leaseChild: job.leaseChild,
               transportPrincipal: "data-manager",
               kind: job.operation.kind,
               operation: job.operation,
@@ -1810,7 +1803,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             );
           }
         } catch {
-          job.controlAdoption = { ...job.controlAdoption, phase: "recovery_required" };
           job.state = "failed";
           job.errorClass = "recovery_required";
           job.result = undefined;
@@ -1949,22 +1941,16 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         let parent: VerifiedParentExecution | undefined;
         let controlAdmission: ReturnType<typeof inspectControlAdmission> | undefined;
         const parentHeader = request.headers["x-openmapx-parent-execution"];
-        const delegationHeader = request.headers["x-openmapx-control-delegation"];
         // Approval is exclusively a borrowed activation leaf. Installing its
         // future validation runtime must never enable a bearer-only root path.
-        if (operation.kind === "transitousLock.approve" && delegationHeader === undefined)
+        if (operation.kind === "transitousLock.approve" && parsed.leaseChild === undefined)
           throw new RequestGuardError("authorization", 403);
-        try {
-          readControlHeaders(request.raw.rawHeaders);
-        } catch {
-          throw new RequestGuardError("authorization", 403);
-        }
-        if (delegationHeader !== undefined) {
+        if (parsed.leaseChild !== undefined) {
           if (!options.controlInstallation || role !== "data-manager" || parentHeader !== undefined)
             throw new RequestGuardError("authorization", 403);
           try {
             controlAdmission = inspectControlAdmission(options.controlInstallation, {
-              rawHeaders: request.raw.rawHeaders,
+              leaseChild: parsed.leaseChild,
               transportPrincipal: "data-manager",
               kind,
               operation,
@@ -2210,15 +2196,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             }
             if (!operationId) throw new RequestGuardError("busy", 429);
             const job: JobRecord = {
-              ...(controlAdmission
-                ? {
-                    controlAdoption: {
-                      leaseId: controlAdmission.leaseId,
-                      delegationId: controlAdmission.delegationId,
-                      phase: "pending-adoption" as const,
-                    },
-                  }
-                : {}),
+              ...(parsed.leaseChild ? { leaseChild: parsed.leaseChild } : {}),
               role,
               operation,
               operationId,
@@ -2463,11 +2441,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 throw error;
               }
             }
-            if (controlAdmission) {
-              const adoption = {
-                leaseId: controlAdmission.leaseId,
-                delegationId: controlAdmission.delegationId,
-              };
+            if (controlAdmission && parsed.leaseChild) {
               try {
                 if (!options.controlInstallation)
                   throw Error("Missing durable control admission context");
@@ -2479,16 +2453,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   admittedAt: job.admittedAt,
                   requestedDeadlineAt: job.requestedDeadlineAt,
                   parent: job.parent,
+                  leaseChild: parsed.leaseChild,
                   serviceIds: lease.serviceIds,
                 });
                 controlLeases.set(job.operationId, lease);
                 controlAuthorities.set(job.operationId, authority);
-                job.controlAdoption = { ...adoption, phase: "ready" };
-                await journal.replace([...jobsById.values()].map(persisted));
               } catch (error) {
                 // The receiver may already have adopted. This identity remains
                 // observable as recovery-required and is never dispatched again.
-                job.controlAdoption = { ...adoption, phase: "recovery_required" };
                 forceRecoveryRequired(job);
                 try {
                   await journal.replace([...jobsById.values()].map(persisted));

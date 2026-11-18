@@ -141,7 +141,7 @@ it("fix1 unsigned metadata can only clamp policy and cannot authorize a remote m
       vi.setSystemTime(Date.now() + 6);
       expect(() => cliProcessOptions()).toThrow("Execution deadline elapsed");
     });
-    vi.stubEnv("OPENMAPX_PARENT_EXECUTION", "unsigned-parent");
+    vi.stubEnv("OPENMAPX_CONTROL_CHILD", "unsigned-child");
     await expect(
       withCliExecutionDeadline(["services", "build"], async () => undefined),
     ).rejects.toThrow();

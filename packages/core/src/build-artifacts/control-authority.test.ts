@@ -71,108 +71,20 @@ it("provisions each role's private records under its own state directory", async
     expect(existsSync(a.controlPrivateRoot(root, role))).toBe(true);
   expect(existsSync(join(root, "secrets"))).toBe(false);
 });
-it("rejects duplicate control headers and oversized individual headers", async () => {
-  const a = await api();
-  expect(() =>
-    a.controlHeaders([
-      "X-OpenMapx-Control-Delegation",
-      "one",
-      "x-openmapx-control-delegation",
-      "two",
-    ]),
-  ).toThrow(/Duplicate/);
-  expect(() => a.controlHeaders(["x-openmapx-parent-execution", "x".repeat(4097)])).toThrow(
-    /limit/,
-  );
-});
-it("retains deadline-only attempts separately from execution witnesses", async () => {
-  const a = await api();
-  const { randomUUID } = await import("node:crypto");
-  const { executionFingerprint } = await import("../ops/execution-identity");
-  const { opsOperationFingerprint } = await import("../ops/fingerprint");
-  await a.provisionControlDirectories(root);
-  const installation = a.openControlInstallation({
-    infraDir: root,
-    role: "ops-agent",
-    serviceIds: ["osrm"],
-  });
-  const operation = { kind: "data.update" as const };
-  const deadlineAt = Date.now() + 60000;
-  const operationFingerprint = opsOperationFingerprint(operation);
-  const parent = {
-    executor: "ops-agent" as const,
-    principal: "api" as const,
-    executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-    operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
-    operationFingerprint,
-    deadlineAt,
-    fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
-  };
-  const body = { kind: "download-osm", regionId: "europe/germany" };
-  const hash = a.controlDigest(body);
-  const child = {
-    executor: "data-manager" as const,
-    principal: "data-manager" as const,
-    executionId: randomUUID(),
-    operationKey: a.controlChildOperationKey(parent.operationKey, "osm", 0),
-    operationFingerprint: hash,
-    deadlineAt,
-    fingerprint: executionFingerprint({
-      kind: body.kind,
-      operationFingerprint: hash,
-      deadlineAt,
-      parent: a.retainedControlParent(parent),
-    }),
-  };
-  const plan = {
-    phase: "osm" as const,
-    ordinal: 0,
-    kind: body.kind,
-    execution: child,
-    serviceIds: ["osrm"],
-    recipient: "data-manager" as const,
-  };
-  const authority = a.retainAdmittedControlExecution(installation, {
-    requestedDeadlineAt: parent.deadlineAt,
-    execution: parent,
-    operation,
-    kind: operation.kind,
-    admittedAt: deadlineAt - 60000,
-    serviceIds: ["osrm"],
-    plan: [plan],
-  });
-  const receiver = a.openControlInstallation({
-    infraDir: root,
-    role: "data-manager",
-    serviceIds: ["osrm"],
-  });
-  const assertion = await a.attestParentExecution(authority, {
-    ...plan,
-    childId: receiver.role,
-  });
-  // data-manager trusts the agent's token and reads the self-contained grant.
-  const verified = a.verifiedRemoteParentExecution(receiver, assertion, {
-    transportPrincipal: "ops-agent",
-    operationKey: child.operationKey,
-    operationFingerprint: hash,
-    kind: body.kind,
-    requestedDeadlineAt: deadlineAt,
-  });
-  expect(verified.parent).toMatchObject({ operationKey: parent.operationKey });
-  expect(() =>
-    a.verifiedRemoteParentExecution(receiver, assertion, {
-      transportPrincipal: "host-cli",
-      operationKey: child.operationKey,
-      operationFingerprint: hash,
-      kind: body.kind,
-      requestedDeadlineAt: deadlineAt,
-    }),
-  ).toThrow(/mismatch/);
-  await expect(
-    a.attestParentExecution(authority, { ...plan, childId: receiver.role }),
-  ).rejects.toThrow(/replay/);
-  a.closeControlInstallation(receiver);
-  a.closeControlInstallation(installation);
+it("lets data-manager admit a deadline-only child only from the agent's token", async () => {
+  const f = await deadlineFamily();
+  try {
+    const delegation = await f.grant();
+    // data-manager trusts the agent's token and the child it states.
+    expect(f.admit(delegation)).toMatchObject({ operationKey: f.execution.operationKey });
+    expect(() => f.c.inspectRemoteDelegation(f.dm, delegation, "host-cli")).toThrow(/mismatch/);
+    expect(() =>
+      f.c.inspectRemoteDelegation(f.dm, { ...delegation, phase: "hardlinks" }, "ops-agent"),
+    ).toThrow(/mismatch/);
+  } finally {
+    f.c.closeControlInstallation(f.dm);
+    f.c.closeControlInstallation(f.agent);
+  }
 });
 it("service manifests mount no control keys and data-manager mounts only its own private records", () => {
   const repo = join(import.meta.dirname, "../../../..");
@@ -186,7 +98,7 @@ it("service manifests mount no control keys and data-manager mounts only its own
     readOnly: false,
   });
 });
-it("verifies the certified ephemeral fixed-CLI deadline chain without exporting a role key", async () => {
+it("lets a fixed CLI child without a lease follow its parent's lifecycle", async () => {
   const c = await api();
   const { randomUUID } = await import("node:crypto");
   const { executionFingerprint } = await import("../ops/execution-identity");
@@ -274,32 +186,23 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     plan: [planned],
   });
   const id = randomUUID();
-  const childId = c.prepareFixedControlChild(authority, id);
-  const assertion = await c.attestParentExecution(authority, {
-    ...planned,
-    childId,
-  });
   const args = c.fixedCliArguments(operation);
   c.retainFixedCliSpawnIntent(authority, {
-    delegationId: id,
+    childKey: id,
     execution: cli,
     operation,
     args,
     plan: [leaf],
   });
-  const fixed = c.openFixedChildInstallation({ infraDir: root, assertion });
+  const delegation = await c.attestParentExecution(authority, { ...planned, childKey: id });
+  expect(delegation).toMatchObject({ leaseId: null, childKey: id });
+  const fixed = c.openFixedChildInstallation({
+    infraDir: root,
+    child: { leaseId: null, childKey: id },
+  });
   expect(c.controlIdentity(fixed)).toBe(id);
   const intent = c.readFixedCliSpawnIntent(fixed, cli, args);
-  const peer = c.verifyFixedCliControlPeer(fixed, {
-    assertion,
-    execution: cli,
-    kind: operation.kind,
-  });
-  const parent = c.verifyParentExecution(assertion, peer, {
-    execution: cli,
-    kind: operation.kind,
-    requestedDeadlineAt: deadlineAt,
-  });
+  const parent = c.verifiedRetainedControlParent(fixed, intent.parent);
   const cliAuthority = c.retainAdmittedControlExecution(fixed, {
     requestedDeadlineAt: cli.deadlineAt,
     execution: cli,
@@ -310,18 +213,8 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     serviceIds: intent.serviceIds,
     plan: intent.plan,
   });
-  const next = await c.attestParentExecution(cliAuthority, {
-    ...leaf,
-    childId: dm.role,
-  });
-  const remoteParent = () =>
-    c.verifiedRemoteParentExecution(dm, next, {
-      transportPrincipal: "ops-agent",
-      operationKey: child.operationKey,
-      operationFingerprint: childHash,
-      kind: body.kind,
-      requestedDeadlineAt: deadlineAt,
-    }).parent;
+  const next = await c.attestParentExecution(cliAuthority, leaf);
+  const remoteParent = () => c.inspectRemoteDelegation(dm, next, "ops-agent").parent;
   expect(remoteParent()).toMatchObject({ operationKey: cli.operationKey });
   c.cancelControlExecution(authority);
   expect(() => c.assertControlExecutionForward(cliAuthority)).toThrow(/ancestor|observation/);
@@ -334,6 +227,7 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
 
 async function deadlineFamily() {
   const c = await api();
+  const phase = await import("./child-phase");
   const { randomUUID } = await import("node:crypto");
   const { executionFingerprint } = await import("../ops/execution-identity");
   const { opsOperationFingerprint } = await import("../ops/fingerprint");
@@ -360,28 +254,20 @@ async function deadlineFamily() {
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
   };
-  const hash = c.controlDigest({ kind: "download-osm", regionId: "europe/germany" });
-  const child = {
-    executor: "data-manager" as const,
-    principal: "data-manager" as const,
-    executionId: randomUUID(),
-    operationKey: c.controlChildOperationKey(execution.operationKey, "osm", 0),
-    operationFingerprint: hash,
-    deadlineAt,
-    fingerprint: executionFingerprint({
-      kind: "download-osm",
-      operationFingerprint: hash,
-      deadlineAt,
-      parent: c.retainedControlParent(execution),
-    }),
-  };
-  const plan = {
+  const reservation = {
+    version: 1 as const,
     phase: "osm" as const,
     ordinal: 0,
     kind: "download-osm",
-    execution: child,
-    serviceIds: ["osrm"],
     recipient: "data-manager" as const,
+    serviceIds: ["osrm"],
+    operationFingerprint: c.controlDigest({ kind: "download-osm", regionId: "europe/germany" }),
+    execution: {
+      executor: "data-manager" as const,
+      principal: "data-manager" as const,
+      executionId: randomUUID(),
+      operationKey: c.controlChildOperationKey(execution.operationKey, "osm", 0),
+    },
   };
   const authority = c.retainAdmittedControlExecution(agent, {
     requestedDeadlineAt: execution.deadlineAt,
@@ -390,18 +276,15 @@ async function deadlineFamily() {
     kind: operation.kind,
     admittedAt: deadlineAt - 60000,
     serviceIds: ["osrm"],
-    plan: [plan],
+    reservations: [reservation],
   });
-  const grant = () => c.attestParentExecution(authority, { ...plan, childId: dm.role });
-  const admit = (assertion: string) =>
-    c.verifiedRemoteParentExecution(dm, assertion, {
-      transportPrincipal: "ops-agent",
-      operationKey: child.operationKey,
-      operationFingerprint: hash,
-      kind: plan.kind,
-      requestedDeadlineAt: deadlineAt,
-    }).parent;
-  return { c, agent, dm, authority, execution, child, grant, admit };
+  const grant = async () => {
+    await phase.bindControlChildPhase(authority, reservation);
+    return (await phase.issueControlChildPhase(authority, { phase: "osm", ordinal: 0 })).delegation;
+  };
+  const admit = (delegation: Awaited<ReturnType<typeof grant>>) =>
+    c.inspectRemoteDelegation(dm, delegation, "ops-agent").parent;
+  return { c, agent, dm, authority, execution, grant, admit };
 }
 it("terminal deadline-only parent cannot mint an unattempted child", async () => {
   const f = await deadlineFamily();
@@ -426,7 +309,7 @@ it.each([false, true])(
       // The parent cancels the returned children over data-manager's route.
       const children = f.c.cancelControlExecution(f.authority);
       expect(children).toHaveLength(attempted ? 1 : 0);
-      await expect(f.grant()).rejects.toThrow(/cancel|forward|replay/);
+      await expect(f.grant()).rejects.toThrow(/cancel|forward|observation/);
       expect(() => f.c.beginControlEffect(f.authority)).toThrow(/cancel|forward/);
     } finally {
       f.c.closeControlInstallation(f.dm);
@@ -439,14 +322,14 @@ it("expired exact deadline-only adoption stays observable without renewing one-u
   const f = await deadlineFamily();
   const { vi } = await import("vitest");
   try {
-    const assertion = await f.grant();
-    const admitted = f.admit(assertion);
+    const delegation = await f.grant();
+    const admitted = f.admit(delegation);
     const clock = vi
       .spyOn(Date, "now")
       .mockReturnValue(f.execution.deadlineAt + 96 * 60 * 60 * 1000);
     try {
-      expect(f.admit(assertion)).toEqual(admitted);
-      await expect(f.grant()).rejects.toThrow(/Expired/);
+      expect(f.admit(delegation)).toEqual(admitted);
+      await expect(f.grant()).rejects.toThrow(/Expired|observation/);
       expect(
         existsSync(
           join(root, `state/ops-agent/control/executions/${f.execution.operationKey}.json`),

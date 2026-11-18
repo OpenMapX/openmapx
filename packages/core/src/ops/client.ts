@@ -535,7 +535,8 @@ export class OpsClient {
       operationKey?: string;
       signal?: AbortSignal;
       execution?: { requestedDeadlineAt: number };
-      controlAssertion?: string;
+      /** The child row data-manager recorded for this operation in the agent's lease store. */
+      leaseChild?: { leaseId: string; childKey: string };
       parentAssertion?: string;
       /** A configuration apply's payload, which its operation names by digest. */
       payload?: TrustedConfigurationPayload;
@@ -560,6 +561,7 @@ export class OpsClient {
       operation,
       ...(options.payload ? { payload: options.payload } : {}),
       ...(options.execution ? { execution: options.execution } : {}),
+      ...(options.leaseChild ? { leaseChild: options.leaseChild } : {}),
     };
     const timeoutSignal = AbortSignal.timeout(
       opsRequestTimeoutMs(operation.kind, this.configuredRequestTimeoutMs),
@@ -574,9 +576,6 @@ export class OpsClient {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
-          ...(options.controlAssertion
-            ? { "x-openmapx-control-delegation": options.controlAssertion }
-            : {}),
           ...(options.parentAssertion
             ? { "x-openmapx-parent-execution": options.parentAssertion }
             : {}),

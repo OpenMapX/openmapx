@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { constants, realpathSync } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { type ControlAdoption, controlAdoptionSchema } from "@openmapx/core/build-artifacts";
+import { type LeaseChildRef, leaseChildRefSchema } from "@openmapx/core/build-artifacts";
 import {
   OPS_KIND_POLICIES,
   OPS_PROTOCOL_VERSION,
@@ -46,7 +46,8 @@ const ERROR_CLASSES = new Set<OpsErrorClass>(
 );
 
 export interface PersistedOpsJob {
-  controlAdoption?: ControlAdoption;
+  /** A data-manager child: its row in the lease store, under data-manager's lease. */
+  leaseChild?: LeaseChildRef;
   executionVersion: 2;
   requestVersion: typeof OPS_PROTOCOL_VERSION;
   admittedAt: number;
@@ -126,7 +127,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   if (
     !exactKeys(raw, [
       "executionVersion",
-      "controlAdoption",
+      "leaseChild",
       "requestVersion",
       "admittedAt",
       "deadlineAt",
@@ -172,7 +173,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   ) {
     throw new Error("invalid");
   }
-  if (raw.controlAdoption !== undefined) controlAdoptionSchema.parse(raw.controlAdoption);
+  if (raw.leaseChild !== undefined) leaseChildRefSchema.parse(raw.leaseChild);
   const operation = opsOperationSchema.parse(raw.operation);
   if (
     opsOperationFingerprint(operation) !== raw.operationFingerprint ||

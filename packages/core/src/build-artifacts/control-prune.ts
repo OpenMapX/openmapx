@@ -5,9 +5,9 @@
  * lease it owns or borrowed has released its root, and no unfinished
  * maintenance owner record names it. Only records whose names derive from the
  * execution's own identifiers go: its operation key, the child keys it planned
- * (unless the child has an admission of its own), and the lease, delegation and
- * attempt IDs read from its own records. A maintenance owner record goes only
- * with its own preparation. Executions whose outcome is unknown, including
+ * (unless the child has an admission of its own) and the spawn records of the
+ * fixed children it started. A maintenance owner record goes only with its own
+ * preparation. Executions whose outcome is unknown, including
  * those that need recovery, are kept.
  *
  * Deletions are independent and can be repeated. Readers never treat a
@@ -33,18 +33,10 @@ import { rootLeaseId } from "./target-lease";
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
 /** Namespaces swept by name. `executions` and `effects` go last; `configuration-maintenance` goes with its preparation. */
 const NAMESPACES = [
-  "children",
   "effect-started",
   "observations",
-  "leases",
-  "attempts",
-  "adoptions",
-  "parent-attempts",
-  "parent-adoptions",
-  "execution-parents",
   "spawns",
   "spawn-started",
-  "execution-adoptions",
   "hardlinks",
   "catalog-commits",
 ] as const;
@@ -59,25 +51,13 @@ const admissionSchema = z
       .object({ maintenanceId: z.uuid().optional(), handoffId: z.uuid().optional() })
       .passthrough()
       .optional(),
-    parent: z.record(z.string(), z.unknown()).optional(),
+    leaseChild: z.object({ leaseId: z.uuid() }).passthrough().optional(),
     plan: z.array(childSchema).optional(),
     reservations: z.array(childSchema).optional(),
   })
   .passthrough();
 type Admission = z.infer<typeof admissionSchema>;
-const leaseReferenceSchema = z.object({ leaseId: z.uuid() }).passthrough();
-const adoptionReferenceSchema = z
-  .object({ leaseId: z.uuid(), delegationId: z.uuid() })
-  .passthrough();
-const borrowedSchema = z
-  .object({ execution: executionRefSchema, assertion: z.string() })
-  .passthrough();
-const lifecycleSchema = z
-  .object({
-    childIntents: z.record(z.string(), z.unknown()).optional(),
-    leaseIntents: z.record(z.string(), z.unknown()).optional(),
-  })
-  .passthrough();
+const spawnSchema = z.object({ parent: z.object({ operationKey: z.string() }) }).passthrough();
 const lifecycleReceiptSchema = z.object({
   seed: z.object({ root: z.object({ operationKey: z.string() }) }),
 });
@@ -148,49 +128,20 @@ function mtime(dir: AnchoredDirectory, name: string): number | null {
 function witnessDirectory(local: InstallationState): string {
   return join(local.privateRoot.path, "execution-witnesses", local.installation.role);
 }
-function assertionLeaseId(assertion: string): string {
-  return leaseReferenceSchema.parse(
-    JSON.parse(Buffer.from(assertion, "base64url").toString("utf8")),
-  ).leaseId;
-}
-type Borrowed = { leaseId: string; delegationId: string }[];
-/** Borrower adoptions by operation key, read once per pass; null when an entry
- * is unreadable, so no execution is taken for unleased. */
-function adoptionIndex(local: InstallationState, onFull: () => void): Map<string, Borrowed> | null {
-  const index = new Map<string, Borrowed>();
-  let unreadable = false;
-  withNamespace(local, "adoptions", (dir) => {
+/** The fixed children each parent started, by the parent's operation key. */
+function spawnIndex(local: InstallationState, onFull: () => void): Map<string, string[]> {
+  const index = new Map<string, string[]>();
+  withNamespace(local, "spawns", (dir) => {
     for (const entry of entries(dir, onFull))
       try {
-        const value = borrowedSchema.parse(JSON.parse(dir.read(entry, 65536).toString("utf8")));
-        const key = value.execution.operationKey;
-        index.set(key, [
-          ...(index.get(key) ?? []),
-          {
-            leaseId: assertionLeaseId(value.assertion),
-            delegationId: entry.replace(/\.json$/, ""),
-          },
-        ]);
+        const parent = spawnSchema.parse(JSON.parse(dir.read(entry, 65536).toString("utf8"))).parent
+          .operationKey;
+        index.set(parent, [...(index.get(parent) ?? []), entry.replace(/\.json$/, "")]);
       } catch {
-        unreadable = true;
+        /* An unreadable spawn record stays. */
       }
   });
-  return unreadable ? null : index;
-}
-/** Leases this execution borrowed, with the delegation it adopted. */
-function borrowedLeases(
-  local: InstallationState,
-  admitted: Admission,
-  name: string,
-  adoptions: Map<string, Borrowed>,
-): Borrowed {
-  const fence = optional(() =>
-    adoptionReferenceSchema.parse(readPrivateRecord(local, "execution-adoptions", name, 8192)),
-  );
-  return [
-    ...(fence ? [{ leaseId: fence.leaseId, delegationId: fence.delegationId }] : []),
-    ...(adoptions.get(admitted.execution.operationKey) ?? []),
-  ];
+  return index;
 }
 /** The execution and the identifiers of its own records, when they may go. */
 async function prunable(
@@ -198,8 +149,7 @@ async function prunable(
   local: InstallationState,
   name: string,
   now: number,
-  onFull: () => void,
-  adoptions: () => Map<string, Borrowed> | null,
+  spawns: () => Map<string, string[]>,
 ): Promise<Prunable | null> {
   const admitted = admissionSchema.parse(readPrivateRecord(local, "executions", name, 65536));
   const key = admitted.execution.operationKey;
@@ -238,49 +188,10 @@ async function prunable(
       add(["*"], child.execution.operationKey);
   add(["hardlinks"], admitted.execution.executionId);
   if (admitted.operation?.handoffId) add(["observations"], admitted.operation.handoffId);
-  // Fixed children it prepared: their key, spawn and key index records.
-  const fixed = optional(() => {
-    const witnesses = new AnchoredDirectory(witnessDirectory(local));
-    try {
-      return z
-        .array(z.uuid())
-        .parse(JSON.parse(witnesses.read(`${key}.keys.json`, 4096).toString("utf8")));
-    } finally {
-      witnesses.close();
-    }
-  });
-  for (const id of fixed ?? []) {
-    add(["children", "spawns", "spawn-started"], id);
-  }
-  // As a child: the parent attempt it adopted.
-  for (const field of ["attemptId", "delegationId"])
-    if (typeof admitted.parent?.[field] === "string")
-      add(["parent-adoptions"], admitted.parent[field]);
-  // As a parent: the attempts and leases it issued.
-  const issued = ["attempts", "children", "parent-attempts", "leases"] as const;
-  const lifecycle = optional(() => {
-    const witnesses = new AnchoredDirectory(witnessDirectory(local));
-    try {
-      return lifecycleSchema.parse(
-        JSON.parse(witnesses.read(`${key}.lifecycle.json`, 65536).toString("utf8")),
-      );
-    } finally {
-      witnesses.close();
-    }
-  });
-  for (const id of [
-    ...Object.keys(lifecycle?.childIntents ?? {}),
-    ...Object.keys(lifecycle?.leaseIntents ?? {}),
-  ])
-    add(issued, id);
-  // As a borrower: only its own adoption record, once the lease is released.
-  const index = adoptions();
-  if (!index) return null;
-  // A lease is released once its row is gone from the store.
-  for (const lease of borrowedLeases(local, admitted, name, index)) {
-    if (await local.leases.read(lease.leaseId)) return null;
-    add(["adoptions"], lease.delegationId);
-  }
+  // Fixed children it started: their spawn records.
+  for (const id of spawns().get(key) ?? []) add(["spawns", "spawn-started"], id);
+  // As a child under another holder's lease: that lease must be released.
+  if (admitted.leaseChild && (await local.leases.read(admitted.leaseChild.leaseId))) return null;
   // Its own root lease must be gone from the store.
   if (await local.leases.read(rootLeaseId(admitted.execution))) return null;
   if (ownerRecord && preparation) {
@@ -371,15 +282,15 @@ export async function pruneControlRecords(
     batch = [...names.slice(start), ...names.slice(0, start)].slice(0, limit);
   cursors.set(local, start + batch.length);
   const found: Prunable[] = [];
-  let index: Map<string, Borrowed> | null | undefined;
-  const adoptions = () => {
-    if (index === undefined) index = adoptionIndex(local, onFull);
+  let index: Map<string, string[]> | undefined;
+  const spawns = () => {
+    index ??= spawnIndex(local, onFull);
     return index;
   };
   for (const name of batch) {
     if (options.keep?.(name.replace(/\.json$/, ""))) continue;
     try {
-      const value = await prunable(installation, local, name, now, onFull, adoptions);
+      const value = await prunable(installation, local, name, now, spawns);
       if (value) found.push(value);
     } catch {
       /* An unreadable or unverifiable record is kept. */

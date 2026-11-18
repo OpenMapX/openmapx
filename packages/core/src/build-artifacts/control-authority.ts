@@ -86,7 +86,11 @@ import {
   originalConfigurationGenerationNonCommitSource,
 } from "../services/configuration-generation";
 import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
-import { dataExecutionStatusSchema } from "../services/data-manager/contracts/executions";
+import {
+  type DataControlDelegation,
+  dataControlDelegationSchema,
+  dataExecutionStatusSchema,
+} from "../services/data-manager/contracts/executions";
 import type { DataManagerTransport } from "../services/data-manager/transport";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
@@ -125,8 +129,7 @@ const PRIVATE_RECORD_BYTES = 131072;
 declare const authorityBrand: unique symbol,
   peerBrand: unique symbol,
   settlementBrand: unique symbol,
-  recoveryBrand: unique symbol,
-  assertionBrand: unique symbol;
+  recoveryBrand: unique symbol;
 export type VerifiedExecutionAuthority = Readonly<{
   execution: ExecutionRef;
   [authorityBrand]: true;
@@ -134,7 +137,6 @@ export type VerifiedExecutionAuthority = Readonly<{
 export type VerifiedControlPeer = Readonly<{ [peerBrand]: true }>;
 export type VerifiedChildSettlement = Readonly<{ [settlementBrand]: true }>;
 export type VerifiedRecoveryAuthority = Readonly<{ [recoveryBrand]: true }>;
-export type ArtifactDelegationAssertion = string & { readonly [assertionBrand]: true };
 export type ChildSettlement = {
   identity: ExecutionRef;
   outcome: "contained" | "committed" | "failed_without_effect" | "unknown";
@@ -296,19 +298,11 @@ export function writePrivateRecord(
     if (
       ![
         "executions",
-        "children",
         "effects",
         "effect-started",
         "observations",
-        "leases",
-        "attempts",
-        "adoptions",
-        "parent-attempts",
-        "parent-adoptions",
-        "execution-parents",
         "spawns",
         "spawn-started",
-        "execution-adoptions",
         "configuration-maintenance",
         "maintenance",
         "hardlinks",
@@ -393,6 +387,8 @@ export function retainAdmittedControlExecution(
     admittedAt: number;
     requestedDeadlineAt?: number;
     parent?: RetainedParentExecution;
+    /** The child row this execution runs as, under another holder's lease. */
+    leaseChild?: LeaseChildRef;
     serviceIds: readonly string[];
     plan?: readonly ControlPlannedChild[];
     reservations?: readonly ControlChildReservation[];
@@ -400,6 +396,7 @@ export function retainAdmittedControlExecution(
   },
 ): VerifiedExecutionAuthority {
   const state = installationState(installation);
+  if (input.leaseChild) leaseChildRefSchema.parse(input.leaseChild);
   const execution = Object.freeze(executionRefSchema.parse(input.execution));
   const serviceIds = targetSchema.parse(input.serviceIds);
   if (
@@ -669,9 +666,7 @@ export interface PeerState {
   recipient: ControlRecipient;
   execution: ExecutionRef;
   kind: string;
-  assertion: string;
-  /** The recipient: a role name, or a fixed child's id. */
-  childId: string;
+  leaseChild: LeaseChildRef;
 }
 const peers = new WeakMap<object, PeerState>();
 export function controlPeerState(peer: VerifiedControlPeer) {
@@ -679,61 +674,37 @@ export function controlPeerState(peer: VerifiedControlPeer) {
   if (!s) throw Error("Unverified control peer");
   return s;
 }
-const delegatedRowSchema = z.strictObject({
-  key: uuid,
-  parentKey: uuid.nullable(),
-  parent: executionRefSchema,
-  execution: executionRefSchema,
-  kind: z.string().max(128),
-  phase: z.string().max(64),
-  recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
-  targets: targetSchema,
-});
+/** A child in the agent's lease store: the lease and the child's row. */
+export type LeaseChildRef = Readonly<{ leaseId: string; childKey: string }>;
+export const leaseChildRefSchema = z.strictObject({ leaseId: uuid, childKey: uuid });
 /**
- * A child row of the agent's lease store, sent to the child's recipient. A
- * recipient that reads the store checks the row there; data-manager cannot and
- * trusts the caller it authenticated by token instead.
+ * A child that a role which cannot read the lease store (data-manager) runs,
+ * as its issuer states it. The caller's token says who sent it.
  */
-const assertionSchema = z
-  .strictObject({
-    version: z.literal(2),
-    leaseId: uuid,
-    delegationId: uuid,
-    grantDigest: digest,
-    owner: executionRefSchema,
-    origin: controlOriginSchema,
-    grant: delegatedRowSchema,
-  })
-  .refine(
-    (value) =>
-      value.grant.key === value.delegationId && controlDigest(value.grant) === value.grantDigest,
-  );
-export function encodeControlAssertion(
-  fields: Omit<z.infer<typeof assertionSchema>, "version" | "grantDigest">,
-): ArtifactDelegationAssertion {
-  return Buffer.from(
-    canonicalJson(
-      assertionSchema.parse({ version: 2, ...fields, grantDigest: controlDigest(fields.grant) }),
-    ),
-  ).toString("base64url") as ArtifactDelegationAssertion;
-}
+export type ControlDelegation = DataControlDelegation;
 /**
- * The delegation data-manager received from the agent or the host CLI. The
+ * The child data-manager received from the agent or the host CLI. The
  * caller's token says who sent it; data-manager never reads the lease store.
+ * A child without a lease runs under its parent's deadline only.
  */
 export function inspectRemoteDelegation(
   installation: ControlInstallation,
-  rawHeaders: readonly string[],
+  value: ControlDelegation,
   transportPrincipal: ControlTransportPrincipal,
 ) {
   if (installation.role !== "data-manager") throw Error("Data-manager receiver required");
-  const { delegation, parent } = controlHeaders(rawHeaders);
-  if (!delegation || parent) throw Error("Delegation required");
-  const parsed = parseControlAssertion(delegation),
-    issuer = parsed.grant.parent.executor;
+  const delegation = dataControlDelegationSchema.parse(value),
+    issuer = delegation.parent.executor;
   if (
-    parsed.grant.recipient !== "data-manager" ||
-    parsed.grant.execution.executor !== "data-manager" ||
+    delegation.execution.executor !== "data-manager" ||
+    !Object.hasOwn(childPhaseKinds, delegation.phase) ||
+    !childPhaseKinds[delegation.phase as ControlChildPhase].includes(delegation.kind) ||
+    delegation.execution.deadlineAt > delegation.parent.deadlineAt ||
+    (delegation.leaseId === null
+      ? !["osm", "transit", "fonts", "data-step"].includes(delegation.phase) ||
+        delegation.targets.length !== 0 ||
+        controlDigest(delegation.owner) !== controlDigest(delegation.parent)
+      : delegation.targets.length === 0) ||
     !(
       (transportPrincipal === "ops-agent" && (issuer === "ops-agent" || issuer === "host-cli")) ||
       (transportPrincipal === "host-cli" && issuer === "host-cli")
@@ -741,205 +712,86 @@ export function inspectRemoteDelegation(
   )
     throw Error("Delegation caller mismatch");
   const verifiedParent = Object.freeze(
-    retainedControlParent(parsed.grant.parent),
+    retainedControlParent(delegation.parent),
   ) as import("../ops/execution-identity").VerifiedParentExecution;
   verifiedParents.add(verifiedParent);
-  verifiedParentOrigins.set(verifiedParent, parsed.origin);
+  verifiedParentOrigins.set(verifiedParent, delegation.origin);
   return Object.freeze({
-    assertion: delegation,
-    leaseId: parsed.leaseId,
-    delegationId: parsed.delegationId,
-    owner: parsed.owner,
-    origin: parsed.origin,
-    parent: parsed.grant.parent,
+    delegation,
+    leaseId: delegation.leaseId,
+    childKey: delegation.childKey,
+    owner: delegation.owner,
+    origin: delegation.origin,
+    parent: delegation.parent,
     verifiedParent,
-    execution: parsed.grant.execution,
-    kind: parsed.grant.kind,
-    phase: parsed.grant.phase,
-    serviceIds: Object.freeze([...parsed.grant.targets]),
+    execution: delegation.execution,
+    kind: delegation.kind,
+    phase: delegation.phase,
+    serviceIds: Object.freeze([...delegation.targets]),
   });
-}
-export function parseControlAssertion(assertion: string) {
-  if (Buffer.byteLength(assertion) > 4096 || !/^[A-Za-z0-9_-]+$/.test(assertion))
-    throw Error("Invalid control assertion encoding/limit");
-  const bytes = Buffer.from(assertion, "base64url");
-  if (bytes.toString("base64url") !== assertion) throw Error("Invalid control assertion encoding");
-  const parsed = assertionSchema.parse(
-    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
-  );
-  if (Buffer.from(canonicalJson(parsed)).toString("base64url") !== assertion)
-    throw Error("Noncanonical control assertion");
-  return parsed;
-}
-export function controlHeaders(rawHeaders: readonly string[]): {
-  delegation?: string;
-  parent?: string;
-} {
-  const found = new Map<string, string>();
-  for (let i = 0; i < rawHeaders.length; i += 2) {
-    const name = rawHeaders[i]?.toLowerCase();
-    if (!["x-openmapx-control-delegation", "x-openmapx-parent-execution"].includes(name)) continue;
-    if (found.has(name) || typeof rawHeaders[i + 1] !== "string")
-      throw Error("Duplicate control header");
-    const value = rawHeaders[i + 1];
-    if (value === undefined) throw Error("Missing control header value");
-    found.set(name, value);
-  }
-  const delegation = found.get("x-openmapx-control-delegation"),
-    parent = found.get("x-openmapx-parent-execution");
-  if (
-    (delegation?.length ?? 0) + (parent?.length ?? 0) > 8192 ||
-    (delegation?.length ?? 0) > 4096 ||
-    (parent?.length ?? 0) > 4096
-  )
-    throw Error("Control header limit");
-  return { delegation, parent };
 }
 /** The caller a receiver authenticated by its own bearer token. */
 export type ControlTransportPrincipal = "data-manager" | "api" | "ops-agent" | "host-cli";
-/** Transport authentication is required by the fixed caller. Record checks finish during anchored adoption. */
+/** The agent's receiver for a child data-manager issued in the agent's lease store. */
 export function verifyControlPeer(
   installation: ControlInstallation,
   input: {
-    rawHeaders: readonly string[];
+    leaseChild: LeaseChildRef;
     transportPrincipal: ControlTransportPrincipal;
     execution: ExecutionRef;
     kind: string;
   },
 ): VerifiedControlPeer {
   const state = installationState(installation);
-  const headers = controlHeaders(input.rawHeaders);
-  const assertionText = headers.delegation ?? headers.parent;
-  if (!assertionText) throw Error("Missing control assertion");
-  if (headers.delegation) parseControlAssertion(assertionText);
-  else parseParentAssertion(assertionText);
-  if (installation.role === "ops-agent" && input.transportPrincipal !== "data-manager")
-    throw Error("Wrong peer transport principal");
-  if (installation.role === "host-cli") throw Error("Host CLI is not an HTTP receiver");
-  if (installation.role === "data-manager" && input.transportPrincipal === "data-manager")
+  if (installation.role !== "ops-agent" || input.transportPrincipal !== "data-manager")
     throw Error("Wrong peer transport principal");
   const peer = Object.freeze({}) as VerifiedControlPeer;
   peers.set(peer, {
     installation: state,
-    role: installation.role === "ops-agent" ? "data-manager" : "ops-agent",
-    recipient: installation.role,
+    role: "data-manager",
+    recipient: "ops-agent",
     execution: executionRefSchema.parse(input.execution),
     kind: input.kind,
-    assertion: assertionText,
-    childId: installation.role,
+    leaseChild: leaseChildRefSchema.parse(input.leaseChild),
   });
   return peer;
 }
-/** Same-agent maintenance continuations must match this role's private attempted intent. */
-export function verifyRetainedLocalControlPeer(
+/** A maintenance step the agent issued to itself under the maintenance's lease. */
+export function verifyLocalControlPeer(
   installation: ControlInstallation,
-  input: { assertion: string; execution: ExecutionRef; kind: string },
+  input: { leaseChild: LeaseChildRef; execution: ExecutionRef; kind: string },
 ): VerifiedControlPeer {
   const state = installationState(installation);
-  const assertion = parseControlAssertion(input.assertion);
   if (installation.role !== "ops-agent" || state.fixedChildId)
     throw Error("Local agent continuation required");
-  const saved = z
-    .object({
-      assertion: z.string(),
-      grant: z.object({ execution: executionRefSchema, kind: z.string() }),
-    })
-    .parse(readPrivateRecord(state, "attempts", `${assertion.delegationId}.json`));
-  if (
-    saved.assertion !== input.assertion ||
-    saved.grant.kind !== input.kind ||
-    controlDigest(saved.grant.execution) !== controlDigest(input.execution)
-  )
-    throw Error("Local continuation intent mismatch");
   const peer = Object.freeze({}) as VerifiedControlPeer;
   peers.set(peer, {
     installation: state,
     role: "ops-agent",
     local: true,
     recipient: "ops-agent",
-    execution: input.execution,
+    execution: executionRefSchema.parse(input.execution),
     kind: input.kind,
-    assertion: input.assertion,
-    childId: installation.role,
+    leaseChild: leaseChildRefSchema.parse(input.leaseChild),
   });
   return peer;
 }
-export function prepareFixedControlChild(
-  authority: VerifiedExecutionAuthority,
-  delegationId: string,
-): string {
-  uuid.parse(delegationId);
-  const s = executionAuthorityState(authority);
-  if (s.installation.installation.role !== "ops-agent")
-    throw Error("Only agent prepares fixed children");
-  withExecutionWriter(s.installation, s.execution, (dir) => {
-    const name = `${s.execution.operationKey}.keys.json`;
-    let ids: string[] = [];
-    try {
-      ids = z
-        .array(uuid)
-        .max(64)
-        .parse(JSON.parse(dir.read(name, 4096).toString("utf8")));
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    }
-    if (
-      ids.length >= Math.min(64, s.plan.length + s.reservations.length) ||
-      ids.includes(delegationId)
-    )
-      throw Error("Fixed child capacity/replay");
-    dir.write(name, canonicalJson([...ids, delegationId]));
-  });
-  writePrivateRecord(
-    s.installation,
-    "children",
-    `${delegationId}.json`,
-    { delegationId, execution: s.execution },
-    true,
-  );
-  return delegationId;
-}
-const fixedChildSchema = z.strictObject({ delegationId: uuid, execution: executionRefSchema });
-export function fixedControlChildId(
-  state: InstallationState,
-  childId: string,
-  parent: ExecutionRef,
-): string {
-  const saved = fixedChildSchema.parse(
-    readPrivateRecord(state, "children", `${uuid.parse(childId)}.json`, 2048),
-  );
-  if (saved.delegationId !== childId || controlDigest(saved.execution) !== controlDigest(parent))
-    throw Error("Fixed child parent mismatch");
-  return saved.delegationId;
-}
+/** The agent's fixed CLI child, which the agent recorded before spawning it. */
 export function verifyFixedCliControlPeer(
   installation: ControlInstallation,
-  input: {
-    assertion: string;
-    execution: ExecutionRef;
-    kind: string;
-    recipient?: "fixed-cli" | "configuration-helper";
-  },
+  input: { leaseChild: LeaseChildRef; execution: ExecutionRef; kind: string },
 ): VerifiedControlPeer {
   const state = installationState(installation);
-  const encoded = JSON.parse(Buffer.from(input.assertion, "base64url").toString("utf8")) as {
-    leaseId?: unknown;
-  };
-  const assertion = encoded.leaseId
-    ? parseControlAssertion(input.assertion)
-    : parseParentAssertion(input.assertion);
-  const fixedId = "delegationId" in assertion ? assertion.delegationId : assertion.attemptId;
-  if (installation.role !== "ops-agent") throw Error("Invalid fixed CLI installation");
-  fixedChildSchema.parse(readPrivateRecord(state, "children", `${uuid.parse(fixedId)}.json`, 2048));
+  if (installation.role !== "ops-agent" || state.fixedChildId !== input.leaseChild.childKey)
+    throw Error("Invalid fixed CLI installation");
   const peer = Object.freeze({}) as VerifiedControlPeer;
   peers.set(peer, {
     installation: state,
     role: "ops-agent",
-    recipient: input.recipient ?? "fixed-cli",
+    recipient: "fixed-cli",
     execution: executionRefSchema.parse(input.execution),
     kind: input.kind,
-    assertion: input.assertion,
-    childId: fixedId,
+    leaseChild: leaseChildRefSchema.parse(input.leaseChild),
   });
   return peer;
 }
@@ -1882,127 +1734,6 @@ export function loadControlStartup(options: Parameters<typeof openControlInstall
     return { reason: CONTROL_RECOVERY_INSTRUCTIONS };
   }
 }
-export const controlAdoptionSchema = z.strictObject({
-  leaseId: uuid,
-  delegationId: uuid,
-  phase: z.enum(["pending-adoption", "ready", "recovery_required"]),
-});
-export type ControlAdoption = z.infer<typeof controlAdoptionSchema>;
-
-/** What a recipient in another role needs to know about the parent: it trusts
- * the parent's authenticated caller, never a file of the parent's role. */
-const parentSummarySchema = z.strictObject({
-  origin: controlOriginSchema,
-  parent: executionRefSchema,
-  child: executionRefSchema,
-  kind: z.string().max(128),
-  phase: z.enum(["data-workflow", "osm", "transit", "fonts", "data-step"]),
-  ordinal: z.number().int().min(0).max(63),
-});
-const parentAssertionSchema = z.strictObject({
-  version: z.literal(2),
-  issuer: z.enum(CONTROL_ROLES),
-  operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-  attemptId: uuid,
-  grantDigest: digest,
-  grant: parentSummarySchema,
-});
-const parentGrantSchema = z.strictObject({
-  version: z.literal(2),
-  origin: controlOriginSchema,
-  parent: executionRefSchema,
-  child: executionRefSchema,
-  kind: z.string().max(128),
-  phase: z.enum(["data-workflow", "osm", "transit", "fonts", "data-step"]),
-  recipient: z.enum(["fixed-cli", "data-manager"]),
-  childId: z.string().max(256),
-  attemptId: uuid,
-  parentAssertion: z.string().max(4096).optional(),
-  ordinal: z.number().int().min(0).max(63),
-});
-function parentSummary(grant: z.infer<typeof parentGrantSchema>) {
-  return parentSummarySchema.parse({
-    origin: grant.origin,
-    parent: grant.parent,
-    child: grant.child,
-    kind: grant.kind,
-    phase: grant.phase,
-    ordinal: grant.ordinal,
-  });
-}
-/** Whether the parent's records are in this role's own private state. */
-function parentReadable(state: InstallationState, issuer: ControlIssuer): boolean {
-  return (
-    issuer === state.installation.role || (Boolean(state.fixedChildId) && issuer === "ops-agent")
-  );
-}
-/**
- * The parent of a data-manager execution named by an agent or host CLI caller.
- * Data-manager cannot read the caller's records; it trusts the caller it
- * authenticated by token, and the parent cancels its children explicitly.
- */
-export function verifiedRemoteParentExecution(
-  installation: ControlInstallation,
-  assertion: string,
-  input: {
-    transportPrincipal: ControlTransportPrincipal;
-    operationKey: string;
-    operationFingerprint: string;
-    kind: string;
-    requestedDeadlineAt?: number;
-  },
-): {
-  parent: import("../ops/execution-identity").VerifiedParentExecution;
-  execution: ExecutionRef;
-} {
-  const parsed = parseParentAssertion(assertion),
-    grant = parsed.grant;
-  if (
-    installation.role !== "data-manager" ||
-    parsed.issuer !== grant.parent.executor ||
-    !(
-      (input.transportPrincipal === "ops-agent" &&
-        (grant.parent.executor === "ops-agent" || grant.parent.executor === "host-cli")) ||
-      (input.transportPrincipal === "host-cli" && grant.parent.executor === "host-cli")
-    ) ||
-    grant.child.operationKey !== input.operationKey ||
-    grant.child.operationFingerprint !== input.operationFingerprint ||
-    grant.kind !== input.kind ||
-    grant.child.deadlineAt !== input.requestedDeadlineAt ||
-    grant.child.deadlineAt > grant.parent.deadlineAt ||
-    grant.child.operationKey !==
-      controlChildOperationKey(grant.parent.operationKey, grant.phase, grant.ordinal) ||
-    !childPhaseKinds[grant.phase].includes(grant.kind)
-  )
-    throw Error("Parent child identity mismatch");
-  const parent = Object.freeze(
-    retainedControlParent(grant.parent),
-  ) as import("../ops/execution-identity").VerifiedParentExecution;
-  verifiedParents.add(parent);
-  verifiedParentOrigins.set(parent, grant.origin);
-  const local = installationState(installation),
-    name = `${grant.child.operationKey}.json`;
-  try {
-    const saved = z
-      .strictObject({ assertion: z.string() })
-      .parse(readPrivateRecord(local, "execution-parents", name));
-    if (saved.assertion !== assertion) throw Error("Parent attempt replay conflict");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    writePrivateRecord(local, "execution-parents", name, { assertion }, true);
-  }
-  return { parent, execution: grant.child };
-}
-function parseParentAssertion(assertion: string) {
-  if (assertion.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(assertion))
-    throw Error("Invalid parent assertion");
-  const parsed = parentAssertionSchema.parse(
-    JSON.parse(Buffer.from(assertion, "base64url").toString("utf8")),
-  );
-  if (Buffer.from(canonicalJson(parsed)).toString("base64url") !== assertion)
-    throw Error("Noncanonical parent assertion");
-  return parsed;
-}
 function executionWitnessDirectory(state: InstallationState, issuer: ControlIssuer) {
   // Execution witnesses stay in the role's own private state. Another role
   // learns about an execution from the request that names it, never from here.
@@ -2021,18 +1752,6 @@ const lifecycleSchema = z.strictObject({
   execution: executionRefSchema,
   sequence: z.number().int().nonnegative().safe(),
   phase: z.enum(["held", "cancel_pending", "recovery_required", "settled"]),
-  childIntents: z.record(uuid, digest),
-  leaseIntents: z
-    .record(
-      uuid,
-      z.strictObject({
-        child: executionRefSchema,
-        leaseId: uuid,
-        grantDigest: digest,
-        attemptDigest: digest,
-      }),
-    )
-    .optional(),
 });
 type ExecutionLifecycle = z.infer<typeof lifecycleSchema>;
 function withExecutionWriter<T>(
@@ -2061,11 +1780,8 @@ function readLifecycle(dir: AnchoredDirectory, execution: ExecutionRef): Executi
   const current = lifecycleSchema.parse(
     JSON.parse(dir.read(`${execution.operationKey}.lifecycle.json`, 65536).toString("utf8")),
   );
-  if (
-    controlDigest(current.execution) !== controlDigest(execution) ||
-    Object.keys(current.childIntents).length + Object.keys(current.leaseIntents ?? {}).length > 64
-  )
-    throw Error("Execution lifecycle identity/capacity mismatch");
+  if (controlDigest(current.execution) !== controlDigest(execution))
+    throw Error("Execution lifecycle identity mismatch");
   return current;
 }
 function writeLifecycle(dir: AnchoredDirectory, lifecycle: ExecutionLifecycle, exclusive = false) {
@@ -2092,49 +1808,20 @@ function initializeLifecycle(
           execution,
           sequence: 0,
           phase: "held",
-          childIntents: {},
         },
         true,
       );
     }
   });
 }
-function withParentLifecycles<T>(
-  state: InstallationState,
-  assertion: string,
-  run: (forward: boolean) => T,
-): T {
-  const chain: Array<{
-    assertion: string;
-    grant: z.infer<typeof parentGrantSchema>;
-    verifier: string;
-  }> = [];
-  function collect(value: string) {
-    // A parent in another role cancels its children through their route.
-    if (!parentReadable(state, parseParentAssertion(value).issuer)) return;
-    const grant = readParentGrant(state, value);
-    if (grant.parentAssertion) collect(grant.parentAssertion);
-    const verifier = grant.parentAssertion
-      ? readParentGrant(state, grant.parentAssertion).childId
-      : grant.parent.executor;
-    chain.push({ assertion: value, grant, verifier });
-  }
-  collect(assertion);
-  function lock(index: number, forward: boolean): T {
-    const item = chain[index];
-    if (!item) return run(forward);
-    return withExecutionWriter(state, item.grant.parent, (dir) => {
-      const lifecycle = readLifecycle(dir, item.grant.parent);
-      const parsed = parseParentAssertion(item.assertion);
-      if (lifecycle.childIntents[parsed.attemptId] !== parsed.grantDigest)
-        throw Error("Missing durable lifecycle child intent");
-      return lock(
-        index + 1,
-        forward && lifecycle.phase === "held" && Date.now() < lifecycle.execution.deadlineAt,
-      );
-    });
-  }
-  return lock(0, true);
+/** Whether a fixed child's parent, which holds no lease, still permits forward effects. */
+function fixedParentForward(state: InstallationState): boolean {
+  const parent = state.fixedParent;
+  if (!parent) return true;
+  return withExecutionWriter(state, parent, (dir) => {
+    const lifecycle = readLifecycle(dir, parent);
+    return lifecycle.phase === "held" && Date.now() < parent.deadlineAt;
+  });
 }
 /** Narrow local runtime fence; exact duplicate admission alone never grants forward permission. */
 export class ControlExecutionFencedError extends Error {}
@@ -2152,16 +1839,9 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
         );
       return run();
     });
-  const assertion = retainedParentAssertion(s);
-  return assertion
-    ? withParentLifecycles(s.installation, assertion, (forward) => {
-        if (!forward)
-          throw new ControlExecutionFencedError(
-            "Canceled/terminal ancestor permits observation only",
-          );
-        return check();
-      })
-    : check();
+  if (!fixedParentForward(s.installation))
+    throw new ControlExecutionFencedError("Canceled/terminal ancestor permits observation only");
+  return check();
 }
 /** Internal publication scope. All filesystem writes complete before guards
  * release; callers may not await HTTP/DB or acquire a lease from this scope. */
@@ -2226,13 +1906,9 @@ export function withControlDelegationPublication<T>(
         publicationScopes.delete(authority);
       }
     });
-  const assertion = retainedParentAssertion(s);
-  return assertion
-    ? withParentLifecycles(s.installation, assertion, (forward) => {
-        if (!forward) throw Error("Canceled ancestor prevents grant publication");
-        return own();
-      })
-    : own();
+  if (!fixedParentForward(s.installation))
+    throw Error("Canceled ancestor prevents grant publication");
+  return own();
 }
 export function assertControlExecutionForward(authority: VerifiedExecutionAuthority): void {
   withControlExecutionForward(authority, () => {});
@@ -2243,20 +1919,6 @@ export function assertControlDelegationForward(
   phase: ControlChildPhase,
 ): void {
   withControlDelegationPublication(authority, phase, () => {});
-}
-function retainedParentAssertion(s: AuthorityState): string | undefined {
-  if (s.installation.fixedParentAssertion) return s.installation.fixedParentAssertion;
-  // Retain the exact adopted assertion with the execution, never search history.
-  try {
-    return z
-      .object({ assertion: z.string() })
-      .parse(
-        readPrivateRecord(s.installation, "execution-parents", `${s.execution.operationKey}.json`),
-      ).assertion;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
-  return undefined;
 }
 /** Persist before a runtime publishes canceled state; return original attempted child identities for cancellation/lookup. */
 export function cancelControlExecution(
@@ -2270,38 +1932,8 @@ export function cancelControlExecution(
       lifecycle.sequence++;
       writeLifecycle(dir, lifecycle);
     }
-    const children = Object.keys(lifecycle.childIntents).map((id) => {
-      const saved = z
-        .object({ grant: z.unknown() })
-        .parse(readPrivateRecord(s.installation, "parent-attempts", `${id}.json`));
-      return Object.freeze(parentGrantSchema.parse(saved.grant).child);
-    });
-    for (const [id, intent] of Object.entries(lifecycle.leaseIntents ?? {})) {
-      // The signed index is published before its private outbox. A crash in
-      // that gap retains this exact identity for cancellation/lookup.
-      let saved: unknown;
-      try {
-        saved = readPrivateRecord(s.installation, "parent-attempts", `${id}.json`, 8192);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      if (saved !== undefined && saved !== null) {
-        const parsed = z
-          .strictObject({ kind: z.literal("lease"), attempt: z.unknown() })
-          .parse(saved);
-        const value = leaseExecutionAttemptSchema.parse(parsed.attempt);
-        if (
-          controlDigest(value.origin) !== controlDigest(s.origin) ||
-          controlDigest(value.parent) !== controlDigest(s.execution) ||
-          controlDigest(parsed.attempt) !== intent.attemptDigest ||
-          controlDigest(value.child) !== controlDigest(intent.child) ||
-          value.leaseId !== intent.leaseId ||
-          value.grantDigest !== intent.grantDigest
-        )
-          throw Error("Retained lease cancellation intent changed");
-      }
-      children.push(Object.freeze({ ...intent.child }));
-    }
+    // Every child is a reserved phase, recorded as attempted before it is issued.
+    const children: ExecutionRef[] = [];
     for (const reserved of s.reservations) {
       const saved = inspectControlChildPublication(authority, reserved);
       if (saved.publication.state === "grant_prepared" && saved.binding)
@@ -2317,53 +1949,6 @@ export function cancelControlExecution(
     return Object.freeze([...distinct.values()]);
   });
 }
-const leaseExecutionAttemptSchema = z.strictObject({
-  version: z.literal(2),
-  origin: controlOriginSchema,
-  parent: executionRefSchema,
-  child: executionRefSchema,
-  leaseId: uuid,
-  delegationId: uuid,
-  grantDigest: digest,
-});
-/** Fixed lease issuer only; exact identities become cancellation-visible before
- * outbox/shared exposure, including a crash before the parent node update. */
-export function recordLeaseControlAttempt(
-  authority: VerifiedExecutionAuthority,
-  input: { child: ExecutionRef; leaseId: string; delegationId: string; grantDigest: string },
-): void {
-  const s = executionAuthorityState(authority),
-    directory = assertControlPublicationScope(authority);
-  const lifecycle = readLifecycle(directory, s.execution);
-  const leases = lifecycle.leaseIntents ?? {};
-  if (
-    Object.keys(lifecycle.childIntents).length + Object.keys(leases).length >= 64 ||
-    leases[input.delegationId]
-  )
-    throw Error("Execution cancellation intent capacity/replay");
-  const attempt = leaseExecutionAttemptSchema.parse({
-    version: 2,
-    origin: s.origin,
-    parent: s.execution,
-    ...input,
-  });
-  leases[input.delegationId] = {
-    child: input.child,
-    leaseId: input.leaseId,
-    grantDigest: input.grantDigest,
-    attemptDigest: controlDigest(attempt),
-  };
-  lifecycle.leaseIntents = leases;
-  lifecycle.sequence++;
-  writeLifecycle(directory, lifecycle);
-  writePrivateRecord(
-    s.installation,
-    "parent-attempts",
-    `${input.delegationId}.json`,
-    { kind: "lease", attempt },
-    true,
-  );
-}
 export function settleExecutionLifecycle(s: AuthorityState) {
   withExecutionWriter(s.installation, s.execution, (dir) => {
     const lifecycle = readLifecycle(dir, s.execution);
@@ -2374,6 +1959,11 @@ export function settleExecutionLifecycle(s: AuthorityState) {
     }
   });
 }
+/**
+ * Issues a child that runs only under this execution's deadline: the fixed
+ * CLI's data workflow, or a data-manager data phase. The parent holds no
+ * lease; the reserved phase records the child before it is sent.
+ */
 export async function attestParentExecution(
   authority: VerifiedExecutionAuthority,
   child: {
@@ -2381,9 +1971,9 @@ export async function attestParentExecution(
     phase: ControlChildPhase;
     serviceIds: readonly string[];
     recipient: ControlRecipient;
-    childId: string;
+    childKey?: string;
   },
-): Promise<string> {
+): Promise<ControlDelegation> {
   const s = executionAuthorityState(authority);
   if (Date.now() >= s.execution.deadlineAt) throw Error("Expired parent execution");
   const plan = resolveControlChildPlan(authority, child);
@@ -2400,128 +1990,29 @@ export async function attestParentExecution(
     throw Error("Unauthorized deadline-only edge");
   if (["osm", "transit", "fonts"].includes(child.phase) && s.kind !== "data.update")
     throw Error("Only Full Update may delegate data phases");
-  if (child.recipient === "data-manager" && child.childId !== "data-manager")
-    throw Error("Wrong child role key");
   verifyDeadlineEdge(s.kind, child.phase, child.recipient, plan.kind);
-  let attemptId: string = randomUUID();
-  if (child.recipient === "fixed-cli") {
-    attemptId = fixedControlChildId(s.installation, child.childId, s.execution);
-  }
-  const grant = parentGrantSchema.parse({
-    version: 2,
-    origin: s.origin,
+  const childKey =
+    child.recipient === "fixed-cli"
+      ? fixedChildSpawn(s.installation, uuid.parse(child.childKey), child.execution).childKey
+      : randomUUID();
+  const delegation = dataControlDelegationSchema.parse({
+    leaseId: null,
+    childKey,
+    owner: s.execution,
     parent: s.execution,
-    child: child.execution,
+    execution: child.execution,
     kind: plan.kind,
     phase: child.phase,
-    recipient: child.recipient,
-    childId: child.childId,
-    attemptId,
-    ordinal: plan.ordinal,
-    ...(s.installation.fixedParentAssertion
-      ? { parentAssertion: s.installation.fixedParentAssertion }
-      : {}),
+    targets: [],
+    origin: s.origin,
   });
-  const fields = {
-    version: 2 as const,
-    issuer: s.execution.executor,
-    operationKey: s.execution.operationKey,
-    attemptId,
-    grantDigest: controlDigest(grant),
-    grant: parentSummary(grant),
-  };
-  const assertion = Buffer.from(canonicalJson(parentAssertionSchema.parse(fields))).toString(
-    "base64url",
-  );
-  parseParentAssertion(assertion);
   return withControlDelegationPublication(authority, child.phase, (dir) => {
     const lifecycle = readLifecycle(dir, s.execution);
     if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
       throw Error("Canceled/terminal execution cannot authorize forward children");
-    const name = `${s.execution.operationKey}.children.json`;
-    let witness: Record<string, unknown> = {};
-    try {
-      witness = z
-        .record(uuid, z.unknown())
-        .parse(JSON.parse(dir.read(name, 65536).toString("utf8")));
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    }
-    for (const value of Object.values(witness)) {
-      const previous = parentGrantSchema.parse(value);
-      if (previous.child.operationKey === child.execution.operationKey)
-        throw Error("Attempted parent child cannot be replayed");
-    }
-    if (Object.keys(witness).length + Object.keys(lifecycle.leaseIntents ?? {}).length >= 64)
-      throw Error("Parent attempt capacity");
-    witness[attemptId] = grant;
-    const bytes = canonicalJson(witness);
-    if (Buffer.byteLength(bytes) > 65536) throw Error("Parent witness capacity");
-    prepareControlChildPublication(authority, plan, {
-      delegationId: attemptId,
-      grantDigest: fields.grantDigest,
-      leaseId: null,
-    });
-    writePrivateRecord(
-      s.installation,
-      "parent-attempts",
-      `${attemptId}.json`,
-      { grant: grant, assertion },
-      true,
-    );
-    lifecycle.childIntents[attemptId] = fields.grantDigest;
-    lifecycle.sequence++;
-    writeLifecycle(dir, lifecycle);
-    dir.write(name, bytes);
-    return assertion;
+    prepareControlChildPublication(authority, plan, delegation);
+    return delegation;
   });
-}
-
-export function readParentGrant(
-  state: InstallationState,
-  assertion: string,
-  depth = 0,
-): z.infer<typeof parentGrantSchema> {
-  if (depth > 1) throw Error("Parent assertion chain limit");
-  const parsed = parseParentAssertion(assertion);
-  const d = executionWitnessDirectory(state, parsed.issuer);
-  let signed: unknown;
-  try {
-    const attempts = z
-      .record(uuid, z.unknown())
-      .parse(
-        JSON.parse(d.role.read(`${parsed.operationKey}.children.json`, 65536).toString("utf8")),
-      );
-    signed = attempts[parsed.attemptId];
-  } finally {
-    d.close();
-  }
-  if (!signed || controlDigest(signed) !== parsed.grantDigest)
-    throw Error("Missing exact retained parent attempt");
-  const grant = parentGrantSchema.parse(signed);
-  if (grant.parentAssertion) {
-    const ancestor = readParentGrant(state, grant.parentAssertion, depth + 1);
-    if (
-      ancestor.recipient !== "fixed-cli" ||
-      controlDigest(ancestor.child) !== controlDigest(grant.parent) ||
-      grant.recipient !== "data-manager"
-    )
-      throw Error("Invalid fixed parent certification");
-  }
-  const parent = readControlExecutionWitness(state, grant.parent);
-  if (
-    canonicalJson(parentSummary(grant)) !== canonicalJson(parsed.grant) ||
-    !sameControlOrigin(grant.origin, parent.origin) ||
-    grant.parent.executor !== parsed.issuer ||
-    grant.parent.operationKey !== parsed.operationKey ||
-    grant.attemptId !== parsed.attemptId ||
-    grant.child.operationKey !==
-      controlChildOperationKey(grant.parent.operationKey, grant.phase, grant.ordinal) ||
-    !childPhaseKinds[grant.phase].includes(grant.kind)
-  )
-    throw Error("Parent immutable phase binding mismatch");
-  verifyDeadlineEdge(parent.kind, grant.phase, grant.recipient, grant.kind);
-  return grant;
 }
 export function verifyDeadlineEdge(
   parentKind: string,
@@ -2556,79 +2047,12 @@ export function verifyDeadlineEdge(
     return;
   throw Error("Unauthorized deadline-only child kind");
 }
-export function verifyParentExecution(
-  assertion: string,
-  peer: VerifiedControlPeer,
-  retainedAttempt: { execution: ExecutionRef; kind: string; requestedDeadlineAt: number },
-): import("../ops/execution-identity").VerifiedParentExecution {
-  const p = controlPeerState(peer);
-  const parsed = parseParentAssertion(assertion);
-  if (assertion !== p.assertion) throw Error("Foreign parent assertion");
-  const grant = readParentGrant(p.installation, assertion);
-  if (
-    grant.parent.operationKey !== parsed.operationKey ||
-    grant.attemptId !== parsed.attemptId ||
-    grant.childId !== p.childId ||
-    grant.recipient !== p.recipient ||
-    grant.kind !== retainedAttempt.kind ||
-    controlDigest(grant.child) !== controlDigest(retainedAttempt.execution) ||
-    grant.child.deadlineAt !== retainedAttempt.requestedDeadlineAt ||
-    grant.child.deadlineAt > grant.parent.deadlineAt
-  )
-    throw Error("Parent child identity mismatch");
-  withParentLifecycles(p.installation, assertion, (forward) => {
-    const name = `${parsed.attemptId}.json`;
-    let retained = false;
-    try {
-      if (
-        controlDigest(readPrivateRecord(p.installation, "parent-adoptions", name)) !==
-        controlDigest(grant)
-      )
-        throw Error("Parent attempt replay conflict");
-      retained = true;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    }
-    if (!retained) {
-      if (!forward) throw Error("Canceled/terminal parent permits observation only");
-      if (Date.now() >= grant.child.deadlineAt) throw Error("Expired parent grant");
-      writePrivateRecord(
-        p.installation,
-        "execution-parents",
-        `${grant.child.operationKey}.json`,
-        { assertion },
-        true,
-      );
-      writePrivateRecord(p.installation, "parent-adoptions", name, grant, true);
-    }
-    const binding = z
-      .strictObject({ assertion: z.string() })
-      .parse(
-        readPrivateRecord(p.installation, "execution-parents", `${grant.child.operationKey}.json`),
-      );
-    if (binding.assertion !== assertion)
-      throw Error("Incomplete/conflicting parent adoption binding");
-  });
-  const parent = Object.freeze(
-    retainedControlParent(grant.parent),
-  ) as import("../ops/execution-identity").VerifiedParentExecution;
-  verifiedParents.add(parent);
-  if (grant.origin) verifiedParentOrigins.set(parent, Object.freeze(grant.origin));
-  return parent;
-}
-
-/** A fixed child shares the agent's private records and is known by its delegation or attempt id. */
+/** A fixed child shares the agent's private records and is known by its spawn record. */
 export function openFixedChildInstallation(options: {
   infraDir: string;
-  assertion: string;
+  child: { leaseId: string | null; childKey: string };
 }): ControlInstallation {
-  const encoded = JSON.parse(Buffer.from(options.assertion, "base64url").toString("utf8")) as {
-    leaseId?: unknown;
-  };
-  const envelope = encoded.leaseId
-    ? parseControlAssertion(options.assertion)
-    : parseParentAssertion(options.assertion);
-  const id = "delegationId" in envelope ? envelope.delegationId : envelope.attemptId;
+  const childKey = uuid.parse(options.child.childKey);
   let recovery: AnchoredDirectory | undefined;
   try {
     recovery = new AnchoredDirectory(
@@ -2636,33 +2060,55 @@ export function openFixedChildInstallation(options: {
       undefined,
       true,
     );
-    const children = recovery.directory("children");
-    try {
-      children.read(`${id}.json`, 2048);
-    } finally {
-      children.close();
-    }
     const installation = Object.freeze({ role: "ops-agent" }) as ControlInstallation;
-    installations.set(installation, {
+    const state: InstallationState = {
       installation,
       privateRoot: recovery,
       dataRoot: join(options.infraDir, "data"),
       registeredTargets: new Set(),
       // Fixed children run in the agent's container or its helper: both use the store.
       leases: agentStoreLeases(options.infraDir, "ops-agent"),
-      fixedChildId: id,
-      ...("attemptId" in envelope ? { fixedParentAssertion: options.assertion } : {}),
-    });
+      fixedChildId: childKey,
+    };
+    const spawn = fixedChildSpawn(state, childKey);
+    // A child of a parent that holds no lease follows its parent's lifecycle.
+    if (options.child.leaseId === null) state.fixedParent = spawn.parent;
+    installations.set(installation, state);
     recovery = undefined;
     return installation;
   } finally {
     recovery?.close();
   }
 }
+const spawnIntentSchema = z.strictObject({
+  parent: executionRefSchema,
+  plan: z.array(plannedChildSchema).max(64),
+  reservations: z.array(controlChildReservationSchema).max(64).optional(),
+  execution: executionRefSchema,
+  operation: opsOperationSchema,
+  dataUpdatePlan: dataUpdatePlanSchema.optional(),
+  dataWorkflowInitial: dataWorkflowReceiptSchema.optional(),
+  args: z.array(z.string().max(4096)).max(64),
+  serviceIds: targetSchema,
+  admittedAt: z.number().int().nonnegative().safe(),
+});
+/** The spawn record of a fixed CLI child, written by its parent before the child is issued. */
+export function fixedChildSpawn(
+  state: InstallationState,
+  childKey: string,
+  execution?: ExecutionRef,
+): z.infer<typeof spawnIntentSchema> & { childKey: string } {
+  const saved = spawnIntentSchema.parse(
+    readPrivateRecord(state, "spawns", `${uuid.parse(childKey)}.json`, 65536),
+  );
+  if (execution && controlDigest(saved.execution) !== controlDigest(execution))
+    throw Error("Fixed child spawn identity mismatch");
+  return { ...saved, childKey };
+}
 export function retainFixedCliSpawnIntent(
   authority: VerifiedExecutionAuthority,
   input: {
-    delegationId: string;
+    childKey: string;
     execution: ExecutionRef;
     operation: unknown;
     args: readonly string[];
@@ -2673,7 +2119,9 @@ export function retainFixedCliSpawnIntent(
   },
 ): void {
   const s = executionAuthorityState(authority);
-  const id = uuid.parse(input.delegationId);
+  if (s.installation.installation.role !== "ops-agent" || s.installation.fixedChildId)
+    throw Error("Only the agent spawns fixed children");
+  const id = uuid.parse(input.childKey);
   const operation = opsOperationSchema.parse(input.operation);
   const slot = [...s.plan, ...s.reservations].find(
     (p) => p.execution.executionId === input.execution.executionId && p.recipient === "fixed-cli",
@@ -2696,28 +2144,18 @@ export function retainFixedCliSpawnIntent(
     s.installation,
     "spawns",
     `${id}.json`,
-    {
+    spawnIntentSchema.parse({
+      parent: s.execution,
       execution: input.execution,
       operation,
-      ...(input.dataUpdatePlan
-        ? { dataUpdatePlan: dataUpdatePlanSchema.parse(input.dataUpdatePlan) }
-        : {}),
-      ...(input.dataWorkflowInitial
-        ? { dataWorkflowInitial: dataWorkflowReceiptSchema.parse(input.dataWorkflowInitial) }
-        : {}),
+      ...(input.dataUpdatePlan ? { dataUpdatePlan: input.dataUpdatePlan } : {}),
+      ...(input.dataWorkflowInitial ? { dataWorkflowInitial: input.dataWorkflowInitial } : {}),
       args: input.args,
       serviceIds: plan.serviceIds,
       admittedAt: Date.now(),
-      plan: z
-        .array(plannedChildSchema)
-        .max(64)
-        .parse(input.plan ?? []),
-      ...(input.reservations === undefined
-        ? {}
-        : {
-            reservations: z.array(controlChildReservationSchema).max(64).parse(input.reservations),
-          }),
-    },
+      plan: input.plan ?? [],
+      ...(input.reservations === undefined ? {} : { reservations: input.reservations }),
+    }),
     true,
   );
 }
@@ -2803,19 +2241,7 @@ export function readFixedCliSpawnIntent(
 ) {
   const s = installationState(installation);
   if (!s.fixedChildId) throw Error("Fixed child authority required");
-  const saved = z
-    .strictObject({
-      plan: z.array(plannedChildSchema).max(64),
-      reservations: z.array(controlChildReservationSchema).max(64).optional(),
-      execution: executionRefSchema,
-      operation: opsOperationSchema,
-      dataUpdatePlan: dataUpdatePlanSchema.optional(),
-      dataWorkflowInitial: dataWorkflowReceiptSchema.optional(),
-      args: z.array(z.string().max(4096)).max(64),
-      serviceIds: targetSchema,
-      admittedAt: z.number().int().nonnegative().safe(),
-    })
-    .parse(readPrivateRecord(s, "spawns", `${s.fixedChildId}.json`, 65536));
+  const saved = fixedChildSpawn(s, s.fixedChildId);
   if (
     controlDigest(execution) !== controlDigest(saved.execution) ||
     canonicalJson(args) !== canonicalJson(saved.args) ||
@@ -2832,14 +2258,8 @@ export function beginFixedCliExecution(
 ): void {
   const s = installationState(installation);
   if (!s.fixedChildId) throw Error("Fixed CLI authority required");
-  const begin = () =>
-    writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
-  if (s.fixedParentAssertion)
-    withParentLifecycles(s, s.fixedParentAssertion, (forward) => {
-      if (!forward) throw Error("Canceled/terminal parent prevents fixed CLI start");
-      begin();
-    });
-  else begin();
+  if (!fixedParentForward(s)) throw Error("Canceled/terminal parent prevents fixed CLI start");
+  writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
 }
 
 const executionWitnessSchema = z.strictObject({
@@ -2945,25 +2365,6 @@ export function verifiedRetainedControlParent(
   verifiedParentOrigins.set(parent, s.origin);
   return parent;
 }
-export function retainedControlAdoptionAssertion(
-  installation: ControlInstallation,
-  adoption: ControlAdoption,
-  execution: ExecutionRef,
-): string {
-  const state = installationState(installation);
-  const saved = z
-    .object({ assertion: z.string().max(4096), execution: executionRefSchema })
-    .parse(readPrivateRecord(state, "adoptions", `${uuid.parse(adoption.delegationId)}.json`));
-  const assertion = parseControlAssertion(saved.assertion);
-  if (
-    assertion.leaseId !== adoption.leaseId ||
-    assertion.delegationId !== adoption.delegationId ||
-    controlDigest(saved.execution) !== controlDigest(execution)
-  )
-    throw Error("Recovery adoption ownership mismatch");
-  return saved.assertion;
-}
-
 /** Whether the agent journal records this maintenance or handoff preparation
  * as succeeded with a prepared result; the journal is its only terminal record. */
 export function verifyControlPreparedTerminal(
@@ -3047,7 +2448,7 @@ export async function verifyDataUpdatePrerequisites(
       if (!attempt) throw Error("Full Update data phase not admitted");
       childInstallation = openFixedChildInstallation({
         infraDir,
-        assertion: attempt.assertion,
+        child: { leaseId: attempt.leaseId, childKey: attempt.childKey },
       });
       dataAuthority = restoreAdmittedControlExecution(childInstallation, attempt.execution);
       const settlement = childSettlementState(

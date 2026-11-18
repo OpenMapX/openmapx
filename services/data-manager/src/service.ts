@@ -61,7 +61,7 @@ let shuttingDown = false;
 app.addHook("onClose", async () => {
   await stopControlPrune?.();
 });
-registerAuth(app, resolveCallerTokens(app), { executionReceiver: () => executionReceiver });
+registerAuth(app, resolveCallerTokens(app));
 const readiness = new DataManagerReadiness();
 const controlStartup = loadControlStartup({
   infraDir: "/data",

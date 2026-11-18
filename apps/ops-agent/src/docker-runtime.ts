@@ -135,12 +135,7 @@ export interface StreamingProcessOptions {
 
 function childEnvironment(): NodeJS.ProcessEnv {
   const env = { ...process.env };
-  for (const key of [
-    "OPENMAPX_CONTROL_EXECUTION",
-    "OPENMAPX_CONTROL_DELEGATION",
-    "OPENMAPX_PARENT_EXECUTION",
-  ])
-    delete env[key];
+  for (const key of ["OPENMAPX_CONTROL_EXECUTION", "OPENMAPX_CONTROL_CHILD"]) delete env[key];
   return env;
 }
 

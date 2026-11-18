@@ -404,17 +404,6 @@ import type {
   ProposeTransitBump502,
   ProposeTransitBump503,
   ProposeTransitBumpBody,
-  RecoverUnadmittedConfigurationPreparation200,
-  RecoverUnadmittedConfigurationPreparation400,
-  RecoverUnadmittedConfigurationPreparation401,
-  RecoverUnadmittedConfigurationPreparation403,
-  RecoverUnadmittedConfigurationPreparation409,
-  RecoverUnadmittedConfigurationPreparation413,
-  RecoverUnadmittedConfigurationPreparation415,
-  RecoverUnadmittedConfigurationPreparation429,
-  RecoverUnadmittedConfigurationPreparation500,
-  RecoverUnadmittedConfigurationPreparation503,
-  RecoverUnadmittedConfigurationPreparationBody,
   ReloadDatasets200,
   ReloadDatasets400,
   ReloadDatasets401,
@@ -568,7 +557,6 @@ import {
   prepareDataConfigurationFenceRequest,
   prepareOfflinePackageRequest,
   proposeTransitBumpRequest,
-  recoverUnadmittedConfigurationPreparationRequest,
   reloadDatasetsRequest,
   removeTransitSourceRequest,
   restartMotisRequest,
@@ -902,116 +890,6 @@ export const prepareDataConfigurationFence = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(prepareDataConfigurationFenceBody),
-    },
-  );
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse200 = {
-  data: RecoverUnadmittedConfigurationPreparation200;
-  status: 200;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse400 = {
-  data: RecoverUnadmittedConfigurationPreparation400;
-  status: 400;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse401 = {
-  data: RecoverUnadmittedConfigurationPreparation401;
-  status: 401;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse403 = {
-  data: RecoverUnadmittedConfigurationPreparation403;
-  status: 403;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse409 = {
-  data: RecoverUnadmittedConfigurationPreparation409;
-  status: 409;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse413 = {
-  data: RecoverUnadmittedConfigurationPreparation413;
-  status: 413;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse415 = {
-  data: RecoverUnadmittedConfigurationPreparation415;
-  status: 415;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse429 = {
-  data: RecoverUnadmittedConfigurationPreparation429;
-  status: 429;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse500 = {
-  data: RecoverUnadmittedConfigurationPreparation500;
-  status: 500;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse503 = {
-  data: RecoverUnadmittedConfigurationPreparation503;
-  status: 503;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponseSuccess =
-  recoverUnadmittedConfigurationPreparationResponse200 & {
-    headers: Headers;
-  };
-export type recoverUnadmittedConfigurationPreparationResponseError = (
-  | recoverUnadmittedConfigurationPreparationResponse400
-  | recoverUnadmittedConfigurationPreparationResponse401
-  | recoverUnadmittedConfigurationPreparationResponse403
-  | recoverUnadmittedConfigurationPreparationResponse409
-  | recoverUnadmittedConfigurationPreparationResponse413
-  | recoverUnadmittedConfigurationPreparationResponse415
-  | recoverUnadmittedConfigurationPreparationResponse429
-  | recoverUnadmittedConfigurationPreparationResponse500
-  | recoverUnadmittedConfigurationPreparationResponse503
-) & {
-  headers: Headers;
-};
-
-export type recoverUnadmittedConfigurationPreparationResponse =
-  | recoverUnadmittedConfigurationPreparationResponseSuccess
-  | recoverUnadmittedConfigurationPreparationResponseError;
-
-export const getRecoverUnadmittedConfigurationPreparationUrl = () => {
-  return `/executions/configuration-maintenance/recovery`;
-};
-
-export const recoverUnadmittedConfigurationPreparation = async (
-  recoverUnadmittedConfigurationPreparationBody: RecoverUnadmittedConfigurationPreparationBody,
-  options?: Parameters<typeof recoverUnadmittedConfigurationPreparationRequest>[1],
-): Promise<recoverUnadmittedConfigurationPreparationResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return recoverUnadmittedConfigurationPreparationRequest<recoverUnadmittedConfigurationPreparationResponse>(
-    getRecoverUnadmittedConfigurationPreparationUrl(),
-    {
-      ...options,
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-      body: JSON.stringify(recoverUnadmittedConfigurationPreparationBody),
     },
   );
 };

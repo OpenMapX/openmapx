@@ -547,7 +547,7 @@ describe("retained execution deadlines", () => {
       vi.useRealTimers();
     }
   });
-  it("rejects unsigned wire parent and delegation headers before effects", async () => {
+  it("rejects an unverified parent header and a lease child from the API before effects", async () => {
     const dispatch = vi.fn();
     const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
@@ -556,18 +556,27 @@ describe("retained execution deadlines", () => {
       dispatch,
     });
     try {
-      for (const name of ["x-openmapx-parent-execution", "x-openmapx-control-delegation"]) {
-        const r = await app.inject({
-          method: "POST",
-          url: "/v1/operations",
-          headers: { ...auth(apiToken), [name]: "unverified" },
-          payload: envelope(
-            { kind: "service.build", serviceId: "valhalla" },
-            `ops1_${name.replaceAll("-", "")}`,
-          ),
-        });
-        expect(r.statusCode).toBe(403);
-      }
+      const operation = { kind: "service.build" as const, serviceId: "valhalla" };
+      const parent = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { ...auth(apiToken), "x-openmapx-parent-execution": "unverified" },
+        payload: envelope(operation, "ops1_parentheaderunverified"),
+      });
+      expect(parent.statusCode).toBe(403);
+      const leaseChild = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(apiToken),
+        payload: {
+          ...envelope(operation, "ops1_leasechildfromapitoken"),
+          leaseChild: {
+            leaseId: "123e4567-e89b-42d3-a456-426614174000",
+            childKey: "123e4567-e89b-42d3-a456-426614174001",
+          },
+        },
+      });
+      expect(leaseChild.statusCode).toBe(403);
       expect(dispatch).not.toHaveBeenCalled();
     } finally {
       await app.close();

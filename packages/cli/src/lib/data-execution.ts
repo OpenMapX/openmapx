@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   bindControlChildPhase,
+  type ControlDelegation,
   cliDataReservation,
   closeControlInstallation,
   consumeControlChildDispatch,
@@ -53,7 +54,8 @@ export async function executeDurableDataStep(
     transport: DataManagerTransport;
     signal?: AbortSignal;
     requestedDeadlineAt: number;
-    parentAssertion?: string;
+    /** The child as this command issued it; absent when an earlier run already did. */
+    delegation?: ControlDelegation;
     observerDeadlineAt: number;
     checkpointAttempt: (attempt: DataChildAttempt) => Promise<void>;
     checkpoint: (status: DataExecutionStatus) => Promise<void>;
@@ -100,7 +102,7 @@ export async function executeDurableDataStep(
       state: "prepared",
     };
     await options.checkpointAttempt(attempt);
-    if (!options.parentAssertion) throw Error("Original data parent assertion required");
+    if (!options.delegation) throw Error("Original data child delegation required");
     attempt = { ...attempt, state: "attempted" };
     await options.checkpointAttempt(attempt);
     try {
@@ -111,12 +113,9 @@ export async function executeDurableDataStep(
               operationKey: options.operationKey,
               input: normalized,
               requestedDeadlineAt: options.requestedDeadlineAt,
+              delegation: options.delegation,
             },
-            {
-              transport: options.transport,
-              signal: options.signal,
-              headers: { "x-openmapx-parent-execution": options.parentAssertion },
-            },
+            { transport: options.transport, signal: options.signal },
           ),
         ),
       );
@@ -202,14 +201,13 @@ export async function runOwnedDataStep(
   const slot = cliDataReservation(context.authority, phase),
     bound = await bindControlChildPhase(context.authority, slot);
   const prior = readCliDataAttempt(context.authority, slot.execution.operationKey);
-  let assertion: string | undefined;
+  let delegation: ControlDelegation | undefined;
   if (!prior) {
     const issued = await issueControlChildPhase(context.authority, {
       phase,
       ordinal: slot.ordinal,
-      childId: "data-manager",
     });
-    assertion = issued.assertion;
+    delegation = issued.delegation;
     consumeControlChildDispatch(issued.dispatchTicket);
   }
   const result = await executeDurableDataStep(input, {
@@ -217,7 +215,7 @@ export async function runOwnedDataStep(
     signal: cliAcquisitionOptions().signal,
     operationKey: slot.execution.operationKey,
     requestedDeadlineAt: bound.execution.deadlineAt,
-    parentAssertion: assertion,
+    delegation,
     transport,
     observerDeadlineAt: context.authority.execution.deadlineAt,
     checkpointAttempt: async (attempt) => retainCliDataAttempt(context.authority, attempt),

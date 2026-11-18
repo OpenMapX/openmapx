@@ -81,11 +81,7 @@ export const catalogActivationRecordSchema = z.strictObject({
   promotion: z.strictObject({
     execution: executionRefSchema,
     terminalReceiptDigest: digest,
-    adoption: z.strictObject({
-      leaseId: z.uuid(),
-      delegationId: z.uuid(),
-      phase: z.literal("ready"),
-    }),
+    leaseChild: z.strictObject({ leaseId: z.uuid(), childKey: z.uuid() }),
   }),
   approval: executionRefSchema,
 });

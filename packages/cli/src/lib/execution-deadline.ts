@@ -29,10 +29,7 @@ export async function withCliExecutionDeadline<T>(
 ): Promise<T> {
   const encoded = process.env.OPENMAPX_CONTROL_EXECUTION;
   const inherited = process.env.OPENMAPX_CLI_DEADLINE_AT;
-  if (
-    (process.env.OPENMAPX_CONTROL_DELEGATION || process.env.OPENMAPX_PARENT_EXECUTION) &&
-    encoded === undefined
-  )
+  if (process.env.OPENMAPX_CONTROL_CHILD && encoded === undefined)
     throw Error("Missing bounded fixed CLI execution");
 
   if (encoded === undefined && inherited === undefined) return run();
@@ -81,8 +78,7 @@ export function cliProcessOptions(phaseTimeoutMs?: number) {
     forceKillAfterDelay: 2000,
     env: {
       OPENMAPX_CONTROL_EXECUTION: undefined,
-      OPENMAPX_CONTROL_DELEGATION: undefined,
-      OPENMAPX_PARENT_EXECUTION: undefined,
+      OPENMAPX_CONTROL_CHILD: undefined,
       OPENMAPX_CLI_DEADLINE_AT: String(context.deadlineAt),
     },
   };

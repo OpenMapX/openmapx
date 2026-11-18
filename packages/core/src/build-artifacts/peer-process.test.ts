@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { build } from "esbuild";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import {
   type ControlIssuer,
   type ExecutionRef,
@@ -112,103 +112,72 @@ async function child(input: unknown) {
     leaseId?: string;
   };
 }
-describe("separate-process physical-mount delegation", () => {
-  it.each(["data-manager", "ops-agent"] as const)(
-    "retains one owner and one receiver across %s direction and path aliases",
-    async (role) => {
-      const receiver = role === "data-manager" ? "ops-agent" : "data-manager";
-      const phase = role === "data-manager" ? "stop-primary" : "hardlinks";
-      const operation =
-        role === "data-manager"
-          ? { kind: "transit-sync" }
-          : {
-              kind: "service.start",
-              serviceId: "motis",
-              expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
-            };
-      const kind = operation.kind;
-      const rootRef = ref(role, kind, operation);
-      const childOperation =
-        receiver === "ops-agent"
-          ? { kind: "motis.primary.stop" }
-          : {
-              kind: "generation-hardlinks",
-              revisionId: "cfg1_test",
-              planDigest: "a".repeat(64),
-              coordinatorMode: "require-running",
-            };
-      const childRef = ref(receiver, childOperation.kind, childOperation, rootRef, phase);
-      const installation = openControlInstallation({
-        infraDir: root,
-        role,
-        serviceIds: ["motis", "osrm"],
-      });
-      const plan: ControlPlannedChild = {
-        phase,
-        ordinal: 0,
-        kind: childOperation.kind,
-        execution: childRef,
-        serviceIds: ["motis"],
-        recipient: receiver,
-      };
-      const authority = retainAdmittedControlExecution(installation, {
-        requestedDeadlineAt: rootRef.deadlineAt,
-        execution: rootRef,
-        kind,
-        operation,
-        admittedAt: rootRef.deadlineAt - 60000,
-        serviceIds: ["motis"],
-        plan: [plan],
-      });
-      const lease = await acquireArtifactTargetLease({
-        serviceIds: ["motis"],
-        owner: authority,
-      });
-      const assertion = await delegateArtifactTargetLease(lease, {
-        ...plan,
-        childId: receiver,
-      });
-      const input = {
-        infraDir: root,
-        role: receiver,
-        assertion,
-        execution: childRef,
-        kind: childOperation.kind,
-        operation: childOperation,
-        admittedAt: childRef.deadlineAt - 60000,
-      };
-      const adopted = await child(input);
-      expect(adopted, JSON.stringify(adopted)).toMatchObject({
-        ok: true,
-        retained: false,
-        leaseId: lease.leaseId,
-      });
-      await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
-      expect(
-        await child({
-          ...input,
-          execution: { ...childRef, operationKey: `opk1_${"z".repeat(32)}` },
-        }),
-      ).toMatchObject({ ok: false });
-      expect(await child({ ...input, settle: true })).toMatchObject({ ok: true, retained: true });
-      await expect(
-        delegateArtifactTargetLease(lease, {
-          ...plan,
-          childId: receiver,
-        }),
-      ).rejects.toThrow(/replay/);
-      retainControlEffectReceipt(authority, {
-        outcome: "failed_without_effect",
-        publication: "not_started",
-        receipt: { kind: "not-started" },
-      });
-      await settleArtifactTargetLeaseChild(
-        lease,
-        verifyControlEffectSettlement(installation, rootRef),
-      );
-      await releaseArtifactTargetLease(lease);
-    },
-  );
+it("retains one data-manager owner and one agent receiver across path aliases", async () => {
+  const role = "data-manager";
+  const phase = "stop-primary";
+  const operation = { kind: "transit-sync" };
+  const kind = operation.kind;
+  const rootRef = ref(role, kind, operation);
+  const childOperation = { kind: "motis.primary.stop" };
+  const childRef = ref("ops-agent", childOperation.kind, childOperation, rootRef, phase);
+  const installation = openControlInstallation({
+    infraDir: root,
+    role,
+    serviceIds: ["motis", "osrm"],
+  });
+  const plan: ControlPlannedChild = {
+    phase,
+    ordinal: 0,
+    kind: childOperation.kind,
+    execution: childRef,
+    serviceIds: ["motis"],
+    recipient: "ops-agent",
+  };
+  const authority = retainAdmittedControlExecution(installation, {
+    requestedDeadlineAt: rootRef.deadlineAt,
+    execution: rootRef,
+    kind,
+    operation,
+    admittedAt: rootRef.deadlineAt - 60000,
+    serviceIds: ["motis"],
+    plan: [plan],
+  });
+  const lease = await acquireArtifactTargetLease({
+    serviceIds: ["motis"],
+    owner: authority,
+  });
+  const delegation = await delegateArtifactTargetLease(lease, plan);
+  const input = {
+    infraDir: join(root, "host-alias"),
+    role: "ops-agent",
+    leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
+    execution: childRef,
+    kind: childOperation.kind,
+    operation: childOperation,
+    admittedAt: childRef.deadlineAt - 60000,
+  };
+  const adopted = await child(input);
+  expect(adopted, JSON.stringify(adopted)).toMatchObject({
+    ok: true,
+    retained: false,
+    leaseId: lease.leaseId,
+  });
+  await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
+  expect(
+    await child({
+      ...input,
+      execution: { ...childRef, operationKey: `opk1_${"z".repeat(32)}` },
+    }),
+  ).toMatchObject({ ok: false });
+  expect(await child({ ...input, settle: true })).toMatchObject({ ok: true, retained: true });
+  await expect(delegateArtifactTargetLease(lease, plan)).rejects.toThrow(/replay/);
+  retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+  await settleArtifactTargetLeaseChild(lease, verifyControlEffectSettlement(installation, rootRef));
+  await releaseArtifactTargetLease(lease);
 });
 it("keeps owner-death recovery fenced until a separately admitted child settles", async () => {
   const { verifyControlRecoveryAuthority } = await import("./control-authority");
@@ -241,14 +210,11 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
     serviceIds: ["motis"],
     owner: authority,
   });
-  const assertion = await delegateArtifactTargetLease(lease, {
-    ...plan,
-    childId: "ops-agent",
-  });
+  const delegation = await delegateArtifactTargetLease(lease, plan);
   const input = {
     infraDir: root,
     role: "ops-agent",
-    assertion,
+    leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
     execution: childRef,
     kind: childOperation.kind,
     operation: childOperation,
@@ -316,10 +282,9 @@ it.each([false, true])(
       owner: authority,
     });
     const id = randomUUID();
-    const key = c.prepareFixedControlChild(authority, id);
-    const assertion = await delegateArtifactTargetLease(lease, { ...plan, childId: key });
     const args = c.fixedCliArguments(operation);
-    c.retainFixedCliSpawnIntent(authority, { delegationId: id, execution: cli, operation, args });
+    c.retainFixedCliSpawnIntent(authority, { childKey: id, execution: cli, operation, args });
+    const delegation = await delegateArtifactTargetLease(lease, { ...plan, childKey: id });
     const hardlinks = {
       kind: "generation-hardlinks",
       revisionId: "cfg1_test",
@@ -327,21 +292,25 @@ it.each([false, true])(
       coordinatorMode: "require-running",
     };
     const leaf = ref("data-manager", hardlinks.kind, hardlinks, cli, "hardlinks");
-    const childId = "data-manager";
-    const fixed = { mode: "fixed", infraDir: root, assertion, execution: cli, args };
+    const fixed = {
+      mode: "fixed",
+      infraDir: root,
+      leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
+      execution: cli,
+      args,
+    };
     const leafInput = {
       execution: leaf,
       phase: "hardlinks",
       recipient: "data-manager",
       serviceIds: ["motis"],
-      childId,
     };
     expect(await child({ ...fixed, child: { ...leafInput, serviceIds: ["osrm"] } })).toMatchObject({
       ok: false,
     });
     const started = (await child({ ...fixed, action: "run", child: leafInput })) as {
       ok: boolean;
-      assertion: string;
+      delegation: unknown;
       error?: string;
     };
     expect(started, JSON.stringify(started)).toMatchObject({ ok: true });
@@ -350,31 +319,18 @@ it.each([false, true])(
     const hardlinkInput = {
       infraDir: root,
       role: "data-manager",
-      assertion: started.assertion,
+      delegation: started.delegation,
       execution: leaf,
       kind: hardlinks.kind,
       operation: hardlinks,
       admittedAt: leaf.deadlineAt - 60000,
     };
+    expect(await child(hardlinkInput)).toMatchObject({ ok: true });
     if (cancelIntermediate) {
-      expect(await child({ ...hardlinkInput, forward: true })).toMatchObject({ ok: true });
       expect(await child({ ...fixed, action: "cancel" })).toMatchObject({ ok: true });
-      expect(await child(hardlinkInput)).toMatchObject({ ok: true, retained: true });
-      expect(await child({ ...hardlinkInput, forward: true })).toMatchObject({ ok: false });
       await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
     }
-    expect(
-      await child({
-        infraDir: root,
-        role: "data-manager",
-        assertion: started.assertion,
-        execution: leaf,
-        kind: hardlinks.kind,
-        operation: hardlinks,
-        admittedAt: leaf.deadlineAt - 60000,
-        settle: true,
-      }),
-    ).toMatchObject({ ok: true });
+    expect(await child({ ...hardlinkInput, settle: true })).toMatchObject({ ok: true });
     expect(await child({ ...fixed, action: "settle" })).toMatchObject({ ok: true });
     c.retainControlEffectReceipt(authority, {
       outcome: "failed_without_effect",
@@ -414,22 +370,23 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
     serviceIds: ["motis"],
     plan: [plan],
   };
-  const childId = "ops-agent";
   const p = spawn(process.execPath, [fixture], {
     stdio: ["pipe", "pipe", "pipe"],
   });
-  const response = new Promise<{ ok: boolean; assertion: string; leaseId: string }>(
-    (resolve, reject) => {
-      let text = "";
-      p.stdout.on("data", (b) => {
-        text += b;
-        if (text.includes("\n")) resolve(JSON.parse(text.split("\n")[0] ?? ""));
-      });
-      p.once("error", reject);
-    },
-  );
+  const response = new Promise<{
+    ok: boolean;
+    delegation: { childKey: string };
+    leaseId: string;
+  }>((resolve, reject) => {
+    let text = "";
+    p.stdout.on("data", (b) => {
+      text += b;
+      if (text.includes("\n")) resolve(JSON.parse(text.split("\n")[0] ?? ""));
+    });
+    p.once("error", reject);
+  });
   p.stdin.end(
-    `${JSON.stringify({ mode: "owner", infraDir: root, role: "data-manager", admitted, child: { ...plan, childId } })}\n`,
+    `${JSON.stringify({ mode: "owner", infraDir: root, role: "data-manager", admitted, child: plan })}\n`,
   );
   const owned = await response;
   expect(owned.ok).toBe(true);
@@ -452,7 +409,7 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
   const input = {
     infraDir: root,
     role: "ops-agent",
-    assertion: owned.assertion,
+    leaseChild: { leaseId: owned.leaseId, childKey: owned.delegation.childKey },
     execution: receiver,
     kind: body.kind,
     operation: body,
@@ -521,13 +478,12 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
     serviceIds: ["motis"],
     owner: authority,
   });
-  const key = "ops-agent";
-  const assertion = await delegateArtifactTargetLease(lease, { ...plan, childId: key });
+  const delegation = await delegateArtifactTargetLease(lease, plan);
   const input = {
     primitive: true,
     infraDir: root,
     role: "ops-agent",
-    assertion,
+    leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
     execution: childRef,
     kind: body.kind,
     operation: body,
@@ -540,9 +496,7 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
   ])
     expect(await child({ ...input, ...patch })).toMatchObject({ ok: false });
   expect(await child({ ...input, settle: true })).toMatchObject({ ok: true });
-  await expect(delegateArtifactTargetLease(lease, { ...plan, childId: key })).rejects.toThrow(
-    /replay/,
-  );
+  await expect(delegateArtifactTargetLease(lease, plan)).rejects.toThrow(/replay/);
   c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
@@ -595,12 +549,11 @@ it("rejects a logical configuration-fence delegation without the actual maintena
     serviceIds: ["motis"],
     owner: authority,
   });
-  const key = "data-manager";
   try {
     // A bare root/plan cannot impersonate the actual maintenance producer.
     // Genuine short-leaf/SQL preparation, forged/foreign controls and held-root
     // acceptance run through the owned API/agent/DM PostgreSQL fixture.
-    await expect(delegateArtifactTargetLease(lease, { ...plan, childId: key })).rejects.toThrow();
+    await expect(delegateArtifactTargetLease(lease, plan)).rejects.toThrow();
     await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
     expect(
       openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })

@@ -101,14 +101,11 @@ it.each([0, 1, 130])(
       serviceIds: ["motis"],
       owner: authority,
     });
-    const delegationId = randomUUID();
-    const childId = c.prepareFixedControlChild(authority, delegationId);
-    const assertion = await c.delegateArtifactTargetLease(lease, {
-      ...plan,
-      childId,
-    });
+    const childKey = randomUUID();
     const args = c.fixedCliArguments(operation);
-    c.retainFixedCliSpawnIntent(authority, { delegationId, execution: child, operation, args });
+    c.retainFixedCliSpawnIntent(authority, { childKey, execution: child, operation, args });
+    await c.delegateArtifactTargetLease(lease, { ...plan, childKey });
+    const fixedChild = { leaseId: lease.leaseId, childKey };
     const receiptOptions = {
       dataRoot: join(infra, "data"),
       execution: child,
@@ -122,12 +119,11 @@ it.each([0, 1, 130])(
     await services.withServiceLifecycleReceiptAuthority(
       authority,
       () => services.openServiceLifecycleReceipt(receiptOptions),
-      { execution: child, childId },
+      { execution: child, childKey },
     );
     vi.stubEnv("OPENMAPX_ROOT_DIR", repo);
     vi.stubEnv("OPENMAPX_CONTROL_EXECUTION", JSON.stringify(child));
-    vi.stubEnv("OPENMAPX_CONTROL_DELEGATION", assertion);
-    vi.stubEnv("OPENMAPX_PARENT_EXECUTION", undefined);
+    vi.stubEnv("OPENMAPX_CONTROL_CHILD", JSON.stringify(fixedChild));
     let calls = 0;
     try {
       const command = withCliControlContext(args, async () => {
@@ -156,7 +152,10 @@ it.each([0, 1, 130])(
       if (exitCode === 0) await command;
       else await expect(command).rejects.toMatchObject({ code: exitCode });
       expect(calls).toBe(1);
-      const childInstallation = c.openFixedChildInstallation({ infraDir: infra, assertion });
+      const childInstallation = c.openFixedChildInstallation({
+        infraDir: infra,
+        child: fixedChild,
+      });
       try {
         const childAuthority = c.restoreAdmittedControlExecution(childInstallation, child);
         expect(() => c.verifyControlEffectSettlement(childInstallation, child)).not.toThrow();

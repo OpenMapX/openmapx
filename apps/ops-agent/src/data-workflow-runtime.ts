@@ -74,9 +74,8 @@ export function installDataWorkflowRuntime(
       let attempted = control.lookupControlChildPhaseAttempt(authority, slot),
         failure: unknown;
       if (!attempted) {
-        const key = control.prepareFixedControlChild(authority, delegationId);
         control.retainFixedCliSpawnIntent(authority, {
-          delegationId,
+          childKey: delegationId,
           execution: bound.execution,
           operation,
           args,
@@ -87,7 +86,7 @@ export function installDataWorkflowRuntime(
         const issued = await control.issueControlChildPhase(authority, {
           phase,
           ordinal: slot.ordinal,
-          childId: key,
+          childKey: delegationId,
           ...(lease ? { lease } : {}),
         });
         control.consumeControlChildDispatch(issued.dispatchTicket);
@@ -96,9 +95,7 @@ export function installDataWorkflowRuntime(
             ...context,
             execution: bound.execution,
             operationKind: "data.update",
-            ...(lease
-              ? { controlAssertion: issued.assertion }
-              : { parentAssertion: issued.assertion }),
+            child: { leaseId: issued.delegation.leaseId, childKey: issued.delegation.childKey },
           });
         } catch (error) {
           failure = error;
@@ -108,7 +105,7 @@ export function installDataWorkflowRuntime(
       if (!attempted) throw new OpsExecutionFailure("recovery_required", {});
       const installation = control.openFixedChildInstallation({
         infraDir,
-        assertion: attempted.assertion,
+        child: { leaseId: attempted.leaseId, childKey: attempted.childKey },
       });
       try {
         const childAuthority = control.restoreAdmittedControlExecution(

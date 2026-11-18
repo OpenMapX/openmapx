@@ -202,15 +202,13 @@ describe.skipIf(
           phase: child.phase,
           ordinal: child.ordinal,
           lease,
-          childId: agent.role,
         });
         const reference = control.lookupControlChildPhaseAttempt(authority, child);
         if (!reference?.leaseId) throw Error("Missing original grant reference");
         const attempted = {
           ...bound,
           state: "attempted" as const,
-          delegationId: reference.delegationId,
-          grantDigest: reference.grantDigest,
+          childKey: reference.childKey,
           leaseId: reference.leaseId,
           dispatchState: "claimed" as const,
         };

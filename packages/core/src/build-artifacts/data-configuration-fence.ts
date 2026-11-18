@@ -9,15 +9,18 @@ import { canonicalJson } from "../ops/canonical-json";
 import { executionFingerprint, type VerifiedParentExecution } from "../ops/execution-identity";
 import {
   type DataConfigurationFencePrepare,
+  type DataConfigurationFencePrepareRequest,
   type DataConfigurationFenceReceipt,
-  type DataConfigurationFenceSettle,
+  type DataConfigurationFenceSettleRequest,
   dataConfigurationFenceOutcomeSchema,
+  dataConfigurationFencePrepareRequestSchema,
   dataConfigurationFencePrepareSchema,
-  dataConfigurationFenceSettleSchema,
+  dataConfigurationFenceSettleRequestSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
 import { startGenerationHardlinksExecutionSchema } from "../services/data-manager/contracts/executions";
 import {
   beginControlEffect,
+  type ControlDelegation,
   type ControlInstallation,
   type ControlTransportPrincipal,
   childSettlementState,
@@ -87,7 +90,6 @@ const preparedGenerations = new WeakMap<
   {
     installation: ControlInstallation;
     request: ReturnType<typeof startGenerationHardlinksExecutionSchema.parse>;
-    headers: readonly string[];
     principal: ControlTransportPrincipal;
     parent: VerifiedParentExecution;
     fenceDigest: string;
@@ -119,13 +121,13 @@ export function createDataConfigurationFenceStore(
   }
   function inspectDelegation(
     body: DataConfigurationFencePrepare,
-    rawHeaders: readonly string[],
+    value: ControlDelegation,
     transportPrincipal: ControlTransportPrincipal,
   ) {
     const kind = "configuration-maintenance.prepare";
     try {
       if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
-      const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
+      const delegation = inspectRemoteDelegation(installation, value, transportPrincipal);
       const operation = { kind, ...body };
       if (
         delegation.parent.executor !== "ops-agent" ||
@@ -240,18 +242,18 @@ export function createDataConfigurationFenceStore(
   }
   async function inspectGenerationAdmission(
     value: unknown,
-    rawHeaders: readonly string[],
     principal: ControlTransportPrincipal,
     tx: Tx,
   ) {
     const request = startGenerationHardlinksExecutionSchema.parse(value);
     let delegation: ReturnType<typeof inspectRemoteDelegation>;
     try {
-      delegation = inspectRemoteDelegation(installation, rawHeaders, principal);
+      delegation = inspectRemoteDelegation(installation, request.delegation, principal);
     } catch {
       throw forbidden("Generation delegation required");
     }
     if (
+      delegation.leaseId === null ||
       delegation.kind !== "generation-hardlinks" ||
       delegation.phase !== "hardlinks" ||
       delegation.execution.operationKey !== request.operationKey ||
@@ -279,49 +281,6 @@ export function createDataConfigurationFenceStore(
     return { request, delegation, fenceDigest: controlDigest(fence) };
   }
   return {
-    /** Whether the original expired preparation was ever admitted, observed
-     * under the admission lock. An expired preparation can no longer be
-     * admitted, so a negative answer stays true. */
-    async recoverUnadmittedPreparation(
-      value: unknown,
-      rawHeaders: readonly string[],
-      transportPrincipal: ControlTransportPrincipal,
-    ) {
-      const input = dataConfigurationFencePrepareSchema.parse(value);
-      const { delegation } = inspectDelegation(input, rawHeaders, transportPrincipal);
-      if (Date.now() <= Math.max(delegation.execution.deadlineAt, delegation.owner.deadlineAt))
-        throw conflict("Original configuration preparation has not expired");
-      return sql.transaction(async (tx) => {
-        await lock(tx);
-        const admitted = await tx.unsafe(
-          "SELECT maintenance_id FROM data_manager.configuration_fence WHERE operation_key=$1 OR fence_id=$2::uuid OR maintenance_id=$3::uuid UNION ALL SELECT id FROM data_manager.jobs WHERE operation_key=$1 OR id=$2::uuid LIMIT 1",
-          [
-            delegation.execution.operationKey,
-            delegation.execution.executionId,
-            input.maintenanceId,
-          ],
-        );
-        if (admitted.length) throw conflict("Original configuration preparation was admitted");
-        // Any private trace of the execution means it may have been admitted.
-        for (const namespace of ["executions", "effects", "effect-started"]) {
-          try {
-            readPrivateRecord(local, namespace, `${delegation.execution.operationKey}.json`);
-            throw conflict("Original configuration preparation was admitted");
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-          }
-        }
-        return {
-          version: 2 as const,
-          kind: "configuration-prepare-not-admitted" as const,
-          leaseId: delegation.leaseId,
-          delegationId: delegation.delegationId,
-          child: delegation.execution,
-          input,
-          observedAt: Date.now(),
-        };
-      });
-    },
     /** Admission opens once the fence table is readable. */
     async startup() {
       open = false;
@@ -331,18 +290,16 @@ export function createDataConfigurationFenceStore(
     assertAdmission,
     async assertGenerationAdmission(
       value: unknown,
-      rawHeaders: readonly string[],
       principal: ControlTransportPrincipal,
       parent?: VerifiedParentExecution,
     ): Promise<VerifiedPreparedGenerationAdmission | undefined> {
-      const checked = await inspectGenerationAdmission(value, rawHeaders, principal, sql);
+      const checked = await inspectGenerationAdmission(value, principal, sql);
       if (!checked) return undefined;
       if (!parent) throw new DataFenceBusy();
       const proof = Object.freeze({}) as VerifiedPreparedGenerationAdmission;
       preparedGenerations.set(proof, {
         installation,
         request: checked.request,
-        headers: Object.freeze([...rawHeaders]),
         principal,
         parent,
         fenceDigest: checked.fenceDigest,
@@ -374,12 +331,7 @@ export function createDataConfigurationFenceStore(
         admission.principal !== source.execution.principal
       )
         throw new DataFenceBusy();
-      const checked = await inspectGenerationAdmission(
-        source.request,
-        source.headers,
-        source.principal,
-        tx,
-      );
+      const checked = await inspectGenerationAdmission(source.request, source.principal, tx);
       if (
         !checked ||
         checked.fenceDigest !== source.fenceDigest ||
@@ -397,12 +349,11 @@ export function createDataConfigurationFenceStore(
     /** Same body returns the recorded receipt; another body for the same
      * maintenance is a conflict; unfinished or unknown data jobs refuse. */
     async prepare(
-      value: DataConfigurationFencePrepare,
-      rawHeaders: readonly string[],
+      value: DataConfigurationFencePrepareRequest,
       transportPrincipal: ControlTransportPrincipal,
     ) {
-      const input = dataConfigurationFencePrepareSchema.parse(value),
-        verified = inspectDelegation(input, rawHeaders, transportPrincipal),
+      const { delegation, ...input } = dataConfigurationFencePrepareRequestSchema.parse(value),
+        verified = inspectDelegation(input, delegation, transportPrincipal),
         execution = verified.delegation.execution,
         assertSame = (existing: FenceRow) => {
           if (
@@ -458,22 +409,23 @@ export function createDataConfigurationFenceStore(
         throw Error("Configuration fence owner changed");
       return receiptOf(saved);
     },
-    /** Settles the prepared row once. The header is the agent's original
-     * prepare delegation; a repeated settle with the same outcome returns the
+    /** Settles the prepared row once. The delegation is the agent's original
+     * fence child; a repeated settle with the same outcome returns the
      * settled receipt, another outcome is a conflict. The host CLI's token
      * settles without a delegation: that is the operator resolving the
      * maintenance with `openmapx control resolve`. */
     async settle(
-      value: DataConfigurationFenceSettle,
-      rawHeaders: readonly string[],
+      value: DataConfigurationFenceSettleRequest,
       transportPrincipal: ControlTransportPrincipal,
     ) {
-      const input = dataConfigurationFenceSettleSchema.parse(value);
+      const { delegation: named, ...input } =
+        dataConfigurationFenceSettleRequestSchema.parse(value);
       let execution: z.infer<typeof fenceRowSchema>["input"]["ownerPrepare"] | undefined;
       if (transportPrincipal !== "host-cli")
         try {
-          if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
-          const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
+          if (transportPrincipal !== "ops-agent" || !named)
+            throw Error("Agent delegation required");
+          const delegation = inspectRemoteDelegation(installation, named, transportPrincipal);
           if (
             delegation.parent.executor !== "ops-agent" ||
             delegation.kind !== "configuration-maintenance.prepare" ||

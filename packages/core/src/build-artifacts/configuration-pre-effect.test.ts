@@ -16,12 +16,13 @@ import {
   beginControlEffect,
   closeControlInstallation,
   controlChildOperationKey,
+  fixedCliArguments,
   inspectConfigurationPreEffectRefusal,
   openControlInstallation,
-  prepareFixedControlChild,
   provisionControlDirectories,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
+  retainFixedCliSpawnIntent,
   verifyControlEffectSettlement,
 } from "./control-authority";
 import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
@@ -135,14 +136,22 @@ it.each(["begun", "bound", "issued"])(
       });
     if (boundary === "begun") beginControlEffect(owner);
     else {
-      await bindControlChildPhase(owner, { phase: "lifecycle", ordinal: 0 });
-      if (boundary === "issued")
-        await issueControlChildPhase(owner, {
-          phase: "lifecycle",
-          ordinal: 0,
-          lease,
-          childId: prepareFixedControlChild(owner, randomUUID()),
+      const bound = await bindControlChildPhase(owner, { phase: "lifecycle", ordinal: 0 });
+      if (boundary === "issued") {
+        const childKey = randomUUID(),
+          operation = {
+            kind: "service.update" as const,
+            serviceId: "motis",
+            expectedConfigurationRevisionId: revision,
+          };
+        retainFixedCliSpawnIntent(owner, {
+          childKey,
+          execution: bound.execution,
+          operation,
+          args: fixedCliArguments(operation),
         });
+        await issueControlChildPhase(owner, { phase: "lifecycle", ordinal: 0, lease, childKey });
+      }
     }
     expect(() => retainConfigurationPreEffectRefusal(owner)).toThrow();
     expect(() => inspectConfigurationPreEffectRefusal(owner)).toThrow();

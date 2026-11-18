@@ -384,11 +384,10 @@ export function createPostgresDataExecutionStore(
       )
         throw new DataExecutionConflict("Bound child identity is immutable");
     }
-    if ("delegationId" in previous) {
+    if ("childKey" in previous) {
       if (
-        !("delegationId" in child) ||
-        previous.delegationId !== child.delegationId ||
-        previous.grantDigest !== child.grantDigest ||
+        !("childKey" in child) ||
+        previous.childKey !== child.childKey ||
         previous.leaseId !== child.leaseId ||
         (previous.dispatchState === "claimed" && child.dispatchState !== "claimed")
       )

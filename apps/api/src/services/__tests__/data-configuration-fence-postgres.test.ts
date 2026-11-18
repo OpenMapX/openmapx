@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
-import { dataConfigurationFencePrepareSchema } from "@openmapx/core/data-manager-contracts";
+import { dataConfigurationFencePrepareRequestSchema } from "@openmapx/core/data-manager-contracts";
 import {
   canonicalJson,
   createControlRootOperationKey,
@@ -41,13 +41,6 @@ async function settledByAgent(
     publication: "committed",
     terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
   });
-}
-/** One delegated child as the agent's lease store records it now. */
-function storeChild(infraDir: string, leaseId: string, delegationId: string) {
-  return control
-    .openLeaseStore({ directory: control.leaseStoreDirectory(infraDir), purpose: "test" })
-    .get(leaseId)
-    ?.children.find((child) => child.key === delegationId);
 }
 
 // Keep real filesystem checks and writes; expose only the publication boundary
@@ -97,81 +90,6 @@ describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("configuration fence real PostgreSQL and retained grants", () => {
-  it("keeps ownership when negative receiver evidence is live, changed, admitted, or unavailable", async () => {
-    const f = await ownedFenceFixture({ productionRegistration: true });
-    let clock: ReturnType<typeof vi.spyOn> | undefined;
-    const request = (input = f.input, headers: Record<string, string> = {}) =>
-      fetch(`${f.data.baseUrl}/executions/configuration-maintenance/recovery`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${f.data.token}`,
-          "content-type": "application/json",
-          "x-openmapx-control-delegation": f.assertion,
-          ...headers,
-        },
-        body: JSON.stringify(input),
-      });
-    try {
-      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-      await fence.startup();
-      expect((await request()).status).not.toBe(200); // live original
-      // Data-manager answers from the expired delegation and its own SQL; it
-      // never reads the agent's lease store. The agent cancels before asking.
-      clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-      control.cancelControlExecution(f.authority);
-      await control.cancelArtifactTargetLease(f.lease);
-      expect((await request(f.input, { authorization: "Bearer wrong" })).status).toBe(401);
-      expect(
-        (await request(f.input, { "x-openmapx-control-delegation": "changed" })).status,
-      ).not.toBe(200);
-      expect((await request({ ...f.input, candidateId: randomUUID() })).status).not.toBe(200);
-      for (const identity of ["key", "id"] as const) {
-        const id = identity === "id" ? f.child.executionId : randomUUID(),
-          key =
-            identity === "key" ? f.child.operationKey : `opk1_${randomUUID().replaceAll("-", "")}`;
-        await f.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key) VALUES(${id},'download-fonts','ok',${key})`;
-        try {
-          expect((await request()).status).not.toBe(200);
-        } finally {
-          await f.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        }
-      }
-      // A fence row for the same maintenance means the preparation was admitted.
-      await f.sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state)
-        VALUES(${f.input.maintenanceId},${randomUUID()},${`opk1_${randomUUID().replaceAll("-", "")}`},${f.input.candidateId},${f.input.planDigest},${JSON.stringify(f.input)}::jsonb,'prepared')`;
-      try {
-        expect((await request()).status).not.toBe(200);
-      } finally {
-        await f.sql`DELETE FROM data_manager.configuration_fence WHERE maintenance_id=${f.input.maintenanceId}`;
-      }
-      for (const [namespace, name] of [
-        ["executions", `${f.child.operationKey}.json`],
-        ["effects", `${f.child.operationKey}.json`],
-        ["effect-started", `${f.child.operationKey}.json`],
-      ]) {
-        const directory = join(f.root, "state/data-manager/control", namespace!),
-          file = join(directory, name!);
-        mkdirSync(directory, { recursive: true, mode: 0o700 });
-        writeFileSync(file, "null", { mode: 0o600 });
-        try {
-          expect((await request()).status).not.toBe(200);
-        } finally {
-          unlinkSync(file);
-        }
-      }
-      await f.sql.begin(async (tx) => {
-        await tx`SELECT pg_advisory_xact_lock(${0x4f4d58},2)`;
-        expect((await request()).status).not.toBe(200);
-      });
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
-      const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8"));
-      expect(storeChild(f.root, assertion.leaseId, assertion.delegationId)?.state).toBe("held");
-    } finally {
-      clock?.mockRestore();
-      await f.close();
-    }
-  }, 60000);
-
   it("prepares a full application closure with the production Data Manager target registration", async () => {
     const f = await ownedFenceFixture({ productionRegistration: true });
     try {
@@ -179,11 +97,7 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("ops-agent");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(
-        f.input,
-        ["x-openmapx-control-delegation", f.assertion],
-        "ops-agent",
-      );
+      const receipt = await fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
       expect(receipt.state).toBe("prepared");
       await settledByAgent(f.lease, f.child, receipt);
       expect(
@@ -207,11 +121,7 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("community-tiles");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(
-        f.input,
-        ["x-openmapx-control-delegation", f.assertion],
-        "ops-agent",
-      );
+      const receipt = await fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
       expect(receipt.state).toBe("prepared");
       await settledByAgent(f.lease, f.child, receipt);
       expect(
@@ -227,15 +137,11 @@ describe.skipIf(
 
   it("prepares a terminal logical guard, blocks concurrent admissions, and restores it before new mutation", async () => {
     const f = await ownedFenceFixture(),
-      { sql, root, dm, child, input, assertion, lease } = f;
+      { sql, root, dm, child, input, delegation, lease } = f;
     try {
       const fence = createDataConfigurationMaintenance(sql, dm);
       await fence.startup();
-      const receipt = await fence.prepare(
-        input,
-        ["x-openmapx-control-delegation", assertion],
-        "ops-agent",
-      );
+      const receipt = await fence.prepare({ ...input, delegation }, "ops-agent");
       expect(receipt).toMatchObject({ fenceId: child.executionId, state: "prepared", sequence: 0 });
       const rows =
         await sql`SELECT state,operation_key,outcome FROM data_manager.configuration_fence WHERE fence_id=${child.executionId}`;
@@ -301,15 +207,11 @@ describe.skipIf(
           operationsPolicy,
         }),
         app = Fastify();
-      registerAuth(
-        app,
-        {
-          api: "guard-fixture-token-api",
-          "ops-agent": "guard-fixture-token",
-          "host-cli": "guard-fixture-token-cli",
-        },
-        { executionReceiver: () => receiver },
-      );
+      registerAuth(app, {
+        api: "guard-fixture-token-api",
+        "ops-agent": "guard-fixture-token",
+        "host-cli": "guard-fixture-token-cli",
+      });
       registerApi(app, {
         executionReceiver: receiver,
         dataDir: join(root, "data"),
@@ -432,15 +334,9 @@ describe.skipIf(
         "configuration_maintenance_busy",
       );
       await expect(
-        fence.prepare(
-          { ...input, candidateId: randomUUID() },
-          ["x-openmapx-control-delegation", assertion],
-          "ops-agent",
-        ),
+        fence.prepare({ ...input, candidateId: randomUUID(), delegation }, "ops-agent"),
       ).rejects.toThrow();
-      expect(
-        await fence.prepare(input, ["x-openmapx-control-delegation", assertion], "ops-agent"),
-      ).toEqual(receipt);
+      expect(await fence.prepare({ ...input, delegation }, "ops-agent")).toEqual(receipt);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
     } finally {
       await f.close();
@@ -454,7 +350,6 @@ import { dataManagerTokenFile } from "../../test/data-manager-token";
 async function ownedFenceFixture(
   options: {
     productionRegistration?: boolean;
-    loseRecoveryResponseOnce?: boolean;
     guardedRecovery?: boolean;
     /** Installed, enabled services outside the release's built-in set. */
     enabledCommunityServiceIds?: string[];
@@ -508,7 +403,6 @@ async function ownedFenceFixture(
       sql: fixture.sql,
       infraDir: root,
       serviceIds: dmServiceIds,
-      loseRecoveryResponseOnce: options.loseRecoveryResponseOnce,
     }),
     dm = control.openControlInstallation({
       infraDir: root,
@@ -645,7 +539,7 @@ async function ownedFenceFixture(
   };
   const captured = Promise.withResolvers<{
       input: import("@openmapx/core/data-manager-contracts").DataConfigurationFencePrepare;
-      assertion: string;
+      delegation: control.ControlDelegation;
     }>(),
     response = Promise.withResolvers<Response>(),
     originalFetch = globalThis.fetch;
@@ -656,12 +550,10 @@ async function ownedFenceFixture(
       String(url) === `${data.baseUrl}/executions/configuration-maintenance/prepare` &&
       init?.method === "POST"
     ) {
-      const assertion = new Headers(init.headers).get("x-openmapx-control-delegation");
-      if (!assertion) throw Error("Actual maintenance grant required");
-      captured.resolve({
-        input: dataConfigurationFencePrepareSchema.parse(JSON.parse(String(init.body))),
-        assertion,
-      });
+      const { delegation, ...input } = dataConfigurationFencePrepareRequestSchema.parse(
+        JSON.parse(String(init.body)),
+      );
+      captured.resolve({ input, delegation });
       return response.promise;
     }
     return originalFetch(url, init);
@@ -711,11 +603,8 @@ async function ownedFenceFixture(
     },
   );
   // The original API producer must reach the actual agent-issued child grant.
-  const { input, assertion } = await Promise.race([captured.promise, pending]);
-  const child = control.inspectArtifactDelegation({
-      assertion,
-      installation: dm,
-    }).execution,
+  const { input, delegation } = await Promise.race([captured.promise, pending]);
+  const child = delegation.execution,
     owner = input.ownerPrepare,
     authority = control.restoreAdmittedControlExecution(agent, owner),
     lease = control.restoreArtifactTargetLeaseForSettlement(authority);
@@ -728,7 +617,7 @@ async function ownedFenceFixture(
     child,
     authority,
     lease,
-    assertion,
+    delegation,
     input,
     data,
     host,
@@ -790,11 +679,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       },
     });
     await fence.startup();
-    const attempt = fence.prepare(
-      f.input,
-      ["x-openmapx-control-delegation", f.assertion],
-      "ops-agent",
-    );
+    const attempt = fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
     const rejected = expect(attempt).rejects.toThrow("Synthetic process crash");
     try {
       await ready;
@@ -842,7 +727,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
     let foreignLease: control.ArtifactTargetLease | undefined;
     try {
       await fence.startup();
-      await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent");
+      await fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
       const before = await f.sql`SELECT * FROM data_manager.configuration_fence`;
       const now = Date.now(),
         deadline = now + 30000,
@@ -920,10 +805,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         owner: authority,
       });
       for (const request of requests) {
-        const assertion = await control.delegateArtifactTargetLease(foreignLease, {
-          ...request.slot,
-          childId: f.dm.role,
-        });
+        const delegation = await control.delegateArtifactTargetLease(foreignLease, request.slot);
         await expect(
           fence.assertGenerationAdmission(
             {
@@ -931,8 +813,8 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
               requestedDeadlineAt: deadline,
               input: request.input,
               plan,
+              delegation,
             },
-            ["x-openmapx-control-delegation", assertion],
             "ops-agent",
           ),
         ).rejects.toMatchObject({ statusCode: 403 });

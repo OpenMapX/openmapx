@@ -148,15 +148,11 @@ it.skipIf(
       }
       return payload;
     });
-    registerAuth(
-      app,
-      {
-        api: "synthetic-dm-token-api",
-        "ops-agent": "synthetic-dm-token",
-        "host-cli": "synthetic-dm-token-cli",
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: "synthetic-dm-token-api",
+      "ops-agent": "synthetic-dm-token",
+      "host-cli": "synthetic-dm-token-cli",
+    });
     registerApi(app, {
       dataDir: data,
       singleFlight,

@@ -69,10 +69,9 @@ it("freezes distinct original data/finalization slots and refuses targets before
       }),
     ).rejects.toThrow("data phase not admitted");
     expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
-    const child = await control.bindControlChildPhase(authority, plan.dataReservation),
-      key = control.prepareFixedControlChild(authority, plan.dataDelegationId);
+    const child = await control.bindControlChildPhase(authority, plan.dataReservation);
     control.retainFixedCliSpawnIntent(authority, {
-      delegationId: plan.dataDelegationId,
+      childKey: plan.dataDelegationId,
       execution: child.execution,
       operation,
       args: control.fixedCliArguments(operation),
@@ -82,7 +81,7 @@ it("freezes distinct original data/finalization slots and refuses targets before
     const issued = await control.issueControlChildPhase(authority, {
       phase: "data-workflow",
       ordinal: 0,
-      childId: key,
+      childKey: plan.dataDelegationId,
     });
     control.consumeControlChildDispatch(issued.dispatchTicket);
     // An issued original CLI is still not a completed data prerequisite.
