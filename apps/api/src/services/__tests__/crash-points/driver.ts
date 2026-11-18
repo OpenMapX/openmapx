@@ -1091,9 +1091,11 @@ export class CrashHost {
    * turned it on, and the call returns once the job reached its source. */
   async startLongDataJob(): Promise<void> {
     const held: Array<() => void> = [];
+    let released = false;
     const source = {
       requests: 0,
       release: () => {
+        released = true;
         for (const answer of held.splice(0)) answer();
       },
     } as {
@@ -1101,9 +1103,13 @@ export class CrashHost {
       requests: number;
       release: () => void;
     };
+    // A refusal the build does not retry, so the job ends on the answer; a
+    // busy status would be retried, and a retried request held again.
     source.server = createHttpServer((_request, response) => {
       source.requests++;
-      held.push(() => response.writeHead(503).end("closed"));
+      const answer = () => response.writeHead(400).end("closed");
+      if (released) answer();
+      else held.push(answer);
     });
     await new Promise<void>((resolve) => source.server.listen(0, "127.0.0.1", resolve));
     this.notablePlacesSource = source;
