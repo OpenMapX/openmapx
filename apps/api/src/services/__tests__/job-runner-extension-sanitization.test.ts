@@ -19,18 +19,17 @@ const database = vi.hoisted(() => {
       update: vi.fn(() => ({
         set: vi.fn((value: Record<string, unknown>) => {
           const captured = { ...value };
-          if (
-            captured.result &&
-            typeof captured.result === "object" &&
-            "queryChunks" in captured.result
-          ) {
+          // A merged result or protocol is captured as the patch it writes.
+          for (const field of ["result", "protocol"] as const) {
+            const written = captured[field];
+            if (!written || typeof written !== "object" || !("queryChunks" in written)) continue;
             const query = new PgDialect().sqlToQuery(
-              captured.result as Parameters<PgDialect["sqlToQuery"]>[0],
+              written as Parameters<PgDialect["sqlToQuery"]>[0],
             );
             const patch = query.params.find(
               (param) => typeof param === "string" && param.startsWith("{"),
             );
-            if (typeof patch === "string") captured.result = JSON.parse(patch);
+            captured[field] = typeof patch === "string" ? JSON.parse(patch) : null;
           }
           updates.push(captured);
           const rows = [{ id: "unit-owned-job", status: "running", result: captured.result }];

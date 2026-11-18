@@ -10,7 +10,7 @@ import {
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { readProjection } from "./admin-job-projection";
-import { type AdminJobProtocol, jobOwnership } from "./admin-job-state";
+import { type AdminJobProtocol, jobCheckpoint, jobOwnership } from "./admin-job-state";
 import {
   type AdministrativeConfigurationWriter,
   administrativeConfigurationState,
@@ -199,7 +199,7 @@ export async function claimCoordinatorPullDelivery(context: JobContext, candidat
       .where(jobOwnership(context.jobId, context.execution))
       .for("update");
     if (!row) throw refuse();
-    const result = row.result as Record<string, unknown>,
+    const result = jobCheckpoint(row.result, row.protocol) ?? {},
       protocol = row.protocol as AdminJobProtocol,
       checkpoint = protocol.candidate;
     if (
@@ -286,7 +286,7 @@ export async function closeUnissuedCoordinatorPull(
       payload.serviceIds?.filter((id) => id === "data-manager").length !== 1
     )
       throw refuse();
-    const result = (row.result ?? {}) as Record<string, unknown>,
+    const result = jobCheckpoint(row.result, row.protocol) ?? {},
       protocol = row.protocol as AdminJobProtocol,
       projection = readProjection(protocol, result),
       stepAddress = createDurableOpsKey(

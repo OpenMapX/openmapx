@@ -47,7 +47,7 @@ export async function pruneMigrationStages() {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
         sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and not ${openCandidateCondition()} and ${noUnsettledManagedOperation()})`,
       ),
@@ -83,7 +83,7 @@ export async function retainMigrationStage(input: {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
       );
     const [counts] = await tx

@@ -93,7 +93,10 @@ it("merges AdminJobFailure evidence into DB/SSE without publishing the runner's 
   });
   const patch = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.result as SQL);
   expect(JSON.parse(patch.params[0] as string)).toEqual({ phase: "build", ...result });
-  expect(store.writes.at(-1)?.values.protocol).toBeUndefined();
+  // Only the handler's own state is merged into the protocol; the claim stays.
+  const own = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.protocol as SQL);
+  expect(own.sql).toContain("'handler'");
+  expect(JSON.stringify(own.params)).not.toContain(execution.owner);
   expect(patch.sql).toContain("- 'observation'");
   expect(events.at(-1)).toMatchObject({
     type: "status",
@@ -141,7 +144,11 @@ it("does not announce an old owner's completion when PostgreSQL rejects its CAS"
   const patches = store.writes.map((write) =>
     JSON.parse(new PgDialect().sqlToQuery(write.values.result as SQL).params[0] as string),
   );
-  expect(patches.find((patch) => patch._settled)).toEqual({
+  // The late completion is kept as the handler's own state, not in the result.
+  const own = store.writes.map((write) =>
+    JSON.parse(new PgDialect().sqlToQuery(write.values.protocol as SQL).params[0] as string),
+  );
+  expect(own.find((patch) => patch._settled)).toEqual({
     _settled: { status: "success", result: { completed: true } },
   });
   expect(patches.at(-1)).toMatchObject({
@@ -168,8 +175,14 @@ it("rejects stale checkpoint writes before another child can be admitted", async
   });
   await run("test.checkpoint");
   expect(effect).not.toHaveBeenCalled();
-  // A handler's checkpoint writes only the result; the claim is the runner's.
-  expect(store.writes[0]?.values.protocol).toBeUndefined();
+  // A handler's checkpoint writes its result and its own state; the claim is the runner's.
+  const own = new PgDialect().sqlToQuery(store.writes[0]?.values.protocol as SQL);
+  expect(own.sql).toContain("'handler'");
+  expect(JSON.stringify(own.params)).not.toContain("forged");
+  expect(store.writes[0]?.values.result).toEqual({
+    execution: { owner: "forged", version: 999 },
+    prepared: true,
+  });
   expect(new PgDialect().sqlToQuery(store.writes[0]?.where as SQL).params).toContain(
     JSON.stringify(execution),
   );

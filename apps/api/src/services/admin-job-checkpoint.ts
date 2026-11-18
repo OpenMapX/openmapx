@@ -10,7 +10,9 @@ import {
   JobOwnershipLost,
   JobStepAllocationConflict,
   JobStepCapacityExceeded,
+  jobCheckpoint,
   jobOwnership,
+  splitJobCheckpoint,
 } from "./admin-job-state";
 
 import { assertStandaloneSettlementCheckpoint } from "./standalone-integrations/settlement-checkpoint";
@@ -38,7 +40,7 @@ export async function checkpointOwnedAdminJob(
       .where(jobOwnership(id, execution, ["running", "cancel_pending"]))
       .for("update");
     if (!row) throw new JobOwnershipLost();
-    const current = (row.result ?? {}) as Record<string, unknown>,
+    const current = jobCheckpoint(row.result, row.protocol) ?? {},
       currentProtocol = row.protocol as AdminJobProtocol,
       old = readProjection(currentProtocol, current),
       next = readProjection({ operations }, candidate);
@@ -76,7 +78,11 @@ export async function checkpointOwnedAdminJob(
         ["standalone.install", "standalone.adopt", "standalone.remove"].includes(row.type) &&
         operation.operation?.kind === "integration.settle";
       if (standaloneSettlement)
-        await assertStandaloneSettlementCheckpoint(row, operation.operation!, tx);
+        await assertStandaloneSettlementCheckpoint(
+          { ...row, result: current },
+          operation.operation!,
+          tx,
+        );
       // Cancellation never authorizes a forward phase. Only the settlement of
       // this job's own configuration maintenance may still be sent.
       const body = operation.operation,
@@ -202,18 +208,19 @@ export async function checkpointOwnedAdminJob(
         ? { _parentExecution: current._parentExecution ?? candidate._parentExecution }
         : {}),
     };
+    const split = splitJobCheckpoint(merged);
     const [updated] = await tx
       .update(adminJob)
       .set({
-        result: merged,
-        protocol: { ...currentProtocol, operations: mergedProjection },
+        result: split.result,
+        protocol: { ...currentProtocol, operations: mergedProjection, handler: split.handler },
         ...(progress === undefined ? {} : { progress }),
       })
       .where(jobOwnership(id, execution, ["running", "cancel_pending"]))
       .returning({ result: adminJob.result, protocol: adminJob.protocol });
     if (!updated) throw new JobOwnershipLost();
     return {
-      result: updated.result as Record<string, unknown>,
+      result: jobCheckpoint(updated.result, updated.protocol) ?? {},
       protocol: updated.protocol as AdminJobProtocol,
     };
   });

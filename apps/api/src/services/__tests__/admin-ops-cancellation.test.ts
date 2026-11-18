@@ -10,6 +10,7 @@ import {
   verifyApiJobParentExecution,
 } from "@openmapx/core/ops";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { jobCheckpoint } from "../admin-job-state.js";
 import type { JobContext } from "../job-runner.js";
 
 // Integration-route imports require a synthetic application secret, scoped to this file.
@@ -526,7 +527,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
       payload: {},
       execution: { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 1 },
       signal: new AbortController().signal,
-      checkpointResult: structuredClone(database.row.result),
+      checkpointResult: structuredClone(jobCheckpoint(database.row.result, database.row.protocol)),
       protocol: structuredClone(database.row.protocol),
       checkpoint: async () => {},
       log: async () => {},

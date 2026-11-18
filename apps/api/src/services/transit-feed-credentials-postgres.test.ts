@@ -507,7 +507,8 @@ describe.skipIf(!enabled)(
               return {
                 status: j.status,
                 type: j.type,
-                failure: r?._migrationFailure,
+                failure: (j.protocol as { handler?: { _migrationFailure?: unknown } })?.handler
+                  ?._migrationFailure,
                 configuration: r?.configuration,
                 phase: (j.protocol as { candidate?: { phase?: unknown } })?.candidate?.phase,
               };

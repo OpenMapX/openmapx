@@ -632,11 +632,14 @@ async function ownedFenceFixture(
         ctx.checkpointResult = saved.result;
         ctx.protocol = saved.protocol;
       } else {
-        await fixture.db
+        const { replaceJobCheckpoint } = await import("../admin-job-state");
+        const [saved] = await fixture.db
           .update(apiSchema.adminJob)
-          .set({ result })
-          .where(eq(apiSchema.adminJob.id, jobId));
+          .set(replaceJobCheckpoint(result))
+          .where(eq(apiSchema.adminJob.id, jobId))
+          .returning({ protocol: apiSchema.adminJob.protocol });
         ctx.checkpointResult = result;
+        ctx.protocol = saved?.protocol;
       }
     },
   };

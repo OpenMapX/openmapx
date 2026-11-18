@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { JobObservationPending } from "./admin-job-failure";
-import { jobOwnership } from "./admin-job-state";
+import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 
 const stepSchema = z.strictObject({
@@ -132,7 +132,7 @@ export async function extensionDatabaseStep<T>(
         canonicalJson(row.payload) !== canonicalJson(ctx.payload)
       )
         return fail();
-      const current = (row.result ?? {}) as Record<string, unknown>,
+      const current = jobCheckpoint(row.result, row.protocol) ?? {},
         retained = await read(current._extensionWorkflow);
       if (canonicalJson(retained) !== canonicalJson(state)) return fail();
       const output = await write(tx);
@@ -146,7 +146,7 @@ export async function extensionDatabaseStep<T>(
       committed = { ...current, _extensionWorkflow: await seal(next) };
       const rows = await tx
         .update(adminJob)
-        .set({ result: committed })
+        .set(replaceJobCheckpoint(committed))
         .where(jobOwnership(ctx.jobId, ctx.execution))
         .returning({ id: adminJob.id });
       if (rows.length !== 1) return fail();

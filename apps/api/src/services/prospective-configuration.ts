@@ -52,6 +52,7 @@ import {
   JobOwnershipLost,
   jobOwnership,
   readAdminJobProtocol,
+  replaceJobCheckpoint,
   writeAdminJobCandidate,
 } from "./admin-job-state";
 import {
@@ -444,7 +445,7 @@ async function concludeWithoutChange(
     delete result.observation;
     const rows = await connection
       .update(schema.adminJob)
-      .set({ status: "canceled", finishedAt: new Date(), result })
+      .set({ status: "canceled", finishedAt: new Date(), ...replaceJobCheckpoint(result) })
       .where(jobOwnership(job.jobId, job.execution, ["running", "cancel_pending"]))
       .returning({ id: schema.adminJob.id });
     if (rows.length !== 1) throw new JobOwnershipLost();

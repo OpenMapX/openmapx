@@ -8,7 +8,12 @@ import {
   installedIntegration,
 } from "../../db/schema";
 import { readProjection } from "../admin-job-projection";
-import { cancelRequestedAt, JobOwnershipLost, readAdminJobProtocol } from "../admin-job-state";
+import {
+  cancelRequestedAt,
+  JobOwnershipLost,
+  jobCheckpoint,
+  readAdminJobProtocol,
+} from "../admin-job-state";
 import { assertOwnershipSettlementCheckpoint } from "./ownership-checkpoint";
 import { readOwnershipState } from "./ownership-state";
 import { readStandaloneState } from "./state";
@@ -125,8 +130,8 @@ export async function hasVerifiedStandaloneRestoration(
   jobId: string | undefined,
 ): Promise<boolean> {
   try {
-    if (!jobId || !result || typeof result !== "object") return false;
-    const value = result as Record<string, unknown>;
+    const value = jobCheckpoint(result, protocol);
+    if (!jobId || !value) return false;
     if (value._standaloneSettled !== true || !cancelRequestedAt(readAdminJobProtocol(protocol)))
       return false;
     let ownership: Awaited<ReturnType<typeof readOwnershipState>> | undefined;

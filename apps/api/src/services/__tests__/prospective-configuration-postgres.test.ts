@@ -50,10 +50,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         log: async () => {},
         setProgress: async () => {},
         checkpoint: async (result, _progress, _key, _address, operations) => {
-          const protocol = operations ? { ...ctx.protocol, operations } : ctx.protocol;
+          const { splitJobCheckpoint } = await import("../admin-job-state"),
+            split = splitJobCheckpoint(result),
+            protocol = {
+              ...ctx.protocol,
+              ...(operations ? { operations } : {}),
+              handler: split.handler,
+            };
           await fixture.db
             .update(schema.adminJob)
-            .set({ result, protocol: protocol as Record<string, unknown> })
+            .set({ result: split.result, protocol: protocol as Record<string, unknown> })
             .where(eq(schema.adminJob.id, jobId));
           ctx.checkpointResult = result;
           ctx.protocol = protocol;

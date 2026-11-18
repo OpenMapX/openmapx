@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { JobObservationPending } from "./admin-job-failure";
-import { jobOwnership } from "./admin-job-state";
+import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 
@@ -63,7 +63,7 @@ export async function prepareServiceUpdateBatch(ctx: JobContext) {
       canonicalJson(row.payload) !== canonicalJson(ctx.payload)
     )
       throw new JobObservationPending("invalid_identity");
-    const result = (row.result ?? {}) as Record<string, unknown>;
+    const result = jobCheckpoint(row.result, row.protocol) ?? {};
     if (result._serviceUpdateBatch) {
       retained = result;
       return parseServiceUpdateBatch(row.payload, result);
@@ -71,7 +71,7 @@ export async function prepareServiceUpdateBatch(ctx: JobContext) {
     retained = { ...result, _serviceUpdateBatch: original };
     const rows = await tx
       .update(adminJob)
-      .set({ result: retained })
+      .set(replaceJobCheckpoint(retained))
       .where(jobOwnership(ctx.jobId, ctx.execution))
       .returning({ id: adminJob.id });
     if (rows.length !== 1) throw new JobObservationPending("recovery_required");

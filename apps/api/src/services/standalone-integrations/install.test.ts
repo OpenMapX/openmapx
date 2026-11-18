@@ -109,8 +109,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .where(eq(schema.adminJob.type, "standalone.install"))
               .then((rows) =>
                 rows.filter((row) => {
-                  const sealed = (row.result as { _standalone?: { body?: string } } | null)
-                    ?._standalone?.body;
+                  const sealed = (
+                    row.protocol as { handler?: { _standalone?: { body?: string } } } | null
+                  )?.handler?._standalone?.body;
                   return (
                     row.status === "running" &&
                     sealed &&
@@ -136,8 +137,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .from(schema.adminJob)
               .where(eq(schema.adminJob.type, "standalone.remove"));
             const job = rows.find((row) => {
-              const body = (row.result as { _standalone?: { body?: string } } | null)?._standalone
-                ?.body;
+              const body = (
+                row.protocol as { handler?: { _standalone?: { body?: string } } } | null
+              )?.handler?._standalone?.body;
               return (
                 row.status === "running" && body && JSON.parse(body).request?.integrationId === id
               );
@@ -720,14 +722,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .select()
           .from(schema.adminJob)
           .where(eq(schema.adminJob.id, String(accepted.body.jobId)));
-        const result = row?.result as {
-          _standalone?: { body: string };
-          observation?: { reason: string };
-        } | null;
+        const result = row?.result as { observation?: { reason: string } } | null,
+          own = (row?.protocol as { handler?: { _standalone?: { body: string } } } | null)?.handler;
         if (
-          result?._standalone &&
-          JSON.parse(result._standalone.body).phase === "persist_attempted" &&
-          result.observation?.reason === "recovery_required"
+          own?._standalone &&
+          JSON.parse(own._standalone.body).phase === "persist_attempted" &&
+          result?.observation?.reason === "recovery_required"
         ) {
           held = row;
           break;

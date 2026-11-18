@@ -740,8 +740,15 @@ describe.skipIf(
         operations,
       },
     };
-    await state.db.update(adminJob).set({ result, protocol }).where(eq(adminJob.id, job.id));
-    return { ...job, result, protocol };
+    // The parent binding is the handler's own state, kept in the protocol.
+    const { splitJobCheckpoint } = await import("../admin-job-state"),
+      split = splitJobCheckpoint(result),
+      stored = { ...protocol, handler: split.handler };
+    await state.db
+      .update(adminJob)
+      .set({ result: split.result, protocol: stored })
+      .where(eq(adminJob.id, job.id));
+    return { ...job, result, protocol: stored };
   }
   it("renewal: same-owner same-address different deadlines has one CAS winner and at most one mutation POST", async () => {
     const job = await seed("test.renewal.same-address"),
@@ -792,8 +799,18 @@ describe.skipIf(
     const job = await seedCapacity(0),
       execution = required(readJobExecution(job.protocol));
     const stale = { ...job.result, _opsLogEvents: 1999, _opsLogBytes: 0 };
-    await state.db.update(adminJob).set({ result: stale }).where(eq(adminJob.id, job.id));
-    const { insertOwnedJobLog } = await import("../admin-job-state");
+    const { insertOwnedJobLog, jobCheckpoint, splitJobCheckpoint } = await import(
+      "../admin-job-state"
+    );
+    await state.db
+      .update(adminJob)
+      .set({
+        protocol: {
+          ...(job.protocol as Record<string, unknown>),
+          handler: splitJobCheckpoint(stale).handler,
+        },
+      })
+      .where(eq(adminJob.id, job.id));
     const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint");
     const entries = [0, 1].map((seq) => ({
       id: `${job.id}:last:${seq}`,
@@ -817,7 +834,8 @@ describe.skipIf(
       undefined,
       stale,
     );
-    expect((await row(job.id)).result).toMatchObject({
+    const charged = await row(job.id);
+    expect(jobCheckpoint(charged.result, charged.protocol)).toMatchObject({
       _opsLogEvents: 2000,
       _opsLogBytes: 4,
       retainedPatch: true,

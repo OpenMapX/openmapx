@@ -24,6 +24,45 @@ export interface AdminJobProtocol {
   /** A job the API ran for an HTTP request: who asked, and a keyed digest of
    * the intent, so the same key with another intent is refused. */
   immediate?: { actorId: string; intentDigest: string };
+  /** The handler's own recovery state (its underscore checkpoint keys), kept
+   * beside the public result. Handlers see both merged as their checkpoint. */
+  handler?: Record<string, unknown>;
+}
+/** Splits a handler's checkpoint into the public result and its own state. */
+export function splitJobCheckpoint(value: Record<string, unknown>) {
+  const result: Record<string, unknown> = {},
+    handler: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value))
+    if (key.startsWith("_")) handler[key] = entry;
+    else result[key] = entry;
+  return { result, handler };
+}
+/** A handler's checkpoint: the job's public result and its own state. */
+export function jobCheckpoint(result: unknown, protocol: unknown): Record<string, unknown> | null {
+  const handler = readAdminJobProtocol(protocol).handler;
+  if ((result === null || result === undefined) && handler === undefined) return null;
+  return { ...((result ?? {}) as Record<string, unknown>), ...(handler ?? {}) };
+}
+/** Update fields that merge a checkpoint patch into a job's result and own state. */
+export function mergeJobCheckpoint(
+  patch: Record<string, unknown>,
+  options: { dropObservation?: boolean; protocol?: Record<string, unknown> } = {},
+) {
+  const { result, handler } = splitJobCheckpoint(patch);
+  return {
+    result: options.dropObservation
+      ? sql`(coalesce(${adminJob.result}, '{}'::jsonb) - 'observation') || ${JSON.stringify(result)}::jsonb`
+      : sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(result)}::jsonb`,
+    protocol: sql`${adminJob.protocol} || jsonb_build_object('handler', coalesce(${adminJob.protocol}->'handler', '{}'::jsonb) || ${JSON.stringify(handler)}::jsonb) || ${JSON.stringify(options.protocol ?? {})}::jsonb`,
+  };
+}
+/** Update fields that replace a job's result and own state with a checkpoint. */
+export function replaceJobCheckpoint(value: Record<string, unknown>) {
+  const { result, handler } = splitJobCheckpoint(value);
+  return {
+    result,
+    protocol: sql`${adminJob.protocol} || jsonb_build_object('handler', ${JSON.stringify(handler)}::jsonb)`,
+  };
 }
 /**
  * A configuration candidate's progress. `candidate_prepared`: the candidate is
@@ -109,8 +148,9 @@ export function hasUnsettledManagedOperation(
   const p = protocol?.operations as
     | { version?: number; operations?: Record<string, { terminal?: boolean }> }
     | undefined;
-  const data = (result as { _dataExecutions?: unknown } | null)?._dataExecutions;
-  const standalone = result as { _standalone?: unknown; _standaloneSettled?: unknown } | null;
+  const own = { ...(result as Record<string, unknown> | null), ...protocol?.handler };
+  const data = own._dataExecutions as unknown;
+  const standalone = own as { _standalone?: unknown; _standaloneSettled?: unknown };
   return (
     (standalone?._standalone !== undefined && standalone._standaloneSettled !== true) ||
     (p?.version === 3 && Object.values(p.operations ?? {}).some((o) => o.terminal !== true)) ||
@@ -129,7 +169,8 @@ export function hasUnsettledManagedOperation(
   );
 }
 export function noUnsettledManagedOperation() {
-  return sql`(${adminJob.result}->'_standalone' IS NULL OR ${adminJob.result}->'_standaloneSettled' = 'true'::jsonb) AND NOT (coalesce(${adminJob.protocol}->'operations'->>'version','') = '3' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.protocol}->'operations'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true')) AND CASE WHEN ${adminJob.result}->'_dataExecutions' IS NULL THEN true WHEN jsonb_typeof(${adminJob.result}->'_dataExecutions') <> 'array' THEN false ELSE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${adminJob.result}->'_dataExecutions') AS backend_entry WHERE backend_entry->>'state' IS DISTINCT FROM 'terminal' OR coalesce(backend_entry->>'publication','unknown') NOT IN ('not_started','committed') OR coalesce(backend_entry->>'status','') NOT IN ('ok','partial','error','canceled','interrupted') OR coalesce(backend_entry->>'id','') !~ '^[a-f0-9-]{36}$' OR coalesce(backend_entry->>'operationKey','') !~ '^opk1_[A-Za-z0-9_-]{16,64}$' OR coalesce(backend_entry->>'fingerprint','') !~ '^[a-f0-9]{64}$') END`;
+  const own = sql`${adminJob.protocol}->'handler'`;
+  return sql`(${own}->'_standalone' IS NULL OR ${own}->'_standaloneSettled' = 'true'::jsonb) AND NOT (coalesce(${adminJob.protocol}->'operations'->>'version','') = '3' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.protocol}->'operations'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true')) AND CASE WHEN ${own}->'_dataExecutions' IS NULL THEN true WHEN jsonb_typeof(${own}->'_dataExecutions') <> 'array' THEN false ELSE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${own}->'_dataExecutions') AS backend_entry WHERE backend_entry->>'state' IS DISTINCT FROM 'terminal' OR coalesce(backend_entry->>'publication','unknown') NOT IN ('not_started','committed') OR coalesce(backend_entry->>'status','') NOT IN ('ok','partial','error','canceled','interrupted') OR coalesce(backend_entry->>'id','') !~ '^[a-f0-9-]{36}$' OR coalesce(backend_entry->>'operationKey','') !~ '^opk1_[A-Za-z0-9_-]{16,64}$' OR coalesce(backend_entry->>'fingerprint','') !~ '^[a-f0-9]{64}$') END`;
 }
 export function readJobExecution(protocol: unknown): JobExecution | undefined {
   const value = readAdminJobProtocol(protocol).execution;
@@ -196,13 +237,14 @@ export async function insertOwnedJobLog(
       INSERT INTO ${adminJobLog} (id, job_id, seq, stream, line, created_at)
       SELECT ${entry.id}, ${entry.jobId}, ${entry.seq}, ${entry.stream}, ${entry.line}, ${entry.createdAt?.toISOString()}::timestamp
       FROM owner WHERE coalesce(owner.protocol->'operations'->>'version','') <> '3' OR (
-        coalesce((owner.result->>'_opsLogEvents')::integer,0) < ${ADMIN_JOB_LOG_LIMITS.events}
-        AND coalesce((owner.result->>'_opsLogBytes')::integer,0) + ${Buffer.byteLength(entry.line, "utf8")} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
+        coalesce((owner.protocol->'handler'->>'_opsLogEvents')::integer,0) < ${ADMIN_JOB_LOG_LIMITS.events}
+        AND coalesce((owner.protocol->'handler'->>'_opsLogBytes')::integer,0) + ${Buffer.byteLength(entry.line, "utf8")} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
       ) ON CONFLICT (id) DO NOTHING RETURNING job_id
     ), charged AS (
-      UPDATE ${adminJob} SET result=coalesce(${adminJob.result},'{}'::jsonb) || jsonb_build_object(
-        '_opsLogEvents',coalesce((owner.result->>'_opsLogEvents')::integer,0)+1,
-        '_opsLogBytes',coalesce((owner.result->>'_opsLogBytes')::integer,0)+${Buffer.byteLength(entry.line, "utf8")})
+      UPDATE ${adminJob} SET protocol=${adminJob.protocol} || jsonb_build_object('handler',
+        coalesce(owner.protocol->'handler','{}'::jsonb) || jsonb_build_object(
+        '_opsLogEvents',coalesce((owner.protocol->'handler'->>'_opsLogEvents')::integer,0)+1,
+        '_opsLogBytes',coalesce((owner.protocol->'handler'->>'_opsLogBytes')::integer,0)+${Buffer.byteLength(entry.line, "utf8")}))
       FROM owner,inserted WHERE ${adminJob.id}=owner.id AND inserted.job_id=owner.id AND owner.protocol->'operations'->>'version'='3'
       RETURNING ${adminJob.id}
     )

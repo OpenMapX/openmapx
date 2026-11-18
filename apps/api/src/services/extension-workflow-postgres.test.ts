@@ -180,12 +180,14 @@ it.skipIf(!enabled)(
           ctx.checkpointResult = saved.result;
           ctx.protocol = saved.protocol;
         } else {
+          const { jobCheckpoint, replaceJobCheckpoint } = await import("./admin-job-state");
           const rows = await fixture.db
             .update(schema.adminJob)
-            .set({ result: value })
+            .set(replaceJobCheckpoint(value))
             .where(eq(schema.adminJob.id, id))
             .returning();
-          ctx.checkpointResult = rows[0]!.result as Record<string, unknown>;
+          ctx.checkpointResult = jobCheckpoint(rows[0]!.result, rows[0]!.protocol);
+          ctx.protocol = rows[0]!.protocol;
         }
         baseline = structuredClone(ctx.checkpointResult ?? {});
       },
@@ -369,12 +371,14 @@ it.skipIf(!enabled)(
             ctx.checkpointResult = saved.result;
             ctx.protocol = saved.protocol;
           } else {
+            const { jobCheckpoint, replaceJobCheckpoint } = await import("./admin-job-state");
             const [saved] = await fixture.db
               .update(schema.adminJob)
-              .set({ result: value })
+              .set(replaceJobCheckpoint(value))
               .where(eq(schema.adminJob.id, id))
               .returning();
-            ctx.checkpointResult = saved!.result as Record<string, unknown>;
+            ctx.checkpointResult = jobCheckpoint(saved!.result, saved!.protocol);
+            ctx.protocol = saved!.protocol;
           }
           baseline = structuredClone(ctx.checkpointResult ?? {});
         },

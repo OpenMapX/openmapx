@@ -12,7 +12,7 @@ import { getIntegration, reloadIntegrations } from "../../integration-host";
 import { dbActorId } from "../../utils/actor";
 import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import { executeAdminJobOperation } from "../admin-job-ops";
-import { jobOwnership } from "../admin-job-state";
+import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "../admin-job-state";
 import { withExtensionChangeLock } from "../extension-recovery";
 import type { JobContext } from "../job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../ops-client";
@@ -103,7 +103,7 @@ async function persist(ctx: JobContext, state: OwnershipState, write: boolean): 
       .for("update");
     if (!job) throw new JobObservationPending("recovery_required");
     await lockOwnership(tx, state.request.integrationId);
-    const value = job.result as Record<string, unknown>,
+    const value = jobCheckpoint(job.result, job.protocol) ?? {},
       retained = await readOwnershipState(value._standalone);
     if (
       retained.operationId !== state.operationId ||
@@ -202,7 +202,7 @@ async function persist(ctx: JobContext, state: OwnershipState, write: boolean): 
     };
     const updated = await tx
       .update(adminJob)
-      .set({ result })
+      .set(replaceJobCheckpoint(result))
       .where(jobOwnership(ctx.jobId, ctx.execution, ["running", "cancel_pending"]))
       .returning({ id: adminJob.id });
     if (updated.length !== 1) throw new JobObservationPending("recovery_required");

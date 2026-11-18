@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, sql } from "../../../db";
 import { adminJob, installedExtension, installedIntegration } from "../../../db/schema";
 import { checkpointOwnedAdminJob } from "../../admin-job-checkpoint";
-import { jobOwnership } from "../../admin-job-state";
+import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "../../admin-job-state";
 import { publishIntegration, settleIntegration } from "../../agent-integrations";
 import {
   extensionDatabaseStep,
@@ -29,7 +29,7 @@ const ctx: JobContext = {
   execution,
   payload: row.payload as Record<string, unknown>,
   signal: new AbortController().signal,
-  checkpointResult: row.result as Record<string, unknown>,
+  checkpointResult: jobCheckpoint(row.result, row.protocol),
   protocol: row.protocol,
   log: async () => {},
   setProgress: async () => {},
@@ -51,11 +51,12 @@ const ctx: JobContext = {
     } else {
       const [saved] = await db
         .update(adminJob)
-        .set({ result: value })
+        .set(replaceJobCheckpoint(value))
         .where(jobOwnership(id, execution))
         .returning();
       if (!saved) throw Error("Owner changed");
-      ctx.checkpointResult = saved.result as Record<string, unknown>;
+      ctx.checkpointResult = jobCheckpoint(saved.result, saved.protocol);
+      ctx.protocol = saved.protocol;
     }
   },
 };

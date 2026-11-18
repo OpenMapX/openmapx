@@ -166,9 +166,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ctx.checkpointResult = saved.result;
             ctx.protocol = saved.protocol;
           } else {
+            const { replaceJobCheckpoint } = await import("../admin-job-state");
             const [saved] = await fixture.db
               .update(schema.adminJob)
-              .set({ result })
+              .set(replaceJobCheckpoint(result))
               .where(eq(schema.adminJob.id, jobId))
               .returning({ protocol: schema.adminJob.protocol });
             ctx.checkpointResult = result;
@@ -299,12 +300,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, ctx.jobId));
-      const { claimAdminJob } = await import("../admin-job-state"),
+      const { claimAdminJob, jobCheckpoint } = await import("../admin-job-state"),
         reclaimed = await claimAdminJob(original!);
       ctx.execution = (
         reclaimed!.protocol as { execution: NonNullable<JobContext["execution"]> }
       ).execution;
-      ctx.checkpointResult = reclaimed!.result as Record<string, unknown>;
+      ctx.checkpointResult = jobCheckpoint(reclaimed!.result, reclaimed!.protocol);
       ctx.protocol = reclaimed!.protocol;
       ctx.checkpoint = async (result, progress, admissionKey, stepAddress, operations) => {
         const saved = await checkpointOwnedAdminJob(
