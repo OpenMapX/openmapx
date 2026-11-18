@@ -304,12 +304,26 @@ describe("configuration maintenance transitions", () => {
       expect(t.record).toMatchObject({ state: "settling", fenceOutcome: "unused" });
       expect(t.effects).toEqual([{ type: "settle_fence", outcome: "unused" }]);
     }
+    const passed = transitionMaintenance(prepared(), { type: "deadline_passed" }, later);
+    expect(passed.record).toMatchObject({ state: "settling", fenceOutcome: "unused" });
+    expect(passed.effects).toEqual([{ type: "settle_fence", outcome: "unused" }]);
+    // Before the deadline the check changes nothing.
+    expect(run(prepared(), { type: "deadline_passed" }).changed).toBe(false);
+    // An apply that stopped before its first step ends at the deadline too.
+    const unstarted = transitionMaintenance(prepared(), { type: "apply", apiJobId }, now).record;
+    expect(transitionMaintenance(unstarted, { type: "deadline_passed" }, later).record.state).toBe(
+      "settling",
+    );
     const attempted = run(
       prepared(),
       { type: "apply", apiJobId },
       { type: "step_start", ordinal: 0 },
     );
     expect(refusal(attempted.record, { type: "abandon" })).toBe("conflict");
+    // A step attempted is never abandoned by the deadline: its outcome decides.
+    expect(
+      transitionMaintenance(attempted.record, { type: "deadline_passed" }, later).changed,
+    ).toBe(false);
   });
 
   it("refuses apply after the deadline, for another job or after a cancel", () => {

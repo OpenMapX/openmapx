@@ -114,8 +114,10 @@ export type MaintenanceEvent =
   /** The agent restarted; `fenceDelegated` says whether the fence child was delegated. */
   | { type: "startup"; fenceDelegated: boolean }
   | { type: "apply"; apiJobId: string }
-  /** `settle{abandon}`, a cancel before apply, or the deadline passing while prepared. */
+  /** `settle{abandon}` or a cancel before any step started. */
   | { type: "abandon" }
+  /** The agent's own check: a maintenance with no step attempted ends at its deadline. */
+  | { type: "deadline_passed" }
   | { type: "step_start"; ordinal: number }
   | {
       type: "step_terminal";
@@ -272,6 +274,15 @@ export function transitionMaintenance(
       if (record.state === "settling" || record.state === "settled") return unchanged();
       if (record.state !== "prepared" && record.state !== "applying") refuse("busy");
       if (record.steps.some((value) => value.state !== "pending")) refuse("conflict");
+      enterSettling("unused");
+      break;
+    case "deadline_passed":
+      if (
+        (record.state !== "prepared" && record.state !== "applying") ||
+        record.steps.some((value) => value.state !== "pending") ||
+        now.getTime() < record.prepare.deadlineAt
+      )
+        return unchanged();
       enterSettling("unused");
       break;
     case "step_start": {
