@@ -161,8 +161,8 @@ as another uid or to take the user from a checkout root owns.
 For an existing installation, use **Admin → System → Updates**. Check the
 configured release and apply that exact candidate.
 The coordinated producer preserves Data Manager ownership, drains active work,
-retains its configuration decision and observes the original job across API and
-agent replacement. Keep the backup option enabled.
+records the update as one maintenance in the operations agent's state and
+observes the original job across API and agent replacement. Keep the backup option enabled.
 
 The host CLI can drive the same public administrative producer when only the panel is
 unavailable. If an agent/helper replacement or prerequisite actually failed, inspect
@@ -403,23 +403,23 @@ service name, list that hostname in `DATA_MANAGER_PLAINTEXT_HOSTS` (see
 dedicated hostname or port.
 :::
 
-### Closing an expired application-update preparation
+### An application update that never applied
 
-An application update can stay at preparation with `recovery_required` when
-Data Manager took its maintenance grant but then refused to admit it, or stopped
-in between. The previous application containers keep running.
+A prepared update that never starts applying ends on its own: once its
+preparation deadline passes, the operations agent settles Data Manager's
+configuration fence as unused and releases the update's services. Cancelling the
+**original** job in Activity before any step started does the same at once. The
+previous application containers keep running, and the job finishes without
+replacing containers or making a backup.
 
-Cancel the **original** job in Activity with a full administrator session. Once
-its original deadline has passed, cancellation settles it only after Data
-Manager and the operations agent confirm that nothing was admitted or changed;
-otherwise it stays pending. The job then finishes as **failed**, keeping its
-receipt and cancellation request, releases its ownership and discards its
-prepared configuration candidate. It does not resume the update, replace
-containers or make a backup.
+An update whose fence preparation got no answer from Data Manager stays at
+preparation with `recovery_required`. Check `pnpm openmapx control status`, then
+resolve the original operation with `pnpm openmapx control resolve`, as described
+under [Operations whose outcome is unknown](#operations-whose-outcome-is-unknown).
 
 Start a fresh checked update afterward; use `--no-backup` for CLI updates and
 their resumes when that is your selected policy, or disable the panel's backup
-option. Do not delete locks, clear database flags or replay the preparation grant.
+option. Do not delete locks, clear database flags or edit the agent's records.
 
 ## 5. Database migrations apply automatically
 

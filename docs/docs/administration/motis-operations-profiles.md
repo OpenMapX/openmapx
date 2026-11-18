@@ -106,7 +106,7 @@ publication and child settlement. CLI and scheduled bumps cannot activate propos
 legacy raw-ref approval is closed. A disconnected observer does not cancel work.
 Cancellation requests wait for actual effect containment. An unknown outcome keeps
 conflicting work blocked; reconnect to the original job instead of submitting a
-second attempt or manually replacing its pointers. Original signed commit receipts
+second attempt or manually replacing its pointers. The original commit records
 support recovery after either process restarts.
 
 The actual catalog-worker/agent canary additionally runs the pinned MOTIS image

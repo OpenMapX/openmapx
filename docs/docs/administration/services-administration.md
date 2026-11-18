@@ -518,7 +518,7 @@ host:
 
 Every clear and resolve is appended to
 `infra/docker/state/ops-agent/control-audit.jsonl` and printed. Do not delete the
-lease store, lock files or signed records by hand: a missing record proves
+lease store, lock files or control records by hand: a missing record proves
 neither cancellation nor containment, and an uncertain operation must stay held
 until it is resolved.
 
