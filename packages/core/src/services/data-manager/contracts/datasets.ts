@@ -40,11 +40,20 @@ export const hardlinkEntrySchema = z.strictObject({
   instance: linkIdentity.optional(),
   targetFilename: linkIdentity.optional(),
 });
-/** A generation's hardlink plan, named by that generation's revision. */
+/**
+ * A generation's hardlink plan, named by that generation's revision. The
+ * operation key names the application: a repeated request with the same key
+ * and body observes the first one instead of linking again. `leaseId` names the
+ * lease the sending agent or host CLI operation holds; data-manager then takes
+ * no lease of its own.
+ */
 export const linkRequestSchema = z.strictObject({
+  operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
+  requestedDeadlineAt: z.number().int().nonnegative().safe(),
   revisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
   plan: z.array(hardlinkEntrySchema).max(2000),
   prune: z.boolean().optional(),
+  leaseId: z.uuid().optional(),
 });
 export const linkResultSchema = z.strictObject({
   ok: z.literal(true),

@@ -193,10 +193,6 @@ describe.skipIf(
           sql,
           singleFlight,
           operationsPolicy,
-          runHardlinks: async () => {
-            dataEffects++;
-            throw Error("Closed generation continuation");
-          },
         }),
         receiver = createDataExecutionReceiver({
           runtime,
@@ -705,111 +701,39 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
   60000,
 );
 it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
-  "rejects a signed foreign generation owner without changing the prepared guard",
+  "admits beside a prepared fence only its own maintenance's hardlink plan, without changing it",
   async () => {
     const f = await ownedFenceFixture(),
-      fence = createDataConfigurationMaintenance(f.sql, f.dm),
-      host = control.openControlInstallation({
-        infraDir: f.root,
-        role: "host-cli",
-        serviceIds: ["foreign-consumer"],
-      });
-    let foreignLease: control.ArtifactTargetLease | undefined;
+      fence = createDataConfigurationMaintenance(f.sql, f.dm);
     try {
       await fence.startup();
       await fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
       const before = await f.sql`SELECT * FROM data_manager.configuration_fence`;
-      const now = Date.now(),
-        deadline = now + 30000,
-        operation = { kind: "data.link" as const },
-        opHash = createHash("sha256").update(canonicalJson(operation)).digest("hex"),
-        owner: ExecutionRef = {
-          executor: "host-cli",
-          principal: "host-cli",
-          executionId: randomUUID(),
-          operationKey: createControlRootOperationKey({
-            notAfter: deadline,
-            nonce: randomBytes(16),
-          }),
-          operationFingerprint: opHash,
-          deadlineAt: deadline,
-          fingerprint: executionFingerprint({
-            kind: operation.kind,
-            operationFingerprint: opHash,
-            deadlineAt: deadline,
-          }),
-        },
-        plan = { plan: [], prune: true as const },
-        planDigest = control.controlDigest(plan);
-      const requests = [
-        {
+      const own = {
           revisionId: f.input.revisionId,
-          planDigest,
-          coordinatorMode: f.input.coordinatorMode,
+          planDigest: f.input.hardlinkPlanDigest ?? "f".repeat(64),
+          leaseId: control.rootLeaseId(f.input.ownerPrepare),
         },
-      ].map((body, ordinal) => {
-        const input = { kind: "generation-hardlinks" as const, ...body },
-          hash = createHash("sha256").update(canonicalJson(input)).digest("hex"),
-          execution: ExecutionRef = {
-            executor: "data-manager",
-            principal: "host-cli",
-            executionId: randomUUID(),
-            operationKey: control.controlChildOperationKey(
-              owner.operationKey,
-              "hardlinks",
-              ordinal,
-            ),
-            operationFingerprint: hash,
-            deadlineAt: deadline,
-            fingerprint: executionFingerprint({
-              kind: input.kind,
-              operationFingerprint: hash,
-              deadlineAt: deadline,
-              parent: control.retainedControlParent(owner),
-            }),
-          };
-        return {
-          input,
-          plan,
-          slot: {
-            phase: "hardlinks" as const,
-            ordinal,
-            kind: input.kind,
-            recipient: "data-manager" as const,
-            execution,
-            serviceIds: ["foreign-consumer"],
-          },
-        };
-      });
-      const authority = control.retainAdmittedControlExecution(host, {
-        execution: owner,
-        kind: operation.kind,
-        operation,
-        admittedAt: now,
-        requestedDeadlineAt: deadline,
-        serviceIds: ["foreign-consumer"],
-        plan: requests.map((request) => request.slot),
-      });
-      foreignLease = await control.acquireArtifactTargetLease({
-        serviceIds: ["foreign-consumer"],
-        owner: authority,
-      });
-      for (const request of requests) {
-        const delegation = await control.delegateArtifactTargetLease(foreignLease, request.slot);
-        await expect(
-          fence.assertGenerationAdmission(
-            {
-              operationKey: request.slot.execution.operationKey,
-              requestedDeadlineAt: deadline,
-              input: request.input,
-              plan,
-              delegation,
-            },
-            "ops-agent",
-          ),
-        ).rejects.toMatchObject({ statusCode: 403 });
-        expect(await f.sql`SELECT id FROM data_manager.jobs WHERE execution_version=2`).toEqual([]);
-      }
+        admit = (
+          input: typeof own,
+          caller: Parameters<typeof fence.assertLinkAdmission>[2],
+        ): Promise<unknown> => f.sql.begin((tx) => fence.assertLinkAdmission(tx, input, caller));
+      // The host CLI, another lease, another revision and another plan stay out.
+      for (const [input, caller] of [
+        [own, "host-cli"],
+        [{ ...own, leaseId: randomUUID() }, "ops-agent"],
+        [{ ...own, revisionId: `cfg1_${"z".repeat(43)}` }, "ops-agent"],
+        [{ ...own, planDigest: "e".repeat(64) }, "ops-agent"],
+      ] as const)
+        await expect(admit(input, caller)).rejects.toThrow("configuration_maintenance_busy");
+      // The API's token never sends a plan under a lease.
+      await expect(admit(own, "api")).rejects.toMatchObject({ statusCode: 403 });
+      // The maintenance's own plan: its fence names the plan it froze. A
+      // maintenance without a plan names none, so nothing is admitted beside it.
+      if (f.input.hardlinkPlanDigest)
+        await expect(admit(own, "ops-agent")).resolves.toBeUndefined();
+      else await expect(admit(own, "ops-agent")).rejects.toThrow("configuration_maintenance_busy");
+      expect(await f.sql`SELECT id FROM data_manager.jobs WHERE execution_version=2`).toEqual([]);
       expect(await f.sql`SELECT * FROM data_manager.configuration_fence`).toEqual(before);
       await expect(
         fence.withAdmission(async () => {
@@ -817,8 +741,6 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         }),
       ).rejects.toThrow("configuration_maintenance_busy");
     } finally {
-      if (foreignLease) control.closeArtifactTargetLeaseHandle(foreignLease);
-      control.closeControlInstallation(host);
       await f.close();
     }
   },

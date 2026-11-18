@@ -75,39 +75,6 @@ for await (const line of createInterface({ input: process.stdin })) {
         );
       }
       process.stdout.write(`${JSON.stringify({ ok: true, leaseId: lease.leaseId, delegation })}\n`);
-    } else if (input.role === "data-manager") {
-      // Data-manager never reads the lease store: it admits the child its
-      // caller states and settles it by identity.
-      const installation = c.openControlInstallation({
-        infraDir: input.infraDir,
-        role: "data-manager",
-        serviceIds: ["motis", "osrm"],
-      });
-      const delegation = c.inspectRemoteDelegation(
-        installation,
-        input.delegation,
-        input.transportPrincipal ?? "ops-agent",
-      );
-      if (c.controlDigest(delegation.execution) !== c.controlDigest(input.execution))
-        throw Error("Delegated execution differs");
-      const authority = c.retainAdmittedControlExecution(installation, {
-        requestedDeadlineAt: input.execution.deadlineAt,
-        execution: input.execution,
-        kind: input.kind,
-        operation: input.operation,
-        admittedAt: input.admittedAt,
-        parent: delegation.verifiedParent,
-        serviceIds: [...delegation.serviceIds],
-      });
-      if (input.settle) {
-        c.retainControlEffectReceipt(authority, {
-          outcome: "failed_without_effect",
-          publication: "not_started",
-          receipt: { kind: "not-started" },
-        });
-        await l.settleOwnLeaseChild(installation, input.execution);
-      }
-      process.stdout.write(`${JSON.stringify({ ok: true })}\n`);
     } else {
       const installation = c.openControlInstallation({
         infraDir: input.infraDir,

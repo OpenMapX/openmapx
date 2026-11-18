@@ -28,7 +28,7 @@ import {
   verifyLocalArtifactTargetRootRelease,
 } from "./execution-record";
 import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
-import { inspectOwnedGenerationHardlinks } from "./generation-hardlinks-owner";
+import { inspectGenerationLinks } from "./generation-link";
 import {
   BUILD_RECORD_DIR,
   buildArtifactSpec,
@@ -891,7 +891,7 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
  * files committed; containment is a separate, source-verified fact. */
 export async function inspectSettledArtifactImport(
   authority: VerifiedExecutionAuthority,
-  transport: DataManagerTransport,
+  links: { transport: DataManagerTransport; infraDir: string; revisionId: string | undefined },
 ) {
   const owner = executionAuthorityState(authority);
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import required");
@@ -908,8 +908,15 @@ export async function inspectSettledArtifactImport(
       : effect.outcome === "unknown" || effect.publication !== "not_started"
   )
     throw Error("Original settled effect required");
+  // The import's hardlink application, read back from data-manager by its key.
   const followUp =
-    (await inspectOwnedGenerationHardlinks(authority, transport)) === "complete"
+    !links.revisionId ||
+    (await inspectGenerationLinks({
+      transport: links.transport,
+      infraDir: links.infraDir,
+      issuer: owner.execution,
+      revisionId: links.revisionId,
+    })) === "complete"
       ? ("complete" as const)
       : ("failed" as const);
   if (journal.phase === "restored")

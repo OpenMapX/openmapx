@@ -62,15 +62,17 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
       AbortSignal.timeout(budget),
       ...(cliAcquisitionOptions().signal ? [cliAcquisitionOptions().signal!] : []),
     ]);
+    // An import into the current generation applies that generation's plan
+    // once its files are committed.
     const hardlinks =
       operation.kind === "artifactTransfer.import" && operation.expectedCurrentRevisionId
-        ? control.planGenerationHardlinksOwner({
-            infraDir: paths.infraDir,
-            parent: execution,
+        ? {
             revisionId: operation.expectedCurrentRevisionId,
-            coordinatorMode: "require-running",
-            serviceIds: targets,
-          })
+            plan: control.readGenerationHardlinkPlan(
+              paths.infraDir,
+              operation.expectedCurrentRevisionId,
+            ).plan,
+          }
         : undefined;
     const authority = control.retainAdmittedControlExecution(installation, {
       execution,
@@ -79,9 +81,7 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
       admittedAt,
       requestedDeadlineAt: deadlineAt,
       serviceIds: targets,
-      ...(hardlinks ? { reservations: hardlinks.reservation ? [hardlinks.reservation] : [] } : {}),
     });
-    if (hardlinks) control.retainGenerationHardlinksOwnerPlan(authority, hardlinks);
     lease = await control.acquireArtifactTargetLease({
       serviceIds: targets,
       owner: authority,

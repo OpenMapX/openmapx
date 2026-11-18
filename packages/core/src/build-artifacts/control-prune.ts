@@ -36,7 +36,6 @@ const NAMESPACES = [
   "observations",
   "spawns",
   "spawn-started",
-  "hardlinks",
   "catalog-commits",
 ] as const;
 const MAX_ENTRIES = 65536;
@@ -185,7 +184,6 @@ async function prunable(
       ) == null
     )
       add(["*"], child.execution.operationKey);
-  add(["hardlinks"], admitted.execution.executionId);
   if (admitted.operation?.handoffId) add(["observations"], admitted.operation.handoffId);
   // Fixed children it started: their spawn records.
   for (const id of spawns().get(key) ?? []) add(["spawns", "spawn-started"], id);

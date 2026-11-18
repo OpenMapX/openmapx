@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -17,10 +16,8 @@ import {
   normalizeDataExecutionInput,
   type TransitDesiredSourceMutation,
 } from "@openmapx/core/data-manager-contracts";
-import { canonicalJson } from "@openmapx/core/ops";
 import { RollingStreamBudget } from "@openmapx/core/server";
 import { feedState, jobs } from "@openmapx/db-schema";
-import { applyHardlinkPlan } from "@openmapx/hardlinks";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import { and, desc, sql as drizzleSql, eq, inArray } from "drizzle-orm";
 
@@ -33,7 +30,6 @@ import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
 import { type DataExecutionReceiver, registerDataExecutionApi } from "./jobs/execution/api.js";
 import { runLocalDataExecution, startLocalDataExecution } from "./jobs/execution/local.js";
 import { DataConfigurationMaintenanceBusy, DataExecutionConflict } from "./jobs/execution/store.js";
-import { publishDataChange } from "./jobs/execution/worker-scope.js";
 import {
   createNotablePlacesRuntimeState,
   getNotablePlacesStatus,
@@ -921,22 +917,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return reply.code(404).send({ ok: false, error: "notable_places index not built" });
     }
     return reply.send({ ok: true, ...status });
-  });
-
-  // Applies a generation's hardlink plan as an exclusive data job, so neither
-  // configuration maintenance nor another data job runs while links change.
-  // Repeating the same plan links nothing new.
-  registerDataManagerRoute(app, "link", async (req) => {
-    const { revisionId, plan, prune = false } = req.body;
-    const applied = await runLocalDataExecution(
-      {
-        kind: "generation-link",
-        revisionId,
-        planDigest: createHash("sha256").update(canonicalJson({ plan, prune })).digest("hex"),
-      },
-      () => publishDataChange(() => applyHardlinkPlan(plan, { rootDir: dataDir, prune })),
-    );
-    return { ok: true as const, ...applied };
   });
 
   registerDataManagerRoute(app, "getOvertureRecovery", async (req, reply) => {

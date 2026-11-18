@@ -34,7 +34,6 @@ import {
   retainDataUpdatePlan,
   retainFixedServiceLifecyclePlan,
   retainFixedSingleDataPlan,
-  retainGenerationHardlinksOwnerPlan,
   settleArtifactTargetLeaseChild,
   startControlPrune,
   TargetBusyError,
@@ -46,7 +45,6 @@ import {
 } from "@openmapx/core/build-artifacts";
 import {
   inspectArtifactPublication,
-  inspectSettledArtifactImport,
   retainUnstartedArtifactImport,
 } from "@openmapx/core/build-artifacts/publication";
 import {
@@ -97,6 +95,7 @@ import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/
 import { ArtifactTransferError } from "./artifact-transfer/errors";
 import {
   finishRestoredPreparedImport,
+  inspectSettledImport,
   prepareArtifactImportAdmission,
   recoverPreparedImportFiles,
   retainArtifactImportPlan,
@@ -106,10 +105,7 @@ import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
 import { configurationHandoffBlocksReplacement } from "./configuration-handoff";
-import {
-  configurationDataManagerTransport,
-  prepareConfigurationHardlinksAdmission,
-} from "./configuration-hardlinks-runtime";
+import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
 import { installCoordinatorStagedOwnershipSource } from "./coordinator-staged-ownership";
 import { prepareDataUpdateAdmission, resolveDataDefaultRegion } from "./data-workflow-runtime";
 import {
@@ -1711,9 +1707,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
         if (job.operation.kind !== "artifactTransfer.import" || found.claim.use !== "import-build")
           return found;
-        const publication = await inspectSettledArtifactImport(
+        const publication = await inspectSettledImport(
+          runtime,
           authority,
-          configurationDataManagerTransport(),
+          job.operation.expectedCurrentRevisionId,
         );
         return { ...found, publication };
       } catch {
@@ -1905,8 +1902,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (
           operation.kind === "lease.acquire" ||
           operation.kind === "lease.read" ||
-          operation.kind === "lease.update" ||
-          operation.kind === "lease.settleChild"
+          operation.kind === "lease.update"
         ) {
           if (!options.controlInstallation || !options.leaseStore)
             throw new RequestGuardError("recovery_required", 409);
@@ -2224,14 +2220,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             // root admission. A stale preview creates no uncertain host owner.
             const preparedArtifactImport =
               job.operation.kind === "artifactTransfer.import"
-                ? await prepareArtifactImportAdmission(
-                    runtime,
-                    executionFor(job),
-                    job.operation,
-                    options.controlInstallation
-                      ? controlRegisteredServiceIds(options.controlInstallation)
-                      : [],
-                  )
+                ? await prepareArtifactImportAdmission(runtime, job.operation)
                 : undefined;
             let coordinatorBaseline:
               | Awaited<ReturnType<typeof prepareCoordinatorPullBaseline>>
@@ -2367,16 +2356,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     ? prepareDataUpdateAdmission(runtime, executionFor(job), job.operation, targets)
                     : undefined;
                 const artifactImport = preparedArtifactImport;
-                const hardlinksPlan =
-                  artifactImport?.hardlinks ??
-                  (job.operation.kind === "configuration.hardlinks.apply"
-                    ? prepareConfigurationHardlinksAdmission(
-                        runtime,
-                        executionFor(job),
-                        job.operation,
-                        targets,
-                      )
-                    : undefined);
                 const lifecyclePlan =
                   job.operation.kind === "service.update"
                     ? prepareServiceUpdateAdmission(
@@ -2403,17 +2382,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                         ],
                       }
                     : {}),
-                  ...(hardlinksPlan
-                    ? { reservations: hardlinksPlan.reservation ? [hardlinksPlan.reservation] : [] }
-                    : {}),
                   ...(lifecyclePlan ? { reservations: [lifecyclePlan.rootReservation] } : {}),
                   ...(maintenancePlan ? { reservations: maintenancePlan.reservations } : {}),
                   ...(coordinatorBaseline ? { coordinatorPullBaseline: coordinatorBaseline } : {}),
                 });
                 if (fixedDataPlan) retainFixedSingleDataPlan(authority, fixedDataPlan);
                 if (dataUpdatePlan) retainDataUpdatePlan(authority, dataUpdatePlan);
-                if (hardlinksPlan) retainGenerationHardlinksOwnerPlan(authority, hardlinksPlan);
-                if (artifactImport) retainArtifactImportPlan(authority, artifactImport.plan);
+                if (artifactImport) retainArtifactImportPlan(authority, artifactImport);
                 if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
                 controlAuthorities.set(job.operationId, authority);
                 if (LEASED_KINDS.has(job.operation.kind)) {

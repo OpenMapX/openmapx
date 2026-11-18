@@ -31,7 +31,6 @@ import {
   configurationReleaseSnapshotSchema,
 } from "./configuration-release-snapshot";
 import { controlDigest } from "./control-records";
-import { generationHardlinksReservation } from "./generation-hardlinks-records";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
@@ -72,7 +71,6 @@ export const fixedConfigurationMaintenancePlanSchema = z.strictObject({
     .array(z.lazy(() => controlChildReservationSchema))
     .min(2)
     .max(33),
-  nestedHardlinks: z.lazy(() => controlChildReservationSchema).nullable(),
   dmPrepare: dataConfigurationFencePrepareSchema,
 });
 export type FixedConfigurationMaintenancePlan = z.infer<
@@ -331,7 +329,6 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       ...dmPrepare,
     }),
   });
-  const middle = reservations.find((value) => value.phase === "maintenance-hardlinks");
   const handoffStep = steps.find((step) => step.phase === "maintenance-handoff");
   const nestedHandoff =
     handoff && handoffStep
@@ -368,15 +365,6 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       steps,
       reservations,
       dmPrepare,
-      nestedHardlinks: middle
-        ? generationHardlinksReservation({
-            parent: middle.execution,
-            revisionId: operation.revisionId,
-            coordinatorMode: operation.coordinatorMode,
-            plan: hardlinkPlan,
-            serviceIds,
-          })
-        : null,
     }),
   );
 }

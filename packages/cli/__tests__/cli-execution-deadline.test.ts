@@ -133,9 +133,9 @@ it("fix1 unsigned metadata can only clamp policy and cannot authorize a remote m
         expect(cliProcessOptions().timeout).toBe(5);
       });
       const transport = constrainCliDataManagerTransport({ request } as never);
-      expect(() => transport.request("link", "/link", { method: "POST" })).toThrow(
-        "deadline-aware receiver upgrade",
-      );
+      expect(() =>
+        transport.request("reloadDatasets", "/datasets/reload", { method: "POST" }),
+      ).toThrow("deadline-aware receiver upgrade");
       expect(request).not.toHaveBeenCalled();
       expect(cliAcquisitionOptions().requestTimeoutMs).toBe(5);
       vi.setSystemTime(Date.now() + 6);
@@ -173,15 +173,11 @@ it("permits the guarded generation-start operation while legacy link stays close
           fetch: request,
         }),
       );
-      await transport.request(
-        "startGenerationHardlinksExecution",
-        "/executions/generation-hardlinks",
-        { method: "POST" },
-      );
+      await transport.request("link", "/link", { method: "POST" });
       expect(request).toHaveBeenCalledOnce();
-      expect(() => transport.request("link", "/link", { method: "POST" })).toThrow(
-        "deadline-aware receiver",
-      );
+      expect(() =>
+        transport.request("reloadDatasets", "/datasets/reload", { method: "POST" }),
+      ).toThrow("deadline-aware receiver");
     });
   } finally {
     vi.unstubAllEnvs();

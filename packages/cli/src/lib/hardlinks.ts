@@ -1,8 +1,6 @@
-import {
-  assertCliExecutionAvailable,
-  assertCliRemoteMutationSupported,
-  cliAcquisitionOptions,
-} from "./execution-deadline";
+import { cliControlContext } from "./control-context";
+import { assertCliExecutionAvailable, cliAcquisitionOptions } from "./execution-deadline";
+import { currentHostLease } from "./host-effect";
 // The CLI never links in the data directory itself: it hands the generated
 // plan to data-manager's `/link` route. Other containers write into the data
 // root, so a symlink planted there could race the planner's path checks;
@@ -10,13 +8,12 @@ import {
 // host CLI shares the risk, and the CLI the operations agent runs would
 // reach the host checkout and the Docker socket.
 
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  createDataManagerTransport,
-  link,
-  unwrapDataManagerResponse,
-} from "@openmapx/core/data-manager-sdk";
+import * as control from "@openmapx/core/build-artifacts";
+import { createDataManagerTransport } from "@openmapx/core/data-manager-sdk";
+import { createControlRootOperationKey, opsExecutionBudget } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import {
   type ApplyHardlinkResult,
@@ -184,7 +181,6 @@ export async function applyGeneratedHardlinks(
     throw new DataManagerUnavailableError(baseUrl, plan.length);
   }
   assertCliExecutionAvailable();
-  assertCliRemoteMutationSupported();
   const revisionId = coreServices.currentConfigurationGeneration(paths.infraDir);
   if (!revisionId) throw new Error(`No applied configuration generation names ${planPath}`);
   const transport = createDataManagerTransport({
@@ -192,18 +188,39 @@ export async function applyGeneratedHardlinks(
     baseUrl,
     authToken: cliDataManagerToken(),
   });
-  const response = await link({ revisionId, plan, prune: opts.prune }, { transport });
-  if (response.status === 409) throw new DataManagerBusyError(plan.length);
-  const result = unwrapDataManagerResponse(response);
-  return {
-    applied: true,
-    entries: plan.length,
-    planPath,
-    linked: result.linked,
-    skipped: result.skipped,
-    pruned: result.pruned,
-    via: "data-manager",
-  };
+  // Under a lease, the application is that operation's: data-manager admits it
+  // under the lease and a repeat names the same application. Without one,
+  // data-manager leases itself and the key names this call only.
+  const held = currentHostLease();
+  const fixed = cliControlContext();
+  const issuer = held?.owner ?? fixed?.authority.execution;
+  const leaseId = held?.leaseId ?? fixed?.lease?.leaseId ?? null;
+  const deadlineAt =
+    issuer?.deadlineAt ?? Date.now() + opsExecutionBudget("generation-link").processMs;
+  let result: Awaited<ReturnType<typeof control.linkGeneration>>;
+  try {
+    result = await control.linkGeneration({
+      transport,
+      operationKey: issuer
+        ? control.generationLinkOperationKey(issuer, revisionId)
+        : createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
+      deadlineAt,
+      revisionId,
+      plan,
+      prune: opts.prune ?? false,
+      leaseId,
+      signal: cliAcquisitionOptions().signal,
+    });
+  } catch (error) {
+    if (error instanceof control.GenerationLinkNotApplied && error.reason === "busy")
+      throw new DataManagerBusyError(plan.length);
+    if (error instanceof control.GenerationLinkNotApplied && error.reason === "unavailable")
+      throw new DataManagerUnavailableError(baseUrl, plan.length);
+    if (error instanceof control.GenerationLinkUnknown)
+      error.message = `Data-manager did not report whether it applied the hardlink plan (${plan.length} ${plan.length === 1 ? "entry" : "entries"}). Applying the plan again links nothing twice: run pnpm openmapx data link once data-manager answers.`;
+    throw error;
+  }
+  return { ...result, applied: true, planPath, via: "data-manager" };
 }
 
 /**

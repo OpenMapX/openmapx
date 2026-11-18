@@ -5,7 +5,10 @@ import type {
 } from "@openmapx/core/data-manager-contracts";
 import type { DataExecutionReceiver } from "./api.js";
 
-type LocalInput = Extract<DataExecutionInput, { kind: LocalDataExecutionKind }>;
+type LocalInput = Extract<
+  DataExecutionInput,
+  { kind: Exclude<LocalDataExecutionKind, "generation-link"> }
+>;
 let receiver: Pick<DataExecutionReceiver, "runLocal"> | undefined;
 /** Installed once by the assembled service before routes, cron or startup work. */
 export function installLocalDataExecutions(value: Pick<DataExecutionReceiver, "runLocal">): void {

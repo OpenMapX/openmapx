@@ -342,7 +342,7 @@ export type StartDataExecution202Result =
       };
     }
   | {
-      kind: "generation-hardlinks";
+      kind: "generation-link";
       hardlinks: {
         applied: boolean;
         /**
@@ -390,7 +390,4 @@ export type StartDataExecution202Result =
     }
   | {
       kind: "ambient-publication";
-    }
-  | {
-      kind: "generation-link";
     };

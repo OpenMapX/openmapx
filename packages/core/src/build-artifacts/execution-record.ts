@@ -234,7 +234,6 @@ export function retainAdmittedControlExecution(
       "artifactTransfer.validate",
       "transit-maintenance",
       ...LOCAL_DATA_EXECUTION_KINDS,
-      "generation-hardlinks",
       "configuration-maintenance.prepare",
       "configuration-maintenance.settle",
       "configurationMaintenance.prepare",

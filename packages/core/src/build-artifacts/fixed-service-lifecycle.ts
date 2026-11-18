@@ -1,13 +1,12 @@
-/** One root-fixed CLI Update and its optional, root-fixed generation leaf. */
+/** One root-fixed CLI Update. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { type OpsOperation, opsOperationSchema } from "../ops/contract";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
-import { generationHardlinksPlanSchema } from "../services/data-manager/contracts/executions";
+import { currentConfigurationGeneration } from "../services/configuration-generation";
 import { controlDigest } from "./control-records";
 import { executionAuthorityState, type VerifiedExecutionAuthority } from "./execution-record";
-import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
@@ -21,10 +20,8 @@ const schema = z.strictObject({
   parent: executionRefSchema,
   operation: opsOperationSchema,
   rootReservation: controlChildReservationSchema,
-  cliReservations: z.array(controlChildReservationSchema).max(1),
   delegationId: z.uuid(),
   finalRevisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
-  plan: generationHardlinksPlanSchema,
 });
 export type FixedServiceLifecyclePlan = z.infer<typeof schema>;
 function address(key: string, purpose: string) {
@@ -47,35 +44,6 @@ export function ownedServiceLifecycleFinalRevisionId(
     throw Error("Original lifecycle authority required");
   return serviceLifecycleFinalRevisionId(s.origin.rootKey);
 }
-export function lifecycleHardlinkReservation(options: {
-  parent: Pick<ExecutionRef, "executor" | "principal" | "executionId" | "operationKey">;
-  revisionId: string;
-  plan: z.infer<typeof generationHardlinksPlanSchema>;
-  serviceIds: readonly string[];
-}): ControlChildReservation | null {
-  if (!options.plan.plan.length) return null;
-  const input = {
-    kind: "generation-hardlinks",
-    revisionId: options.revisionId,
-    coordinatorMode: "ensure-running",
-    planDigest: controlDigest(options.plan),
-  };
-  return controlChildReservationSchema.parse({
-    version: 1,
-    phase: "hardlinks",
-    ordinal: 0,
-    kind: "generation-hardlinks",
-    recipient: "data-manager",
-    serviceIds: [...options.serviceIds].sort(),
-    operationFingerprint: controlDigest(input),
-    execution: {
-      executor: "data-manager",
-      principal: "host-cli",
-      executionId: address(options.parent.operationKey, "hardlinks"),
-      operationKey: controlChildOperationKey(options.parent.operationKey, "hardlinks", 0),
-    },
-  });
-}
 export function planFixedServiceUpdate(options: {
   infraDir: string;
   parent: ExecutionRef;
@@ -84,10 +52,12 @@ export function planFixedServiceUpdate(options: {
 }): FixedServiceLifecyclePlan {
   const operation = opsOperationSchema.parse(options.operation),
     finalRevisionId = serviceLifecycleFinalRevisionId(options.parent.operationKey);
-  const plan = readOwnedGenerationHardlinkPlan(
-    options.infraDir,
-    options.operation.expectedConfigurationRevisionId,
-  );
+  // An update planned against a generation that is no longer current is refused at admission.
+  if (
+    currentConfigurationGeneration(options.infraDir) !==
+    options.operation.expectedConfigurationRevisionId
+  )
+    throw Error("Lifecycle configuration revision conflict");
   const child = {
     executor: "host-cli" as const,
     principal: "host-cli" as const,
@@ -104,21 +74,13 @@ export function planFixedServiceUpdate(options: {
     operationFingerprint: opsOperationFingerprint(operation),
     execution: child,
   };
-  const leaf = lifecycleHardlinkReservation({
-    parent: child,
-    revisionId: finalRevisionId,
-    plan,
-    serviceIds: options.serviceIds,
-  });
   return schema.parse({
     version: 1,
     parent: options.parent,
     operation,
     rootReservation,
-    cliReservations: leaf ? [leaf] : [],
     delegationId: address(options.parent.operationKey, "challenge"),
     finalRevisionId,
-    plan,
   });
 }
 export function retainFixedServiceLifecyclePlan(

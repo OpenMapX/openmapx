@@ -310,9 +310,6 @@ it.skipIf(
       sql,
       singleFlight,
       operationsPolicy,
-      runHardlinks: async () => {
-        throw Error("This fixture has no generation grant");
-      },
     });
     const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch }),
       receiver = createDataExecutionReceiver({
@@ -607,9 +604,6 @@ it
         sql,
         singleFlight,
         operationsPolicy,
-        runHardlinks: async () => {
-          throw Error("No generation grant");
-        },
       }),
       receiver = createDataExecutionReceiver({
         runtime,

@@ -33,7 +33,7 @@ export function receiverFixture(patch: Partial<DataExecutionReceiver> = {}): Dat
     subscribe: () => () => {},
     legacyResult: () => undefined,
     admit: unsupported,
-    admitHardlinks: unsupported,
+    link: unsupported,
     inspect: async () => dataReceipt(),
     lookup: unsupported,
     requestCancel: unsupported,

@@ -128,8 +128,7 @@ export function writePrivateRecord(
   const dir = state.privateRoot.directory(namespace, true, true);
   try {
     const bytes = canonicalJson(value);
-    if (Buffer.byteLength(bytes) > (namespace === "hardlinks" ? 1024 * 1024 : PRIVATE_RECORD_BYTES))
-      throw Error("Private receipt limit");
+    if (Buffer.byteLength(bytes) > PRIVATE_RECORD_BYTES) throw Error("Private receipt limit");
     if (
       ![
         "executions",
@@ -140,7 +139,6 @@ export function writePrivateRecord(
         "spawn-started",
         "configuration-maintenance",
         "maintenance",
-        "hardlinks",
         "catalog-commits",
       ].includes(namespace)
     )

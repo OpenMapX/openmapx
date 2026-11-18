@@ -18,10 +18,7 @@ import {
   artifactFingerprint,
   assertArtifactTargetLeaseExecution,
   executionAuthorityState,
-  inspectLocalLeaseChildSettlement,
-  lookupControlChildPhaseBinding,
   parseBundleManifest,
-  readGenerationHardlinksOwnerPlan,
   type ValidatedBuildBundle,
   validateBuildBundle,
   verifyLocalArtifactTargetRootRelease,
@@ -1342,23 +1339,6 @@ export class ArtifactTransferStore {
       result.artifactFingerprint !== publication.artifactFingerprint
     )
       failed(409, "Committed publication evidence required");
-    const plan = readGenerationHardlinksOwnerPlan(authority);
-    if (plan.reservation) {
-      const binding = lookupControlChildPhaseBinding(authority, plan.reservation),
-        settlement = binding
-          ? inspectLocalLeaseChildSettlement(lease, binding.child.execution)
-          : null;
-      if (
-        (!binding && result.followUp !== "failed") ||
-        (binding &&
-          (result.followUp === "failed"
-            ? !settlement ||
-              settlement.outcome === "unknown" ||
-              settlement.publication === "unknown"
-            : settlement?.outcome !== "committed" || settlement.publication !== "committed"))
-      )
-        failed(409, "Original hardlink child is not settled");
-    }
     return this.lock(() => {
       const meta = this.owned(claim.stageId, claim.ownerId, "prepared-artifact"),
         entry = meta.claims.find((entry) => entry.claim.claimId === claim.claimId);

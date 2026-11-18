@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -14,15 +14,18 @@ import * as control from "@openmapx/core/build-artifacts";
 import {
   type DataExecutionInput,
   type DataExecutionStatus,
+  type HardlinkEntry,
   isDataExecutionTerminal,
   LOCAL_DATA_EXECUTION_KINDS,
   SHORT_DATA_EXECUTION_KINDS,
 } from "@openmapx/core/data-manager-contracts";
+import { createDataManagerTransport } from "@openmapx/core/data-manager-sdk";
 import {
   createControlRootOperationKey,
   type OpsClient,
   OpsClientError,
   type OpsJobStatus,
+  parseControlRootOperationKey,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import Fastify from "fastify";
@@ -36,6 +39,7 @@ import { registerApi } from "../../api.js";
 import { registerAuth } from "../../auth.js";
 import { resetOpsClient, runOpsOperation } from "../../ops-client.js";
 import { resolveOperationsProfile } from "../transitous/operations-profile.js";
+import { createDataConfigurationMaintenance } from "./configuration-maintenance.js";
 import { installLocalDataExecutions } from "./local.js";
 import { removePrunedDataRows } from "./prune-rows.js";
 import { createDataExecutionReceiver } from "./receiver.js";
@@ -57,8 +61,14 @@ const inputs: Record<(typeof LOCAL_DATA_EXECUTION_KINDS)[number], DataExecutionI
     kind: "generation-link",
     revisionId: `cfg1_${"g".repeat(43)}`,
     planDigest: "d".repeat(64),
+    leaseId: null,
   },
 };
+/** The kinds whose in-process work stores only its kind; a hardlink
+ * application stores what it linked, and has tests of its own below. */
+const KIND_ONLY_LOCAL_KINDS = LOCAL_DATA_EXECUTION_KINDS.filter(
+  (kind) => kind !== "generation-link",
+);
 const reserved: Record<string, string[]> = {
   "traffic-maintenance": ["valhalla.traffic.maintain", "valhalla.traffic.refreshWaysToEdges"],
   "traffic-predicted": ["valhalla.traffic.maintain"],
@@ -125,12 +135,12 @@ describe.skipIf(
     resetOpsClient();
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   });
-  async function harness() {
+  async function harness(options: { infraDir?: string; fence?: boolean } = {}) {
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
     const sql = postgres(url, { max: 6 });
-    const root = mkdtempSync(join(tmpdir(), "omx-local-executions-"));
-    mkdirSync(join(root, "data"), { mode: 0o700 });
+    const root = options.infraDir ?? mkdtempSync(join(tmpdir(), "omx-local-executions-"));
+    mkdirSync(join(root, "data"), { recursive: true, mode: 0o700 });
     await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
         infraDir: root,
@@ -138,7 +148,12 @@ describe.skipIf(
         serviceIds: ["data-manager"],
       }),
       journal = control.createDataExecutionControlJournal(installation, sql),
-      store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
+      fence = options.fence ? createDataConfigurationMaintenance(sql, installation) : undefined;
+    await fence?.startup();
+    const store = createPostgresDataExecutionStore(sql, {
+      controlJournal: journal,
+      ...(fence ? { configurationFence: fence } : {}),
+    });
     const fonts = { started: deferred(), release: deferred() };
     const runtimes: DataExecutionRuntime[] = [];
     const keys: string[] = [];
@@ -226,7 +241,7 @@ describe.skipIf(
     await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
   }, 60_000);
 
-  it.each(LOCAL_DATA_EXECUTION_KINDS)(
+  it.each(KIND_ONLY_LOCAL_KINDS)(
     "admits %s with its agent reservations and its lease class, and runs it to its terminal",
     async (kind) => {
       const h = await harness(),
@@ -393,34 +408,40 @@ describe.skipIf(
     }
   }, 120_000);
 
-  it("applies a generation's hardlink plan with real work from the host CLI through data-manager", async () => {
-    const h = await harness(),
-      runtime = h.runtime();
-    // A checkout whose applied generation has a plan with work.
+  /** A checkout whose applied generation names a plan with work, and
+   * data-manager's `/link` on the durable runtime, both over one data
+   * directory. Requests can be sent as the host CLI or the agent. */
+  async function linkFixture(options: { fence?: boolean; entries?: HardlinkEntry[] } = {}) {
     const repo = mkdtempSync(join(tmpdir(), "omx-link-checkout-")),
       infra = join(repo, "infra", "docker"),
       data = join(infra, "data"),
       revisionId = `cfg1_${"g".repeat(43)}`;
     writeFileSync(join(repo, "pnpm-workspace.yaml"), "packages: []\n");
     mkdirSync(join(repo, "services"));
-    mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS), { recursive: true });
-    mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS, revisionId), { mode: 0o700 });
+    mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS, revisionId), {
+      recursive: true,
+      mode: 0o700,
+    });
     symlinkSync(`generations/${revisionId}`, join(infra, services.CURRENT_CONFIGURATION));
-    const entry = {
-      source: "data/osm",
-      target: "data/valhalla/osm-pbf",
-      consumerService: "valhalla",
-      dataType: "osm-pbf",
-    };
+    const h = await harness({ infraDir: infra, fence: options.fence }),
+      runtime = h.runtime();
+    const entries = options.entries ?? [
+      {
+        source: "data/osm",
+        target: "data/valhalla/osm-pbf",
+        consumerService: "valhalla",
+        dataType: "osm-pbf",
+      },
+    ];
     writeFileSync(
       join(infra, services.CURRENT_CONFIGURATION, services.GENERATED_HARDLINK_PLAN_FILE),
-      JSON.stringify([entry]),
+      JSON.stringify(entries),
       { mode: 0o600 },
     );
     mkdirSync(join(data, "osm"), { recursive: true });
     writeFileSync(join(data, "osm", "planet.osm.pbf"), "PBF");
-    // Data-manager's route on the durable runtime. The receiver's fence and
-    // dispatcher are never reached by in-process work.
+    // The receiver's own fence and dispatcher are never reached by in-process
+    // work; a sender's lease is checked against the store's fence.
     const receiver = createDataExecutionReceiver({
       runtime,
       installation: h.installation,
@@ -430,11 +451,12 @@ describe.skipIf(
     });
     installLocalDataExecutions(receiver);
     const token = "link-fixture-host-cli-token-0123456789abcdef",
+      tokens = { api: `${token}-api`, "ops-agent": `${token}-agent`, "host-cli": token },
       tokenFile = join(repo, "data-manager-token"),
       previousToken = process.env.DATA_MANAGER_TOKEN_FILE;
     writeFileSync(tokenFile, token, { mode: 0o600 });
     const app = Fastify();
-    registerAuth(app, { api: `${token}-api`, "ops-agent": `${token}-agent`, "host-cli": token });
+    registerAuth(app, tokens);
     registerApi(app, { dataDir: data, executionReceiver: receiver });
     const dataManagerUrl = await app.listen({ host: "127.0.0.1", port: 0 });
     process.env.DATA_MANAGER_TOKEN_FILE = tokenFile;
@@ -443,8 +465,40 @@ describe.skipIf(
       else process.env.DATA_MANAGER_TOKEN_FILE = previousToken;
       await app.close();
       await h.sql`DELETE FROM data_manager.jobs WHERE kind='generation-link'`;
+      await h.sql`DELETE FROM data_manager.configuration_fence`;
       rmSync(repo, { recursive: true, force: true });
     });
+    const send = (
+      caller: "host-cli" | "ops-agent",
+      leaseId: string | null,
+      operationKey = createControlRootOperationKey({
+        notAfter: Date.now() + 60_000,
+        nonce: randomBytes(16),
+      }),
+    ) =>
+      control.linkGeneration({
+        transport: createDataManagerTransport({
+          baseUrl: dataManagerUrl,
+          authToken: tokens[caller],
+        }),
+        operationKey,
+        deadlineAt: parseControlRootOperationKey(operationKey).notAfter,
+        revisionId,
+        plan: entries,
+        prune: true,
+        leaseId,
+      });
+    const planDigest = control.controlDigest({ plan: entries, prune: true });
+    return { h, runtime, repo, infra, data, revisionId, dataManagerUrl, send, planDigest };
+  }
+  const linkRows = (h: Awaited<ReturnType<typeof harness>>) =>
+    h.sql<{ status: string; publication: string; finished: boolean; lease_id: string | null }[]>`
+      SELECT status, execution_state->>'publication' AS publication,
+        finished_at IS NOT NULL AS finished, execution_input->>'leaseId' AS lease_id
+      FROM data_manager.jobs WHERE kind='generation-link' ORDER BY admitted_at`;
+
+  it("applies a generation's hardlink plan with real work from the host CLI through data-manager", async () => {
+    const { h, runtime, repo, data, revisionId, dataManagerUrl } = await linkFixture();
     const apply = () =>
       applyGeneratedHardlinks({ rootDir: repo, requirePlan: true, prune: true, dataManagerUrl });
 
@@ -467,5 +521,108 @@ describe.skipIf(
     h.fonts.release.resolve();
     expect((await h.terminal(runtime, fonts.id)).status).toBe("ok");
     await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
+  }, 60_000);
+
+  it("applies a plan under the lease its sender holds, which refuses data-manager's own lease", async () => {
+    const { h, data, send } = await linkFixture();
+    // A host operation holding every service, as `control rollback` does.
+    const deadline = Date.now() + 60_000,
+      owner = {
+        executor: "host-cli" as const,
+        principal: "host-cli" as const,
+        executionId: randomUUID(),
+        operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+        operationFingerprint: "a".repeat(64),
+        deadlineAt: deadline,
+        fingerprint: "b".repeat(64),
+      },
+      leases = control.agentStoreLeases(h.root, "host-cli"),
+      held = await control.admitRootLease(leases, {
+        owner,
+        ownerKind: "control.rollback",
+        targets: ["data-manager"],
+      });
+    // Without its lease id the plan is refused: data-manager cannot lease itself.
+    await expect(send("host-cli", null)).rejects.toMatchObject({ reason: "busy" });
+    // With it, data-manager links under that lease and takes none of its own.
+    const key = control.generationLinkOperationKey(owner, `cfg1_${"g".repeat(43)}`);
+    expect(await send("host-cli", held.leaseId, key)).toMatchObject({ linked: 1 });
+    expect((await h.leases()).map((lease) => lease.leaseId)).toEqual([held.leaseId]);
+    expect(statSync(join(data, "valhalla", "osm-pbf", "planet.osm.pbf")).ino).toBe(
+      statSync(join(data, "osm", "planet.osm.pbf")).ino,
+    );
+    // The same key observes the application it names instead of running another.
+    expect(await send("host-cli", held.leaseId, key)).toMatchObject({ linked: 1, skipped: 0 });
+    expect((await linkRows(h)).map((row) => [row.status, row.lease_id])).toEqual([
+      ["error", null],
+      ["ok", held.leaseId],
+    ]);
+    await leases.release({ leaseId: held.leaseId });
+  }, 60_000);
+
+  it("beside a prepared fence admits only its maintenance's own plan, under that maintenance's lease", async () => {
+    const { h, runtime, revisionId, send, planDigest } = await linkFixture({ fence: true });
+    const deadline = Date.now() + 60_000,
+      ownerPrepare = {
+        executor: "ops-agent" as const,
+        principal: "api" as const,
+        executionId: `job1_${"p".repeat(32)}`,
+        operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+        operationFingerprint: "c".repeat(64),
+        deadlineAt: deadline,
+        fingerprint: "d".repeat(64),
+      },
+      maintenanceId = randomUUID();
+    await h.sql`INSERT INTO data_manager.configuration_fence
+      (maintenance_id, fence_id, operation_key, candidate_id, plan_digest, input, state)
+      VALUES (${maintenanceId}::uuid, ${randomUUID()}::uuid, ${ownerPrepare.operationKey},
+        ${randomUUID()}::uuid, ${"e".repeat(64)}, ${h.sql.json({
+          maintenanceId,
+          candidateId: randomUUID(),
+          ownerPrepare,
+          planDigest: "e".repeat(64),
+          revisionId,
+          hardlinkPlanDigest: planDigest,
+          serviceIds: ["data-manager"],
+          coordinatorMode: "require-running",
+        })}, 'prepared')`;
+    const own = control.rootLeaseId(ownerPrepare);
+    // No other job, sender or lease gets past the prepared fence.
+    await expect(send("ops-agent", null)).rejects.toMatchObject({ reason: "busy" });
+    await expect(send("host-cli", own)).rejects.toMatchObject({ reason: "busy" });
+    await expect(send("ops-agent", randomUUID())).rejects.toMatchObject({ reason: "busy" });
+    await expect(h.admit(runtime, { kind: "download-fonts" })).rejects.toThrow(
+      "configuration_maintenance_busy",
+    );
+    // The maintenance's own step, sent by the agent under the maintenance's lease.
+    expect(await send("ops-agent", own)).toMatchObject({ linked: 1 });
+    expect((await linkRows(h)).map((row) => [row.status, row.lease_id])).toEqual([["ok", own]]);
+    expect(await h.leases()).toEqual([]);
+  }, 60_000);
+
+  it("ends a plan that fails part-way as failed with links that may have changed, and blocks nothing", async () => {
+    const { h, runtime, data, send } = await linkFixture({ fence: true });
+    // Another service's file where the plan needs a directory.
+    writeFileSync(join(data, "valhalla"), "not a directory");
+    const key = createControlRootOperationKey({
+      notAfter: Date.now() + 60_000,
+      nonce: randomBytes(16),
+    });
+    await expect(send("host-cli", null, key)).rejects.toBeInstanceOf(control.GenerationLinkFailed);
+    // A known outcome: the row is final with its publication committed, so it
+    // keeps neither data jobs, nor configuration changes, nor a lease held.
+    expect(await linkRows(h)).toEqual([
+      { status: "error", publication: "committed", finished: true, lease_id: null },
+    ]);
+    await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
+    expect(
+      await h.sql`SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown'`,
+    ).toEqual([]);
+    // Asking again under the same key reports the same outcome without a second run.
+    await expect(send("host-cli", null, key)).rejects.toBeInstanceOf(control.GenerationLinkFailed);
+    expect(await linkRows(h)).toHaveLength(1);
+    const fonts = await h.admit(runtime, { kind: "download-fonts" });
+    h.fonts.release.resolve();
+    expect((await h.terminal(runtime, fonts.id)).status).toBe("ok");
   }, 60_000);
 });

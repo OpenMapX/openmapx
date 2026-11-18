@@ -1,19 +1,24 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   type ControlInstallation,
   inspectDataExecutionAdmission,
+  TargetBusyError,
 } from "@openmapx/core/build-artifacts";
 import {
   type DataExecutionInput,
+  type DataExecutionStatus,
+  isDataExecutionTerminal,
   LOCAL_DATA_EXECUTION_KINDS,
+  linkRequestSchema,
   normalizeDataExecutionInput,
-  startGenerationHardlinksExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
 import {
   canonicalJson,
   createControlRootOperationKey,
+  OpsClientError,
   opsExecutionBudget,
 } from "@openmapx/core/ops";
+import { applyHardlinkPlan } from "@openmapx/hardlinks";
 import {
   type MotisOperationsPolicy,
   transitAllowedCountries,
@@ -24,6 +29,19 @@ import type { createDataExecutionDispatcher } from "./dispatch.js";
 import { transitChildCandidateId } from "./ops-children.js";
 import type { DataExecutionRuntime } from "./runtime.js";
 import { DataExecutionConflict, dataExecutionInputFingerprint } from "./store.js";
+import { dataExecutionWorkerContext, retainDataPublication } from "./worker-scope.js";
+
+/** Whether a refusal before any work came from another holder rather than an
+ * agent that did not answer. */
+function refusedBusy(error: unknown): boolean {
+  return (
+    error instanceof TargetBusyError ||
+    (error instanceof OpsClientError &&
+      (error.errorClass === "busy" || error.errorClass === "conflict"))
+  );
+}
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function createDataExecutionReceiver(deps: {
   runtime: DataExecutionRuntime;
   installation: ControlInstallation;
@@ -51,7 +69,7 @@ export function createDataExecutionReceiver(deps: {
     input: DataExecutionInput,
     source: Pick<
       Parameters<DataExecutionRuntime["admit"]>[1],
-      "triggeredBy" | "idempotencyKey" | "work"
+      "triggeredBy" | "idempotencyKey" | "work" | "refused"
     >,
   ) => {
     const requestedDeadlineAt = Date.now() + opsExecutionBudget(input.kind).processMs,
@@ -80,7 +98,6 @@ export function createDataExecutionReceiver(deps: {
     async admit(value, options) {
       const input = validate(value);
       if (
-        input.kind === "generation-hardlinks" ||
         input.kind === "transit-maintenance" ||
         (LOCAL_DATA_EXECUTION_KINDS as readonly string[]).includes(input.kind)
       )
@@ -103,35 +120,76 @@ export function createDataExecutionReceiver(deps: {
           : {}),
       });
     },
-    async admitHardlinks(value, transportPrincipal) {
-      const request = startGenerationHardlinksExecutionSchema.parse(value),
-        verified = inspectDataExecutionAdmission(installation, {
-          ...request,
-          transportPrincipal,
-          operationFingerprint: dataExecutionInputFingerprint(request.input),
+    async link(value, transportPrincipal) {
+      const request = linkRequestSchema.parse(value),
+        prune = request.prune ?? false,
+        leaseId = request.leaseId ?? null;
+      if (leaseId && transportPrincipal !== "ops-agent" && transportPrincipal !== "host-cli")
+        throw Object.assign(Error("Only the agent or the host CLI links under its own lease"), {
+          statusCode: 403,
         });
-      if (!verified)
-        throw Object.assign(Error("Delegated generation leaf required"), { statusCode: 403 });
-      const preparedGeneration = await configurationFence.assertGenerationAdmission(
-        request,
-        transportPrincipal,
-        verified.parent,
-      );
-      return runtime.admit(request.input, {
-        ...(preparedGeneration ? { preparedGeneration } : {}),
+      const input = normalizeDataExecutionInput({
+        kind: "generation-link",
+        revisionId: request.revisionId,
+        planDigest: createHash("sha256")
+          .update(canonicalJson({ plan: request.plan, prune }))
+          .digest("hex"),
+        leaseId,
+      });
+      let refusal: unknown;
+      const admitted = await runtime.admit(input, {
         operationKey: request.operationKey,
         requestedDeadlineAt: request.requestedDeadlineAt,
-        parent: verified.parent,
-        id: verified.execution.executionId,
-        principal: verified.execution.principal,
-        adopt: verified.adopt,
-        hardlinkPlan: request.plan,
-        serviceIds: verified.serviceIds,
+        ...(leaseId ? { linkCaller: transportPrincipal } : {}),
+        // From the first link on, a failure part-way may have changed links: it
+        // is a known partial outcome, never an unknown publication.
+        work: async () => {
+          const context = dataExecutionWorkerContext();
+          if (!context) throw Error("Hardlink application runs only as a data execution");
+          await retainDataPublication();
+          const applied = applyHardlinkPlan(request.plan, { rootDir: context.dataRoot, prune });
+          return {
+            kind: "generation-link",
+            hardlinks: {
+              applied: true,
+              entries: request.plan.length,
+              linked: applied.linked,
+              skipped: applied.skipped,
+              pruned: applied.pruned,
+              via: "data-manager",
+            },
+          };
+        },
+        refused: (error) => {
+          refusal = error;
+        },
+      });
+      // A repeated request, or one whose application outlives this wait, asks again.
+      const until = Date.now() + 10_000;
+      let status: DataExecutionStatus = admitted;
+      while (!isDataExecutionTerminal(status) && Date.now() < until) {
+        await Promise.race([runtime.settled(status.id), sleep(250)]);
+        status = (await runtime.inspect(status.id)) ?? status;
+      }
+      if (!isDataExecutionTerminal(status)) return { state: "running" as const, status };
+      if (status.status === "ok" && status.result?.kind === "generation-link") {
+        const { linked, skipped, pruned } = status.result.hardlinks;
+        return { state: "applied" as const, linked, skipped, pruned };
+      }
+      const reason =
+        status.diagnostics.tail.at(-1)?.message ?? `Hardlink application ${status.status}`;
+      if (status.publication === "not_started")
+        throw Object.assign(Error(`Hardlink plan not applied: ${reason}`), {
+          statusCode: refusal === undefined || refusedBusy(refusal) ? 409 : 503,
+        });
+      throw Object.assign(Error(`Hardlink plan failed and links may have changed: ${reason}`), {
+        statusCode: 500,
       });
     },
     admitLocal: async (value, source) => admitRoot(validate(value), source ?? {}),
     async runLocal(input, run, options) {
       let outcome: { value: Awaited<ReturnType<typeof run>> } | { error: unknown } | undefined;
+      let refusal: unknown;
       const status = await admitRoot(normalizeDataExecutionInput(input), {
         ...options,
         work: async () => {
@@ -143,6 +201,9 @@ export function createDataExecutionReceiver(deps: {
           }
           return { kind: input.kind };
         },
+        refused: (error) => {
+          refusal = error;
+        },
       });
       const completion = runtime.settled(status.id).then(async () => {
         if (outcome && "error" in outcome) throw outcome.error;
@@ -153,7 +214,9 @@ export function createDataExecutionReceiver(deps: {
               final?.diagnostics.tail.at(-1)?.message ??
                 `Data execution ${status.id} ended ${final?.status ?? "unobserved"}`,
             ),
-            { statusCode: 409 },
+            // Refused before it ran: busy when another holder has data-manager,
+            // unavailable when the agent did not answer the lease request.
+            { statusCode: refusal === undefined || refusedBusy(refusal) ? 409 : 503 },
           );
         return outcome.value;
       });

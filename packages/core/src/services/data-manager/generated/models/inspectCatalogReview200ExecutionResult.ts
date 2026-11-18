@@ -342,7 +342,7 @@ export type InspectCatalogReview200ExecutionResult =
       };
     }
   | {
-      kind: "generation-hardlinks";
+      kind: "generation-link";
       hardlinks: {
         applied: boolean;
         /**
@@ -390,7 +390,4 @@ export type InspectCatalogReview200ExecutionResult =
     }
   | {
       kind: "ambient-publication";
-    }
-  | {
-      kind: "generation-link";
     };

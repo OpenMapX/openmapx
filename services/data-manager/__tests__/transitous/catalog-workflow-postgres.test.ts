@@ -634,9 +634,6 @@ it
           sql: state.db.sql,
           singleFlight,
           operationsPolicy: policy,
-          runHardlinks: async () => {
-            throw Error("No generation operation in catalog workflow");
-          },
         });
       runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
       const receiver = createDataExecutionReceiver({

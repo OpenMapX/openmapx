@@ -134,7 +134,6 @@
       "gbfsCatalogLock.inspect",
       "lease.acquire",
       "lease.read",
-      "lease.settleChild",
       "lease.update",
       "motis.primary.promote",
       "motis.primary.restart",
@@ -393,7 +392,7 @@
         "apps/ops-agent/src/lease-operations.ts#runLeaseOperation",
         "services/data-manager/src/jobs/execution/runtime.ts#createDataExecutionRuntime"
       ],
-      "typedKinds": ["lease.acquire", "lease.read", "lease.update", "lease.settleChild"]
+      "typedKinds": ["lease.acquire", "lease.read", "lease.update"]
     },
     {
       "id": "data-manager.catalog-locks",
@@ -414,8 +413,8 @@
       "semanticSources": [
         "apps/api/src/services/prospective-configuration.ts#prepareConfigurationMaintenance",
         "apps/api/src/services/prospective-configuration.ts#inspectConfigurationMaintenance",
-        "apps/api/src/services/prospective-configuration.ts#applyConfigurationMaintenance",
-        "apps/api/src/services/prospective-configuration.ts#settleConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#applySavedConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#settleJobMaintenance",
         "apps/ops-agent/src/maintenance-source.ts#planConfigurationMaintenance",
         "apps/ops-agent/src/maintenance-runtime.ts#createMaintenanceRuntime"
       ],

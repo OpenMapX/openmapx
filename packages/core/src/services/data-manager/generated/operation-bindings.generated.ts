@@ -346,15 +346,6 @@ export async function startDataExecutionRequest<T>(
 ): Promise<T> {
   return startDataExecutionBound<T>(url, options);
 }
-const startGenerationHardlinksExecutionBound = bindDataManagerOperation(
-  "startGenerationHardlinksExecution",
-);
-export async function startGenerationHardlinksExecutionRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return startGenerationHardlinksExecutionBound<T>(url, options);
-}
 const syncTransitBound = bindDataManagerOperation("syncTransit");
 export async function syncTransitRequest<T>(
   url: string,

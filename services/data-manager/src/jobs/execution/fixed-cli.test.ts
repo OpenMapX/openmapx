@@ -127,9 +127,6 @@ it.skipIf(
         sql,
         singleFlight,
         operationsPolicy,
-        runHardlinks: async () => {
-          throw Error("No generation grant");
-        },
       }),
       runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch }),
       receiver = createDataExecutionReceiver({

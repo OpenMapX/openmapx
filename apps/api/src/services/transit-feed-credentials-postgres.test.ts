@@ -600,6 +600,7 @@ describe.skipIf(!enabled)(
       expect(dm.preparePosts).toBe(1);
     }, 90000);
     it("consumes one real purpose proof and commits a preserved map through one original guard, recreation and active mounted revision", async () => {
+      const startedAt = Date.now();
       const { input, catalog, challenge } = await authorizedInput();
       const competing = await authorizedInput({ seed: false }),
         applying = jobRunner.applyImmediateTransitCredentials(input);
@@ -629,7 +630,15 @@ describe.skipIf(!enabled)(
       expect(proof?.state).toBe("consumed");
       // The first prepare reply is lost; the agent repeats the same body.
       expect(dm.preparePosts).toBe(2);
-      expect(dm.posts).toBe(1);
+      // So is the first /link answer: the agent asks again under the same key and
+      // observes the one application data-manager ran under the maintenance's
+      // lease, beside its prepared fence.
+      expect(dm.posts).toBe(2);
+      const links = await state.fixture
+        .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${startedAt}`;
+      expect(links).toHaveLength(1);
+      expect(links[0]).toMatchObject({ status: "ok" });
+      expect(links[0]!.execution_input.leaseId).toEqual(expect.any(String));
       expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(dropped.size).toBe(3);
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);

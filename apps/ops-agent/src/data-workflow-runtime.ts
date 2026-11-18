@@ -79,7 +79,7 @@ export function installDataWorkflowRuntime(
           execution: bound.execution,
           operation,
           args,
-          reservations: phase === "data-workflow" ? plan.dataChildren : plan.finalizationChildren,
+          reservations: phase === "data-workflow" ? plan.dataChildren : [],
           dataUpdatePlan: plan,
           ...(initial ? { dataWorkflowInitial: initial } : {}),
         });

@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   type ContainedDataExecution,
+  type ControlTransportPrincipal,
   type DataExecutionControlJournal,
   retainedControlParent,
   retainedDataDatabaseTimestamp,
-  type VerifiedPreparedGenerationAdmission,
 } from "@openmapx/core/build-artifacts";
 import {
   type DataExecutionIdentity,
@@ -76,7 +76,8 @@ export interface DataExecutionRecord {
   finishedAt: number | null;
 }
 export interface DataExecutionAdmissionOptions {
-  preparedGeneration?: VerifiedPreparedGenerationAdmission;
+  /** Who sent a hardlink application under its own lease. */
+  linkCaller?: ControlTransportPrincipal;
   operationKey: string;
   requestedDeadlineAt?: number;
   parent?: VerifiedParentExecution;
@@ -545,30 +546,34 @@ export function createPostgresDataExecutionStore(
               return { value: await run(tx) };
             })
             .then((result) => result.value);
-        if (!admission.preparedGeneration) return withDataAdmissionTransaction(sql, run);
-        if (input.kind !== "generation-hardlinks" || !options.configurationFence)
-          throw new DataConfigurationMaintenanceBusy();
+        if (!(input.kind === "generation-link" && input.leaseId))
+          return withDataAdmissionTransaction(sql, run);
+        // A hardlink application under its sender's lease: admitted beside a
+        // prepared fence only for that fence's own maintenance.
+        const fence = options.configurationFence,
+          caller = admission.linkCaller,
+          leaseId = input.leaseId;
+        if (!fence || !caller) throw new DataConfigurationMaintenanceBusy();
         const result = await sql.begin(async (tx) => {
           const held =
             await tx`SELECT pg_try_advisory_xact_lock(${DATA_ADMISSION_LOCK[0]},${DATA_ADMISSION_LOCK[1]}) AS held`;
           if (held[0]?.held !== true) throw new DataConfigurationMaintenanceBusy();
-          await options.configurationFence!.assertPreparedGenerationAdmission(
+          await fence.assertLinkAdmission(
             tx,
-            admission.preparedGeneration!,
-            input,
-            admission,
+            { revisionId: input.revisionId, planDigest: input.planDigest, leaseId },
+            caller,
           );
           return { value: await run(tx) };
         });
         return result.value;
       };
+      const borrowsLease = input.kind === "generation-link" && input.leaseId !== null;
       return admitTransaction(async (tx) => {
         if (idempotencyKey) {
           const original = await findByIdempotencyKey(tx, idempotencyKey);
           if (original) return matchIdempotent(original);
         }
-        if (!admission.preparedGeneration && !short)
-          await options.configurationFence?.assertAdmission(tx);
+        if (!borrowsLease && !short) await options.configurationFence?.assertAdmission(tx);
         const retained = await find(tx, "operation_key", admission.operationKey);
         if (retained) return match(retained);
         // One exclusive execution at a time; short traffic runs neither count

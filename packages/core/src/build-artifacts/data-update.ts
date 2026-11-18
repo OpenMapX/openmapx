@@ -18,7 +18,6 @@ import {
 } from "./data-update-records";
 import { dataUpdateHostDefaults, dataUpdateSourcesDigest } from "./data-update-sources";
 import { executionAuthorityState, type VerifiedExecutionAuthority } from "./execution-record";
-import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
 import { readPrivateRecord, writePrivateRecord } from "./private-records";
 
 export function planDataUpdate(options: {
@@ -64,7 +63,6 @@ export function planDataUpdate(options: {
     countries,
     revisionId,
     sourcesDigest,
-    hardlinks: readOwnedGenerationHardlinkPlan(options.infraDir, revisionId),
     serviceIds: options.serviceIds,
   });
 }
@@ -84,11 +82,11 @@ function validate(authority: VerifiedExecutionAuthority, plan: DataUpdatePlan) {
   if (!ownRoot && !child) throw Error("Foreign Full Update plan");
   const expected = ownRoot
     ? s.execution.executor === "host-cli"
-      ? [...plan.dataChildren, ...plan.finalizationChildren]
+      ? plan.dataChildren
       : [plan.dataReservation, plan.finalizationReservation]
     : child === plan.dataReservation
       ? plan.dataChildren
-      : plan.finalizationChildren;
+      : [];
   if (canonicalJson(s.reservations) !== canonicalJson(expected))
     throw Error("Full Update phase plan changed");
 }

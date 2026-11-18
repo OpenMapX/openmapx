@@ -43,7 +43,7 @@ function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
       "serviceRepository.settle",
       "service.pull",
       "stack.render",
-      "generation-hardlinks",
+      "generation-link",
       "service.start",
     ].reduce((sum, kind) => sum + opsExecutionBudget(kind).processMs, 60_000);
     const integrationBudget =
@@ -64,7 +64,7 @@ function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
       "stack.render",
       "configuration.hardlinks.inspect",
       "service.start",
-      "generation-hardlinks",
+      "generation-link",
       ctx.jobType === "service.apply" ? "service.recreate" : "service.start",
     ].reduce((sum, kind) => sum + opsExecutionBudget(kind).processMs, 60_000);
   }

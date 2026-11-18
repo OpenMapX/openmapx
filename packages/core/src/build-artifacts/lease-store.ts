@@ -184,7 +184,6 @@ export type ControlChildPhase =
   | "data-clean"
   | "data-workflow"
   | "data-finalization"
-  | "hardlinks"
   | "stop-primary"
   | "stop-staging"
   | "restart-staging"
@@ -223,7 +222,6 @@ export const childPhaseKinds: Readonly<Record<ControlChildPhase, readonly string
     "data.searchIndexBuild",
     "data.notablePlacesBuild",
   ],
-  hardlinks: ["generation-hardlinks"],
   "stop-primary": ["motis.primary.stop"],
   "stop-staging": ["motis.staging.stop"],
   "restart-staging": ["motis.staging.restart"],
@@ -338,8 +336,6 @@ export interface LeaseBackend {
   }): Promise<LeaseRecord>;
   cancel(input: { leaseId: string; key: string | null }): Promise<LeaseRecord | undefined>;
   release(input: { leaseId: string }): Promise<void>;
-  /** Settles the data-manager child named by the settlement's identity, if it is still held. */
-  settleChild(settlement: LeaseSettlement): Promise<LeaseRecord | undefined>;
 }
 /** A role that reads the store itself also reads it without waiting and adopts children. */
 export interface LocalLeaseBackend extends LeaseBackend {
@@ -514,24 +510,6 @@ export const leaseRules = {
     node.state = knownSettlement(input.settlement) ? "settled" : "recovery_required";
     return lease;
   },
-  /**
-   * Data-manager reports the outcome of a child it ran under another role's
-   * lease. The child is found by its identity; the first known outcome
-   * recorded, by data-manager or by the issuer from its status, is kept, and a
-   * released lease leaves nothing to settle.
-   */
-  settleChild(leases: LeaseRecord[], settlement: LeaseSettlement) {
-    for (const lease of leases) {
-      const child = lease.children.find(
-        (value) =>
-          value.recipient === "data-manager" && sameExecution(value.execution, settlement.identity),
-      );
-      if (!child) continue;
-      if (settledKnown(child)) return lease;
-      return leaseRules.settle(leases, { leaseId: lease.leaseId, key: child.key, settlement });
-    }
-    return undefined;
-  },
   cancel(leases: LeaseRecord[], input: Parameters<LeaseBackend["cancel"]>[0]) {
     const lease = leases.find((value) => value.leaseId === input.leaseId);
     if (!lease) return undefined;
@@ -566,8 +544,6 @@ export function localLeaseBackend(
     settle: (input) => store.update((leases) => leaseRules.settle(leases, input)),
     cancel: (input) => store.update((leases) => leaseRules.cancel(leases, input)),
     release: (input) => store.update((leases) => leaseRules.release(leases, input)),
-    settleChild: (settlement) =>
-      store.update((leases) => leaseRules.settleChild(leases, settlement)),
   };
 }
 
@@ -611,22 +587,6 @@ export function verifyFiniteControlEdge(
     ["lifecycle", "build", "data-link", "data-clean", "data-finalization"].includes(phase) &&
     childPhaseKinds[phase].includes(kind)
   )
-    return phase === "data-clean" ? [] : ["hardlinks"];
-  if (
-    ["ops-agent", "fixed-cli", "host-cli"].includes(role) &&
-    recipient === "data-manager" &&
-    phase === "hardlinks" &&
-    [
-      "service.start",
-      "service.update",
-      "service.build",
-      "services.buildAll",
-      "data.link",
-      "configuration.hardlinks.apply",
-      "data.update",
-      "artifactTransfer.import",
-    ].includes(kind)
-  )
     return [];
   if (
     role === "ops-agent" &&
@@ -646,11 +606,7 @@ export function verifyFiniteControlEdge(
         "maintenance-handoff",
       ].includes(phase)
     )
-      return phase === "maintenance-hardlinks"
-        ? ["hardlinks"]
-        : phase === "maintenance-handoff"
-          ? ["configuration-handoff"]
-          : [];
+      return phase === "maintenance-handoff" ? ["configuration-handoff"] : [];
   }
   throw Error("Unauthorized finite control edge");
 }

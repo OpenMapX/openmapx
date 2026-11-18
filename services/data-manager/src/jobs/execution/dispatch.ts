@@ -71,7 +71,6 @@ export function createDataExecutionDispatcher(deps: {
   sql: postgres.Sql;
   singleFlight: SingleFlightController;
   operationsPolicy: MotisOperationsPolicy;
-  runHardlinks: (context: DataExecutionContext) => Promise<DataExecutionResult>;
   notablePlaces?: {
     runtimeState: ReturnType<typeof createNotablePlacesRuntimeState>;
     operationLock: ReturnType<typeof createNotablePlacesOperationLock>;
@@ -404,8 +403,6 @@ export function createDataExecutionDispatcher(deps: {
         finish(context.execution.executionId, { event: "done", ok: true, ...result });
         return { kind: input.kind, metrics: { processed: result.placeCount } };
       }
-      case "generation-hardlinks":
-        return deps.runHardlinks(context);
       case "transit-maintenance": {
         const slot = (await context.record()).reservations[0];
         if (!slot) throw Error("Maintenance child reservation missing");

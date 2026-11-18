@@ -562,15 +562,14 @@ export async function readServiceLifecycleReceipt(options: {
 /**
  * Whether a recorded failure can be released by the process that recorded it.
  * Docker effects are awaited children, so once one has exited no writer of ours
- * survives; only a hardlink child issued to data-manager can outlive this process.
- * `hardlinkAttempt` is null only when the child was provably never issued. Anything
- * else, including an attempt that could not be read, keeps the fence.
+ * survives; only a hardlink application data-manager never answered for can
+ * still be running, and that keeps the fence.
  */
 export function lifecycleFailureHasNoSurvivor(
   receipt: ServiceLifecycleReceipt,
-  hardlinkAttempt: unknown,
+  hardlinkOutcomeUnknown: boolean,
 ): boolean {
-  return (receipt.phase === "failed" || receipt.phase === "unknown") && hardlinkAttempt === null;
+  return (receipt.phase === "failed" || receipt.phase === "unknown") && !hardlinkOutcomeUnknown;
 }
 
 function readOriginalStandaloneReceipt(authority: VerifiedExecutionAuthority) {
@@ -591,7 +590,7 @@ function readOriginalStandaloneReceipt(authority: VerifiedExecutionAuthority) {
 /** The original producer's durable failure or unknown outcome, at any phase it stopped. */
 export function readFailedServiceLifecycleReceipt(authority: VerifiedExecutionAuthority) {
   const receipt = readOriginalStandaloneReceipt(authority);
-  if (!lifecycleFailureHasNoSurvivor(receipt, null))
+  if (!lifecycleFailureHasNoSurvivor(receipt, false))
     throw Error("Original failed lifecycle required");
   return receipt;
 }

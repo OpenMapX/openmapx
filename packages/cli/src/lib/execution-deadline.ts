@@ -100,19 +100,10 @@ export function constrainCliDataManagerTransport(
       if (
         deadlines.getStore() &&
         !["GET", "HEAD"].includes((options?.method ?? "GET").toUpperCase()) &&
-        ![
-          "startDataExecution",
-          "cancelDataExecution",
-          "startGenerationHardlinksExecution",
-        ].includes(operationId)
+        !["startDataExecution", "cancelDataExecution", "link"].includes(operationId)
       )
         throw Error("Managed data-manager execution requires a deadline-aware receiver upgrade");
       return transport.request(operationId, url, options);
     },
   };
-}
-export function assertCliRemoteMutationSupported(): void {
-  assertCliExecutionAvailable();
-  if (deadlines.getStore())
-    throw Error("Managed data-manager execution requires a deadline-aware receiver upgrade");
 }

@@ -16,15 +16,14 @@ import { childPhaseKinds } from "../../../packages/core/src/build-artifacts/leas
 
 type LeaseOperation = Extract<
   OpsOperation,
-  { kind: "lease.acquire" | "lease.read" | "lease.update" | "lease.settleChild" }
+  { kind: "lease.acquire" | "lease.read" | "lease.update" }
 >;
 
 /**
  * Leases data-manager holds through the agent. It sees and changes only
  * leases its own executions own, and the same rules apply as to the agent's
  * leases: one admission path, children recorded before they start, release
- * only once everything has a known outcome. It also reports the outcome of a
- * child it ran under the agent's or the host CLI's lease.
+ * only once everything has a known outcome.
  */
 export async function runLeaseOperation(
   installation: ControlInstallation,
@@ -36,14 +35,6 @@ export async function runLeaseOperation(
   const owned = (lease: LeaseRecord | undefined) =>
     lease && lease.owner.executor === role ? lease : undefined;
   const now = Date.now();
-  if (operation.kind === "lease.settleChild") {
-    if (operation.settlement.identity.executor !== role) throw new LeaseRefused();
-    return {
-      lease:
-        (await store.update((leases) => leaseRules.settleChild(leases, operation.settlement))) ??
-        null,
-    };
-  }
   if (operation.kind === "lease.acquire") {
     const registered = new Set(controlRegisteredServiceIds(installation));
     if (

@@ -908,7 +908,6 @@
                         "overture-sync",
                         "search-index-build",
                         "notable-places-build",
-                        "generation-hardlinks",
                         "transit-maintenance",
                         "traffic-live",
                         "traffic-maintenance",
@@ -1627,7 +1626,7 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "generation-hardlinks"
+                                "generation-link"
                               ]
                             },
                             "hardlinks": {
@@ -1793,21 +1792,6 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "generation-link"
                               ]
                             }
                           },
@@ -2389,9 +2373,9 @@
         }
       }
     },
-    "/executions/generation-hardlinks": {
+    "/link": {
       "post": {
-        "operationId": "startGenerationHardlinksExecution",
+        "operationId": "link",
         "tags": [
           "data-manager"
         ],
@@ -2411,344 +2395,66 @@
                     "minimum": 0,
                     "maximum": 9007199254740991
                   },
-                  "input": {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "enum": [
-                          "generation-hardlinks"
-                        ]
-                      },
-                      "revisionId": {
-                        "type": "string",
-                        "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
-                      },
-                      "planDigest": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{64}$"
-                      },
-                      "coordinatorMode": {
-                        "type": "string",
-                        "enum": [
-                          "ensure-running",
-                          "require-running"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "revisionId",
-                      "planDigest",
-                      "coordinatorMode"
-                    ],
-                    "additionalProperties": false
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
                   },
                   "plan": {
-                    "type": "object",
-                    "properties": {
-                      "plan": {
-                        "maxItems": 256,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "source": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 1024
-                            },
-                            "target": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 1024
-                            },
-                            "consumerService": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                            },
-                            "dataType": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                            },
-                            "instance": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                            },
-                            "targetFilename": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                            }
-                          },
-                          "required": [
-                            "source",
-                            "target",
-                            "consumerService",
-                            "dataType"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "prune": {
-                        "type": "boolean",
-                        "enum": [
-                          true
-                        ]
-                      }
-                    },
-                    "required": [
-                      "plan",
-                      "prune"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "delegation": {
-                    "type": "object",
-                    "properties": {
-                      "leaseId": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "childKey": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "owner": {
-                        "type": "object",
-                        "properties": {
-                          "executor": {
-                            "type": "string",
-                            "enum": [
-                              "ops-agent",
-                              "data-manager",
-                              "host-cli"
-                            ]
-                          },
-                          "principal": {
-                            "type": "string",
-                            "enum": [
-                              "api",
-                              "data-manager",
-                              "host-cli"
-                            ]
-                          },
-                          "executionId": {
-                            "type": "string"
-                          },
-                          "operationKey": {
-                            "type": "string",
-                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
-                          },
-                          "operationFingerprint": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          },
-                          "fingerprint": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          },
-                          "deadlineAt": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "required": [
-                          "executor",
-                          "principal",
-                          "executionId",
-                          "operationKey",
-                          "operationFingerprint",
-                          "fingerprint",
-                          "deadlineAt"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "parent": {
-                        "type": "object",
-                        "properties": {
-                          "executor": {
-                            "type": "string",
-                            "enum": [
-                              "ops-agent",
-                              "data-manager",
-                              "host-cli"
-                            ]
-                          },
-                          "principal": {
-                            "type": "string",
-                            "enum": [
-                              "api",
-                              "data-manager",
-                              "host-cli"
-                            ]
-                          },
-                          "executionId": {
-                            "type": "string"
-                          },
-                          "operationKey": {
-                            "type": "string",
-                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
-                          },
-                          "operationFingerprint": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          },
-                          "fingerprint": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          },
-                          "deadlineAt": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "required": [
-                          "executor",
-                          "principal",
-                          "executionId",
-                          "operationKey",
-                          "operationFingerprint",
-                          "fingerprint",
-                          "deadlineAt"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "execution": {
-                        "type": "object",
-                        "properties": {
-                          "executor": {
-                            "type": "string",
-                            "enum": [
-                              "ops-agent",
-                              "data-manager",
-                              "host-cli"
-                            ]
-                          },
-                          "principal": {
-                            "type": "string",
-                            "enum": [
-                              "api",
-                              "data-manager",
-                              "host-cli"
-                            ]
-                          },
-                          "executionId": {
-                            "type": "string"
-                          },
-                          "operationKey": {
-                            "type": "string",
-                            "pattern": "^opk1_[A-Za-z0-9_-]{16,64}$"
-                          },
-                          "operationFingerprint": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          },
-                          "fingerprint": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          },
-                          "deadlineAt": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "required": [
-                          "executor",
-                          "principal",
-                          "executionId",
-                          "operationKey",
-                          "operationFingerprint",
-                          "fingerprint",
-                          "deadlineAt"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "kind": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 128
-                      },
-                      "phase": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 64
-                      },
-                      "targets": {
-                        "maxItems": 256,
-                        "type": "array",
-                        "items": {
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
                           "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        "target": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        "consumerService": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                        },
+                        "dataType": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                        },
+                        "instance": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                        },
+                        "targetFilename": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
                         }
                       },
-                      "origin": {
-                        "type": "object",
-                        "properties": {
-                          "version": {
-                            "type": "number",
-                            "enum": [
-                              1
-                            ]
-                          },
-                          "rootKey": {
-                            "type": "string",
-                            "maxLength": 69
-                          },
-                          "issuer": {
-                            "type": "string",
-                            "enum": [
-                              "ops-agent",
-                              "data-manager",
-                              "host-cli"
-                            ]
-                          },
-                          "notAfter": {
-                            "type": "integer",
-                            "exclusiveMinimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "required": [
-                          "version",
-                          "rootKey",
-                          "issuer",
-                          "notAfter"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": [
-                      "leaseId",
-                      "childKey",
-                      "owner",
-                      "parent",
-                      "execution",
-                      "kind",
-                      "phase",
-                      "targets",
-                      "origin"
-                    ],
-                    "additionalProperties": false
+                      "required": [
+                        "source",
+                        "target",
+                        "consumerService",
+                        "dataType"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "prune": {
+                    "type": "boolean"
+                  },
+                  "leaseId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
                   "operationKey",
                   "requestedDeadlineAt",
-                  "input",
-                  "plan",
-                  "delegation"
+                  "revisionId",
+                  "plan"
                 ],
                 "additionalProperties": false
               }
@@ -2763,10 +2469,47 @@
             "serviceToken": []
           }
         ],
-        "x-openmapx-contract-id": "startGenerationHardlinksExecution",
+        "x-openmapx-contract-id": "link",
         "x-openmapx-auth": "service",
         "x-openmapx-api-caller": false,
         "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "linked": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "skipped": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "pruned": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "linked",
+                    "skipped",
+                    "pruned"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "202": {
             "description": "Response",
             "content": {
@@ -2813,7 +2556,6 @@
                         "overture-sync",
                         "search-index-build",
                         "notable-places-build",
-                        "generation-hardlinks",
                         "transit-maintenance",
                         "traffic-live",
                         "traffic-maintenance",
@@ -3532,7 +3274,7 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "generation-hardlinks"
+                                "generation-link"
                               ]
                             },
                             "hardlinks": {
@@ -3698,21 +3440,6 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "generation-link"
                               ]
                             }
                           },
@@ -7177,7 +6904,6 @@
                         "overture-sync",
                         "search-index-build",
                         "notable-places-build",
-                        "generation-hardlinks",
                         "transit-maintenance",
                         "traffic-live",
                         "traffic-maintenance",
@@ -7896,7 +7622,7 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "generation-hardlinks"
+                                "generation-link"
                               ]
                             },
                             "hardlinks": {
@@ -8062,21 +7788,6 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "generation-link"
                               ]
                             }
                           },
@@ -8794,7 +8505,6 @@
                         "overture-sync",
                         "search-index-build",
                         "notable-places-build",
-                        "generation-hardlinks",
                         "transit-maintenance",
                         "traffic-live",
                         "traffic-maintenance",
@@ -9513,7 +9223,7 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "generation-hardlinks"
+                                "generation-link"
                               ]
                             },
                             "hardlinks": {
@@ -9679,21 +9389,6 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "generation-link"
                               ]
                             }
                           },
@@ -10436,7 +10131,6 @@
                         "overture-sync",
                         "search-index-build",
                         "notable-places-build",
-                        "generation-hardlinks",
                         "transit-maintenance",
                         "traffic-live",
                         "traffic-maintenance",
@@ -11155,7 +10849,7 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "generation-hardlinks"
+                                "generation-link"
                               ]
                             },
                             "hardlinks": {
@@ -11321,21 +11015,6 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "generation-link"
                               ]
                             }
                           },
@@ -39089,679 +38768,6 @@
         }
       }
     },
-    "/link": {
-      "post": {
-        "operationId": "link",
-        "tags": [
-          "data-manager"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "revisionId": {
-                    "type": "string",
-                    "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
-                  },
-                  "plan": {
-                    "maxItems": 2000,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "source": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 1024
-                        },
-                        "target": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 1024
-                        },
-                        "consumerService": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                        },
-                        "dataType": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                        },
-                        "instance": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                        },
-                        "targetFilename": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                        }
-                      },
-                      "required": [
-                        "source",
-                        "target",
-                        "consumerService",
-                        "dataType"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "prune": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "revisionId",
-                  "plan"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "serviceBearer": []
-          },
-          {
-            "serviceToken": []
-          }
-        ],
-        "x-openmapx-contract-id": "link",
-        "x-openmapx-auth": "service",
-        "x-openmapx-api-caller": false,
-        "responses": {
-          "200": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "linked": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "skipped": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "pruned": {
-                      "type": "number",
-                      "minimum": 0
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "linked",
-                    "skipped",
-                    "pruned"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Response",
-            "headers": {
-              "retry-after": {
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[1-9]\\d*$"
-                },
-                "description": "Required response header"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/overture/recovery": {
       "get": {
         "operationId": "getOvertureRecovery",
@@ -44356,7 +43362,6 @@
                                 "overture-sync",
                                 "search-index-build",
                                 "notable-places-build",
-                                "generation-hardlinks",
                                 "transit-maintenance",
                                 "traffic-live",
                                 "traffic-maintenance",
@@ -45075,7 +44080,7 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": [
-                                        "generation-hardlinks"
+                                        "generation-link"
                                       ]
                                     },
                                     "hardlinks": {
@@ -45241,21 +44246,6 @@
                                       "type": "string",
                                       "enum": [
                                         "ambient-publication"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "kind"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": [
-                                        "generation-link"
                                       ]
                                     }
                                   },

@@ -19,7 +19,6 @@ import { installDataMutationAdmission } from "./jobs/execution/admission.js";
 import type { DataExecutionReceiver } from "./jobs/execution/api.js";
 import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "./jobs/execution/dispatch.js";
-import { applyOwnedGenerationHardlinks } from "./jobs/execution/hardlinks.js";
 import { installLocalDataExecutions } from "./jobs/execution/local.js";
 import { removePrunedDataRows } from "./jobs/execution/prune-rows.js";
 import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
@@ -122,7 +121,6 @@ const dispatcher = createDataExecutionDispatcher({
   sql,
   singleFlight,
   operationsPolicy,
-  runHardlinks: applyOwnedGenerationHardlinks,
   notablePlaces,
 });
 const executionRuntime = createDataExecutionRuntime({

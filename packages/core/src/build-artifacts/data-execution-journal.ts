@@ -172,11 +172,14 @@ function statusOf(raw: unknown) {
     throw Error("Data journal identity conflict");
   return { row, status, execution };
 }
-/** Whether an execution of this kind holds a lease of its own in the agent's
- * store. A hardlink leaf runs under its issuer's lease, and the short traffic
- * kinds run under none. */
-export function dataExecutionHoldsLease(kind: string): boolean {
-  return kind !== "generation-hardlinks" && !SHORT_DATA_EXECUTION_KINDS.includes(kind);
+/** Whether an execution holds a lease of its own in the agent's store. A
+ * hardlink application sent with a lease id runs under its sender's lease, and
+ * the short traffic kinds run under none. */
+export function dataExecutionHoldsLease(input: { kind: string; leaseId?: unknown }): boolean {
+  return (
+    !SHORT_DATA_EXECUTION_KINDS.includes(input.kind) &&
+    !(input.kind === "generation-link" && typeof input.leaseId === "string")
+  );
 }
 export function createDataExecutionControlJournal(
   installation: ControlInstallation,
@@ -636,71 +639,6 @@ export function createDataExecutionControlJournal(
         );
       });
     },
-    async retainHardlinksPlan(authority: VerifiedExecutionAuthority, plan: unknown) {
-      const s = executionAuthorityState(authority),
-        value = await load(authority.execution),
-        body = generationHardlinksPlanSchema.parse(plan);
-      if (value.status.kind !== "generation-hardlinks") throw Error("Generation leaf required");
-      const input = z
-        .object({
-          execution_input: z.object({
-            kind: z.literal("generation-hardlinks"),
-            revisionId: z.string(),
-            planDigest: z.string(),
-            coordinatorMode: z.string(),
-          }),
-        })
-        .parse(value.row).execution_input;
-      if (
-        input.planDigest !== controlDigest(body) ||
-        body.plan.some((entry) => !s.serviceIds.includes(entry.consumerService))
-      )
-        throw Error("Signed generation plan/target binding mismatch");
-      const payload = { version: 1, execution: s.execution, input, plan: body };
-      let saved: unknown;
-      try {
-        saved = readPrivateRecord(
-          local,
-          "hardlinks",
-          `${s.execution.executionId}.json`,
-          1024 * 1024,
-        );
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      if (saved) {
-        const original = z.unknown().parse(saved);
-        if (canonicalJson(original) !== canonicalJson(payload))
-          throw Error("Original generation plan conflict");
-        return;
-      }
-      writePrivateRecord(local, "hardlinks", `${s.execution.executionId}.json`, payload, true);
-    },
-    async readHardlinksPlan(execution: ExecutionRef) {
-      const value = await load(execution),
-        payload = z
-          .strictObject({
-            version: z.literal(1),
-            execution: executionRefSchema,
-            input: z.object({
-              kind: z.literal("generation-hardlinks"),
-              revisionId: z.string(),
-              planDigest: z.string(),
-              coordinatorMode: z.string(),
-            }),
-            plan: generationHardlinksPlanSchema,
-          })
-          .parse(
-            readPrivateRecord(local, "hardlinks", `${execution.executionId}.json`, 1024 * 1024),
-          );
-      if (
-        controlDigest(payload.execution) !== controlDigest(execution) ||
-        controlDigest(payload.input) !== controlDigest(value.row.execution_input) ||
-        payload.input.planDigest !== controlDigest(payload.plan)
-      )
-        throw Error("Original generation plan changed");
-      return payload.plan;
-    },
     async begin(authority: VerifiedExecutionAuthority) {
       const value = await load(authority.execution);
       if (value.status.status !== "queued" || value.status.cancellationRequestedAt)
@@ -855,7 +793,9 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original worker child snapshot changed");
       await assertOwnedProxyRecoverySettled(execution);
-      const lease = dataExecutionHoldsLease(value.status.kind)
+      const lease = dataExecutionHoldsLease(
+          dataExecutionInputSchema.parse(value.row.execution_input),
+        )
           ? restoreArtifactTargetLeaseForSettlement(authority)
           : undefined,
         error = proof.outcome === "failed" ? Error("Original contained worker failed") : undefined;
@@ -911,7 +851,9 @@ export function createDataExecutionControlJournal(
         proxyRecovery: "not_required",
       });
       writePrivateRecord(local, "observations", name, proof, true);
-      const lease = dataExecutionHoldsLease(value.status.kind)
+      const lease = dataExecutionHoldsLease(
+          dataExecutionInputSchema.parse(value.row.execution_input),
+        )
           ? restoreArtifactTargetLeaseForSettlement(authority)
           : undefined,
         completion = Object.freeze({ [completionBrand]: true as const });

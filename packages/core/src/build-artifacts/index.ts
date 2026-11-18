@@ -17,7 +17,6 @@ export {
 export {
   createDataConfigurationFenceStore,
   type DataFenceSql,
-  type VerifiedPreparedGenerationAdmission,
 } from "./data-configuration-fence";
 export { retainedDataDatabaseTimestamp } from "./data-database-time";
 export * from "./data-evidence";
@@ -55,6 +54,7 @@ export {
   ControlExecutionFencedError,
   type ControlExecutionOrigin,
   type ControlPlannedChild,
+  type ControlTransportPrincipal,
   cancelControlExecution,
   executionAuthorityState,
   fixedCliArguments,
@@ -125,7 +125,6 @@ export {
 } from "./fixed-data-execution";
 export {
   type FixedServiceLifecyclePlan,
-  lifecycleHardlinkReservation,
   ownedServiceLifecycleFinalRevisionId,
   planFixedServiceUpdate,
   readFixedServiceLifecyclePlan,
@@ -133,14 +132,15 @@ export {
   serviceLifecycleFinalRevisionId,
 } from "./fixed-service-lifecycle";
 export {
-  executeOwnedGenerationHardlinks,
-  type GenerationHardlinksOwnerPlan,
-  inspectOwnedGenerationHardlinks,
-  planGenerationHardlinksOwner,
-  readGenerationHardlinksOwnerPlan,
-  readOwnedGenerationHardlinkPlan,
-  retainGenerationHardlinksOwnerPlan,
-} from "./generation-hardlinks-owner";
+  applyGenerationLinks,
+  GenerationLinkFailed,
+  GenerationLinkNotApplied,
+  GenerationLinkUnknown,
+  generationLinkOperationKey,
+  inspectGenerationLinks,
+  linkGeneration,
+  readGenerationHardlinkPlan,
+} from "./generation-link";
 export {
   type LeaseOperation,
   type LeaseSender,

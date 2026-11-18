@@ -42,12 +42,6 @@ const ordinaryInputs = [
   regional("search-index-build"),
   z.strictObject({ kind: z.literal("notable-places-build") }),
 ] as const;
-export const generationHardlinksInputSchema = z.strictObject({
-  kind: z.literal("generation-hardlinks"),
-  revisionId: dataRevisionSchema,
-  planDigest: dataFingerprintSchema,
-  coordinatorMode: dataCoordinatorModeSchema,
-});
 const maintenance = z.discriminatedUnion("action", [
   z.strictObject({ kind: z.literal("transit-maintenance"), action: z.literal("restart-primary") }),
   z.strictObject({
@@ -90,17 +84,20 @@ const localInputs = z.discriminatedUnion("kind", [
     kind: z.literal("ambient-publication"),
     action: z.enum(["build", "resume", "discard", "enable", "disable", "rollback"]),
   }),
-  // A host CLI's `compose up`, `services start|update` or `data link`.
+  // A generation's hardlink plan, applied through `/link`. With a lease id it
+  // runs under the lease of the agent or host CLI operation that sent it, or
+  // under the prepared fence of that operation's maintenance; without one it
+  // leases data-manager itself.
   z.strictObject({
     kind: z.literal("generation-link"),
     revisionId: dataRevisionSchema,
     planDigest: dataFingerprintSchema,
+    leaseId: z.uuid().nullable(),
   }),
 ]);
 export const ordinaryDataExecutionInputSchema = z.discriminatedUnion("kind", ordinaryInputs);
 export const dataExecutionInputSchema = z.union([
   ordinaryDataExecutionInputSchema,
-  generationHardlinksInputSchema,
   maintenance,
   localInputs,
 ]);
@@ -185,7 +182,7 @@ export const dataExecutionResultSchema = z
       metrics: dataExecutionMetricsSchema,
     }),
     z.strictObject({
-      kind: z.literal("generation-hardlinks"),
+      kind: z.literal("generation-link"),
       hardlinks: hardlinkApplySummarySchema,
     }),
     z.strictObject({
@@ -193,7 +190,10 @@ export const dataExecutionResultSchema = z
       action: z.enum(["restart-primary", "reload-feed-proxy"]),
       changed: z.literal(true),
     }),
-    ...LOCAL_DATA_EXECUTION_KINDS.map((kind) => z.strictObject({ kind: z.literal(kind) })),
+    ...LOCAL_DATA_EXECUTION_KINDS.filter(
+      (kind): kind is Exclude<LocalDataExecutionKind, "generation-link"> =>
+        kind !== "generation-link",
+    ).map((kind) => z.strictObject({ kind: z.literal(kind) })),
   ])
   .refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 32 * 1024);
 export type DataExecutionResult = z.infer<typeof dataExecutionResultSchema>;
@@ -218,7 +218,6 @@ export const dataExecutionStatusSchema = z
       "overture-sync",
       "search-index-build",
       "notable-places-build",
-      "generation-hardlinks",
       "transit-maintenance",
       ...LOCAL_DATA_EXECUTION_KINDS,
     ]),
@@ -271,19 +270,11 @@ export const startDataExecutionSchema = z.strictObject({
   requestedDeadlineAt: dataEpochSchema.optional(),
   delegation: dataControlDelegationSchema.optional(),
 });
+/** A generation's hardlink plan as the agent and the fixed lifecycles freeze it. */
 export const generationHardlinksPlanSchema = z.strictObject({
   plan: z.array(hardlinkEntrySchema).max(256),
   prune: z.literal(true),
 });
-export const startGenerationHardlinksExecutionSchema = z
-  .strictObject({
-    operationKey: dataOperationKeySchema,
-    requestedDeadlineAt: dataEpochSchema,
-    input: generationHardlinksInputSchema,
-    plan: generationHardlinksPlanSchema,
-    delegation: dataControlDelegationSchema,
-  })
-  .refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 1024 * 1024);
 export const dataExecutionIdentitySchema = z.strictObject({
   id: z.uuid(),
   operationKey: dataOperationKeySchema,

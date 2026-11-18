@@ -37,7 +37,6 @@ import { resolveOperationsProfile } from "../transitous/operations-profile";
 import { getSingleFlightController } from "../transitous/runtime";
 import { createDataConfigurationMaintenance } from "./configuration-maintenance";
 import { createDataExecutionDispatcher } from "./dispatch";
-import { applyOwnedGenerationHardlinks } from "./hardlinks";
 import { createDataExecutionReceiver } from "./receiver";
 import { createDataExecutionRuntime } from "./runtime";
 import { createPostgresDataExecutionStore } from "./store";
@@ -153,15 +152,11 @@ it.skipIf(
       sql,
       singleFlight,
       operationsPolicy,
-      runHardlinks: async () => {
-        throw Error("Actual generation receiver owns its hardlink worker");
-      },
     });
     const runtime = createDataExecutionRuntime({
         store,
         dispatch: async (input, context) => {
           effects.push(input.kind);
-          if (input.kind === "generation-hardlinks") return applyOwnedGenerationHardlinks(context);
           if (input.kind === "download-osm") {
             await publishDataChange(() => {
               mkdirSync(join(data, "osm"), { recursive: true });
@@ -333,12 +328,14 @@ it.skipIf(
         },
       });
       expect(admissions).toBe(3);
-      expect(effects).toEqual([
-        "download-osm",
-        "transit-sync",
-        "download-fonts",
-        "generation-hardlinks",
-      ]);
+      expect(effects).toEqual(["download-osm", "transit-sync", "download-fonts"]);
+      // The final generation's plan went through /link under the update's own
+      // lease: data-manager took no lease of its own for it.
+      const links = await sql<{ status: string; execution_input: { leaseId: string | null } }[]>`
+        SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link'`;
+      expect(links).toHaveLength(1);
+      expect(links[0]).toMatchObject({ status: "ok" });
+      expect(links[0]!.execution_input.leaseId).toEqual(expect.any(String));
       expect(readFileSync(commands, "utf8")).toContain("osrm-extract");
       expect(existsSync(join(data, "osrm-graph/region.osrm"))).toBe(true);
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(

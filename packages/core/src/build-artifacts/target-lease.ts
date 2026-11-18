@@ -566,55 +566,6 @@ export function inspectLocalLeaseChildSettlement(
   return childSettlementOf(current(s), s.node, execution);
 }
 /**
- * Settles the data-manager child `execution` of this lease node from the
- * terminal status data-manager reported to this role over its authenticated
- * route. Only a terminal status with a known publication settles it.
- */
-export async function settleDataManagerLeaseChild(
-  lease: TargetLeaseAuthority,
-  execution: ExecutionRef,
-  status: import("../services/data-manager/contracts/executions").DataExecutionStatus,
-): Promise<ChildSettlement | null> {
-  const s = stateOf(lease);
-  const record = await fresh(s);
-  const child = record
-    ? leaseChildrenOf(record, s.node).find((value) => sameExecution(value.execution, execution))
-    : undefined;
-  if (!record || !child) throw Error("Exact retained child grant required");
-  if (
-    !["ok", "partial", "error", "canceled", "interrupted"].includes(status.status) ||
-    status.publication === "unknown"
-  )
-    return settledKnown(child) ? (child.settlement as ChildSettlement) : null;
-  const terminal = assertDataManagerTerminal(execution, status);
-  if (settledKnown(child)) return child.settlement as ChildSettlement;
-  return settleIssuedLeaseChild(lease, execution, {
-    outcome:
-      status.publication === "not_started"
-        ? "failed_without_effect"
-        : status.status === "ok"
-          ? "committed"
-          : "contained",
-    publication: status.publication,
-    terminalReceiptDigest: controlDigest({ version: 1, status: terminal }),
-  });
-}
-/**
- * Data-manager reports the known outcome of a hardlink child it ran under the
- * agent's or the host CLI's lease, from its own effect settlement. It does so
- * after its terminal, at startup repair and in recovery, so a known outcome is
- * recorded even when the issuer's own observation was interrupted.
- */
-export async function settleOwnLeaseChild(
-  installation: import("./control-records").ControlInstallation,
-  execution: ExecutionRef,
-): Promise<void> {
-  const settlement = childSettlementState(
-    verifyControlEffectSettlement(installation, execution),
-  ).evidence;
-  await installationState(installation).leases.settleChild(settlement);
-}
-/**
  * Settles the child `execution` this lease node issued, from the answer its
  * recipient gave to this role over an authenticated route. A recorded
  * settlement never changes.

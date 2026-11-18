@@ -60,6 +60,8 @@ describe("data-manager producer contract metadata", () => {
     });
     const revisionId = `cfg1_${"a".repeat(43)}`;
     const oversizedBody = {
+      operationKey: `opk1_${"k".repeat(32)}`,
+      requestedDeadlineAt: Date.now() + 60_000,
       revisionId,
       plan: [
         { source: "x".repeat(100), target: "target", consumerService: "consumer", dataType: "osm" },
@@ -81,7 +83,7 @@ describe("data-manager producer contract metadata", () => {
     expect(oversized.statusCode).toBe(413);
     await expect(
       linkDatasets(
-        { revisionId, plan: [] },
+        { ...oversizedBody, plan: [] },
         { transport, headers: { "Content-Type": "application/xml" } },
       ),
     ).resolves.toMatchObject({ status: 415, data: media.json() });

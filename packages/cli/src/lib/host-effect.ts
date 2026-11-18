@@ -1,5 +1,11 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { admitRootLease, agentStoreLeases, TargetBusyError } from "@openmapx/core/build-artifacts";
+import {
+  admitRootLease,
+  agentStoreLeases,
+  GenerationLinkUnknown,
+  TargetBusyError,
+} from "@openmapx/core/build-artifacts";
 import {
   canonicalJson,
   createControlRootOperationKey,
@@ -21,12 +27,22 @@ function exitOutcome(code: number): Outcome {
   return code === 0 ? "committed" : code >= 128 ? "unknown" : "contained";
 }
 
-/** A process killed, timed out or cut off from the daemon did not report how far it got. */
+/** A process killed, timed out or cut off from the daemon did not report how
+ * far it got, nor did a hardlink plan data-manager never answered for. */
 function thrownOutcome(error: unknown): Outcome {
   const value = error as { signal?: unknown; timedOut?: unknown; isTerminated?: unknown };
-  return value?.signal || value?.timedOut === true || value?.isTerminated === true
+  return value?.signal ||
+    value?.timedOut === true ||
+    value?.isTerminated === true ||
+    error instanceof GenerationLinkUnknown
     ? "unknown"
     : "contained";
+}
+
+const heldLeases = new AsyncLocalStorage<{ leaseId: string; owner: ExecutionRef }>();
+/** The lease the running host effect holds, for requests made under it. */
+export function currentHostLease(): { leaseId: string; owner: ExecutionRef } | undefined {
+  return heldLeases.getStore();
 }
 
 /**
@@ -98,7 +114,7 @@ export async function withHostTargets<T>(
   };
   let result: T;
   try {
-    result = await run();
+    result = await heldLeases.run({ leaseId: lease.leaseId, owner }, run);
   } catch (error) {
     if (input.contained?.(error)) await finish("contained", true);
     else await finish(thrownOutcome(error));

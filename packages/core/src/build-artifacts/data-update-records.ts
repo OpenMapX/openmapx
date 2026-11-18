@@ -5,12 +5,10 @@ import { opsOperationSchema } from "../ops/contract";
 import { executionRefSchema } from "../ops/execution-ref";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
-  generationHardlinksPlanSchema,
   normalizeDataExecutionInput,
   ordinaryDataExecutionInputSchema,
 } from "../services/data-manager/contracts/executions";
 import { controlDigest } from "./control-records";
-import { generationHardlinksReservation } from "./generation-hardlinks-records";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
@@ -26,11 +24,9 @@ export const dataUpdatePlanSchema = z.strictObject({
   revisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
   sourcesDigest: z.string().regex(/^[a-f0-9]{64}$/),
   finalRevisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
-  hardlinks: generationHardlinksPlanSchema,
   dataReservation: controlChildReservationSchema,
   finalizationReservation: controlChildReservationSchema,
   dataChildren: z.array(controlChildReservationSchema).length(3),
-  finalizationChildren: z.array(controlChildReservationSchema).max(1),
   dataDelegationId: z.uuid(),
   finalizationDelegationId: z.uuid(),
 });
@@ -48,14 +44,7 @@ export function dataUpdateAddress(key: string, purpose: string) {
 export function createDataUpdatePlan(
   options: Pick<
     DataUpdatePlan,
-    | "parent"
-    | "operation"
-    | "region"
-    | "countries"
-    | "domain"
-    | "revisionId"
-    | "sourcesDigest"
-    | "hardlinks"
+    "parent" | "operation" | "region" | "countries" | "domain" | "revisionId" | "sourcesDigest"
   > & { serviceIds: readonly string[] },
 ): DataUpdatePlan {
   if (options.operation.kind !== "data.update") throw Error("Full Update operation required");
@@ -109,17 +98,6 @@ export function createDataUpdatePlan(
     }),
   );
   const finalRevisionId = `cfg1_${createHash("sha256").update(`openmapx-data-update-generation-v1\0${root.operationKey}`).digest("base64url")}`;
-  const leaf = generationHardlinksReservation({
-    parent: root.executor === "host-cli" ? root : finalizationReservation.execution,
-    revisionId: finalRevisionId,
-    coordinatorMode: "ensure-running",
-    plan: options.hardlinks,
-    serviceIds: targets,
-  });
-  if (leaf && root.executor === "host-cli") {
-    leaf.ordinal = 3;
-    leaf.execution.operationKey = controlChildOperationKey(root.operationKey, "hardlinks", 3);
-  }
   const { serviceIds: _targets, ...body } = options;
   const plan = dataUpdatePlanSchema.parse({
     ...body,
@@ -127,7 +105,6 @@ export function createDataUpdatePlan(
     dataReservation,
     finalizationReservation,
     dataChildren,
-    finalizationChildren: leaf ? [leaf] : [],
     finalRevisionId,
     dataDelegationId: dataUpdateAddress(root.operationKey, "data-grant"),
     finalizationDelegationId: dataUpdateAddress(root.operationKey, "finalization-grant"),

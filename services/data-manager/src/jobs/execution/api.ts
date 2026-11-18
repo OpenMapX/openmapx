@@ -7,7 +7,7 @@ import type {
   DataExecutionInput,
   DataExecutionStatus,
   LocalDataExecutionKind,
-  startGenerationHardlinksExecutionSchema,
+  linkRequestSchema,
 } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type z from "zod/v4";
@@ -33,7 +33,10 @@ export interface DataExecutionReceiver {
    * completion settles once the execution is terminal, with the work's value
    * or its failure. */
   runLocal<T>(
-    input: Extract<DataExecutionInput, { kind: LocalDataExecutionKind }>,
+    input: Extract<
+      DataExecutionInput,
+      { kind: Exclude<LocalDataExecutionKind, "generation-link"> }
+    >,
     work: () => Promise<T>,
     options?: { triggeredBy?: string },
   ): Promise<{ status: DataExecutionStatus; completion: Promise<T> }>;
@@ -52,10 +55,16 @@ export interface DataExecutionReceiver {
       transportPrincipal: DataManagerPrincipal;
     },
   ): Promise<DataExecutionStatus>;
-  admitHardlinks(
-    request: z.infer<typeof startGenerationHardlinksExecutionSchema>,
+  /** Applies a generation's hardlink plan, or observes the application its
+   * operation key already names. `running` once the request has waited its
+   * share and the application has not ended. */
+  link(
+    request: z.infer<typeof linkRequestSchema>,
     transportPrincipal: DataManagerPrincipal,
-  ): Promise<DataExecutionStatus>;
+  ): Promise<
+    | { state: "applied"; linked: number; skipped: number; pruned: number }
+    | { state: "running"; status: DataExecutionStatus }
+  >;
   inspect(id: string): Promise<DataExecutionStatus | null>;
   lookup(operationKey: string): Promise<DataExecutionStatus | null>;
   requestCancel(identity: DataExecutionIdentity): Promise<DataExecutionStatus>;
@@ -93,9 +102,16 @@ export function registerDataExecutionApi(
       .code(202)
       .send(await receiver.admit(input, { ...admission, transportPrincipal: principal(request) }));
   });
-  registerDataManagerRoute(app, "startGenerationHardlinksExecution", async (request, reply) => {
+  // Applies a generation's hardlink plan as a data job: under the lease the
+  // sender names, under the prepared fence of that sender's maintenance, or,
+  // without a lease, exclusively under data-manager's own. Busy and unavailable
+  // answers mean nothing was linked; a 500 means links may have changed.
+  registerDataManagerRoute(app, "link", async (request, reply) => {
     if (!receiver) return unavailable(reply);
-    return reply.code(202).send(await receiver.admitHardlinks(request.body, principal(request)));
+    const outcome = await receiver.link(request.body, principal(request));
+    if (outcome.state === "running") return reply.code(202).send(outcome.status);
+    const { state: _state, ...counts } = outcome;
+    return { ok: true as const, ...counts };
   });
   registerDataManagerRoute(app, "prepareDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);

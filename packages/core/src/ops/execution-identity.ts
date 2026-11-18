@@ -66,7 +66,6 @@ const futureBudgets: Readonly<Record<string, number>> = {
   "overture-sync": 24 * 3600_000,
   "search-index-build": 24 * 3600_000,
   "notable-places-build": 24 * 3600_000,
-  "generation-hardlinks": 10 * 60_000,
   "configuration-maintenance.prepare": 60_000,
   "transit-maintenance": 120_000,
   "traffic-live": 15 * 60_000,

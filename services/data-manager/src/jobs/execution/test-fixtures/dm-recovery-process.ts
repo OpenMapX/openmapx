@@ -50,9 +50,6 @@ const dispatcher = createDataExecutionDispatcher({
   sql: rawSql,
   singleFlight,
   operationsPolicy: policy,
-  runHardlinks: async () => {
-    throw Error("No hardlinks in this fixture");
-  },
 });
 const runner = createDefaultTransitousScriptRunner();
 let dispatches = 0;

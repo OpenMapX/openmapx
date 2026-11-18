@@ -78,7 +78,7 @@ function ref(
     principal: role === "ops-agent" ? (parent ? "data-manager" : "api") : role,
     executionId: role === "ops-agent" ? `job1_${randomUUID().replaceAll("-", "")}` : randomUUID(),
     operationKey: parent
-      ? controlChildOperationKey(parent.operationKey, phase ?? "hardlinks", 0)
+      ? controlChildOperationKey(parent.operationKey, phase ?? "lifecycle", 0)
       : createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     operationFingerprint,
     deadlineAt,
@@ -246,108 +246,6 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
     }),
   ).toBe("released");
 });
-it.each([false, true])(
-  "certifies a depth-two hardlink leaf across processes (cancel intermediate: %s)",
-  async (cancelIntermediate) => {
-    const c = await import("./test-fixtures/control");
-    const operation = {
-      kind: "service.start" as const,
-      serviceId: "motis",
-      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
-    };
-    const execution = ref("ops-agent", operation.kind, operation);
-    const cli = ref("host-cli", operation.kind, operation, execution, "lifecycle");
-    const plan: ControlPlannedChild = {
-      phase: "lifecycle",
-      ordinal: 0,
-      kind: operation.kind,
-      execution: cli,
-      serviceIds: ["motis"],
-      recipient: "fixed-cli",
-    };
-    const installation = c.openControlInstallation({
-      infraDir: root,
-      role: "ops-agent",
-      serviceIds: ["motis", "osrm"],
-    });
-    const authority = c.retainAdmittedControlExecution(installation, {
-      requestedDeadlineAt: execution.deadlineAt,
-      execution,
-      kind: operation.kind,
-      operation,
-      admittedAt: execution.deadlineAt - 60000,
-      serviceIds: ["motis"],
-      plan: [plan],
-    });
-    const lease = await acquireArtifactTargetLease({
-      serviceIds: ["motis"],
-      owner: authority,
-    });
-    const id = randomUUID();
-    const args = c.fixedCliArguments(operation);
-    c.retainFixedCliSpawnIntent(authority, { childKey: id, execution: cli, operation, args });
-    const delegation = await delegateArtifactTargetLease(lease, { ...plan, childKey: id });
-    const hardlinks = {
-      kind: "generation-hardlinks",
-      revisionId: "cfg1_test",
-      planDigest: "a".repeat(64),
-      coordinatorMode: "require-running",
-    };
-    const leaf = ref("data-manager", hardlinks.kind, hardlinks, cli, "hardlinks");
-    const fixed = {
-      mode: "fixed",
-      infraDir: root,
-      leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
-      execution: cli,
-      args,
-    };
-    const leafInput = {
-      execution: leaf,
-      phase: "hardlinks",
-      recipient: "data-manager",
-      serviceIds: ["motis"],
-    };
-    expect(await child({ ...fixed, child: { ...leafInput, serviceIds: ["osrm"] } })).toMatchObject({
-      ok: false,
-    });
-    const started = (await child({ ...fixed, action: "run", child: leafInput })) as {
-      ok: boolean;
-      delegation: unknown;
-      error?: string;
-    };
-    expect(started, JSON.stringify(started)).toMatchObject({ ok: true });
-    expect(await child({ ...fixed, action: "run" })).toMatchObject({ ok: false });
-    expect(await child({ ...fixed, action: "settle" })).toMatchObject({ ok: false });
-    const hardlinkInput = {
-      infraDir: root,
-      role: "data-manager",
-      delegation: started.delegation,
-      execution: leaf,
-      kind: hardlinks.kind,
-      operation: hardlinks,
-      admittedAt: leaf.deadlineAt - 60000,
-    };
-    expect(await child(hardlinkInput)).toMatchObject({ ok: true });
-    if (cancelIntermediate) {
-      expect(await child({ ...fixed, action: "cancel" })).toMatchObject({ ok: true });
-      await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
-    }
-    expect(await child({ ...hardlinkInput, settle: true })).toMatchObject({ ok: true });
-    expect(await child({ ...fixed, action: "settle" })).toMatchObject({ ok: true });
-    c.retainControlEffectReceipt(authority, {
-      outcome: "failed_without_effect",
-      publication: "not_started",
-      receipt: { kind: "not-started" },
-    });
-    await settleArtifactTargetLeaseChild(
-      lease,
-      c.verifyControlEffectSettlement(installation, execution),
-    );
-    await releaseArtifactTargetLease(lease);
-    c.closeControlInstallation(installation);
-  },
-  60000,
-);
 it("keeps an attempted child fenced after SIGKILL of its actual owner process", async () => {
   const c = await import("./test-fixtures/control");
   const l = await import("./target-lease");

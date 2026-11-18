@@ -90,8 +90,6 @@ export const leaseOperationSchemas = [
       z.strictObject({ action: z.literal("release") }),
     ]),
   }),
-  /** Data-manager reports the known outcome of a child it ran under another's lease. */
-  z.strictObject({ kind: z.literal("lease.settleChild"), settlement: leaseSettlementSchema }),
 ] as const;
 export const leaseResultSchemas = {
   "lease.acquire": z.discriminatedUnion("outcome", [
@@ -100,5 +98,4 @@ export const leaseResultSchemas = {
   ]),
   "lease.read": z.strictObject({ lease: leaseRecordSchema.nullable() }),
   "lease.update": z.strictObject({ lease: leaseRecordSchema.nullable() }),
-  "lease.settleChild": z.strictObject({ lease: leaseRecordSchema.nullable() }),
 } as const;

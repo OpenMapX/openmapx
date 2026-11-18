@@ -6,7 +6,7 @@
  * receipt this returns. */
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
-import { executionFingerprint, type VerifiedParentExecution } from "../ops/execution-identity";
+import { executionFingerprint } from "../ops/execution-identity";
 import { DATA_ADVISORY_LOCKS } from "../services/data-manager/advisory-locks";
 import {
   type DataConfigurationFencePrepare,
@@ -18,7 +18,6 @@ import {
   dataConfigurationFencePrepareSchema,
   dataConfigurationFenceSettleRequestSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
-import { startGenerationHardlinksExecutionSchema } from "../services/data-manager/contracts/executions";
 import { type ControlInstallation, controlDigest } from "./control-records";
 import {
   beginControlEffect,
@@ -35,6 +34,7 @@ import {
   verifyControlEffectSettlement,
   withPrivateEffectWriter,
 } from "./execution-record";
+import { rootLeaseId } from "./lease-store";
 import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 
 export interface DataFenceSql {
@@ -80,19 +80,6 @@ function receiptOf(row: FenceRow): DataConfigurationFenceReceipt {
     state: row.state,
   };
 }
-declare const preparedGenerationBrand: unique symbol;
-export type VerifiedPreparedGenerationAdmission = Readonly<{ [preparedGenerationBrand]: true }>;
-const preparedGenerations = new WeakMap<
-  VerifiedPreparedGenerationAdmission,
-  {
-    installation: ControlInstallation;
-    request: ReturnType<typeof startGenerationHardlinksExecutionSchema.parse>;
-    principal: ControlTransportPrincipal;
-    parent: VerifiedParentExecution;
-    fenceDigest: string;
-    execution: ReturnType<typeof inspectRemoteDelegation>["execution"];
-  }
->();
 export function createDataConfigurationFenceStore(
   installation: ControlInstallation,
   sql: DataFenceSql,
@@ -236,45 +223,30 @@ export function createDataConfigurationFenceStore(
     if (await row(tx, "state", "prepared")) throw new DataFenceBusy();
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
   }
-  async function inspectGenerationAdmission(
-    value: unknown,
-    principal: ControlTransportPrincipal,
+  /** A generation's hardlink plan sent with the sender's lease id. Outside a
+   * maintenance it is admitted like any data job. While a fence is prepared
+   * only the maintenance's own plan runs: the agent sends it under the lease
+   * the maintenance owner holds, for the revision and plan the fence names. */
+  async function assertLinkAdmission(
     tx: Tx,
+    input: { revisionId: string; planDigest: string; leaseId: string },
+    caller: ControlTransportPrincipal,
   ) {
-    const request = startGenerationHardlinksExecutionSchema.parse(value);
-    let delegation: ReturnType<typeof inspectRemoteDelegation>;
-    try {
-      delegation = inspectRemoteDelegation(installation, request.delegation, principal);
-    } catch {
-      throw forbidden("Generation delegation required");
-    }
-    if (
-      delegation.leaseId === null ||
-      delegation.kind !== "generation-hardlinks" ||
-      delegation.phase !== "hardlinks" ||
-      delegation.execution.operationKey !== request.operationKey ||
-      delegation.execution.operationFingerprint !== controlDigest(request.input) ||
-      request.input.planDigest !== controlDigest(request.plan) ||
-      request.plan.plan.some((entry) => !delegation.serviceIds.includes(entry.consumerService))
-    )
-      throw forbidden("Generation plan/delegation binding conflict");
+    if (caller !== "ops-agent" && caller !== "host-cli")
+      throw forbidden("Only the agent or the host CLI links under its own lease");
     if (!open) throw new DataFenceBusy();
     const fence = await row(tx, "state", "prepared");
-    if (!fence) return;
-    const receipt = receiptOf(fence);
-    // During maintenance only the maintenance owner's own hardlink leaf runs:
-    // the agent issued it under the maintenance owner the fence was prepared for.
-    if (
-      principal !== "ops-agent" ||
-      canonicalJson(delegation.owner) !== canonicalJson(receipt.ownerPrepare) ||
-      request.input.revisionId !== receipt.revisionId ||
-      request.input.planDigest !== receipt.hardlinkPlanDigest ||
-      request.input.coordinatorMode !== fence.input.coordinatorMode ||
-      delegation.serviceIds.some((id) => !fence.input.serviceIds.includes(id))
-    )
-      throw forbidden("Generation maintenance owner/revision/hash conflict");
+    if (fence) {
+      const receipt = receiptOf(fence);
+      if (
+        caller !== "ops-agent" ||
+        input.leaseId !== rootLeaseId(receipt.ownerPrepare) ||
+        input.revisionId !== receipt.revisionId ||
+        input.planDigest !== receipt.hardlinkPlanDigest
+      )
+        throw new DataFenceBusy();
+    }
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
-    return { request, delegation, fenceDigest: controlDigest(fence) };
   }
   return {
     /** Admission opens once the fence table is readable. */
@@ -284,57 +256,7 @@ export function createDataConfigurationFenceStore(
       open = true;
     },
     assertAdmission,
-    async assertGenerationAdmission(
-      value: unknown,
-      principal: ControlTransportPrincipal,
-      parent?: VerifiedParentExecution,
-    ): Promise<VerifiedPreparedGenerationAdmission | undefined> {
-      const checked = await inspectGenerationAdmission(value, principal, sql);
-      if (!checked) return undefined;
-      if (!parent) throw new DataFenceBusy();
-      const proof = Object.freeze({}) as VerifiedPreparedGenerationAdmission;
-      preparedGenerations.set(proof, {
-        installation,
-        request: checked.request,
-        principal,
-        parent,
-        fenceDigest: checked.fenceDigest,
-        execution: checked.delegation.execution,
-      });
-      return proof;
-    },
-    async assertPreparedGenerationAdmission(
-      tx: Tx,
-      proof: VerifiedPreparedGenerationAdmission,
-      input: unknown,
-      admission: {
-        operationKey: string;
-        requestedDeadlineAt?: number;
-        parent?: VerifiedParentExecution;
-        id?: string;
-        principal?: string;
-      },
-    ): Promise<void> {
-      const source = preparedGenerations.get(proof);
-      if (
-        !source ||
-        source.installation !== installation ||
-        source.parent !== admission.parent ||
-        canonicalJson(input) !== canonicalJson(source.request.input) ||
-        admission.operationKey !== source.request.operationKey ||
-        admission.requestedDeadlineAt !== source.request.requestedDeadlineAt ||
-        admission.id !== source.execution.executionId ||
-        admission.principal !== source.execution.principal
-      )
-        throw new DataFenceBusy();
-      const checked = await inspectGenerationAdmission(source.request, source.principal, tx);
-      if (
-        !checked ||
-        checked.fenceDigest !== source.fenceDigest ||
-        canonicalJson(checked.delegation.execution) !== canonicalJson(source.execution)
-      )
-        throw new DataFenceBusy();
-    },
+    assertLinkAdmission,
     async withAdmission<T>(run: (tx: Tx) => Promise<T>): Promise<T> {
       return sql.transaction(async (tx) => {
         await lock(tx);

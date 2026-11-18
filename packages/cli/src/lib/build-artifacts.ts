@@ -344,7 +344,7 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
     });
     const requireCoordinator = async () => {
       if (
-        owner?.hardlinks?.plan.plan.length &&
+        owner?.hardlinks?.plan.length &&
         !dm.unwrapDataManagerResponse(await dm.getStatus({ transport, signal: owner.signal })).ok
       )
         throw Error("Data manager must already be running to apply imported hardlinks");
@@ -401,27 +401,31 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
     }
     let followUp: "complete" | "failed" = "complete";
     if (owner.hardlinks) {
+      const revisionId = owner.hardlinks.revisionId;
       try {
         await services.withConfigurationGenerationWriter(
           paths.infraDir,
           () =>
-            control.executeOwnedGenerationHardlinks({
-              authority: owner!.authority,
-              lease: owner!.lease,
+            control.applyGenerationLinks({
               infraDir: paths.infraDir,
+              revisionId,
               transport,
+              issuer: owner!.authority.execution,
+              leaseId: owner!.lease.leaseId,
               signal: owner!.signal,
             }),
           owner.signal,
         );
       } catch (error) {
-        if (
-          owner.hardlinks.reservation &&
-          control.lookupControlChildPhaseBinding(owner.authority, owner.hardlinks.reservation)
-        )
+        // An application data-manager never answered for keeps the import's
+        // lease held until the operator resolves it.
+        let cause = error;
+        while (cause instanceof services.ConfigurationGenerationError && cause.cause)
+          cause = cause.cause;
+        if (cause instanceof control.GenerationLinkUnknown)
           throw Error(
-            "Artifacts committed; original hardlink execution is unresolved. Retain the import workspace and reconcile its original owner.",
-            { cause: error },
+            "Artifacts committed; data-manager did not report whether it applied the hardlink plan. Check `pnpm openmapx control status`, then resolve the import's operation.",
+            { cause },
           );
         followUp = "failed";
       }

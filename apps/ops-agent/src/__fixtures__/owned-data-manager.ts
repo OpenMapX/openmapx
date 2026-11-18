@@ -8,7 +8,6 @@ import { resolveOperationsProfile } from "../../../../services/data-manager/src/
 import { getSingleFlightController } from "../../../../services/data-manager/src/jobs/transitous/runtime";
 import { createDataConfigurationMaintenance } from "../../../../services/data-manager/src/jobs/execution/configuration-maintenance";
 import { createDataExecutionDispatcher } from "../../../../services/data-manager/src/jobs/execution/dispatch";
-import { applyOwnedGenerationHardlinks } from "../../../../services/data-manager/src/jobs/execution/hardlinks";
 import { createDataExecutionReceiver } from "../../../../services/data-manager/src/jobs/execution/receiver";
 import { createDataExecutionRuntime } from "../../../../services/data-manager/src/jobs/execution/runtime";
 import { removePrunedDataRows } from "../../../../services/data-manager/src/jobs/execution/prune-rows";
@@ -41,7 +40,7 @@ export async function ownedDataManager(options: {
   }
   const store = createPostgresDataExecutionStore(options.sql, { controlJournal: journal, configurationFence: fence });
   const singleFlight = getSingleFlightController(), operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
-  const dispatcher = createDataExecutionDispatcher({ dataDir, state: new StateStore(dataDir), sql: options.sql, singleFlight, operationsPolicy, runHardlinks: applyOwnedGenerationHardlinks });
+  const dispatcher = createDataExecutionDispatcher({ dataDir, state: new StateStore(dataDir), sql: options.sql, singleFlight, operationsPolicy });
   const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
   const receiver = createDataExecutionReceiver({ runtime, installation, configurationFence: fence, dispatcher, operationsPolicy });
   const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0;
@@ -69,11 +68,12 @@ export async function ownedDataManager(options: {
       if (options.pausePrepareResponse && reply.statusCode === 200) { prepareReplyEntered.resolve(); await continuePrepareReply.promise; }
       if (options.losePrepareResponseOnce && preparePosts === 1) reply.raw.destroy();
     }
-    if (request.method === "POST" && request.url === "/executions/generation-hardlinks") {
+    if (request.method === "POST" && request.url === "/link") {
       const key = (request.body as { operationKey?: string } | undefined)?.operationKey;
       if (key) keys.add(key);
       replies.push({ status: reply.statusCode, body: typeof payload === "string" ? JSON.parse(payload) : null });
-      posts++; if (options.loseHardlinkResponse) reply.raw.destroy();
+      // Only the first answer is lost: the agent asks again under the same key.
+      posts++; if (options.loseHardlinkResponse && posts === 1) reply.raw.destroy();
     }
     return payload;
   });

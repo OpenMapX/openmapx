@@ -48,7 +48,7 @@ export function installServiceLifecycleRuntime(
       execution: child.execution,
       operation,
       args,
-      reservations: plan.cliReservations,
+      reservations: [],
     });
     const issued = await issueControlChildPhase(authority, {
       phase: "lifecycle",

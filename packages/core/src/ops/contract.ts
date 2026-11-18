@@ -206,7 +206,6 @@ export const OPS_OPERATION_KINDS = [
   "lease.acquire",
   "lease.read",
   "lease.update",
-  "lease.settleChild",
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
@@ -354,11 +353,10 @@ export const OPS_KIND_POLICIES = {
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
   // Read-only, for the admin panel: the pins, never a proposal or a change.
   "transitousPin.inspect": sync("api", 30_000),
-  // Data-manager claims targets, and settles the children it ran, through the agent.
+  // Data-manager claims targets through the agent.
   "lease.acquire": sync("data-manager", 15_000, 256 * 1024),
   "lease.read": sync("data-manager", 15_000, 256 * 1024),
   "lease.update": sync("data-manager", 15_000, 256 * 1024),
-  "lease.settleChild": sync("data-manager", 15_000, 256 * 1024),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
 /** Read streams/diagnostics do not acquire control-root authority or a retention dependency. */

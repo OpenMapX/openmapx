@@ -4,14 +4,9 @@ import { join } from "node:path";
 import {
   buildArtifactSpec,
   controlDigest,
-  executeOwnedGenerationHardlinks,
   executionAuthorityState,
-  type GenerationHardlinksOwnerPlan,
-  inspectOwnedGenerationHardlinks,
-  lookupControlChildPhaseBinding,
-  planGenerationHardlinksOwner,
-  readGenerationHardlinksOwnerPlan,
-  readOwnedGenerationHardlinkPlan,
+  inspectGenerationLinks,
+  readGenerationHardlinkPlan,
   readPrivateRecord,
   type VerifiedExecutionAuthority,
   writePrivateRecord,
@@ -19,6 +14,7 @@ import {
 import {
   artifactPublicationFingerprint,
   inspectArtifactPublication,
+  inspectSettledArtifactImport,
   publishValidatedBuild,
   retainUnstartedArtifactImport,
 } from "@openmapx/core/build-artifacts/publication";
@@ -31,6 +27,7 @@ import {
 import { services } from "@openmapx/core/server";
 import { z } from "zod";
 import {
+  applyAgentGenerationLinks,
   assertConfigurationCoordinatorReady,
   configurationDataManagerTransport,
 } from "../configuration-hardlinks-runtime";
@@ -165,9 +162,7 @@ async function snapshot(
       join(source.infraDir, "data"),
       prepared.bundle.manifest.service,
     );
-    const hardlinks = revisionId
-      ? readOwnedGenerationHardlinkPlan(source.infraDir, revisionId)
-      : null;
+    const hardlinks = revisionId ? readGenerationHardlinkPlan(source.infraDir, revisionId) : null;
     if (hardlinks?.plan.length)
       try {
         await assertConfigurationCoordinatorReady(signal);
@@ -215,10 +210,8 @@ async function snapshot(
 /** Fixed source invoked by the actual server before signing the original root. */
 export async function prepareArtifactImportAdmission(
   runtime: OpsRuntime,
-  parent: ExecutionRef,
   operation: ImportOperation,
-  targets: readonly string[],
-): Promise<{ plan: ImportPlan; hardlinks: GenerationHardlinksOwnerPlan }> {
+): Promise<ImportPlan> {
   const source = sources.get(runtime);
   if (!source) throw Error("Prepared import runtime unavailable");
   const retained = source.store.readImportPreview(operation),
@@ -233,16 +226,7 @@ export async function prepareArtifactImportAdmission(
   const plan = planSchema.parse({ version: 1, ...current });
   if (Buffer.byteLength(JSON.stringify(plan)) > 7 * 1024)
     throw new OpsExecutionFailure("validation", {});
-  return {
-    plan,
-    hardlinks: planGenerationHardlinksOwner({
-      infraDir: source.infraDir,
-      parent,
-      revisionId: operation.expectedCurrentRevisionId,
-      coordinatorMode: "require-running",
-      serviceIds: targets,
-    }),
-  };
+  return plan;
 }
 export function retainArtifactImportPlan(authority: VerifiedExecutionAuthority, plan: ImportPlan) {
   const owner = executionAuthorityState(authority);
@@ -372,38 +356,48 @@ export function installPreparedImportRuntime(
         throw failure;
       });
       if (result.outcome !== "committed") return result;
-      // The frozen CURRENT generation already names the producer paths; importing
-      // changes their bytes, not configuration. Apply it through the one borrowed
-      // require-running leaf under the SAME original import root.
-      const hardlinks = readGenerationHardlinksOwnerPlan(authority);
+      // The current generation already names the producer paths; importing
+      // changes their bytes, not configuration. Its plan is applied under the
+      // import's own lease.
+      const revisionId = operation.expectedCurrentRevisionId;
+      if (!revisionId) throw Error("Prepared import generation required");
       try {
-        if (hardlinks.plan.plan.length) await assertConfigurationCoordinatorReady(context.signal);
-        await services.withConfigurationGenerationWriter(
-          source.infraDir,
-          () =>
-            executeOwnedGenerationHardlinks({
-              authority,
-              lease,
-              infraDir: source.infraDir,
-              transport: configurationDataManagerTransport(),
-              signal: context.signal,
-            }),
-          context.signal,
-        );
-        await store.completePreparedImport(context, claim, result);
-        return { ...result, followUp: "complete" as const };
-      } catch {
-        if (
-          hardlinks.reservation &&
-          lookupControlChildPhaseBinding(authority, hardlinks.reservation)
-        )
-          throw new OpsExecutionFailure("recovery_required", {});
-        // Files are committed, but an unavailable coordinator started no child.
-        // Preserve that result; the caller must report failed follow-up explicitly.
+        if (readGenerationHardlinkPlan(source.infraDir, revisionId).plan.length)
+          await assertConfigurationCoordinatorReady(context.signal);
+        await applyAgentGenerationLinks({
+          infraDir: source.infraDir,
+          revisionId,
+          execution: context.execution,
+          lease,
+          signal: context.signal,
+        });
+      } catch (error) {
+        // An application data-manager never reported keeps the import's lease.
+        if (error instanceof OpsExecutionFailure && error.errorClass === "recovery_required")
+          throw error;
+        // Files are committed and the plan was not applied. Preserve that
+        // result; the caller must report failed follow-up explicitly.
         return { ...result, followUp: "failed" as const };
       }
+      await store.completePreparedImport(context, claim, result);
+      return { ...result, followUp: "complete" as const };
     });
   };
+}
+
+/** A settled import's publication and its hardlink follow-up, read back for a claim. */
+export function inspectSettledImport(
+  runtime: OpsRuntime,
+  authority: VerifiedExecutionAuthority,
+  revisionId: string | null | undefined,
+) {
+  const source = sources.get(runtime);
+  if (!source) throw Error("Prepared import runtime unavailable");
+  return inspectSettledArtifactImport(authority, {
+    transport: configurationDataManagerTransport(),
+    infraDir: source.infraDir,
+    revisionId: revisionId ?? undefined,
+  });
 }
 
 /** Settlement-only restart consumer. It never imports again or dispatches a child. */
@@ -431,14 +425,19 @@ export async function recoverPreparedImportFiles(
       return { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
     });
   if (published.phase === "committed") {
-    const followUp =
-      (await inspectOwnedGenerationHardlinks(
-        authority,
-        configurationDataManagerTransport(),
-        lease,
-      )) === "complete"
-        ? ("complete" as const)
-        : ("failed" as const);
+    // The hardlink application the import may have sent, read back by its key.
+    // One data-manager still runs keeps the import, and its lease, unresolved.
+    const links = operation.expectedCurrentRevisionId
+      ? await inspectGenerationLinks({
+          infraDir: source.infraDir,
+          transport: configurationDataManagerTransport(),
+          issuer: authority.execution,
+          revisionId: operation.expectedCurrentRevisionId,
+          signal: context.signal,
+        })
+      : "complete";
+    if (links === "pending") throw Error("Prepared import hardlink application remains unresolved");
+    const followUp = links === "complete" ? ("complete" as const) : ("failed" as const);
     const result = {
       outcome: "committed" as const,
       serviceId: published.serviceId,
@@ -451,10 +450,7 @@ export async function recoverPreparedImportFiles(
   }
   if (published.phase === "restored")
     return { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
-  const plan = originalImportPlan(authority),
-    hardlinks = readGenerationHardlinksOwnerPlan(authority);
-  if (hardlinks.reservation && lookupControlChildPhaseBinding(authority, hardlinks.reservation))
-    throw Error("Prepared import has an unexplained child attempt");
+  const plan = originalImportPlan(authority);
   return source.store.withPreparedArtifact(operation, (prepared) =>
     publishValidatedBuild({
       ...prepared,

@@ -334,6 +334,7 @@ import type {
   InspectTransitSyncPreflight503,
   InspectTransitSyncPreflightBody,
   Link200,
+  Link202,
   Link400,
   Link401,
   Link403,
@@ -491,17 +492,6 @@ import type {
   StartDataExecution500,
   StartDataExecution503,
   StartDataExecutionBody,
-  StartGenerationHardlinksExecution202,
-  StartGenerationHardlinksExecution400,
-  StartGenerationHardlinksExecution401,
-  StartGenerationHardlinksExecution403,
-  StartGenerationHardlinksExecution409,
-  StartGenerationHardlinksExecution413,
-  StartGenerationHardlinksExecution415,
-  StartGenerationHardlinksExecution429,
-  StartGenerationHardlinksExecution500,
-  StartGenerationHardlinksExecution503,
-  StartGenerationHardlinksExecutionBody,
   SyncTransit202,
   SyncTransit400,
   SyncTransit401,
@@ -565,7 +555,6 @@ import {
   setAmbientPlacesEnabledRequest,
   settleDataConfigurationFenceRequest,
   startDataExecutionRequest,
-  startGenerationHardlinksExecutionRequest,
   syncTransitRequest,
 } from "./operation-bindings.generated";
 export type startDataExecutionResponse202 = {
@@ -674,86 +663,88 @@ export const startDataExecution = async (
   });
 };
 
-export type startGenerationHardlinksExecutionResponse202 = {
-  data: StartGenerationHardlinksExecution202;
+export type linkResponse200 = {
+  data: Link200;
+  status: 200;
+};
+
+export type linkResponse202 = {
+  data: Link202;
   status: 202;
 };
 
-export type startGenerationHardlinksExecutionResponse400 = {
-  data: StartGenerationHardlinksExecution400;
+export type linkResponse400 = {
+  data: Link400;
   status: 400;
 };
 
-export type startGenerationHardlinksExecutionResponse401 = {
-  data: StartGenerationHardlinksExecution401;
+export type linkResponse401 = {
+  data: Link401;
   status: 401;
 };
 
-export type startGenerationHardlinksExecutionResponse403 = {
-  data: StartGenerationHardlinksExecution403;
+export type linkResponse403 = {
+  data: Link403;
   status: 403;
 };
 
-export type startGenerationHardlinksExecutionResponse409 = {
-  data: StartGenerationHardlinksExecution409;
+export type linkResponse409 = {
+  data: Link409;
   status: 409;
 };
 
-export type startGenerationHardlinksExecutionResponse413 = {
-  data: StartGenerationHardlinksExecution413;
+export type linkResponse413 = {
+  data: Link413;
   status: 413;
 };
 
-export type startGenerationHardlinksExecutionResponse415 = {
-  data: StartGenerationHardlinksExecution415;
+export type linkResponse415 = {
+  data: Link415;
   status: 415;
 };
 
-export type startGenerationHardlinksExecutionResponse429 = {
-  data: StartGenerationHardlinksExecution429;
+export type linkResponse429 = {
+  data: Link429;
   status: 429;
 };
 
-export type startGenerationHardlinksExecutionResponse500 = {
-  data: StartGenerationHardlinksExecution500;
+export type linkResponse500 = {
+  data: Link500;
   status: 500;
 };
 
-export type startGenerationHardlinksExecutionResponse503 = {
-  data: StartGenerationHardlinksExecution503;
+export type linkResponse503 = {
+  data: Link503;
   status: 503;
 };
 
-export type startGenerationHardlinksExecutionResponseSuccess =
-  startGenerationHardlinksExecutionResponse202 & {
-    headers: Headers;
-  };
-export type startGenerationHardlinksExecutionResponseError = (
-  | startGenerationHardlinksExecutionResponse400
-  | startGenerationHardlinksExecutionResponse401
-  | startGenerationHardlinksExecutionResponse403
-  | startGenerationHardlinksExecutionResponse409
-  | startGenerationHardlinksExecutionResponse413
-  | startGenerationHardlinksExecutionResponse415
-  | startGenerationHardlinksExecutionResponse429
-  | startGenerationHardlinksExecutionResponse500
-  | startGenerationHardlinksExecutionResponse503
+export type linkResponseSuccess = (linkResponse200 | linkResponse202) & {
+  headers: Headers;
+};
+export type linkResponseError = (
+  | linkResponse400
+  | linkResponse401
+  | linkResponse403
+  | linkResponse409
+  | linkResponse413
+  | linkResponse415
+  | linkResponse429
+  | linkResponse500
+  | linkResponse503
 ) & {
   headers: Headers;
 };
 
-export type startGenerationHardlinksExecutionResponse =
-  | startGenerationHardlinksExecutionResponseSuccess
-  | startGenerationHardlinksExecutionResponseError;
+export type linkResponse = linkResponseSuccess | linkResponseError;
 
-export const getStartGenerationHardlinksExecutionUrl = () => {
-  return `/executions/generation-hardlinks`;
+export const getLinkUrl = () => {
+  return `/link`;
 };
 
-export const startGenerationHardlinksExecution = async (
-  startGenerationHardlinksExecutionBody: StartGenerationHardlinksExecutionBody,
-  options?: Parameters<typeof startGenerationHardlinksExecutionRequest>[1],
-): Promise<startGenerationHardlinksExecutionResponse> => {
+export const link = async (
+  linkBody: LinkBody,
+  options?: Parameters<typeof linkRequest>[1],
+): Promise<linkResponse> => {
   const getHeaders = (
     h?: NonNullable<RequestInit["headers"]>,
   ): Record<string, string | readonly string[]> => {
@@ -773,15 +764,12 @@ export const startGenerationHardlinksExecution = async (
     }
     return headers;
   };
-  return startGenerationHardlinksExecutionRequest<startGenerationHardlinksExecutionResponse>(
-    getStartGenerationHardlinksExecutionUrl(),
-    {
-      ...options,
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-      body: JSON.stringify(startGenerationHardlinksExecutionBody),
-    },
-  );
+  return linkRequest<linkResponse>(getLinkUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+    body: JSON.stringify(linkBody),
+  });
 };
 
 export type prepareDataConfigurationFenceResponse200 = {
@@ -4581,110 +4569,6 @@ export const getNotablePlacesStatus = async (
       method: "GET",
     },
   );
-};
-
-export type linkResponse200 = {
-  data: Link200;
-  status: 200;
-};
-
-export type linkResponse400 = {
-  data: Link400;
-  status: 400;
-};
-
-export type linkResponse401 = {
-  data: Link401;
-  status: 401;
-};
-
-export type linkResponse403 = {
-  data: Link403;
-  status: 403;
-};
-
-export type linkResponse409 = {
-  data: Link409;
-  status: 409;
-};
-
-export type linkResponse413 = {
-  data: Link413;
-  status: 413;
-};
-
-export type linkResponse415 = {
-  data: Link415;
-  status: 415;
-};
-
-export type linkResponse429 = {
-  data: Link429;
-  status: 429;
-};
-
-export type linkResponse500 = {
-  data: Link500;
-  status: 500;
-};
-
-export type linkResponse503 = {
-  data: Link503;
-  status: 503;
-};
-
-export type linkResponseSuccess = linkResponse200 & {
-  headers: Headers;
-};
-export type linkResponseError = (
-  | linkResponse400
-  | linkResponse401
-  | linkResponse403
-  | linkResponse409
-  | linkResponse413
-  | linkResponse415
-  | linkResponse429
-  | linkResponse500
-  | linkResponse503
-) & {
-  headers: Headers;
-};
-
-export type linkResponse = linkResponseSuccess | linkResponseError;
-
-export const getLinkUrl = () => {
-  return `/link`;
-};
-
-export const link = async (
-  linkBody: LinkBody,
-  options?: Parameters<typeof linkRequest>[1],
-): Promise<linkResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return linkRequest<linkResponse>(getLinkUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(linkBody),
-  });
 };
 
 export type getOvertureRecoveryResponse200 = {

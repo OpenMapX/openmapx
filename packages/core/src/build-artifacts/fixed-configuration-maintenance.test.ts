@@ -100,12 +100,6 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   expect(plan.steps[0]!.operationKey).toBe(source.operation.applyOperationKey);
   expect(plan.reservations.map((value) => value.ordinal)).toEqual([0, 1, 2, 3]);
   expect(plan.reservations.map((value) => value.kind)).not.toContain("service.start");
-  expect(plan.nestedHardlinks).toMatchObject({
-    kind: "generation-hardlinks",
-    phase: "hardlinks",
-    ordinal: 0,
-    recipient: "data-manager",
-  });
   expect(plan.dmPrepare.planDigest).toBe(plan.planDigest);
   expect(plan.dmPrepare.hardlinkPlanDigest).not.toBe(plan.planDigest);
   const original = JSON.stringify(plan.dmPrepare);

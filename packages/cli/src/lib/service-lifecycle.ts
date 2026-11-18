@@ -96,7 +96,6 @@ export async function runCliServiceLifecycle(options: {
   const { assertCliDeploymentSecrets } = await import("./deployment-secret-policy");
   const { renderComposeWithWriter } = await import("../commands/compose");
   const { dockerComposeStream, dockerCompose } = await import("./docker");
-  const { readGeneratedHardlinkPlan } = await import("./hardlinks");
   const release = await import("./release");
   const { API_SERVICE_ID, migrateBeforeApiUpdate } = await import("./api-migrations");
   const paths = repoPaths();
@@ -153,9 +152,6 @@ export async function runCliServiceLifecycle(options: {
       services.currentConfigurationGeneration(paths.infraDir),
     ));
   if (!expected) throw Error("An initial configuration generation is required");
-  // The existing generation supplies the exact finite hardlink intent. A nonempty
-  // plan must use its retained durable leaf; it can never fall back to /link/local.
-  const plan = readGeneratedHardlinkPlan().plan;
   const operation =
     options.action === "update"
       ? {
@@ -199,13 +195,6 @@ export async function runCliServiceLifecycle(options: {
   const finalRevisionId = inherited
     ? control.ownedServiceLifecycleFinalRevisionId(inherited.authority)
     : control.serviceLifecycleFinalRevisionId(execution.operationKey);
-  const frozenPlan = { plan, prune: true as const };
-  const reservation = control.lifecycleHardlinkReservation({
-    parent: execution,
-    revisionId: finalRevisionId,
-    plan: frozenPlan,
-    serviceIds: targets,
-  });
   const authority =
     inherited?.authority ??
     control.retainAdmittedControlExecution(installation, {
@@ -215,16 +204,9 @@ export async function runCliServiceLifecycle(options: {
       admittedAt,
       requestedDeadlineAt: deadlineAt,
       serviceIds: targets,
-      reservations: reservation ? [reservation] : [],
     });
-  control.retainGenerationHardlinksOwnerPlan(authority, {
-    version: 1,
-    parent: execution,
-    revisionId: finalRevisionId,
-    coordinatorMode: "ensure-running",
-    plan: frozenPlan,
-    reservation,
-  });
+  // Set when data-manager never answered for this lifecycle's hardlink plan.
+  let hardlinkOutcomeUnknown = false;
   if (inherited && !inherited.lease)
     throw Error("Delegated lifecycle requires its original borrowed lease");
   let owning = false;
@@ -458,10 +440,9 @@ export async function runCliServiceLifecycle(options: {
           finalRevisionId: committed.revisionId,
           commit: "final_committed",
         });
-        if (ops.canonicalJson(readGeneratedHardlinkPlan().plan) !== ops.canonicalJson(plan))
-          throw Error("Hardlink intent changed");
         return committed;
       }, signal);
+      const plan = control.readGenerationHardlinkPlan(paths.infraDir, rendered.revisionId).plan;
       const conflict = "Lifecycle generation changed before hardlinks";
       const sdk = await import("@openmapx/core/data-manager-sdk"),
         { dataManagerUrl } = await import("./data-manager-url");
@@ -495,12 +476,19 @@ export async function runCliServiceLifecycle(options: {
       }
       return withWriterStep(async (owned) => {
         assertConfigurationUnchanged(rendered.revisionId, conflict);
-        const hardlinks = await control.executeOwnedGenerationHardlinks({
-          authority,
-          lease: owned.lease,
-          infraDir: paths.infraDir,
-          transport,
-        });
+        let hardlinks: ServicePreparationResult["hardlinks"];
+        try {
+          hardlinks = await control.applyGenerationLinks({
+            infraDir: paths.infraDir,
+            revisionId: rendered.revisionId,
+            transport,
+            issuer: authority.execution,
+            leaseId: owned.lease.leaseId,
+          });
+        } catch (error) {
+          if (error instanceof control.GenerationLinkUnknown) hardlinkOutcomeUnknown = true;
+          throw error;
+        }
         await checkpoint(owned, { phase: "hardlinks_applied", hardlinks });
         return { revisionId: rendered.revisionId, coordinatorMode, hardlinks };
       }, signal);
@@ -556,17 +544,10 @@ export async function runCliServiceLifecycle(options: {
         const failed = await services.withServiceLifecycleReceiptAuthority(authority, () =>
           services.readServiceLifecycleReceipt({ dataRoot, execution }),
         );
-        let attempt: unknown = null;
-        try {
-          if (reservation) attempt = control.lookupControlChildPhaseAttempt(authority, reservation);
-        } catch (lookupError) {
-          attempt = lookupError;
-        }
-        if (!services.lifecycleFailureHasNoSurvivor(failed, attempt)) {
-          // Recovery accepts only a failure at the hardlink step itself.
-          if (attempt !== null)
+        if (!services.lifecycleFailureHasNoSurvivor(failed, hardlinkOutcomeUnknown)) {
+          if (hardlinkOutcomeUnknown)
             log.warn(
-              `Operation ${key} keeps its service locks because a hardlink request issued to data-manager may still be running. Its record is infra/docker/state/ops-agent/lifecycle/${key}.json. Once data-manager has finished it, \`pnpm openmapx control status\` shows the lease and \`pnpm openmapx control resolve --op ${key} --as committed|failed\` ends it.`,
+              `Operation ${key} keeps its service locks because data-manager did not report whether it applied the hardlink plan. Its record is infra/docker/state/ops-agent/lifecycle/${key}.json. \`pnpm openmapx control status\` shows the lease; once data-manager answers, \`pnpm openmapx control resolve --op ${key} --as committed|failed\` ends it, and \`pnpm openmapx data link\` applies the plan again.`,
             );
           return;
         }

@@ -12,8 +12,17 @@ import {
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { generationLinkOperationKey } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { currentHostLease } from "../src/lib/host-effect";
+
+// The lease a host effect such as `control rollback` holds while it runs.
+vi.mock("../src/lib/host-effect", async (original) => ({
+  ...(await original<typeof import("../src/lib/host-effect")>()),
+  currentHostLease: vi.fn(() => undefined),
+}));
+
 import {
   applyGeneratedHardlinks,
   applyGeneratedHardlinksBeforeStart,
@@ -63,9 +72,11 @@ async function fakeDataManager(
 ): Promise<{
   url: string;
   requests: Array<{ revisionId: unknown; plan: unknown; prune: unknown }>;
+  bodies: Array<Record<string, unknown>>;
   server: Server;
 }> {
   const requests: Array<{ revisionId: unknown; plan: unknown; prune: unknown }> = [];
+  const bodies: Array<Record<string, unknown>> = [];
   const server = createServer((req, res) => {
     if (req.url === "/status") {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -78,6 +89,7 @@ async function fakeDataManager(
       req.on("end", () => {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
         requests.push({ revisionId: body.revisionId, plan: body.plan, prune: body.prune });
+        bodies.push(body);
         if (options.linkRefusal) {
           res.writeHead(options.linkStatus ?? 503, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: options.linkRefusal }));
@@ -93,7 +105,7 @@ async function fakeDataManager(
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   const port = (server.address() as { port: number }).port;
-  return { url: `http://127.0.0.1:${port}`, requests, server };
+  return { url: `http://127.0.0.1:${port}`, requests, bodies, server };
 }
 
 const REVISION = `cfg1_${"r".repeat(43)}`;
@@ -158,6 +170,60 @@ describe("applyGeneratedHardlinks", () => {
     }
   });
 
+  it("sends the plan under the lease a host effect holds, keyed by that operation", async () => {
+    writeOsm();
+    writePlan([OSM_FOR_VALHALLA]);
+    const owner = {
+      executor: "host-cli" as const,
+      principal: "host-cli" as const,
+      executionId: "11111111-1111-4111-8111-111111111111",
+      operationKey: `opk1_t1_${(Date.now() + 600_000).toString(16).padStart(14, "0")}_${"A".repeat(22)}`,
+      operationFingerprint: "a".repeat(64),
+      deadlineAt: Date.now() + 600_000,
+      fingerprint: "b".repeat(64),
+    };
+    const leaseId = "22222222-2222-4222-8222-222222222222";
+    vi.mocked(currentHostLease).mockReturnValue({ leaseId, owner });
+    const dataManager = await fakeDataManager();
+    try {
+      await applyGeneratedHardlinks({
+        rootDir: tmp,
+        requirePlan: true,
+        prune: true,
+        dataManagerUrl: dataManager.url,
+      });
+      // Data-manager admits it under this lease instead of leasing itself,
+      // which the rollback's own lease on every service would refuse.
+      expect(dataManager.bodies[0]).toMatchObject({
+        leaseId,
+        operationKey: generationLinkOperationKey(owner, REVISION),
+        requestedDeadlineAt: owner.deadlineAt,
+      });
+    } finally {
+      vi.mocked(currentHostLease).mockReturnValue(undefined);
+      await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
+    }
+  });
+
+  it("sends no lease and a fresh key without a held lease", async () => {
+    writeOsm();
+    writePlan([OSM_FOR_VALHALLA]);
+    const dataManager = await fakeDataManager();
+    try {
+      for (let n = 0; n < 2; n++)
+        await applyGeneratedHardlinks({
+          rootDir: tmp,
+          requirePlan: true,
+          prune: true,
+          dataManagerUrl: dataManager.url,
+        });
+      expect(dataManager.bodies.map((body) => body.leaseId)).toEqual([undefined, undefined]);
+      expect(new Set(dataManager.bodies.map((body) => body.operationKey)).size).toBe(2);
+    } finally {
+      await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
+    }
+  });
+
   it.each([
     ["an empty plan", []],
     ["a plan whose producers hold no data", [OSM_FOR_VALHALLA]],
@@ -186,11 +252,11 @@ describe("applyGeneratedHardlinks", () => {
     }
   });
 
-  it("surfaces the route's error for a plan with work", async () => {
+  it("reports data-manager answering unavailable as unavailable, not busy, and asks once", async () => {
     writeOsm();
     writePlan([OSM_FOR_VALHALLA]);
     const dataManager = await fakeDataManager({
-      linkRefusal: "Durable data receiver is unavailable",
+      linkRefusal: "Hardlink plan not applied: the agent did not answer",
     });
     try {
       await expect(
@@ -200,7 +266,7 @@ describe("applyGeneratedHardlinks", () => {
           prune: true,
           dataManagerUrl: dataManager.url,
         }),
-      ).rejects.toThrow(/Durable data receiver is unavailable/);
+      ).rejects.toBeInstanceOf(DataManagerUnavailableError);
       expect(dataManager.requests).toHaveLength(1);
     } finally {
       await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));

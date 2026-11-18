@@ -88,7 +88,11 @@ describe("the agent's lease store", () => {
     const { leases } = backend(),
       owner = execution("ops-agent"),
       child = execution("data-manager");
-    const lease = await leases.acquire({ owner, ownerKind: "data.update", targets: ["osrm"] });
+    const lease = await leases.acquire({
+      owner,
+      ownerKind: "configurationMaintenance.prepare",
+      targets: ["osrm"],
+    });
     const key = randomUUID();
     await leases.delegate({
       leaseId: lease.leaseId,
@@ -97,8 +101,8 @@ describe("the agent's lease store", () => {
         parentKey: null,
         parent: owner,
         execution: child,
-        kind: "generation-hardlinks",
-        phase: "hardlinks",
+        kind: "configuration-maintenance.prepare",
+        phase: "configuration-fence",
         recipient: "data-manager",
         targets: ["osrm"],
       },
@@ -112,8 +116,8 @@ describe("the agent's lease store", () => {
           parentKey: null,
           parent: owner,
           execution: execution("data-manager"),
-          kind: "generation-hardlinks",
-          phase: "hardlinks",
+          kind: "configuration-maintenance.prepare",
+          phase: "configuration-fence",
           recipient: "data-manager",
           targets: ["motis"],
         },

@@ -1,38 +1,20 @@
 import {
-  executeOwnedGenerationHardlinks,
-  type GenerationHardlinksOwnerPlan,
-  planGenerationHardlinksOwner,
-  readGenerationHardlinksOwnerPlan,
+  applyGenerationLinks,
+  GenerationLinkNotApplied,
+  GenerationLinkUnknown,
+  readGenerationHardlinkPlan,
+  type TargetLeaseAuthority,
 } from "@openmapx/core/build-artifacts";
 import {
   createDataManagerTransport,
-  DataExecutionObservationPending,
   getStatus,
   unwrapDataManagerResponse,
 } from "@openmapx/core/data-manager-sdk";
-import type { ExecutionRef, OpsOperation } from "@openmapx/core/ops";
+import type { ExecutionRef, HardlinkApplySummary } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { readDataManagerToken } from "@openmapx/core/service-secret-files";
-import { OpsExecutionFailure, type OpsRuntime } from "./runtime";
+import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
 
-const sources = new WeakMap<OpsRuntime, { infraDir: string }>();
-/** The production factory's fixed source; callers cannot inject a handler or a plan. */
-export function prepareConfigurationHardlinksAdmission(
-  runtime: OpsRuntime,
-  parent: ExecutionRef,
-  operation: Extract<OpsOperation, { kind: "configuration.hardlinks.apply" }>,
-  serviceIds: readonly string[],
-): GenerationHardlinksOwnerPlan {
-  const source = sources.get(runtime);
-  if (!source) throw Error("Production hardlink source unavailable");
-  return planGenerationHardlinksOwner({
-    ...source,
-    parent,
-    revisionId: operation.revisionId,
-    coordinatorMode: operation.coordinatorMode,
-    serviceIds,
-  });
-}
 export function configurationDataManagerTransport() {
   return createDataManagerTransport({
     baseUrl: process.env.DATA_MANAGER_URL?.trim() || "http://data-manager:4000",
@@ -47,45 +29,64 @@ export async function assertConfigurationCoordinatorReady(signal?: AbortSignal) 
   );
   if (!status.ok || status.status !== "ready") throw Error("Configuration coordinator unavailable");
 }
+
+/**
+ * Applies the current generation's hardlink plan for an operation the agent
+ * runs under `lease`, through data-manager's `/link`, while holding the
+ * generation writer so the generation cannot change underneath. A plan
+ * data-manager did not apply fails the operation without effect; one whose
+ * outcome data-manager never reported leaves it needing recovery, with its
+ * lease held.
+ */
+export async function applyAgentGenerationLinks(options: {
+  infraDir: string;
+  revisionId: string;
+  execution: ExecutionRef;
+  lease: TargetLeaseAuthority;
+  signal: AbortSignal;
+}): Promise<HardlinkApplySummary> {
+  try {
+    return await services.withConfigurationGenerationWriter(
+      options.infraDir,
+      () =>
+        applyGenerationLinks({
+          infraDir: options.infraDir,
+          revisionId: options.revisionId,
+          transport: configurationDataManagerTransport(),
+          issuer: options.execution,
+          leaseId: options.lease.leaseId,
+          signal: options.signal,
+        }),
+      options.signal,
+    );
+  } catch (error) {
+    let cause = error;
+    while (cause instanceof services.ConfigurationGenerationError && cause.cause instanceof Error)
+      cause = cause.cause;
+    if (cause instanceof GenerationLinkUnknown)
+      throw Object.assign(new OpsExecutionFailure("recovery_required", {}), { cause });
+    if (cause instanceof GenerationLinkNotApplied && cause.reason === "busy")
+      throw Object.assign(new OpsExecutionFailure("busy", {}), { cause });
+    throw cause;
+  }
+}
+
 export function installConfigurationHardlinksRuntime(
   runtime: OpsRuntime,
   options: { infraDir: string },
 ): void {
-  sources.set(runtime, options);
-  runtime["configuration.hardlinks.apply"] = async (operation, context) => {
-    const authority = context.controlAuthority,
-      lease = context.artifactLease ?? context.ownedTargetLease;
-    if (!authority || !lease) throw Error("Original hardlink root authority required");
-    const plan = readGenerationHardlinksOwnerPlan(authority);
-    if (
-      plan.revisionId !== operation.revisionId ||
-      plan.coordinatorMode !== operation.coordinatorMode
-    )
-      throw Error("Hardlink owner binding conflict");
-    // A stopped coordinator never causes a lifecycle fallback inside this owner.
-    if (plan.plan.plan.length) await assertConfigurationCoordinatorReady(context.signal);
-    try {
-      return await services.withConfigurationGenerationWriter(
-        options.infraDir,
-        async () => {
-          if (plan.plan.plan.length) await assertConfigurationCoordinatorReady(context.signal);
-          return executeOwnedGenerationHardlinks({
-            authority,
-            lease,
-            ...options,
-            transport: configurationDataManagerTransport(),
-            signal: context.signal,
-          });
-        },
-        context.signal,
-      );
-    } catch (error) {
-      let cause = error;
-      while (cause instanceof services.ConfigurationGenerationError && cause.cause instanceof Error)
-        cause = cause.cause;
-      if (cause instanceof DataExecutionObservationPending)
-        throw new OpsExecutionFailure("recovery_required", {});
-      throw error;
-    }
+  runtime["configuration.hardlinks.apply"] = async (operation, context: OpsExecutionContext) => {
+    const lease = context.artifactLease ?? context.ownedTargetLease;
+    if (!lease) throw Error("Original hardlink lease required");
+    // A stopped coordinator never causes a lifecycle fallback inside this operation.
+    if (readGenerationHardlinkPlan(options.infraDir, operation.revisionId).plan.length)
+      await assertConfigurationCoordinatorReady(context.signal);
+    return applyAgentGenerationLinks({
+      infraDir: options.infraDir,
+      revisionId: operation.revisionId,
+      execution: context.execution,
+      lease,
+      signal: context.signal,
+    });
   };
 }

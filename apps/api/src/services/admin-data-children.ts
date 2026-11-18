@@ -77,20 +77,13 @@ export async function cancelAdminDataChildren(
   // DM receiver wrote this parent binding; an absent row remains unknown to its
   // agent-root reconciliation and never authorizes another POST.
   for (const root of candidates) {
-    const dataCliKey = controlChildOperationKey(root.operationKey, "data-workflow", 0),
-      finalizationCliKey = controlChildOperationKey(root.operationKey, "data-finalization", 1);
+    const dataCliKey = controlChildOperationKey(root.operationKey, "data-workflow", 0);
     const addresses =
       root.kind === "data.update"
-        ? [
-            ...(["osm", "transit", "fonts"] as const).map((phase, ordinal) => ({
-              parentKey: dataCliKey,
-              operationKey: controlChildOperationKey(dataCliKey, phase, ordinal),
-            })),
-            {
-              parentKey: finalizationCliKey,
-              operationKey: controlChildOperationKey(finalizationCliKey, "hardlinks", 0),
-            },
-          ]
+        ? (["osm", "transit", "fonts"] as const).map((phase, ordinal) => ({
+            parentKey: dataCliKey,
+            operationKey: controlChildOperationKey(dataCliKey, phase, ordinal),
+          }))
         : [
             {
               parentKey: dataCliKey,

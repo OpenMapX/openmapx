@@ -8,9 +8,11 @@ vi.mock("../src/jobs/execution/local.js", () => ({
   }),
 }));
 
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createControlRootOperationKey } from "@openmapx/core/ops";
 import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -584,7 +586,7 @@ describe("data-manager API", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("POST /link applies a generation's plan in the data directory and refuses an unnamed one", async () => {
+  it("POST /link refuses an unnamed plan and links nothing without the durable receiver", async () => {
     const dataDir = createDataDir();
     mkdirSync(join(dataDir, "osm"), { recursive: true });
     writeFileSync(join(dataDir, "osm", "planet.osm.pbf"), "PBF");
@@ -598,17 +600,22 @@ describe("data-manager API", () => {
         dataType: "osm-pbf",
       },
     ];
+    const deadline = Date.now() + 60_000;
+    const named = {
+      operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+      requestedDeadlineAt: deadline,
+      revisionId: `cfg1_${"a".repeat(43)}`,
+      plan,
+      prune: true,
+    };
 
-    const unnamed = await app.inject({ method: "POST", url: "/link", payload: { plan } });
-    expect(unnamed.statusCode).toBe(400);
-    const res = await app.inject({
-      method: "POST",
-      url: "/link",
-      payload: { revisionId: `cfg1_${"a".repeat(43)}`, plan, prune: true },
-    });
-
-    expect(res.statusCode, res.body).toBe(200);
-    expect(res.json()).toEqual({ ok: true, linked: 1, skipped: 0, pruned: 0 });
-    expect(existsSync(join(dataDir, "valhalla", "osm-pbf", "planet.osm.pbf"))).toBe(true);
+    for (const unnamed of [{ plan }, { ...named, operationKey: undefined }]) {
+      const res = await app.inject({ method: "POST", url: "/link", payload: unnamed });
+      expect(res.statusCode).toBe(400);
+    }
+    // The plan is only ever applied as a durable data execution.
+    const res = await app.inject({ method: "POST", url: "/link", payload: named });
+    expect(res.statusCode, res.body).toBe(503);
+    expect(existsSync(join(dataDir, "valhalla"))).toBe(false);
   });
 });

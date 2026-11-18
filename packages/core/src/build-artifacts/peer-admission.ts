@@ -120,13 +120,9 @@ export function inspectDataExecutionAdmission(
     delegation.execution.operationKey !== input.operationKey ||
     delegation.execution.operationFingerprint !== input.operationFingerprint ||
     delegation.execution.deadlineAt !== input.requestedDeadlineAt ||
-    (delegation.leaseId === null) === (input.input.kind === "generation-hardlinks")
+    delegation.leaseId !== null
   )
     throw Error("Unsupported or mismatched delegated data leaf");
-  if (delegation.leaseId !== null) {
-    const local = installationState(installation);
-    local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
-  }
   return Object.freeze({
     execution: delegation.execution,
     parent: delegation.verifiedParent,

@@ -312,9 +312,6 @@ it.skipIf(!enabled)(
       sql: state.fixture.sql,
       singleFlight,
       operationsPolicy: policy,
-      runHardlinks: async () => {
-        throw Error("Unexpected generation effect");
-      },
     });
     const store = createPostgresDataExecutionStore(state.fixture.sql, {
       controlJournal: createDataExecutionControlJournal(dmInstallation, state.fixture.sql),

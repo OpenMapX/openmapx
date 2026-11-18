@@ -25,7 +25,6 @@ import {
   restoreConfigurationMaintenancePhaseIssuer,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
-  retainGenerationHardlinksOwnerPlan,
   settleArtifactTargetLeaseChild,
   settleIssuedLeaseChild,
   type VerifiedExecutionAuthority,
@@ -64,10 +63,7 @@ import {
   configurationHandoffRunArgs,
   inspectConfigurationHandoffPrerequisite,
 } from "./configuration-handoff";
-import {
-  configurationDataManagerTransport,
-  prepareConfigurationHardlinksAdmission,
-} from "./configuration-hardlinks-runtime";
+import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
 import { isReportedProcessFailure } from "./docker-runtime";
 import type { OpsJobJournal } from "./journal";
 import {
@@ -391,22 +387,9 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           parent: verifiedParentForArtifactDelegation(installation, leaseChild, execution),
           leaseChild,
           serviceIds: lease.serviceIds,
-          reservations:
-            step.phase === "maintenance-hardlinks" && file.plan.nestedHardlinks
-              ? [file.plan.nestedHardlinks]
-              : [],
+          reservations: [],
         });
         bindBorrowedControlExecution(lease, childAuthority);
-        if (operation.kind === "configuration.hardlinks.apply")
-          retainGenerationHardlinksOwnerPlan(
-            childAuthority,
-            prepareConfigurationHardlinksAdmission(
-              deps.runtime,
-              execution,
-              operation,
-              lease.serviceIds,
-            ),
-          );
         const payload =
           step.phase === "configuration-commit"
             ? (

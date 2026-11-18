@@ -30,7 +30,7 @@ vi.mock("@openmapx/core/build-artifacts", async (original) => {
   const actual = await original<typeof import("@openmapx/core/build-artifacts")>();
   return {
     ...actual,
-    executeOwnedGenerationHardlinks: vi.fn(actual.executeOwnedGenerationHardlinks),
+    applyGenerationLinks: vi.fn(actual.applyGenerationLinks),
   };
 });
 vi.mock("../src/lib/docker", async (original) => ({
@@ -563,9 +563,12 @@ describe("actual CLI service lifecycle preparation", () => {
     ]);
     expect(targetLocks()).toEqual([]);
   });
-  it("a failure after an issued hardlink child keeps the lease", async () => {
+  it("keeps the lease when data-manager never reports the hardlink outcome", async () => {
     await renderWithHardlinkPlan();
     const stop = await unreachableHardlinkExecutor();
+    vi.mocked(control.applyGenerationLinks).mockRejectedValueOnce(
+      new control.GenerationLinkUnknown("opk1_unanswered_application"),
+    );
     try {
       await expect(command("start")).rejects.toThrow("exit:1");
     } finally {
@@ -587,30 +590,22 @@ describe("actual CLI service lifecycle preparation", () => {
     expect(diagnostics).toContain("infra/docker/state/ops-agent/lifecycle/");
     expect(diagnostics).not.toContain("recover-update");
   });
-  it("points to control resolve when Start fails after its hardlink child committed", async () => {
+  it("releases its targets when Start fails after data-manager applied the hardlink plan", async () => {
     await renderWithHardlinkPlan();
     const stop = await unreachableHardlinkExecutor();
-    vi.mocked(control.executeOwnedGenerationHardlinks).mockImplementationOnce(
-      async ({ authority, lease }) => {
-        const installation = control.executionAuthorityState(authority).installation.installation,
-          { reservation } = control.readGenerationHardlinksOwnerPlan(authority);
-        if (!reservation) throw Error("Fixture plan has no hardlink reservation");
-        await control.bindControlChildPhase(authority, reservation);
-        await control.issueControlChildPhase(authority, {
-          phase: "hardlinks",
-          ordinal: reservation.ordinal,
-          lease,
-        });
-        return { applied: true, entries: 1, linked: 1, skipped: 0, pruned: 0, via: "data-manager" };
-      },
-    );
+    vi.mocked(control.applyGenerationLinks).mockImplementationOnce(async (options) => {
+      // The lifecycle's own lease travels with the plan.
+      expect(options.leaseId).toEqual(expect.any(String));
+      expect(options.issuer.operationKey).toMatch(/^opk1_/);
+      return { applied: true, entries: 1, linked: 1, skipped: 0, pruned: 0, via: "data-manager" };
+    });
     vi.mocked(dockerComposeStream).mockResolvedValueOnce(1);
     try {
       await expect(command("start")).rejects.toThrow("exit:1");
     } finally {
       await stop();
     }
-    expect(targetLocks()).toEqual(["alpha", "beta"]);
+    expect(targetLocks()).toEqual([]);
     const receipt = await retainedReceipt();
     expect(receipt).toMatchObject({
       phase: "failed",
@@ -618,11 +613,7 @@ describe("actual CLI service lifecycle preparation", () => {
       failure: { reason: "recreate", failedServiceIds: ["alpha"] },
     });
     const diagnostics = JSON.stringify(vi.mocked(console.error).mock.calls);
-    expect(diagnostics).toContain(`Operation ${receipt.execution.operationKey} keeps`);
-    expect(diagnostics).toContain(
-      `openmapx control resolve --op ${receipt.execution.operationKey} --as committed|failed`,
-    );
-    expect(diagnostics).not.toContain("recover-update");
+    expect(diagnostics).not.toContain(`Operation ${receipt.execution.operationKey} keeps`);
   });
   it("a lease held by a live operation still refuses a second start", async () => {
     let refusal: unknown;
