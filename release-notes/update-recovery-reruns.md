@@ -17,7 +17,9 @@ longer drives: it records a configuration helper that exited and reopens other
 operations without waiting for the job, settles data-manager's configuration
 fence again when data-manager did not answer, releases the services of a
 maintenance that settled just before a restart, and gives back a prepared
-maintenance whose deadline passed before anything was applied. When
+maintenance whose deadline passed before anything was applied, so an update
+that never started applying no longer needs its job cancelled after the
+deadline to close. When
 data-manager refuses the fence settlement for good, the agent stops sending it
 and marks the maintenance as needing recovery. `openmapx control resolve`
 refuses a maintenance the agent still drives (preparing, prepared or applying),
