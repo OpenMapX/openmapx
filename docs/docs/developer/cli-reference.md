@@ -165,10 +165,11 @@ hardlinks, authenticated feeds — lives in
 | `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                                                                                                             |
 | `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                                                                                                  |
 
-`data link` and `services build` use the same `/link` route as `compose up`; a
-build's artifacts are complete by then. Both fail instead of warning while
-data-manager is busy. `services start` and `services update` apply the plan
-through their own generation-hardlinks job.
+`data link`, `services build`, `services start` and `services update` use the
+same `/link` route as `compose up`; a build's artifacts are complete by then.
+They fail instead of warning while data-manager is busy. A command that holds a
+lease on its services sends the plan under that lease, so data-manager does not
+need one of its own.
 
 `data download osm`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing

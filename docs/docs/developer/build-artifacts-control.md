@@ -217,8 +217,8 @@ replaced atomically under the recoverable lock `leases.lock` (see [Locks](#locks
 other service mounts that directory. The writers are:
 
 - the agent, for its own operations;
-- data-manager, through the typed agent operations `lease.acquire`, `lease.read`,
-  `lease.update` and `lease.settleChild` over its own agent token;
+- data-manager, through the typed agent operations `lease.acquire`, `lease.read` and
+  `lease.update` over its own agent token;
 - the host CLI, the agent's fixed CLI children, the configuration helper and the
   catalog bootstrap, which write the file themselves under the same lock.
 
@@ -438,15 +438,39 @@ fenced. Data-manager's advisory locks are named in one registry,
 ### Hardlink plans
 
 A generation's hardlink plan is applied inside data-manager, under its data
-directory, in one of two ways. The host CLI (`compose up`, `data link`,
-`services build`, `control rollback`) sends the applied generation's revision and
-plan to `POST /link`, which runs an exclusive `generation-link` job; repeating the
-same plan links nothing new, and a busy data-manager answers 409. Configuration
-maintenance, the API's service preparation and compose render (through the
-agent's `configuration.hardlinks.apply`), host service lifecycle commands, data
-updates and artifact imports apply the plan as a `generation-hardlinks` child of their own execution under
-their lease, which data-manager admits even while that maintenance holds the
-fence.
+directory, by one route: `POST /link` with the generation's revision, its plan and
+an operation key. Every caller uses it: configuration maintenance's hardlink step
+and the agent's `configuration.hardlinks.apply` (the API's service preparation and
+compose render), artifact imports, data updates, the service lifecycle commands,
+`control rollback`, `compose up`, `data link` and `services build`.
+
+- **Under the sender's lease.** A caller whose operation holds a lease names it
+  (`leaseId`). Data-manager then runs the `generation-link` job under that lease
+  and takes none of its own; the caller settles its lease from the answer it got.
+  While a configuration fence is prepared, only the agent's request for that
+  maintenance is admitted: its lease must be the maintenance's root lease, and its
+  revision and plan digest the ones the fence names. Every other request is busy.
+- **Without a lease** (`compose up`, `data link` on the host), data-manager leases
+  itself and runs the job exclusively, as any other data job.
+
+The operation key is derived from the sending operation and the revision, so a
+request repeated after a lost answer observes the first application, and recovery
+reads its outcome by the same key (`lookupDataExecution`) without sending it
+again. While the application runs past a request's wait, `/link` answers 202 and
+the caller asks again; it asks for up to two minutes, never past its own deadline.
+Answers mean:
+
+| Answer | Meaning                                                    | Caller                                                               |
+| ------ | ---------------------------------------------------------- | -------------------------------------------------------------------- |
+| 200    | Applied; the link counts                                   | settles its lease as committed                                       |
+| 409    | Busy: another holder or a fence refused it; nothing linked | fails without effect (`compose up` warns and starts)                 |
+| 503    | Data-manager or the agent did not answer; nothing linked   | fails without effect (`compose up` warns and starts)                 |
+| 500    | The plan failed part-way; links may have changed           | fails with a known outcome; the job is final                         |
+| none   | No answer within its retries                               | outcome unknown: the lease stays held for `openmapx control resolve` |
+
+A failure part-way through linking is recorded as a committed ("may have changed")
+publication, so the job ends and holds nothing; applying the same plan again links
+nothing twice.
 
 ### API administrative job status
 
@@ -621,7 +645,3 @@ data-manager restarts, in-process work the old process left behind ends
 admitted finished. The new process proves the old worker is gone, so this does not
 wait for an operator; a partly written local publication reads as changed rather
 than held as unknown.
-
-**Two hardlink paths.** The host CLI's `/link` and the `generation-hardlinks`
-child of the other callers apply the same plan through different admissions;
-see [Hardlink plans](#hardlink-plans).
