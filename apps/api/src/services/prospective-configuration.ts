@@ -614,6 +614,9 @@ async function prepareMaintenance(candidate: ValidatedConfigurationCandidate): P
       await deliverPull();
     await prepareMaintenanceCoordinator(candidate, state);
     if (pull) await deliverPull();
+    // A candidate that expired while its image downloaded acquires no maintenance.
+    if (Date.parse(record.snapshot.expiresAt) <= Date.now())
+      throw new CandidateRefused("Configuration candidate expired");
   }
   state.prepared = await prepareConfigurationMaintenance(candidate);
 }

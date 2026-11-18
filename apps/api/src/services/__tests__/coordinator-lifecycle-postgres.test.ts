@@ -2834,6 +2834,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           entry = entries[key]!;
         expect(entry.phase).toBe("admitting");
         entry.phase = "prepared";
+        const { jobCheckpoint } = await import("../admin-job-state");
         const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint"),
           execution = originalProtocol.execution as { owner: string; version: number };
         const merged = await checkpointOwnedAdminJob(
@@ -2878,7 +2879,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .select()
           .from(schema.adminJob)
           .where(eq(schema.adminJob.id, id));
-        expect(JSON.stringify(unchanged!.result)).toBe(JSON.stringify(merged.result));
+        // The stored result is the public part of the checkpoint the CAS returned.
+        expect(JSON.stringify(jobCheckpoint(unchanged!.result, unchanged!.protocol))).toBe(
+          JSON.stringify(merged.result),
+        );
         expect(JSON.stringify(unchanged!.protocol)).toBe(JSON.stringify(merged.protocol));
         pullAdmissionReplyGate = undefined;
         release.resolve();
