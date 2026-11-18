@@ -18,7 +18,6 @@ export const GetAdminTransitPins200ExecutionKind = {
   "overture-sync": "overture-sync",
   "search-index-build": "search-index-build",
   "notable-places-build": "notable-places-build",
-  "generation-hardlinks": "generation-hardlinks",
   "transit-maintenance": "transit-maintenance",
   "traffic-live": "traffic-live",
   "traffic-maintenance": "traffic-maintenance",

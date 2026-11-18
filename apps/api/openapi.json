@@ -92596,7 +92596,6 @@
                                 "overture-sync",
                                 "search-index-build",
                                 "notable-places-build",
-                                "generation-hardlinks",
                                 "transit-maintenance",
                                 "traffic-live",
                                 "traffic-maintenance",
@@ -93315,7 +93314,7 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": [
-                                        "generation-hardlinks"
+                                        "generation-link"
                                       ]
                                     },
                                     "hardlinks": {
@@ -93481,21 +93480,6 @@
                                       "type": "string",
                                       "enum": [
                                         "ambient-publication"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "kind"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": [
-                                        "generation-link"
                                       ]
                                     }
                                   },
@@ -94334,7 +94318,6 @@
                         "overture-sync",
                         "search-index-build",
                         "notable-places-build",
-                        "generation-hardlinks",
                         "transit-maintenance",
                         "traffic-live",
                         "traffic-maintenance",
@@ -95053,7 +95036,7 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "generation-hardlinks"
+                                "generation-link"
                               ]
                             },
                             "hardlinks": {
@@ -95219,21 +95202,6 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "generation-link"
                               ]
                             }
                           },
@@ -95988,7 +95956,6 @@
                         "overture-sync",
                         "search-index-build",
                         "notable-places-build",
-                        "generation-hardlinks",
                         "transit-maintenance",
                         "traffic-live",
                         "traffic-maintenance",
@@ -96707,7 +96674,7 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "generation-hardlinks"
+                                "generation-link"
                               ]
                             },
                             "hardlinks": {
@@ -96873,21 +96840,6 @@
                               "type": "string",
                               "enum": [
                                 "ambient-publication"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "generation-link"
                               ]
                             }
                           },

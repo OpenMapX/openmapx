@@ -342,7 +342,7 @@ export type CancelAdminTransitPinExecution200Result =
       };
     }
   | {
-      kind: "generation-hardlinks";
+      kind: "generation-link";
       hardlinks: {
         applied: boolean;
         /**
@@ -390,7 +390,4 @@ export type CancelAdminTransitPinExecution200Result =
     }
   | {
       kind: "ambient-publication";
-    }
-  | {
-      kind: "generation-link";
     };
