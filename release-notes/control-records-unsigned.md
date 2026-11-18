@@ -32,20 +32,19 @@ writes.
 
 ## Who is affected
 
-Installations created before this release that still have the key files or the
-`control-private` directory. Fresh installations are not affected.
+Every Docker deployment. Development checkouts that ran an earlier release keep
+the old key files and directories until they are deleted.
 
 ## Required action
 
-Stop the stack, then delete the old files by hand:
+Install fresh, as `update-system-fresh-install.md` describes. Deleting the old
+files does not make an existing installation upgradable. In a development
+checkout that is reinstalled in place, delete the files nothing reads any more:
 
 ```bash
 rm -f infra/docker/secrets/control-ops-agent.key \
   infra/docker/secrets/control-data-manager.key \
   infra/docker/secrets/control-host-cli.key \
   infra/docker/secrets/control-verifiers.json
-rm -rf infra/docker/control-private infra/docker/state/ops-agent/trusted-config
+rm -rf infra/docker/control-private
 ```
-
-Records under the old directory are not migrated; run `openmapx compose render`
-and start the stack again.

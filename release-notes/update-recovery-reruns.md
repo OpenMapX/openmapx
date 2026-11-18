@@ -39,8 +39,8 @@ running. The agent keeps that operation's services held until an operator
 records the outcome with `openmapx control resolve`.
 
 The API database gains an `admin_job.protocol` column (migration `0066`) that
-holds the job runner's own state. The migration copies nothing: install from an
-empty database, as the update-system replacement requires.
+holds the job runner's own state. The migration copies nothing: install fresh,
+as `update-system-fresh-install.md` describes.
 
 Configuration results in the administration API no longer contain
 `publisherCleanupFailed`; the publisher it described was removed with the sealed

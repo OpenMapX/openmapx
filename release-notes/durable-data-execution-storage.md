@@ -12,12 +12,11 @@ available. Every data job is now such a durable execution; see
 
 ## Who is affected
 
-Self-hosted installations upgrading the API, data manager and operations agent.
+Every Docker deployment.
 
 ## Required action
 
-Apply the normal API database migrations before enabling durable data execution.
-Upgrade the control services together. Do not remove unresolved execution or
-configuration maintenance records to retry work: uncertain outcomes retain their
-original identity and require reconciliation; `openmapx control status` shows
-them.
+Install fresh, as `update-system-fresh-install.md` describes. Do not remove
+unresolved execution or configuration maintenance records to retry work:
+uncertain outcomes retain their original identity and require reconciliation;
+`openmapx control status` shows them.

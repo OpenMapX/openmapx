@@ -22,9 +22,10 @@ host operations these jobs ask the operations agent for.
 
 ## Who is affected
 
-Self-hosted installations upgrading the API, Data Manager and operations agent.
+Every Docker deployment. Operators who start catalog proposals, dataset reloads
+or ambient place changes while another data job runs now get `409`.
 
 ## Required action
 
-Apply the normal API database migrations, then upgrade the control services
-together.
+Install fresh, as `update-system-fresh-install.md` describes: job rows the old
+in-process path left unfinished are not closed by this release.
