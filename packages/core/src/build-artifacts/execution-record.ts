@@ -450,11 +450,6 @@ export function retainAdmittedControlExecution(
     origin,
   });
   if (newlyAdmitted) initializeControlChildReservations(authority);
-  publishControlExecutionWitness(
-    state,
-    { execution, kind: input.kind, serviceIds, origin },
-    controlDigest(receipt),
-  );
   initializeLifecycle(state, execution, newlyAdmitted);
   return authority;
 }
@@ -2046,61 +2041,6 @@ export function beginFixedCliExecution(
   if (!s.fixedChildId) throw Error("Fixed CLI authority required");
   if (!fixedParentForward(s)) throw Error("Canceled/terminal parent prevents fixed CLI start");
   writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
-}
-
-const executionWitnessSchema = z.strictObject({
-  version: z.literal(2),
-  origin: controlOriginSchema,
-  execution: executionRefSchema,
-  kind: z.string().max(128),
-  serviceIds: targetSchema,
-  authorityDigest: digest,
-});
-export function readControlExecutionWitness(state: InstallationState, execution: ExecutionRef) {
-  const d = executionWitnessDirectory(state, execution.executor);
-  try {
-    const witness = executionWitnessSchema.parse(
-      JSON.parse(d.role.read(`${execution.operationKey}.json`, 65536).toString("utf8")),
-    );
-    if (controlDigest(witness.execution) !== controlDigest(execution))
-      throw Error("Durable parent execution witness mismatch");
-    return witness;
-  } finally {
-    d.close();
-  }
-}
-function publishControlExecutionWitness(
-  state: InstallationState,
-  input: {
-    execution: ExecutionRef;
-    kind: string;
-    serviceIds: readonly string[];
-    origin: ControlExecutionOrigin;
-  },
-  authorityDigest: string,
-) {
-  const d = executionWitnessDirectory(state, input.execution.executor);
-  try {
-    const witness = {
-      version: 2 as const,
-      origin: input.origin,
-      execution: input.execution,
-      kind: input.kind,
-      serviceIds: [...input.serviceIds],
-      authorityDigest,
-    };
-    const name = `${input.execution.operationKey}.json`;
-    try {
-      const prior = JSON.parse(d.role.read(name, 65536).toString("utf8"));
-      if (controlDigest(prior) !== controlDigest(witness))
-        throw Error("Replaced execution witness");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      d.role.write(name, canonicalJson(witness), true);
-    }
-  } finally {
-    d.close();
-  }
 }
 
 /** Restore only the original signed durable admission; this grants no permission to redispatch. */
