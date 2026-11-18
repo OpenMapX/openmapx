@@ -347,10 +347,15 @@ export class ConfigurationMaintenance {
       const file = this.read(maintenanceId);
       switch (effect.type) {
         case "start_step":
-          queue.unshift(
-            ...(await this.change(maintenanceId, { type: "step_start", ordinal: effect.ordinal }))
-              .effects,
-          );
+          try {
+            queue.unshift(
+              ...(await this.change(maintenanceId, { type: "step_start", ordinal: effect.ordinal }))
+                .effects,
+            );
+          } catch (error) {
+            // A cancel recorded since the last step ended: no step starts.
+            if (!(error instanceof MaintenanceTransitionRefused)) throw error;
+          }
           break;
         case "dispatch_step": {
           const step = file.record.steps[effect.ordinal]!;
