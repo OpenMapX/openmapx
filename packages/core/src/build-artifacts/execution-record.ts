@@ -401,7 +401,7 @@ export function retainAdmittedControlExecution(
     origin = controlOriginSchema.parse(inherited);
   } else {
     if (input.parent && (input.parent.issuer !== "api" || !verifiedParents.has(input.parent)))
-      throw Error("Missing signed inherited origin; legacy parent is observation-only");
+      throw Error("A child needs its parent's verified origin; this parent can only be observed");
     const parsed = parseControlRootOperationKey(execution.operationKey);
     const now = Date.now();
     if (parsed.notAfter <= now) throw Error("Expired control root expiry");
@@ -833,7 +833,7 @@ export function retainConfigurationPreEffectRefusal(authority: VerifiedExecution
     receipt: { kind: "not-started" },
   });
 }
-/** The transition/restart observer consumes the actual indexed signed effect;
+/** The transition/restart observer consumes the actual indexed recorded effect;
  * an error class or caller status never qualifies nonissuance. */
 export function inspectConfigurationPreEffectRefusal(authority: VerifiedExecutionAuthority): void {
   const state = configurationPreEffectState(authority),
@@ -985,8 +985,8 @@ export function retainControlEffectReceipt(
       const prior = settlementSchema.extend({ receipt: effectObservationSchema }).parse(raw);
       if (controlDigest(prior) === controlDigest(payload)) {
         // A completed helper may have lost the write acknowledgement after
-        // the signed effect landed but before its terminal record. Repair
-        // only this exact source using its original signed completion time.
+        // the effect record landed but before its terminal record. Repair
+        // only this exact source using its original recorded completion time.
         return;
       }
       // A later transport/journal failure must never erase proved committed effects.
@@ -2045,7 +2045,7 @@ export function beginFixedCliExecution(
   writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
 }
 
-/** Restore only the original signed durable admission; this grants no permission to redispatch. */
+/** Restore only the original retained admission; this grants no permission to redispatch. */
 export function restoreAdmittedControlExecution(
   installation: ControlInstallation,
   execution: ExecutionRef,
@@ -2079,7 +2079,7 @@ export function restoreAdmittedControlExecution(
   });
   return authority;
 }
-/** Fixed local continuation adapter: private signed admission, never a bare request identity. */
+/** Fixed local continuation adapter: private retained admission, never a bare request identity. */
 export function verifiedRetainedControlParent(
   installation: ControlInstallation,
   execution: ExecutionRef,
@@ -2145,7 +2145,7 @@ export function verifyControlPreparedTerminal(
 }
 
 /** Target acquisition observes only its original data-phase owner and all three
- * signed, physically settled DM children. No progress object is authority. */
+ * recorded, physically settled DM children. No progress object is authority. */
 export async function verifyDataUpdatePrerequisites(
   authority: VerifiedExecutionAuthority,
   transport: DataManagerTransport | undefined,

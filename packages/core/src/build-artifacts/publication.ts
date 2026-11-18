@@ -826,7 +826,7 @@ export async function publishValidatedBuild(
   });
 }
 
-/** Read the sole local publisher's signed, indexed commit evidence. Local consumers
+/** Read the sole local publisher's recorded, indexed commit evidence. Local consumers
  * use this to settle a stage; public receipt IDs or result strings are insufficient. */
 export function inspectArtifactPublication(authority: VerifiedExecutionAuthority) {
   const state = executionAuthorityState(authority);
@@ -1040,7 +1040,7 @@ export function originalArtifactValidationOperation(authority: VerifiedExecution
 }
 /** This fixed private-only operation has no managed target or child. The live
  * store producer first proves its extraction is contained and cleaned. Match
- * its actual signed effect result before upgrading only the retained knowledge;
+ * its actual recorded effect result before upgrading only the retained knowledge;
  * the original public status tuple, deadline and timestamp remain unchanged. */
 export function assertKnownArtifactStageReceipt(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);

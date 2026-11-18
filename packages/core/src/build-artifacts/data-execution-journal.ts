@@ -227,7 +227,7 @@ export function createDataExecutionControlJournal(
       throw error;
     }
   }
-  /** One fixed policy over the current actual row, original signed plan and
+  /** One fixed policy over the current actual row, original retained plan and
    * authenticated shared child/canonical receipts. No status/result shortcut. */
   async function assertOwnedProxyRecoverySettled(
     execution: ExecutionRef,
@@ -324,7 +324,7 @@ export function createDataExecutionControlJournal(
     }
   }
   /** Only the final fixed paired leaf can close a killed activation worker.
-   * Its untrusted result is accepted solely by the exact signed physical receipt.
+   * Its untrusted result is accepted solely by the exact recorded physical receipt.
    * No phase is dispatched and no public status alone proves completion. */
   async function catalogActivationCompletion(authority: VerifiedExecutionAuthority) {
     const state = executionAuthorityState(authority),
@@ -466,7 +466,7 @@ export function createDataExecutionControlJournal(
         await assertOwnedProxyRecoverySettled(execution);
         return;
       } catch {
-        /* Below requires the original signed proxy plan and current row. */
+        /* Below requires the original retained proxy plan and current row. */
       }
       const authority = restoreAdmittedControlExecution(installation, execution),
         s = executionAuthorityState(authority),
@@ -788,7 +788,7 @@ export function createDataExecutionControlJournal(
               ...(result ? { result } : {}),
             });
       // Only the live producer, after awaiting the actual dispatcher promise,
-      // creates this immutable completion. Recovery only reads its signature.
+      // creates this immutable completion. Recovery only reads it back.
       writePrivateRecord(
         local,
         "observations",
@@ -1089,7 +1089,7 @@ export function createDataExecutionControlJournal(
     },
     repairTerminal: async (execution: ExecutionRef) => {
       await assertOwnedProxyRecoverySettled(execution);
-      // existing signed commitment only; never reconstruct one from a row
+      // existing recorded commitment only; never reconstruct one from a row
       const authority = restoreAdmittedControlExecution(installation, execution);
       readProof(authority);
       await (async () => {

@@ -118,8 +118,8 @@ export async function assertStandaloneSettlementCheckpoint(
     (integration?.managedByExtension && integration.managedByExtension !== state.parentId)
   )
     throw new JobOwnershipLost();
-  // The unchanged parent/body/address checks in the caller and actual signed
-  // agent transaction independently enforce the original lifetime and ownership.
+  // The unchanged parent/body/address checks in the caller and the agent's own
+  // keyed operation independently enforce the original lifetime and ownership.
 }
 
 /** Whole-job cancellation is supported by the original successful restore leaf,

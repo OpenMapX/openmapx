@@ -333,7 +333,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
       expectedImageId,
     });
     // Every mount and mounted-file byte comparison above still runs. Bind
-    // their complete canonical evidence without repeating it in the signed owner.
+    // their complete canonical evidence without repeating it in the maintenance record.
     details.push({
       containerId: owned.containerId,
       mountCount: mounts.length,

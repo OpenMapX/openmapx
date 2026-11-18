@@ -250,7 +250,7 @@ export async function assertOwnedMaintenanceRecreateRuntime(
   if (!source) throw Error("Configuration maintenance source unavailable");
   return inspectOriginalOwnerServices(source, installation, file, context.signal);
 }
-/** Read-only eligibility from the actual MAC packet and closed existing
+/** Read-only eligibility from the retained candidate and closed existing
  * producer. It grants no generation child, decision or publication authority. */
 async function assertPlannedCoordinatorConfigurationWrite(
   runtime: OpsRuntime,

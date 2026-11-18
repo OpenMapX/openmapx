@@ -381,7 +381,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
   );
 }
 /** Restore comparisons recompute every derived body/address from the original
- * retained inputs. A schema-valid signed summary is not a frozen graph. */
+ * retained inputs. A schema-valid summary is not a frozen graph. */
 export function assertFixedConfigurationMaintenancePlan(
   value: FixedConfigurationMaintenancePlan,
 ): void {

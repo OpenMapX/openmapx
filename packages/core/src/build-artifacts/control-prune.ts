@@ -206,8 +206,8 @@ async function prunable(
     ...(ownerRecord && preparation ? { ownerRecord } : {}),
   };
 }
-/** The role's shared execution witnesses, named after the operation key, and
- * the service lifecycle receipts whose signed seed names a pruned root. */
+/** The role's execution records, named after the operation key, and the
+ * service lifecycle receipts whose recorded seed names a pruned root. */
 function removeShared(local: InstallationState, keys: readonly string[], onFull: () => void): void {
   const role = local.installation.role,
     paths = [

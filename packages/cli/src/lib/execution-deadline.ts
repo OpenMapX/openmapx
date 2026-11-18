@@ -90,7 +90,7 @@ export function cliAcquisitionOptions(): { signal?: AbortSignal; requestTimeoutM
     ? { signal: context.signal, requestTimeoutMs: Math.min(15000, context.deadlineAt - Date.now()) }
     : {};
 }
-/** Remote mutations need a receiver-retained deadline. Unsigned CLI metadata cannot supply it. */
+/** Remote mutations need a receiver-retained deadline. The CLI's own metadata cannot supply it. */
 export function constrainCliDataManagerTransport(
   transport: DataManagerTransport,
 ): DataManagerTransport {

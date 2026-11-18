@@ -169,7 +169,7 @@ export function controlInstallationDataRoot(installation: ControlInstallation): 
 }
 /** Fixed agent registry refresh after a repository publication/removal. This
  * local admission cache is populated from the literal trusted service loader,
- * never an operation's requested IDs. Retained roots keep their signed targets. */
+ * never an operation's requested IDs. Retained roots keep their recorded targets. */
 export function replaceControlRegisteredServiceIds(
   installation: ControlInstallation,
   serviceIds: readonly string[],

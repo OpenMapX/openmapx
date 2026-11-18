@@ -1722,8 +1722,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     };
   }
 
-  // No replay during restart. Rejoin original signed admissions/adoptions and
-  // retained own-effect proof; absent containment evidence keeps its fence.
+  // No replay during restart. Rejoin the retained admissions and own-effect
+  // records; absent containment evidence keeps its fence.
   app.addHook("onReady", async () => {
     await options.artifactTransfers
       ?.reconcileTransferStages({ signal: AbortSignal.timeout(30000) })

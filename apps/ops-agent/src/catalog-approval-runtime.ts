@@ -274,7 +274,7 @@ export function installCatalogApprovalRuntime(
       const bytes = live.read("motis-candidate-manifest.json", 32 * 1024 * 1024, false);
       if (createHash("sha256").update(bytes).digest("hex") !== passed.manifestHash)
         throw Error("Activated manifest differs from validation");
-      // The host independently rejoins its actual promotion's signed candidate
+      // The host independently rejoins its actual promotion's retained candidate
       // publication and current inode/size/mtime/ctime inventory. Re-reading
       // multi-hundred-GB datasets inside a 120-second pin leaf is not viable;
       // the owned DM validation/activation worker hashes their complete bytes.

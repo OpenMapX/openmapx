@@ -121,7 +121,7 @@ const artifactSchema = z.strictObject({
   sizeBytes: z.number().int().nonnegative().safe(),
 });
 /** The existing candidate writer verifies artifact hashes before retaining its
- * manifest. Bind all verified files' inode/change metadata into the signed
+ * manifest. Bind all verified files' inode/change metadata into the retained
  * snapshot as well, so subsequent byte/inode changes cannot hide behind an
  * unchanged manifest. Paths are the finite manifest roles, never HTTP input. */
 function candidateArtifacts(

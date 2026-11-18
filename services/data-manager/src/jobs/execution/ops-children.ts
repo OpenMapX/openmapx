@@ -517,7 +517,7 @@ async function observeChild(
     await delay(100, undefined, { signal });
   }
 }
-/** Body-first confirmed CAS -> signed one-time binding -> grant/ref -> confirmed
+/** Body-first confirmed CAS -> recorded one-time binding -> grant/ref -> confirmed
  * claimed CAS -> consume fresh nominal ticket -> exactly one mutation POST. */
 type OwnedDataOpsOptions = {
   context: DataExecutionContext;

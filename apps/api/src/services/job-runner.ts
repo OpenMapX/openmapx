@@ -129,7 +129,7 @@ function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string,
   try {
     const output = value;
     // Host-owned recovery packets are protocol state, not extension output.
-    // Redacting their signatures/owner IDs would destroy original authority.
+    // Redacting their keys or owner IDs would lose the original identity.
     const retained = Object.fromEntries(
       Object.entries(output).filter(([key]) => key.startsWith("_")),
     );

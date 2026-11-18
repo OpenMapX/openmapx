@@ -1,4 +1,4 @@
-/** Portable signed review evidence. A failed build never fabricates candidate evidence. */
+/** Portable review evidence. A failed build never fabricates candidate evidence. */
 import z from "zod/v4";
 import { executionRefSchema } from "../ops/execution-ref";
 

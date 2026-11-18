@@ -1,4 +1,4 @@
-/** Immutable agent-signed proposals; retaining one never selects active pins. */
+/** Immutable agent-retained proposals; retaining one never selects active pins. */
 import { join } from "node:path";
 import { type ControlInstallation, controlDigest } from "../build-artifacts/control-records";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
@@ -116,7 +116,7 @@ export async function retainCatalogProposal(input: {
     input.signal,
   );
 }
-/** Bounded metadata only; selecting a proposal separately re-verifies its signature. */
+/** Bounded metadata only; selecting a proposal separately re-reads and re-checks it. */
 export function listCatalogProposals(input: {
   rootDir: string;
   installation: ControlInstallation;

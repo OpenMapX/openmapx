@@ -10,7 +10,7 @@ export const guardedSystemReleasePayloadSchema = z.strictObject({
   releaseId: configurationReleaseSelectionSchema.shape.releaseId,
   expectedDigest: configurationReleaseSelectionSchema.shape.manifestDigest,
 });
-/** Additional rejection predicate. The actual actor, owned row, original MAC
+/** Additional rejection predicate. The actual actor, owned row, original
  * candidate, preview and frozen controls must still pass their own checks. */
 export function platformJobMatchesPreview(
   job: { type: string; payload: unknown },

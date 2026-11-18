@@ -1,4 +1,4 @@
-// Internal mint registry shared only by the fixed API and role-signature verifiers.
+// Internal mint registry shared only by the fixed API and parent verifiers.
 // Deliberately absent from every package export.
 export const verifiedParents = new WeakSet<object>();
 export const verifiedParentOrigins = new WeakMap<
