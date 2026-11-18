@@ -127,7 +127,7 @@ it.skipIf(!enabled)(
         createdBy: "transit-preview-admin",
         finishedAt: expired,
         payload: { operationKey: completedKey },
-        result: { _immediateActorId: "transit-preview-admin" },
+        protocol: { immediate: { actorId: "transit-preview-admin", intentDigest: "0".repeat(64) } },
       },
       {
         id: randomUUID(),
@@ -135,7 +135,7 @@ it.skipIf(!enabled)(
         status: "running",
         createdBy: "transit-preview-admin",
         payload: { operationKey: pendingKey },
-        result: { _immediateActorId: "transit-preview-admin" },
+        protocol: { immediate: { actorId: "transit-preview-admin", intentDigest: "0".repeat(64) } },
       },
     ]);
     await make(`opk1_${randomUUID().replaceAll("-", "")}`);

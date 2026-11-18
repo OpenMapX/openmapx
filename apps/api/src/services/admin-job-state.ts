@@ -21,6 +21,9 @@ export interface AdminJobProtocol {
   operations?: unknown;
   /** The configuration candidate the job is carrying through its three phases. */
   candidate?: AdminJobCandidate;
+  /** A job the API ran for an HTTP request: who asked, and a keyed digest of
+   * the intent, so the same key with another intent is refused. */
+  immediate?: { actorId: string; intentDigest: string };
 }
 /**
  * A configuration candidate's progress. `candidate_prepared`: the candidate is

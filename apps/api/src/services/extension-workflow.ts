@@ -177,8 +177,6 @@ export function completedExtensionStep<T>(handle: ExtensionWorkflow, name: strin
   return step?.state === "complete" ? (structuredClone(step.result) as T) : undefined;
 }
 
-export const readExtensionWorkflow = read;
-
 export function hasExtensionPublications(handle: ExtensionWorkflow): boolean {
   return Object.keys(owner(handle).state.steps).some(
     (name) => name.startsWith("repository.publish:") || name.startsWith("integration.publish:"),

@@ -9,7 +9,7 @@ export async function pruneTransitCredentialPreviews(
   connection: Pick<typeof db, "delete">,
   now = new Date(),
 ) {
-  const matchingJob = sql`${adminJob.payload}->>'operationKey' = ${preview.operationKey} AND ${adminJob.result}->>'_immediateActorId' = ${preview.actorId}`;
+  const matchingJob = sql`${adminJob.payload}->>'operationKey' = ${preview.operationKey} AND ${adminJob.protocol}->'immediate'->>'actorId' = ${preview.actorId}`;
   const rows = await connection
     .delete(preview)
     .where(

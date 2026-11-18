@@ -127,14 +127,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     async function job(options: { immediate?: boolean } = {}): Promise<JobContext> {
       const jobId = randomUUID(),
         execution = { owner: randomUUID(), version: 1 },
-        result = options.immediate ? { _immediateIntentDigest: "0".repeat(64) } : {};
+        protocol = {
+          execution,
+          ...(options.immediate
+            ? { immediate: { actorId: jobId, intentDigest: "0".repeat(64) } }
+            : {}),
+        };
       await fixture.db.insert(schema.adminJob).values({
         id: jobId,
         type: "service.apply",
         payload: {},
         status: "running",
-        protocol: { execution },
-        result,
+        protocol,
       });
       const ctx: JobContext = {
         jobId,
@@ -142,8 +146,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         execution,
         payload: {},
         signal: new AbortController().signal,
-        checkpointResult: result,
-        protocol: { execution },
+        checkpointResult: {},
+        protocol,
         log: async () => {},
         setProgress: async () => {},
         checkpoint: async (result, progress, admissionKey, stepAddress, operations) => {
@@ -828,12 +832,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         type: "service.apply",
         payload: { operationKey: "opk1_fixturesamekeyconflict00" },
         status: "success",
-        protocol: {},
-        result: {
-          _immediateActorId: "fixture-admin",
-          _immediateIntentDigest: apiKeyedDigest("immediate-configuration-intent", {
-            other: true,
-          }),
+        protocol: {
+          immediate: {
+            actorId: "fixture-admin",
+            intentDigest: apiKeyedDigest("immediate-configuration-intent", { other: true }),
+          },
         },
       });
       await expect(request("synthetic-conflicting-credential")).rejects.toMatchObject({

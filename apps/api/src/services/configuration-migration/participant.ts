@@ -1,7 +1,7 @@
 /** Closed staged issuers. Legacy batch intents cannot construct these participants. */
 import { randomUUID } from "node:crypto";
 import { canonicalJson } from "@openmapx/core/ops";
-import { and, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { AdminActionReauthentication } from "../../account/admin-reauthentication";
 import { loadAuthPolicy } from "../../account/auth-policy";
 import {
@@ -359,15 +359,7 @@ export async function prepareStagedMigrationParticipant(input: {
           })),
         },
       });
-      await consumeMigrationStage(stage, owner.job.jobId, tx, {
-        candidateId: candidate.candidateId,
-        settingsKeys:
-          stage.kind === "migration" ? Object.keys((plan as MigrationPlan).settings) : [],
-        integrationIds:
-          stage.kind === "migration"
-            ? [...new Set((plan as MigrationPlan).document.bindings.map((b) => b.integrationId))]
-            : [],
-      });
+      await consumeMigrationStage(stage, owner.job.jobId, tx);
       state.committed = true;
     },
   }) as unknown as ConfigurationCommitParticipant;

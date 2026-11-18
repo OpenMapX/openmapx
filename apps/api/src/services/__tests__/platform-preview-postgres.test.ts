@@ -696,8 +696,12 @@ dbDescribe("durable exact platform preview", () => {
     expect(stored?.consumedByJobId).toBeNull();
     await fixture.db.transaction(async (tx) => {
       const receipt = await commitPlatformConfigurationIntent(input, tx);
-      const { assertConfigurationSavedRows } = await import("../configuration-saved-rows");
-      await assertConfigurationSavedRows(tx, [receipt]);
+      // The receipt names the row version the save wrote.
+      const [written] = await tx
+        .select({ version: sql<string>`xmin::text` })
+        .from(systemSettings)
+        .where(eq(systemSettings.key, "platformConfiguration"));
+      expect(receipt.rowVersion).toBe(written?.version);
       await tx
         .update(adminJob)
         .set({ result: { saved: true } })

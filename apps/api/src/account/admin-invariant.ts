@@ -54,7 +54,7 @@ export async function assertAccountDeletionAllowed(targetId: string) {
       and(
         or(
           eq(adminJob.createdBy, targetId),
-          sql`${adminJob.result}->>'_immediateActorId' = ${targetId}`,
+          sql`${adminJob.protocol}->'immediate'->>'actorId' = ${targetId}`,
         ),
         or(
           sql`${adminJob.status} NOT IN ('success','failed','canceled')`,

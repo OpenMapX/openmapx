@@ -328,16 +328,11 @@ function createCandidate(input: {
 }
 /** The source a candidate was prepared from, where its record keeps one. */
 function retainedSource(record: PreparedConfigurationRecord) {
-  return (
-    record.privateCoordinatorSource ??
-    record.privatePlatformIntent?.sourceSnapshot ??
-    record.privateMaintenancePreparation?.source ??
-    null
-  );
+  return record.privateCoordinatorSource ?? record.privatePlatformIntent?.sourceSnapshot ?? null;
 }
 /** A job the API ran for an HTTP request; only its intent's digest is kept. */
 function isImmediateJob(job: JobContext): boolean {
-  return typeof job.checkpointResult?._immediateIntentDigest === "string";
+  return readAdminJobProtocol(job.protocol).immediate !== undefined;
 }
 function protocolCandidate(job: JobContext): AdminJobCandidate | undefined {
   return readAdminJobProtocol(job.protocol).candidate;
@@ -1763,37 +1758,6 @@ export async function prepareProspectiveConfiguration(input: {
           maintenanceId,
           prepareOperationKey: maintenanceId ? root.operationKey : null,
           coordinatorPrerequisite,
-          ...(maintenanceId && !owner.participant && overlay.purpose === "service-secret"
-            ? {
-                privateMaintenancePreparation: {
-                  version: 1 as const,
-                  source,
-                  serviceSecrets: merged.serviceSecretRows
-                    .filter(
-                      (row) =>
-                        row.serviceId === "data-manager" &&
-                        overlay.changes.some(
-                          (change) =>
-                            change.kind === "service-secret" &&
-                            change.serviceId === row.serviceId &&
-                            change.key === row.key &&
-                            change.action === "set",
-                        ),
-                    )
-                    .map((row) => ({
-                      id: row.id,
-                      serviceId: "data-manager" as const,
-                      key: row.key,
-                      ciphertext: row.ciphertext,
-                      iv: row.iv,
-                      tag: row.tag,
-                      createdAt: row.createdAt.toISOString(),
-                      updatedAt: row.updatedAt.toISOString(),
-                      updatedBy: row.updatedBy,
-                    })),
-                },
-              }
-            : {}),
           ...(apiFollowUp === "integration-reload" ||
           (overlay.purpose === "migration" &&
             owner.participant &&
@@ -2424,7 +2388,6 @@ async function persistOverlay(
 
 /** Reads the coordinator's state as the candidate's hardlinks preview reports it. */
 async function coordinatorState(candidate: ValidatedConfigurationCandidate, state: CandidateState) {
-  if (!state.source) throw Error("Original prospective preview source required");
   const preview = await executeAndWait(
     createApiOpsClient(),
     {
@@ -2432,7 +2395,7 @@ async function coordinatorState(candidate: ValidatedConfigurationCandidate, stat
       candidateId: candidate.candidateId,
       revisionId: candidate.revisionId,
       expectedCurrentRevisionId: candidate.expectedCurrentRevisionId,
-      expectedSourceRevision: state.source.sourceRevision,
+      expectedSourceRevision: state.record.expectedSourceRevision,
       coordinatorMode: state.overlay.coordinatorMode,
     },
     createDurableOpsKey("configuration.hardlinks.preview", candidate.operationKey),

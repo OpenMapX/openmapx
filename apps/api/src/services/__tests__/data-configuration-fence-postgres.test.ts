@@ -455,7 +455,6 @@ async function ownedFenceFixture(
   options: {
     productionRegistration?: boolean;
     loseRecoveryResponseOnce?: boolean;
-    immediateRecovery?: boolean;
     guardedRecovery?: boolean;
     /** Installed, enabled services outside the release's built-in set. */
     enabledCommunityServiceIds?: string[];
@@ -582,18 +581,8 @@ async function ownedFenceFixture(
           releaseId: checkedRelease.releaseId,
           expectedDigest: checkedRelease.manifestDigest,
         }
-      : options.immediateRecovery
-        ? { operationKey }
-        : {},
-    initialResult = {
-      ...(options.immediateRecovery
-        ? {
-            _immediateJobId: jobId,
-            _immediateActorId: actorId,
-            _immediateIntentDigest: "a".repeat(64),
-          }
-        : {}),
-    };
+      : {},
+    initialResult = {};
   if (options.guardedRecovery) {
     await fixture.db.insert(apiSchema.user).values({
       id: actorId,

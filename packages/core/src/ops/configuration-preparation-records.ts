@@ -113,29 +113,6 @@ export const preparedConfigurationRecordSchema = z.strictObject({
   privatePlatformIntent: platformConfigurationIntentSchema.optional(),
   privateCoordinatorLifecycle: coordinatorLifecycleMetadataSchema.optional(),
   privateCoordinatorSource: configurationSourcesInspectionSchema.optional(),
-  // Exact current DM credential persistence inputs retained before its helper
-  // prerequisite. Recovery never regenerates row IDs, encryption or a seal.
-  privateMaintenancePreparation: z
-    .strictObject({
-      version: z.literal(1),
-      source: configurationSourcesInspectionSchema,
-      serviceSecrets: z
-        .array(
-          z.strictObject({
-            id: z.uuid(),
-            serviceId: z.literal("data-manager"),
-            key,
-            ciphertext: z.string().max(350000),
-            iv: z.string().max(64),
-            tag: z.string().max(64),
-            createdAt: z.iso.datetime(),
-            updatedAt: z.iso.datetime(),
-            updatedBy: z.string().max(256).nullable(),
-          }),
-        )
-        .max(128),
-    })
-    .optional(),
   // Private authenticated recovery data, counted in the existing 768KiB cell.
   // No raw process environment, backend/provider objects or new authority.
   privateIntegrationReload: z

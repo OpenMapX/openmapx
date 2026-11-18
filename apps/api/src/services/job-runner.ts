@@ -184,19 +184,17 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
  * still authenticate the original private packet, owned row/nonce, source and
  * every retained attempt before it can deliver an original continuation. */
 function hasRetainedImmediateConfiguration(job: {
-  id: string;
   type: string;
   payload: unknown;
-  result: unknown;
+  protocol: unknown;
 }): boolean {
-  const result = job.result as Record<string, unknown> | null,
+  const immediate = readAdminJobProtocol(job.protocol).immediate,
     payload = job.payload as Record<string, unknown> | null;
   return (
     IMMEDIATE_CONFIGURATION_JOB_TYPES.some((type) => type === job.type) &&
-    result?._immediateJobId === job.id &&
-    typeof result._immediateActorId === "string" &&
-    typeof result._immediateIntentDigest === "string" &&
-    /^[a-f0-9]{64}$/.test(result._immediateIntentDigest) &&
+    typeof immediate?.actorId === "string" &&
+    typeof immediate.intentDigest === "string" &&
+    /^[a-f0-9]{64}$/.test(immediate.intentDigest) &&
     typeof payload?.operationKey === "string" &&
     /^opk1_[A-Za-z0-9_-]{16,64}$/.test(payload.operationKey)
   );
@@ -379,7 +377,7 @@ class AdminJobRunner {
     run: (
       ctx: JobContext,
     ) => Promise<{ value: T; result: Record<string, unknown>; failed?: boolean }>,
-    restore: (result: Record<string, unknown>) => T,
+    restore: (result: Record<string, unknown>, jobId: string) => T,
   ): Promise<T> {
     const intentDigest = apiKeyedDigest("immediate-configuration-intent", options.intent);
     const actorId = options.actorId ?? "internal";
@@ -390,7 +388,7 @@ class AdminJobRunner {
         .where(
           and(
             sql`${adminJob.payload}->>'operationKey' = ${options.operationKey}`,
-            sql`${adminJob.result}->>'_immediateActorId' = ${actorId}`,
+            sql`${adminJob.protocol}->'immediate'->>'actorId' = ${actorId}`,
           ),
         )
         .limit(2);
@@ -418,11 +416,7 @@ class AdminJobRunner {
               protocol: {
                 execution,
                 observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),
-              },
-              result: {
-                _immediateJobId: id,
-                _immediateActorId: actorId,
-                _immediateIntentDigest: intentDigest,
+                immediate: { actorId, intentDigest },
               },
             })
             .returning();
@@ -434,7 +428,10 @@ class AdminJobRunner {
     let job = retained[0]!,
       checkpoint = (job.result ?? {}) as Record<string, unknown>,
       recovering = false;
-    if (job.type !== options.type || checkpoint._immediateIntentDigest !== intentDigest)
+    if (
+      job.type !== options.type ||
+      readAdminJobProtocol(job.protocol).immediate?.intentDigest !== intentDigest
+    )
       throw new AdminJobFailure("Retained configuration intent conflicts", {
         errorCode: "conflict",
       });
@@ -443,7 +440,7 @@ class AdminJobRunner {
       if (["success", "failed"].includes(job.status)) {
         if (checkpoint._configurationRejection)
           throw restoreConfigurationRejection(checkpoint._configurationRejection);
-        return restore(checkpoint);
+        return restore(checkpoint, job.id);
       }
       if (
         !["running", "cancel_pending"].includes(job.status) ||
@@ -499,7 +496,7 @@ class AdminJobRunner {
       if (!settled || !["success", "failed"].includes(settled.status))
         throw new JobObservationPending("recovery_required");
       if (failure && !(value !== undefined && failure instanceof AdminJobFailure)) throw failure;
-      return value ?? restore((settled.result ?? {}) as Record<string, unknown>);
+      return value ?? restore((settled.result ?? {}) as Record<string, unknown>, job.id);
     } finally {
       clearInterval(heartbeat);
       this.active.delete(job.id);
@@ -511,16 +508,17 @@ class AdminJobRunner {
    * reconciliation. No registered callback, new intent or latest desired state
    * is used; all authority is reconstructed by its nominal private reader. */
   private async resumeImmediateConfiguration(ctx: JobContext): Promise<Record<string, unknown>> {
+    const immediate = readAdminJobProtocol(ctx.protocol).immediate;
     if (
+      !immediate ||
       !hasRetainedImmediateConfiguration({
-        id: ctx.jobId,
         type: ctx.jobType ?? "",
         payload: ctx.payload,
-        result: ctx.checkpointResult,
+        protocol: ctx.protocol,
       })
     )
       throw new JobObservationPending("recovery_required");
-    const actorId = ctx.checkpointResult!._immediateActorId as string,
+    const actorId = immediate.actorId,
       operationKey = ctx.payload.operationKey as string,
       { withAdministrativeConfigurationJob, withAdministrativeConfigurationWriter } = await import(
         "./administrative-configuration-writer"
@@ -657,7 +655,7 @@ class AdminJobRunner {
           failed: value.outcome.outcome !== "committed" || value.outcome.followUp !== "complete",
         };
       },
-      (result) => {
+      (result, jobId) => {
         if (result.errorCode === "configuration_prerequisite")
           throw new ConfigurationPrerequisiteFailure();
         let outcome = parseTrustedConfigurationApplyOutcome(result.configuration);
@@ -692,7 +690,7 @@ class AdminJobRunner {
         return {
           outcome,
           ...(integrationReload ? { integrationReload } : {}),
-          ...(typeof result._immediateJobId === "string" ? { jobId: result._immediateJobId } : {}),
+          jobId,
         };
       },
     );
@@ -1237,8 +1235,7 @@ class AdminJobRunner {
       throw error;
     };
     const retainedImmediate =
-        observe &&
-        hasRetainedImmediateConfiguration({ id: jobId, type, payload, result: checkpointResult }),
+        observe && hasRetainedImmediateConfiguration({ type, payload, protocol }),
       retainedQueuedCoordinator =
         observe &&
         hasRetainedQueuedCoordinator({ type, payload, result: checkpointResult, protocol }),

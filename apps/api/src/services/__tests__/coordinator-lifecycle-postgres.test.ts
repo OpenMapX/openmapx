@@ -2297,7 +2297,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .select()
                 .from(schema.adminJob)
                 .where(eq(schema.adminJob.id, id)),
-              before = original!.result as Record<string, unknown>,
               beforeProtocol = original!.protocol as Record<string, unknown>;
             expect(beforeProtocol.candidate).toBeUndefined();
             expect(
