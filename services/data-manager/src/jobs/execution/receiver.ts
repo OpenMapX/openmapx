@@ -129,7 +129,7 @@ export function createDataExecutionReceiver(deps: {
         serviceIds: verified.serviceIds,
       });
     },
-    admitLocal: (value, source) => admitRoot(validate(value), source ?? {}),
+    admitLocal: async (value, source) => admitRoot(validate(value), source ?? {}),
     async runLocal(input, run, options) {
       let outcome: { value: Awaited<ReturnType<typeof run>> } | { error: unknown } | undefined;
       const status = await admitRoot(normalizeDataExecutionInput(input), {
