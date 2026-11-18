@@ -8,29 +8,32 @@ import { createControlRootOperationKey } from "../ops/control-root-key";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
-  bindControlChildPhase,
-  type ControlChildReservation,
-  issueControlChildPhase,
-} from "./child-phase";
-import {
   beginControlEffect,
-  closeControlInstallation,
-  controlChildOperationKey,
+  bindControlChildPhase,
   fixedCliArguments,
   inspectConfigurationPreEffectRefusal,
-  openControlInstallation,
-  provisionControlDirectories,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
   retainFixedCliSpawnIntent,
   verifyControlEffectSettlement,
-} from "./control-authority";
-import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
+  verifyLocalArtifactTargetRootRelease,
+} from "./execution-record";
+import {
+  type ControlChildReservation,
+  controlChildOperationKey,
+  leaseStoreDirectory,
+  openLeaseStore,
+} from "./lease-store";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlDirectories,
+} from "./private-records";
 import {
   acquireArtifactTargetLease,
+  issueControlChildPhase,
   releaseArtifactTargetLease,
   settleArtifactTargetLeaseChild,
-  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 let root: string, installation: ReturnType<typeof openControlInstallation>;

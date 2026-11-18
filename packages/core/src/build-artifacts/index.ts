@@ -4,64 +4,73 @@ export { DataExecutionPartialResult } from "./data-execution-outcome";
 
 export * from "./archive";
 export {
-  bindControlChildPhase,
-  type ControlChildReservation,
-  consumeControlChildDispatch,
-  type FreshControlChildDispatch,
-  issueControlChildPhase,
-  lookupControlChildPhase,
-  lookupControlChildPhaseAttempt,
-  lookupControlChildPhaseBinding,
-} from "./child-phase";
-export {
   configurationHostFields,
   observeConfigurationSources,
   verifyConfigurationReleaseSourceWitness,
   verifyConfigurationSourceWitness,
 } from "./configuration-source-witness";
+export { type ControlInstallation, controlDigest } from "./control-records";
 export {
-  agentStoreLeases,
+  type CoordinatorPullBaseline,
+  coordinatorPullBaselineSchema,
+} from "./coordinator-pull-records";
+export {
+  createDataConfigurationFenceStore,
+  type DataFenceSql,
+  type VerifiedPreparedGenerationAdmission,
+} from "./data-configuration-fence";
+export { retainedDataDatabaseTimestamp } from "./data-database-time";
+export * from "./data-evidence";
+export {
+  assertDataTransitCandidateForExecution,
+  assertOwnedDataTransitCandidate,
+  inspectDataTransitCandidate,
+  markFeedProxyReloadAttempted,
+  publishedDataTransitCandidate,
+  retainOwnedDataTransitCandidate,
+} from "./data-execution-candidate";
+export {
+  type ContainedDataExecution,
+  createDataExecutionControlJournal,
+  type DataExecutionControlJournal,
+  dataTerminalReceiptDigest,
+} from "./data-execution-journal";
+export { assertDataManagerTerminal, readDataManagerTerminal } from "./data-manager-terminal";
+export {
+  assertDataUpdateSources,
+  planDataUpdate,
+  readDataUpdatePlan,
+  retainDataUpdatePlan,
+  verifyDataUpdatePrerequisites,
+} from "./data-update";
+export { type DataUpdatePlan, dataUpdatePlanSchema } from "./data-update-records";
+export {
   assertControlExecutionForward,
-  assertControlStorageAvailable,
-  assertFreshControlRoot,
   attestParentExecution,
   beginControlEffect,
   beginFixedCliExecution,
-  CONTROL_RECOVERY_INSTRUCTIONS,
-  type ControlChildPhase,
+  bindControlChildPhase,
   type ControlDelegation,
   ControlExecutionFencedError,
   type ControlExecutionOrigin,
-  type ControlInstallation,
   type ControlPlannedChild,
-  type ControlRecipient,
   cancelControlExecution,
-  closeControlInstallation,
-  controlChildOperationKey,
-  controlIdentity,
-  controlInstallationDataRoot,
-  controlPrivateRoot,
-  controlRegisteredServiceIds,
   executionAuthorityState,
   fixedCliArguments,
   inspectConfigurationPreEffectRefusal,
   inspectRemoteDelegation,
   type LeaseChildRef,
   leaseChildRefSchema,
-  loadControlStartup,
-  localFeedCredentialTemplateDigest,
-  markFeedProxyReloadAttempted,
+  lookupControlChildPhase,
+  lookupControlChildPhaseAttempt,
+  lookupControlChildPhaseBinding,
   observeCoordinatorPullForMaintenance,
   observedCoordinatorPullBaseline,
-  openControlInstallation,
   openFixedChildInstallation,
   ownedCoordinatorPullBaseline,
   ownedStagedCoordinatorBaseline,
-  provisionControlDirectories,
   readFixedCliSpawnIntent,
-  readPrivateRecord,
   readVerifiedStagedCoordinatorOwnership,
-  replaceControlRegisteredServiceIds,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
@@ -84,44 +93,10 @@ export {
   verifyControlRecoveryAuthority,
   verifyCoordinatorPullAdmissionSource,
   verifyFixedCliControlPeer,
+  verifyLocalArtifactTargetRootRelease,
   verifyLocalControlPeer,
   verifyMaintenanceCoordinatorPrerequisite,
-  writePrivateRecord,
-} from "./control-authority";
-export { controlDigest } from "./control-records";
-export {
-  type CoordinatorPullBaseline,
-  coordinatorPullBaselineSchema,
-} from "./coordinator-pull-records";
-export {
-  createDataConfigurationFenceStore,
-  type DataFenceSql,
-  type VerifiedPreparedGenerationAdmission,
-} from "./data-configuration-fence";
-export { retainedDataDatabaseTimestamp } from "./data-database-time";
-export * from "./data-evidence";
-export {
-  assertDataTransitCandidateForExecution,
-  assertOwnedDataTransitCandidate,
-  inspectDataTransitCandidate,
-  publishedDataTransitCandidate,
-  retainOwnedDataTransitCandidate,
-} from "./data-execution-candidate";
-export {
-  type ContainedDataExecution,
-  createDataExecutionControlJournal,
-  type DataExecutionControlJournal,
-  dataTerminalReceiptDigest,
-} from "./data-execution-journal";
-export { assertDataManagerTerminal, readDataManagerTerminal } from "./data-manager-terminal";
-export {
-  assertDataUpdateSources,
-  planDataUpdate,
-  readDataUpdatePlan,
-  retainDataUpdatePlan,
-  verifyDataUpdatePrerequisites,
-} from "./data-update";
-export { type DataUpdatePlan, dataUpdatePlanSchema } from "./data-update-records";
+} from "./execution-record";
 export {
   commitFeedProxyValidationFailure,
   feedProxyValidationCompletionDigest,
@@ -172,6 +147,12 @@ export {
   remoteLeaseBackend,
 } from "./lease-remote";
 export * from "./lease-store";
+export {
+  type ControlChildPhase,
+  type ControlChildReservation,
+  type ControlRecipient,
+  controlChildOperationKey,
+} from "./lease-store";
 export * from "./maintenance-file";
 export * from "./manifest";
 export {
@@ -186,4 +167,27 @@ export {
 } from "./motis-candidate";
 export { inspectControlAdmission, inspectDataExecutionAdmission } from "./peer-admission";
 export * from "./prepared-evidence";
+export {
+  agentStoreLeases,
+  assertControlStorageAvailable,
+  assertFreshControlRoot,
+  CONTROL_RECOVERY_INSTRUCTIONS,
+  closeControlInstallation,
+  controlIdentity,
+  controlInstallationDataRoot,
+  controlPrivateRoot,
+  controlRegisteredServiceIds,
+  loadControlStartup,
+  localFeedCredentialTemplateDigest,
+  openControlInstallation,
+  provisionControlDirectories,
+  readPrivateRecord,
+  replaceControlRegisteredServiceIds,
+  writePrivateRecord,
+} from "./private-records";
 export * from "./target-lease";
+export {
+  consumeControlChildDispatch,
+  type FreshControlChildDispatch,
+  issueControlChildPhase,
+} from "./target-lease";

@@ -30,13 +30,13 @@ import {
   type RetainedParentExecution,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
 import {
   type CoordinatorPullWitness,
   coordinatorPullWitnessPayloadSchema,
   stagedCoordinatorObservationSchema,
 } from "../../../packages/core/src/build-artifacts/coordinator-pull-records";
 import type { MaintenanceFile } from "../../../packages/core/src/build-artifacts/maintenance-file";
+import { installationState } from "../../../packages/core/src/build-artifacts/private-records";
 import {
   type ConfigurationCandidateSource,
   readConfigurationCandidate,

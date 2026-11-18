@@ -34,12 +34,12 @@ import {
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import z from "zod/v4";
-import { installationState } from "../../../../../packages/core/src/build-artifacts/control-authority";
 import {
   AnchoredDirectory,
   identity,
   sameInode,
 } from "../../../../../packages/core/src/build-artifacts/filesystem";
+import { installationState } from "../../../../../packages/core/src/build-artifacts/private-records";
 import { runOpsOperation } from "../../ops-client.js";
 import { withLegacyDataMutation } from "../execution/legacy-mutation.js";
 import type { DataExecutionStore } from "../execution/store.js";

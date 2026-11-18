@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createControlRootOperationKey, executionFingerprint, opsOperationSchema } from "../ops";
+import { controlDigest } from "./control-records";
+import { retainAdmittedControlExecution } from "./execution-record";
 import {
   closeControlInstallation,
-  controlDigest,
   localFeedCredentialTemplateDigest,
   openControlInstallation,
   provisionControlDirectories,
-  retainAdmittedControlExecution,
-} from "./control-authority";
+} from "./private-records";
 
 const roots: string[] = [];
 afterEach(() => {

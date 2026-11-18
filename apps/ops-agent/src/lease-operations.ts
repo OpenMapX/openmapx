@@ -12,7 +12,7 @@ import {
   type OpsResultFor,
   type OpsRole,
 } from "@openmapx/core/ops";
-import { childPhaseKinds } from "../../../packages/core/src/build-artifacts/control-child-records";
+import { childPhaseKinds } from "../../../packages/core/src/build-artifacts/lease-store";
 
 type LeaseOperation = Extract<
   OpsOperation,

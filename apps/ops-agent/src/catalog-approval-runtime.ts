@@ -37,12 +37,10 @@ import {
   opsOperationFingerprint,
   parseOpsResult,
 } from "@openmapx/core/ops";
-import {
-  childSettlementState,
-  readPrivateRecord,
-} from "../../../packages/core/src/build-artifacts/control-authority";
 import { verifyDataTransitCandidateForExecution } from "../../../packages/core/src/build-artifacts/data-execution-candidate";
+import { childSettlementState } from "../../../packages/core/src/build-artifacts/execution-record";
 import { AnchoredDirectory } from "../../../packages/core/src/build-artifacts/filesystem";
+import { readPrivateRecord } from "../../../packages/core/src/build-artifacts/private-records";
 import { dataManagerTerminal } from "./data-manager-terminal";
 import type { OpsRuntime } from "./runtime";
 

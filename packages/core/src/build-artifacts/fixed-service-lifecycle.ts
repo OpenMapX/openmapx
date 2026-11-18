@@ -5,16 +5,15 @@ import { type OpsOperation, opsOperationSchema } from "../ops/contract";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { generationHardlinksPlanSchema } from "../services/data-manager/contracts/executions";
-import { type ControlChildReservation, controlChildReservationSchema } from "./child-phase";
-import {
-  controlChildOperationKey,
-  executionAuthorityState,
-  readPrivateRecord,
-  type VerifiedExecutionAuthority,
-  writePrivateRecord,
-} from "./control-authority";
 import { controlDigest } from "./control-records";
+import { executionAuthorityState, type VerifiedExecutionAuthority } from "./execution-record";
 import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
+import {
+  type ControlChildReservation,
+  controlChildOperationKey,
+  controlChildReservationSchema,
+} from "./lease-store";
+import { readPrivateRecord, writePrivateRecord } from "./private-records";
 
 const domain = "openmapx-fixed-service-lifecycle-v1";
 const schema = z.strictObject({

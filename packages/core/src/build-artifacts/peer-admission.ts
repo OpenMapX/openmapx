@@ -1,16 +1,15 @@
 import { opsOperationSchema } from "../ops/contract";
 import type { ExecutionRef } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
+import { type ControlInstallation, controlDigest } from "./control-records";
 import {
   type ControlDelegation,
-  type ControlInstallation,
   type ControlTransportPrincipal,
-  controlDigest,
   inspectRemoteDelegation,
-  installationState,
   type LeaseChildRef,
   verifyControlPeer,
-} from "./control-authority";
+} from "./execution-record";
+import { installationState } from "./private-records";
 import {
   adoptArtifactTargetLease,
   inspectArtifactDelegation,

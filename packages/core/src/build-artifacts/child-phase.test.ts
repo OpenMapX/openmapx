@@ -10,9 +10,9 @@ import {
   normalizeExecutionAdmission,
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
-import { inspectControlChildPublication } from "./child-phase";
-import { installationState } from "./control-authority";
+import { inspectControlChildPublication } from "./execution-record";
 import * as control from "./index";
+import { installationState } from "./private-records";
 
 afterEach(() => vi.restoreAllMocks());
 /** The leases the agent's store holds for the installation at `root`. */

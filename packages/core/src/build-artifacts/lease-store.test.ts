@@ -8,10 +8,10 @@ import { heldTargets } from "./__fixtures__/held-targets";
 import {
   type LeaseSettlement,
   leaseStoreDirectory,
+  localLeaseBackend,
   openLeaseStore,
   TargetBusyError,
 } from "./lease-store";
-import { localLeaseBackend } from "./target-lease";
 
 const roots: string[] = [];
 afterEach(() => {

@@ -6,11 +6,11 @@ import {
   opsOperationFingerprint,
 } from "../ops";
 import { releaseProvenance } from "../services/__fixtures__/release-provenance";
-import { controlChildOperationKey } from "./control-authority";
 import {
   assertFixedConfigurationMaintenancePlan,
   buildFixedConfigurationMaintenancePlan,
 } from "./fixed-configuration-maintenance";
+import { controlChildOperationKey } from "./lease-store";
 
 // Pure plan-data qualification only. These inputs confer no authority and are
 // not the real producer/decision/DM positive required by the task.

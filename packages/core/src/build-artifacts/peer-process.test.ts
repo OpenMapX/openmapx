@@ -12,19 +12,21 @@ import {
   executionFingerprint,
 } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
+import { controlDigest } from "./control-records";
 import {
-  type ControlChildPhase,
   type ControlPlannedChild,
-  controlChildOperationKey,
-  controlDigest,
-  openControlInstallation,
-  provisionControlDirectories,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   retainedControlParent,
   verifyControlEffectSettlement,
-} from "./control-authority";
-import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
+} from "./execution-record";
+import {
+  type ControlChildPhase,
+  controlChildOperationKey,
+  leaseStoreDirectory,
+  openLeaseStore,
+} from "./lease-store";
+import { openControlInstallation, provisionControlDirectories } from "./private-records";
 import {
   acquireArtifactTargetLease,
   closeArtifactTargetLeaseHandle,
@@ -180,7 +182,7 @@ it("retains one data-manager owner and one agent receiver across path aliases", 
   await releaseArtifactTargetLease(lease);
 });
 it("keeps owner-death recovery fenced until a separately admitted child settles", async () => {
-  const { verifyControlRecoveryAuthority } = await import("./control-authority");
+  const { verifyControlRecoveryAuthority } = await import("./test-fixtures/control");
   const { reconcileArtifactTargetLease } = await import("./target-lease");
   const role = "data-manager";
   const operation = { kind: "transit-sync" };
@@ -247,7 +249,7 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
 it.each([false, true])(
   "certifies a depth-two hardlink leaf across processes (cancel intermediate: %s)",
   async (cancelIntermediate) => {
-    const c = await import("./control-authority");
+    const c = await import("./test-fixtures/control");
     const operation = {
       kind: "service.start" as const,
       serviceId: "motis",
@@ -347,7 +349,7 @@ it.each([false, true])(
   60000,
 );
 it("keeps an attempted child fenced after SIGKILL of its actual owner process", async () => {
-  const c = await import("./control-authority");
+  const c = await import("./test-fixtures/control");
   const l = await import("./target-lease");
   const operation = { kind: "transit-sync" };
   const execution = ref("data-manager", operation.kind, operation);
@@ -432,7 +434,7 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
   c.closeControlInstallation(installation);
 });
 it("keeps paired-pin approval a one-use leaf under its original activation root", async () => {
-  const c = await import("./control-authority");
+  const c = await import("./test-fixtures/control");
   const operation = { kind: "catalog.activate", validationId: randomUUID() };
   const execution = ref("data-manager", operation.kind, operation);
   const body = {
@@ -510,7 +512,7 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
   c.closeControlInstallation(installation);
 });
 it("rejects a logical configuration-fence delegation without the actual maintenance producer's owner", async () => {
-  const c = await import("./control-authority");
+  const c = await import("./test-fixtures/control");
   const operation = {
     kind: "configurationMaintenance.prepare",
     maintenanceId: randomUUID(),

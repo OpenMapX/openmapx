@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { createControlRootOperationKey } from "../../ops/control-root-key";
 import { type ControlIssuer, executionFingerprint } from "../../ops/execution-identity";
 import { opsOperationFingerprint } from "../../ops/fingerprint";
-import * as c from "../control-authority";
+import * as c from "./control";
 
 export function admittedRoot(root: string, role: ControlIssuer = "host-cli", lifetime = 60000) {
   const installation = c.openControlInstallation({

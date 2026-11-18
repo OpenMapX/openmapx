@@ -1,13 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import type { ControlInstallation } from "../build-artifacts/control-records";
+import { controlDigest } from "../build-artifacts/control-records";
 import {
   beginControlEffect,
-  controlDigest,
   executionAuthorityState,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
-} from "../build-artifacts/control-authority";
-import type { ControlInstallation } from "../build-artifacts/control-records";
+} from "../build-artifacts/execution-record";
 import {
   type ArtifactTargetLease,
   acquireArtifactTargetLease,

@@ -1,61 +1,8 @@
-import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
-import {
-  type ControlChildPhase,
-  type ControlRecipient,
-  childPhaseKinds,
-  controlChildOperationKey,
-} from "./control-child-records";
-import { dataUpdatePlanSchema } from "./data-update-records";
-import { dataUpdateSourcesDigest } from "./data-update-sources";
-import {
-  LOCAL_CREDENTIAL_TEMPLATE_KIND,
-  localCredentialTemplateFileDigest,
-  localCredentialTemplateOperationSchema,
-  localCredentialTemplateReceiptSchema,
-} from "./local-credential-template";
-
-export {
-  type ControlChildPhase,
-  type ControlRecipient,
-  childPhaseKinds,
-  controlChildOperationKey,
-} from "./control-child-records";
-
-import {
-  type ControlInstallation,
-  controlDigest,
-  controlOriginSchema,
-  digest,
-  type InstallationState,
-  sameControlOrigin,
-  targetSchema,
-  uuid,
-} from "./control-records";
-// biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
-import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
-import {
-  type LeaseBackend,
-  localLeaseBackend,
-  rootLeaseId,
-  verifyLocalArtifactTargetRootRelease,
-} from "./target-lease";
-
-// biome-ignore-end lint/suspicious/noImportCycles: Same exact deferred guard import.
-
-export {
-  type ControlInstallation,
-  controlDigest,
-  controlOriginSchema,
-  digest,
-  type InstallationState,
-  sameControlOrigin,
-  targetSchema,
-  uuid,
-} from "./control-records";
-
+/** One execution as its role recorded it: the admitted operation, its
+ * lifecycle, its effect start and settlement, and the children it reserved. */
 import { randomUUID } from "node:crypto";
-import { fsyncSync, mkdirSync, realpathSync, statfsSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { fsyncSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { PreparedConfigurationRecord } from "../ops/configuration-preparation";
 import {
@@ -73,11 +20,14 @@ import {
   type ExecutionRef,
   executionFingerprint,
   executionRefSchema,
+  normalizeExecutionAdmission,
+  opsExecutionBudget,
   opsExecutionMaximumMs,
   type RetainedParentExecution,
   retainedParentExecutionSchema,
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
+import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import { servicePullResultSchema } from "../ops/service-operation-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import {
@@ -92,19 +42,15 @@ import {
   dataExecutionStatusSchema,
 } from "../services/data-manager/contracts/executions";
 import type { DataManagerTransport } from "../services/data-manager/transport";
-// biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
-  type ControlChildReservation,
-  controlChildReservationSchema,
-  initializeControlChildReservations,
-  inspectControlChildPublication,
-  lookupControlChildPhase,
-  lookupControlChildPhaseAttempt,
-  prepareControlChildPublication,
-  resolveControlChildPlan,
-  validateControlChildReservations,
-} from "./child-phase";
-// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
+  type ControlInstallation,
+  controlDigest,
+  controlOriginSchema,
+  digest,
+  type InstallationState,
+  targetSchema,
+  uuid,
+} from "./control-records";
 import {
   type CoordinatorPullBaseline,
   coordinatorPullBaselineSchema,
@@ -113,19 +59,47 @@ import {
   stagedCoordinatorObservationPayloadSchema,
   stagedCoordinatorSourceSchema,
 } from "./coordinator-pull-records";
-// biome-ignore-start lint/suspicious/noImportCycles: Fixed proof verification uses this module's original nominal authority and effect writer after initialization.
-import { recordFeedProxyReloadAttempted } from "./data-execution-candidate";
-// biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
 import { readDataManagerTerminal } from "./data-manager-terminal";
+import { dataUpdatePlanSchema } from "./data-update-records";
+import { dataUpdateSourcesDigest } from "./data-update-sources";
 import { AnchoredDirectory, identity } from "./filesystem";
+import {
+  type ControlChildPhase,
+  type ControlChildReservation,
+  type ControlRecipient,
+  childPhaseKinds,
+  controlChildOperationKey,
+  controlChildReservationSchema,
+  knownSettlement,
+  localLeases,
+  requireLocalLeases,
+  rootLeaseId,
+  verifyFiniteControlEdge,
+} from "./lease-store";
+import {
+  LOCAL_CREDENTIAL_TEMPLATE_KIND,
+  localCredentialTemplateOperationSchema,
+  localCredentialTemplateReceiptSchema,
+} from "./local-credential-template";
 import {
   MAINTENANCE_NAMESPACE,
   type MaintenanceFile,
   maintenanceFileName,
   parseMaintenanceFile,
 } from "./maintenance-file";
-export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
-const PRIVATE_RECORD_BYTES = 131072;
+import {
+  agentStoreLeases,
+  assertControlStorageAvailable,
+  closeControlInstallation,
+  controlPrivateRoot,
+  installationState,
+  readPrivateRecord,
+  registerControlInstallation,
+  writePrivateRecord,
+} from "./private-records";
+
+export type { ControlExecutionOrigin } from "../ops/control-root-key";
+
 declare const authorityBrand: unique symbol,
   peerBrand: unique symbol,
   settlementBrand: unique symbol,
@@ -143,105 +117,7 @@ export type ChildSettlement = {
   publication: "not_started" | "committed" | "unknown";
   terminalReceiptDigest: string;
 };
-export type { ControlExecutionOrigin } from "../ops/control-root-key";
 
-/** Where a role keeps its private control records: its own state directory. */
-export function controlPrivateRoot(infraDir: string, role: ControlIssuer): string {
-  return join(infraDir, "state", role, "control");
-}
-/** Data-manager's private records, as its container mounts them. */
-export const DATA_MANAGER_CONTAINER_PRIVATE_ROOT = "/var/lib/openmapx/control";
-/** Creates each role's private record directory; render and host commands call it. */
-export function provisionControlDirectories(infraDir: string): void {
-  const infra = new AnchoredDirectory(infraDir);
-  try {
-    const state = infra.directory("state", true);
-    try {
-      for (const role of CONTROL_ROLES) {
-        const roleRoot = state.directory(role, true);
-        try {
-          roleRoot.directory("control", true, true).close();
-        } finally {
-          roleRoot.close();
-        }
-      }
-    } finally {
-      state.close();
-    }
-  } finally {
-    infra.close();
-  }
-}
-const installations = new WeakMap<object, InstallationState>();
-/** The agent's own lease store, as its processes and the host CLI see it. */
-export function agentStoreLeases(infraDir: string, role: ControlIssuer): LeaseBackend {
-  return localLeaseBackend(
-    openLeaseStore({ directory: leaseStoreDirectory(infraDir), purpose: role }),
-  );
-}
-export function installationState(value: ControlInstallation): InstallationState {
-  const state = installations.get(value);
-  if (!state) throw Error("Unverified control installation");
-  state.privateRoot.check();
-  return state;
-}
-/** Who wrote a control record: a fixed child's id, or the role itself. */
-export function controlIdentity(installation: ControlInstallation): string {
-  return installationState(installation).fixedChildId ?? installation.role;
-}
-/** Called only at fixed host/service startup; infraDir is the configured installation, never a request field. */
-export function openControlInstallation(options: {
-  infraDir: string;
-  role: ControlIssuer;
-  serviceIds?: readonly string[];
-  container?: boolean;
-  /** Data-manager and the host CLI pass the agent's routes; others use its store. */
-  leases?: LeaseBackend;
-}): ControlInstallation {
-  if (options.serviceIds?.length) targetSchema.parse([...new Set(options.serviceIds)].sort());
-  const container = options.container === true && options.role === "data-manager";
-  let privateRoot: AnchoredDirectory | undefined;
-  try {
-    privateRoot = new AnchoredDirectory(
-      container
-        ? DATA_MANAGER_CONTAINER_PRIVATE_ROOT
-        : controlPrivateRoot(options.infraDir, options.role),
-      undefined,
-      true,
-    );
-    const dataRoot = container ? "/data" : join(options.infraDir, "data");
-    const privateRelative = relative(realpathSync(dataRoot), realpathSync(privateRoot.path));
-    if (!privateRelative || (!privateRelative.startsWith("../") && privateRelative !== ".."))
-      throw Error("Role recovery material is inside the shared data mount");
-    const data = new AnchoredDirectory(dataRoot);
-    try {
-      if (
-        identity(data.stat).dev === identity(privateRoot.stat).dev &&
-        identity(data.stat).ino === identity(privateRoot.stat).ino
-      )
-        throw Error("Role recovery material must be outside shared data");
-    } finally {
-      data.close();
-    }
-    const installation = Object.freeze({ role: options.role }) as ControlInstallation;
-    installations.set(installation, {
-      installation,
-      privateRoot,
-      dataRoot,
-      registeredTargets: new Set(options.serviceIds ?? []),
-      leases: options.leases ?? agentStoreLeases(options.infraDir, options.role),
-    });
-    privateRoot = undefined;
-    return installation;
-  } finally {
-    privateRoot?.close();
-  }
-}
-export function closeControlInstallation(installation: ControlInstallation) {
-  const s = installationState(installation);
-  s.privateRoot.close();
-  installations.delete(installation);
-}
 export interface ControlPlannedChild {
   phase: ControlChildPhase;
   ordinal: number;
@@ -283,38 +159,6 @@ export function executionAuthorityState(value: VerifiedExecutionAuthority) {
     throw Error("Durable execution authority changed");
   return s;
 }
-export function writePrivateRecord(
-  state: InstallationState,
-  namespace: string,
-  name: string,
-  value: unknown,
-  exclusive = false,
-) {
-  const dir = state.privateRoot.directory(namespace, true, true);
-  try {
-    const bytes = canonicalJson(value);
-    if (Buffer.byteLength(bytes) > (namespace === "hardlinks" ? 1024 * 1024 : PRIVATE_RECORD_BYTES))
-      throw Error("Private receipt limit");
-    if (
-      ![
-        "executions",
-        "effects",
-        "effect-started",
-        "observations",
-        "spawns",
-        "spawn-started",
-        "configuration-maintenance",
-        "maintenance",
-        "hardlinks",
-        "catalog-commits",
-      ].includes(namespace)
-    )
-      throw Error("Unknown fixed authority namespace");
-    dir.write(name, bytes, exclusive);
-  } finally {
-    dir.close();
-  }
-}
 export function retainedExecutionOrigin(
   state: InstallationState,
   execution: ExecutionRef,
@@ -331,51 +175,6 @@ export function retainedExecutionOrigin(
   if (controlDigest(execution) !== controlDigest(admitted.execution))
     throw Error("Execution origin identity mismatch");
   return admitted.origin;
-}
-export function assertFreshControlRoot(key: string, requestedDeadlineAt: number | undefined): void {
-  const parsed = parseControlRootOperationKey(key);
-  if (requestedDeadlineAt !== parsed.notAfter || parsed.notAfter - Date.now() > 7 * 24 * 3600_000)
-    throw Error("A timed control root with its exact deadline is required");
-  // An expired root is refused whether or not its records were already pruned.
-  if (parsed.notAfter <= Date.now()) throw Error("Expired control root");
-}
-/** Refuses new control work, before any effect, when the role's private
- * state filesystem has less than 64 MiB free. */
-export function assertControlStorageAvailable(installation: ControlInstallation): void {
-  const { bavail, bsize } = statfsSync(installationState(installation).privateRoot.anchor);
-  if (bavail * bsize < 64 * 1024 * 1024)
-    throw Error("Control state filesystem is nearly full; free space before retrying");
-}
-export function controlInstallationDataRoot(installation: ControlInstallation): string {
-  return installationState(installation).dataRoot;
-}
-/** Fixed agent registry refresh after a repository publication/removal. This
- * local admission cache is populated from the literal trusted service loader,
- * never an operation's requested IDs. Retained roots keep their signed targets. */
-export function replaceControlRegisteredServiceIds(
-  installation: ControlInstallation,
-  serviceIds: readonly string[],
-): void {
-  const state = installationState(installation);
-  if (installation.role !== "ops-agent" || state.fixedChildId)
-    throw Error("Agent registry refresh required");
-  state.registeredTargets = new Set(targetSchema.parse([...new Set(serviceIds)].sort()));
-}
-export function controlRegisteredServiceIds(installation: ControlInstallation): string[] {
-  return [...installationState(installation).registeredTargets].sort();
-}
-export function readPrivateRecord(
-  state: InstallationState,
-  namespace: string,
-  name: string,
-  max: number = PRIVATE_RECORD_BYTES,
-): unknown {
-  const dir = state.privateRoot.directory(namespace);
-  try {
-    return JSON.parse(dir.read(name, max).toString("utf8"));
-  } finally {
-    dir.close();
-  }
 }
 /** Fixed adapters call after their own durable admission, passing the complete typed operation, never only its IDs. */
 export function retainAdmittedControlExecution(
@@ -1721,19 +1520,6 @@ export function retainedControlParent(execution: ExecutionRef): RetainedParentEx
   };
 }
 
-export const CONTROL_RECOVERY_INSTRUCTIONS =
-  "Run openmapx compose render on the installation host to provision control trust. For missing or conflicting retained records: stop all relevant writers and helpers, inspect the original private receipts and publication state, and repair only the exact owned record; never delete locks by age.";
-/** Availability is not authority. An unavailable signer leaves inspection/recovery HTTP routes intact. */
-export function loadControlStartup(options: Parameters<typeof openControlInstallation>[0]): {
-  installation?: ControlInstallation;
-  reason?: string;
-} {
-  try {
-    return { installation: openControlInstallation(options) };
-  } catch {
-    return { reason: CONTROL_RECOVERY_INSTRUCTIONS };
-  }
-}
 function executionWitnessDirectory(state: InstallationState, issuer: ControlIssuer) {
   // Execution witnesses stay in the role's own private state. Another role
   // learns about an execution from the request that names it, never from here.
@@ -1825,10 +1611,10 @@ function fixedParentForward(state: InstallationState): boolean {
 }
 /** Narrow local runtime fence; exact duplicate admission alone never grants forward permission. */
 export class ControlExecutionFencedError extends Error {}
-export function markFeedProxyReloadAttempted(authority: VerifiedExecutionAuthority): void {
-  withControlExecutionForward(authority, () => recordFeedProxyReloadAttempted(authority));
-}
-function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, run: () => T): T {
+export function withControlExecutionForward<T>(
+  authority: VerifiedExecutionAuthority,
+  run: () => T,
+): T {
   const s = executionAuthorityState(authority);
   const check = () =>
     withExecutionWriter(s.installation, s.execution, (dir) => {
@@ -2073,7 +1859,7 @@ export function openFixedChildInstallation(options: {
     const spawn = fixedChildSpawn(state, childKey);
     // A child of a parent that holds no lease follows its parent's lifecycle.
     if (options.child.leaseId === null) state.fixedParent = spawn.parent;
-    installations.set(installation, state);
+    registerControlInstallation(state);
     recovery = undefined;
     return installation;
   } finally {
@@ -2487,11 +2273,375 @@ export async function verifyDataUpdatePrerequisites(
   }
 }
 
-/** Opaque local file version, never a public hash of a credential value. */
-export function localFeedCredentialTemplateDigest(
-  installation: ControlInstallation,
-  operation: unknown,
-  contents?: string,
+export function validateControlChildReservations(input: {
+  role: ControlRecipient | "host-cli";
+  kind: string;
+  execution: ExecutionRef;
+  serviceIds: readonly string[];
+  plan: readonly ControlPlannedChild[];
+  reservations: readonly ControlChildReservation[];
+}): void {
+  const slots = [...input.plan, ...input.reservations].sort((a, b) => a.ordinal - b.ordinal);
+  if (
+    slots.length > 64 ||
+    new Set(slots.map((slot) => slot.execution.operationKey)).size !== slots.length
+  )
+    throw Error("Control child reservation capacity or duplicate key");
+  for (const [ordinal, slot] of slots.entries()) {
+    if (
+      slot.ordinal !== ordinal ||
+      slot.execution.operationKey !==
+        controlChildOperationKey(input.execution.operationKey, slot.phase, ordinal) ||
+      !childPhaseKinds[slot.phase]?.includes(slot.kind) ||
+      slot.serviceIds.some((id) => !input.serviceIds.includes(id))
+    )
+      throw Error("Invalid immutable child reservation");
+    if (
+      (slot.recipient === "fixed-cli" && slot.phase === "data-workflow") ||
+      (slot.recipient === "data-manager" &&
+        ["osm", "transit", "fonts", "data-step"].includes(slot.phase))
+    )
+      verifyDeadlineEdge(input.kind, slot.phase, slot.recipient, slot.kind);
+    else verifyFiniteControlEdge(input.role, input.kind, slot.phase, slot.recipient);
+    const executor =
+      slot.recipient === "ops-agent"
+        ? "ops-agent"
+        : slot.recipient === "data-manager"
+          ? "data-manager"
+          : "host-cli";
+    if (slot.execution.executor !== executor)
+      throw Error("Reserved receiver execution address mismatch");
+  }
+}
+const planSchema = z.lazy(() =>
+  z.strictObject({
+    phase: z.enum(Object.keys(childPhaseKinds) as [ControlChildPhase, ...ControlChildPhase[]]),
+    ordinal: z.number().int().min(0).max(63),
+    kind: z.string(),
+    recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
+    serviceIds: z.array(z.string()).max(256),
+    execution: executionRefSchema,
+  }),
+);
+const publicationSchema = z.discriminatedUnion("state", [
+  z.strictObject({ state: z.literal("unissued") }),
+  z.strictObject({
+    state: z.literal("grant_prepared"),
+    delegation: dataControlDelegationSchema,
+  }),
+]);
+const cellSchema = z.strictObject({
+  version: z.literal(2),
+  origin: controlOriginSchema,
+  parent: executionRefSchema,
+  admissionDigest: digest,
+  reservationDigest: digest,
+  binding: z
+    .strictObject({
+      child: planSchema,
+      boundAt: z.number().int().nonnegative().safe(),
+      requestedDeadlineAt: z.number().int().nonnegative().safe(),
+    })
+    .nullable(),
+  publication: publicationSchema,
+});
+type Cell = z.infer<typeof cellSchema>;
+const cellName = (authority: VerifiedExecutionAuthority, ordinal: number) =>
+  `phase-${authority.execution.operationKey}-${ordinal}.json`;
+function reservation(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  return localCredentialTemplateFileDigest(installationState(installation), operation, contents);
+  const state = executionAuthorityState(authority);
+  const value = state.reservations.find(
+    (r) => r.phase === input.phase && r.ordinal === input.ordinal,
+  );
+  if (!value) throw Error("Phase is absent from immutable reservations");
+  return { state, value };
+}
+function readCell(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
+): Cell {
+  const { state, value } = reservation(authority, input);
+  const raw = readPrivateRecord(
+    state.installation,
+    "observations",
+    cellName(authority, input.ordinal),
+    8192,
+  );
+  const cell = cellSchema.parse(raw);
+  if (
+    controlDigest(cell.origin) !== controlDigest(state.origin) ||
+    controlDigest(cell.parent) !== controlDigest(state.execution) ||
+    cell.admissionDigest !== state.receiptDigest ||
+    cell.reservationDigest !== controlDigest(value)
+  )
+    throw Error("Reserved phase binding identity changed");
+  if (cell.binding) {
+    const { child, boundAt, requestedDeadlineAt } = cell.binding;
+    const expected = {
+      phase: value.phase,
+      ordinal: value.ordinal,
+      kind: value.kind,
+      recipient: value.recipient,
+      serviceIds: value.serviceIds,
+      execution: {
+        ...value.execution,
+        operationFingerprint: value.operationFingerprint,
+        deadlineAt: requestedDeadlineAt,
+        fingerprint: executionFingerprint({
+          kind: value.kind,
+          operationFingerprint: value.operationFingerprint,
+          deadlineAt: requestedDeadlineAt,
+          parent: retainedControlParent(state.execution),
+        }),
+      },
+    };
+    if (
+      requestedDeadlineAt <= boundAt ||
+      requestedDeadlineAt > state.execution.deadlineAt ||
+      controlDigest(child) !== controlDigest(expected)
+    )
+      throw Error("Reserved phase exact identity mismatch");
+  } else if (cell.publication.state !== "unissued")
+    throw Error("An unbound phase cannot have a grant");
+  return cell;
+}
+function writeCell(
+  authority: VerifiedExecutionAuthority,
+  ordinal: number,
+  cell: Cell,
+  exclusive = false,
+) {
+  const state = executionAuthorityState(authority);
+  const record = cellSchema.parse(cell);
+  if (Buffer.byteLength(canonicalJson(record)) > 8192)
+    throw Error("Phase binding capacity exceeded");
+  writePrivateRecord(
+    state.installation,
+    "observations",
+    cellName(authority, ordinal),
+    record,
+    exclusive,
+  );
+}
+/** Called by durable admission before any forward witness/effect becomes ready. */
+export function initializeControlChildReservations(authority: VerifiedExecutionAuthority): void {
+  const state = executionAuthorityState(authority);
+  const cells = state.reservations.map((r) => ({
+    r,
+    cell: cellSchema.parse({
+      version: 2,
+      origin: state.origin,
+      parent: state.execution,
+      admissionDigest: state.receiptDigest,
+      reservationDigest: controlDigest(r),
+      binding: null,
+      publication: { state: "unissued" },
+    }),
+  }));
+  // Bound exact identities, decimal epoch lengths and UUID/digest publication
+  // fields have fixed maxima. Budget their complete records up front.
+  const maximum = cells.reduce((total, { r, cell }) => {
+    const largestExecution = {
+      executor: "ops-agent",
+      principal: "data-manager",
+      executionId: "f".repeat(68),
+      operationKey: "f".repeat(69),
+      operationFingerprint: "f".repeat(64),
+      fingerprint: "f".repeat(64),
+      deadlineAt: Number.MAX_SAFE_INTEGER,
+    };
+    const largest = {
+      ...cell,
+      binding: {
+        boundAt: Number.MAX_SAFE_INTEGER,
+        requestedDeadlineAt: Number.MAX_SAFE_INTEGER,
+        child: {
+          phase: r.phase,
+          ordinal: r.ordinal,
+          kind: r.kind,
+          recipient: r.recipient,
+          serviceIds: r.serviceIds,
+          execution: {
+            ...r.execution,
+            operationFingerprint: r.operationFingerprint,
+            deadlineAt: Number.MAX_SAFE_INTEGER,
+            fingerprint: "f".repeat(64),
+          },
+        },
+      },
+      publication: {
+        state: "grant_prepared",
+        delegation: {
+          leaseId: "f".repeat(36),
+          childKey: "f".repeat(36),
+          owner: largestExecution,
+          parent: largestExecution,
+          execution: largestExecution,
+          kind: r.kind,
+          phase: r.phase,
+          targets: r.serviceIds,
+          origin: state.origin,
+        },
+      },
+    };
+    const size = Buffer.byteLength(canonicalJson(largest));
+    if (size > 8192) throw Error("Phase binding cell capacity exceeded");
+    return total + size;
+  }, 0);
+  if (maximum > 128 * 1024) throw Error("Phase binding aggregate capacity exceeded");
+  for (const { r, cell } of cells) writeCell(authority, r.ordinal, cell, true);
+}
+export function lookupControlChildPhase(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
+): ControlPlannedChild | null {
+  return readCell(authority, input).binding?.child ?? null;
+}
+export async function bindControlChildPhase(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
+): Promise<ControlPlannedChild> {
+  const retained = readCell(authority, input);
+  if (retained.binding) return retained.binding.child;
+  return withControlDelegationPublication(authority, input.phase, () => {
+    const current = readCell(authority, input);
+    if (current.binding) return current.binding.child;
+    const { state, value } = reservation(authority, input),
+      boundAt = Date.now();
+    const requestedDeadlineAt = Math.min(
+      state.execution.deadlineAt,
+      boundAt + opsExecutionBudget(value.kind).processMs,
+    );
+    const normalized = normalizeExecutionAdmission({
+      kind: value.kind,
+      operationKey: value.execution.operationKey,
+      operationFingerprint: value.operationFingerprint,
+      admittedAt: boundAt,
+      requestedDeadlineAt,
+      parent: verifiedRetainedControlParent(state.installation.installation, state.execution),
+    });
+    const child = {
+      phase: value.phase,
+      ordinal: value.ordinal,
+      kind: value.kind,
+      recipient: value.recipient,
+      serviceIds: [...value.serviceIds],
+      execution: {
+        ...value.execution,
+        operationFingerprint: value.operationFingerprint,
+        deadlineAt: normalized.deadlineAt,
+        fingerprint: normalized.fingerprint,
+      },
+    };
+    writeCell(authority, value.ordinal, {
+      ...current,
+      binding: { child, boundAt, requestedDeadlineAt },
+    });
+    return child;
+  });
+}
+/** Internal fixed issuer hook, invoked while the actual publication guards are held. */
+export function prepareControlChildPublication(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
+  delegation: ControlDelegation,
+): void {
+  assertControlPublicationScope(authority);
+  const state = executionAuthorityState(authority);
+  if (!state.reservations.some((r) => r.phase === input.phase && r.ordinal === input.ordinal))
+    return;
+  const cell = readCell(authority, input);
+  if (!cell.binding || cell.publication.state !== "unissued")
+    throw Error("Reserved phase publication requires observation");
+  writeCell(authority, input.ordinal, {
+    ...cell,
+    publication: { state: "grant_prepared", delegation },
+  });
+}
+export function inspectControlChildPublication(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
+) {
+  const cell = readCell(authority, input);
+  return {
+    binding: cell.binding,
+    publication: cell.publication,
+    bindingDigest: controlDigest(cell.binding),
+  };
+}
+export function lookupControlChildPhaseBinding(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
+) {
+  const cell = readCell(authority, input);
+  return cell.binding
+    ? Object.freeze({ ...cell.binding, bindingDigest: controlDigest(cell.binding) })
+    : null;
+}
+/** The child an attempted phase issued, for observation and cancellation only.
+ * This returns no ticket and never repairs or reissues a missing attempt. */
+export function lookupControlChildPhaseAttempt(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; ordinal: number },
+) {
+  const cell = readCell(authority, input),
+    s = executionAuthorityState(authority);
+  if (cell.publication.state === "unissued") return null;
+  if (!cell.binding) throw Error("Attempted phase has no exact binding");
+  const delegation = cell.publication.delegation;
+  if (
+    delegation.kind !== cell.binding.child.kind ||
+    controlDigest(delegation.execution) !== controlDigest(cell.binding.child.execution) ||
+    controlDigest(delegation.parent) !== controlDigest(s.execution)
+  )
+    throw Error("Original phase child identity changed");
+  return Object.freeze({
+    channel: delegation.leaseId === null ? ("parent" as const) : ("delegation" as const),
+    delegation,
+    leaseId: delegation.leaseId,
+    childKey: delegation.childKey,
+    execution: cell.binding.child.execution,
+    bindingDigest: controlDigest(cell.binding),
+  });
+}
+export function resolveControlChildPlan(
+  authority: VerifiedExecutionAuthority,
+  input: { phase: ControlChildPhase; execution: ExecutionRef; recipient: ControlRecipient },
+): ControlPlannedChild | undefined {
+  const state = executionAuthorityState(authority);
+  const exact = state.plan.find(
+    (p) =>
+      p.phase === input.phase &&
+      p.recipient === input.recipient &&
+      controlDigest(p.execution) === controlDigest(input.execution),
+  );
+  if (exact) return exact;
+  const slot = state.reservations.find(
+    (r) => r.phase === input.phase && r.execution.operationKey === input.execution.operationKey,
+  );
+  if (!slot) return undefined;
+  const bound = lookupControlChildPhase(authority, slot);
+  if (
+    bound &&
+    bound.recipient === input.recipient &&
+    controlDigest(bound.execution) === controlDigest(input.execution)
+  )
+    return bound;
+  return undefined;
+}
+
+/**
+ * Checks that the execution's own root is released: its own effect settled
+ * with a known outcome and its lease is gone from the store.
+ */
+export function verifyLocalArtifactTargetRootRelease(authority: VerifiedExecutionAuthority): void {
+  if (!localRootReleased(authority)) throw Error("Original root release is not proved");
+}
+export function localRootReleased(authority: VerifiedExecutionAuthority): boolean {
+  const a = executionAuthorityState(authority);
+  childSettlementState(verifyControlEffectSettlement(a.installation.installation, a.execution));
+  return !requireLocalLeases(a.installation.leases).readSync(rootLeaseId(a.execution));
 }

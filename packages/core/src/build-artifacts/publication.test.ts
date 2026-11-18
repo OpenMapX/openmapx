@@ -8,8 +8,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createControlRootOperationKey } from "../ops/control-root-key";
 import { executionFingerprint } from "../ops/execution-identity";
 import { DEFAULT_ARTIFACT_ARCHIVE_LIMITS, validateBuildBundle, writeBuildBundle } from "./archive";
-import * as control from "./control-authority";
 import { acquireArtifactTargetLease, closeArtifactTargetLeaseHandle } from "./target-lease";
+import * as control from "./test-fixtures/control";
 
 vi.mock("node:fs", async (original) => {
   const actual = await original<typeof import("node:fs")>();

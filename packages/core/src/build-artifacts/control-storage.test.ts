@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 it("refuses a new admission before any record while the control filesystem is nearly full", async () => {
-  const control = await import("./control-authority");
+  const control = await import("./test-fixtures/control");
   const root = fs.mkdtempSync(join(tmpdir(), "omx-control-storage-"));
   roots.push(root);
   fs.mkdirSync(join(root, "data"), { mode: 0o700 });

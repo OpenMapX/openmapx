@@ -1,5 +1,6 @@
 /** Fixed cross-role reads obtain their paths from the installed nominal role. */
-import { type ControlInstallation, installationState } from "../build-artifacts/control-authority";
+import type { ControlInstallation } from "../build-artifacts/control-records";
+import { installationState } from "../build-artifacts/private-records";
 import {
   readCatalogActivationFile,
   readCatalogValidationFile,

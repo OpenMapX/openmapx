@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
+import { controlDigest } from "../build-artifacts/control-records";
+import { retainedExecutionOrigin } from "../build-artifacts/execution-record";
+import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import {
   closeControlInstallation,
   installationState,
   openControlInstallation,
   readPrivateRecord,
-  retainedExecutionOrigin,
   writePrivateRecord,
-} from "../build-artifacts/control-authority";
-import { controlDigest } from "../build-artifacts/control-records";
-import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
+} from "../build-artifacts/private-records";
 import {
   assertArtifactTargetLeaseExecution,
   catalogPinTargetOwner,

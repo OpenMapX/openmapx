@@ -1,7 +1,7 @@
 import type { OpsClient } from "../ops/client";
 import { type OpsOperation, type OpsResultFor, parseOpsResult } from "../ops/contract";
+import type { LeaseBackend } from "./lease-store";
 import { TargetBusyError } from "./lease-store";
-import type { LeaseBackend } from "./target-lease";
 
 export type LeaseOperation = Extract<
   OpsOperation,

@@ -1,8 +1,8 @@
 /** Immutable agent-signed proposals; retaining one never selects active pins. */
 import { join } from "node:path";
-import { type ControlInstallation, installationState } from "../build-artifacts/control-authority";
-import { controlDigest } from "../build-artifacts/control-records";
+import { type ControlInstallation, controlDigest } from "../build-artifacts/control-records";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
+import { installationState } from "../build-artifacts/private-records";
 import { canonicalJson } from "../ops/canonical-json";
 import { withConfigurationGenerationWriter } from "../services/configuration-generation";
 import { parseCatalogPinSet } from "./generation";

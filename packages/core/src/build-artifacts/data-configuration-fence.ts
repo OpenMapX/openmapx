@@ -18,17 +18,14 @@ import {
   dataConfigurationFenceSettleRequestSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
 import { startGenerationHardlinksExecutionSchema } from "../services/data-manager/contracts/executions";
+import { type ControlInstallation, controlDigest } from "./control-records";
 import {
   beginControlEffect,
   type ControlDelegation,
-  type ControlInstallation,
   type ControlTransportPrincipal,
   childSettlementState,
-  controlDigest,
   executionAuthorityState,
   inspectRemoteDelegation,
-  installationState,
-  readPrivateRecord,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainedControlParent,
@@ -36,8 +33,8 @@ import {
   type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
   withPrivateEffectWriter,
-  writePrivateRecord,
-} from "./control-authority";
+} from "./execution-record";
+import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 
 export interface DataFenceSql {
   unsafe(

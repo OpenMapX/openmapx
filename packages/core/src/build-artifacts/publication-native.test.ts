@@ -9,9 +9,9 @@ import { executionRefSchema } from "../ops/execution-ref";
 import { configurationWriterLockPath } from "../services/configuration-ownership";
 import { readLockHolder } from "../services/recoverable-lock";
 import type { ValidatedBuildBundle } from "./archive";
-import * as control from "./control-authority";
 import { inspectArtifactPublication, publishValidatedBuild } from "./publication";
-import * as leases from "./target-lease";
+import * as control from "./test-fixtures/control";
+import * as leases from "./test-fixtures/control";
 
 const cleanup: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => {

@@ -10,8 +10,8 @@ import {
   opsOperationFingerprint,
 } from "../../ops/index";
 import { DEFAULT_ARTIFACT_ARCHIVE_LIMITS, validateBuildBundle, writeBuildBundle } from "../archive";
-import * as control from "../control-authority";
 import { acquireArtifactTargetLease } from "../target-lease";
+import * as control from "./control";
 
 const root = process.argv[2]!,
   point = process.argv[3]!;

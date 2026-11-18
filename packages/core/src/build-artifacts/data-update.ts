@@ -10,20 +10,16 @@ import {
   readAppliedPlatformConfiguration,
 } from "../services/configuration-generation";
 import { resolvePlatformConfiguration } from "../services/platform-configuration";
-import {
-  controlDigest,
-  executionAuthorityState,
-  readPrivateRecord,
-  type VerifiedExecutionAuthority,
-  writePrivateRecord,
-} from "./control-authority";
+import { controlDigest } from "./control-records";
 import {
   createDataUpdatePlan,
   type DataUpdatePlan,
   dataUpdatePlanSchema,
 } from "./data-update-records";
 import { dataUpdateHostDefaults, dataUpdateSourcesDigest } from "./data-update-sources";
+import { executionAuthorityState, type VerifiedExecutionAuthority } from "./execution-record";
 import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
+import { readPrivateRecord, writePrivateRecord } from "./private-records";
 
 export function planDataUpdate(options: {
   infraDir: string;
@@ -131,4 +127,4 @@ export function assertDataUpdateSources(authority: VerifiedExecutionAuthority) {
   return plan;
 }
 
-export { verifyDataUpdatePrerequisites } from "./control-authority";
+export { verifyDataUpdatePrerequisites } from "./execution-record";

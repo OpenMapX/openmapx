@@ -1,8 +1,8 @@
 import { createInterface } from "node:readline";
-import * as c from "../control-authority";
 import { inspectControlAdmission } from "../peer-admission";
 import * as l from "../target-lease";
 import { verifiedParentForArtifactDelegation } from "../target-lease";
+import * as c from "./control";
 
 for await (const line of createInterface({ input: process.stdin })) {
   try {

@@ -1,28 +1,28 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-// biome-ignore-start lint/suspicious/noImportCycles: Recovery reads original receipts only after initialization; nominal writer/lease checks already depend on this control graph.
+import { controlDigest } from "../build-artifacts/control-records";
+import {
+  executionAuthorityState,
+  fixedChildSpawn,
+  type VerifiedExecutionAuthority,
+  withPrivateEffectWriter,
+} from "../build-artifacts/execution-record";
+import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import {
   closeControlInstallation,
   controlIdentity,
-  executionAuthorityState,
-  fixedChildSpawn,
   installationState,
   openControlInstallation,
   readPrivateRecord,
-  type VerifiedExecutionAuthority,
-  withPrivateEffectWriter,
   writePrivateRecord,
-} from "../build-artifacts/control-authority";
-import { controlDigest } from "../build-artifacts/control-records";
-import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
+} from "../build-artifacts/private-records";
 import {
   assertArtifactTargetLeaseContainmentOwner,
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseReceiptOwner,
   type TargetLeaseAuthority,
 } from "../build-artifacts/target-lease";
-// biome-ignore-end lint/suspicious/noImportCycles: Deferred original-source recovery checks.
 import { canonicalJson } from "../ops/canonical-json";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import {

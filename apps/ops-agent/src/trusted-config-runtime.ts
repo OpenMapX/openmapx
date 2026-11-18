@@ -17,7 +17,7 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
-import { retainConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
+import { retainConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/execution-record";
 import { configurationGenerationNonCommitForError } from "../../../packages/core/src/services/configuration-generation";
 import {
   type ConfigurationCandidateSource,

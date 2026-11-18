@@ -6,19 +6,21 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { createControlRootOperationKey } from "../ops";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
+import { CONTROL_PRUNE_AFTER_MS, pruneControlRecords } from "./control-prune";
+import type { ControlInstallation } from "./control-records";
 import {
-  assertFreshControlRoot,
-  type ControlInstallation,
-  closeControlInstallation,
-  openControlInstallation,
-  provisionControlDirectories,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
-} from "./control-authority";
-import { CONTROL_PRUNE_AFTER_MS, pruneControlRecords } from "./control-prune";
+} from "./execution-record";
 import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
+import {
+  assertFreshControlRoot,
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlDirectories,
+} from "./private-records";
 import {
   acquireArtifactTargetLease,
   releaseArtifactTargetLease,

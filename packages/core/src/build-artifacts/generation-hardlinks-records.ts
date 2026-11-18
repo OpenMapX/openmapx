@@ -4,12 +4,12 @@ import type { z } from "zod";
 import type { ExecutionRef } from "../ops/execution-ref";
 import type { CoordinatorMode } from "../ops/service-results";
 import { generationHardlinksPlanSchema } from "../services/data-manager/contracts/executions";
+import { controlDigest } from "./control-records";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
   controlChildReservationSchema,
-} from "./control-child-records";
-import { controlDigest } from "./control-records";
+} from "./lease-store";
 
 function uuid(key: string) {
   const b = createHash("sha256")

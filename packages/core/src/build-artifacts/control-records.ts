@@ -5,7 +5,7 @@ import { canonicalJson } from "../ops/canonical-json";
 import type { ControlExecutionOrigin } from "../ops/control-root-key";
 import type { ControlIssuer, ExecutionRef } from "../ops/execution-identity";
 import type { AnchoredDirectory } from "./filesystem";
-import type { LeaseBackend } from "./target-lease";
+import type { LeaseBackend } from "./lease-store";
 
 declare const installationBrand: unique symbol;
 export type ControlInstallation = Readonly<{

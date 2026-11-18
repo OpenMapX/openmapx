@@ -19,7 +19,6 @@ import {
   transitionMaintenance,
 } from "@openmapx/core/ops";
 import { z } from "zod";
-import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
 import {
   maintenanceFileName as fileName,
   type MaintenanceFile,
@@ -27,6 +26,7 @@ import {
   MAINTENANCE_NAMESPACE as NAMESPACE,
   parseMaintenanceFile,
 } from "../../../packages/core/src/build-artifacts/maintenance-file";
+import { installationState } from "../../../packages/core/src/build-artifacts/private-records";
 import type { DataConfigurationFenceReceipt } from "../../../packages/core/src/services/data-manager/contracts/configuration-maintenance";
 
 export type { MaintenanceFile };

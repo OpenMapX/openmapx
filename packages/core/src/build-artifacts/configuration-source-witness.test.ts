@@ -14,7 +14,7 @@ import {
   closeControlInstallation,
   openControlInstallation,
   provisionControlDirectories,
-} from "./control-authority";
+} from "./private-records";
 
 let root: string;
 beforeEach(async () => {

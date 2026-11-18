@@ -21,13 +21,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { heldTargets } from "../build-artifacts/__fixtures__/held-targets";
+import type { ControlInstallation } from "../build-artifacts/control-records";
+import { retainAdmittedControlExecution } from "../build-artifacts/execution-record";
 import {
-  type ControlInstallation,
   closeControlInstallation,
   openControlInstallation,
   provisionControlDirectories,
-  retainAdmittedControlExecution,
-} from "../build-artifacts/control-authority";
+} from "../build-artifacts/private-records";
 import {
   type ArtifactTargetLease,
   acquireArtifactTargetLease,

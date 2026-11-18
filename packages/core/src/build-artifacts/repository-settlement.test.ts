@@ -10,13 +10,15 @@ import {
 } from "../ops";
 import {
   beginControlEffect,
-  closeControlInstallation,
-  openControlInstallation,
-  provisionControlDirectories,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
-} from "./control-authority";
+} from "./execution-record";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlDirectories,
+} from "./private-records";
 
 it.each(["commit", "rollback", "release"] as const)(
   "records actual awaited repository %s as a known finite filesystem settlement",

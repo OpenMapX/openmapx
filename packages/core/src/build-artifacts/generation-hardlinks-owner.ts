@@ -28,28 +28,25 @@ import {
   unwrapDataManagerResponse,
 } from "../services/data-manager/transport";
 import { currentConfigurationFile, GENERATED_HARDLINK_PLAN_FILE } from "../services/deployment";
-import {
-  bindControlChildPhase,
-  consumeControlChildDispatch,
-  controlChildReservationSchema,
-  issueControlChildPhase,
-  lookupControlChildPhaseBinding,
-} from "./child-phase";
-import {
-  assertControlExecutionForward,
-  executionAuthorityState,
-  readPrivateRecord,
-  type VerifiedExecutionAuthority,
-  writePrivateRecord,
-} from "./control-authority";
 import { controlDigest } from "./control-records";
 import { readDataManagerTerminal } from "./data-manager-terminal";
 import {
+  assertControlExecutionForward,
+  bindControlChildPhase,
+  executionAuthorityState,
+  lookupControlChildPhaseBinding,
+  type VerifiedExecutionAuthority,
+  verifyLocalArtifactTargetRootRelease,
+} from "./execution-record";
+import { controlChildReservationSchema } from "./lease-store";
+import { readPrivateRecord, writePrivateRecord } from "./private-records";
+import {
   assertArtifactTargetLeaseExecution,
+  consumeControlChildDispatch,
   inspectLocalLeaseChildSettlement,
+  issueControlChildPhase,
   settleDataManagerLeaseChild,
   type TargetLeaseAuthority,
-  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 const schema = z.strictObject({

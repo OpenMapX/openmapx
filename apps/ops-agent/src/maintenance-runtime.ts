@@ -55,9 +55,9 @@ import {
 import {
   childSettlementState,
   inspectConfigurationGenerationNonCommit,
-  installationState,
-} from "../../../packages/core/src/build-artifacts/control-authority";
-import type { ControlChildReservation } from "../../../packages/core/src/build-artifacts/control-child-records";
+} from "../../../packages/core/src/build-artifacts/execution-record";
+import type { ControlChildReservation } from "../../../packages/core/src/build-artifacts/lease-store";
+import { installationState } from "../../../packages/core/src/build-artifacts/private-records";
 import { readConfigurationCandidate } from "./configuration-candidate-source";
 import {
   CONFIGURATION_HANDOFF_LABEL,

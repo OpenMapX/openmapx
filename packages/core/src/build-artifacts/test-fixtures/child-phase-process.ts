@@ -1,11 +1,7 @@
 import { writeSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { bindControlChildPhase } from "../child-phase";
-import {
-  closeControlInstallation,
-  openControlInstallation,
-  restoreAdmittedControlExecution,
-} from "../control-authority";
+import { bindControlChildPhase, restoreAdmittedControlExecution } from "../execution-record";
+import { closeControlInstallation, openControlInstallation } from "../private-records";
 
 const lines = createInterface({ input: process.stdin });
 for await (const line of lines) {

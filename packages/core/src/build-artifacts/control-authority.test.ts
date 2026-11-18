@@ -61,7 +61,7 @@ it("renewal refuses an expired timed root after all original identity details we
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 async function api() {
-  return import("./control-authority");
+  return import("./test-fixtures/control");
 }
 it("provisions each role's private records under its own state directory", async () => {
   const a = await api();
@@ -227,7 +227,7 @@ it("lets a fixed CLI child without a lease follow its parent's lifecycle", async
 
 async function deadlineFamily() {
   const c = await api();
-  const phase = await import("./child-phase");
+  const phase = await import("./test-fixtures/control");
   const { randomUUID } = await import("node:crypto");
   const { executionFingerprint } = await import("../ops/execution-identity");
   const { opsOperationFingerprint } = await import("../ops/fingerprint");

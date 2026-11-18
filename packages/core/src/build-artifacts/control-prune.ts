@@ -20,15 +20,14 @@ import { z } from "zod";
 import { executionRefSchema } from "../ops/execution-ref";
 import {
   type ControlInstallation,
-  childSettlementState,
-  installationState,
-  readPrivateRecord,
-  verifyControlEffectSettlement,
-} from "./control-authority";
-import { controlOriginSchema, type InstallationState } from "./control-records";
+  controlOriginSchema,
+  type InstallationState,
+} from "./control-records";
+import { childSettlementState, verifyControlEffectSettlement } from "./execution-record";
 import { AnchoredDirectory } from "./filesystem";
+import { rootLeaseId } from "./lease-store";
 import { MAINTENANCE_NAMESPACE } from "./maintenance-file";
-import { rootLeaseId } from "./target-lease";
+import { installationState, readPrivateRecord } from "./private-records";
 
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
 /** Namespaces swept by name. `executions` and `effects` go last; `configuration-maintenance` goes with its preparation. */

@@ -94,7 +94,7 @@ import {
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import Fastify, { type FastifyInstance } from "fastify";
-import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
+import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/execution-record";
 import { ArtifactTransferError } from "./artifact-transfer/errors";
 import {
   finishRestoredPreparedImport,

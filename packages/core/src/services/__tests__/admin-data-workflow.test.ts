@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
+import { retainAdmittedControlExecution } from "../../build-artifacts/execution-record";
 import {
   closeControlInstallation,
   openControlInstallation,
   provisionControlDirectories,
-  retainAdmittedControlExecution,
-} from "../../build-artifacts/control-authority";
+} from "../../build-artifacts/private-records";
 import {
   createControlRootOperationKey,
   executionFingerprint,

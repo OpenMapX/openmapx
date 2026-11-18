@@ -30,13 +30,13 @@ import {
   type ConfigurationReleaseSnapshot,
   configurationReleaseSnapshotSchema,
 } from "./configuration-release-snapshot";
+import { controlDigest } from "./control-records";
+import { generationHardlinksReservation } from "./generation-hardlinks-records";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
   controlChildReservationSchema,
-} from "./control-child-records";
-import { controlDigest } from "./control-records";
-import { generationHardlinksReservation } from "./generation-hardlinks-records";
+} from "./lease-store";
 
 const ids = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))

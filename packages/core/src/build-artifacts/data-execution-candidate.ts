@@ -18,28 +18,24 @@ import type { OpsOperation } from "../ops/contract";
 import { retainedParentExecutionSchema } from "../ops/execution-identity";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { opsOperationFingerprint } from "../ops/fingerprint";
-// biome-ignore lint/suspicious/noImportCycles: Candidate snapshots and fixed proof publication share the original phase/authority; calls occur after schema initialization.
-import { inspectControlChildPublication } from "./child-phase";
-// biome-ignore-start lint/suspicious/noImportCycles: Nominal execution verification is reused by the fixed producer after module initialization.
+import {
+  type ControlInstallation,
+  controlDigest,
+  controlOriginSchema,
+  sameControlOrigin,
+} from "./control-records";
 import {
   assertControlExecutionForward,
-  type ControlChildPhase,
-  type ControlInstallation,
-  controlChildOperationKey,
-  controlDigest,
   executionAuthorityState,
-  installationState,
-  readPrivateRecord,
+  inspectControlChildPublication,
   retainedControlParent,
   type VerifiedExecutionAuthority,
+  withControlExecutionForward,
   withPrivateEffectWriter,
-  writePrivateRecord,
-} from "./control-authority";
-// biome-ignore-end lint/suspicious/noImportCycles: Shared original execution verification described above.
-import { controlOriginSchema, sameControlOrigin } from "./control-records";
+} from "./execution-record";
 import { AnchoredDirectory, identity, sameInode } from "./filesystem";
-// biome-ignore lint/suspicious/noImportCycles: The candidate reads the agent's store through the same lease module as its issuer.
-import { localLeases } from "./target-lease";
+import { type ControlChildPhase, controlChildOperationKey, localLeases } from "./lease-store";
+import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 
 const schema = z.strictObject({
   version: z.literal(1),
@@ -776,3 +772,7 @@ export const {
     inspectFeedProxyValidationFailure,
   };
 })();
+/** Records that the proxy reload began, while the execution may still go forward. */
+export function markFeedProxyReloadAttempted(authority: VerifiedExecutionAuthority): void {
+  withControlExecutionForward(authority, () => recordFeedProxyReloadAttempted(authority));
+}

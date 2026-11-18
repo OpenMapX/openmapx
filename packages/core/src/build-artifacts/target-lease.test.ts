@@ -6,16 +6,18 @@ import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
+import type { ControlInstallation } from "./control-records";
 import {
-  type ControlInstallation,
-  closeControlInstallation,
-  openControlInstallation,
-  provisionControlDirectories,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
-} from "./control-authority";
+} from "./execution-record";
 import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlDirectories,
+} from "./private-records";
 
 let root: string;
 let installation: ControlInstallation;
@@ -40,7 +42,7 @@ function heldLeases() {
   return openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" }).list();
 }
 it("reconciles a settled root after a crash between settlement and release", async () => {
-  const c = await import("./control-authority"),
+  const c = await import("./test-fixtures/control"),
     a = await api();
   const authority = owner();
   const lease = await a.acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: authority });
@@ -185,7 +187,7 @@ it("rejects arbitrary caller text as effect evidence", async () => {
   ).toThrow(/evidence|receipt/);
 });
 it("issues no maintenance step from a bare terminal summary without the maintenance record", async () => {
-  const c = await import("./control-authority");
+  const c = await import("./test-fixtures/control");
   const a = await api();
   const { writeFileSync } = await import("node:fs");
   const agent = c.openControlInstallation({
@@ -305,7 +307,7 @@ it("holds a target lease and the configuration writer together", async () => {
     "../services/configuration-ownership"
   );
   const a = await api();
-  const c = await import("./control-authority");
+  const c = await import("./test-fixtures/control");
   const authority = owner();
   const lease = await a.acquireArtifactTargetLease({
     serviceIds: ["osrm"],
@@ -327,7 +329,7 @@ it("holds a target lease and the configuration writer together", async () => {
   await a.releaseArtifactTargetLease(lease);
 });
 it("does not turn an already-started execution into no-effect evidence", async () => {
-  const c = await import("./control-authority");
+  const c = await import("./test-fixtures/control");
   const authority = owner();
   c.beginControlEffect(authority);
   expect(() =>
@@ -339,7 +341,7 @@ it("does not turn an already-started execution into no-effect evidence", async (
   ).toThrow(/Started/);
 });
 it("does not restart effects after retaining unused-execution evidence", async () => {
-  const c = await import("./control-authority");
+  const c = await import("./test-fixtures/control");
   const authority = owner();
   c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",

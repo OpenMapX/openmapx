@@ -5,14 +5,16 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   cancelControlExecution,
+  restoreAdmittedControlExecution,
+  retainAdmittedControlExecution,
+} from "../build-artifacts/execution-record";
+import { AnchoredDirectory } from "../build-artifacts/filesystem";
+import { leaseStoreDirectory, openLeaseStore } from "../build-artifacts/lease-store";
+import {
   closeControlInstallation,
   openControlInstallation,
   provisionControlDirectories,
-  restoreAdmittedControlExecution,
-  retainAdmittedControlExecution,
-} from "../build-artifacts/control-authority";
-import { AnchoredDirectory } from "../build-artifacts/filesystem";
-import { leaseStoreDirectory, openLeaseStore } from "../build-artifacts/lease-store";
+} from "../build-artifacts/private-records";
 import {
   acquireArtifactTargetLease,
   closeArtifactTargetLeaseHandle,

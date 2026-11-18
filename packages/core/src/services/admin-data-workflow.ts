@@ -1,15 +1,14 @@
 /** Business progress, never execution authority. Uses original indexed private
  * records so retention/capacity/recovery remain owned by the control family. */
 import { z } from "zod";
+import { controlDigest } from "../build-artifacts/control-records";
 import {
-  controlDigest,
   executionAuthorityState,
-  readPrivateRecord,
   type VerifiedExecutionAuthority,
   withPrivateEffectWriter,
-  writePrivateRecord,
-} from "../build-artifacts/control-authority";
+} from "../build-artifacts/execution-record";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
+import { readPrivateRecord, writePrivateRecord } from "../build-artifacts/private-records";
 import { canonicalJson } from "../ops/canonical-json";
 import { type DataWorkflowReceipt, dataWorkflowReceiptSchema } from "../ops/job-evidence";
 

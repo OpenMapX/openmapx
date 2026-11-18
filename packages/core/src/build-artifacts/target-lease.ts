@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { opsOperationSchema } from "../ops/contract";
@@ -9,30 +9,26 @@ import {
   type VerifiedParentExecution,
 } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
-// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
-import { leaseTargetsSchema } from "../ops/lease-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import type { DataManagerTransport } from "../services/data-manager/transport";
-// biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
-import { prepareControlChildPublication, resolveControlChildPlan } from "./child-phase";
-// biome-ignore-end lint/suspicious/noImportCycles: Same exact deferred guard import.
-// biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
+import { controlDigest, type InstallationState, targetSchema } from "./control-records";
+import { assertDataManagerTerminal } from "./data-manager-terminal";
 import {
+  assertControlDelegationForward,
   assertControlExecutionForward,
+  attestParentExecution,
   type ChildSettlement,
-  type ControlChildPhase,
   type ControlDelegation,
-  type ControlRecipient,
-  childPhaseKinds,
   childSettlementState,
   controlPeerState,
   executionAuthorityState,
   fixedChildSpawn,
-  type InstallationState,
-  installationState,
+  inspectControlChildPublication,
   type LeaseChildRef,
-  readPrivateRecord,
+  lookupControlChildPhase,
+  prepareControlChildPublication,
   recoveryAuthorityState,
+  resolveControlChildPlan,
   retainedControlParent,
   type VerifiedChildSettlement,
   type VerifiedControlPeer,
@@ -42,24 +38,28 @@ import {
   verifyControlPreparedTerminal,
   verifyDataUpdatePrerequisites,
   withControlDelegationPublication,
-} from "./control-authority";
-import { controlChildOperationKey } from "./control-child-records";
-import { controlDigest, targetSchema } from "./control-records";
-import { assertDataManagerTerminal } from "./data-manager-terminal";
+} from "./execution-record";
 import {
+  admitRootLease,
+  type ControlChildPhase,
+  type ControlRecipient,
+  childPhaseKinds,
+  controlChildOperationKey,
+  descendantsOf,
+  furtherEdges,
   knownSettlement,
-  type LeaseChild,
+  type LeaseBackend,
   type LeaseRecord,
-  type LeaseSettlement,
-  type LeaseStore,
   leaseChildrenOf,
   leaseNodeForward,
+  localLeases,
+  requireLocalLeases,
+  rootLeaseId,
   sameExecution,
-  TargetBusyError,
+  settledKnown,
 } from "./lease-store";
+import { installationState, readPrivateRecord } from "./private-records";
 
-// biome-ignore lint/suspicious/noImportCycles: Type re-export for the existing shared settlement protocol.
-export type { ChildSettlement } from "./control-authority";
 export type ArtifactTargetLease = {
   readonly leaseId: string;
   readonly owner: ExecutionRef;
@@ -74,262 +74,6 @@ export type BorrowedArtifactTargetLease = {
   readonly mode: "borrowed";
 };
 export type TargetLeaseAuthority = ArtifactTargetLease | BorrowedArtifactTargetLease;
-
-/**
- * The lease calls every role makes. The agent, its fixed CLI children, its
- * configuration helper and the host CLI use the store directly; data-manager
- * asks the agent, which applies the same rules on its behalf.
- */
-export interface LeaseBackend {
-  acquire(input: {
-    owner: ExecutionRef;
-    ownerKind: string;
-    targets: readonly string[];
-  }): Promise<LeaseRecord>;
-  read(leaseId: string): Promise<LeaseRecord | undefined>;
-  delegate(input: {
-    leaseId: string;
-    child: Omit<LeaseChild, "state" | "adopted" | "settlement">;
-  }): Promise<LeaseRecord>;
-  settle(input: {
-    leaseId: string;
-    key: string | null;
-    settlement: LeaseSettlement;
-  }): Promise<LeaseRecord>;
-  cancel(input: { leaseId: string; key: string | null }): Promise<LeaseRecord | undefined>;
-  release(input: { leaseId: string }): Promise<void>;
-  /** Settles the data-manager child named by the settlement's identity, if it is still held. */
-  settleChild(settlement: LeaseSettlement): Promise<LeaseRecord | undefined>;
-}
-/** A role that reads the store itself also reads it without waiting and adopts children. */
-export interface LocalLeaseBackend extends LeaseBackend {
-  readSync(leaseId: string): LeaseRecord | undefined;
-  listSync(): LeaseRecord[];
-  adopt(input: { leaseId: string; key: string; execution: ExecutionRef }): Promise<LeaseRecord>;
-}
-/** The store-reading backend of a local role, or undefined for data-manager. */
-export function localLeases(backend: LeaseBackend): LocalLeaseBackend | undefined {
-  return "readSync" in backend ? (backend as LocalLeaseBackend) : undefined;
-}
-function requireLocalLeases(backend: LeaseBackend): LocalLeaseBackend {
-  const local = localLeases(backend);
-  if (!local) throw Error("This role cannot read the lease store");
-  return local;
-}
-
-const MAX_DESCENDANTS = 64;
-function nodeOf(lease: LeaseRecord, key: string | null) {
-  if (key === null) return lease;
-  const child = lease.children.find((entry) => entry.key === key);
-  if (!child) throw Error("Missing retained child node");
-  return child;
-}
-function descendantsOf(lease: LeaseRecord, key: string | null): LeaseChild[] {
-  if (key === null) return lease.children;
-  const result: LeaseChild[] = [];
-  for (const child of lease.children) {
-    let parent = child.parentKey;
-    while (parent !== null) {
-      if (parent === key) {
-        result.push(child);
-        break;
-      }
-      parent = lease.children.find((entry) => entry.key === parent)?.parentKey ?? null;
-    }
-  }
-  return result;
-}
-function settledKnown(node: { state: string; settlement?: LeaseSettlement }): boolean {
-  return node.state === "settled" && knownSettlement(node.settlement);
-}
-
-/** Who issues under `parentKey`, and the kind it runs: that child, or the lease's owner. */
-function issuerOf(lease: LeaseRecord, parentKey: string | null) {
-  if (parentKey === null)
-    return { role: lease.owner.executor, kind: lease.ownerKind, parent: undefined };
-  const parent = lease.children.find((entry) => entry.key === parentKey);
-  if (!parent) throw Error("Missing retained child node");
-  return { role: parent.recipient, kind: parent.kind, parent };
-}
-/** The phase a child may issue under itself, if any; a grandchild issues none. */
-function furtherEdges(lease: LeaseRecord, child: LeaseChild): string[] {
-  if (child.parentKey !== null) return [];
-  return verifyFiniteControlEdge(
-    lease.owner.executor,
-    lease.ownerKind,
-    child.phase as ControlChildPhase,
-    child.recipient,
-  );
-}
-
-/**
- * The id of the root lease `owner` holds. It is derived from the owner's key,
- * so the owner finds its lease in the store without a record of its own; one
- * key holds at most one root lease.
- */
-export function rootLeaseId(owner: Pick<ExecutionRef, "operationKey">): string {
-  const d = createHash("sha256")
-    .update("openmapx-root-lease\0")
-    .update(owner.operationKey)
-    .digest("hex");
-  return `${d.slice(0, 8)}-${d.slice(8, 12)}-4${d.slice(13, 16)}-8${d.slice(17, 20)}-${d.slice(20, 32)}`;
-}
-
-/** The lease rules, applied under the store lock by every writer; the edge grammar is checked here. */
-export const leaseRules = {
-  acquire(leases: LeaseRecord[], input: Parameters<LeaseBackend["acquire"]>[0], now: number) {
-    const existing = leases.find((lease) => sameExecution(lease.owner, input.owner));
-    if (existing) {
-      if (
-        existing.ownerKind !== input.ownerKind ||
-        canonicalJson(existing.targets) !== canonicalJson([...input.targets].sort())
-      )
-        throw Error("Execution already acquired a different root lease");
-      return existing;
-    }
-    if (now >= input.owner.deadlineAt) throw Error("Target closure or execution deadline mismatch");
-    // Another execution with the same key is a conflict, never a second lease.
-    if (leases.some((lease) => lease.owner.operationKey === input.owner.operationKey))
-      throw Error("Execution already acquired a root lease; reconcile its original identity");
-    const targets = leaseTargetsSchema.parse([...new Set(input.targets)].sort());
-    for (const target of targets) {
-      const holder = leases.find((lease) => lease.targets.includes(target));
-      if (holder) throw new TargetBusyError(target, holder);
-    }
-    const record: LeaseRecord = {
-      leaseId: rootLeaseId(input.owner),
-      owner: input.owner,
-      ownerKind: input.ownerKind,
-      targets,
-      state: "held",
-      children: [],
-      createdAt: now,
-    };
-    leases.push(record);
-    return record;
-  },
-  delegate(leases: LeaseRecord[], input: Parameters<LeaseBackend["delegate"]>[0], now: number) {
-    const lease = leases.find((value) => value.leaseId === input.leaseId);
-    if (!lease) throw Error("Target lease is not held");
-    const existing = lease.children.find((child) => child.key === input.child.key);
-    if (existing) {
-      if (!sameExecution(existing.execution, input.child.execution))
-        throw Error("Attempted child cannot be replayed");
-      return lease;
-    }
-    if (
-      !leaseNodeForward(lease, input.child.parentKey, now) ||
-      now >= input.child.execution.deadlineAt
-    )
-      throw Error("Lease does not permit forward delegation");
-    if (lease.children.length >= MAX_DESCENDANTS) throw Error("Child intent capacity exhausted");
-    if (
-      lease.children.some(
-        (child) => child.execution.operationKey === input.child.execution.operationKey,
-      )
-    )
-      throw Error("Attempted child cannot be replayed");
-    const issuer = issuerOf(lease, input.child.parentKey);
-    const scope = issuer.parent?.targets ?? lease.targets;
-    if (input.child.targets.some((id) => !scope.includes(id))) throw Error("Widened target subset");
-    if (issuer.parent && !furtherEdges(lease, issuer.parent).includes(input.child.phase))
-      throw Error("Unauthorized descendant edge");
-    verifyFiniteControlEdge(
-      issuer.role,
-      issuer.kind,
-      input.child.phase as ControlChildPhase,
-      input.child.recipient,
-    );
-    lease.children.push({ ...input.child, adopted: false, state: "held" });
-    return lease;
-  },
-  adopt(leases: LeaseRecord[], input: Parameters<LocalLeaseBackend["adopt"]>[0], now: number) {
-    const lease = leases.find((value) => value.leaseId === input.leaseId);
-    const child = lease?.children.find((value) => value.key === input.key);
-    if (!lease || !child || !sameExecution(child.execution, input.execution))
-      throw Error("Wrong peer principal, kind, key, fingerprint, or subset");
-    if (!child.adopted) {
-      if (!leaseNodeForward(lease, child.parentKey, now) || now >= child.execution.deadlineAt)
-        throw Error("Stale or canceled delegation");
-      child.adopted = true;
-    }
-    return lease;
-  },
-  settle(leases: LeaseRecord[], input: Parameters<LeaseBackend["settle"]>[0]) {
-    const lease = leases.find((value) => value.leaseId === input.leaseId);
-    if (!lease) throw Error("Target lease is not held");
-    const node = nodeOf(lease, input.key);
-    if (
-      !sameExecution(input.settlement.identity, "execution" in node ? node.execution : lease.owner)
-    )
-      throw Error("Foreign settlement identity");
-    for (const child of leaseChildrenOf(lease, input.key))
-      if (!settledKnown(child)) throw Error("Unsettled attempted child retains target fence");
-    if (node.state === "settled") {
-      if (canonicalJson(node.settlement) !== canonicalJson(input.settlement))
-        throw Error("Original settlement changed");
-      return lease;
-    }
-    node.settlement = input.settlement;
-    node.state = knownSettlement(input.settlement) ? "settled" : "recovery_required";
-    return lease;
-  },
-  /**
-   * Data-manager reports the outcome of a child it ran under another role's
-   * lease. The child is found by its identity; the first known outcome
-   * recorded, by data-manager or by the issuer from its status, is kept, and a
-   * released lease leaves nothing to settle.
-   */
-  settleChild(leases: LeaseRecord[], settlement: LeaseSettlement) {
-    for (const lease of leases) {
-      const child = lease.children.find(
-        (value) =>
-          value.recipient === "data-manager" && sameExecution(value.execution, settlement.identity),
-      );
-      if (!child) continue;
-      if (settledKnown(child)) return lease;
-      return leaseRules.settle(leases, { leaseId: lease.leaseId, key: child.key, settlement });
-    }
-    return undefined;
-  },
-  cancel(leases: LeaseRecord[], input: Parameters<LeaseBackend["cancel"]>[0]) {
-    const lease = leases.find((value) => value.leaseId === input.leaseId);
-    if (!lease) return undefined;
-    const node = nodeOf(lease, input.key);
-    if (node.state === "held") node.state = "cancel_pending";
-    return lease;
-  },
-  release(leases: LeaseRecord[], input: Parameters<LeaseBackend["release"]>[0]) {
-    const index = leases.findIndex((value) => value.leaseId === input.leaseId);
-    const lease = leases[index];
-    if (!lease) return;
-    if (!settledKnown(lease)) throw Error("Durable own-effect settlement is required");
-    if (lease.children.some((child) => !settledKnown(child)))
-      throw Error("Every attempted descendant must settle");
-    leases.splice(index, 1);
-  },
-};
-
-/** The agent's own lease backend over its store. */
-export function localLeaseBackend(
-  store: LeaseStore,
-  now: () => number = Date.now,
-): LocalLeaseBackend {
-  const get = (leaseId: string) => store.get(leaseId);
-  return {
-    acquire: (input) => store.update((leases) => leaseRules.acquire(leases, input, now())),
-    read: async (leaseId) => get(leaseId),
-    readSync: get,
-    listSync: () => store.list(),
-    delegate: (input) => store.update((leases) => leaseRules.delegate(leases, input, now())),
-    adopt: (input) => store.update((leases) => leaseRules.adopt(leases, input, now())),
-    settle: (input) => store.update((leases) => leaseRules.settle(leases, input)),
-    cancel: (input) => store.update((leases) => leaseRules.cancel(leases, input)),
-    release: (input) => store.update((leases) => leaseRules.release(leases, input)),
-    settleChild: (settlement) =>
-      store.update((leases) => leaseRules.settleChild(leases, settlement)),
-  };
-}
 
 interface State {
   backend: LeaseBackend;
@@ -386,112 +130,6 @@ function current(s: State): LeaseRecord | undefined {
 async function fresh(s: State): Promise<LeaseRecord | undefined> {
   s.seen = await s.backend.read(s.leaseId);
   return s.seen;
-}
-
-export function verifyFiniteControlEdge(
-  role: ControlRecipient | "host-cli",
-  kind: string,
-  phase: ControlChildPhase,
-  recipient: ControlRecipient,
-): string[] {
-  if (role === "data-manager") {
-    if (kind === "catalog.validate") {
-      if (
-        recipient !== "ops-agent" ||
-        !["stop-staging", "restart-staging", "proxy-stage", "proxy-restore"].includes(phase)
-      )
-        throw Error("Unauthorized catalog validation child edge");
-      return [];
-    }
-    if (
-      !["transit-sync", "catalog.activate", "transit-maintenance"].includes(kind) ||
-      recipient !== "ops-agent" ||
-      ![
-        "stop-primary",
-        "stop-staging",
-        "restart-staging",
-        "promote-primary",
-        "recover-primary",
-        "proxy-stage",
-        "proxy-commit",
-        "proxy-restore",
-        "paired-pin-commit",
-      ].includes(phase) ||
-      (phase === "paired-pin-commit" && kind !== "catalog.activate")
-    )
-      throw Error("Unauthorized data-manager child edge");
-    return [];
-  }
-  if (
-    role === "ops-agent" &&
-    recipient === "fixed-cli" &&
-    ["lifecycle", "build", "data-link", "data-clean", "data-finalization"].includes(phase) &&
-    childPhaseKinds[phase].includes(kind)
-  )
-    return phase === "data-clean" ? [] : ["hardlinks"];
-  if (
-    ["ops-agent", "fixed-cli", "host-cli"].includes(role) &&
-    recipient === "data-manager" &&
-    phase === "hardlinks" &&
-    [
-      "service.start",
-      "service.update",
-      "service.build",
-      "services.buildAll",
-      "data.link",
-      "configuration.hardlinks.apply",
-      "data.update",
-      "artifactTransfer.import",
-    ].includes(kind)
-  )
-    return [];
-  if (
-    role === "ops-agent" &&
-    recipient === "configuration-helper" &&
-    phase === "configuration-handoff" &&
-    kind === "configurationHandoff.prepare"
-  )
-    return [];
-  if (role === "ops-agent" && kind === "configurationMaintenance.prepare") {
-    if (recipient === "data-manager" && phase === "configuration-fence") return [];
-    if (
-      recipient === "ops-agent" &&
-      [
-        "configuration-commit",
-        "maintenance-hardlinks",
-        "maintenance-recreate",
-        "maintenance-handoff",
-      ].includes(phase)
-    )
-      return phase === "maintenance-hardlinks"
-        ? ["hardlinks"]
-        : phase === "maintenance-handoff"
-          ? ["configuration-handoff"]
-          : [];
-  }
-  throw Error("Unauthorized finite control edge");
-}
-
-/**
- * Acquires the root lease of `owner`, or returns the one it already holds. A
- * holder that is finishing gets five seconds to release, within the deadline;
- * after that a held target refuses with the holder named.
- */
-export async function admitRootLease(
-  backend: Pick<LeaseBackend, "acquire">,
-  input: Parameters<LeaseBackend["acquire"]>[0],
-  signal?: AbortSignal,
-): Promise<LeaseRecord> {
-  const until = Math.min(Date.now() + 5000, input.owner.deadlineAt);
-  for (;;) {
-    try {
-      return await backend.acquire(input);
-    } catch (error) {
-      if (!(error instanceof TargetBusyError) || Date.now() >= until) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      signal?.throwIfAborted();
-    }
-  }
 }
 
 export async function acquireArtifactTargetLease(options: {
@@ -627,7 +265,7 @@ export async function delegateArtifactTargetLease(
 /** The store row of a child, for a receiver that reads the store. No adoption or effect authority. */
 export function inspectArtifactDelegation(options: {
   leaseChild: LeaseChildRef;
-  installation: import("./control-authority").ControlInstallation;
+  installation: import("./control-records").ControlInstallation;
 }) {
   const local = installationState(options.installation);
   const lease = requireLocalLeases(local.leases).readSync(options.leaseChild.leaseId),
@@ -650,7 +288,7 @@ export function inspectArtifactDelegation(options: {
 
 /** The parent that issued a delegation, for a recipient that reads the store. */
 export function verifiedParentForArtifactDelegation(
-  installation: import("./control-authority").ControlInstallation,
+  installation: import("./control-records").ControlInstallation,
   leaseChild: LeaseChildRef,
   execution: ExecutionRef,
 ): VerifiedParentExecution {
@@ -830,19 +468,6 @@ export function restoreArtifactTargetLeaseForSettlement(
     settlementOnly: true,
   }) as ArtifactTargetLease;
 }
-/**
- * Checks that the execution's own root is released: its own effect settled
- * with a known outcome and its lease is gone from the store.
- */
-export function verifyLocalArtifactTargetRootRelease(authority: VerifiedExecutionAuthority): void {
-  if (!localRootReleased(authority)) throw Error("Original root release is not proved");
-}
-function localRootReleased(authority: VerifiedExecutionAuthority): boolean {
-  const a = executionAuthorityState(authority);
-  childSettlementState(verifyControlEffectSettlement(a.installation.installation, a.execution));
-  return !requireLocalLeases(a.installation.leases).readSync(executionLeaseId(authority));
-}
-
 /** Settles the owner from recovery evidence and releases it when every child is known. */
 export async function reconcileArtifactTargetLease(options: {
   leaseId: string;
@@ -981,7 +606,7 @@ export async function settleDataManagerLeaseChild(
  * recorded even when the issuer's own observation was interrupted.
  */
 export async function settleOwnLeaseChild(
-  installation: import("./control-authority").ControlInstallation,
+  installation: import("./control-records").ControlInstallation,
   execution: ExecutionRef,
 ): Promise<void> {
   const settlement = childSettlementState(
@@ -1063,7 +688,7 @@ export function catalogPinTargetOwner(lease: TargetLeaseAuthority) {
 
 /** The delegation's root lease is still held by its owner. Observation only. */
 export function assertArtifactDelegationRootHeld(
-  installation: import("./control-authority").ControlInstallation,
+  installation: import("./control-records").ControlInstallation,
   leaseChild: LeaseChildRef,
 ): void {
   const local = installationState(installation),
@@ -1072,7 +697,7 @@ export function assertArtifactDelegationRootHeld(
 }
 /** Read-only terminal evidence of a borrowed child after the agent restarted. */
 export function verifyRetainedArtifactTargetSettlement(
-  installation: import("./control-authority").ControlInstallation,
+  installation: import("./control-records").ControlInstallation,
   leaseChild: LeaseChildRef,
   execution: ExecutionRef,
 ): void {
@@ -1117,4 +742,71 @@ export function restoreConfigurationMaintenancePhaseIssuer(
     closeArtifactTargetLeaseHandle(lease);
     throw error;
   }
+}
+
+const dispatchBrand = Symbol("fresh-control-child-dispatch");
+export type FreshControlChildDispatch = Readonly<{ [dispatchBrand]: true }>;
+const tickets = new WeakMap<
+  FreshControlChildDispatch,
+  {
+    used: boolean;
+    authority: VerifiedExecutionAuthority;
+    phase: ControlChildPhase;
+    deadlineAt: number;
+  }
+>();
+export async function issueControlChildPhase(
+  authority: VerifiedExecutionAuthority,
+  input: {
+    phase: ControlChildPhase;
+    ordinal: number;
+    /** A fixed CLI child's key, chosen with its spawn record. */
+    childKey?: string;
+    lease?: TargetLeaseAuthority;
+    /** What the child acts on, recorded with its grant for the recipient. */
+    evidence?: Record<string, unknown>;
+  },
+) {
+  const child = lookupControlChildPhase(authority, input);
+  if (!child) throw Error("Child phase is not bound");
+  const before = inspectControlChildPublication(authority, input);
+  if (before.publication.state !== "unissued") throw Error("Attempted child requires observation");
+  if (
+    input.lease &&
+    controlDigest(input.lease.mode === "owner" ? input.lease.owner : input.lease.execution) !==
+      controlDigest(authority.execution)
+  )
+    throw Error("Foreign phase target authority");
+  const delegation = input.lease
+    ? await delegateArtifactTargetLease(input.lease, {
+        ...child,
+        ...(input.childKey ? { childKey: input.childKey } : {}),
+        ...(input.evidence ? { evidence: input.evidence } : {}),
+      })
+    : await attestParentExecution(authority, {
+        ...child,
+        ...(input.childKey ? { childKey: input.childKey } : {}),
+      });
+  const saved = inspectControlChildPublication(authority, input);
+  if (saved.publication.state !== "grant_prepared")
+    throw Error("Child publication was not retained");
+  const dispatchTicket = Object.freeze({ [dispatchBrand]: true as const });
+  tickets.set(dispatchTicket, {
+    used: false,
+    authority,
+    phase: input.phase,
+    deadlineAt: child.execution.deadlineAt,
+  });
+  return {
+    channel: input.lease ? ("delegation" as const) : ("parent" as const),
+    delegation,
+    dispatchTicket,
+  };
+}
+export function consumeControlChildDispatch(ticket: FreshControlChildDispatch): void {
+  const saved = tickets.get(ticket);
+  if (!saved || saved.used) throw Error("Missing or consumed child dispatch ticket");
+  saved.used = true;
+  assertControlDelegationForward(saved.authority, saved.phase);
+  if (Date.now() >= saved.deadlineAt) throw Error("Child dispatch deadline elapsed");
 }

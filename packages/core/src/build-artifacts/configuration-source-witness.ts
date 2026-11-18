@@ -15,12 +15,8 @@ import {
 } from "../services/configuration-generation";
 import { serviceSelectionPath } from "../services/deployment";
 import type { LoadedService } from "../services/types";
-import {
-  type ControlInstallation,
-  installationState,
-  readPrivateRecord,
-  writePrivateRecord,
-} from "./control-authority";
+import type { ControlInstallation } from "./control-records";
+import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 
 const domain = "openmapx-configuration-source-witness-v1";
 const witnessSchema = z.strictObject({
