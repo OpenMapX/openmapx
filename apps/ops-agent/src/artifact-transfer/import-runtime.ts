@@ -19,7 +19,6 @@ import {
 } from "@openmapx/core/build-artifacts/publication";
 import {
   artifactImportPreviewSchema,
-  type ExecutionRef,
   type OpsOperation,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";

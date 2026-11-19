@@ -1,18 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { opsOperationSchema } from "../ops/contract";
 import { controlOriginSchema } from "../ops/control-root-key";
-import {
-  type ExecutionRef,
-  executionRefSchema,
-  type VerifiedParentExecution,
-} from "../ops/execution-identity";
+import type { ExecutionRef, VerifiedParentExecution } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import type { DataManagerTransport } from "../services/data-manager/transport";
 import { controlDigest, type InstallationState, targetSchema } from "./control-records";
-import { assertDataManagerTerminal } from "./data-manager-terminal";
 import {
   assertControlDelegationForward,
   assertControlExecutionForward,

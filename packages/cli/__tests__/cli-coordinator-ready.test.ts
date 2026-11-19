@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
-import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createDataManagerTransport } from "@openmapx/core/data-manager-sdk";
 import * as ops from "@openmapx/core/ops";

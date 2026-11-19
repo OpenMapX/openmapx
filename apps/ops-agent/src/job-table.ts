@@ -2,6 +2,10 @@ import {
   CONTROL_PRUNE_AFTER_MS,
   closeArtifactTargetLeaseHandle,
   type ExecutionHandle,
+  journalExecution,
+  journalExecutionRow,
+  journalExecutionSchema,
+  type OwningExecutionRows,
   type TargetLeaseAuthority,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -230,6 +234,9 @@ export class JobTable<Observation = unknown> {
       job.terminalAt === undefined
     )
       return true;
+    // An execution's row goes with the control prune, which also checks its
+    // settlement, its key's expiry and the leases it ran under.
+    if (job.execution) return true;
     if (!this.options.controlRoots || !opsKindRequiresControlAuthority(job.operation.kind))
       return job.terminalAt + this.options.jobRetentionMs > nowMs;
     let notAfter = 0;
@@ -254,17 +261,87 @@ export class JobTable<Observation = unknown> {
     });
   }
 
-  /** A journal entry still describes this key's execution, directly or as the
-   * preparation its maintenance controls belong to; its records stay. */
+  /** Another journal entry still needs this key's records: an entry of that
+   * key without a row of its own, or a maintenance control of that
+   * preparation. */
   references(operationKey: string): boolean {
     for (const job of this.byId.values())
       if (
-        job.operationKey === operationKey ||
+        (job.operationKey === operationKey && !job.execution) ||
         ("prepareOperationKey" in job.operation &&
           job.operation.prepareOperationKey === operationKey)
       )
         return true;
     return false;
+  }
+
+  /**
+   * The execution rows of the agent's own operations, kept on their journal
+   * rows. A change is applied to the row in memory, so every later journal
+   * write carries it, and resolves once a journal write with it is durable.
+   */
+  executionRows(): OwningExecutionRows {
+    const jobOf = (key: string) => {
+      for (const job of this.byId.values()) if (job.operationKey === key) return job;
+      return undefined;
+    };
+    // Only a finished row whose outcome needs no recovery is offered to the prune.
+    const offered = (job: JobRecord) =>
+      job.execution !== undefined &&
+      job.terminalAt !== undefined &&
+      !recoveryRequired(job) &&
+      !this.configurationResultsSettling.has(job.operationId) &&
+      !this.activeControllers.has(job.operationId);
+    return {
+      owns: (key) => jobOf(key) !== undefined,
+      read: (key) => {
+        const job = jobOf(key);
+        return job && journalExecutionRow(job);
+      },
+      admit: async (row) => {
+        const job = jobOf(row.admission.execution.operationKey);
+        if (!job) throw Error("Missing journal operation");
+        const next = journalExecution(job, row);
+        if (job.execution) {
+          const { progress: _held, ...held } = job.execution,
+            { progress: _next, ...admitted } = next;
+          if (canonicalJson(held) !== canonicalJson(admitted))
+            throw Error("Conflicting retained execution identity");
+          return "retained";
+        }
+        job.execution = next;
+        await this.persist();
+        return "admitted";
+      },
+      update: async (key, change) => {
+        const job = jobOf(key);
+        if (!job?.execution) throw Error("Missing execution row");
+        const progress = structuredClone(job.execution.progress);
+        const result = change(progress);
+        job.execution = journalExecutionSchema.parse({ ...job.execution, progress });
+        await this.persist();
+        return result;
+      },
+      keys: (limit) => {
+        const keys = [...this.byId.values()].filter(offered).map((job) => job.operationKey);
+        return { keys: keys.slice(0, limit), complete: keys.length <= limit };
+      },
+      remove: (keys) =>
+        this.withAdmissionLock(async () => {
+          const removed = [...this.byId.values()].filter(
+            (job) => offered(job) && keys.includes(job.operationKey),
+          );
+          if (!removed.length) return;
+          await this.options.journal.replace(
+            [...this.byId.values()].filter((job) => !removed.includes(job)).map(persisted),
+          );
+          for (const job of removed) {
+            this.byId.delete(job.operationId);
+            this.byKey.delete(`${job.role}:${job.operationKey}`);
+            this.authorities.delete(job.operationId);
+          }
+        }),
+    };
   }
 
   /** Entries that need recovery are bounded separately, so they never use up
@@ -486,5 +563,6 @@ function persisted(job: JobRecord): PersistedOpsJob {
       ? {}
       : { terminationRequestedAt: job.terminationRequestedAt }),
     ...(job.interrupted && job.state === "failed" ? { interrupted: true as const } : {}),
+    ...(job.execution ? { execution: job.execution } : {}),
   };
 }

@@ -1,7 +1,9 @@
 /** Time-based prune of a role's own control records.
  *
- * An execution's records are removed once its effect outcome is known, its
- * root key has expired, at least 72 hours have passed since it finished, every
+ * The prune walks the role's execution rows (the agent's journal rows for its
+ * own operations, a row file per execution otherwise). An execution's records
+ * are removed once its effect outcome is known, its
+ * root key has expired, at least 72 hours have passed since it settled, every
  * lease it owns or borrowed has released its root, and no unfinished
  * maintenance owner record names it. Only records whose names derive from the
  * execution's own identifiers go: its operation key, the child keys it planned
@@ -12,17 +14,11 @@
  *
  * Deletions are independent and can be repeated. Readers never treat a
  * missing record as permission: a missing admission, effect or lease is
- * unknown, and an expired root key is refused at admission. An agent
- * execution also needs its sealed canonical terminal commitment. */
+ * unknown, and an expired root key is refused at admission. */
 import { rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { executionRefSchema } from "../ops/execution-ref";
-import {
-  type ControlInstallation,
-  controlOriginSchema,
-  type InstallationState,
-} from "./control-records";
+import type { ControlInstallation, InstallationState } from "./control-records";
 import { verifyControlEffectSettlement } from "./execution-record";
 import { AnchoredDirectory } from "./filesystem";
 import { rootLeaseId } from "./lease-store";
@@ -33,22 +29,9 @@ export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
 /** Namespaces swept by name. The execution row goes last; `configuration-maintenance` goes with its preparation. */
 const NAMESPACES = ["observations", "spawns", "spawn-started", "catalog-commits"] as const;
 const MAX_ENTRIES = 65536;
-const childSchema = z.object({ execution: z.object({ operationKey: z.string() }) });
-const admissionSchema = z
-  .object({
-    execution: executionRefSchema,
-    origin: controlOriginSchema,
-    kind: z.string(),
-    operation: z
-      .object({ maintenanceId: z.uuid().optional(), handoffId: z.uuid().optional() })
-      .passthrough()
-      .optional(),
-    leaseChild: z.object({ leaseId: z.uuid() }).passthrough().optional(),
-    plan: z.array(childSchema).optional(),
-    reservations: z.array(childSchema).optional(),
-  })
-  .passthrough();
-type Admission = z.infer<typeof admissionSchema>;
+const operationIdsSchema = z
+  .object({ maintenanceId: z.uuid().optional(), handoffId: z.uuid().optional() })
+  .catch({});
 const spawnSchema = z.object({ parent: z.object({ operationKey: z.string() }) }).passthrough();
 const lifecycleReceiptSchema = z.object({
   seed: z.object({ root: z.object({ operationKey: z.string() }) }),
@@ -135,26 +118,22 @@ function spawnIndex(local: InstallationState, onFull: () => void): Map<string, s
 async function prunable(
   installation: ControlInstallation,
   local: InstallationState,
-  name: string,
+  key: string,
   now: number,
   spawns: () => Map<string, string[]>,
 ): Promise<Prunable | null> {
-  const row = z
-    .object({ admission: admissionSchema, progress: z.object({ settlement: z.unknown() }) })
-    .parse(readPrivateRecord(local, "executions", name, 256 * 1024));
+  const row = local.rows.read(key);
+  if (!row) return null;
   const admitted = row.admission;
-  const key = admitted.execution.operationKey;
   if (admitted.origin.notAfter + CONTROL_PRUNE_AFTER_MS > now) return null;
-  // The row's last write is its settlement; a settled row is not written again.
-  const finishedAt = row.progress.settlement
-    ? (withNamespace(local, "executions", (dir) => mtime(dir, name)) ?? null)
-    : null;
+  const finishedAt = row.progress.settledAt;
   if (finishedAt === null || finishedAt + CONTROL_PRUNE_AFTER_MS > now) return null;
   const outcome = verifyControlEffectSettlement(installation, admitted.execution).outcome;
   if (outcome === "unknown") return null;
   // A step stays while the maintenance it belongs to still has its record;
   // that record goes only with its own preparation.
-  const maintenanceId = admitted.operation?.maintenanceId;
+  const operation = operationIdsSchema.parse(admitted.operation);
+  const maintenanceId = operation.maintenanceId;
   const ownerRecord = maintenanceId ? `${maintenanceId}.json` : undefined;
   const preparation = admitted.kind === "configurationMaintenance.prepare";
   if (
@@ -171,14 +150,9 @@ async function prunable(
   // Its own key and the keys of children it planned that have no admission of
   // their own in this role.
   add(["*"], key);
-  for (const child of [...(admitted.plan ?? []), ...(admitted.reservations ?? [])])
-    if (
-      withNamespace(local, "executions", (dir) =>
-        mtime(dir, `${child.execution.operationKey}.json`),
-      ) == null
-    )
-      add(["*"], child.execution.operationKey);
-  if (admitted.operation?.handoffId) add(["observations"], admitted.operation.handoffId);
+  for (const child of [...admitted.plan, ...admitted.reservations])
+    if (!local.rows.read(child.execution.operationKey)) add(["*"], child.execution.operationKey);
+  if (operation.handoffId) add(["observations"], operation.handoffId);
   // Fixed children it started: their spawn records.
   for (const id of spawns().get(key) ?? []) add(["spawns", "spawn-started"], id);
   // As a child under another holder's lease: that lease must be released.
@@ -252,9 +226,9 @@ export async function pruneControlRecords(
     reported = true;
   };
   if (local.fixedChildId) return [];
-  const names = (withNamespace(local, "executions", (dir) => entries(dir, onFull)) ?? [])
-    .filter((name) => name.endsWith(".json"))
-    .sort();
+  const listed = local.rows.keys(MAX_ENTRIES);
+  if (!listed.complete) onFull();
+  const names = listed.keys.sort();
   // Strays are recognised only against the complete list of admissions.
   const complete = !reported;
   const start = (cursors.get(local) ?? 0) % Math.max(names.length, 1),
@@ -266,10 +240,10 @@ export async function pruneControlRecords(
     index ??= spawnIndex(local, onFull);
     return index;
   };
-  for (const name of batch) {
-    if (options.keep?.(name.replace(/\.json$/, ""))) continue;
+  for (const key of batch) {
+    if (options.keep?.(key)) continue;
     try {
-      const value = await prunable(installation, local, name, now, spawns);
+      const value = await prunable(installation, local, key, now, spawns);
       if (value) found.push(value);
     } catch {
       /* An unreadable or unverifiable record is kept. */
@@ -302,17 +276,16 @@ export async function pruneControlRecords(
     if (reported) return [];
     // The row goes first, then its terminal commitment: a pass interrupted in
     // between leaves only that, removed as a stray below.
-    for (const [namespace, name] of [
-      ["executions", (key: string) => `${key}.json`],
-      ["observations", (key: string) => `terminal-${key}.json`],
-    ] as const)
-      withNamespace(local, namespace, (dir) => {
-        for (const key of keys) optional(() => dir.removeFile(name(key)));
-      });
+    await local.rows.remove(keys);
+    withNamespace(local, "observations", (dir) => {
+      for (const key of keys) optional(() => dir.removeFile(`terminal-${key}.json`));
+    });
   }
   // Terminal commitments whose row is gone, from an interrupted pass, go
   // once they are 72 hours old.
-  const admitted = new Set(names.filter((name) => !keys.some((key) => name === `${key}.json`)));
+  const admitted = new Set(
+    names.filter((name) => !keys.includes(name)).map((key) => `${key}.json`),
+  );
   if (complete)
     withNamespace(local, "observations", (dir) => {
       for (const entry of entries(dir, onFull)) {

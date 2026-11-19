@@ -234,7 +234,10 @@ describe("reviewed durable admission boundary", () => {
       records: () => [],
       replace: async () => {
         writes += 1;
-        if (writes >= 3) throw new Error("disk unavailable");
+        // Admission, its execution row, the running state and the effect
+        // start are written; the settlement, the terminal write and its
+        // fallback fail.
+        if (writes >= 5) throw new Error("disk unavailable");
       },
     };
     const app = await buildOpsAgentServer({

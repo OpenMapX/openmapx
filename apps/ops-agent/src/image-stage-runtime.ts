@@ -1,5 +1,4 @@
 /** Cache immutable content only; configured tags and container state are not changed. */
-import { join } from "node:path";
 import {
   assertControlExecutionForward,
   assertImageStageLeaseCompatibility,

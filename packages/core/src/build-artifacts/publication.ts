@@ -4,9 +4,8 @@ import { createHash } from "node:crypto";
 import { fsyncSync, lstatSync, mkdirSync, renameSync, rmdirSync, unlinkSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { z } from "zod";
-import { transferStageSchema } from "../ops/artifact-transfer";
 import { canonicalJson } from "../ops/canonical-json";
-import { type OpsJobStatus, opsOperationSchema } from "../ops/contract";
+import { opsOperationSchema } from "../ops/contract";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
   currentConfigurationGeneration,

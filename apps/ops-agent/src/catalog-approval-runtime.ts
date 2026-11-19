@@ -6,6 +6,7 @@ import type { ExecutionHandle, TargetLeaseAuthority } from "@openmapx/core/build
 import {
   assertControlExecutionForward,
   controlDigest,
+  executionReceipt,
   inspectArtifactDelegation,
   inspectDataTransitCandidate,
   restoreAdmittedControlExecution,
@@ -14,8 +15,6 @@ import {
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
-  catalogApprovalAdmissionSchema,
-  catalogPromotionEffectSchema,
   catalogRuntimeInputsSchema,
   publishCatalogPinSet,
   readCatalogActivation,
@@ -35,7 +34,6 @@ import {
 } from "@openmapx/core/ops";
 import { verifyDataTransitCandidateForExecution } from "../../../packages/core/src/build-artifacts/data-execution-candidate";
 import { AnchoredDirectory } from "../../../packages/core/src/build-artifacts/filesystem";
-import { readPrivateRecord } from "../../../packages/core/src/build-artifacts/private-records";
 import { dataManagerTerminal } from "./data-manager-terminal";
 import type { OpsRuntime } from "./runtime";
 
@@ -185,17 +183,9 @@ export function installCatalogApprovalRuntime(
       validated.result.validationId !== passed.validationId
     )
       throw Error("Successful original validation completion required");
-    const admission = catalogApprovalAdmissionSchema.parse(
-      readPrivateRecord(
-        own.installation,
-        "executions",
-        `${context.execution.operationKey}.json`,
-        65536,
-      ),
-    );
     if (
-      canonicalJson(admission.parent) !== canonicalJson(retainedControlParent(activation.parent)) ||
-      canonicalJson(admission.operation) !== canonicalJson(operation)
+      canonicalJson(own.parent) !== canonicalJson(retainedControlParent(activation.parent)) ||
+      canonicalJson(own.operation) !== canonicalJson(operation)
     )
       throw Error("Approval differs from its actual parent admission");
     const promoted = restoreAdmittedControlExecution(installation, activation.promotion.execution),
@@ -227,14 +217,11 @@ export function installCatalogApprovalRuntime(
       settlement.terminalReceiptDigest !== activation.promotion.terminalReceiptDigest
     )
       throw Error("Original successful promotion settlement required");
-    const effect = catalogPromotionEffectSchema.parse(
-      readPrivateRecord(
-        own.installation,
-        "effects",
-        `${activation.promotion.execution.operationKey}.json`,
-      ),
-    );
-    if (parseOpsResult("motis.primary.promote", effect.receipt.result).activeRunId !== passed.epoch)
+    const effect = executionReceipt(promoted);
+    if (
+      effect.kind !== "ops-result" ||
+      parseOpsResult("motis.primary.promote", effect.result).activeRunId !== passed.epoch
+    )
       throw Error("Promotion activated a different candidate");
     const selected = await runtime["transitousLock.inspect"](
       { kind: "transitousLock.inspect", proposalId: operation.proposalId, offset: 0 },

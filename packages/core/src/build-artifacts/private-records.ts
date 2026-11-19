@@ -1,12 +1,16 @@
 /** Each role's private control records: its installation, the directory only
  * it writes, and plain bounded records read back with schema checks. */
-import { fsyncSync, realpathSync, statfsSync } from "node:fs";
+import { realpathSync, statfsSync } from "node:fs";
 import { join, relative } from "node:path";
 import { canonicalJson } from "../ops/canonical-json";
 import { parseControlRootOperationKey } from "../ops/control-root-key";
 import type { ControlIssuer } from "../ops/execution-identity";
 import { type ControlInstallation, type InstallationState, targetSchema } from "./control-records";
-import { type ExecutionRows, fileExecutionRows } from "./execution-rows";
+import {
+  fileExecutionRows,
+  layeredExecutionRows,
+  type OwningExecutionRows,
+} from "./execution-rows";
 import { AnchoredDirectory, identity } from "./filesystem";
 import {
   type LeaseBackend,
@@ -115,9 +119,13 @@ export function openControlInstallation(options: {
     privateRoot?.close();
   }
 }
-/** Keeps this role's execution rows in `rows`, such as the agent's journal. */
-export function useExecutionRows(installation: ControlInstallation, rows: ExecutionRows): void {
-  installationState(installation).rows = rows;
+/** Keeps the rows `primary` owns there, such as the agent's journal; the rest stay in files. */
+export function keepExecutionRowsIn(
+  installation: ControlInstallation,
+  primary: OwningExecutionRows,
+): void {
+  const state = installationState(installation);
+  state.rows = layeredExecutionRows(primary, state.rows);
 }
 export function closeControlInstallation(installation: ControlInstallation) {
   const s = installationState(installation);

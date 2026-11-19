@@ -54,6 +54,8 @@ import {
   type ExecutionRow,
   type ExecutionSettlement,
   fileExecutionRows,
+  journalFileRows,
+  layeredExecutionRows,
   plannedChildSchema,
 } from "./execution-rows";
 import { AnchoredDirectory } from "./filesystem";
@@ -372,6 +374,7 @@ export async function retainAdmittedControlExecution(
       phase: "held",
       effectStartedAt: null,
       settlement: null,
+      settledAt: null,
       children: reservations.map((r) => ({ ordinal: r.ordinal, binding: null, delegation: null })),
     },
   });
@@ -601,6 +604,7 @@ function recordSettlement(
     if (!options.replaceUnknown || prior.outcome !== "unknown") return;
   }
   progress.settlement = payload;
+  progress.settledAt = Date.now();
 }
 /** Records the owner's terminal settlement as given; the module producing it proved it. */
 export function settleExecution(
@@ -682,6 +686,12 @@ export function inspectConfigurationGenerationNonCommit(
   )
     throw Error("Actual original generation noncommit required");
   return effect.receipt;
+}
+/** The receipt the execution's own settlement recorded. */
+export function executionReceipt(handle: ExecutionHandle): EffectReceipt {
+  const settlement = settlementOf(rowOf(handle));
+  if (!settlement) throw Error("Execution is not settled");
+  return settlement.receipt;
 }
 /** Whether the execution recorded its own settlement. */
 export function executionSettled(handle: ExecutionHandle): boolean {
@@ -1193,7 +1203,8 @@ export function openFixedChildInstallation(options: {
       registeredTargets: new Set(),
       // Fixed children run in the agent's container or its helper: both use the store.
       leases: agentStoreLeases(options.infraDir, "ops-agent"),
-      rows: fileExecutionRows(recovery),
+      // Its own row is a file; its parent's, when the agent journals it, is there.
+      rows: layeredExecutionRows(journalFileRows(options.infraDir), fileExecutionRows(recovery)),
       fixedChildId: childKey,
     };
     const spawn = fixedChildSpawn(state, childKey);

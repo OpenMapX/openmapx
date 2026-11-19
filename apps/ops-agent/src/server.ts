@@ -3,6 +3,7 @@ import {
   beginControlEffect,
   type ControlInstallation,
   inspectControlAdmission,
+  keepExecutionRowsIn,
   type LeaseStore,
   restoreAdmittedControlExecution,
   retainControlEffectReceipt,
@@ -190,6 +191,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     controlRoots: options.controlInstallation !== undefined,
     settlement,
   });
+  // The agent's operations keep their execution rows on their journal rows.
+  if (options.controlInstallation)
+    keepExecutionRowsIn(options.controlInstallation, table.executionRows());
   const activeStreams = () => options.artifactTransfers?.activeStreams ?? 0;
   /** The configuration maintenance runs its steps through the same claim and
    * dispatch as any operation, each under its own lease child. */

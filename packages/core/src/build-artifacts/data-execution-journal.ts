@@ -14,7 +14,6 @@ import {
   dataExecutionInputSchema,
   dataExecutionResultSchema,
   dataExecutionStatusSchema,
-  generationHardlinksPlanSchema,
   isDataExecutionTerminal,
   LOCAL_DATA_EXECUTION_KINDS,
   SHORT_DATA_EXECUTION_KINDS,

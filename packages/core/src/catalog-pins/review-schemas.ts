@@ -107,13 +107,6 @@ export function sameCatalogRuntimeInputs(
       JSON.stringify([...after.configuredKeys].sort())
   );
 }
-/** Fixed host-source codecs; these validate retained bytes and grant no authority. */
-export const catalogApprovalAdmissionSchema = z
-  .object({ parent: z.unknown(), operation: z.unknown() })
-  .passthrough();
-export const catalogPromotionEffectSchema = z
-  .object({ receipt: z.strictObject({ kind: z.literal("ops-result"), result: z.unknown() }) })
-  .passthrough();
 const catalogArtifactSchema = z.strictObject({
   path: z.string().min(1).max(4096),
   sha256: digest,

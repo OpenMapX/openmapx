@@ -1,4 +1,6 @@
 /** One durable row per execution: what was admitted, and how far it got. */
+
+import { join } from "node:path";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { type ControlExecutionOrigin, controlOriginSchema } from "../ops/control-root-key";
@@ -6,7 +8,7 @@ import { retainedParentExecutionSchema } from "../ops/execution-identity";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { leaseTargetsSchema } from "../ops/lease-records";
 import { dataControlDelegationSchema } from "../services/data-manager/contracts/executions";
-import { type AnchoredDirectory, acquireGuardDirectory, identity } from "./filesystem";
+import { AnchoredDirectory, acquireGuardDirectory, identity } from "./filesystem";
 import {
   type ControlChildPhase,
   type ControlChildReservation,
@@ -96,6 +98,8 @@ export const executionProgressSchema = z.strictObject({
   /** Recorded before the first effect; absent means nothing ran. */
   effectStartedAt: z.number().int().nonnegative().safe().nullable(),
   settlement: executionSettlementSchema.nullable(),
+  /** When the settlement was last recorded; the prune counts from it. */
+  settledAt: z.number().int().nonnegative().safe().nullable(),
   children: z.array(childCellSchema).max(64),
 });
 export type ExecutionProgress = z.infer<typeof executionProgressSchema>;
@@ -112,13 +116,20 @@ export const executionRowSchema = z.strictObject({
 /**
  * Where a role keeps its execution rows: the agent's journal for its
  * operations, a file per execution for a process that has no journal of its
- * own. Every change is durable before `update` resolves.
+ * own. Every change is durable before `admit`, `update` or `remove` resolves.
  */
 export interface ExecutionRows {
   read(operationKey: string): ExecutionRow | undefined;
   /** Records a new row; the same key with a different admission is a conflict. */
   admit(row: ExecutionRow): Promise<"admitted" | "retained">;
   update<T>(operationKey: string, change: (progress: ExecutionProgress) => T): Promise<T>;
+  /** Up to `limit` keys the prune may consider; `complete` when none were left out. */
+  keys(limit: number): { keys: string[]; complete: boolean };
+  remove(operationKeys: readonly string[]): Promise<void>;
+}
+/** A store that keeps only some keys, in front of another one. */
+export interface OwningExecutionRows extends ExecutionRows {
+  owns(operationKey: string): boolean;
 }
 
 /** Whether two admissions are the same; anything else under one key is a conflict. */
@@ -156,8 +167,18 @@ export function fileExecutionRows(privateRoot: AnchoredDirectory): ExecutionRows
       dir.close();
     }
   };
+  /** The rows directory, or undefined while no row was ever written. */
+  const existing = () => {
+    try {
+      return privateRoot.directory("executions");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+  };
   const read = (key: string): ExecutionRow | undefined => {
-    const dir = privateRoot.directory("executions", true, true);
+    const dir = existing();
+    if (!dir) return undefined;
     try {
       return executionRowSchema.parse(
         JSON.parse(dir.read(name(key), ROW_BYTES).toString("utf8")),
@@ -201,6 +222,185 @@ export function fileExecutionRows(privateRoot: AnchoredDirectory): ExecutionRows
         write(row, false);
         return result;
       });
+    },
+    keys(limit) {
+      const dir = existing();
+      if (!dir) return { keys: [], complete: true };
+      try {
+        let names: string[];
+        let complete = true;
+        try {
+          names = dir.listBounded(limit);
+        } catch (error) {
+          if ((error as Error).message !== "Authority directory capacity exceeded") throw error;
+          names = dir.list().slice(0, limit);
+          complete = false;
+        }
+        return {
+          keys: names
+            .filter((entry) => entry.endsWith(".json"))
+            .map((entry) => entry.slice(0, -".json".length))
+            .filter((key) => ROW_NAME.test(key)),
+          complete,
+        };
+      } finally {
+        dir.close();
+      }
+    },
+    async remove(keys) {
+      const dir = existing();
+      if (!dir) return;
+      try {
+        for (const key of keys)
+          try {
+            dir.removeFile(name(key));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+      } finally {
+        dir.close();
+      }
+    },
+  };
+}
+
+/**
+ * What the agent's journal row adds to its operation to hold the execution:
+ * the parts of the admission the row does not already carry, and the progress.
+ */
+export const journalExecutionSchema = z.strictObject({
+  serviceIds: leaseTargetsSchema,
+  plan: z.array(plannedChildSchema).max(64),
+  reservations: z.array(controlChildReservationSchema).max(64),
+  origin: controlOriginSchema,
+  progress: executionProgressSchema,
+});
+export type JournalExecution = z.infer<typeof journalExecutionSchema>;
+/** The fields of an agent journal row an execution row is made from. */
+export interface JournalOperation {
+  operationId: string;
+  operationKey: string;
+  role: "api" | "data-manager";
+  operationFingerprint: string;
+  fingerprint: string;
+  deadlineAt: number;
+  admittedAt: number;
+  requestedDeadlineAt?: number;
+  parent?: z.infer<typeof retainedParentExecutionSchema>;
+  leaseChild?: { leaseId: string; childKey: string };
+  operation: { kind: string };
+  execution?: JournalExecution;
+}
+/** The execution row a journal row holds, if any. */
+export function journalExecutionRow(job: JournalOperation): ExecutionRow | undefined {
+  if (!job.execution) return undefined;
+  const { progress, ...rest } = job.execution;
+  return {
+    admission: {
+      execution: {
+        executor: "ops-agent",
+        principal: job.role,
+        executionId: job.operationId,
+        operationKey: job.operationKey,
+        operationFingerprint: job.operationFingerprint,
+        fingerprint: job.fingerprint,
+        deadlineAt: job.deadlineAt,
+      },
+      kind: job.operation.kind,
+      operation: job.operation,
+      admittedAt: job.admittedAt,
+      ...(job.requestedDeadlineAt === undefined
+        ? {}
+        : { requestedDeadlineAt: job.requestedDeadlineAt }),
+      ...(job.parent ? { parent: job.parent } : {}),
+      ...(job.leaseChild ? { leaseChild: job.leaseChild } : {}),
+      ...rest,
+    },
+    progress,
+  };
+}
+/**
+ * What a journal row stores for `row`, which must be the row of `job`'s own
+ * operation; the same key with any other admission is a conflict.
+ */
+export function journalExecution(job: JournalOperation, row: ExecutionRow): JournalExecution {
+  const execution = journalExecutionSchema.parse({
+    serviceIds: row.admission.serviceIds,
+    plan: row.admission.plan,
+    reservations: row.admission.reservations,
+    origin: row.admission.origin,
+    progress: row.progress,
+  });
+  const composed = journalExecutionRow({ ...job, execution });
+  if (!composed || !sameAdmission(composed.admission, row.admission))
+    throw Error("Conflicting retained execution identity");
+  return execution;
+}
+
+const JOURNAL_BYTES = 24 * 1024 * 1024;
+/**
+ * The agent's journal as another process reads it: a fixed CLI child reads
+ * its parent's row there. Only the agent writes the journal.
+ */
+export function journalFileRows(infraDir: string): OwningExecutionRows {
+  const rows = () => {
+    let directory: AnchoredDirectory | undefined;
+    try {
+      directory = new AnchoredDirectory(join(infraDir, "state", "ops-agent"));
+      const file = z
+        .object({ version: z.literal(2), jobs: z.array(z.unknown()).max(512) })
+        .parse(JSON.parse(directory.read("jobs-v1.json", JOURNAL_BYTES).toString("utf8")));
+      const found = new Map<string, ExecutionRow>();
+      for (const job of file.jobs) {
+        const execution = (job as { execution?: unknown } | null)?.execution;
+        if (execution === undefined) continue;
+        const row = journalExecutionRow({
+          ...(job as JournalOperation),
+          execution: journalExecutionSchema.parse(execution),
+        });
+        if (row) found.set(row.admission.execution.operationKey, row);
+      }
+      return found;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return new Map<string, ExecutionRow>();
+      throw error;
+    } finally {
+      directory?.close();
+    }
+  };
+  const readOnly = () => Promise.reject(Error("Only the agent writes its journal"));
+  return {
+    owns: (key) => rows().has(key),
+    read: (key) => rows().get(key),
+    admit: readOnly,
+    update: readOnly,
+    keys: () => ({ keys: [], complete: true }),
+    remove: readOnly,
+  };
+}
+
+/** Keys `primary` owns are kept there; every other key is kept in `fallback`. */
+export function layeredExecutionRows(
+  primary: OwningExecutionRows,
+  fallback: ExecutionRows,
+): ExecutionRows {
+  const of = (key: string) => (primary.owns(key) ? primary : fallback);
+  return {
+    read: (key) => of(key).read(key),
+    admit: (row) => of(row.admission.execution.operationKey).admit(row),
+    update: (key, change) => of(key).update(key, change),
+    keys(limit) {
+      const first = primary.keys(limit),
+        second = fallback.keys(Math.max(0, limit - first.keys.length));
+      return {
+        keys: [...first.keys, ...second.keys],
+        complete: first.complete && second.complete,
+      };
+    },
+    async remove(keys) {
+      await primary.remove(keys.filter((key) => primary.owns(key)));
+      await fallback.remove(keys.filter((key) => !primary.owns(key)));
     },
   };
 }

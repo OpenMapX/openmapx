@@ -56,6 +56,7 @@ export {
   cancelControlExecution,
   type ExecutionHandle,
   executionEffectStarted,
+  executionReceipt,
   fixedCliArguments,
   inspectConfigurationPreEffectRefusal,
   inspectRemoteDelegation,
@@ -82,6 +83,14 @@ export {
   verifyLocalControlPeer,
   verifyMaintenanceCoordinatorPrerequisite,
 } from "./execution-record";
+export {
+  type ExecutionRow,
+  type JournalExecution,
+  journalExecution,
+  journalExecutionRow,
+  journalExecutionSchema,
+  type OwningExecutionRows,
+} from "./execution-rows";
 export {
   commitFeedProxyValidationFailure,
   feedProxyValidationCompletionDigest,
@@ -162,6 +171,7 @@ export {
   controlInstallationDataRoot,
   controlPrivateRoot,
   controlRegisteredServiceIds,
+  keepExecutionRowsIn,
   loadControlStartup,
   localFeedCredentialTemplateDigest,
   openControlInstallation,

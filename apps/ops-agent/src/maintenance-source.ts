@@ -5,7 +5,6 @@ import {
   buildFixedConfigurationMaintenancePlan,
   type ControlInstallation,
   type FixedConfigurationMaintenancePlan,
-  readPrivateRecord,
   verifyConfigurationReleaseSourceWitness,
   verifyConfigurationSourceWitness,
   verifyMaintenanceCoordinatorPrerequisite,
@@ -299,19 +298,8 @@ export async function planConfigurationMaintenance(
     // coordinator needs no Compose up and is observed again above.
     const helper = candidate.record.coordinatorPrerequisite;
     if (helper) {
-      let present = false;
-      try {
-        readPrivateRecord(
-          installationState(input.installation),
-          "executions",
-          `${helper.root.operationKey}.json`,
-          65536,
-        );
-        present = true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      if (present) verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
+      if (installationState(input.installation).rows.read(helper.root.operationKey))
+        verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
     }
     if (fixed.action === "update") {
       // The image this update pulled, as the agent's own journal recorded the

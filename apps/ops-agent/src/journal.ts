@@ -2,8 +2,14 @@ import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { type LeaseChildRef, leaseChildRefSchema } from "@openmapx/core/build-artifacts";
 import {
+  type JournalExecution,
+  journalExecutionSchema,
+  type LeaseChildRef,
+  leaseChildRefSchema,
+} from "@openmapx/core/build-artifacts";
+import {
+  canonicalJson,
   OPS_KIND_POLICIES,
   OPS_PROTOCOL_VERSION,
   OPS_PUBLIC_ERROR_MESSAGES,
@@ -78,6 +84,9 @@ export interface PersistedOpsJob {
   /** The job failed because the agent stopped while it ran, not by its own
    * failure: its outcome is unknown. */
   interrupted?: true;
+  /** The execution this operation runs as: what its admission adds to the
+   * operation, when its effect started, its settlement and its children. */
+  execution?: JournalExecution;
 }
 
 export interface OpsJobJournal {
@@ -88,6 +97,11 @@ export interface OpenOpsJobJournalOptions {
   now?: () => Date;
   maxEntries?: number;
   maxBytes?: number;
+}
+
+/** The part of a row's execution fixed at admission. */
+function admissionOf({ progress: _progress, ...admission }: JournalExecution) {
+  return admission;
 }
 
 function exactKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
@@ -134,6 +148,7 @@ function parseJob(value: unknown): PersistedOpsJob {
       "terminalAt",
       "terminationRequestedAt",
       "interrupted",
+      "execution",
     ]) ||
     raw.executionVersion !== 2 ||
     raw.requestVersion !== OPS_PROTOCOL_VERSION ||
@@ -158,6 +173,7 @@ function parseJob(value: unknown): PersistedOpsJob {
     throw new Error("invalid");
   }
   if (raw.leaseChild !== undefined) leaseChildRefSchema.parse(raw.leaseChild);
+  if (raw.execution !== undefined) raw.execution = journalExecutionSchema.parse(raw.execution);
   const operation = opsOperationSchema.parse(raw.operation);
   if (
     opsOperationFingerprint(operation) !== raw.operationFingerprint ||
@@ -350,7 +366,10 @@ export async function openOpsJobJournal(
           retained.operationFingerprint !== record.operationFingerprint ||
           retained.requestedDeadlineAt !== record.requestedDeadlineAt ||
           retained.deploymentBudgetMs !== record.deploymentBudgetMs ||
-          JSON.stringify(retained.parent) !== JSON.stringify(record.parent))
+          JSON.stringify(retained.parent) !== JSON.stringify(record.parent) ||
+          (retained.execution &&
+            canonicalJson(admissionOf(retained.execution)) !==
+              canonicalJson(record.execution ? admissionOf(record.execution) : null)))
       )
         throw Error("Retained execution identity is immutable");
     }
