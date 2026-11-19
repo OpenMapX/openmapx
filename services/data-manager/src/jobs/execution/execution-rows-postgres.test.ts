@@ -178,7 +178,7 @@ describe.skipIf(
       root = mkdtempSync(join(tmpdir(), "omx-dm-rows-insert-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
     await control.provisionControlDirectories(root);
-    const unused = async () => ({ kind: "download-fonts" as const, completed: true });
+    const unused = async () => ({ kind: "download-fonts", completed: true }) as const;
     const dm = dataManagerProcess(sql, root, unused),
       // An installation that may not lease data-manager cannot compose the row.
       foreign = dataManagerProcess(sql, root, unused, ["motis"]);
@@ -261,7 +261,7 @@ describe.skipIf(
         }),
       );
       await dm.journal.begin(authority);
-      const result = { kind: "download-fonts" as const, completed: true },
+      const result = { kind: "download-fonts", completed: true } as const,
         { completion } = await dm.journal.contain(authority, Promise.resolve(result));
       const terminal = {
           ...record.status,
