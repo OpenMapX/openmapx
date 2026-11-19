@@ -1,0 +1,7 @@
+ALTER TABLE "data_manager"."configuration_fence" DROP CONSTRAINT "configuration_fence_state";--> statement-breakpoint
+ALTER TABLE "admin_job" ADD COLUMN "protocol" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_agent_operations" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_admission" jsonb;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_progress" jsonb;--> statement-breakpoint
+ALTER TABLE "data_manager"."configuration_fence" ADD CONSTRAINT "configuration_fence_state" CHECK (("data_manager"."configuration_fence"."state" = 'prepared' AND "data_manager"."configuration_fence"."outcome" IS NULL AND "data_manager"."configuration_fence"."settled_at" IS NULL) OR ("data_manager"."configuration_fence"."state" = 'settled' AND "data_manager"."configuration_fence"."outcome" IN ('applied','unused','contained') AND "data_manager"."configuration_fence"."settled_at" IS NOT NULL) OR ("data_manager"."configuration_fence"."state" = 'refused' AND "data_manager"."configuration_fence"."outcome" IS NULL AND "data_manager"."configuration_fence"."settled_at" IS NOT NULL));--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD CONSTRAINT "data_manager_jobs_execution_row" CHECK (("data_manager"."jobs"."execution_admission" IS NULL) = ("data_manager"."jobs"."execution_progress" IS NULL) AND ("data_manager"."jobs"."execution_admission" IS NULL OR "data_manager"."jobs"."execution_version" = 2));

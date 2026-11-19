@@ -1,5 +1,5 @@
 {
-  "id": "abf4b0ce-4cc6-4da2-8ae4-287a8a5607e1",
+  "id": "14d5cbbe-f2f3-4f2b-ad5c-194785107fc7",
   "prevId": "639ebc86-b820-431f-bc9d-2e96a698ed89",
   "version": "7",
   "dialect": "postgresql",
@@ -1738,7 +1738,7 @@
       "checkConstraints": {
         "configuration_fence_state": {
           "name": "configuration_fence_state",
-          "value": "(\"data_manager\".\"configuration_fence\".\"state\" = 'prepared' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NULL) OR (\"data_manager\".\"configuration_fence\".\"state\" = 'settled' AND \"data_manager\".\"configuration_fence\".\"outcome\" IN ('applied','unused','contained') AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL)"
+          "value": "(\"data_manager\".\"configuration_fence\".\"state\" = 'prepared' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NULL) OR (\"data_manager\".\"configuration_fence\".\"state\" = 'settled' AND \"data_manager\".\"configuration_fence\".\"outcome\" IN ('applied','unused','contained') AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL) OR (\"data_manager\".\"configuration_fence\".\"state\" = 'refused' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
@@ -2045,6 +2045,25 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
+        "execution_agent_operations": {
+          "name": "execution_agent_operations",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "execution_admission": {
+          "name": "execution_admission",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "execution_progress": {
+          "name": "execution_progress",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "ownership_version": {
           "name": "ownership_version",
           "type": "integer",
@@ -2079,6 +2098,10 @@
         "data_manager_jobs_execution_bounds": {
           "name": "data_manager_jobs_execution_bounds",
           "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND jsonb_typeof(\"data_manager\".\"jobs\".\"execution_children\") = 'array' AND jsonb_array_length(\"data_manager\".\"jobs\".\"execution_children\") <= 32 AND octet_length(\"data_manager\".\"jobs\".\"execution_children\"::text) <= 131072"
+        },
+        "data_manager_jobs_execution_row": {
+          "name": "data_manager_jobs_execution_row",
+          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NULL OR \"data_manager\".\"jobs\".\"execution_version\" = 2)"
         },
         "data_manager_jobs_execution_shape": {
           "name": "data_manager_jobs_execution_shape",

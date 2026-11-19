@@ -6,7 +6,8 @@ impacts: [migration]
 
 Live, predicted and maintenance traffic, transit catalog proposals, dataset
 reloads and ambient place publication now run as durable Data Manager jobs, like
-transit syncs and downloads. Migration 0067 adds the column that records the
+transit syncs and downloads. Migration `0066_update_system_job_rows` adds the
+column that records the
 host operations these jobs ask the operations agent for.
 
 - Live traffic keeps running while a long job such as a transit sync is in

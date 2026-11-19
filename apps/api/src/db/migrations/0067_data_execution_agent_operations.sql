@@ -1,1 +1,0 @@
-ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_agent_operations" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -27,14 +27,14 @@ export async function installDisposableDataAdmission(
     "0004_data_manager_jobs_and_feed_state.sql",
     "0042_admin_data_execution.sql",
     "0063_configuration_fence_table.sql",
-    "0067_data_execution_agent_operations.sql",
-    "0068_configuration_fence_refusal.sql",
-    "0069_data_execution_rows.sql",
+    "0066_update_system_job_rows.sql",
   ]) {
-    const body = readFileSync(join(migrations, name), "utf8")
+    // Only the data_manager statements: the disposable schema has no API tables.
+    const statements = readFileSync(join(migrations, name), "utf8")
       .replace('CREATE SCHEMA "data_manager";', 'CREATE SCHEMA IF NOT EXISTS "data_manager";')
-      .replaceAll("--> statement-breakpoint", "");
-    await sql.unsafe(body);
+      .split("--> statement-breakpoint")
+      .filter((statement) => statement.includes('"data_manager"'));
+    await sql.unsafe(statements.join("\n"));
   }
   const root = mkdtempSync(join(tmpdir(), "omx-disposable-admission-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
