@@ -21,7 +21,6 @@ import {
   lookupControlChildPhase,
   openControlInstallation,
   openLeaseStore,
-  ownedCoordinatorPullBaseline,
   releaseArtifactTargetLease,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
@@ -50,10 +49,6 @@ import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-s
 import { configurationPolicyRevision } from "../../../../ops-agent/src/configured-resource-authority";
 import { runContainedProcess } from "../../../../ops-agent/src/docker-runtime";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
-import {
-  consumeCoordinatorPullOwnershipCapture,
-  inspectOriginalCoordinatorServices,
-} from "../../../../ops-agent/src/owned-services";
 import {
   createPolicyResourceClaimer,
   createProductionRegistryResourceClaimer,
@@ -459,17 +454,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               }).claim(...args);
             }
             const raw = await host.claimer.claim(...args);
-            if (
-              raw &&
-              args[0].kind === "service.pull" &&
-              args[0].candidateId &&
-              claimCase === "consumed capture"
-            )
-              consumeCoordinatorPullOwnershipCapture(raw, {
-                operationFingerprint: args[1],
-                candidateId: args[0].candidateId,
-                policyRevision: raw.capability.revisionId,
-              });
             return raw && copyPullClaim && args[0].kind === "service.pull"
               ? {
                   ...raw,
@@ -2779,16 +2763,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("configurationMaintenance.settle")).toBe(1);
       expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
-      const original = await inspectOriginalCoordinatorServices(
-        host.owned,
-        ownedCoordinatorPullBaseline(
-          restoreAdmittedControlExecution(installation, owner.plan.prepare),
-        ),
-        new AbortController().signal,
-      );
-      expect(original.find((s) => s.serviceId === "data-manager")?.provenance.imageId).toBe(
-        `sha256:${"b".repeat(64)}`,
-      );
+      // The pulled image is unused; the old coordinator runs the image its
+      // generation recorded, so it stays the agent's own.
+      expect(
+        owner.originalContainers.find((s: { serviceId: string }) => s.serviceId === "data-manager")
+          ?.provenance.imageId,
+      ).toBe(`sha256:${"b".repeat(64)}`);
+      expect(
+        services.readGenerationImageIds(host.infraDir, host.initial.revisionId)["data-manager"],
+      ).toBe(`sha256:${"b".repeat(64)}`);
       expect(
         (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
           (s) => s.serviceId === "data-manager",

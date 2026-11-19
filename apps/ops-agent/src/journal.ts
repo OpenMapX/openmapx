@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { constants, realpathSync } from "node:fs";
+import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { type LeaseChildRef, leaseChildRefSchema } from "@openmapx/core/build-artifacts";
 import {
   OPS_KIND_POLICIES,
@@ -22,7 +22,6 @@ import {
   type RetainedExecutionAdmission,
   validateRetainedExecutionAdmission,
 } from "@openmapx/core/ops";
-import { services as coreServices } from "@openmapx/core/server";
 
 /** The file keeps its jobs-v1.json name; its contents are format version 2. */
 const JOURNAL_FILE_VERSION = 2;
@@ -85,26 +84,6 @@ export interface OpsJobJournal {
   records(): readonly PersistedOpsJob[];
   replace(records: readonly PersistedOpsJob[]): Promise<void>;
 }
-const productionJournalIndexes = new WeakMap<
-  OpsJobJournal,
-  {
-    path: string;
-    read(): readonly PersistedOpsJob[];
-  }
->();
-/** A bounded locator view of this actual journal, never source authority. */
-export function readProductionCoordinatorJournalIndex(journal: OpsJobJournal, dataRoot: string) {
-  const owned = productionJournalIndexes.get(journal);
-  if (
-    !owned ||
-    owned.path !== coreServices.agentStatePaths(dirname(realpathSync(dataRoot))).journal
-  )
-    throw Error("Actual fixed ops-agent journal required");
-  const records = owned.read();
-  if (records.length > OPS_JOB_JOURNAL_MAX_ENTRIES) throw Error("Ops journal index limit");
-  return records;
-}
-
 export interface OpenOpsJobJournalOptions {
   now?: () => Date;
   maxEntries?: number;
@@ -453,9 +432,5 @@ export async function openOpsJobJournal(
   } catch {
     throw new Error("Ops job journal is unavailable");
   }
-  productionJournalIndexes.set(journal, {
-    path: join(realpathSync(dirname(path)), basename(resolve(path))),
-    read: () => current.map((entry) => structuredClone(entry)),
-  });
   return journal;
 }

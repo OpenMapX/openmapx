@@ -5,7 +5,6 @@ import { services } from "@openmapx/core/server";
 import type { FixedCliRunner } from "./administrative-runtime";
 import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
-import { assertStagedCoordinatorConfigurationWrite } from "./maintenance-source";
 import { OpsExecutionFailure, OpsHostUpdateRequiredError, type OpsRuntime } from "./runtime";
 
 const sources = new WeakMap<OpsRuntime, { rootDir: string }>();
@@ -140,7 +139,6 @@ export function installDataWorkflowRuntime(
         control.closeControlInstallation(installation);
       }
     };
-    await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
     await run("data-workflow");
     context.signal.throwIfAborted();
     const initial = await control.verifyDataUpdatePrerequisites(
@@ -148,7 +146,6 @@ export function installDataWorkflowRuntime(
       configurationDataManagerTransport(),
       context.signal,
     );
-    await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
     const lease = await control.acquireArtifactTargetLease({
       serviceIds: plan.dataReservation.serviceIds,
       owner: authority,

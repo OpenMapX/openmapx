@@ -4,10 +4,6 @@
 import { z } from "zod";
 import { maintenanceRecordSchema } from "../ops/configuration-maintenance-record";
 import { ownedServiceSnapshotSchema } from "../ops/owned-service-records";
-import {
-  coordinatorPullWitnessSchema,
-  stagedCoordinatorObservationSchema,
-} from "./coordinator-pull-records";
 import { fixedConfigurationMaintenancePlanSchema } from "./fixed-configuration-maintenance";
 
 export const MAINTENANCE_NAMESPACE = "maintenance";
@@ -16,9 +12,8 @@ export const maintenanceFileSchema = z.strictObject({
   version: z.literal(1),
   record: maintenanceRecordSchema,
   plan: z.lazy(() => fixedConfigurationMaintenancePlanSchema),
+  /** The containers as the preparation found them; each recreate replaces one. */
   originalContainers: z.array(ownedServiceSnapshotSchema).max(256),
-  coordinatorPull: coordinatorPullWitnessSchema.optional(),
-  stagedCoordinatorProvenance: stagedCoordinatorObservationSchema.optional(),
 });
 export type MaintenanceFile = z.infer<typeof maintenanceFileSchema>;
 

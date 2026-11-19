@@ -147,8 +147,16 @@ export async function inspectMaintenanceDockerRuntime(options: {
               })
             )[0]
           : undefined,
+      // A committed generation records the image its containers run.
+      recorded =
+        owner.record.generation === "committed"
+          ? services.readGenerationImageIds(options.stack.infraDir, inspectedRevision)[id]
+          : undefined,
       expectedImageId =
-        releaseImage?.imageId ?? frozenImage?.imageId ?? original[0]!.provenance.imageId;
+        recorded ??
+        releaseImage?.imageId ??
+        frozenImage?.imageId ??
+        original[0]!.provenance.imageId;
     if (
       (frozenImage && spec.image !== frozenImage.imageReference) ||
       (release && (!download || !releaseImage || spec.image !== releaseReference))

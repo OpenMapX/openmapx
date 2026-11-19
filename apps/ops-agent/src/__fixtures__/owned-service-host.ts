@@ -105,6 +105,9 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       serviceSecrets: [],
     },
     ownedServiceGenerations: [],
+    // The host's one local image, recorded as the CLI records what is present.
+    imageIds: async (references) =>
+      Object.fromEntries(Object.keys(references).map((id) => [id, `sha256:${"b".repeat(64)}`])),
   });
   services.writeServiceSelectionFile(infraDir, options.selectedRoots ?? [...(withCoordinator ? ["data-manager", "motis"] : ["motis"]),...(options.extraServiceIds??[])]);
   const composePath = services.currentConfigurationFile(infraDir, services.GENERATED_COMPOSE_FILE);
@@ -313,7 +316,6 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       const a = await loadAuthority();
       return {
         revisionId: configurationPolicyRevision(a.revisionId),
-        configurationAuthorityRevision: a.revisionId,
         services: a.services.map((s) => ({
           serviceId: s.manifest.id,
           enabled: s.enabled,

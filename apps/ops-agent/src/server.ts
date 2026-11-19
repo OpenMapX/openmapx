@@ -106,7 +106,6 @@ import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
 import { configurationHandoffBlocksReplacement } from "./configuration-handoff";
 import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
-import { installCoordinatorStagedOwnershipSource } from "./coordinator-staged-ownership";
 import { prepareDataUpdateAdmission, resolveDataDefaultRegion } from "./data-workflow-runtime";
 import {
   type DawarichSubjectExportRouteOptions,
@@ -120,13 +119,8 @@ import { createMaintenance, maintenanceCapacityReached, pendingHandoffs } from "
 import { createMaintenanceRuntime, type MaintenanceRuntime } from "./maintenance-runtime";
 import {
   assertManagedCliConfigurationPreflight,
-  assertOwnedMaintenanceRecreateRuntime,
   planConfigurationMaintenance,
 } from "./maintenance-source";
-import {
-  type CoordinatorPullOwnershipObservation,
-  consumeCoordinatorPullOwnershipCapture,
-} from "./owned-services";
 import { createPolicyResourceClaimer, type OpsResourceClaimer } from "./policy";
 import { safeProcessDiagnostic } from "./process-output";
 import { productionOwnedServices, productionRegisteredServiceIds } from "./production-runtime";
@@ -141,7 +135,6 @@ import {
   type OpsRuntime,
 } from "./runtime";
 import { prepareServiceUpdateAdmission } from "./service-lifecycle-runtime";
-import { prepareCoordinatorPullBaseline } from "./service-pull-runtime";
 
 const DEFAULT_BODY_LIMIT = 32 * 1024;
 // A prepared candidate (up to 768 KiB) and its request envelope.
@@ -511,8 +504,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   } catch {
     /* Generic runtimes retain cache-only ownership. */
   }
-  if (literalProductionRuntime && options.controlInstallation && options.journal)
-    installCoordinatorStagedOwnershipSource(runtime, options.controlInstallation, journal);
   const resourceClaimer =
     options.resourceClaimer ?? createPolicyResourceClaimer(options.resourcePolicy ?? {});
   /** The configuration maintenance runs its steps through the same claim and
@@ -534,16 +525,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           const claimed = await resourceClaimer.claim(operation, fingerprint, context.signal, {
             role: "api",
             operationKey: context.execution.operationKey,
-            maintenanceStep:
-              operation.kind === "service.recreate" || operation.kind === "service.recreateIsolated"
-                ? {
-                    inspectServices: (signal) =>
-                      assertOwnedMaintenanceRecreateRuntime(runtime, operation, {
-                        ...context,
-                        signal,
-                      }),
-                  }
-                : {},
+            maintenanceStep: true,
           });
           if (!claimed || claimed.fingerprint !== fingerprint)
             throw new OpsContractError("authorization", "Operation resource is not permitted");
@@ -715,19 +697,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
 
   const recoveryRequired = (job: JobRecord) =>
     job.state === "failed" && job.errorClass === "recovery_required";
-  /** The newest succeeded staged data-manager pull describes the running
-   * coordinator; its journal entry and control records stay. */
-  const newestStagedCoordinatorKey = () =>
-    [...jobsById.values()]
-      .filter(
-        (job) =>
-          job.role === "api" &&
-          job.state === "succeeded" &&
-          job.operation.kind === "service.pull" &&
-          job.operation.serviceId === "data-manager" &&
-          !!job.operation.candidateId,
-      )
-      .sort((a, b) => b.admittedAt - a.admittedAt)[0]?.operationKey;
   /** Control-authority entries stay until 72 hours after terminal and until
    * their timed root key has expired, so an API restarting in that window can
    * still read them. Other entries stay for the configured job retention. */
@@ -735,8 +704,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (
       recoveryRequired(job) ||
       configurationResultsSettling.has(job.operationId) ||
-      job.terminalAt === undefined ||
-      job.operationKey === newestStagedCoordinatorKey()
+      job.terminalAt === undefined
     )
       return true;
     if (!options.controlInstallation || !opsKindRequiresControlAuthority(job.operation.kind))
@@ -1865,8 +1833,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (options.controlInstallation) {
       const prune = startControlPrune(options.controlInstallation, {
         onError: (error) => console.warn("Control record prune failed", error),
-        keep: (operationKey) =>
-          newestStagedCoordinatorKey() === operationKey || journalReferences(operationKey),
+        keep: journalReferences,
       });
       stopControlPrune = prune.stop;
       await prune.ready;
@@ -2108,7 +2075,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           active -= 1;
           throw error;
         }
-        let coordinatorCapture: CoordinatorPullOwnershipObservation | undefined;
         try {
           if (
             !claim ||
@@ -2130,12 +2096,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           ) {
             throw new OpsContractError("authorization", "Operation resource is not permitted");
           }
-          if (operation.kind === "service.pull" && operation.candidateId)
-            coordinatorCapture = consumeCoordinatorPullOwnershipCapture(claim, {
-              operationFingerprint: fingerprint,
-              candidateId: operation.candidateId,
-              policyRevision: claim.capability.revisionId,
-            });
           claim = immutableSnapshot({
             fingerprint: claim.fingerprint,
             operation: claim.operation,
@@ -2222,28 +2182,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               job.operation.kind === "artifactTransfer.import"
                 ? await prepareArtifactImportAdmission(runtime, job.operation)
                 : undefined;
-            let coordinatorBaseline:
-              | Awaited<ReturnType<typeof prepareCoordinatorPullBaseline>>
-              | undefined;
-            if (job.operation.kind === "service.pull" && job.operation.candidateId) {
-              if (!options.controlInstallation || !coordinatorCapture)
-                throw new RequestGuardError("authorization", 403);
-              try {
-                coordinatorBaseline = await prepareCoordinatorPullBaseline(
-                  runtime,
-                  options.controlInstallation,
-                  {
-                    operation: job.operation,
-                    execution: executionFor(job),
-                    parent: job.parent,
-                    requestedDeadlineAt: job.requestedDeadlineAt,
-                  },
-                  coordinatorCapture,
-                );
-              } catch {
-                throw new RequestGuardError("authorization", 403);
-              }
-            }
             // The target lease is the one admission: a held target refuses the
             // operation as busy before anything is recorded. Its targets, and a
             // maintenance plan, are read first; a failure there is raised once the
@@ -2384,7 +2322,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     : {}),
                   ...(lifecyclePlan ? { reservations: [lifecyclePlan.rootReservation] } : {}),
                   ...(maintenancePlan ? { reservations: maintenancePlan.reservations } : {}),
-                  ...(coordinatorBaseline ? { coordinatorPullBaseline: coordinatorBaseline } : {}),
                 });
                 if (fixedDataPlan) retainFixedSingleDataPlan(authority, fixedDataPlan);
                 if (dataUpdatePlan) retainDataUpdatePlan(authority, dataUpdatePlan);

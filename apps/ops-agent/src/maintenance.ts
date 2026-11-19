@@ -216,10 +216,6 @@ export function createMaintenance(
     version: 1,
     plan,
     originalContainers: input.originalContainers,
-    ...(input.coordinatorPull ? { coordinatorPull: input.coordinatorPull } : {}),
-    ...(input.stagedCoordinatorProvenance
-      ? { stagedCoordinatorProvenance: input.stagedCoordinatorProvenance }
-      : {}),
     record: {
       version: 1,
       maintenanceId: plan.operation.maintenanceId,

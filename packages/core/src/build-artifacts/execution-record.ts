@@ -5,16 +5,8 @@ import { fsyncSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { PreparedConfigurationRecord } from "../ops/configuration-preparation";
-import {
-  type OpsJobStatus,
-  type OpsOperationKind,
-  opsOperationSchema,
-  parseBoundedOpsResult,
-  parseOpsJobStatus,
-} from "../ops/contract";
+import { type OpsOperationKind, opsOperationSchema, parseBoundedOpsResult } from "../ops/contract";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
-import { controlTerminalReceiptDigest } from "../ops/control-terminal-receipt";
-import { coordinatorPullSubmissionDigest } from "../ops/coordinator-lifecycle-records";
 import {
   type ControlIssuer,
   type ExecutionRef,
@@ -28,7 +20,6 @@ import {
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
-import { servicePullResultSchema } from "../ops/service-operation-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import {
   currentConfigurationGeneration,
@@ -52,14 +43,6 @@ import {
   targetSchema,
   uuid,
 } from "./control-records";
-import {
-  type CoordinatorPullBaseline,
-  coordinatorPullBaselineSchema,
-  coordinatorPullWitnessPayloadSchema,
-  coordinatorPullWitnessSchema,
-  stagedCoordinatorObservationPayloadSchema,
-  stagedCoordinatorSourceSchema,
-} from "./coordinator-pull-records";
 import { readDataManagerTerminal } from "./data-manager-terminal";
 import { dataUpdatePlanSchema } from "./data-update-records";
 import { dataUpdateSourcesDigest } from "./data-update-sources";
@@ -71,8 +54,6 @@ import {
   childPhaseKinds,
   controlChildOperationKey,
   controlChildReservationSchema,
-  knownSettlement,
-  localLeases,
   requireLocalLeases,
   rootLeaseId,
   verifyFiniteControlEdge,
@@ -192,7 +173,6 @@ export function retainAdmittedControlExecution(
     serviceIds: readonly string[];
     plan?: readonly ControlPlannedChild[];
     reservations?: readonly ControlChildReservation[];
-    coordinatorPullBaseline?: CoordinatorPullBaseline;
   },
 ): VerifiedExecutionAuthority {
   const state = installationState(installation);
@@ -255,24 +235,6 @@ export function retainAdmittedControlExecution(
       })
   )
     throw Error("Immutable execution identity mismatch");
-  const coordinatorPull =
-    parsed.success && parsed.data.kind === "service.pull" && parsed.data.candidateId
-      ? parsed.data
-      : undefined;
-  if (coordinatorPull || input.coordinatorPullBaseline) {
-    const baseline = coordinatorPullBaselineSchema.parse(input.coordinatorPullBaseline);
-    if (
-      !coordinatorPull ||
-      coordinatorPull.serviceId !== "data-manager" ||
-      installation.role !== "ops-agent" ||
-      state.fixedChildId ||
-      input.parent?.issuer !== "api" ||
-      input.parent.apiJobId === undefined ||
-      baseline.candidateId !== coordinatorPull.candidateId ||
-      baseline.configurationRevisionId !== coordinatorPull.expectedConfigurationRevisionId
-    )
-      throw Error("Original coordinator pull baseline required");
-  }
   const plan = z
     .array(plannedChildSchema)
     .max(64)
@@ -1083,134 +1045,6 @@ export function verifyMaintenanceCoordinatorPrerequisite(
   verifyLocalArtifactTargetRootRelease(authority);
 }
 
-declare const stagedCoordinatorBrand: unique symbol;
-export type VerifiedStagedCoordinatorOwnership = Readonly<{ [stagedCoordinatorBrand]: true }>;
-const stagedCoordinatorProofs = new WeakMap<
-  VerifiedStagedCoordinatorOwnership,
-  {
-    installation: ControlInstallation;
-    origin: ControlExecutionOrigin;
-    source: z.infer<typeof stagedCoordinatorSourceSchema>;
-    status: OpsJobStatus;
-  }
->();
-export function verifiedStagedCoordinatorOwnershipState(proof: VerifiedStagedCoordinatorOwnership) {
-  const value = stagedCoordinatorProofs.get(proof);
-  if (!value) throw Error("Actual staged coordinator ownership required");
-  return {
-    origin: structuredClone(value.origin),
-    source: structuredClone(value.source),
-  };
-}
-/** Journal tuples locate source bytes only. This verifies the actual first
- * signed admission, immutable canonical/effect settlement and role-signed API
- * copy without requiring or renewing an expired API candidate or its grants. */
-export function readVerifiedStagedCoordinatorOwnership(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  input: OpsJobStatus,
-): VerifiedStagedCoordinatorOwnership {
-  const local = installationState(installation);
-  if (installation.role !== "ops-agent" || local.fixedChildId)
-    throw Error("Production ops-agent staged source required");
-  const raw = readPrivateRecord(local, "executions", `${execution.operationKey}.json`, 65536),
-    admitted = z
-      .object({
-        version: z.literal(2),
-        origin: controlOriginSchema,
-        kind: z.literal("service.pull"),
-        execution: executionRefSchema,
-        operation: opsOperationSchema,
-        admittedAt: z.number().int().nonnegative().safe(),
-        requestedDeadlineAt: z.number().int().nonnegative().safe(),
-        parent: retainedParentExecutionSchema,
-        coordinatorPullBaseline: coordinatorPullBaselineSchema,
-      })
-      .passthrough()
-      .parse(raw),
-    baseline = admitted.coordinatorPullBaseline,
-    operation = admitted.operation,
-    parent = admitted.parent;
-  if (
-    canonicalJson(admitted.execution) !== canonicalJson(execution) ||
-    execution.executor !== "ops-agent" ||
-    execution.principal !== "api" ||
-    operation.kind !== "service.pull" ||
-    operation.serviceId !== "data-manager" ||
-    !operation.candidateId ||
-    operation.candidateId !== baseline.candidateId ||
-    operation.expectedConfigurationRevisionId !== baseline.configurationRevisionId ||
-    execution.operationFingerprint !== opsOperationFingerprint(operation) ||
-    parent.issuer !== "api" ||
-    execution.deadlineAt > admitted.requestedDeadlineAt ||
-    execution.deadlineAt <= admitted.admittedAt ||
-    execution.fingerprint !==
-      executionFingerprint({
-        kind: "service.pull",
-        operationFingerprint: execution.operationFingerprint,
-        deadlineAt: execution.deadlineAt,
-        parent,
-      })
-  )
-    throw Error("Original staged coordinator admission changed");
-  const authority = restoreAdmittedControlExecution(installation, execution),
-    state = executionAuthorityState(authority),
-    terminal = parseOpsJobStatus(input),
-    terminalDigest = controlTerminalReceiptDigest(terminal),
-    settlement = verifyControlEffectSettlement(installation, execution),
-    effectRecord = readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
-    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(effectRecord);
-  if (
-    canonicalJson(state.origin) !== canonicalJson(admitted.origin) ||
-    terminal.state !== "succeeded" ||
-    terminal.operationKey !== execution.operationKey ||
-    terminal.fingerprint !== execution.fingerprint ||
-    effect.outcome !== "committed" ||
-    effect.publication !== "committed" ||
-    effect.receipt.kind !== "ops-result" ||
-    canonicalJson(terminal.result) !== canonicalJson(effect.receipt.result)
-  )
-    throw Error("Actual successful contained staged coordinator source required");
-  const result = servicePullResultSchema.parse(effect.receipt.result);
-  if (
-    result.revisionId !== baseline.configurationRevisionId ||
-    result.imageReference !== baseline.configImageReference
-  )
-    throw Error("Original staged coordinator result changed");
-  const source = stagedCoordinatorSourceSchema.parse({
-      execution,
-      admittedAt: admitted.admittedAt,
-      baseline,
-      admissionDigest: controlDigest(raw),
-      canonicalDigest: terminalDigest,
-      effectDigest: controlDigest(childSettlementState(settlement).evidence),
-    }),
-    proof = Object.freeze({}) as VerifiedStagedCoordinatorOwnership;
-  stagedCoordinatorProofs.set(proof, {
-    installation,
-    origin: state.origin,
-    source: structuredClone(source),
-    status: structuredClone(input),
-  });
-  return proof;
-}
-declare const stagedOwnerBaselineBrand: unique symbol;
-export type VerifiedStagedCoordinatorOwnerBaseline = Readonly<{ [stagedOwnerBaselineBrand]: true }>;
-const stagedOwnerBaselines = new WeakMap<
-  VerifiedStagedCoordinatorOwnerBaseline,
-  {
-    baseline: CoordinatorPullBaseline;
-    expectedCurrentRevisionId: string;
-    currentAuthorityRevision: string;
-  }
->();
-export function verifiedStagedCoordinatorOwnerBaselineState(
-  proof: VerifiedStagedCoordinatorOwnerBaseline,
-) {
-  const value = stagedOwnerBaselines.get(proof);
-  if (!value) throw Error("Actual staged original-owner provenance required");
-  return structuredClone(value);
-}
 /** The maintenance file of a `configurationMaintenance.prepare` root, by its admitted body. */
 function maintenanceFileOf(state: InstallationState, execution: ExecutionRef): MaintenanceFile {
   const admitted = readPrivateRecord(
@@ -1227,264 +1061,6 @@ function maintenanceFileOf(state: InstallationState, execution: ExecutionRef): M
   if (canonicalJson(file.plan.prepare) !== canonicalJson(execution))
     throw Error("Original maintenance root changed");
   return file;
-}
-/** A separately bound historical observation, never this owner's pull or a
- * caller-selected current generation. All postcommit exceptions verify the
- * original actual canonical/effect/physical child under the same decision. */
-export function ownedStagedCoordinatorBaseline(
-  authority: VerifiedExecutionAuthority,
-): VerifiedStagedCoordinatorOwnerBaseline {
-  const state = executionAuthorityState(authority);
-  if (
-    state.kind !== "configurationMaintenance.prepare" ||
-    state.installation.fixedChildId ||
-    state.installation.installation.role !== "ops-agent"
-  )
-    throw Error("Original staged maintenance owner required");
-  const owner = maintenanceFileOf(state.installation, state.execution);
-  const observation = stagedCoordinatorObservationPayloadSchema.parse(
-      owner.stagedCoordinatorProvenance,
-    ),
-    baseline = observation.source.baseline;
-  if (
-    owner.coordinatorPull ||
-    owner.plan.coordinatorImage?.action !== "apply" ||
-    canonicalJson(observation.ownerPrepare) !== canonicalJson(state.execution) ||
-    observation.candidateId !== owner.plan.operation.candidateId ||
-    observation.planDigest !== owner.plan.planDigest ||
-    baseline.configurationRevisionId !== owner.plan.operation.expectedCurrentRevisionId ||
-    canonicalJson(owner.originalContainers.find((c) => c.serviceId === "data-manager")) !==
-      canonicalJson(baseline.container)
-  )
-    throw Error("Original staged owner/source binding changed");
-  let expectedCurrentRevisionId = baseline.configurationRevisionId;
-  if (owner.record.generation === "committed") {
-    if (
-      owner.record.steps[0]?.outcome !== "committed" ||
-      owner.record.appliedRevisionId !== owner.plan.operation.revisionId
-    )
-      throw Error("Original staged owner generation required");
-    expectedCurrentRevisionId = owner.plan.operation.revisionId;
-  } else if (
-    owner.record.generation !== "not_started" &&
-    owner.record.generation !== "not_committed"
-  )
-    throw Error("Unknown staged owner generation");
-  const proof = Object.freeze({}) as VerifiedStagedCoordinatorOwnerBaseline;
-  stagedOwnerBaselines.set(proof, {
-    baseline: structuredClone(baseline),
-    expectedCurrentRevisionId,
-    currentAuthorityRevision: owner.plan.sourceAuthorityRevision,
-  });
-  return proof;
-}
-declare const coordinatorBaselineBrand: unique symbol;
-export type VerifiedCoordinatorPullBaseline = Readonly<{ [coordinatorBaselineBrand]: true }>;
-const baselineProofs = new WeakMap<
-  VerifiedCoordinatorPullBaseline,
-  Readonly<
-    z.infer<typeof coordinatorPullWitnessPayloadSchema> & { expectedCurrentRevisionId: string }
-  >
->();
-const observedBaselineProofs = new WeakMap<object, VerifiedCoordinatorPullBaseline>();
-export function verifiedCoordinatorPullBaselineState(proof: VerifiedCoordinatorPullBaseline) {
-  const value = baselineProofs.get(proof);
-  if (!value) throw Error("Verified original coordinator baseline required");
-  // Return a copy so a consumer cannot mutate the authenticated private observation.
-  return structuredClone(value);
-}
-export function observedCoordinatorPullBaseline(witness: object): VerifiedCoordinatorPullBaseline {
-  const proof = observedBaselineProofs.get(witness);
-  if (!proof) throw Error("Actual original pull observation required");
-  return proof;
-}
-/** Recovery derives only from the exact indexed signed owner, after the initial
- * successful source copy. It does not depend on a pruned normal pull. */
-export function ownedCoordinatorPullBaseline(
-  authority: VerifiedExecutionAuthority,
-): VerifiedCoordinatorPullBaseline {
-  const state = executionAuthorityState(authority);
-  if (
-    state.kind !== "configurationMaintenance.prepare" ||
-    state.installation.fixedChildId ||
-    state.installation.installation.role !== "ops-agent"
-  )
-    throw Error("Original maintenance owner required");
-  const owner = maintenanceFileOf(state.installation, state.execution);
-  const witness = coordinatorPullWitnessPayloadSchema.parse(owner.coordinatorPull);
-  if (
-    canonicalJson(witness.maintenancePrepare) !== canonicalJson(state.execution) ||
-    witness.candidateId !== owner.plan.operation.candidateId ||
-    witness.maintenanceId !== owner.plan.operation.maintenanceId ||
-    witness.baseline.candidateId !== witness.candidateId ||
-    witness.baseline.sourceRevision !== witness.sourceRevision ||
-    witness.baseline.configurationAuthorityRevision !== owner.plan.sourceAuthorityRevision ||
-    witness.baseline.submissionDigest !== witness.submissionDigest ||
-    canonicalJson(owner.originalContainers.find((c) => c.serviceId === "data-manager")) !==
-      canonicalJson(witness.baseline.container) ||
-    owner.plan.coordinatorImage?.imageId !== witness.imageId
-  )
-    throw Error("Original coordinator owner source changed");
-  const proof = Object.freeze({}) as VerifiedCoordinatorPullBaseline;
-  baselineProofs.set(
-    proof,
-    Object.freeze({
-      ...structuredClone(witness),
-      expectedCurrentRevisionId:
-        owner.record.generation === "committed"
-          ? owner.plan.operation.revisionId
-          : witness.baseline.configurationRevisionId,
-    }),
-  );
-  return proof;
-}
-/** Fixed source of this one pre-sealed normal pull. Its real signed admission
- * owns the assigned execution ID and effective deadline; neither is predicted. */
-export function verifyCoordinatorPullAdmissionSource(
-  installation: ControlInstallation,
-  record: PreparedConfigurationRecord,
-) {
-  const state = installationState(installation),
-    fixed = record.privateCoordinatorLifecycle;
-  if (
-    installation.role !== "ops-agent" ||
-    state.fixedChildId ||
-    fixed?.action !== "update" ||
-    record.apiFollowUp !== "coordinator-update" ||
-    !record.maintenanceId ||
-    fixed.pull.operation.candidateId !== record.candidateId
-  )
-    throw Error("Original coordinator pull source required");
-  const submission = fixed.pull,
-    raw = readPrivateRecord(state, "executions", `${submission.operationKey}.json`, 65536),
-    admitted = z
-      .object({
-        version: z.literal(2),
-        origin: controlOriginSchema,
-        kind: z.literal("service.pull"),
-        execution: executionRefSchema,
-        operation: opsOperationSchema,
-        admittedAt: z.number().int().nonnegative().safe(),
-        requestedDeadlineAt: z.number().int().nonnegative().safe(),
-        parent: retainedParentExecutionSchema,
-        coordinatorPullBaseline: coordinatorPullBaselineSchema,
-      })
-      .passthrough()
-      .parse(raw),
-    parent = admitted.parent,
-    attempt = submission.attempt,
-    execution = admitted.execution;
-  if (
-    admitted.coordinatorPullBaseline.candidateId !== record.candidateId ||
-    admitted.coordinatorPullBaseline.sourceRevision !== record.expectedSourceRevision ||
-    admitted.coordinatorPullBaseline.configurationRevisionId !==
-      submission.operation.expectedConfigurationRevisionId ||
-    admitted.coordinatorPullBaseline.submissionDigest !==
-      coordinatorPullSubmissionDigest(submission) ||
-    parent.issuer !== "api" ||
-    execution.executor !== "ops-agent" ||
-    execution.principal !== "api" ||
-    execution.operationKey !== submission.operationKey ||
-    execution.operationFingerprint !== submission.operationFingerprint ||
-    canonicalJson(admitted.operation) !== canonicalJson(submission.operation) ||
-    admitted.requestedDeadlineAt !== submission.requestedDeadlineAt ||
-    execution.deadlineAt > admitted.requestedDeadlineAt ||
-    execution.deadlineAt <= admitted.admittedAt ||
-    execution.fingerprint !==
-      executionFingerprint({
-        kind: "service.pull",
-        operationFingerprint: submission.operationFingerprint,
-        deadlineAt: execution.deadlineAt,
-        parent,
-      }) ||
-    parent.apiJobId !== record.apiJobId ||
-    parent.apiJobId !== attempt.apiJobId ||
-    parent.apiOwnerVersion !== attempt.apiOwnerVersion ||
-    parent.attemptId !== attempt.attemptId ||
-    parent.operationKey !== record.parentOperationKey ||
-    parent.operationKey !== attempt.parentOperationKey ||
-    parent.fingerprint !== record.parentFingerprint ||
-    parent.fingerprint !== attempt.parentFingerprint ||
-    parent.deadlineAt !== record.parentDeadlineAt ||
-    parent.deadlineAt !== attempt.parentDeadlineAt
-  )
-    throw Error("Original coordinator normal admission changed");
-  restoreAdmittedControlExecution(installation, execution);
-  return admitted;
-}
-
-/** Only a real immutable canonical terminal + contained effect can mint this
- * copied observation. The structural public status alone supplies no proof. */
-export function observeCoordinatorPullForMaintenance(
-  installation: ControlInstallation,
-  record: PreparedConfigurationRecord,
-  maintenancePrepare: ExecutionRef,
-  status: OpsJobStatus,
-) {
-  const admitted = verifyCoordinatorPullAdmissionSource(installation, record),
-    authority = restoreAdmittedControlExecution(installation, admitted.execution),
-    state = executionAuthorityState(authority),
-    terminal = parseOpsJobStatus(status),
-    terminalDigest = controlTerminalReceiptDigest(terminal),
-    settlement = verifyControlEffectSettlement(installation, admitted.execution),
-    effect = settlementSchema
-      .extend({ receipt: effectObservationSchema })
-      .parse(
-        readPrivateRecord(state.installation, "effects", `${admitted.execution.operationKey}.json`),
-      );
-  if (
-    terminal.state !== "succeeded" ||
-    terminal.operationKey !== admitted.execution.operationKey ||
-    terminal.fingerprint !== admitted.execution.fingerprint ||
-    effect.outcome !== "committed" ||
-    effect.publication !== "committed" ||
-    effect.receipt.kind !== "ops-result" ||
-    canonicalJson(terminal.result) !== canonicalJson(effect.receipt.result)
-  )
-    throw Error("Actual successful contained coordinator pull required");
-  const { changed: _changed, ...result } = servicePullResultSchema.parse(effect.receipt.result),
-    fixed = record.privateCoordinatorLifecycle!;
-  if (
-    fixed.action !== "update" ||
-    result.revisionId !== fixed.pull.operation.expectedConfigurationRevisionId
-  )
-    throw Error("Original coordinator pull revision changed");
-  const witness = coordinatorPullWitnessSchema.parse(
-    coordinatorPullWitnessPayloadSchema.parse({
-      version: 2,
-      maintenanceId: record.maintenanceId,
-      candidateId: record.candidateId,
-      maintenancePrepare,
-      pull: admitted.execution,
-      submissionDigest: coordinatorPullSubmissionDigest(fixed.pull),
-      operationFingerprint: admitted.execution.operationFingerprint,
-      apiParentDigest: controlDigest(admitted.parent),
-      sourceRevision: record.expectedSourceRevision,
-      ...result,
-      terminalReceiptDigest: terminalDigest,
-      effectReceiptDigest: controlDigest(childSettlementState(settlement).evidence),
-      baseline: admitted.coordinatorPullBaseline,
-      baselineAdmissionDigest: controlDigest(
-        readPrivateRecord(
-          state.installation,
-          "executions",
-          `${admitted.execution.operationKey}.json`,
-          65536,
-        ),
-      ),
-      verifiedAt: Date.now(),
-    }),
-  );
-  const proof = Object.freeze({}) as VerifiedCoordinatorPullBaseline;
-  baselineProofs.set(
-    proof,
-    Object.freeze({
-      ...structuredClone(witness),
-      expectedCurrentRevisionId: admitted.coordinatorPullBaseline.configurationRevisionId,
-    }),
-  );
-  observedBaselineProofs.set(witness, proof);
-  return witness;
 }
 const recovery = new WeakMap<object, { authority: AuthorityState; evidence: ChildSettlement }>();
 export function verifyControlRecoveryAuthority(

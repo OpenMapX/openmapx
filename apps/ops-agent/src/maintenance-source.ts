@@ -6,14 +6,7 @@ import {
   type ControlInstallation,
   executionAuthorityState,
   type FixedConfigurationMaintenancePlan,
-  observeCoordinatorPullForMaintenance,
-  observedCoordinatorPullBaseline,
-  ownedCoordinatorPullBaseline,
-  ownedStagedCoordinatorBaseline,
   readPrivateRecord,
-  restoreAdmittedControlExecution,
-  type VerifiedCoordinatorPullBaseline,
-  verifiedStagedCoordinatorOwnershipState,
   verifyConfigurationReleaseSourceWitness,
   verifyConfigurationSourceWitness,
   verifyMaintenanceCoordinatorPrerequisite,
@@ -25,16 +18,11 @@ import {
   type ExecutionRef,
   type OpsOperation,
   opsOperationFingerprint,
-  parseOpsJobStatus,
   protectedConfigurationServiceIdSchema,
   type RetainedParentExecution,
+  servicePullResultSchema,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import {
-  type CoordinatorPullWitness,
-  coordinatorPullWitnessPayloadSchema,
-  stagedCoordinatorObservationSchema,
-} from "../../../packages/core/src/build-artifacts/coordinator-pull-records";
 import type { MaintenanceFile } from "../../../packages/core/src/build-artifacts/maintenance-file";
 import { installationState } from "../../../packages/core/src/build-artifacts/private-records";
 import {
@@ -46,14 +34,8 @@ import { preflightConfigurationRelease } from "./configuration-release-preflight
 import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OpsJobJournal } from "./journal";
 import { readMaintenance } from "./maintenance";
-import {
-  inspectLiteralStagedConfigurationDependency,
-  inspectOriginalCoordinatorServices,
-  inspectStagedCoordinatorMaintenanceSource,
-  inspectStagedCoordinatorOwnerServices,
-  type OwnedServiceResolver,
-} from "./owned-services";
-import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
+import type { OwnedServiceResolver } from "./owned-services";
+import type { OpsExecutionContext, OpsRuntime } from "./runtime";
 import { coordinatorCandidateMetadata, renderCoordinatorCandidate } from "./service-pull-runtime";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
 
@@ -77,8 +59,8 @@ export function maintenanceSource(runtime: OpsRuntime): Source {
   if (!source?.candidateSource) throw Error("Configuration maintenance source unavailable");
   return source;
 }
-/** The normal root remains held while this writer-side preflight runs. Release
- * the writer before invoking the fixed CLI, which acquires its own writer. */
+/** A managed CLI command the agent runs for one of these operations holds the
+ * whole registered target closure under its own lease. */
 export async function assertManagedCliConfigurationPreflight(
   runtime: OpsRuntime,
   operation: OpsOperation,
@@ -101,75 +83,13 @@ export async function assertManagedCliConfigurationPreflight(
     .sort();
   if (canonicalJson(targets) !== canonicalJson(lease.serviceIds))
     throw Error("Managed configuration target closure changed");
-  try {
-    await services.withConfigurationGenerationWriter(
-      source.infraDir,
-      () => assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal),
-      context.signal,
-    );
-  } catch (error) {
-    if (
-      error instanceof services.ConfigurationGenerationError &&
-      error.result.outcome === "not_committed" &&
-      !error.result.cleanupFailed &&
-      error.cause instanceof OpsExecutionFailure &&
-      error.cause.errorClass === "configuration_prerequisite"
-    )
-      throw error.cause;
-    throw error;
-  }
-}
-/** Read only from this runtime's existing fixed source and literal resolver.
- * Planned eligibility never substitutes for actual nominal publication. */
-export async function assertStagedCoordinatorReleaseWrite(
-  runtime: OpsRuntime,
-  signal: AbortSignal,
-): Promise<void> {
-  const source = sources.get(runtime);
-  if (
-    !source ||
-    (await inspectLiteralStagedConfigurationDependency(source.ownedServices, signal)) !== "none"
-  )
-    throw new OpsExecutionFailure("configuration_prerequisite", {});
 }
 
-export async function assertStagedCoordinatorConfigurationWrite(
-  runtime: OpsRuntime,
-  operation: OpsOperation,
-  context: OpsExecutionContext,
-  signal: AbortSignal,
-): Promise<void> {
-  const source = sources.get(runtime);
-  if (!source) throw new OpsExecutionFailure("configuration_prerequisite", {});
-  const dependency = await inspectLiteralStagedConfigurationDependency(
-    source.ownedServices,
-    signal,
-  );
-  if (dependency === "none") return;
-  if (dependency === "required") {
-    try {
-      if (operation.kind === "configuration.hardlinks.preview") {
-        await assertPlannedCoordinatorConfigurationWrite(runtime, operation);
-        return;
-      }
-      if (
-        (operation.kind === "stack.render" || operation.kind === "vault.apply") &&
-        operation.maintenanceId
-      ) {
-        await assertOwnedCoordinatorConfigurationWrite(runtime, context, operation, signal);
-        return;
-      }
-    } catch {
-      /* Changed or foreign producer keeps the prerequisite closed. */
-    }
-  }
-  throw new OpsExecutionFailure("configuration_prerequisite", {});
-}
-
-/** The release a maintenance pins in the generation it commits; undefined when
- * it keeps the applied release. */
-export function readMaintenanceRelease(installation: ControlInstallation, maintenanceId: string) {
-  return readMaintenance(installation, maintenanceId).plan.release;
+/** What a maintenance's commit step puts in its generation: the release it
+ * pins, if any, and the coordinator image it pulled or applies, if any. */
+export function readMaintenancePlan(installation: ControlInstallation, maintenanceId: string) {
+  const { release, coordinatorImage } = readMaintenance(installation, maintenanceId).plan;
+  return { release, coordinatorImage };
 }
 /** The release a maintenance froze once its data fence is prepared, so a check
  * uses the snapshot and local images instead of the registry. */
@@ -211,192 +131,28 @@ function maintenanceStepOf(
   return { file, step, installation: child.installation.installation };
 }
 
-/** The original containers a generation step keeps, when the coordinator is
- * replaced in the same maintenance. */
-export async function inspectOwnedMaintenanceGenerationRuntime(
-  runtime: OpsRuntime,
+/** The commit step of the running maintenance, before its generation exists. */
+export function assertMaintenanceGenerationStep(
   context: OpsExecutionContext,
   operation: Extract<OpsOperation, { kind: "stack.render" | "vault.apply" }>,
-  signal: AbortSignal,
 ) {
-  const { file, step, installation } = maintenanceStepOf(context, operation);
+  const { file, step } = maintenanceStepOf(context, operation);
   if (step.phase !== "configuration-commit" || file.record.generation !== "not_started")
     throw Error("Maintenance generation step changed");
-  if (!file.coordinatorPull && !file.stagedCoordinatorProvenance) return undefined;
-  const source = sources.get(runtime);
-  if (!source) throw Error("Configuration maintenance source unavailable");
-  const services = await inspectOriginalOwnerServices(source, installation, file, signal),
-    ordinary = await source.ownedServices.inspectInventory?.(signal);
-  if (!ordinary || ordinary.unverifiedServiceIds.some((id) => id !== "data-manager"))
-    throw Error("Original generation inventory unavailable");
-  return {
-    services,
-    observedContainerIds: ordinary.observedContainerIds,
-    unverifiedServiceIds: [],
-  };
 }
-/** A recreate step of the running maintenance: the containers as the
- * maintenance found them, so a replaced coordinator stays its own. */
-export async function assertOwnedMaintenanceRecreateRuntime(
-  runtime: OpsRuntime,
+/** A recreate step of the running maintenance. */
+export function assertOwnedMaintenanceRecreateRuntime(
   operation: OpsOperation,
-  context: Pick<OpsExecutionContext, "controlAuthority" | "artifactLease" | "signal">,
+  context: Pick<OpsExecutionContext, "controlAuthority" | "artifactLease">,
 ) {
   if (operation.kind !== "service.recreate" && operation.kind !== "service.recreateIsolated")
     throw Error("Maintenance recreate step required");
-  const { file, step, installation } = maintenanceStepOf(context, operation);
-  if (step.phase !== "maintenance-recreate") throw Error("Maintenance recreate step changed");
-  const source = sources.get(runtime);
-  if (!source) throw Error("Configuration maintenance source unavailable");
-  return inspectOriginalOwnerServices(source, installation, file, context.signal);
-}
-/** Read-only eligibility from the retained candidate and closed existing
- * producer. It grants no generation child, decision or publication authority. */
-async function assertPlannedCoordinatorConfigurationWrite(
-  runtime: OpsRuntime,
-  operation: Extract<OpsOperation, { kind: "configuration.hardlinks.preview" }>,
-) {
-  const source = sources.get(runtime);
-  if (!source?.candidateSource) throw Error("Actual planned coordinator source required");
-  const candidate = await readConfigurationCandidate(source.candidateSource, operation.candidateId),
-    original = candidate.operation,
-    record = candidate.record;
-  if (
-    !["stack.render", "vault.apply"].includes(original.kind) ||
-    !("revisionId" in original) ||
-    !("expectedCurrentRevisionId" in original) ||
-    !("expectedSourceRevision" in original) ||
-    !("coordinatorMode" in original) ||
-    original.revisionId !== operation.revisionId ||
-    original.expectedCurrentRevisionId !== operation.expectedCurrentRevisionId ||
-    original.expectedSourceRevision !== operation.expectedSourceRevision ||
-    original.coordinatorMode !== operation.coordinatorMode ||
-    record.candidateId !== operation.candidateId ||
-    !record.maintenanceId ||
-    !record.prepareOperationKey ||
-    (canonicalJson(record.affectedServiceIds) !== '["data-manager"]' &&
-      !(
-        record.privateIntegrationReload?.stagedMigration &&
-        record.affectedServiceIds.includes("data-manager")
-      ))
-  )
-    throw Error("Planned coordinator identity changed");
-  if (record.privateCoordinatorLifecycle) {
-    renderCoordinatorCandidate(candidate, await source.loadAuthority(), source.infraDir);
-    return;
-  }
-  const overlay = record.privateOverlay as { purpose?: unknown; changes?: unknown } | null;
-  if (record.privateIntegrationReload?.stagedMigration) {
-    if (
-      original.kind !== "stack.render" ||
-      !overlay ||
-      overlay.purpose !== "migration" ||
-      !Array.isArray(overlay.changes) ||
-      overlay.changes.length > 512 ||
-      !["integration-reload", "platform-apply"].includes(record.apiFollowUp ?? "") ||
-      overlay.changes.some(
-        (change) =>
-          !change ||
-          typeof change !== "object" ||
-          ![
-            "service-config",
-            "integration-config",
-            "service-secret",
-            "integration-secret",
-            "integration-binding",
-            "platform",
-            "selection",
-          ].includes(change.kind),
-      )
-    )
-      throw Error("Fixed staged migration producer required");
-    const managed = overlay.changes.find(
-      (change) =>
-        change.kind === "service-secret" &&
-        change.serviceId === "data-manager" &&
-        change.key === "TRANSITOUS_API_KEYS",
-    );
-    if (
-      managed &&
-      (record.privateIntegrationReload.stagedMigration.kind !== "credentials" ||
-        managed.action !== "set" ||
-        candidate.payload.serviceSecrets.find((entry) => entry.serviceId === "data-manager")?.values
-          .TRANSITOUS_API_KEYS !== managed.value ||
-        !candidate.payload.transitCredentialsRevision)
-    )
-      throw Error("Original managed migration map required");
-    return;
-  }
-
-  if (
-    original.kind !== "vault.apply" ||
-    original.serviceId !== "data-manager" ||
-    record.apiFollowUp !== "service-apply" ||
-    !overlay ||
-    typeof overlay !== "object" ||
-    Array.isArray(overlay) ||
-    !["service-secret", "transit-credentials"].includes(String(overlay.purpose)) ||
-    !Array.isArray(overlay.changes) ||
-    !overlay.changes.length ||
-    !overlay.changes.every(
-      (change) =>
-        change &&
-        typeof change === "object" &&
-        !Array.isArray(change) &&
-        change.kind === "service-secret" &&
-        change.serviceId === "data-manager",
-    )
-  )
-    throw Error("Fixed planned DM recreation producer required");
-  if (overlay.purpose === "transit-credentials") {
-    const change = overlay.changes[0] as Record<string, unknown> | undefined;
-    if (
-      original.coordinatorMode !== "require-running" ||
-      overlay.changes.length !== 1 ||
-      change?.key !== "TRANSITOUS_API_KEYS" ||
-      change.action !== "set" ||
-      typeof change.value !== "string" ||
-      candidate.payload.serviceSecrets.find((entry) => entry.serviceId === "data-manager")?.values
-        .TRANSITOUS_API_KEYS !== change.value ||
-      !candidate.payload.transitCredentialsRevision
-    )
-      throw Error("Fixed managed transit credential producer required");
-  } else if (
-    overlay.changes.some(
-      (change) => (change as Record<string, unknown>).key === "TRANSITOUS_API_KEYS",
-    )
-  ) {
-    throw Error("Managed transit credential producer required");
-  }
-}
-/** Actual publication is stricter than the read-only planned eligibility. */
-async function assertOwnedCoordinatorConfigurationWrite(
-  runtime: OpsRuntime,
-  context: OpsExecutionContext,
-  operation: Extract<OpsOperation, { kind: "stack.render" | "vault.apply" }>,
-  signal: AbortSignal,
-) {
-  await inspectOwnedMaintenanceGenerationRuntime(runtime, context, operation, signal);
-  const owner = maintenanceStepOf(context, operation).file;
-  if (
-    !owner.plan.coordinatorImage ||
-    !owner.plan.steps.some(
-      (step) =>
-        step.phase === "maintenance-recreate" &&
-        "serviceId" in step.operation &&
-        step.operation.serviceId === "data-manager",
-    )
-  )
-    throw Error("Original frozen DM recreation required");
+  if (maintenanceStepOf(context, operation).step.phase !== "maintenance-recreate")
+    throw Error("Maintenance recreate step changed");
 }
 
 /** What a preparation plans before its lease: the fixed plan and the host as found. */
-export type MaintenancePlanning = Readonly<
-  Pick<
-    MaintenanceFile,
-    "plan" | "originalContainers" | "coordinatorPull" | "stagedCoordinatorProvenance"
-  >
->;
+export type MaintenancePlanning = Readonly<Pick<MaintenanceFile, "plan" | "originalContainers">>;
 /** Plans a configuration maintenance from the API's retained candidate and the host. */
 export async function planConfigurationMaintenance(
   runtime: OpsRuntime,
@@ -540,9 +296,7 @@ export async function planConfigurationMaintenance(
       throw Error("Original settled old-revision coordinator prerequisite required");
     verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
   }
-  let coordinatorPull: CoordinatorPullWitness | undefined,
-    coordinatorBaseline: VerifiedCoordinatorPullBaseline | undefined,
-    coordinatorImage: FixedConfigurationMaintenancePlan["coordinatorImage"];
+  let coordinatorImage: FixedConfigurationMaintenancePlan["coordinatorImage"];
   if (coordinator) {
     const fixed = coordinatorCandidateMetadata(candidate.record);
     // A used helper remains an exact settled original. An already-ready old
@@ -564,58 +318,32 @@ export async function planConfigurationMaintenance(
       if (present) verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
     }
     if (fixed.action === "update") {
+      // The image this update pulled, as the agent's own journal recorded the
+      // pull's result; the commit step records it in the generation.
       const matches = input.journal
         .records()
         .filter((job) => job.role === "api" && job.operationKey === fixed.pull.operationKey);
-      if (!matches || matches.length !== 1)
-        throw Error("Unique original coordinator pull source unavailable");
-      const job = matches[0]!;
+      const job = matches.length === 1 ? matches[0] : undefined;
       if (
-        job.operation.kind !== "service.pull" ||
+        job?.operation.kind !== "service.pull" ||
         job.state !== "succeeded" ||
         canonicalJson(job.operation) !== canonicalJson(fixed.pull.operation)
       )
         throw Error("Actual successful current coordinator pull required");
-      const status = parseOpsJobStatus({
-        version: 2,
-        admittedAt: job.admittedAt,
-        deadlineAt: job.deadlineAt,
-        fingerprint: job.fingerprint,
-        operationId: job.operationId,
-        operationKey: job.operationKey,
-        kind: job.operation.kind,
-        resourceId: job.resourceId,
-        state: job.state,
-        submittedAt: job.submittedAt,
-        updatedAt: job.updatedAt,
-        result: job.result,
-        ...(job.terminationRequestedAt
-          ? { terminationRequestedAt: job.terminationRequestedAt }
-          : {}),
-      });
-      coordinatorPull = observeCoordinatorPullForMaintenance(
-        input.installation,
-        candidate.record,
-        input.execution,
-        status,
-      );
-      coordinatorBaseline = observedCoordinatorPullBaseline(coordinatorPull);
-
-      const proof = coordinatorPull && coordinatorPullWitnessPayloadSchema.parse(coordinatorPull);
+      const pulled = servicePullResultSchema.parse(job.result);
       if (
-        !proof ||
-        proof.imageReference !== coordinator.imageReference ||
-        proof.releaseSelectionDigest !== coordinator.releaseSelectionDigest ||
-        proof.submissionDigest !== coordinatorPullSubmissionDigest(fixed.pull)
+        pulled.revisionId !== input.operation.expectedCurrentRevisionId ||
+        pulled.imageReference !== coordinator.imageReference ||
+        pulled.releaseSelectionDigest !== coordinator.releaseSelectionDigest
       )
         throw Error("Original pulled coordinator image source changed");
       coordinatorImage = {
         action: "update",
         noDeps: fixed.noDeps,
-        imageReference: proof.imageReference,
-        imageId: proof.imageId,
-        releaseSelectionDigest: proof.releaseSelectionDigest,
-        pullSubmissionDigest: proof.submissionDigest,
+        imageReference: pulled.imageReference,
+        imageId: pulled.imageId,
+        releaseSelectionDigest: pulled.releaseSelectionDigest,
+        pullSubmissionDigest: coordinatorPullSubmissionDigest(fixed.pull),
       };
     } else {
       const observed = await source.execFile(
@@ -659,17 +387,8 @@ export async function planConfigurationMaintenance(
       pullSubmissionDigest: null,
     };
   }
-  const staged =
-    !coordinatorBaseline && recreateServiceIds.includes("data-manager")
-      ? await inspectStagedCoordinatorMaintenanceSource(source.ownedServices, input.signal)
-      : undefined;
-  const originalContainers = coordinatorBaseline
-    ? await inspectOriginalCoordinatorServices(
-        source.ownedServices,
-        coordinatorBaseline,
-        input.signal,
-      )
-    : (staged?.services ?? (await source.ownedServices.inspectOwnedServices(input.signal)));
+  // The containers as the maintenance finds them; each recreate replaces one.
+  const originalContainers = await source.ownedServices.inspectOwnedServices(input.signal);
   if (
     originalContainers.find((service) => service.serviceId === "data-manager")?.state !== "running"
   )
@@ -753,50 +472,5 @@ export async function planConfigurationMaintenance(
       input.operation.expectedCurrentRevisionId
   )
     throw Error("Configuration maintenance preflight drifted");
-  const stagedSource = staged?.proof && verifiedStagedCoordinatorOwnershipState(staged.proof);
-  if (
-    stagedSource &&
-    (coordinatorPull ||
-      stagedSource.source.baseline.configurationRevisionId !==
-        input.operation.expectedCurrentRevisionId)
-  )
-    throw Error("Original staged maintenance source changed");
-  const stagedCoordinatorProvenance = stagedSource
-    ? stagedCoordinatorObservationSchema.parse({
-        version: 1,
-        ownerPrepare: input.execution,
-        candidateId: input.operation.candidateId,
-        planDigest: frozen.planDigest,
-        source: stagedSource.source,
-        capturedAt: Date.now(),
-      })
-    : undefined;
-  return {
-    plan: frozen,
-    originalContainers: structuredClone(originalContainers),
-    ...(coordinatorPull ? { coordinatorPull } : {}),
-    ...(stagedCoordinatorProvenance ? { stagedCoordinatorProvenance } : {}),
-  };
-}
-
-async function inspectOriginalOwnerServices(
-  source: Source,
-  installation: ControlInstallation,
-  file: MaintenanceFile,
-  signal: AbortSignal,
-) {
-  const root = restoreAdmittedControlExecution(installation, file.plan.prepare);
-  return file.plan.coordinatorImage?.action === "update"
-    ? inspectOriginalCoordinatorServices(
-        source.ownedServices,
-        ownedCoordinatorPullBaseline(root),
-        signal,
-      )
-    : file.stagedCoordinatorProvenance
-      ? inspectStagedCoordinatorOwnerServices(
-          source.ownedServices,
-          ownedStagedCoordinatorBaseline(root),
-          signal,
-        )
-      : source.ownedServices.inspectOwnedServices(signal);
+  return { plan: frozen, originalContainers: structuredClone(originalContainers) };
 }

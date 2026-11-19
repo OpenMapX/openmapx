@@ -253,7 +253,6 @@ async function main(): Promise<void> {
       const authority = await authorityLoader();
       return {
         revisionId: `${authority.revisionId.slice(0, 48)}-${loadConfiguredResourceAuthority().revisionId}`,
-        configurationAuthorityRevision: authority.revisionId,
         services: authority.services.map((service) => ({
           serviceId: service.manifest.id,
           enabled: service.enabled,

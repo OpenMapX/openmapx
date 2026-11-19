@@ -19,7 +19,7 @@ import {
 import { open } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { JSON_SCHEMA, load as loadYaml } from "js-yaml";
-import { configurationProjectionFingerprint, type OpsResultFor } from "../ops";
+import { canonicalJson, configurationProjectionFingerprint, type OpsResultFor } from "../ops";
 import type { ConfigurationApplyResult } from "../ops/contract";
 import {
   type TrustedConfigurationPayload,
@@ -99,6 +99,7 @@ const MAX_GENERATION_BYTES = 2 * 1024 * 1024;
 const RESOLVED_CONFIG_FILE = "resolved-config.generated.json";
 /** The release whose images the generation pins, as its canonical manifest. */
 const RELEASE_MANIFEST_FILE = "release-manifest.json";
+const GENERATION_IMAGES_FILE = "images.json";
 const REVISION = /^cfg1_[A-Za-z0-9_-]{43}$/;
 
 /**
@@ -132,6 +133,12 @@ export interface CommitConfigurationOptions {
   installationId?: string;
   signal?: AbortSignal;
   beforeCommit?: () => Promise<void>;
+  /**
+   * The local image id each enabled service's reference names, by service id,
+   * recorded in the generation. It may leave out images that are not present
+   * and may refuse the commit by throwing. Omitted, nothing is recorded.
+   */
+  imageIds?: (references: Readonly<Record<string, string>>) => Promise<Record<string, string>>;
   afterGenerationRename?: () => Promise<void>;
   afterCommit?: () => Promise<void>;
   /**
@@ -933,6 +940,62 @@ export function readGenerationRelease(
   return { manifest, manifestDigest: releaseManifestDigest(manifest) };
 }
 
+const IMAGE_ID = /^sha256:[a-f0-9]{64}$/;
+/**
+ * The local image each service's reference named when the generation was
+ * committed, by service id. A pinned reference names its image by digest; a
+ * tag can move later, so this is what the generation's containers run. Empty
+ * for a generation committed before its images were present.
+ */
+export function readGenerationImageIds(
+  infraDir: string,
+  revisionId: string,
+): Readonly<Record<string, string>> {
+  const directory = dirname(configurationGenerationComposeFile(infraDir, revisionId));
+  let raw: string;
+  try {
+    raw = readOwnGenerationFile(join(directory, GENERATION_IMAGES_FILE), [0o600n]);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
+  const images = (JSON.parse(raw) as { images?: unknown }).images;
+  if (
+    !images ||
+    typeof images !== "object" ||
+    Array.isArray(images) ||
+    Object.values(images).some((id) => typeof id !== "string" || !IMAGE_ID.test(id))
+  )
+    throw new Error(UNSAFE);
+  return images as Record<string, string>;
+}
+
+/**
+ * The local image id each reference names now, by service id. A reference
+ * whose image is not present is left out.
+ */
+export async function inspectLocalImageIds(
+  references: Readonly<Record<string, string>>,
+  docker: (args: string[]) => Promise<string>,
+): Promise<Record<string, string>> {
+  const byReference = new Map<string, string | null>();
+  for (const reference of new Set(Object.values(references))) {
+    let id: string | null = null;
+    try {
+      id = (await docker(["image", "inspect", "--format", "{{.Id}}", reference])).trim();
+    } catch {
+      /* Not present locally. */
+    }
+    byReference.set(reference, id && IMAGE_ID.test(id) ? id : null);
+  }
+  const ids: Record<string, string> = {};
+  for (const [serviceId, reference] of Object.entries(references)) {
+    const id = byReference.get(reference);
+    if (id) ids[serviceId] = id;
+  }
+  return ids;
+}
+
 /** The release the applied generation pins, or null. */
 export function readAppliedRelease(infraDir: string): GenerationRelease | null {
   const active = currentConfigurationGeneration(infraDir);
@@ -1545,6 +1608,32 @@ async function commitOwnedConfigurationFiles(
         canonicalReleaseManifest(pinned),
         0o600,
       );
+    if (options.imageIds) {
+      const composed =
+        (
+          loadYaml(rendered.composeYaml, { schema: JSON_SCHEMA }) as {
+            services?: Record<string, { image?: unknown }>;
+          }
+        )?.services ?? {};
+      const references = Object.fromEntries(
+        resolved.enabled.flatMap((service) => {
+          const image = composed[service.manifest.id]?.image;
+          return typeof image === "string" ? [[service.manifest.id, image]] : [];
+        }),
+      );
+      const ids = await options.imageIds(references);
+      if (
+        Object.entries(ids).some(
+          ([serviceId, id]) => !Object.hasOwn(references, serviceId) || !IMAGE_ID.test(id),
+        )
+      )
+        throw new Error("Generation image identities do not match its services");
+      await writeDurable(
+        join(temporary, GENERATION_IMAGES_FILE),
+        `${canonicalJson({ images: ids })}\n`,
+        0o600,
+      );
+    }
     // The service files its containers mount, in the store beside the
     // generations; the generation records which trees it uses.
     writeServiceFileTrees(infraDir, serviceFiles.trees.values());

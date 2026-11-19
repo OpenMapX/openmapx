@@ -1,28 +1,20 @@
-/** Existing normal pull: only fixed trusted image sources, with no generation
- * publication, container lifecycle, mutable overlay repair or target lease. */
+/** Image pulls from the images the configuration names, with no generation
+ * publication, container lifecycle or target lease. A coordinator update pulls
+ * data-manager's image first; its maintenance commits the image the pull
+ * reports into the generation, and its recreate is checked against it. */
 import { readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import {
   assertControlExecutionForward,
   assertCoordinatorPullLeaseCompatibility,
   beginControlEffect,
-  type ControlInstallation,
-  coordinatorPullBaselineSchema,
   executionAuthorityState,
   retainConfigurationPreEffectRefusal,
   verifyConfigurationReleaseSourceWitness,
-  verifyConfigurationSourceWitness,
-  verifyCoordinatorPullAdmissionSource,
 } from "@openmapx/core/build-artifacts";
 import {
   canonicalJson,
   coordinatorLifecycleMetadataSchema,
-  coordinatorPullSubmissionDigest,
-  type ExecutionRef,
-  type OpsOperation,
   type PreparedConfigurationRecord,
-  type RetainedParentExecution,
   servicePullResultSchema,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -36,13 +28,9 @@ import {
   runContainedProcess,
   runContainedStreamingProcess,
 } from "./docker-runtime";
-import {
-  type CoordinatorPullOwnershipObservation,
-  confirmCoordinatorPullOwnership,
-  type OwnedServiceResolver,
-} from "./owned-services";
+import type { OwnedServiceResolver } from "./owned-services";
 import { safeProcessDiagnostic } from "./process-output";
-import type { OpsExecutionContext, OpsRuntime } from "./runtime";
+import type { OpsRuntime } from "./runtime";
 import { OpsExecutionFailure } from "./runtime";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
 
@@ -102,113 +90,7 @@ interface ServicePullSource {
   ownedServices: OwnedServiceResolver;
   execFile?: DockerRuntimeOptions["execFile"];
 }
-const sources = new WeakMap<OpsRuntime, ServicePullSource>();
-/** The generic action wrapper cannot infer this internal workflow from a UUID.
- * Require its actual MAC candidate and original signed normal admission. */
-export async function assertAdmittedCoordinatorPullRuntime(
-  runtime: OpsRuntime,
-  operation: Extract<OpsOperation, { kind: "service.pull" }>,
-  context: OpsExecutionContext,
-): Promise<void> {
-  const source = sources.get(runtime);
-  if (
-    !source?.candidateSource ||
-    !context.controlAuthority ||
-    operation.serviceId !== "data-manager" ||
-    !operation.candidateId
-  )
-    throw Error("Actual internal coordinator Update pull required");
-  const candidate = await readConfigurationCandidate(source.candidateSource, operation.candidateId),
-    state = executionAuthorityState(context.controlAuthority),
-    actual = verifyCoordinatorPullAdmissionSource(
-      state.installation.installation,
-      candidate.record,
-    );
-  if (
-    coordinatorCandidateMetadata(candidate.record).action !== "update" ||
-    canonicalJson(actual.operation) !== canonicalJson(operation) ||
-    canonicalJson(actual.execution) !== canonicalJson(context.execution) ||
-    canonicalJson(state.execution) !== canonicalJson(context.execution)
-  )
-    throw Error("Original internal coordinator Update pull changed");
-}
-/** Actual MAC source join, under the first original server admission lock. */
-export async function prepareCoordinatorPullBaseline(
-  runtime: OpsRuntime,
-  installation: ControlInstallation,
-  input: {
-    operation: Extract<OpsOperation, { kind: "service.pull" }>;
-    execution: ExecutionRef;
-    parent?: RetainedParentExecution;
-    requestedDeadlineAt?: number;
-  },
-  observation: CoordinatorPullOwnershipObservation,
-) {
-  const source = sources.get(runtime),
-    parent = input.parent;
-  if (
-    !source?.candidateSource ||
-    !input.operation.candidateId ||
-    !parent ||
-    parent.issuer !== "api"
-  )
-    throw Error("Original coordinator source required");
-  const candidate = await readConfigurationCandidate(
-      source.candidateSource,
-      input.operation.candidateId,
-    ),
-    registry = await source.loadAuthority(),
-    rendered = renderCoordinatorCandidate(candidate, registry, source.infraDir),
-    fixed = rendered.fixed;
-  if (fixed.action !== "update") throw Error("Original update submission required");
-  const submission = fixed.pull,
-    attempt = submission.attempt;
-  if (
-    canonicalJson(submission.operation) !== canonicalJson(input.operation) ||
-    submission.operationKey !== input.execution.operationKey ||
-    submission.operationFingerprint !== input.execution.operationFingerprint ||
-    submission.requestedDeadlineAt !== input.requestedDeadlineAt ||
-    observation.operationFingerprint !== submission.operationFingerprint ||
-    observation.candidateId !== candidate.record.candidateId ||
-    registry.revisionId !== observation.configurationAuthorityRevision ||
-    candidate.record.apiJobId !== parent.apiJobId ||
-    parent.apiJobId !== attempt.apiJobId ||
-    parent.apiOwnerVersion !== attempt.apiOwnerVersion ||
-    parent.attemptId !== attempt.attemptId ||
-    parent.operationKey !== attempt.parentOperationKey ||
-    parent.fingerprint !== attempt.parentFingerprint ||
-    parent.deadlineAt !== attempt.parentDeadlineAt ||
-    candidate.record.parentOperationKey !== parent.operationKey ||
-    candidate.record.parentFingerprint !== parent.fingerprint ||
-    candidate.record.parentDeadlineAt !== parent.deadlineAt ||
-    services.currentConfigurationGeneration(source.infraDir) !==
-      input.operation.expectedConfigurationRevisionId ||
-    rendered.imageReference !== observation.configImageReference
-  )
-    throw Error("Original coordinator claim/source changed");
-  verifyConfigurationSourceWitness({
-    installation,
-    infraDir: source.infraDir,
-    sourceRevision: candidate.record.expectedSourceRevision,
-    expectedCurrentRevisionId: input.operation.expectedConfigurationRevisionId,
-    authorityRevision: observation.configurationAuthorityRevision,
-  });
-  return coordinatorPullBaselineSchema.parse({
-    version: 1,
-    candidateId: candidate.record.candidateId,
-    sourceRevision: candidate.record.expectedSourceRevision,
-    configurationRevisionId: input.operation.expectedConfigurationRevisionId,
-    configurationAuthorityRevision: observation.configurationAuthorityRevision,
-    policyRevision: observation.policyRevision,
-    submissionDigest: coordinatorPullSubmissionDigest(submission),
-    observedAt: observation.observedAt,
-    configImageReference: observation.configImageReference,
-    composeSourcesDigest: observation.composeSourcesDigest,
-    container: observation.container,
-  });
-}
 export function installServicePullRuntime(runtime: OpsRuntime, options: ServicePullSource) {
-  sources.set(runtime, options);
   runtime["service.pull"] = async (operation, context) => {
     if (operation.serviceId === "data-manager" && !operation.candidateId)
       throw new OpsExecutionFailure("configuration_prerequisite", {});
@@ -229,33 +111,19 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
           const registry = await options.loadAuthority();
           let imageReference: string, releaseSelectionDigest: string | null;
           if (operation.candidateId) {
+            // The image the coordinator update's candidate renders, pulled only
+            // as that update's own first step while the old coordinator runs.
             if (!options.candidateSource) throw Error("Original pull candidate unavailable");
             const candidate = await readConfigurationCandidate(
                 options.candidateSource,
                 operation.candidateId,
               ),
               source = renderCoordinatorCandidate(candidate, registry, options.infraDir),
-              fixed = source.fixed,
-              actual = verifyCoordinatorPullAdmissionSource(
-                admitted.installation.installation,
-                candidate.record,
-              ),
-              parent = actual.parent;
+              fixed = source.fixed;
             if (
               fixed.action !== "update" ||
-              !parent ||
-              parent.issuer !== "api" ||
               canonicalJson(fixed.pull.operation) !== canonicalJson(operation) ||
-              fixed.pull.operationKey !== context.execution.operationKey ||
-              fixed.pull.operationFingerprint !== context.execution.operationFingerprint ||
-              candidate.record.apiJobId !== parent.apiJobId ||
-              fixed.pull.attempt.apiJobId !== parent.apiJobId ||
-              fixed.pull.attempt.apiOwnerVersion !== parent.apiOwnerVersion ||
-              fixed.pull.attempt.attemptId !== parent.attemptId ||
-              fixed.pull.attempt.parentOperationKey !== parent.operationKey ||
-              fixed.pull.attempt.parentFingerprint !== parent.fingerprint ||
-              fixed.pull.attempt.parentDeadlineAt !== parent.deadlineAt ||
-              fixed.pull.requestedDeadlineAt !== actual.requestedDeadlineAt
+              fixed.pull.operationKey !== context.execution.operationKey
             )
               throw Error("Original coordinator pull submission changed");
             verifyConfigurationReleaseSourceWitness({
@@ -267,80 +135,12 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
             });
             ({ imageReference, releaseSelectionDigest } = source);
             if (
-              actual.coordinatorPullBaseline.configurationAuthorityRevision !==
-                registry.revisionId ||
-              actual.coordinatorPullBaseline.policyRevision !==
-                context.claim.capability.revisionId ||
-              actual.coordinatorPullBaseline.configImageReference !== imageReference
-            )
-              throw Error("Original pull baseline source changed");
-            await confirmCoordinatorPullOwnership(
-              options.ownedServices,
-              operation,
-              context.execution.operationFingerprint,
-              actual.coordinatorPullBaseline,
-              context.signal,
-            );
-            if (
               (await options.ownedServices.inspectOwnedServices(context.signal)).find(
                 (s) => s.serviceId === "data-manager",
               )?.state !== "running"
             )
               throw Error("Ready old coordinator required before image pull");
             await assertConfigurationCoordinatorReady(context.signal);
-            // Same actual current native Compose sources plus the full
-            // readonly prospective render/registered manifest sources. Aliases
-            // are a refusal condition; no sibling OLD-image exception exists.
-            const args = services.stackComposeArgs({
-              infraDir: options.infraDir,
-              composePath: services.configurationGenerationComposeFile(
-                options.infraDir,
-                operation.expectedConfigurationRevisionId,
-              ),
-            });
-            const config = JSON.parse(
-              (
-                await (options.execFile ?? runContainedProcess)(
-                  "docker",
-                  [...args, "config", "--format", "json"],
-                  { signal: context.signal, timeout: 15000, maxBuffer: 1024 * 1024 },
-                )
-              ).stdout,
-            ) as { services?: Record<string, { image?: string }> };
-            if (
-              !config.services ||
-              typeof config.services !== "object" ||
-              Array.isArray(config.services) ||
-              Object.keys(config.services).length > 256
-            )
-              throw Error("Current coordinator image inventory unavailable");
-            const identity = services.coordinatorPullReferenceIdentity(imageReference),
-              enabled = new Set(source.rendered.resolved.enabled.map((value) => value.manifest.id));
-            for (const service of registry.services) {
-              if (service.manifest.id === "data-manager") continue;
-              const selected = services.readServiceReleaseImageSelection(
-                  options.infraDir,
-                  service.manifest.id,
-                ),
-                prospective =
-                  selected.imageReference ??
-                  (enabled.has(service.manifest.id)
-                    ? services.configurationImageReference(
-                        source.rendered.rendered.composeYaml,
-                        service.manifest.id,
-                      )
-                    : services.serviceContainerImageReference(service.manifest.container));
-              const current =
-                config.services[service.manifest.id]?.image ??
-                selected.imageReference ??
-                services.serviceContainerImageReference(service.manifest.container);
-              if (
-                [current, prospective].some(
-                  (value) => services.coordinatorPullReferenceIdentity(value) === identity,
-                )
-              )
-                throw Error("Coordinator image reference shared by another registered service");
-            }
           } else {
             const selected = services.readServiceReleaseImageSelection(
               options.infraDir,
@@ -366,6 +166,8 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
             return value;
           };
           if (operation.serviceId === "data-manager") {
+            // A maintenance holding data-manager would recreate it from a
+            // generation whose image this pull could move under it.
             try {
               assertCoordinatorPullLeaseCompatibility(authority);
             } catch {
