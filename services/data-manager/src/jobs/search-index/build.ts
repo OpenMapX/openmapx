@@ -9,6 +9,7 @@ import type { StateStore } from "../../state.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import {
   assertDataPublication,
+  cancellableTransaction,
   publishDataChange,
   retainDataPublication,
 } from "../execution/worker-scope.js";
@@ -215,7 +216,7 @@ export async function buildOsmSearchIndex(
       );
       assertDataPublication();
       await publishDataChange(() =>
-        opts.sql.begin(async (transaction) => {
+        cancellableTransaction(opts.sql, async (transaction) => {
           await transaction.unsafe(
             `UPDATE osm_search__staging.index_state
               SET status='ready', place_count=$1, term_count=$2, published_at=NOW(), updated_at=NOW(), last_error=NULL

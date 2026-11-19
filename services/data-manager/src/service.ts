@@ -14,7 +14,7 @@ import { registerApi } from "./api.js";
 import { registerAuth, resolveCallerTokens } from "./auth.js";
 import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "./control-targets.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
-import { rawSql, sql } from "./db/index.js";
+import { connectDatabase, sql } from "./db/index.js";
 import { installDataMutationAdmission } from "./jobs/execution/admission.js";
 import type { DataExecutionReceiver } from "./jobs/execution/api.js";
 import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
@@ -24,6 +24,7 @@ import { removePrunedDataRows } from "./jobs/execution/prune-rows.js";
 import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "./jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "./jobs/execution/store.js";
+import { openCancellableSql } from "./jobs/execution/worker-scope.js";
 import {
   type NotablePlacesSchedule,
   scheduleNotablePlaces,
@@ -97,13 +98,13 @@ const notablePlaces = {
 
 const dataState = new StateStore(dataDir);
 const executionJournal = controlStartup.installation
-  ? createDataExecutionControlJournal(controlStartup.installation, rawSql)
+  ? createDataExecutionControlJournal(controlStartup.installation, sql)
   : undefined;
 const configurationFence = controlStartup.installation
-  ? createDataConfigurationMaintenance(rawSql, controlStartup.installation)
+  ? createDataConfigurationMaintenance(sql, controlStartup.installation)
   : undefined;
 if (configurationFence) installDataMutationAdmission(configurationFence);
-const executionStore = createPostgresDataExecutionStore(rawSql, {
+const executionStore = createPostgresDataExecutionStore(sql, {
   controlJournal: executionJournal,
   configurationFence,
 });
@@ -126,6 +127,7 @@ const dispatcher = createDataExecutionDispatcher({
 const executionRuntime = createDataExecutionRuntime({
   store: executionStore,
   dispatch: dispatcher.dispatch,
+  openSql: (signal) => openCancellableSql(connectDatabase, sql, signal),
 });
 if (controlStartup.installation && configurationFence) {
   executionReceiver = createDataExecutionReceiver({
@@ -215,7 +217,7 @@ async function start(): Promise<void> {
     readiness,
     controlInstallation: controlStartup.installation ?? undefined,
     onControlPruneError: (err) => app.log.warn({ err }, "Control record prune failed"),
-    removePrunedRows: (operationKeys) => removePrunedDataRows(rawSql, operationKeys),
+    removePrunedRows: (operationKeys) => removePrunedDataRows(sql, operationKeys),
     onControlPruneStarted: (stop) => {
       stopControlPrune = stop;
       if (shuttingDown) void stop();

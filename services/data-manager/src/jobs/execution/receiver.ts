@@ -30,7 +30,7 @@ import type { createDataExecutionDispatcher } from "./dispatch.js";
 import { transitChildCandidateId } from "./ops-children.js";
 import type { DataExecutionRuntime } from "./runtime.js";
 import { DataExecutionConflict, dataExecutionInputFingerprint } from "./store.js";
-import { dataExecutionWorkerContext, retainDataPublication } from "./worker-scope.js";
+import { retainDataPublication } from "./worker-scope.js";
 
 /** Whether a refusal before any work came from another holder rather than an
  * agent that did not answer. */
@@ -153,9 +153,7 @@ export function createDataExecutionReceiver(deps: {
         ...(linkSender ? { linkSender } : {}),
         // From the first link on, a failure part-way may have changed links: it
         // is a known partial outcome, never an unknown publication.
-        work: async () => {
-          const context = dataExecutionWorkerContext();
-          if (!context) throw Error("Hardlink application runs only as a data execution");
+        work: async (context) => {
           await retainDataPublication();
           const applied = applyHardlinkPlan(request.plan, { rootDir: context.dataRoot, prune });
           return {
@@ -202,9 +200,9 @@ export function createDataExecutionReceiver(deps: {
       let refusal: unknown;
       const status = await admitRoot(normalizeDataExecutionInput(input), {
         ...options,
-        work: async () => {
+        work: async (context) => {
           try {
-            outcome = { value: await run() };
+            outcome = { value: await run(context.sql) };
           } catch (error) {
             outcome = { error };
             throw error;

@@ -54,6 +54,8 @@ export async function installDisposableDataAdmission(
     dispatch: async () => {
       throw Error("Only in-process work runs in this fixture");
     },
+    // Workers share the fixture's pool; cancellation is covered by the runtime suite.
+    openSql: () => ({ sql, close: async () => {} }),
   });
   installLocalDataExecutions(
     createDataExecutionReceiver({

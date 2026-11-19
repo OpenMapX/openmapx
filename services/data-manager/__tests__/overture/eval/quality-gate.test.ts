@@ -1,8 +1,8 @@
+import type postgres from "postgres";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ unsafe: vi.fn() }));
-
-vi.mock("../../../src/db/index.js", () => ({ sql: { unsafe: mocks.unsafe } }));
+const mocks = { unsafe: vi.fn() };
+const sql = { unsafe: mocks.unsafe } as unknown as postgres.Sql;
 
 import {
   OVERTURE_QUALITY_BASELINE,
@@ -110,7 +110,7 @@ describe("Overture permanent quality baseline", () => {
     mocks.unsafe.mockResolvedValue([]);
 
     await expect(
-      validateOvertureQuality("overture_places__staging", baseline.region, [baseline]),
+      validateOvertureQuality(sql, "overture_places__staging", baseline.region, [baseline]),
     ).rejects.toThrow(/staged-release quality regression: monschau-centre-cafes/);
     expect(mocks.unsafe).toHaveBeenCalledWith(
       expect.stringContaining('FROM "overture_places__staging".places'),
@@ -127,7 +127,7 @@ describe("Overture permanent quality baseline", () => {
 
   it("does not query unrelated regional cases", async () => {
     await expect(
-      validateOvertureQuality("overture_places__staging", "europe/france", [
+      validateOvertureQuality(sql, "overture_places__staging", "europe/france", [
         OVERTURE_QUALITY_BASELINE[0],
       ]),
     ).resolves.toEqual({ applicableCases: 0, cases: [] });
@@ -184,7 +184,7 @@ describe("Overture permanent quality baseline", () => {
     });
 
     await expect(
-      validateFusedOvertureQuality("overture_places", baseline.region, [baseline]),
+      validateFusedOvertureQuality(sql, "overture_places", baseline.region, [baseline]),
     ).resolves.toEqual(
       expect.objectContaining({
         applicableCases: 1,

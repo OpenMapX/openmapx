@@ -1,4 +1,8 @@
-import { assertDataPublication, publishDataChange } from "../execution/worker-scope.js";
+import {
+  assertDataPublication,
+  cancellableTransaction,
+  publishDataChange,
+} from "../execution/worker-scope.js";
 
 export { buildConflationComponents } from "./components.js";
 
@@ -21,9 +25,15 @@ import {
   scoreConflationPair,
 } from "@openmapx/core/utils/poiConflation";
 import { gridDisk, latLngToCell } from "h3-js";
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 import { buildConflationComponents } from "./components.js";
-import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./embeddings.js";
+import {
+  cosineSimilarity,
+  DEFAULT_MODEL,
+  embed,
+  ensureEmbeddingModel,
+  SqlEmbeddingCache,
+} from "./embeddings.js";
 import { assertValidRegion, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema } from "./schema.js";
 
@@ -416,6 +426,7 @@ export interface ScoreOvertureCandidatesResult {
  * crash is harmless.
  */
 export async function scoreOvertureCandidates(opts: {
+  sql: postgres.Sql;
   region: string;
   release?: string;
   ollamaUrl?: string;
@@ -434,7 +445,7 @@ export async function scoreOvertureCandidates(opts: {
   ) => Promise<void>;
 }): Promise<ScoreOvertureCandidatesResult> {
   assertValidRegion(opts.region);
-  const { ollamaUrl, useEmbeddings = false, onProgress } = opts;
+  const { sql, ollamaUrl, useEmbeddings = false, onProgress } = opts;
   const release = await resolveOvertureRelease(opts.release);
   const schema = opts.schema ?? "overture_places";
   assertValidOvertureSchema(schema);
@@ -443,7 +454,10 @@ export async function scoreOvertureCandidates(opts: {
     await ensureEmbeddingModel(DEFAULT_MODEL, ollamaUrl);
   }
 
-  const embedFn = useEmbeddings ? (texts: string[]) => embed(texts, { ollamaUrl }) : undefined;
+  const cache = new SqlEmbeddingCache(sql);
+  const embedFn = useEmbeddings
+    ? (texts: string[]) => embed(texts, { ollamaUrl, cache })
+    : undefined;
   if (!opts.resume) {
     await sql.unsafe(`TRUNCATE TABLE "${schema}".poi_conflation_candidate`);
   }
@@ -538,6 +552,7 @@ export interface AssignOvertureCandidatesResult {
 
 /** Solves exact one-to-one assignments independently per graph component. */
 export async function assignOvertureCandidates(opts: {
+  sql: postgres.Sql;
   schema?: string;
   componentCount?: number | null;
   assignmentCursor?: number | null;
@@ -546,6 +561,7 @@ export async function assignOvertureCandidates(opts: {
   onWorkspace?: (components: number) => Promise<void>;
   onCheckpoint?: (assignmentCursor: number, stagedLinks: number) => Promise<void>;
 }): Promise<AssignOvertureCandidatesResult> {
+  const { sql } = opts;
   const schema = opts.schema ?? "overture_places";
   assertValidOvertureSchema(schema);
   let components = opts.componentCount ?? null;
@@ -557,7 +573,7 @@ export async function assignOvertureCandidates(opts: {
     [],
   );
   if (components === null || (components > 0 && Number(mappings ?? 0) === 0)) {
-    components = await buildConflationComponents(schema, opts.onProgress);
+    components = await buildConflationComponents(sql, schema, opts.onProgress);
     assignmentCursor = 0;
     stagedLinks = 0;
     await opts.onWorkspace?.(components);
@@ -639,13 +655,14 @@ export async function assignOvertureCandidates(opts: {
 
 /** Atomically publishes the completely assigned next-link snapshot. */
 export async function publishOvertureLinks(
+  sql: postgres.Sql,
   schema = "overture_places",
 ): Promise<{ linked: number }> {
   assertValidOvertureSchema(schema);
 
   assertDataPublication();
   await publishDataChange(() =>
-    sql.begin(async (tx) => {
+    cancellableTransaction(sql, async (tx) => {
       await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
       await tx.unsafe(
         `INSERT INTO "${schema}".poi_conflation_link
@@ -668,6 +685,7 @@ export async function publishOvertureLinks(
 
 /** Clears retry artifacts only after state has durably reached `completed`. */
 export async function cleanupOvertureConflationWorkspace(
+  sql: postgres.Sql,
   schema = "overture_places",
 ): Promise<void> {
   assertValidOvertureSchema(schema);

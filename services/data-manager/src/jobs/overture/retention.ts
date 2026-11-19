@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 import { assertDataPublication, publishDataChange } from "../execution/worker-scope.js";
 import { assertValidOvertureSchema } from "./schema.js";
 import { assertValidOvertureRelease } from "./stac.js";
@@ -93,8 +93,9 @@ export function pruneOvertureReleases(
  * safely retryable without rescanning on every steady-state retry tick.
  */
 export async function finalizeOvertureReleaseFiles(
-  opts: PruneOvertureReleasesOptions & { schema?: string },
+  opts: PruneOvertureReleasesOptions & { sql: postgres.Sql; schema?: string },
 ): Promise<PruneOvertureReleasesResult | null> {
+  const { sql } = opts;
   const schema = opts.schema ?? "overture_places";
   assertValidOvertureSchema(schema);
   assertValidOvertureRelease(opts.activeRelease);

@@ -10,6 +10,7 @@ import type {
   linkRequestSchema,
 } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type postgres from "postgres";
 import type z from "zod/v4";
 import { requestPrincipal } from "../../auth.js";
 import type { DataManagerPrincipal } from "../../principals.js";
@@ -31,13 +32,13 @@ export interface DataExecutionReceiver {
   ): Promise<DataExecutionStatus>;
   /** Admits in-process work as a durable execution. Admission is awaited; the
    * completion settles once the execution is terminal, with the work's value
-   * or its failure. */
+   * or its failure. The work gets the execution's cancellable database handle. */
   runLocal<T>(
     input: Extract<
       DataExecutionInput,
       { kind: Exclude<LocalDataExecutionKind, "generation-link"> }
     >,
-    work: () => Promise<T>,
+    work: (sql: postgres.Sql) => Promise<T>,
     options?: { triggeredBy?: string },
   ): Promise<{ status: DataExecutionStatus; completion: Promise<T> }>;
   admitMaintenance(

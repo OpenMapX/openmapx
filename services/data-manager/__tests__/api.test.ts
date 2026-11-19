@@ -27,7 +27,7 @@ vi.mock("../src/jobs/download-osm.js", () => ({
 }));
 
 const mockInspectOvertureRecovery = vi.hoisted(() =>
-  vi.fn(async (_dataDir: string, region: string) => {
+  vi.fn(async (_sql: unknown, _dataDir: string, region: string) => {
     const action = { allowed: false, reason: "fixture" };
     return {
       region,
@@ -511,7 +511,7 @@ describe("data-manager API", () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json()).toMatchObject({ region });
-      expect(mockInspectOvertureRecovery).toHaveBeenCalledWith(dataDir, region);
+      expect(mockInspectOvertureRecovery).toHaveBeenCalledWith(expect.anything(), dataDir, region);
     },
   );
 

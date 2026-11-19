@@ -9,9 +9,14 @@ const factories = [
   ["notable places", createNotablePlacesOperationLock],
 ] as const;
 
+/** A query as postgres.js returns it: a promise with its cancellation modifier. */
+function query(result: Promise<unknown> = Promise.resolve([])) {
+  return Object.assign(result, { signal: () => result });
+}
+
 function healthyConnection() {
   return {
-    unsafe: vi.fn().mockResolvedValue([]),
+    unsafe: vi.fn((_text: string) => query()),
     release: vi.fn(),
   };
 }
@@ -42,7 +47,7 @@ describe.each(factories)("%s operation lock", (_name, createLock) => {
   it("admits a later build after the advisory unlock fails", async () => {
     const unlockError = new Error("unlock failed");
     const faulty = {
-      unsafe: vi.fn().mockResolvedValueOnce([]).mockRejectedValueOnce(unlockError),
+      unsafe: vi.fn().mockReturnValueOnce(query()).mockRejectedValueOnce(unlockError),
       release: vi.fn(),
     };
     const healthy = healthyConnection();
@@ -61,7 +66,7 @@ describe.each(factories)("%s operation lock", (_name, createLock) => {
   it("admits a later build after the connection release throws", async () => {
     const releaseError = new Error("release failed");
     const faulty = {
-      unsafe: vi.fn().mockResolvedValue([]),
+      unsafe: vi.fn((_text: string) => query()),
       release: vi.fn(() => {
         throw releaseError;
       }),
@@ -86,7 +91,7 @@ describe.each(factories)("%s operation lock", (_name, createLock) => {
       failUnlock = reject;
     });
     const faulty = {
-      unsafe: vi.fn().mockResolvedValueOnce([]).mockReturnValueOnce(pendingUnlock),
+      unsafe: vi.fn().mockReturnValueOnce(query()).mockReturnValueOnce(pendingUnlock),
       release: vi.fn(),
     };
     const healthy = healthyConnection();

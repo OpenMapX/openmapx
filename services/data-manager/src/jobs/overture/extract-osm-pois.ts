@@ -4,10 +4,11 @@ import type { OsmFilter } from "@openmapx/core/utils/osmCategoryFilters";
 import { CATEGORY_FILTERS } from "@openmapx/core/utils/osmCategoryFilters";
 import { execa } from "execa";
 import { latLngToCell } from "h3-js";
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 import { osmPbfName } from "../download-osm.js";
 import {
   assertDataPublication,
+  cancellableTransaction,
   dataWorkerSignal,
   publishDataChange,
   retainDataPublication,
@@ -37,6 +38,7 @@ export function osmTagsToCategory(tags: Record<string, string>): string | undefi
 }
 
 export interface ExtractOsmPoisOptions {
+  sql: postgres.Sql;
   /** Defaults to the region's downloaded PBF: <dataDir>/osm/<osmPbfName(region)>. */
   pbfPath?: string;
   dataDir: string;
@@ -174,6 +176,7 @@ export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | n
 export async function extractOsmPois(
   opts: ExtractOsmPoisOptions,
 ): Promise<{ emitted: number; extracted: number }> {
+  const { sql } = opts;
   assertValidRegion(opts.region);
   const schema = opts.schema ?? "overture_places";
   assertValidOvertureSchema(schema);
@@ -262,7 +265,7 @@ export async function extractOsmPois(
           records.push(record);
           emitted += 1;
           if (records.length >= OSM_POIS_INSERT_BATCH) {
-            await insertOsmPois(schema, stagingTable, records);
+            await insertOsmPois(sql, schema, stagingTable, records);
             records = [];
             await opts.onCheckpoint?.(emitted);
             if (emitted % 25_000 === 0) {
@@ -270,7 +273,7 @@ export async function extractOsmPois(
             }
           }
         }
-        await insertOsmPois(schema, stagingTable, records);
+        await insertOsmPois(sql, schema, stagingTable, records);
         await exportProcess;
       } catch (error) {
         exportProcess.kill("SIGTERM");
@@ -291,7 +294,7 @@ export async function extractOsmPois(
       );
       assertDataPublication();
       await publishDataChange(() =>
-        sql.begin(async (tx) => {
+        cancellableTransaction(sql, async (tx) => {
           await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
           await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
           await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
@@ -381,6 +384,7 @@ export function deduplicateOsmPoiRecords(records: OsmPoiRecord[]): OsmPoiRecord[
  * extract instead of silently hiding a malformed snapshot.
  */
 async function insertOsmPois(
+  sql: postgres.Sql,
   schema: string,
   table: "osm_pois__staging",
   records: OsmPoiRecord[],

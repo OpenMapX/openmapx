@@ -19,7 +19,7 @@ globalThis.fetch = (url, options) =>
     : fetchOriginal(url, options);
 const [
   { openControlInstallation, createDataExecutionControlJournal },
-  { rawSql, sql },
+  { connectDatabase, sql },
   { createDataConfigurationMaintenance },
   { createPostgresDataExecutionStore },
   { createDataExecutionRuntime },
@@ -30,6 +30,7 @@ const [
   { resolveOperationsProfileFromEnv },
   { registerAuth },
   { registerApi },
+  { openCancellableSql },
   { default: Fastify },
 ] = await Promise.all([
   import("@openmapx/core/build-artifacts"),
@@ -44,6 +45,7 @@ const [
   import("../../src/jobs/transitous/operations-profile.ts"),
   import("../../src/auth.ts"),
   import("../../src/api.ts"),
+  import("../../src/jobs/execution/worker-scope.ts"),
   import("fastify"),
 ]);
 const installation = openControlInstallation({
@@ -51,10 +53,10 @@ const installation = openControlInstallation({
   role: "data-manager",
   serviceIds: input.serviceIds,
 });
-const journal = createDataExecutionControlJournal(installation, rawSql);
-const fence = createDataConfigurationMaintenance(rawSql, installation);
+const journal = createDataExecutionControlJournal(installation, sql);
+const fence = createDataConfigurationMaintenance(sql, installation);
 await fence.startup();
-const store = createPostgresDataExecutionStore(rawSql, {
+const store = createPostgresDataExecutionStore(sql, {
   controlJournal: journal,
   configurationFence: fence,
 });
@@ -70,7 +72,11 @@ const dispatcher = createDataExecutionDispatcher({
     throw Error("No generation in catalog fixture");
   },
 });
-const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
+const runtime = createDataExecutionRuntime({
+  store,
+  dispatch: dispatcher.dispatch,
+  openSql: (signal) => openCancellableSql(connectDatabase, sql, signal),
+});
 const receiver = createDataExecutionReceiver({
   runtime,
   installation,

@@ -121,7 +121,11 @@ export async function runCatalogValidation(options: {
       abortSignal: context.signal,
       logger,
       onStageComplete: async (stage) => {
-        await makePersistingOnStageComplete(context.execution.executionId, logger)(stage);
+        await makePersistingOnStageComplete(
+          context.sql,
+          context.execution.executionId,
+          logger,
+        )(stage);
         const diagnostic = dataExecutionDiagnostic(stage.message ?? stage.stage);
         await context.checkpoint({
           progress: Math.min(

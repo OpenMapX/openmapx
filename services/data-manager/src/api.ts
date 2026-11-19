@@ -922,7 +922,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   registerDataManagerRoute(app, "getOvertureRecovery", async (req, reply) => {
     reply.header("cache-control", "no-store");
     try {
-      return await inspectOvertureRecovery(dataDir, req.query.region);
+      return await inspectOvertureRecovery(sql, dataDir, req.query.region);
     } catch {
       reply.code(503);
       return { ok: false, error: "Overture prerequisite inspection is unavailable" };
@@ -930,7 +930,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   registerDataManagerRoute(app, "getOvertureStatus", async (_req, reply) => {
-    const state = await getOvertureConflationState();
+    const state = await getOvertureConflationState(sql);
     if (!state) {
       reply.code(404);
       return { ok: false, error: "overture_places not ingested" };

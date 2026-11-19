@@ -54,9 +54,6 @@ vi.mock("../../src/db/index", () => ({
   get sql() {
     return state.fixture.sql;
   },
-  get rawSql() {
-    return state.fixture.sql;
-  },
   get db() {
     return state.fixture.db;
   },

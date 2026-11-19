@@ -1,3 +1,4 @@
+import type postgres from "postgres";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface InsertCall {
@@ -6,9 +7,10 @@ interface InsertCall {
 
 const insertCalls: InsertCall[] = [];
 let insertError: Error | null = null;
+const sql = {} as postgres.Sql;
 
-vi.mock("../src/db/index.js", () => ({
-  db: {
+vi.mock("drizzle-orm/postgres-js", () => ({
+  drizzle: () => ({
     insert: () => ({
       values: (values: Record<string, unknown>) => {
         insertCalls.push({ values });
@@ -25,7 +27,7 @@ vi.mock("../src/db/index.js", () => ({
         };
       },
     }),
-  },
+  }),
 }));
 
 beforeEach(() => {
@@ -51,7 +53,7 @@ describe("job persistence", () => {
         stderr: "download https://user:ARTIFACT-PASSWORD@example.org/feed?key=ARTIFACT-TOKEN",
       },
     };
-    const hook = makePersistingOnStageComplete("job-1", { warn: vi.fn() }, "example");
+    const hook = makePersistingOnStageComplete(sql, "job-1", { warn: vi.fn() }, "example");
 
     await hook(result);
 
@@ -70,7 +72,7 @@ describe("job persistence", () => {
   it("normalizes absent diagnostics and swallows redacted persistence errors", async () => {
     const { makePersistingOnStageComplete } = await import("../src/jobs/persistence.js");
     const warn = vi.fn();
-    const hook = makePersistingOnStageComplete("job-1", { warn }, "example");
+    const hook = makePersistingOnStageComplete(sql, "job-1", { warn }, "example");
     const result = {
       stage: "promote",
       status: "skipped",

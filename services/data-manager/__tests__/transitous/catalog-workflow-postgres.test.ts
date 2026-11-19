@@ -63,9 +63,6 @@ vi.mock("../../src/db/index", () => ({
   get sql() {
     return state.db.sql;
   },
-  get rawSql() {
-    return state.db.sql;
-  },
 }));
 const csv =
   "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n";

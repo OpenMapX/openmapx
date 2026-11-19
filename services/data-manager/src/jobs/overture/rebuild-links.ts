@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { osmPbfName } from "../download-osm.js";
 import { assertOverturePostgresCapacity, estimateOvertureConflationBytes } from "./capacity.js";
@@ -71,6 +71,7 @@ export type RebuildOvertureLinksResult =
   | { status: "failed"; linked: number; phase: ConflationPhase; error: string };
 
 export interface RebuildOvertureLinksOptions {
+  sql: postgres.Sql;
   region: string;
   dataDir: string;
   release?: string;
@@ -91,7 +92,7 @@ interface RebuildDependencies {
   validateFusedQuality: typeof validateFusedOvertureQuality;
   publish: typeof publishOvertureLinks;
   cleanup: typeof cleanupOvertureConflationWorkspace;
-  preflight: (schema: string) => Promise<void>;
+  preflight: (sql: postgres.Sql, schema: string) => Promise<void>;
 }
 
 export function fingerprintOsmSnapshot(path: string): string {
@@ -111,8 +112,9 @@ const defaultDependencies: RebuildDependencies = {
   validateFusedQuality: validateFusedOvertureQuality,
   publish: publishOvertureLinks,
   cleanup: cleanupOvertureConflationWorkspace,
-  preflight: (schema) =>
+  preflight: (sql, schema) =>
     assertOverturePostgresCapacity({
+      sql,
       schema,
       stage: "PostGIS conflation workspace",
       workingBytes: estimateOvertureConflationBytes,
@@ -206,6 +208,7 @@ function mapState(row: StateRow): ConflationState {
 }
 
 export async function getOvertureConflationState(
+  sql: postgres.Sql,
   schema = "overture_places",
 ): Promise<ConflationState | null> {
   assertValidOvertureSchema(schema);
@@ -237,6 +240,7 @@ const ACCUMULATE_PHASE_DURATION = `phase_durations_ms = jsonb_set(
 )`;
 
 async function resetForNewSource(
+  sql: postgres.Sql,
   schema: string,
   attemptCount: number,
   sourceFingerprint: string,
@@ -259,18 +263,19 @@ async function resetForNewSource(
   );
 }
 
-async function stateAfterTransition(schema: string): Promise<ConflationState> {
-  const state = await getOvertureConflationState(schema);
+async function stateAfterTransition(sql: postgres.Sql, schema: string): Promise<ConflationState> {
+  const state = await getOvertureConflationState(sql, schema);
   if (!state) throw new Error("Overture conflation state disappeared during phase transition");
   return state;
 }
 
 async function finalizeWorkspace(
+  sql: postgres.Sql,
   schema: string,
   attemptCount: number,
   cleanup: RebuildDependencies["cleanup"],
 ): Promise<void> {
-  await cleanup(schema);
+  await cleanup(sql, schema);
   await sql.unsafe(
     `UPDATE "${schema}".conflation_state
      SET workspace_cleaned_at = COALESCE(workspace_cleaned_at, NOW()), updated_at = NOW()
@@ -296,10 +301,11 @@ export async function rebuildOvertureLinksUnlocked(
   dependencies: RebuildDependencies = defaultDependencies,
 ): Promise<RebuildOvertureLinksResult> {
   assertValidRegion(opts.region);
+  const { sql } = opts;
   const schema = opts.schema ?? "overture_places";
   assertValidOvertureSchema(schema);
 
-  const current = await getOvertureConflationState(schema);
+  const current = await getOvertureConflationState(sql, schema);
   if (!current) throw new Error(`No installed Overture release with conflation state in ${schema}`);
   const release = opts.release ?? current.release;
   if (current.release !== release || current.region !== opts.region) {
@@ -320,7 +326,7 @@ export async function rebuildOvertureLinksUnlocked(
   if (current.status === "completed" && !restart) {
     if (current.workspaceCleanedAt === null) {
       try {
-        await finalizeWorkspace(schema, current.attemptCount, dependencies.cleanup);
+        await finalizeWorkspace(sql, schema, current.attemptCount, dependencies.cleanup);
       } catch (cleanupError) {
         opts.onProgress?.(
           `Conflation is complete; retry workspace cleanup remains deferred: ${(cleanupError as Error).message}`,
@@ -361,7 +367,7 @@ export async function rebuildOvertureLinksUnlocked(
   );
   let state = claimed[0] ? mapState(claimed[0]) : null;
   if (!state) {
-    const latest = await getOvertureConflationState(schema);
+    const latest = await getOvertureConflationState(sql, schema);
     if (latest?.status === "completed") {
       return { status: "already_completed", linked: latest.linkedCount ?? 0 };
     }
@@ -404,15 +410,15 @@ export async function rebuildOvertureLinksUnlocked(
   };
 
   try {
-    await dependencies.preflight(schema);
+    await dependencies.preflight(sql, schema);
     if (restart) {
       opts.onProgress?.(
         opts.force === true
           ? "Explicit restart requested; discarding durable conflation workspace..."
           : "OSM snapshot changed; restarting conflation from extraction...",
       );
-      await resetForNewSource(schema, state.attemptCount, sourceFingerprint);
-      state = await stateAfterTransition(schema);
+      await resetForNewSource(sql, schema, state.attemptCount, sourceFingerprint);
+      state = await stateAfterTransition(sql, schema);
     }
 
     if (state.phase === "extract") {
@@ -420,6 +426,7 @@ export async function rebuildOvertureLinksUnlocked(
         `Conflation attempt ${state.attemptCount}, phase extract: streaming the OSM snapshot...`,
       );
       const extraction = await dependencies.extract({
+        sql,
         region: opts.region,
         dataDir: opts.dataDir,
         pbfPath,
@@ -442,7 +449,7 @@ export async function rebuildOvertureLinksUnlocked(
          WHERE singleton = 1 AND status = 'running' AND attempt_count = $4 AND phase = 'extract'`,
         [sourceFingerprint, extraction.emitted, extraction.extracted, state.attemptCount],
       );
-      state = await stateAfterTransition(schema);
+      state = await stateAfterTransition(sql, schema);
     }
 
     if (state.phase === "score") {
@@ -452,6 +459,7 @@ export async function rebuildOvertureLinksUnlocked(
       );
       const hasCursor = state.scoreCursorH3 !== null;
       const score = await dependencies.score({
+        sql,
         region: opts.region,
         release,
         schema,
@@ -497,7 +505,7 @@ export async function rebuildOvertureLinksUnlocked(
           state.attemptCount,
         ],
       );
-      state = await stateAfterTransition(schema);
+      state = await stateAfterTransition(sql, schema);
     }
 
     if (state.phase === "assign") {
@@ -505,6 +513,7 @@ export async function rebuildOvertureLinksUnlocked(
         `Conflation attempt ${state.attemptCount}, phase assign: solving exact components...`,
       );
       const assigned = await dependencies.assign({
+        sql,
         schema,
         componentCount: state.componentCount,
         assignmentCursor: state.assignmentCursor,
@@ -530,7 +539,7 @@ export async function rebuildOvertureLinksUnlocked(
       });
 
       opts.onProgress?.("Running fused OSM + Overture quality regression gate...");
-      const quality = await dependencies.validateFusedQuality(schema, opts.region);
+      const quality = await dependencies.validateFusedQuality(sql, schema, opts.region);
       opts.onProgress?.(`Fused quality gate passed (${quality.applicableCases} cases).`);
       await sql.unsafe(
         `UPDATE "${schema}".conflation_state
@@ -540,7 +549,7 @@ export async function rebuildOvertureLinksUnlocked(
          WHERE singleton = 1 AND status = 'running' AND attempt_count = $4 AND phase = 'assign'`,
         [assigned.components, assigned.assignmentCursor, assigned.stagedLinks, state.attemptCount],
       );
-      state = await stateAfterTransition(schema);
+      state = await stateAfterTransition(sql, schema);
     }
 
     if (state.phase === "publish") {
@@ -550,7 +559,7 @@ export async function rebuildOvertureLinksUnlocked(
       opts.onProgress?.(
         `Conflation attempt ${state.attemptCount}, phase publish: atomically activating links...`,
       );
-      const published = await dependencies.publish(schema);
+      const published = await dependencies.publish(sql, schema);
       await sql.unsafe(
         `UPDATE "${schema}".conflation_state
          SET ${ACCUMULATE_PHASE_DURATION}, phase = 'complete', status = 'completed',
@@ -559,9 +568,9 @@ export async function rebuildOvertureLinksUnlocked(
          WHERE singleton = 1 AND status = 'running' AND attempt_count = $2 AND phase = 'publish'`,
         [published.linked, state.attemptCount],
       );
-      state = await stateAfterTransition(schema);
+      state = await stateAfterTransition(sql, schema);
       try {
-        await finalizeWorkspace(schema, state.attemptCount, dependencies.cleanup);
+        await finalizeWorkspace(sql, schema, state.attemptCount, dependencies.cleanup);
       } catch (cleanupError) {
         opts.onProgress?.(
           `Conflation completed; retry workspace cleanup deferred: ${(cleanupError as Error).message}`,

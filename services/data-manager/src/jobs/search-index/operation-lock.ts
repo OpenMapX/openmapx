@@ -1,7 +1,7 @@
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
 
-import { withDataSqlSettlement } from "../execution/worker-scope.js";
+import { dataWorkerSignal } from "../execution/worker-scope.js";
 
 export const [SEARCH_INDEX_LOCK_NAMESPACE, SEARCH_INDEX_LOCK_KEY] = DATA_ADVISORY_LOCKS.searchIndex;
 const [, NOTABLE_PLACES_LOCK_KEY] = DATA_ADVISORY_LOCKS.notablePlaces;
@@ -32,17 +32,18 @@ function createAdvisoryOperationLock(
       let connection: Awaited<ReturnType<typeof sql.reserve>> | undefined;
       try {
         connection = await sql.reserve();
-        await connection.unsafe(`SELECT pg_advisory_lock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`);
+        // Waiting for another process's build ends when the waiting worker is cancelled.
+        await connection
+          .unsafe(`SELECT pg_advisory_lock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`)
+          .signal(dataWorkerSignal());
         return await operation();
       } finally {
         // Admission stays held until cleanup settles, and clears even if it throws.
         try {
           if (connection) {
             try {
-              await withDataSqlSettlement(() =>
-                connection!.unsafe(
-                  `SELECT pg_advisory_unlock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`,
-                ),
+              await connection.unsafe(
+                `SELECT pg_advisory_unlock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`,
               );
             } finally {
               connection.release();

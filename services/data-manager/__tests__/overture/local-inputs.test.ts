@@ -11,13 +11,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { overtureRecoverySchema } from "@openmapx/core/data-manager-contracts";
+import type postgres from "postgres";
 import { afterEach, expect, it, vi } from "vitest";
 import { captureOvertureCatalogue } from "../../src/jobs/overture/attribution-capture";
 import { inspectOvertureLocalInputs } from "../../src/jobs/overture/local-inputs";
 import { buildOverturePullContract, pullContractPath } from "../../src/jobs/overture/stac";
 
 const database = vi.hoisted(() => ({ sql: Object.assign(vi.fn(), { unsafe: vi.fn() }) }));
-vi.mock("../../src/db/index", () => ({ sql: database.sql, rawSql: database.sql, db: {} }));
+vi.mock("../../src/db/index", () => ({ sql: database.sql, db: {} }));
+const sql = database.sql as unknown as postgres.Sql;
 vi.mock("../../src/jobs/overture/operation-lock", async (original) => ({
   ...(await original<object>()),
   overtureOperationBusy: async () => false,
@@ -115,16 +117,16 @@ it("reports a complete pull without a valid catalogue instead of skipping to an 
     .spyOn(globalThis, "fetch")
     .mockRejectedValue(Error("Unexpected network release discovery"));
   const { ingestOverture } = await import("../../src/jobs/overture/ingest");
-  await expect(ingestOverture({ dataDir: path, region: "europe/germany" })).rejects.toThrow(
+  await expect(ingestOverture({ sql, dataDir: path, region: "europe/germany" })).rejects.toThrow(
     refusal,
   );
   const { assertOvertureRecoveryInputs, inspectOvertureRecovery } = await import(
     "../../src/jobs/overture/recovery"
   );
   await expect(
-    assertOvertureRecoveryInputs(path, "europe/germany", "overture-ingest"),
+    assertOvertureRecoveryInputs(sql, path, "europe/germany", "overture-ingest"),
   ).rejects.toThrow(refusal);
-  const status = await inspectOvertureRecovery(path, "europe/germany");
+  const status = await inspectOvertureRecovery(sql, path, "europe/germany");
   expect(status.downloadedRelease).toBeNull();
   expect(status.actions["overture-ingest"]).toEqual({ allowed: false, reason: refusal });
   expect(overtureRecoverySchema.parse(status)).toEqual(status);
@@ -145,7 +147,7 @@ it("refuses standalone ingest without a completed local download before network 
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(Error("Unexpected network release discovery"));
   const { ingestOverture } = await import("../../src/jobs/overture/ingest");
-  await expect(ingestOverture({ dataDir: path, region: "europe/germany" })).rejects.toThrow(
+  await expect(ingestOverture({ sql, dataDir: path, region: "europe/germany" })).rejects.toThrow(
     /completed local Overture partition/,
   );
   expect(fetch).not.toHaveBeenCalled();

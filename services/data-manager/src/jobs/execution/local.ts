@@ -3,6 +3,7 @@ import type {
   DataExecutionStatus,
   LocalDataExecutionKind,
 } from "@openmapx/core/data-manager-contracts";
+import type postgres from "postgres";
 import type { DataExecutionReceiver } from "./api.js";
 
 type LocalInput = Extract<
@@ -15,10 +16,11 @@ export function installLocalDataExecutions(value: Pick<DataExecutionReceiver, "r
   receiver = value;
 }
 /** Admits `work` as a durable data execution of `input`'s kind and returns once
- * it is admitted; `completion` settles when the execution is terminal. */
+ * it is admitted; `completion` settles when the execution is terminal. The work
+ * gets the execution's database handle, whose queries cancelling it cancels. */
 export async function startLocalDataExecution<T>(
   input: LocalInput,
-  work: () => Promise<T>,
+  work: (sql: postgres.Sql) => Promise<T>,
   options?: { triggeredBy?: string },
 ): Promise<{ status: DataExecutionStatus; completion: Promise<T> }> {
   if (!receiver)
@@ -28,7 +30,7 @@ export async function startLocalDataExecution<T>(
 /** Runs `work` as a durable data execution and resolves with its value. */
 export async function runLocalDataExecution<T>(
   input: LocalInput,
-  work: () => Promise<T>,
+  work: (sql: postgres.Sql) => Promise<T>,
   options?: { triggeredBy?: string },
 ): Promise<T> {
   return (await startLocalDataExecution(input, work, options)).completion;

@@ -1,14 +1,19 @@
 /** Readiness is advisory data; the existing worker lock and checks enforce writes. */
 import type { OvertureRecoveryStatus } from "@openmapx/core/data-manager-contracts";
+import type postgres from "postgres";
 import { inspectOvertureLocalInputs } from "./local-inputs.js";
 import { overtureOperationBusy } from "./operation-lock.js";
 import { getOvertureConflationState } from "./rebuild-links.js";
 export async function inspectOvertureRecovery(
+  sql: postgres.Sql,
   dataDir: string,
   region: string,
 ): Promise<OvertureRecoveryStatus> {
   const local = inspectOvertureLocalInputs(dataDir, region),
-    [busy, installed] = await Promise.all([overtureOperationBusy(), getOvertureConflationState()]);
+    [busy, installed] = await Promise.all([
+      overtureOperationBusy(),
+      getOvertureConflationState(sql),
+    ]);
   const matching = installed?.region === region;
   const action = (reason: string | null) => ({
     allowed: !busy && reason === null,
@@ -39,6 +44,7 @@ export async function inspectOvertureRecovery(
   };
 }
 export async function assertOvertureRecoveryInputs(
+  sql: postgres.Sql,
   dataDir: string,
   region: string,
   kind: "overture-ingest" | "overture-extract" | "overture-conflate",
@@ -51,7 +57,7 @@ export async function assertOvertureRecoveryInputs(
       throw Error("Download a completed release partition for this region before ingesting it.");
     return local.downloadedRelease;
   }
-  const installed = await getOvertureConflationState();
+  const installed = await getOvertureConflationState(sql);
   if (installed?.region !== region)
     throw Error("Ingest this region's Places partition before rebuilding its OSM workspace.");
   if (

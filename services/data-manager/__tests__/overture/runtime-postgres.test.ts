@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseClient } from "@openmapx/integration-framework";
 import { latLngToCell } from "h3-js";
+import type postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveGers } from "../../../../integrations/knowledge-overture/provider.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
@@ -54,7 +55,7 @@ async function withDeadline<T>(work: PromiseLike<T>, label: string, ms = 10_000)
 describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
   let pg: PostgisFixture;
   let previousDatabaseUrl: string | undefined;
-  let dataManagerSql: { end: (options?: { timeout?: number }) => Promise<void> };
+  let dataManagerSql: postgres.Sql;
   let rebuildModule: typeof import("../../src/jobs/overture/rebuild-links.js");
   let ingestModule: typeof import("../../src/jobs/overture/ingest.js");
   let retentionModule: typeof import("../../src/jobs/overture/retention.js");
@@ -67,9 +68,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     rebuildModule = await import("../../src/jobs/overture/rebuild-links.js");
     ingestModule = await import("../../src/jobs/overture/ingest.js");
     retentionModule = await import("../../src/jobs/overture/retention.js");
-    ({ sql: dataManagerSql } = (await import("../../src/db/index.js")) as unknown as {
-      sql: typeof dataManagerSql;
-    });
+    ({ sql: dataManagerSql } = await import("../../src/db/index.js"));
     await pg.sql.unsafe(buildSchemaDDL("overture_places"));
   }, 120_000);
 
@@ -82,7 +81,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
 
   it("backfills 25,000 rows in key order, preserves prefilled values, and restarts after a failed batch", async () => {
     await pg.sql.unsafe(buildSchemaDDL("overture_h3test", { deferPlacesIndexes: true }));
-    await ingestModule.backfillDerivedColumns("overture_h3test");
+    await ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test");
     await pg.sql.unsafe(`INSERT INTO overture_h3test.places (gers_id, geom, h3_r8, sources_catalogue, release)
       SELECT lpad(i::text, 8, '0'), ST_SetSRID(ST_MakePoint(8 + (i % 100) / 10000.0, 50),4326),
         CASE WHEN i % 7 = 0 THEN 'prefilled' ELSE NULL END, '[{"sourceId":"overture","name":"Overture Maps"}]', 'synthetic'
@@ -90,15 +89,15 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(`CREATE FUNCTION overture_h3test.fail_late() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN IF NEW.gers_id > '00010000' THEN RAISE EXCEPTION 'injected late batch failure'; END IF; RETURN NEW; END $$;
       CREATE TRIGGER fail_late BEFORE UPDATE ON overture_h3test.places FOR EACH ROW EXECUTE FUNCTION overture_h3test.fail_late()`);
-    await expect(ingestModule.backfillDerivedColumns("overture_h3test")).rejects.toThrow(
-      "injected late batch failure",
-    );
+    await expect(
+      ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test"),
+    ).rejects.toThrow("injected late batch failure");
     const [partial] = await pg.sql.unsafe(
       `SELECT count(*)::int AS count FROM overture_h3test.places WHERE h3_r8 IS NOT NULL AND h3_r8 <> 'prefilled'`,
     );
     expect(partial.count).toBe(5000);
     await pg.sql.unsafe("DROP TRIGGER fail_late ON overture_h3test.places");
-    await ingestModule.backfillDerivedColumns("overture_h3test");
+    await ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test");
     const rows = await pg.sql.unsafe<{ gers_id: string; h3_r8: string }[]>(
       "SELECT gers_id, h3_r8 FROM overture_h3test.places",
     );
@@ -113,7 +112,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(
       `CREATE TRIGGER fail_late BEFORE UPDATE ON overture_h3test.places FOR EACH ROW EXECUTE FUNCTION overture_h3test.fail_late()`,
     );
-    await ingestModule.backfillDerivedColumns("overture_h3test");
+    await ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test");
   }, 60_000);
 
   it("executes the spatial fallback with one SRID and resolves the nearby place", async () => {
@@ -209,6 +208,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
       preflight: vi.fn(async () => undefined),
     };
     const options = {
+      sql: dataManagerSql,
       region: "europe/germany/berlin",
       release: "2026-07-22.0",
       dataDir,
@@ -224,14 +224,14 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
           error: "injected score crash",
         }),
       );
-      expect((await rebuildModule.getOvertureConflationState())?.phase).toBe("score");
+      expect((await rebuildModule.getOvertureConflationState(dataManagerSql))?.phase).toBe("score");
 
       await expect(
         rebuildModule.rebuildOvertureLinksUnlocked(options, dependencies as never),
       ).resolves.toEqual(expect.objectContaining({ status: "completed", linked: 1 }));
       expect(dependencies.extract).toHaveBeenCalledTimes(1);
       expect(dependencies.score).toHaveBeenCalledTimes(2);
-      expect(await rebuildModule.getOvertureConflationState()).toEqual(
+      expect(await rebuildModule.getOvertureConflationState(dataManagerSql)).toEqual(
         expect.objectContaining({
           status: "completed",
           phase: "complete",
@@ -242,6 +242,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
 
       await expect(
         retentionModule.finalizeOvertureReleaseFiles({
+          sql: dataManagerSql,
           dataDir,
           activeRelease: "2026-07-22.0",
           retain: 2,
@@ -249,6 +250,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
       ).resolves.toEqual({ retained: [], removed: [] });
       await expect(
         retentionModule.finalizeOvertureReleaseFiles({
+          sql: dataManagerSql,
           dataDir,
           activeRelease: "2026-07-22.0",
           retain: 2,
@@ -261,7 +263,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         rebuildModule.rebuildOvertureLinksUnlocked(options, dependencies as never),
       ).resolves.toEqual(expect.objectContaining({ status: "completed", linked: 1 }));
       expect(dependencies.extract).toHaveBeenCalledTimes(2);
-      expect(await rebuildModule.getOvertureConflationState()).toEqual(
+      expect(await rebuildModule.getOvertureConflationState(dataManagerSql)).toEqual(
         expect.objectContaining({
           status: "completed",
           sourceFingerprint: "snapshot-two",
@@ -565,7 +567,12 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
        VALUES ('2026-08-19.0', 'europe/germany/berlin', 3, 'pending')`,
     );
 
-    await ingestModule.activateOvertureStagingSchema(live, staging, "2026-09-10T12:00:00.000Z");
+    await ingestModule.activateOvertureStagingSchema(
+      dataManagerSql,
+      live,
+      staging,
+      "2026-09-10T12:00:00.000Z",
+    );
 
     // Conflation is a later, independent phase. A failed attempt must not
     // rewrite the timestamp that identifies the active Places release.

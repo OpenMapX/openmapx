@@ -1,3 +1,4 @@
+import type postgres from "postgres";
 import { makePersistingOnStageComplete as makeSharedPersistingOnStageComplete } from "../persistence.js";
 import type { JobLogger, StageResult } from "./types.js";
 
@@ -8,8 +9,9 @@ import type { JobLogger, StageResult } from "./types.js";
  * successful Transitous run.
  */
 export function makePersistingOnStageComplete(
+  sql: postgres.Sql,
   jobId: string,
   logger: JobLogger,
 ): (result: StageResult) => Promise<void> {
-  return makeSharedPersistingOnStageComplete(jobId, logger, "transitous-pipeline");
+  return makeSharedPersistingOnStageComplete(sql, jobId, logger, "transitous-pipeline");
 }

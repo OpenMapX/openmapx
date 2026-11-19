@@ -1,5 +1,6 @@
 import { jobStages } from "@openmapx/db-schema";
-import { db } from "../db/index.js";
+import { drizzle } from "drizzle-orm/postgres-js";
+import type postgres from "postgres";
 import { scrubDiagnosticValue, scrubSecrets } from "../utils/scrub-secrets.js";
 
 export interface PersistableStageResult {
@@ -18,6 +19,7 @@ export interface PersistenceLogger {
 }
 
 export function makePersistingOnStageComplete<TStage extends PersistableStageResult>(
+  sql: postgres.Sql,
   jobId: string,
   logger: PersistenceLogger,
   logPrefix: string,
@@ -33,17 +35,19 @@ export function makePersistingOnStageComplete<TStage extends PersistableStageRes
         error: TStage["error"] | null;
         artifacts: Record<string, unknown> | null;
       };
-      await db.insert(jobStages).values({
-        jobId,
-        stage: result.stage,
-        status: result.status,
-        startedAt: new Date(result.startedAt),
-        finishedAt: new Date(result.finishedAt),
-        durationMs: result.durationMs,
-        message: diagnostics.message,
-        error: diagnostics.error,
-        artifacts: diagnostics.artifacts,
-      });
+      await drizzle(sql)
+        .insert(jobStages)
+        .values({
+          jobId,
+          stage: result.stage,
+          status: result.status,
+          startedAt: new Date(result.startedAt),
+          finishedAt: new Date(result.finishedAt),
+          durationMs: result.durationMs,
+          message: diagnostics.message,
+          error: diagnostics.error,
+          artifacts: diagnostics.artifacts,
+        });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(

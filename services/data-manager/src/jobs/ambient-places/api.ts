@@ -82,6 +82,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
   async function start(
     action: "build" | "resume",
     job: (
+      sql: postgres.Sql,
       claim: () => void,
       options: { onProgress: (p: AmbientBuildProgress) => void },
     ) => Promise<unknown>,
@@ -100,8 +101,9 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       accept = resolve;
       reject = rejectPromise;
     });
-    void runLocalDataExecution({ kind: "ambient-publication", action }, () =>
+    void runLocalDataExecution({ kind: "ambient-publication", action }, (worker) =>
       job(
+        worker,
         () => {
           claimed = true;
           accept();
@@ -147,7 +149,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     }
     return start(
       "build",
-      (claim, options) => buildAmbientPlaces(sql, region, claim, options),
+      (worker, claim, options) => buildAmbientPlaces(worker, region, claim, options),
       reply,
     );
   });
@@ -160,13 +162,14 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
         if (action === "resume")
           return start(
             "resume",
-            (claim, options) => resumePlanetPlaces(sql, generation, claim, options),
+            (worker, claim, options) => resumePlanetPlaces(worker, generation, claim, options),
             reply,
           );
         if (building) return reply.code(409).send({ error: "An ambient build is already running" });
         try {
-          await runLocalDataExecution({ kind: "ambient-publication", action: "discard" }, () =>
-            discardPlanetPlaces(sql, generation),
+          await runLocalDataExecution(
+            { kind: "ambient-publication", action: "discard" },
+            (worker) => discardPlanetPlaces(worker, generation),
           );
           return { ok: true };
         } catch (error) {
@@ -179,7 +182,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     try {
       await runLocalDataExecution(
         { kind: "ambient-publication", action: request.body.enabled ? "enable" : "disable" },
-        () => setAmbientEnabled(sql, request.body.enabled),
+        (worker) => setAmbientEnabled(worker, request.body.enabled),
       );
       return { ok: true };
     } catch (error) {
@@ -188,8 +191,8 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
   });
   registerDataManagerRoute(app, "rollbackAmbientPlaces", async (_request, reply) => {
     try {
-      await runLocalDataExecution({ kind: "ambient-publication", action: "rollback" }, () =>
-        rollbackAmbientPlaces(sql),
+      await runLocalDataExecution({ kind: "ambient-publication", action: "rollback" }, (worker) =>
+        rollbackAmbientPlaces(worker),
       );
       return { ok: true };
     } catch (error) {

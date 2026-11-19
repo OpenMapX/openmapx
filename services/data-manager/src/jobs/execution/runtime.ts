@@ -33,6 +33,7 @@ import {
   OpsClientError,
   type VerifiedParentExecution,
 } from "@openmapx/core/ops";
+import type postgres from "postgres";
 import { jobChildLogger } from "../../logger.js";
 import { opsClient } from "../../ops-client.js";
 import { cancelAndSettleRetainedTransitousScripts } from "../transitous/script-runner.js";
@@ -50,7 +51,7 @@ import type {
   DataExecutionRecord,
   DataExecutionStore,
 } from "./store.js";
-import { withDataExecutionScope } from "./worker-scope.js";
+import { type CancellableSql, withDataExecutionScope } from "./worker-scope.js";
 export type DataExecutionProgressPatch = Partial<
   Pick<DataExecutionStatus, "progress" | "diagnostics" | "publication">
 >;
@@ -62,6 +63,8 @@ export interface DataExecutionContext {
   readonly execution: ExecutionRef;
   readonly executionVersion: number;
   readonly signal: AbortSignal;
+  /** The worker's database handle: cancelling the execution cancels its queries. */
+  readonly sql: postgres.Sql;
   /** The execution's own lease in the agent's store. A hardlink application
    * sent with a lease id runs under its sender's lease, and a short traffic run
    * under none. */
@@ -94,7 +97,7 @@ export interface DataExecutionRuntime {
       /** Checks the normalized identity against what the caller named. */
       adopt?: (execution: ExecutionRef) => Promise<undefined>;
       /** The in-process work of a local kind, run instead of the dispatcher. */
-      work?: () => Promise<DataExecutionResult>;
+      work?: (context: DataExecutionContext) => Promise<DataExecutionResult>;
       /** Told why the execution ended before its work began: its lease was refused. */
       refused?: (error: unknown) => void;
     },
@@ -148,6 +151,8 @@ export function createDataExecutionRuntime(deps: {
   store: DataExecutionStore;
   dispatch(input: DataExecutionInput, context: DataExecutionContext): Promise<DataExecutionResult>;
   now?: () => number;
+  /** Opens a worker's database handle; its queries are cancelled when the signal aborts. */
+  openSql?: (signal: AbortSignal) => CancellableSql;
 }): DataExecutionRuntime {
   const { store } = deps,
     journal = store.controlJournal,
@@ -184,6 +189,9 @@ export function createDataExecutionRuntime(deps: {
       signal: AbortSignal.abort(
         new DOMException("Recovery permits cancellation/observation only", "AbortError"),
       ),
+      get sql(): never {
+        throw new DataExecutionOwnershipLost("Recovery permits observation/settlement only");
+      },
       targetAuthority: lease,
       authority,
       installation: owner.installation,
@@ -346,7 +354,7 @@ export function createDataExecutionRuntime(deps: {
     record: DataExecutionRecord,
     adopt?: (execution: ExecutionRef) => Promise<undefined>,
     parent?: VerifiedParentExecution,
-    work?: () => Promise<DataExecutionResult>,
+    work?: (context: DataExecutionContext) => Promise<DataExecutionResult>,
     refused?: (error: unknown) => void,
   ) {
     const owner = requireJournal(),
@@ -393,13 +401,18 @@ export function createDataExecutionRuntime(deps: {
       }
     await owner.begin(authority);
     const controller = new AbortController();
-    let entry: LiveEntry;
+    let entry: LiveEntry, database: CancellableSql | undefined;
     const context: DataExecutionContext = {
       execution: record.execution,
       get executionVersion() {
         return entry.record.version;
       },
       signal: controller.signal,
+      get sql() {
+        if (!deps.openSql) throw Error("Worker database handle unavailable");
+        database ??= deps.openSql(controller.signal);
+        return database.sql;
+      },
       targetAuthority: lease,
       authority,
       installation: owner.installation,
@@ -497,7 +510,7 @@ export function createDataExecutionRuntime(deps: {
               }
               context.assertForward();
               return withDataExecutionScope(context, () =>
-                work ? work() : deps.dispatch(record.input, context),
+                work ? work(context) : deps.dispatch(record.input, context),
               );
             })
             .then(
@@ -607,6 +620,7 @@ export function createDataExecutionRuntime(deps: {
         clearInterval(ancestry);
         if (lease) closeArtifactTargetLeaseHandle(lease);
         active.delete(record.status.id);
+        await database?.close().catch(() => {});
       }
     })();
   }

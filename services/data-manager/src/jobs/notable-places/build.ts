@@ -9,6 +9,7 @@ import type postgres from "postgres";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import {
   assertDataPublication,
+  cancellableTransaction,
   dataWorkerSignal,
   publishDataChange,
   retainDataPublication,
@@ -331,7 +332,7 @@ export async function buildNotablePlaces(
       );
       assertDataPublication();
       await publishDataChange(() =>
-        opts.sql.begin(async (transaction) => {
+        cancellableTransaction(opts.sql, async (transaction) => {
           await transaction.unsafe(
             `UPDATE notable_places__staging.index_state
               SET status='ready', place_count=$1, name_count=$2, published_at=NOW(),
