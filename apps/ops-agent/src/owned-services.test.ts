@@ -1,5 +1,5 @@
 import { rmSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
@@ -102,6 +102,48 @@ describe("owned service cleanup", () => {
     expect(await host.owned.inspectOwnedServices(signal())).toEqual([]);
     // A container the reference names now is the agent's, recorded or not.
     host.row.Image = `sha256:${"e".repeat(64)}`;
+    expect((await host.owned.inspectOwnedServices(signal())).map((s) => s.serviceId)).toEqual([
+      "motis",
+    ]);
+  });
+
+  it("matches a container from a generation that recorded no images against the applied one's record", async () => {
+    const host = await fixture();
+    const reference = host.row.ConfigImage as string;
+    // The container's generation was written before its images existed.
+    rmSync(
+      join(
+        dirname(
+          services.configurationGenerationComposeFile(host.infraDir, host.initial.revisionId),
+        ),
+        "images.json",
+      ),
+    );
+    host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
+    expect(await host.owned.inspectOwnedServices(signal())).toEqual([]);
+    // A later generation, applied while the old image was present, recorded it.
+    host.setImageIdentity(reference, host.row.Image as string);
+    await services.commitConfigurationGeneration({
+      infraDir: host.infraDir,
+      services: host.loaded,
+      input: {
+        domain: "later.example.test",
+        selectedRoots: ["motis"],
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      },
+      imageIds: (references) =>
+        services.inspectLocalImageIds(references, async (args) => {
+          const { stdout } = await host.execFile("docker", args, {
+            signal: signal(),
+            timeout: 15_000,
+            maxBuffer: 4096,
+          });
+          return stdout;
+        }),
+    });
+    host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
     expect((await host.owned.inspectOwnedServices(signal())).map((s) => s.serviceId)).toEqual([
       "motis",
     ]);

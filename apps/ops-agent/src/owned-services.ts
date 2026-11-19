@@ -36,8 +36,10 @@ const FORMAT =
 /**
  * The stack's containers the agent can tell it created: each from a retained
  * generation's own compose file, with the image that generation names. A
- * container runs the image its generation recorded at commit, or the one its
- * reference names now; an image pulled since does not make it a stranger.
+ * container runs the image its generation recorded at commit (or, when that
+ * generation recorded none, the image the applied generation recorded for the
+ * service), or the one its reference names now; an image pulled since does not
+ * make it a stranger.
  */
 export function createOwnedServiceResolver(options: {
   stack: services.StackPaths;
@@ -207,12 +209,19 @@ export function createOwnedServiceResolver(options: {
           /[\0\r\n]/.test(reference)
         )
           continue;
-        let generationImages = recorded.get(revisionId);
-        if (!generationImages) {
-          generationImages = services.readGenerationImageIds(infra, revisionId);
-          recorded.set(revisionId, generationImages);
-        }
-        if (row.Image !== generationImages[serviceId]) {
+        const recordedImage = (id: string) => {
+          let images = recorded.get(id);
+          if (!images) {
+            images = services.readGenerationImageIds(infra, id);
+            recorded.set(id, images);
+          }
+          return images[serviceId];
+        };
+        // Its own generation's record; for a generation written before its
+        // images existed, the applied generation's record of the same service.
+        const own = recordedImage(revisionId),
+          applied = own ? undefined : services.currentConfigurationGeneration(infra);
+        if (row.Image !== own && (!applied || row.Image !== recordedImage(applied))) {
           let current = images.get(reference);
           if (!current) {
             current = (await run(["image", "inspect", "--format", "{{.Id}}", reference])).trim();
