@@ -28,6 +28,8 @@ export async function installDisposableDataAdmission(
     "0042_admin_data_execution.sql",
     "0063_configuration_fence_table.sql",
     "0067_data_execution_agent_operations.sql",
+    "0068_configuration_fence_refusal.sql",
+    "0069_data_execution_rows.sql",
   ]) {
     const body = readFileSync(join(migrations, name), "utf8")
       .replace('CREATE SCHEMA "data_manager";', 'CREATE SCHEMA IF NOT EXISTS "data_manager";')
