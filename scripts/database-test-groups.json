@@ -63,6 +63,7 @@
     "services/data-manager/src/jobs/execution/full-update.test.ts",
     "services/data-manager/src/jobs/execution/runner-cancellation.test.ts",
     "services/data-manager/src/jobs/execution/ops-children.test.ts",
+    "services/data-manager/src/jobs/execution/execution-rows-postgres.test.ts",
     "apps/api/src/services/__tests__/data-configuration-fence-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/api-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/extractor-postgres.test.ts",

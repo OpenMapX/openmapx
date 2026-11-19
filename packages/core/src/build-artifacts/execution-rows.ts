@@ -265,15 +265,26 @@ export function fileExecutionRows(privateRoot: AnchoredDirectory): ExecutionRows
   };
 }
 
-/**
- * What the agent's journal row adds to its operation to hold the execution:
- * the parts of the admission the row does not already carry, and the progress.
- */
-export const journalExecutionSchema = z.strictObject({
+/** The parts of an admission that a role's own record of the operation does not already carry. */
+const admissionExtrasSchema = z.strictObject({
   serviceIds: leaseTargetsSchema,
   plan: z.array(plannedChildSchema).max(64),
   reservations: z.array(controlChildReservationSchema).max(64),
   origin: controlOriginSchema,
+});
+function admissionExtras(admission: ExecutionAdmission) {
+  return admissionExtrasSchema.parse({
+    serviceIds: admission.serviceIds,
+    plan: admission.plan,
+    reservations: admission.reservations,
+    origin: admission.origin,
+  });
+}
+/**
+ * What the agent's journal row adds to its operation to hold the execution:
+ * the parts of the admission the row does not already carry, and the progress.
+ */
+export const journalExecutionSchema = admissionExtrasSchema.extend({
   progress: executionProgressSchema,
 });
 export type JournalExecution = z.infer<typeof journalExecutionSchema>;
@@ -326,10 +337,7 @@ export function journalExecutionRow(job: JournalOperation): ExecutionRow | undef
  */
 export function journalExecution(job: JournalOperation, row: ExecutionRow): JournalExecution {
   const execution = journalExecutionSchema.parse({
-    serviceIds: row.admission.serviceIds,
-    plan: row.admission.plan,
-    reservations: row.admission.reservations,
-    origin: row.admission.origin,
+    ...admissionExtras(row.admission),
     progress: row.progress,
   });
   const composed = journalExecutionRow({ ...job, execution });
@@ -378,6 +386,129 @@ export function journalFileRows(infraDir: string): OwningExecutionRows {
     update: readOnly,
     keys: async () => ({ keys: [], complete: true }),
     remove: readOnly,
+  };
+}
+
+/** Data-manager's database, as its job table rows are read and written. */
+export interface DataJobRowsDatabase {
+  unsafe(
+    query: string,
+    parameters?: (string | number | null)[],
+  ): Promise<readonly Record<string, unknown>[]>;
+}
+const DATA_JOB_ROW =
+  "SELECT metadata,kind,execution_input,admitted_at,requested_deadline_at,execution_parent,execution_admission,execution_progress FROM data_manager.jobs WHERE execution_version=2 AND operation_key=$1";
+const epoch = z.union([z.string(), z.number()]).transform(Number).pipe(z.number().int().safe());
+const dataJobRowSchema = z.object({
+  metadata: z.object({ dataExecution: z.object({ execution: executionRefSchema }) }),
+  kind: z.string(),
+  execution_input: z.unknown(),
+  admitted_at: epoch,
+  requested_deadline_at: epoch.nullable(),
+  execution_parent: retainedParentExecutionSchema.nullable(),
+  execution_admission: admissionExtrasSchema.nullable(),
+  execution_progress: executionProgressSchema.nullable(),
+});
+/** The admission a job row records, with the parts only the execution row adds. */
+function dataJobAdmission(
+  row: z.infer<typeof dataJobRowSchema>,
+  extras: z.infer<typeof admissionExtrasSchema>,
+): ExecutionAdmission {
+  return {
+    execution: row.metadata.dataExecution.execution,
+    kind: row.kind,
+    operation: row.execution_input,
+    admittedAt: row.admitted_at,
+    ...(row.requested_deadline_at === null
+      ? {}
+      : { requestedDeadlineAt: row.requested_deadline_at }),
+    ...(row.execution_parent ? { parent: row.execution_parent } : {}),
+    ...extras,
+  };
+}
+/**
+ * Data-manager's execution rows, on the `data_manager.jobs` row of each
+ * execution: the job row already records the execution, its operation, its
+ * admission time, its deadline and its parent; `execution_admission` adds the
+ * rest of the admission once, and `execution_progress` holds the progress. A
+ * change is a compare-and-set on the progress, repeated when another writer
+ * changed it first, and never touches the job's own version.
+ */
+export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRows {
+  const load = async (key: string) => {
+    const rows = await database.unsafe(DATA_JOB_ROW, [key]);
+    return rows[0] ? dataJobRowSchema.parse(rows[0]) : undefined;
+  };
+  const retained = (row: z.infer<typeof dataJobRowSchema>, admission: ExecutionAdmission) => {
+    if (
+      !row.execution_admission ||
+      !sameAdmission(dataJobAdmission(row, row.execution_admission), admission)
+    )
+      throw Error("Conflicting retained execution identity");
+    return "retained" as const;
+  };
+  return {
+    async read(key) {
+      const row = await load(key);
+      if (!row?.execution_admission || !row.execution_progress) return undefined;
+      return executionRowSchema.parse({
+        admission: dataJobAdmission(row, row.execution_admission),
+        progress: row.execution_progress,
+      }) as ExecutionRow;
+    },
+    async admit({ admission, progress }) {
+      const key = admission.execution.operationKey,
+        row = await load(key);
+      if (!row) throw Error("Original data journal row required");
+      if (row.execution_admission) return retained(row, admission);
+      const extras = admissionExtras(admission);
+      if (!sameAdmission(dataJobAdmission(row, extras), admission))
+        throw Error("Conflicting retained execution identity");
+      const written = await database.unsafe(
+        "UPDATE data_manager.jobs SET execution_admission=$2::text::jsonb,execution_progress=$3::text::jsonb WHERE execution_version=2 AND operation_key=$1 AND execution_admission IS NULL RETURNING id",
+        [key, canonicalJson(extras), canonicalJson(executionProgressSchema.parse(progress))],
+      );
+      if (written.length) return "admitted";
+      const current = await load(key);
+      if (!current) throw Error("Original data journal row required");
+      return retained(current, admission);
+    },
+    async update(key, change) {
+      for (let attempt = 0; attempt < 16; attempt += 1) {
+        const row = await load(key);
+        if (!row?.execution_progress) throw Error("Missing execution row");
+        const before = canonicalJson(row.execution_progress),
+          progress = structuredClone(row.execution_progress),
+          result = change(progress),
+          after = canonicalJson(executionProgressSchema.parse(progress));
+        if (after === before) return result;
+        if (Buffer.byteLength(after) > ROW_BYTES) throw Error("Execution row capacity");
+        const written = await database.unsafe(
+          "UPDATE data_manager.jobs SET execution_progress=$3::text::jsonb WHERE execution_version=2 AND operation_key=$1 AND execution_progress=$2::text::jsonb RETURNING id",
+          [key, before, after],
+        );
+        if (written.length) return result;
+      }
+      throw Error("Execution row is changing faster than it can be updated");
+    },
+    async keys(limit) {
+      const rows = await database.unsafe(
+        "SELECT operation_key FROM data_manager.jobs WHERE execution_version=2 AND execution_admission IS NOT NULL ORDER BY operation_key LIMIT $1",
+        [limit + 1],
+      );
+      return {
+        keys: rows.slice(0, limit).map((row) => z.string().parse(row.operation_key)),
+        complete: rows.length <= limit,
+      };
+    },
+    async remove(keys) {
+      // Only a finished job's row goes; an unfinished one keeps its execution.
+      for (const key of keys)
+        await database.unsafe(
+          "DELETE FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NOT NULL AND operation_key=$1",
+          [key],
+        );
+    },
   };
 }
 

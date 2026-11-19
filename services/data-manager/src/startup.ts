@@ -11,8 +11,6 @@ export interface RequiredStartupDependencies {
   controlInstallation?: ControlInstallation;
   onControlPruneError?: (error: unknown) => void;
   onControlPruneStarted?: (stop: () => Promise<void>) => void;
-  /** Removes this service's own rows for executions whose records are pruned. */
-  removePrunedRows?: (operationKeys: readonly string[]) => Promise<void>;
 }
 
 export interface RequiredStartupResult {
@@ -37,7 +35,6 @@ export async function initializeRequiredSubsystems(
         onError:
           dependencies.onControlPruneError ??
           ((error) => console.warn("Control record prune failed", error)),
-        beforeRemove: dependencies.removePrunedRows,
       });
       let stopRequested = false;
       stopControlPrune = async () => {

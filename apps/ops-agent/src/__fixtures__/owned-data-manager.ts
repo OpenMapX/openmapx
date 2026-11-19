@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { closeControlInstallation, createDataExecutionControlJournal, openControlInstallation, pruneControlRecords } from "@openmapx/core/build-artifacts";
+import { closeControlInstallation, createDataExecutionControlJournal, openControlInstallation } from "@openmapx/core/build-artifacts";
 import Fastify from "fastify";
 import { registerApi } from "../../../../services/data-manager/src/api";
 import { registerAuth } from "../../../../services/data-manager/src/auth";
@@ -10,7 +10,6 @@ import { createDataConfigurationMaintenance } from "../../../../services/data-ma
 import { createDataExecutionDispatcher } from "../../../../services/data-manager/src/jobs/execution/dispatch";
 import { createDataExecutionReceiver } from "../../../../services/data-manager/src/jobs/execution/receiver";
 import { createDataExecutionRuntime } from "../../../../services/data-manager/src/jobs/execution/runtime";
-import { removePrunedDataRows } from "../../../../services/data-manager/src/jobs/execution/prune-rows";
 import { createPostgresDataExecutionStore } from "../../../../services/data-manager/src/jobs/execution/store";
 
 /** Actual HTTP receiver, SQL admission guard, dispatcher, filesystem leaf and journal. */
@@ -124,12 +123,6 @@ export async function ownedDataManager(options: {
     },
     get hardlinkResponseStatuses() { return replies.map(reply => reply.status); },
     get hardlinkResponses() { return structuredClone(replies); },
-    /** One prune pass as the service runs it, at the given time. */
-    pruneRecords: (now?: number) =>
-      pruneControlRecords(installation, {
-        now,
-        beforeRemove: (keys) => removePrunedDataRows(options.sql, keys),
-      }),
     async diagnostics() { return { maintenanceReplies, replies: replies.map(reply => ({ status: reply.status, error: (reply.body as { error?: unknown } | null)?.error })),
       executions: await Promise.all([...keys].map(async key => { const value = await store.lookup(key); return value && { status: value.status.status, publication: value.status.publication, diagnostics: value.status.diagnostics }; })) }; },
     async close() {

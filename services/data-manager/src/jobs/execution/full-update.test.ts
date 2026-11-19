@@ -132,10 +132,14 @@ it.skipIf(
       }
     };
     await fence.startup();
-    const store = createPostgresDataExecutionStore(sql, {
+    // Job rows are shared by every fixture; this test's are those admitted since it began.
+    const startedAt = Date.now(),
+      store = createPostgresDataExecutionStore(sql, {
         controlJournal: journal,
         configurationFence: fence,
       }),
+      ownRows = async () =>
+        (await store.listUnsettled()).filter((row) => row.status.admittedAt >= startedAt),
       singleFlight = getSingleFlightController(),
       operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
     let releaseTransit!: () => void, transitStarted!: () => void;
@@ -344,17 +348,7 @@ it.skipIf(
       expect(heldTargets(dirname(data)).includes("osrm")).toBe(false);
     } catch (error) {
       const witnessProblems: Record<string, string> = {};
-      for (const row of await store.listUnsettled()) {
-        if (
-          !existsSync(
-            join(
-              host.infraDir,
-              "state/data-manager/control/executions",
-              `${row.status.operationKey}.json`,
-            ),
-          )
-        )
-          continue;
+      for (const row of await ownRows()) {
         try {
           control.assertDataManagerTerminal(row.execution, row.status);
           witnessProblems[row.input.kind] = "verified";
@@ -373,21 +367,11 @@ it.skipIf(
             witnessProblems,
             publicationFailures,
             actualFailure: actualFailure instanceof Error ? actualFailure.stack : actualFailure,
-            rows: (await store.listUnsettled())
-              .filter((row) =>
-                existsSync(
-                  join(
-                    host.infraDir,
-                    "state/data-manager/control/executions",
-                    `${row.status.operationKey}.json`,
-                  ),
-                ),
-              )
-              .map((row) => ({
-                kind: row.input.kind,
-                status: row.status,
-                finishedAt: row.finishedAt,
-              })),
+            rows: (await ownRows()).map((row) => ({
+              kind: row.input.kind,
+              status: row.status,
+              finishedAt: row.finishedAt,
+            })),
             commands: existsSync(commands) ? readFileSync(commands, "utf8") : "",
           },
           await client.status("data.update", operationId),
@@ -403,13 +387,7 @@ it.skipIf(
       await runtime.close();
       for (const row of await store.listUnsettled())
         if (
-          existsSync(
-            join(
-              host.infraDir,
-              "state/data-manager/control/executions",
-              `${row.status.operationKey}.json`,
-            ),
-          ) ||
+          row.status.admittedAt >= startedAt ||
           (rootOperationKey &&
             row.parent &&
             "execution" in row.parent &&

@@ -41,7 +41,6 @@ import { resetOpsClient, runOpsOperation } from "../../ops-client.js";
 import { resolveOperationsProfile } from "../transitous/operations-profile.js";
 import { createDataConfigurationMaintenance } from "./configuration-maintenance.js";
 import { installLocalDataExecutions } from "./local.js";
-import { removePrunedDataRows } from "./prune-rows.js";
 import { createDataExecutionReceiver } from "./receiver.js";
 import { createDataExecutionRuntime, type DataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore } from "./store.js";
@@ -399,10 +398,7 @@ describe.skipIf(
       }
       const named = () => files().filter((name) => batch.some((key) => name.includes(key)));
       expect(named().length).toBeGreaterThan(30);
-      const removed = await control.pruneControlRecords(h.installation, {
-        now: pruneAfter,
-        beforeRemove: (keys) => removePrunedDataRows(h.sql, keys),
-      });
+      const removed = await control.pruneControlRecords(h.installation, { now: pruneAfter });
       expect(removed.sort()).toEqual([...batch].sort());
       expect(named()).toEqual([]);
       expect(

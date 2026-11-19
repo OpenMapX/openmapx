@@ -286,7 +286,9 @@ it.skipIf(
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
 
-    const sql = postgres(url, { max: 4 }),
+    // Job rows are shared by every fixture; this test's are those admitted since it began.
+    const startedAt = Date.now(),
+      sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-durable-dm-agent-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
     await control.provisionControlDirectories(root);
@@ -481,15 +483,7 @@ it.skipIf(
       const ownIds = new Set([
         ...(id ? [id] : []),
         ...fixtureRows
-          .filter((row) =>
-            existsSync(
-              join(
-                root,
-                "state/data-manager/control/executions",
-                `${row.status.operationKey}.json`,
-              ),
-            ),
-          )
+          .filter((row) => row.status.admittedAt >= startedAt)
           .map((row) => row.status.id),
       ]);
       for (const ownId of ownIds) await sql`DELETE FROM data_manager.jobs WHERE id=${ownId}`;
@@ -883,10 +877,10 @@ it
       expect(record.status.deadlineAt).toBe(deadline);
       const lease = () => targetLease(data, kind === "promotion" ? "motis" : "motis-feed-proxy"),
         held = lease(),
-        rootReceipt = join(root, "state/data-manager/control/executions", `${key}.json`),
-        // The root's admission is never rewritten; its progress records the cancel.
-        admission = () => JSON.parse(readFileSync(rootReceipt, "utf8")).admission,
-        original = admission();
+        // The root's admission, on its job row, is never rewritten; its progress records the cancel.
+        admission = async () =>
+          (await control.restoreAdmittedControlExecution(dm, record.execution)).receiptDigest,
+        original = await admission();
       await receiver.requestCancel({ id, operationKey: key, fingerprint: admitted.fingerprint });
       expect((await next()).type).toBe("aborted");
       expect(held).toBeDefined();
@@ -906,7 +900,7 @@ it
         .toBe("canceled");
       expect((await receiver.inspect(id))?.publication).toBe("committed");
       await expect.poll(lease, { timeout: 10000 }).toBeUndefined();
-      expect(admission()).toEqual(original);
+      expect(await admission()).toEqual(original);
       expect(posts).toBe(1);
       expect(cancels).toBe(1);
       expect((await store.inspect(id))?.children).toMatchObject([

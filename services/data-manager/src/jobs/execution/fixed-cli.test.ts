@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -106,6 +105,10 @@ it.skipIf(
         js: `import {createRequire as fixtureCreateRequire} from 'node:module';const require=fixtureCreateRequire(${JSON.stringify(resolve("packages/cli/package.json"))});`,
       },
     });
+    // Job rows are shared by every fixture; this test's are those admitted since it began.
+    const startedAt = Date.now(),
+      ownRows = async () =>
+        (await store.listUnsettled()).filter((row) => row.status.admittedAt >= startedAt);
     const sql = postgres(url, { max: 4 }),
       dm = control.openControlInstallation({
         infraDir: infra,
@@ -174,7 +177,8 @@ it.skipIf(
     // The fixed CLI the agent runs presents the agent's own token.
     process.env.DATA_MANAGER_TOKEN_FILE = join(root, "data-manager-ops-agent-token");
     writeFileSync(process.env.DATA_MANAGER_TOKEN_FILE, "synthetic-dm-token", { mode: 0o600 });
-    const agentJournal = await openOpsJobJournal(join(data, "ops-agent/jobs-v1.json")),
+    // A fixed CLI child reads its parent's execution row from the agent's journal.
+    const agentJournal = await openOpsJobJournal(services.agentStatePaths(infra).journal),
       agentRuntime = createAdministrativeRuntime(createUnavailableRuntime(), {
         rootDir: root,
         runFixedCli: createDefaultFixedCli(root, join(root, "agent.mjs")),
@@ -233,11 +237,7 @@ it.skipIf(
       expect(readFileSync(join(data, "tile-fonts/Test Font/0-255.pbf"), "utf8")).toBe(
         "synthetic-public-glyph",
       );
-      const rows = (await store.listUnsettled()).filter((row) =>
-        existsSync(
-          join(infra, "state/data-manager/control/executions", `${row.status.operationKey}.json`),
-        ),
-      );
+      const rows = await ownRows();
       expect(rows).toHaveLength(1);
       expect(rows[0]?.status.status).toBe("ok");
       expect(rows[0]?.parent?.issuer).toBe("host-cli");
@@ -304,13 +304,8 @@ it.skipIf(
       await app.close();
       fontServer.closeAllConnections();
       await new Promise<void>((resolve) => fontServer.close(() => resolve()));
-      for (const row of await store.listUnsettled())
-        if (
-          existsSync(
-            join(infra, "state/data-manager/control/executions", `${row.status.operationKey}.json`),
-          )
-        )
-          await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id}`;
+      for (const row of await ownRows())
+        await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id}`;
       control.closeControlInstallation(dm);
       control.closeControlInstallation(agentInstallation);
       await sql.end();

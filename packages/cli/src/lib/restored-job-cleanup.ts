@@ -14,9 +14,9 @@ export const RESTORED_JOB_FAILURE_REASON = "restored from backup";
  *
  * An open row becomes `error` unless it already carries a final status. Its
  * unknown publication is recorded as not started, and its retained child and
- * agent operation attempts are dropped: they could only be settled with
- * receipts from a host timeline that the restore replaced, and an unsettled
- * child lets the recovery pass pull a closed execution back to
+ * agent operation attempts and its execution row are dropped: they could only
+ * be settled with receipts from a host timeline that the restore replaced, and
+ * an unsettled child lets the recovery pass pull a closed execution back to
  * interrupted/unknown. A row
  * that is already settled, including its children, is left untouched.
  * Offline packages still being prepared are failed the same way; a finished
@@ -41,7 +41,9 @@ SET status = CASE WHEN status IN ('ok', 'partial', 'error', 'canceled') THEN sta
       ELSE execution_state
     END,
     execution_children = '[]'::jsonb,
-    execution_agent_operations = '[]'::jsonb
+    execution_agent_operations = '[]'::jsonb,
+    execution_admission = NULL,
+    execution_progress = NULL
 WHERE status IN ('queued', 'running', 'cancel_pending')
    OR (status = 'interrupted' AND finished_at IS NULL)
    OR execution_state->>'publication' = 'unknown'

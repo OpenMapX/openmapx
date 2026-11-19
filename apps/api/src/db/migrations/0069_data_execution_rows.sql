@@ -1,0 +1,3 @@
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_admission" jsonb;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_progress" jsonb;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD CONSTRAINT "data_manager_jobs_execution_row" CHECK (("data_manager"."jobs"."execution_admission" IS NULL) = ("data_manager"."jobs"."execution_progress" IS NULL) AND ("data_manager"."jobs"."execution_admission" IS NULL OR "data_manager"."jobs"."execution_version" = 2));

@@ -38,6 +38,7 @@ import {
   settleExecution,
   verifyControlEffectSettlement,
 } from "./execution-record";
+import { type DataJobRowsDatabase, dataJobExecutionRows } from "./execution-rows";
 import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 import {
   assertRetainedCatalogActivationChildrenSettled,
@@ -47,12 +48,6 @@ import {
   type TargetLeaseAuthority,
 } from "./target-lease";
 
-export interface DataExecutionJournalDatabase {
-  unsafe(
-    query: string,
-    parameters?: (string | number | null)[],
-  ): Promise<readonly Record<string, unknown>[]>;
-}
 const completionBrand = Symbol("contained-data-worker");
 export type ContainedDataExecution = Readonly<{ [completionBrand]: true }>;
 const completions = new WeakMap<
@@ -180,11 +175,13 @@ export function dataExecutionHoldsLease(input: { kind: string; leaseId?: unknown
 }
 export function createDataExecutionControlJournal(
   installation: ControlInstallation,
-  database: DataExecutionJournalDatabase,
+  database: DataJobRowsDatabase,
 ) {
   const local = installationState(installation);
   if (installation.role !== "data-manager" || local.fixedChildId)
     throw Error("Fixed data-manager journal required");
+  // Each execution's row lives on its job row.
+  local.rows = dataJobExecutionRows(database);
   async function load(execution: ExecutionRef) {
     const rows = await database.unsafe(
       "SELECT * FROM data_manager.jobs WHERE execution_version=2 AND operation_key=$1",

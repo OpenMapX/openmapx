@@ -58,6 +58,13 @@ export const jobs = dataManager.table(
     /** Agent operations of in-process work: reserved at admission, recorded as
      * attempted before the request and as terminal once the agent answers. */
     executionAgentOperations: jsonb("execution_agent_operations").notNull().default([]),
+    /** The execution row, recorded once the execution is admitted: the parts of
+     * its admission the columns above do not carry (targets, planned and
+     * reserved children, origin), fixed when recorded. */
+    executionAdmission: jsonb("execution_admission"),
+    /** The execution row's progress: phase, effect start, settlement and the
+     * grants of its reserved children. Changes never touch `ownership_version`. */
+    executionProgress: jsonb("execution_progress"),
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
@@ -67,6 +74,10 @@ export const jobs = dataManager.table(
     check(
       "data_manager_jobs_execution_bounds",
       sql`${table.ownershipVersion} >= 0 AND jsonb_typeof(${table.executionChildren}) = 'array' AND jsonb_array_length(${table.executionChildren}) <= 32 AND octet_length(${table.executionChildren}::text) <= 131072`,
+    ),
+    check(
+      "data_manager_jobs_execution_row",
+      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2)`,
     ),
     check(
       "data_manager_jobs_execution_shape",

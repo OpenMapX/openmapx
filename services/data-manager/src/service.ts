@@ -20,7 +20,6 @@ import type { DataExecutionReceiver } from "./jobs/execution/api.js";
 import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "./jobs/execution/dispatch.js";
 import { installLocalDataExecutions } from "./jobs/execution/local.js";
-import { removePrunedDataRows } from "./jobs/execution/prune-rows.js";
 import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "./jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "./jobs/execution/store.js";
@@ -217,7 +216,6 @@ async function start(): Promise<void> {
     readiness,
     controlInstallation: controlStartup.installation ?? undefined,
     onControlPruneError: (err) => app.log.warn({ err }, "Control record prune failed"),
-    removePrunedRows: (operationKeys) => removePrunedDataRows(sql, operationKeys),
     onControlPruneStarted: (stop) => {
       stopControlPrune = stop;
       if (shuttingDown) void stop();

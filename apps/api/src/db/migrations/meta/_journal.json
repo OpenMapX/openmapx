@@ -484,6 +484,13 @@
       "when": 1795119064271,
       "tag": "0068_configuration_fence_refusal",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795119565433,
+      "tag": "0069_data_execution_rows",
+      "breakpoints": true
     }
   ]
 }

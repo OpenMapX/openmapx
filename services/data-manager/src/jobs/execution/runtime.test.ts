@@ -15,7 +15,6 @@ import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
 import { preserveTransitPending } from "../transitous/owned-ops.js";
 import { buildJobContext } from "../transitous/pipeline.js";
-import { removePrunedDataRows } from "./prune-rows.js";
 import { createDataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore } from "./store.js";
 import { cancellableTransaction, openCancellableSql, publishDataChange } from "./worker-scope.js";
@@ -654,9 +653,11 @@ describe.skipIf(
         await runtime.close();
         const record = await store.inspect(id);
         expect(record?.reservations).toHaveLength(8);
-        // The execution's row holds its reservations' bindings and grants.
-        const cells = [join(root, "state/data-manager/control/executions", `${key}.json`)];
-        expect(cells.every((path) => requireExists(path))).toBe(true);
+        // The execution's row, on its job row, holds a cell per reservation, and
+        // no row file is written.
+        const [stored] = await sql`SELECT execution_progress FROM data_manager.jobs WHERE id=${id}`;
+        expect(stored?.execution_progress?.children).toHaveLength(8);
+        expect(requireExists(join(root, "state/data-manager/control/executions"))).toBe(false);
         vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
         if (phase === "startup")
           clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
@@ -666,7 +667,6 @@ describe.skipIf(
           initializeOfflineStorage: async () => {},
           reconcileJobs: async () => {},
           setupCronSchedulers: () => ({ stop() {} }) as never,
-          removePrunedRows: (keys) => removePrunedDataRows(sql, keys),
         });
         stopRetention = startup.stopControlPrune;
         if (phase === "periodic") {
@@ -677,7 +677,6 @@ describe.skipIf(
           await stopRetention?.();
         }
         expect(await store.inspect(id)).toBeNull();
-        expect(cells.every((path) => !requireExists(path))).toBe(true);
         await expect(
           store.admit(
             { kind: "transit-sync", countries: ["de"] },

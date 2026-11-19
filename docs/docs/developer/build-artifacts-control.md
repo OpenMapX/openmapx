@@ -90,8 +90,10 @@ as a known failure.
   identity, origin, targets, reserved children), fixed when it is recorded, and its
   progress (held, cancel pending or settled; when the effect started; the
   settlement and its receipt; each reserved child's binding and grant). The agent
-  keeps the rows of its operations on their journal rows; every other execution
-  has a row file in its role's `control` directory.
+  keeps the rows of its operations on their journal rows and data-manager keeps
+  each execution's row on its `data_manager.jobs` row; every other execution (a
+  maintenance step, a fixed CLI child, a host CLI root) has a row file in its
+  role's `control` directory.
 - **Operation key.** The caller-chosen idempotency key of an agent operation,
   `opk1_…`. New root operations use timed keys, `opk1_t1_<expiry>_<nonce>`. The same
   key with the same body returns the original operation; with a different body it
@@ -128,17 +130,17 @@ trusted because only its owner writes that directory, which
 nowhere else. Everything read from disk or the network is
 schema-checked. Docker and host administrators remain trusted.
 
-| Record                                                                                                                                                                                                             | Place                                                                                                                                                                                                            | Writer                                                                            | Readers                                                              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Administrative job row: `payload`, public `result`, and `protocol` (claim, cancellation, attempted agent operations, candidate phase)                                                                              | PostgreSQL, `admin_job`                                                                                                                                                                                          | API                                                                               | API                                                                  |
-| Agent journal row per operation                                                                                                                                                                                    | `state/ops-agent/jobs-v1.json`                                                                                                                                                                                   | agent                                                                             | agent; callers through the operation routes                          |
-| Execution row: admission (operation, identity, origin, targets, reserved children) and progress (held, cancel pending or settled; effect started; settlement and receipt; each reserved child's binding and grant) | an agent operation: its journal row; a maintenance step or fixed CLI child: `state/ops-agent/control/executions/<key>.json`; data-manager and the host CLI: `executions/<key>.json` in their `control` directory | that role (a fixed CLI child its own file)                                        | that role; a fixed CLI child reads its parent's row from the journal |
-| Configuration candidate (payload, snapshot, apply operation, private intents)                                                                                                                                      | agent state, behind `configuration.candidate.retain`, `read` and `discard`                                                                                                                                       | API through the agent                                                             | API on recovery; agent when the apply step runs                      |
-| Maintenance file: record, plan (with the Data Manager image it commits), the containers it replaces                                                                                                                | `state/ops-agent/control/…/maintenance/<maintenanceId>.json`                                                                                                                                                     | agent; the host CLI only for `control resolve` of a record in recovery_required   | agent; API through `configurationMaintenance.*` results              |
-| Helper progress                                                                                                                                                                                                    | `maintenance/<maintenanceId>.handoff.json` beside the maintenance file                                                                                                                                           | helper                                                                            | agent, after the helper container exited                             |
-| Lease rows and their children                                                                                                                                                                                      | `state/ops-agent/leases.json`                                                                                                                                                                                    | agent, host CLI, fixed children and helper under the lock; data-manager over HTTP | holders by lease ID; children by `{leaseId, childKey}`               |
-| Data-manager fence                                                                                                                                                                                                 | `data_manager.configuration_fence`                                                                                                                                                                               | data-manager on the agent's request                                               | data-manager, agent                                                  |
-| Data execution row (status, publication, lease children, agent operations of in-process work)                                                                                                                      | `data_manager.jobs`                                                                                                                                                                                              | data-manager                                                                      | data-manager; agent and host CLI through `lookupDataExecution`       |
+| Record                                                                                                                                                                                                             | Place                                                                                                                                                                                                                                                                                             | Writer                                                                            | Readers                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Administrative job row: `payload`, public `result`, and `protocol` (claim, cancellation, attempted agent operations, candidate phase)                                                                              | PostgreSQL, `admin_job`                                                                                                                                                                                                                                                                           | API                                                                               | API                                                                  |
+| Agent journal row per operation                                                                                                                                                                                    | `state/ops-agent/jobs-v1.json`                                                                                                                                                                                                                                                                    | agent                                                                             | agent; callers through the operation routes                          |
+| Execution row: admission (operation, identity, origin, targets, reserved children) and progress (held, cancel pending or settled; effect started; settlement and receipt; each reserved child's binding and grant) | an agent operation: its journal row; a data-manager execution: its `data_manager.jobs` row (`execution_admission`, `execution_progress`); a maintenance step or fixed CLI child: `state/ops-agent/control/executions/<key>.json`; a host CLI root: `state/host-cli/control/executions/<key>.json` | that role (a fixed CLI child its own file)                                        | that role; a fixed CLI child reads its parent's row from the journal |
+| Configuration candidate (payload, snapshot, apply operation, private intents)                                                                                                                                      | agent state, behind `configuration.candidate.retain`, `read` and `discard`                                                                                                                                                                                                                        | API through the agent                                                             | API on recovery; agent when the apply step runs                      |
+| Maintenance file: record, plan (with the Data Manager image it commits), the containers it replaces                                                                                                                | `state/ops-agent/control/…/maintenance/<maintenanceId>.json`                                                                                                                                                                                                                                      | agent; the host CLI only for `control resolve` of a record in recovery_required   | agent; API through `configurationMaintenance.*` results              |
+| Helper progress                                                                                                                                                                                                    | `maintenance/<maintenanceId>.handoff.json` beside the maintenance file                                                                                                                                                                                                                            | helper                                                                            | agent, after the helper container exited                             |
+| Lease rows and their children                                                                                                                                                                                      | `state/ops-agent/leases.json`                                                                                                                                                                                                                                                                     | agent, host CLI, fixed children and helper under the lock; data-manager over HTTP | holders by lease ID; children by `{leaseId, childKey}`               |
+| Data-manager fence, and its record of the agent's fence child (prepared, settled or refused)                                                                                                                       | `data_manager.configuration_fence`                                                                                                                                                                                                                                                                | data-manager on the agent's request                                               | data-manager, agent                                                  |
+| Data job row (status, publication, lease children, agent operations of in-process work) with the job's execution row                                                                                               | `data_manager.jobs`                                                                                                                                                                                                                                                                               | data-manager                                                                      | data-manager; agent and host CLI through `lookupDataExecution`       |
 
 The API's keyed digests (the source fingerprint of a candidate and the intent
 digest of an immediate configuration request) use a key derived from the API's own
@@ -451,33 +453,51 @@ Manager update goes through the administrative job.
 
 ### Data-manager fence states
 
-One row per maintenance in `data_manager.configuration_fence`. `prepare` inserts
-it under the data-admission advisory lock; `settle` is a conditional update
-(`WHERE state='prepared'`) read back in the same transaction, so a racing data
-admission sees the row either prepared or settled. Only the operations agent calls
-`prepare` and `settle`, each naming the fence child the agent recorded under the
-maintenance's lease (the request's `delegation` field); settle also requires the
-agent's own data-manager token and the agent's maintenance lease still held.
+One row per maintenance in `data_manager.configuration_fence`. The row is
+data-manager's only record of the agent's fence child: data-manager keeps no
+execution row for it. `prepare` inserts the prepared row in the transaction that
+holds the data-admission advisory lock and checks admission; a prepare refused
+there inserts a `refused` row instead, so a repeat of the same request is refused
+again rather than preparing a fence the agent has already settled as refused.
+`settle` is a conditional update (`WHERE state='prepared'`) read back in the same
+transaction, so a racing data admission sees the row either prepared or settled.
+Only the operations agent calls `prepare` and `settle`, each naming the fence child
+the agent recorded under the maintenance's lease (the request's `delegation`
+field); settle also requires the agent's own data-manager token and the agent's
+maintenance lease still held.
 
-| From       | Event                                                      | To                                      |
-| ---------- | ---------------------------------------------------------- | --------------------------------------- |
-| (none)     | Agent `prepare`; no unfinished or unknown data job exists  | `prepared`                              |
-| (none)     | Agent `prepare` while a data job is unfinished or unknown  | no row; the leaf settles without effect |
-| `prepared` | Agent `prepare` with the same body                         | `prepared` (recorded answer returned)   |
-| `prepared` | Agent `prepare` for the same maintenance with another body | `prepared` (409 conflict)               |
-| `prepared` | Agent `settle` with the final outcome                      | `settled` with that outcome             |
-| `settled`  | Agent `settle` with the same outcome                       | `settled` (settled answer returned)     |
-| `settled`  | Agent `settle` with another outcome                        | `settled` (409 conflict)                |
+| From       | Event                                                                  | To                                    |
+| ---------- | ---------------------------------------------------------------------- | ------------------------------------- |
+| (none)     | Agent `prepare`; no unfinished or unknown data job exists              | `prepared`                            |
+| (none)     | Agent `prepare` while a data job is unfinished or unknown, or contends | `refused` (409 busy)                  |
+| (none)     | Agent `prepare` after its child's deadline                             | no row (409 busy)                     |
+| `prepared` | Agent `prepare` with the same body                                     | `prepared` (recorded answer returned) |
+| `prepared` | Agent `prepare` for the same maintenance with another body             | `prepared` (409 conflict)             |
+| `prepared` | Agent `settle` with the final outcome                                  | `settled` with that outcome           |
+| `settled`  | Agent `settle` with the same outcome                                   | `settled` (settled answer returned)   |
+| `settled`  | Agent `settle` with another outcome                                    | `settled` (409 conflict)              |
+| `refused`  | Agent `prepare` with the same body                                     | `refused` (409 busy again)            |
+| `refused`  | Agent `settle`, `openmapx control resolve` or inspection               | `refused` (answered as no fence: 404) |
 
 Data-job admission refuses while a row is `prepared`, and while any data job's
 publication is unknown. The agent repeats the same prepare or settle body after a
-lost reply until data-manager answers. A refused or never-issued prepare leaves no
-row: the agent's prepare fails without effect and its maintenance lease releases.
+lost reply until data-manager answers. A refused or never-issued prepare fences
+nothing: the agent's prepare fails without effect and its maintenance lease
+releases. A preparation removes the rows that were settled or refused more than
+72 hours earlier.
 
 ### Data jobs
 
 Every data job is a durable execution in `data_manager.jobs`; there is one
-admission. Exclusive jobs (transit syncs, imports, builds, catalog proposals,
+admission. The job row is also the execution row: the job's columns already hold
+its execution, operation, admission time, deadline and parent, and admission adds
+`execution_admission` (targets, reserved children, origin) once, after the job
+row is inserted and before the lease and the worker. `execution_progress` holds
+the progress; each change is a compare-and-set on it that leaves the job's own
+version alone, and is durable before the effect, grant or cancellation it
+precedes. The same key with another admission is a conflict, and a later process
+reads the row back from the table, so a restart observes an attempted job and
+never dispatches it again. Exclusive jobs (transit syncs, imports, builds, catalog proposals,
 dataset reloads, ambient publication, `generation-link`) take the data-admission
 lock exclusively, are refused while another exclusive job is unfinished and lease
 `data-manager` at the agent. Live, predicted and maintenance traffic runs are
@@ -639,8 +659,8 @@ parent's admission, and raw caller JSON cannot supply it.
 Each role prunes its own records at startup and then hourly
 (`startControlPrune`). The prune walks the role's execution rows: the agent's
 journal rows for its own operations (only finished ones that need no recovery
-are offered) and the row files otherwise. An execution's records go when all of
-these hold:
+are offered), data-manager's job rows that hold one, and the row files
+otherwise. An execution's records go when all of these hold:
 
 - it settled; an execution that never settled is kept;
 - its root key expired at least 72 hours ago, and it settled at least 72 hours
@@ -656,13 +676,12 @@ removed: its operation key, the children it reserved that have no admission of
 their own, the spawn records of its fixed children and, for a preparation, its
 maintenance and helper progress records. A record of another execution that
 merely names it stays. The execution row goes last; on the agent, removing it
-removes the operation's journal row. A pass that stopped in between leaves strays
+removes the operation's journal row, and on data-manager its finished job row. A pass that stopped in between leaves strays
 that a later pass removes once they are 72 hours old. A pass examines at most 256
 executions and resumes where the previous pass stopped; a store too large for one
 pass is reported and pruned in part. The records of a recovery-required execution
 stay regardless of age, and the agent also keeps those of a preparation a
-maintenance control in its journal still names. Data-manager deletes its settled
-fence rows and finished execution rows for pruned executions before their files.
+maintenance control in its journal still names.
 
 Readers never treat a pruned record as permission: a missing admission, effect or
 lease is unknown, and an expired key is refused. There is no separate retention

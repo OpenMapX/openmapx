@@ -1,7 +1,8 @@
 /** Time-based prune of a role's own control records.
  *
  * The prune walks the role's execution rows (the agent's journal rows for its
- * own operations, a row file per execution otherwise). An execution's records
+ * own operations, data-manager's job rows, a row file per execution otherwise);
+ * removing a data-manager row removes its finished job row. An execution's records
  * are removed once it settled, its root key has expired, at least 72 hours
  * have passed since it settled, every lease it owns or borrowed has released
  * its root (so no attempted child is unsettled), and no unfinished
@@ -203,8 +204,7 @@ function removeShared(local: InstallationState, keys: readonly string[], onFull:
   }
 }
 /** One bounded pass over at most `limit` admissions. Returns the operation
- * keys whose records were removed. `beforeRemove` runs first, for a role's
- * own rows elsewhere; if it fails, nothing is removed in this pass. */
+ * keys whose records were removed. */
 export async function pruneControlRecords(
   installation: ControlInstallation,
   options: {
@@ -212,7 +212,6 @@ export async function pruneControlRecords(
     limit?: number;
     /** Keys whose records stay although they are otherwise prunable. */
     keep?: (operationKey: string) => boolean;
-    beforeRemove?: (keys: readonly string[]) => Promise<void>;
     /** A directory held more entries than one pass reads. */
     onFull?: () => void;
   } = {},
@@ -252,7 +251,6 @@ export async function pruneControlRecords(
   }
   const keys = found.map((value) => value.key);
   if (keys.length) {
-    await options.beforeRemove?.(keys);
     removeShared(local, keys, onFull);
     const terminals = new Set(keys.map((key) => `terminal-${key}.json`));
     for (const namespace of NAMESPACES) {
@@ -343,7 +341,6 @@ export function startControlPrune(
   options: {
     onError: (error: unknown) => void;
     keep?: (operationKey: string) => boolean;
-    beforeRemove?: (keys: readonly string[]) => Promise<void>;
   },
 ): { ready: Promise<void>; stop: () => Promise<void> } {
   let pending: Promise<void> | undefined,
@@ -352,7 +349,6 @@ export function startControlPrune(
     if (stopped) return Promise.resolve();
     pending ??= pruneControlRecords(installation, {
       keep: options.keep,
-      beforeRemove: options.beforeRemove,
       onFull: () =>
         options.onError(
           Error("A control record directory exceeds one prune pass; pruning in part"),
