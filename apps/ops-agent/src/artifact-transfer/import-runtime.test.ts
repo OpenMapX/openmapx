@@ -755,3 +755,77 @@ it("contains a failed archive validation and exposes only its original private-p
     f.calls.some((args) => args.includes("up") || args.includes("stop") || args.includes("pull")),
   ).toBe(false);
 }, 60000);
+
+it("admits another operation while a failed archive validation is being contained", async () => {
+  const f = await fixture();
+  async function badStage() {
+    const bytes = Buffer.from("not an archive"),
+      stage = await f.store.createStage({
+        ownerId: "synthetic-admin",
+        purpose: "prepared-artifact",
+        direction: "upload",
+        declaredBytes: bytes.length,
+        operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+      });
+    await f.store.upload({
+      stageId: stage.stageId,
+      ownerId: "synthetic-admin",
+      purpose: stage.purpose,
+      attemptId: randomUUID(),
+      deadlineAt: Date.now() + 60000,
+      body: new ReadableStream({
+        start(c) {
+          c.enqueue(bytes);
+          c.close();
+        },
+      }),
+    });
+    return stage;
+  }
+  async function validate(stageId: string) {
+    const deadline = Date.now() + 600000,
+      operation = {
+        kind: "artifactTransfer.validate" as const,
+        stageId,
+        ownerId: "synthetic-admin",
+        purpose: "prepared-artifact" as const,
+      },
+      admitted = await f.client.execute(operation, {
+        operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+        execution: { requestedDeadlineAt: deadline },
+      });
+    if (admitted.execution !== "async") throw Error("Validation was not queued");
+    return admitted.operationId;
+  }
+  const [first, second] = [await badStage(), await badStage()];
+  let entered = () => {},
+    release = () => {};
+  const containing = new Promise<void>((resolve) => {
+      entered = resolve;
+    }),
+    held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  const contain = f.store.containPreparedValidation.bind(f.store);
+  vi.spyOn(f.store, "containPreparedValidation").mockImplementation(async (authority) => {
+    entered();
+    await held;
+    return contain(authority);
+  });
+  const firstId = await validate(first.stageId);
+  await containing;
+  try {
+    // The first validation's containment holds no admission lock: a second
+    // operation is admitted and recorded while it waits.
+    const secondId = await validate(second.stageId);
+    expect((await f.client.status("artifactTransfer.validate", firstId)).state).not.toBe("failed");
+    expect(f.journal.records().some((row) => row.operationId === secondId)).toBe(true);
+  } finally {
+    release();
+  }
+  await vi.waitFor(
+    async () =>
+      expect((await f.client.status("artifactTransfer.validate", firstId)).state).toBe("failed"),
+    { timeout: 20000, interval: 50 },
+  );
+}, 60000);
