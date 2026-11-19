@@ -22,23 +22,25 @@ import {
   transitousRunnerRequestSchema,
   transitousRunnerResultSchema,
 } from "../transitous-runner/contract";
-import {
-  type ControlInstallation,
-  controlDigest,
-  controlOriginSchema,
-  sameControlOrigin,
-} from "./control-records";
+import { type ControlInstallation, controlDigest } from "./control-records";
 import { retainedDataDatabaseTimestamp } from "./data-database-time";
 import { DataExecutionPartialResult } from "./data-execution-outcome";
 import {
   beginControlEffect,
+  type ControlAdmissionInput,
   cancelControlExecution,
   type ExecutionHandle,
+  executionReceipt,
+  executionSettled,
+  newControlExecutionRow,
   restoreAdmittedControlExecution,
   settleExecution,
-  verifyControlEffectSettlement,
 } from "./execution-record";
-import { type DataJobRowsDatabase, dataJobExecutionRows } from "./execution-rows";
+import {
+  type DataJobRowsDatabase,
+  dataJobExecutionRows,
+  dataJobRowColumns,
+} from "./execution-rows";
 import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 import {
   assertRetainedCatalogActivationChildrenSettled,
@@ -63,12 +65,10 @@ const completions = new WeakMap<
     lease?: TargetLeaseAuthority;
   }
 >();
+/** How a worker ended, on its job row's `execution_completion`. */
 const workerSchema = z
   .strictObject({
     version: z.literal(1),
-    origin: controlOriginSchema,
-    execution: executionRefSchema,
-    admissionDigest: z.string().regex(/^[a-f0-9]{64}$/),
     workerId: z.uuid(),
     containedAt: z.number().int().positive().safe(),
     outcome: z.enum(["returned", "partial", "failed", "catalog-activation-committed"]),
@@ -88,17 +88,6 @@ const runnerJournalSchema = z.strictObject({
   completedDigest: z.string().regex(/^[a-f0-9]{64}$/),
   attempts: z.array(transitousRunnerRequestSchema).max(32),
 });
-const terminalSchema = z.strictObject({
-  version: z.literal(1),
-  phase: z.enum(["prepared", "canonical"]),
-  origin: controlOriginSchema,
-  execution: executionRefSchema,
-  admissionDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  terminalDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  terminalAt: z.number().int().positive().safe(),
-  workerId: z.uuid(),
-  childrenDigest: z.string().regex(/^[a-f0-9]{64}$/),
-});
 const rowSchema = z.object({
   id: z.uuid(),
   execution_version: z.literal(2),
@@ -116,6 +105,7 @@ const rowSchema = z.object({
     .transform((value) => (value === null ? null : retainedDataDatabaseTimestamp(value))),
   ownership_version: z.number().int(),
   metadata: z.unknown(),
+  execution_completion: workerSchema.nullable(),
 });
 const mutableSchema = z.strictObject({
   cancellationRequestedAt: z.string().nullable(),
@@ -193,38 +183,16 @@ export function createDataExecutionControlJournal(
       throw Error("Original data journal execution changed");
     return value;
   }
-  const recoverySchema = z.strictObject({
-    version: z.literal(1),
-    execution: executionRefSchema,
-    admissionDigest: z.string(),
-    origin: controlOriginSchema,
-    restore: z.unknown(),
-    backupDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  });
-  function recoveryIntent(s: ExecutionHandle) {
-    try {
-      const proof = recoverySchema.parse(
-        readPrivateRecord(
-          local,
-          "observations",
-          `proxy-recovery-${s.execution.operationKey}.json`,
-          8192,
-        ),
-      );
-      if (
-        proof.admissionDigest !== s.receiptDigest ||
-        controlDigest(proof.execution) !== controlDigest(s.execution) ||
-        !sameControlOrigin(proof.origin, s.origin)
-      )
-        throw Error("Original proxy recovery identity changed");
-      return proof;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    }
+  /** Records how the worker ended, once. */
+  async function recordCompletion(execution: ExecutionRef, completion: unknown) {
+    const written = await database.unsafe(
+      "UPDATE data_manager.jobs SET execution_completion=$2::text::jsonb WHERE execution_version=2 AND operation_key=$1 AND execution_completion IS NULL RETURNING id",
+      [execution.operationKey, canonicalJson(workerSchema.parse(completion))],
+    );
+    if (written.length !== 1) throw Error("Original worker completion exists");
   }
-  /** One fixed policy over the current actual row, original retained plan and
-   * authenticated shared child/canonical receipts. No status/result shortcut. */
+  /** The proxy restore owes its recovery once a restore child is reserved on
+   * the row, which records the backup it restores. */
   async function assertOwnedProxyRecoverySettled(
     execution: ExecutionRef,
   ): Promise<"not_required" | "settled"> {
@@ -251,8 +219,7 @@ export function createDataExecutionControlJournal(
         .passthrough()
         .parse(raw),
     );
-    const intent = recoveryIntent(authority);
-    let required = intent !== null || children.some((child) => child.phase === "proxy-restore");
+    let required = children.some((child) => child.phase === "proxy-restore");
     {
       for (const child of children.filter((child) =>
         ["proxy-stage", "proxy-commit", "proxy-restore"].includes(child.phase),
@@ -284,16 +251,15 @@ export function createDataExecutionControlJournal(
           required = true;
       }
       if (!required) return "not_required";
-      if (!restore || !intent || controlDigest(intent.restore) !== controlDigest(restore))
-        throw Error("Original proxy restore obligation remains pending");
       const child = children.find(
-        (child) => child.phase === "proxy-restore" && child.ordinal === restore.ordinal,
+        (child) => child.phase === "proxy-restore" && child.ordinal === restore?.ordinal,
       );
       if (
+        !restore ||
         !child ||
         child.state !== "terminal" ||
         !child.execution ||
-        child.proxyRecovery?.backupDigest !== intent.backupDigest ||
+        !child.proxyRecovery ||
         child.execution.executionId !== restore.execution.executionId ||
         child.execution.operationKey !== restore.execution.operationKey
       )
@@ -401,9 +367,6 @@ export function createDataExecutionControlJournal(
       throw Error("Original catalog commit time changed");
     return workerSchema.parse({
       version: 1,
-      origin: state.origin,
-      execution: state.execution,
-      admissionDigest: state.receiptDigest,
       workerId: `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`,
       containedAt: stamp,
       outcome: "catalog-activation-committed",
@@ -420,39 +383,18 @@ export function createDataExecutionControlJournal(
       },
     });
   }
-  function readProof(s: ExecutionHandle) {
-    const proof = terminalSchema.parse(
-      readPrivateRecord(local, "observations", `terminal-${s.execution.operationKey}.json`, 8192),
-    );
-    if (
-      proof.admissionDigest !== s.receiptDigest ||
-      !sameControlOrigin(proof.origin, s.origin) ||
-      controlDigest(proof.execution) !== controlDigest(s.execution)
-    )
-      throw Error("Original data terminal commitment changed");
-    return proof;
-  }
-  async function verifyStored(execution: ExecutionRef, digest?: string) {
-    await assertOwnedProxyRecoverySettled(execution);
-    const value = await load(execution),
-      authority = await restoreAdmittedControlExecution(installation, execution),
-      proof = readProof(authority);
-    if (
-      !isDataExecutionTerminal(value.status) ||
-      !value.row.finished_at ||
-      proof.phase !== "canonical" ||
-      proof.terminalAt !== value.row.finished_at.getTime() ||
-      proof.terminalDigest !== dataTerminalReceiptDigest(value.status) ||
-      (digest !== undefined && proof.terminalDigest !== digest) ||
-      value.row.execution_children.some((raw) => childSchema.parse(raw).state !== "terminal")
-    )
-      throw Error("Data journal terminal containment is not proved");
-    await verifyControlEffectSettlement(installation, execution);
-    return { value, authority, proof };
+  /** The terminal the execution committed, as its settlement records it. */
+  async function settledTerminal(s: ExecutionHandle) {
+    const receipt = (await executionSettled(s)) ? await executionReceipt(s) : undefined;
+    return receipt?.kind === "data-execution" ? receipt : undefined;
   }
   return {
     installation,
     dataRoot: local.dataRoot,
+    /** The execution row columns a new job row is inserted with. */
+    newExecutionRow(input: ControlAdmissionInput) {
+      return dataJobRowColumns(newControlExecutionRow(installation, input));
+    },
     assertOwnedProxyRecoverySettled,
     /** Repair only an unproved proxy root's public finality. Its original
      * identity, local write evidence, child receipts and physical lease stay. */
@@ -491,52 +433,6 @@ export function createDataExecutionControlJournal(
         ],
       );
       if (rows.length !== 1) throw Error("Proxy recovery finality repair CAS lost");
-    },
-    async retainProxyRecoveryIntent(authority: ExecutionHandle, backupDigest: string) {
-      const value = await load(authority.execution),
-        s = authority,
-        restore = s.reservations.find((slot) => slot.phase === "proxy-restore");
-      const child = value.row.execution_children
-        .map((raw) =>
-          z
-            .object({
-              phase: z.string(),
-              state: z.string(),
-              operationKey: z.string(),
-              proxyRecovery: z.object({ backupDigest: z.string() }).optional(),
-            })
-            .parse(raw),
-        )
-        .find((child) => child.phase === "proxy-restore");
-      if (
-        s.installation !== local ||
-        !restore ||
-        child?.state !== "reserved" ||
-        child.operationKey !== restore.execution.operationKey ||
-        child.proxyRecovery?.backupDigest !== backupDigest
-      )
-        throw Error("Confirmed original restore reservation required");
-      const payload = recoverySchema.parse({
-        version: 1,
-        execution: s.execution,
-        admissionDigest: s.receiptDigest,
-        origin: s.origin,
-        restore,
-        backupDigest,
-      });
-      const prior = recoveryIntent(authority);
-      if (prior) {
-        if (controlDigest(prior) !== controlDigest(payload))
-          throw Error("Original recovery backup changed");
-        return;
-      }
-      writePrivateRecord(
-        local,
-        "observations",
-        `proxy-recovery-${s.execution.operationKey}.json`,
-        payload,
-        true,
-      );
     },
     pendingRunnerAttempts(state: ExecutionHandle) {
       if (
@@ -694,9 +590,6 @@ export function createDataExecutionControlJournal(
           ? await catalogActivationCompletion(authority)
           : workerSchema.parse({
               version: 1,
-              origin: state.origin,
-              execution: state.execution,
-              admissionDigest: state.receiptDigest,
               workerId,
               containedAt: Date.now(),
               outcome: result ? (partial ? "partial" : "returned") : "failed",
@@ -707,13 +600,7 @@ export function createDataExecutionControlJournal(
             });
       // Only the live producer, after awaiting the actual dispatcher promise,
       // creates this immutable completion. Recovery only reads it back.
-      writePrivateRecord(
-        local,
-        "observations",
-        `worker-${state.execution.operationKey}.json`,
-        proof,
-        true,
-      );
+      await recordCompletion(state.execution, proof);
       const completion = Object.freeze({ [completionBrand]: true as const });
       completions.set(completion, {
         authority,
@@ -735,32 +622,25 @@ export function createDataExecutionControlJournal(
       // deadline passed. Every already-issued physical child must be settled.
       await cancelControlExecution(authority);
       const proof = await catalogActivationCompletion(authority),
-        name = `worker-${execution.operationKey}.json`;
-      try {
-        const retained = readPrivateRecord(local, "observations", name, 65536);
+        retained = (await load(execution)).row.execution_completion;
+      if (retained) {
         if (canonicalJson(retained) !== canonicalJson(proof))
           throw Error("Original worker completion already differs");
         return;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
-      writePrivateRecord(local, "observations", name, proof, true);
+      await recordCompletion(execution, proof);
     },
+    /** The completion a worker recorded, or null when it recorded none. */
     async restoreCompletion(execution: ExecutionRef) {
       const value = await load(execution),
         authority = await restoreAdmittedControlExecution(installation, execution),
-        state = authority;
-      const proof = workerSchema.parse(
-        readPrivateRecord(local, "observations", `worker-${execution.operationKey}.json`, 65536),
-      );
+        proof = value.row.execution_completion;
+      if (!proof) return null;
       if (proof.outcome === "catalog-activation-committed") {
         if (canonicalJson(proof) !== canonicalJson(await catalogActivationCompletion(authority)))
           throw Error("Original final approval completion changed");
       }
       if (
-        proof.admissionDigest !== state.receiptDigest ||
-        !sameControlOrigin(proof.origin, state.origin) ||
-        controlDigest(proof.execution) !== controlDigest(execution) ||
         proof.containedAt < value.status.admittedAt ||
         (proof.result && proof.result.kind !== value.status.kind)
       )
@@ -806,22 +686,11 @@ export function createDataExecutionControlJournal(
      * worker may have changed data. */
     async containAbandoned(execution: ExecutionRef, publication: "not_started" | "committed") {
       const value = await load(execution),
-        authority = await restoreAdmittedControlExecution(installation, execution),
-        state = authority,
-        name = `worker-${execution.operationKey}.json`;
+        authority = await restoreAdmittedControlExecution(installation, execution);
       if (!(LOCAL_DATA_EXECUTION_KINDS as readonly string[]).includes(value.status.kind))
         throw Error("Only an in-process data worker can be abandoned");
-      try {
-        readPrivateRecord(local, "observations", name, 65536);
-        throw Error("Original worker completion exists");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
       const proof = workerSchema.parse({
         version: 1,
-        origin: state.origin,
-        execution: state.execution,
-        admissionDigest: state.receiptDigest,
         workerId: randomUUID(),
         containedAt: Date.now(),
         outcome: "failed",
@@ -829,7 +698,7 @@ export function createDataExecutionControlJournal(
         childrenDigest: controlDigest(value.row.execution_children),
         proxyRecovery: "not_required",
       });
-      writePrivateRecord(local, "observations", name, proof, true);
+      await recordCompletion(execution, proof);
       const lease = dataExecutionHoldsLease(
           dataExecutionInputSchema.parse(value.row.execution_input),
         )
@@ -916,44 +785,17 @@ export function createDataExecutionControlJournal(
       }
       const childrenDigest = controlDigest(children),
         digest = dataTerminalReceiptDigest(terminal);
-      let raw: unknown = null;
-      try {
-        raw = readPrivateRecord(
-          local,
-          "observations",
-          `terminal-${s.execution.operationKey}.json`,
-          8192,
-        );
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      const prior = raw === null ? undefined : readProof(authority);
-      const original = prior?.terminalAt ?? terminalAt;
+      // The settlement records the terminal before the job row commits it; a
+      // repeat after a crash in between commits the same terminal at its first time.
+      const prior = await settledTerminal(s);
       if (
         prior &&
-        (prior.terminalDigest !== digest ||
+        (dataTerminalReceiptDigest(prior.status) !== digest ||
           prior.workerId !== owned.workerId ||
           prior.childrenDigest !== childrenDigest)
       )
         throw Error("Original data terminal tuple is immutable");
-      const payload = terminalSchema.parse({
-        version: 1,
-        phase: "prepared",
-        origin: s.origin,
-        execution: s.execution,
-        admissionDigest: s.receiptDigest,
-        terminalDigest: digest,
-        terminalAt: original,
-        workerId: owned.workerId,
-        childrenDigest,
-      });
-      writePrivateRecord(
-        local,
-        "observations",
-        `terminal-${s.execution.operationKey}.json`,
-        payload,
-        false,
-      );
+      const original = prior?.terminalAt ?? terminalAt;
       await settleExecution(s, {
         outcome: terminal.publication === "committed" ? "committed" : "contained",
         publication: terminal.publication,
@@ -962,48 +804,29 @@ export function createDataExecutionControlJournal(
           status: terminal,
           workerId: owned.workerId,
           childrenDigest,
+          terminalAt: original,
         },
       });
       return original;
     },
-    async publishTerminal(execution: ExecutionRef) {
+    /** Checks that the job row committed the terminal its settlement records,
+     * at its time, with every child terminal, before the execution's own lease
+     * is released. */
+    async verifyContainedTerminal(execution: ExecutionRef) {
       await assertOwnedProxyRecoverySettled(execution);
       const value = await load(execution),
-        authority = await restoreAdmittedControlExecution(installation, execution),
-        proof = readProof(authority);
-      if (
-        !isDataExecutionTerminal(value.status) ||
-        value.row.finished_at?.getTime() !== proof.terminalAt ||
-        dataTerminalReceiptDigest(value.status) !== proof.terminalDigest ||
-        controlDigest(value.row.execution_children) !== proof.childrenDigest
-      )
-        throw Error("Original committed data terminal tuple/time required");
-      await verifyControlEffectSettlement(installation, execution);
-      if (proof.phase !== "canonical")
-        writePrivateRecord(
-          local,
-          "observations",
-          `terminal-${execution.operationKey}.json`,
-          { ...proof, phase: "canonical" },
-          false,
+        terminal = await settledTerminal(
+          await restoreAdmittedControlExecution(installation, execution),
         );
-    },
-    /** Checks the committed terminal and every child's terminal before the
-     * execution's own lease is released. */
-    async verifyContainedTerminal(execution: ExecutionRef) {
-      await verifyStored(execution);
-    },
-    repairTerminal: async (execution: ExecutionRef) => {
-      await assertOwnedProxyRecoverySettled(execution);
-      // existing recorded commitment only; never reconstruct one from a row
-      const authority = await restoreAdmittedControlExecution(installation, execution);
-      readProof(authority);
-      await (async () => {
-        const value = await load(execution);
-        if (!isDataExecutionTerminal(value.status)) throw Error("Data terminal row required");
-      })();
-      // Use the same exact tuple/time verifier and publisher above via the fixed method.
-      return authority;
+      if (
+        !terminal ||
+        !isDataExecutionTerminal(value.status) ||
+        value.row.finished_at?.getTime() !== terminal.terminalAt ||
+        dataTerminalReceiptDigest(value.status) !== dataTerminalReceiptDigest(terminal.status) ||
+        controlDigest(value.row.execution_children) !== terminal.childrenDigest ||
+        value.row.execution_children.some((raw) => childSchema.parse(raw).state !== "terminal")
+      )
+        throw Error("Data journal terminal containment is not proved");
     },
   };
 }

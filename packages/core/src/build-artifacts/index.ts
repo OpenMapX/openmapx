@@ -48,6 +48,7 @@ export {
   beginControlEffect,
   beginFixedCliExecution,
   bindControlChildPhase,
+  type ControlAdmissionInput,
   type ControlDelegation,
   ControlExecutionFencedError,
   type ControlExecutionOrigin,

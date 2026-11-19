@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   type ContainedDataExecution,
+  type ControlAdmissionInput,
   type ControlTransportPrincipal,
   type DataExecutionControlJournal,
   retainedControlParent,
@@ -38,6 +39,7 @@ import {
 import {
   type DataOpsChildAttempt,
   type DataOpsChildReserved,
+  dataChildControlReservation,
   dataOpsChildAttemptSchema,
   dataOpsChildReservedSchema,
   reserveTransitChildOperations,
@@ -109,7 +111,41 @@ export function dataExecutionInputFingerprint(value: unknown): string {
     .update(canonicalJson(normalizeDataExecutionInput(value)))
     .digest("hex");
 }
+/** The services an execution leases: data-manager itself, and for transit work
+ * the primary MOTIS, its staging slot and the feed proxy. */
+export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
+  return ["transit-sync", "catalog.validate", "catalog.activate"].includes(input.kind)
+    ? ["data-manager", "motis", "motis-feed-proxy", "motis-staging"]
+    : input.kind === "transit-maintenance"
+      ? input.action === "restart-primary"
+        ? ["data-manager", "motis"]
+        : ["data-manager", "motis-feed-proxy"]
+      : ["data-manager"];
+}
+/** What the control kernel records about a data execution when it is admitted. */
+export function dataControlAdmission(value: {
+  execution: ExecutionRef;
+  input: DataExecutionInput;
+  admittedAt: number;
+  requestedDeadlineAt: number | null | undefined;
+  parent: RetainedParentExecution | undefined;
+  reservations: readonly (DataOpsChildReserved | DataOpsChildAttempt)[];
+}): ControlAdmissionInput {
+  return {
+    execution: value.execution,
+    kind: value.input.kind,
+    operation: value.input,
+    admittedAt: value.admittedAt,
+    ...(value.requestedDeadlineAt != null
+      ? { requestedDeadlineAt: value.requestedDeadlineAt }
+      : {}),
+    ...(value.parent ? { parent: value.parent } : {}),
+    serviceIds: dataExecutionTargetIds(value.input),
+    reservations: value.reservations.map(dataChildControlReservation),
+  };
+}
 export interface DataExecutionStore {
+  /** Absent only when the control installation could not be opened; nothing is admitted then. */
   readonly controlJournal?: DataExecutionControlJournal;
   admit(
     input: DataExecutionInput,
@@ -291,9 +327,9 @@ export function createPostgresDataExecutionStore(
   sql: postgres.Sql,
   options: {
     now?: () => number;
-    controlJournal?: DataExecutionControlJournal;
+    controlJournal: DataExecutionControlJournal | undefined;
     configurationFence?: DataConfigurationMaintenance;
-  } = {},
+  },
 ): DataExecutionStore {
   const now = options.now ?? Date.now;
   const storeIdentity = Symbol("data-store");
@@ -476,6 +512,11 @@ export function createPostgresDataExecutionStore(
   return {
     controlJournal: options.controlJournal,
     async admit(value, admission) {
+      const journal = options.controlJournal;
+      if (!journal)
+        throw Object.assign(Error("Durable control prerequisites are unavailable"), {
+          statusCode: 503,
+        });
       const input = normalizeDataExecutionInput(value),
         operationFingerprint = dataExecutionInputFingerprint(input);
       const idempotencyKey = admission.idempotencyKey
@@ -580,7 +621,7 @@ export function createPostgresDataExecutionStore(
         if (retained) return match(retained);
         // One exclusive execution at a time; short traffic runs neither count
         // nor wait.
-        if (options.controlJournal && !short) {
+        if (!short) {
           const active =
             await tx`SELECT id FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NULL AND kind <> ALL(${[...SHORT_DATA_EXECUTION_KINDS]}) LIMIT 1`;
           if (active.length) throw new DataConfigurationMaintenanceBusy();
@@ -615,13 +656,26 @@ export function createPostgresDataExecutionStore(
         });
         const childReservations = reserveTransitChildOperations(execution, input),
           agentOperations = reserveAgentOperations(input, status.deadlineAt);
+        // The execution row goes in with the job row: no job row exists without one.
+        const row = journal.newExecutionRow(
+          dataControlAdmission({
+            execution,
+            input,
+            admittedAt: status.admittedAt,
+            requestedDeadlineAt: admission.requestedDeadlineAt,
+            parent: admission.parent,
+            reservations: childReservations,
+          }),
+        );
         const rows = await tx<
           Row[]
         >`INSERT INTO data_manager.jobs(id,kind,status,triggered_by,idempotency_key,started_at,execution_version,operation_key,operation_fingerprint,
-          execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,execution_agent_operations,metadata)
+          execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,execution_agent_operations,metadata,
+          execution_admission,execution_progress)
           VALUES(${status.id},${input.kind},'queued',${admission.triggeredBy ?? null},${idempotencyKey ?? null},${new Date(status.admittedAt).toISOString()}::text::timestamptz,2,${status.operationKey},${operationFingerprint},
           ${status.fingerprint},${status.admittedAt},${status.deadlineAt},${admission.requestedDeadlineAt ?? null},
-          ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson(agentOperations)}::text::jsonb,${canonicalJson({ dataExecution: { version: 1, execution, childReservations } })}::text::jsonb) RETURNING *`;
+          ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson(agentOperations)}::text::jsonb,${canonicalJson({ dataExecution: { version: 1, execution, childReservations } })}::text::jsonb,
+          ${row.admission}::text::jsonb,${row.progress}::text::jsonb) RETURNING *`;
         if (!rows[0]) throw Error("Execution admission did not return its durable row");
         return { created: true, record: decode(rows[0]) };
       }).catch(async (error) => {
@@ -652,11 +706,7 @@ export function createPostgresDataExecutionStore(
         const record = await find(tx, "id", id, true);
         if (!record || record.version !== version) return null;
         const status = dataExecutionStatusSchema.parse({ ...record.status, ...patch });
-        if (
-          options.controlJournal &&
-          !isDataExecutionTerminal(record.status) &&
-          isDataExecutionTerminal(status)
-        )
+        if (!isDataExecutionTerminal(record.status) && isDataExecutionTerminal(status))
           throw new DataExecutionConflict("Actual contained worker terminal commitment required");
         if (
           isDataExecutionTerminal(status) &&
@@ -788,13 +838,11 @@ export function createPostgresDataExecutionStore(
       if (record.agentOperations.some((entry) => entry.state === "attempted"))
         throw new DataExecutionConflict("An attempted agent operation retains the execution");
       const terminalAt = await options.controlJournal.prepareTerminal(completion, status, now());
-      const result = await sql.begin(async (tx) => {
+      return sql.begin(async (tx) => {
         const current = await find(tx, "id", id, true);
         if (!current || current.version !== version) return null;
         return update(tx, current, { status, terminalAt });
       });
-      if (result) await options.controlJournal.publishTerminal(result.execution);
-      return result;
     },
   };
 }

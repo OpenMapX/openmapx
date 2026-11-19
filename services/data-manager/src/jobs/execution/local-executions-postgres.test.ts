@@ -396,14 +396,15 @@ describe.skipIf(
         batch.push(admitted.operationKey);
         await runtime.settled(admitted.id);
       }
+      // Every record of a run is on its job row; no file is named after it.
       const named = () => files().filter((name) => batch.some((key) => name.includes(key)));
-      expect(named().length).toBeGreaterThan(30);
+      const rows = () =>
+        h.sql`SELECT id FROM data_manager.jobs WHERE operation_key = ANY(${batch})`;
+      expect(named()).toEqual([]);
+      expect(await rows()).toHaveLength(30);
       const removed = await control.pruneControlRecords(h.installation, { now: pruneAfter });
       expect(removed.sort()).toEqual([...batch].sort());
-      expect(named()).toEqual([]);
-      expect(
-        await h.sql`SELECT id FROM data_manager.jobs WHERE operation_key = ANY(${batch})`,
-      ).toHaveLength(0);
+      expect(await rows()).toHaveLength(0);
     }
   }, 120_000);
 

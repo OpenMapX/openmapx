@@ -1,5 +1,13 @@
 /** Actual SQL Activity projection; admitted rows here are inert and never dispatch. */
 import { randomBytes, randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  createDataExecutionControlJournal,
+  openControlInstallation,
+  provisionControlDirectories,
+} from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { expect, it, vi } from "vitest";
 import { createPostgresDataExecutionStore } from "../../../../services/data-manager/src/jobs/execution/store";
@@ -19,8 +27,18 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   async () => {
     const fixture = await createMigratedPostgresFixture();
     state.fixture = fixture;
+    const root = mkdtempSync(join(tmpdir(), "omx-activity-catalog-"));
     try {
-      const store = createPostgresDataExecutionStore(fixture.sql),
+      mkdirSync(join(root, "data"), { mode: 0o700 });
+      await provisionControlDirectories(root);
+      const installation = openControlInstallation({
+          infraDir: root,
+          role: "data-manager",
+          serviceIds: ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
+        }),
+        store = createPostgresDataExecutionStore(fixture.sql, {
+          controlJournal: createDataExecutionControlJournal(installation, fixture.sql),
+        }),
         deadline = Date.now() + 60000,
         proposalId = randomUUID();
       const inputs = [
@@ -52,10 +70,13 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(await getActivityJob(record.status.id, "data-manager")).toMatchObject({
           cancelable: true,
         });
+        // One catalog job runs at a time; the next one is admitted once this row is gone.
+        await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${record.status.id}`;
       }
     } finally {
       state.fixture = null;
       await fixture.stop();
+      rmSync(root, { recursive: true, force: true });
     }
   },
   60000,

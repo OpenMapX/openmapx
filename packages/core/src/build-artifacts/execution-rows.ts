@@ -127,6 +127,9 @@ export interface ExecutionRows {
   /** Up to `limit` keys the prune may consider; `complete` when none were left out. */
   keys(limit: number): Promise<{ keys: string[]; complete: boolean }>;
   remove(operationKeys: readonly string[]): Promise<void>;
+  /** Removes the records a store holds for executions whose row is gone,
+   * once they finished before `finishedBefore` and were admitted before `admittedBefore`. */
+  removeRowless?(bounds: { finishedBefore: number; admittedBefore: number }): Promise<void>;
 }
 /** A store that keeps only some keys, in front of another one. */
 export interface OwningExecutionRows extends ExecutionRows {
@@ -409,6 +412,13 @@ const dataJobRowSchema = z.object({
   execution_admission: admissionExtrasSchema.nullable(),
   execution_progress: executionProgressSchema.nullable(),
 });
+/** The two columns a new job row carries for its execution row. */
+export function dataJobRowColumns(row: ExecutionRow): { admission: string; progress: string } {
+  return {
+    admission: canonicalJson(admissionExtras(row.admission)),
+    progress: canonicalJson(executionProgressSchema.parse(row.progress)),
+  };
+}
 /** The admission a job row records, with the parts only the execution row adds. */
 function dataJobAdmission(
   row: z.infer<typeof dataJobRowSchema>,
@@ -430,9 +440,10 @@ function dataJobAdmission(
  * Data-manager's execution rows, on the `data_manager.jobs` row of each
  * execution: the job row already records the execution, its operation, its
  * admission time, its deadline and its parent; `execution_admission` adds the
- * rest of the admission once, and `execution_progress` holds the progress. A
- * change is a compare-and-set on the progress, repeated when another writer
- * changed it first, and never touches the job's own version.
+ * rest of the admission and is inserted with the job row, and
+ * `execution_progress` holds the progress. A change is a compare-and-set on the
+ * progress, repeated when another writer changed it first, and never touches
+ * the job's own version.
  */
 export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRows {
   const load = async (key: string) => {
@@ -456,22 +467,11 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
         progress: row.execution_progress,
       }) as ExecutionRow;
     },
-    async admit({ admission, progress }) {
-      const key = admission.execution.operationKey,
-        row = await load(key);
-      if (!row) throw Error("Original data journal row required");
-      if (row.execution_admission) return retained(row, admission);
-      const extras = admissionExtras(admission);
-      if (!sameAdmission(dataJobAdmission(row, extras), admission))
-        throw Error("Conflicting retained execution identity");
-      const written = await database.unsafe(
-        "UPDATE data_manager.jobs SET execution_admission=$2::text::jsonb,execution_progress=$3::text::jsonb WHERE execution_version=2 AND operation_key=$1 AND execution_admission IS NULL RETURNING id",
-        [key, canonicalJson(extras), canonicalJson(executionProgressSchema.parse(progress))],
-      );
-      if (written.length) return "admitted";
-      const current = await load(key);
-      if (!current) throw Error("Original data journal row required");
-      return retained(current, admission);
+    // The row is inserted with its job row (`dataJobRowColumns`), so it is only ever retained here.
+    async admit({ admission }) {
+      const row = await load(admission.execution.operationKey);
+      if (!row?.execution_admission) throw Error("Original data journal row required");
+      return retained(row, admission);
     },
     async update(key, change) {
       for (let attempt = 0; attempt < 16; attempt += 1) {
@@ -508,6 +508,14 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
           "DELETE FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NOT NULL AND operation_key=$1",
           [key],
         );
+    },
+    // A backup restore closes the jobs it found open and drops their execution
+    // rows; their job rows go by the same retention as the others.
+    async removeRowless({ finishedBefore, admittedBefore }) {
+      await database.unsafe(
+        "DELETE FROM data_manager.jobs WHERE execution_version=2 AND execution_admission IS NULL AND finished_at < to_timestamp($1::bigint / 1000.0) AND admitted_at < $2::bigint",
+        [finishedBefore, admittedBefore],
+      );
     },
   };
 }

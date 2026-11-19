@@ -152,7 +152,9 @@ describe.skipIf(
         outcome: "committed",
         terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
       });
-      const store = createPostgresDataExecutionStore(sql),
+      const store = createPostgresDataExecutionStore(sql, {
+          controlJournal: control.createDataExecutionControlJournal(dm, sql),
+        }),
         deadline = Date.now() + 30000,
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
       await expect(
@@ -739,7 +741,9 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       await ready;
       const deadline = Date.now() + 30000,
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
-        store = createPostgresDataExecutionStore(f.sql);
+        store = createPostgresDataExecutionStore(f.sql, {
+          controlJournal: control.createDataExecutionControlJournal(f.dm, f.sql),
+        });
       await expect(
         store.admit(
           { kind: "download-fonts" },

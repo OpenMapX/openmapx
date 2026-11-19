@@ -5,30 +5,50 @@ import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dataChildControlReservation } from "./ops-children.js";
-import { createPostgresDataExecutionStore, DATA_ADMISSION_LOCK } from "./store.js";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  createPostgresDataExecutionStore,
+  DATA_ADMISSION_LOCK,
+  dataControlAdmission,
+} from "./store.js";
 
 describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("durable execution PostgreSQL admission and CAS", () => {
   let sql: ReturnType<typeof postgres>;
+  let journal: control.DataExecutionControlJournal;
+  let journalRoot: string;
   const ids: string[] = [];
-  beforeAll(() => {
+  /** A data-manager installation over its own directory, with its journal on `sql`. */
+  async function dataManagerJournal(root: string) {
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlDirectories(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "data-manager",
+      serviceIds: ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
+    });
+    return { installation, journal: control.createDataExecutionControlJournal(installation, sql) };
+  }
+  beforeAll(async () => {
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Explicit owned synthetic database required");
     sql = postgres(url, { max: 4, connection: { statement_timeout: 5000 } });
+    journalRoot = mkdtempSync(join(tmpdir(), "omx-data-store-"));
+    ({ journal } = await dataManagerJournal(journalRoot));
+  });
+  // An unfinished execution keeps the next exclusive one out, so each test removes its rows.
+  afterEach(async () => {
+    if (ids.length) await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${ids.splice(0)}::uuid[])`;
   });
   afterAll(async () => {
-    if (sql) {
-      if (ids.length) await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${ids}::uuid[])`;
-      await sql.end();
-    }
+    await sql?.end();
+    if (journalRoot) rmSync(journalRoot, { recursive: true, force: true });
   });
   it("retains one normalized admission under concurrent connections and rejects a renewed deadline", async () => {
-    const one = createPostgresDataExecutionStore(sql),
-      two = createPostgresDataExecutionStore(sql);
+    const one = createPostgresDataExecutionStore(sql, { controlJournal: journal }),
+      two = createPostgresDataExecutionStore(sql, { controlJournal: journal });
     const requestedDeadlineAt = Date.now() + 60000;
     const operationKey = createControlRootOperationKey({
       notAfter: requestedDeadlineAt,
@@ -54,7 +74,7 @@ describe.skipIf(
     ).rejects.toThrow(/conflict/i);
   });
   it("allows one owner-version writer and retains cancel intent before finalization", async () => {
-    const store = createPostgresDataExecutionStore(sql);
+    const store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
     const requestedDeadlineAt = Date.now() + 60000;
     const operationKey = createControlRootOperationKey({
       notAfter: requestedDeadlineAt,
@@ -104,7 +124,7 @@ describe.skipIf(
     });
     try {
       await ready;
-      const store = createPostgresDataExecutionStore(sql),
+      const store = createPostgresDataExecutionStore(sql, { controlJournal: journal }),
         requestedDeadlineAt = Date.now() + 60000;
       const operationKey = createControlRootOperationKey({
         notAfter: requestedDeadlineAt,
@@ -122,7 +142,9 @@ describe.skipIf(
   it.each(["claimed", "stale"] as const)(
     "uses real body/binding/grant evidence for a single child CAS continuation (%s)",
     async (mode) => {
-      const store = createPostgresDataExecutionStore(sql),
+      const root = mkdtempSync(join(tmpdir(), "omx-data-child-cas-"));
+      const { installation: dm, journal: dmJournal } = await dataManagerJournal(root);
+      const store = createPostgresDataExecutionStore(sql, { controlJournal: dmJournal }),
         requestedDeadlineAt = Date.now() + 60000;
       const operationKey = createControlRootOperationKey({
         notAfter: requestedDeadlineAt,
@@ -135,29 +157,23 @@ describe.skipIf(
       ids.push(record.status.id);
       const child = record.reservations[0];
       if (!child) throw Error("Missing original fixed child body");
-      const root = mkdtempSync(join(tmpdir(), "omx-data-child-cas-"));
-      mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlDirectories(root);
       const services = ["motis", "motis-feed-proxy", "motis-staging"];
-      const dm = control.openControlInstallation({
-        infraDir: root,
-        role: "data-manager",
-        serviceIds: services,
-      });
       const agent = control.openControlInstallation({
         infraDir: root,
         role: "ops-agent",
         serviceIds: services,
       });
-      const authority = await control.retainAdmittedControlExecution(dm, {
-        execution: record.execution,
-        kind: record.input.kind,
-        operation: record.input,
-        admittedAt: record.status.admittedAt,
-        requestedDeadlineAt,
-        serviceIds: services,
-        reservations: record.reservations.map(dataChildControlReservation),
-      });
+      const authority = await control.retainAdmittedControlExecution(
+        dm,
+        dataControlAdmission({
+          execution: record.execution,
+          input: record.input,
+          admittedAt: record.status.admittedAt,
+          requestedDeadlineAt,
+          parent: undefined,
+          reservations: record.reservations,
+        }),
+      );
       const lease = await control.acquireArtifactTargetLease({
         serviceIds: services,
         owner: authority,
@@ -179,12 +195,13 @@ describe.skipIf(
             operationFingerprint: "b".repeat(64),
           }),
         ).rejects.toThrow(/child|identity/i);
+        // Only the contained worker's finalization ends an execution.
         await expect(
           store.checkpoint(record.status.id, winner.record.version, {
             status: "ok",
             publication: "committed",
           }),
-        ).rejects.toThrow(/unsettled/i);
+        ).rejects.toThrow(/terminal commitment required/);
         const exact = await control.bindControlChildPhase(authority, child);
         const binding = await control.lookupControlChildPhaseBinding(authority, child);
         if (!binding) throw Error("Missing original binding");

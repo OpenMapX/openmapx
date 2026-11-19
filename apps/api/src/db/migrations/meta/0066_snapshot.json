@@ -1,5 +1,5 @@
 {
-  "id": "14d5cbbe-f2f3-4f2b-ad5c-194785107fc7",
+  "id": "02268be6-b2d5-4ec5-ab6b-a2943682bacf",
   "prevId": "639ebc86-b820-431f-bc9d-2e96a698ed89",
   "version": "7",
   "dialect": "postgresql",
@@ -2064,6 +2064,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "execution_completion": {
+          "name": "execution_completion",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "ownership_version": {
           "name": "ownership_version",
           "type": "integer",
@@ -2101,7 +2107,7 @@
         },
         "data_manager_jobs_execution_row": {
           "name": "data_manager_jobs_execution_row",
-          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NULL OR \"data_manager\".\"jobs\".\"execution_version\" = 2)"
+          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NULL OR \"data_manager\".\"jobs\".\"execution_version\" = 2) AND (\"data_manager\".\"jobs\".\"execution_version\" IS DISTINCT FROM 2 OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"execution_completion\" IS NULL OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL)"
         },
         "data_manager_jobs_execution_shape": {
           "name": "data_manager_jobs_execution_shape",

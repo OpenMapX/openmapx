@@ -18,6 +18,30 @@ import { build } from "esbuild";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { transitChildCandidateId } from "./ops-children.js";
 
+/** A fault that runs at the next forward check; every check waits for it. */
+const forwardGate = vi.hoisted(() => ({
+  fault: undefined as (() => Promise<void>) | undefined,
+  running: undefined as Promise<void> | undefined,
+}));
+vi.mock("@openmapx/core/build-artifacts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core/build-artifacts")>();
+  return {
+    ...actual,
+    assertControlExecutionForward: async (
+      ...args: Parameters<typeof actual.assertControlExecutionForward>
+    ) => {
+      const fault = forwardGate.fault;
+      forwardGate.fault = undefined;
+      if (fault)
+        forwardGate.running = fault().finally(() => {
+          forwardGate.running = undefined;
+        });
+      await forwardGate.running;
+      return actual.assertControlExecutionForward(...args);
+    },
+  };
+});
+
 /** The lease holding `target` in the installation whose data root is `data`. */
 function targetLease(data: string, target: string): string | undefined {
   return control
@@ -256,7 +280,6 @@ it.each(["promotion", "reload"] as const)(
   60000,
 );
 
-import { existsSync } from "node:fs";
 import {
   cancelDataExecution,
   createDataManagerTransport,
@@ -612,20 +635,30 @@ it
       });
     let restoreFault: ReturnType<typeof vi.spyOn> | undefined,
       recoveryFaultReached = false;
-    const retainRecovery = journal.retainProxyRecoveryIntent.bind(journal);
-    journal.retainProxyRecoveryIntent = async (authority, backupDigest) => {
-      await retainRecovery(authority, backupDigest);
-      if (kind === "cancel-before-restore")
-        await runtime.requestCancel({
-          id: authority.execution.executionId,
-          operationKey: authority.execution.operationKey,
-          fingerprint: authority.execution.fingerprint,
-        });
+    // Each fault strikes once the restore reservation is confirmed on the row.
+    const reserveChild = store.reserveChild.bind(store);
+    store.reserveChild = async (id, version, child) => {
+      const saved = await reserveChild(id, version, child);
+      if (!saved?.continuation || child.phase !== "proxy-restore") return saved;
+      if (kind === "cancel-before-restore") {
+        // The cancellation waits for this write, so it runs at the next forward check.
+        const { execution } = saved.record;
+        forwardGate.fault = async () => {
+          await runtime.requestCancel({
+            id: execution.executionId,
+            operationKey: execution.operationKey,
+            fingerprint: execution.fingerprint,
+          });
+          recoveryFaultReached = true;
+        };
+        return saved;
+      }
       if (kind === "expire-before-restore")
         restoreFault = vi.spyOn(Date, "now").mockReturnValue(deadline + 1);
       recoveryFaultReached = true;
       if (kind === "restore-reservation-crash")
         throw Error("Synthetic crash after confirmed restore reservation");
+      return saved;
     };
     const checkpointChild = store.checkpointChild.bind(store);
     store.checkpointChild = async (id, version, child) => {
@@ -796,10 +829,9 @@ it
           expect(held).toBeDefined();
           await expect
             .poll(
-              () =>
-                existsSync(
-                  join(root, "state/data-manager/control/observations", `worker-${key}.json`),
-                ),
+              async () =>
+                (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id!}`)[0]
+                  ?.execution_completion != null,
               { timeout: 15000 },
             )
             .toBe(true);

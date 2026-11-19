@@ -39,17 +39,15 @@ import { opsClient } from "../../ops-client.js";
 import { cancelAndSettleRetainedTransitousScripts } from "../transitous/script-runner.js";
 import { type DataAgentOperation, settleAgentOperations } from "./agent-operations.js";
 import { dataExecutionDiagnostic } from "./diagnostics.js";
-import {
-  cancelAndSettleOwnedDataOpsChildren,
-  type DataOpsChildAttempt,
-  dataChildControlReservation,
-} from "./ops-children.js";
+import { cancelAndSettleOwnedDataOpsChildren, type DataOpsChildAttempt } from "./ops-children.js";
 import { ownedLease } from "./owned-lease.js";
-import type {
-  DataExecutionAdmissionOptions,
-  DataExecutionPatch,
-  DataExecutionRecord,
-  DataExecutionStore,
+import {
+  type DataExecutionAdmissionOptions,
+  type DataExecutionPatch,
+  type DataExecutionRecord,
+  type DataExecutionStore,
+  dataControlAdmission,
+  dataExecutionTargetIds,
 } from "./store.js";
 import { type CancellableSql, withDataExecutionScope } from "./worker-scope.js";
 export type DataExecutionProgressPatch = Partial<
@@ -138,15 +136,6 @@ async function releaseOwnLease(
 const PRE_EFFECT_REFUSALS = new Set(["authorization", "validation", "busy", "conflict"]);
 /** Repeats of a lost acquisition: 250 ms doubling to 8 s, about 32 s in all. */
 const ACQUIRE_RETRIES = 8;
-export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
-  return ["transit-sync", "catalog.validate", "catalog.activate"].includes(input.kind)
-    ? ["data-manager", "motis", "motis-feed-proxy", "motis-staging"]
-    : input.kind === "transit-maintenance"
-      ? input.action === "restart-primary"
-        ? ["data-manager", "motis"]
-        : ["data-manager", "motis-feed-proxy"]
-      : ["data-manager"];
-}
 export function createDataExecutionRuntime(deps: {
   store: DataExecutionStore;
   dispatch(input: DataExecutionInput, context: DataExecutionContext): Promise<DataExecutionResult>;
@@ -317,12 +306,10 @@ export function createDataExecutionRuntime(deps: {
               ? "committed"
               : "not_started";
           let completion: Awaited<ReturnType<typeof owner.containAbandoned>>["completion"];
-          try {
-            ({ completion, lease } = await owner.restoreCompletion(record.execution));
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          const restored = await owner.restoreCompletion(record.execution);
+          if (restored) ({ completion, lease } = restored);
+          else
             ({ completion, lease } = await owner.containAbandoned(record.execution, publication));
-          }
           const saved = await store.finalize(
             current.status.id,
             current.version,
@@ -363,18 +350,17 @@ export function createDataExecutionRuntime(deps: {
     if (LOCAL_DATA_EXECUTION_KINDS.includes(record.input.kind as never) !== (work !== undefined))
       throw Error("In-process work runs only as a local data execution");
     await adopt?.(record.execution);
-    const authority = await retainAdmittedControlExecution(owner.installation, {
-      execution: record.execution,
-      kind: record.input.kind,
-      operation: record.input,
-      admittedAt: record.status.admittedAt,
-      ...(record.requestedDeadlineAt !== null
-        ? { requestedDeadlineAt: record.requestedDeadlineAt }
-        : {}),
-      ...(parent ? { parent } : {}),
-      serviceIds: targets,
-      reservations: record.reservations.map(dataChildControlReservation),
-    });
+    const authority = await retainAdmittedControlExecution(
+      owner.installation,
+      dataControlAdmission({
+        execution: record.execution,
+        input: record.input,
+        admittedAt: record.status.admittedAt,
+        requestedDeadlineAt: record.requestedDeadlineAt,
+        parent,
+        reservations: record.reservations,
+      }),
+    );
     // A hardlink application sent with a lease id runs under its sender's
     // lease, and a short traffic run under none. Other executions claim their
     // targets first: a held target, or an agent that cannot answer, ends the
@@ -703,9 +689,7 @@ export function createDataExecutionRuntime(deps: {
         if (active.has(record.status.id) || recovering.has(record.status.id)) continue;
         if (isDataExecutionTerminal(record.status)) {
           try {
-            await owner.assertOwnedProxyRecoverySettled(record.execution);
-            await owner.repairTerminal(record.execution);
-            await owner.publishTerminal(record.execution);
+            await owner.verifyContainedTerminal(record.execution);
             const authority = await restoreAdmittedControlExecution(
                 owner.installation,
                 record.execution,
@@ -730,28 +714,23 @@ export function createDataExecutionRuntime(deps: {
           // Recover authentic observation authority without assuming that the
           // killed local producer ever reached worker completion publication.
           observation = await observationContext(record);
-          try {
-            recovered = await owner.restoreCompletion(record.execution);
-          } catch (error) {
-            if (
-              LOCAL_DATA_EXECUTION_KINDS.includes(record.input.kind as never) &&
-              (error as NodeJS.ErrnoException).code === "ENOENT"
-            ) {
+          recovered = await owner.restoreCompletion(record.execution);
+          if (!recovered) {
+            if (LOCAL_DATA_EXECUTION_KINDS.includes(record.input.kind as never)) {
               recoverAbandoned(record);
               continue;
             }
-            if (
-              record.input.kind !== "catalog.activate" ||
-              (error as NodeJS.ErrnoException).code !== "ENOENT"
-            )
-              throw error;
+            const missing = Error("Original worker completion missing");
+            if (record.input.kind !== "catalog.activate") throw missing;
             // Final approval is the fixed graph's last effect. Reconcile only
             // its original address and authenticated, fully settled child tree.
             await cancelControlExecution(observation.authority);
             await cancelArtifactTargetLease(ownedLease(observation));
-            if ((await cancelAndSettleOwnedDataOpsChildren(observation)) !== "settled") throw error;
+            if ((await cancelAndSettleOwnedDataOpsChildren(observation)) !== "settled")
+              throw missing;
             await owner.repairCommittedCatalogActivation(record.execution);
             recovered = await owner.restoreCompletion(record.execution);
+            if (!recovered) throw missing;
           }
           await cancelControlExecution(recovered.authority);
           if (recovered.lease) await cancelArtifactTargetLease(recovered.lease);

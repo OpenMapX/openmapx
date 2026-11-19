@@ -726,7 +726,7 @@ VALUES ('${DELETED_USER_ID}', 'Mixed Restore User', '${DELETED_EMAIL}', true, no
       finished: string,
       children = "[]",
     ) =>
-      `('${id}', 'full-update', '${status}', ${finished}, 2, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', 1, 100, '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '${children}')`;
+      `('${id}', 'full-update', '${status}', ${finished}, 2, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', 1, 100, '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '${children}', '{}', '{}', '{}')`;
     await psql(`
 INSERT INTO admin_job (id, type, status, finished_at)
 VALUES
@@ -746,7 +746,7 @@ VALUES
   ('00000000-0000-4000-8000-000000000005', 'transitous-sync', 'canceled', now(), NULL),
   ('00000000-0000-4000-8000-000000000006', 'transitous-sync', 'interrupted', NULL, NULL);
 INSERT INTO data_manager.jobs
-  (id, kind, status, finished_at, execution_version, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_children)
+  (id, kind, status, finished_at, execution_version, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_children, execution_admission, execution_progress, execution_completion)
 VALUES
   ${v2("00000000-0000-4000-8000-000000000007", "a", "queued", "not_started", "NULL")},
   ${v2("00000000-0000-4000-8000-000000000008", "b", "running", "unknown", "NULL", '[{"state":"attempted"}]')},
@@ -847,6 +847,23 @@ VALUES
         "SELECT right(id::text, 2) || '=' || jsonb_array_length(execution_children) FROM data_manager.jobs WHERE execution_version = 2 AND right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
       ),
     ).toBe(["08=0", "09=0", "0d=0", "0e=1"].join("\n"));
+    // A closed execution loses its execution row and worker completion; a settled one keeps them.
+    expect(
+      await psql(
+        "SELECT right(id::text, 2) || '=' || (execution_admission IS NULL AND execution_progress IS NULL AND execution_completion IS NULL)::text FROM data_manager.jobs WHERE execution_version = 2 ORDER BY id;",
+      ),
+    ).toBe(
+      [
+        "07=true",
+        "08=true",
+        "09=true",
+        "0a=true",
+        "0b=false",
+        "0c=true",
+        "0d=true",
+        "0e=false",
+      ].join("\n"),
+    );
     expect(
       await psql(
         "SELECT right(id::text, 2) || '=' || status || '|' || coalesce(error_message, '') || '|' || (lease_owner IS NULL)::text FROM data_manager.offline_package_jobs ORDER BY id;",

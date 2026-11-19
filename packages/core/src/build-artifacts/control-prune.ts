@@ -28,6 +28,8 @@ import { MAINTENANCE_NAMESPACE } from "./maintenance-file";
 import { installationState, readPrivateRecord } from "./private-records";
 
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
+/** A root key's expiry is at most seven days after its admission, and every child inherits its root's. */
+const MAX_KEY_LIFETIME_MS = 7 * 24 * 3600_000;
 /** Namespaces swept by name. The execution row goes last; `configuration-maintenance` goes with its preparation. */
 const NAMESPACES = ["observations", "spawns", "spawn-started", "catalog-commits"] as const;
 const MAX_ENTRIES = 65536;
@@ -252,7 +254,6 @@ export async function pruneControlRecords(
   const keys = found.map((value) => value.key);
   if (keys.length) {
     removeShared(local, keys, onFull);
-    const terminals = new Set(keys.map((key) => `terminal-${key}.json`));
     for (const namespace of NAMESPACES) {
       const ids = found.flatMap((value) => [
         ...(value.identifiers.get("*") ?? []),
@@ -260,7 +261,7 @@ export async function pruneControlRecords(
       ]);
       withNamespace(local, namespace, (dir) => {
         for (const entry of entries(dir, onFull))
-          if (!terminals.has(entry) && ids.some((id) => entry.includes(id))) dir.removeFile(entry);
+          if (ids.some((id) => entry.includes(id))) dir.removeFile(entry);
       });
     }
     withNamespace(local, MAINTENANCE_NAMESPACE, (dir) => {
@@ -273,40 +274,14 @@ export async function pruneControlRecords(
     // A namespace read only in part may still hold records of these
     // executions; their admissions stay so a later pass finds them again.
     if (reported) return [];
-    // The row goes first, then its terminal commitment: a pass interrupted in
-    // between leaves only that, removed as a stray below.
     await local.rows.remove(keys);
-    withNamespace(local, "observations", (dir) => {
-      for (const key of keys) optional(() => dir.removeFile(`terminal-${key}.json`));
-    });
   }
-  // Terminal commitments whose row is gone, from an interrupted pass, go
-  // once they are 72 hours old.
-  const admitted = new Set(
-    names.filter((name) => !keys.includes(name)).map((key) => `${key}.json`),
-  );
-  if (complete) {
-    const strays =
-      withNamespace(local, "observations", (dir) =>
-        entries(dir, onFull).filter((entry) => {
-          if (!entry.endsWith(".json") || !entry.startsWith("terminal-")) return false;
-          const finishedAt = mtime(dir, entry);
-          return (
-            !admitted.has(entry.replace(/^terminal-/, "")) &&
-            finishedAt !== null &&
-            finishedAt + CONTROL_PRUNE_AFTER_MS <= now
-          );
-        }),
-      ) ?? [];
-    // A row the store still holds, offered to the prune or not, keeps it.
-    const orphaned: string[] = [];
-    for (const entry of strays)
-      if (!(await local.rows.read(entry.slice("terminal-".length, -".json".length))))
-        orphaned.push(entry);
-    withNamespace(local, "observations", (dir) => {
-      for (const entry of orphaned) optional(() => dir.removeFile(entry));
-    });
-  }
+  // Records without a row go by the same retention, and only once their key
+  // expired: no key stays valid more than seven days after its admission.
+  await local.rows.removeRowless?.({
+    finishedBefore: now - CONTROL_PRUNE_AFTER_MS,
+    admittedBefore: now - MAX_KEY_LIFETIME_MS - CONTROL_PRUNE_AFTER_MS,
+  });
   // Source witnesses no maintenance owner references any more, once old enough.
   if (complete) {
     const referenced = new Set<string>();

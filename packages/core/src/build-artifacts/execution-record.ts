@@ -141,23 +141,101 @@ export async function retainedExecutionOrigin(
     throw Error("Execution origin identity mismatch");
   return row.admission.origin;
 }
+export type ControlAdmissionInput = {
+  execution: ExecutionRef;
+  kind: string;
+  operation: unknown;
+  admittedAt: number;
+  requestedDeadlineAt?: number;
+  parent?: RetainedParentExecution;
+  /** The child row this execution runs as, under another holder's lease. */
+  leaseChild?: LeaseChildRef;
+  serviceIds: readonly string[];
+  plan?: readonly ControlPlannedChild[];
+  reservations?: readonly ControlChildReservation[];
+};
 /** Fixed adapters call after their own durable admission, passing the complete typed operation, never only its IDs. */
 export async function retainAdmittedControlExecution(
   installation: ControlInstallation,
-  input: {
-    execution: ExecutionRef;
-    kind: string;
-    operation: unknown;
-    admittedAt: number;
-    requestedDeadlineAt?: number;
-    parent?: RetainedParentExecution;
-    /** The child row this execution runs as, under another holder's lease. */
-    leaseChild?: LeaseChildRef;
-    serviceIds: readonly string[];
-    plan?: readonly ControlPlannedChild[];
-    reservations?: readonly ControlChildReservation[];
-  },
+  input: ControlAdmissionInput,
 ): Promise<ExecutionHandle> {
+  const state = installationState(installation),
+    requested = requestedAdmission(installation, input);
+  const existing = await state.rows.read(requested.execution.operationKey);
+  if (existing) {
+    const { origin: _origin, ...retained } = existing.admission;
+    if (canonicalJson(retained) !== canonicalJson(requested))
+      throw Error("Conflicting retained execution identity");
+    return handleOf(state, existing.admission);
+  }
+  const row = newRow(installation, input, requested);
+  await state.rows.admit(row);
+  return handleOf(state, row.admission);
+}
+/**
+ * The row of a new execution, for an owner that records it in the same
+ * transaction as its own record of the execution. Its handle comes from
+ * `retainAdmittedControlExecution` once that transaction committed.
+ */
+export function newControlExecutionRow(
+  installation: ControlInstallation,
+  input: ControlAdmissionInput,
+): ExecutionRow {
+  return newRow(installation, input, requestedAdmission(installation, input));
+}
+function newRow(
+  installation: ControlInstallation,
+  input: ControlAdmissionInput,
+  requested: Omit<ExecutionAdmission, "origin">,
+): ExecutionRow {
+  const { execution } = requested;
+  let origin: ControlExecutionOrigin;
+  const inherited = input.parent && verifiedParentOrigins.get(input.parent);
+  if (inherited) {
+    if (!input.parent || !verifiedParents.has(input.parent))
+      throw Error("Unverified parent origin");
+    origin = controlOriginSchema.parse(inherited);
+  } else {
+    if (input.parent && (input.parent.issuer !== "api" || !verifiedParents.has(input.parent)))
+      throw Error("A child needs its parent's verified origin; this parent can only be observed");
+    const parsedKey = parseControlRootOperationKey(execution.operationKey);
+    const now = Date.now();
+    if (parsedKey.notAfter <= now) throw Error("Expired control root expiry");
+    if (
+      parsedKey.notAfter - now > 7 * 24 * 3600_000 ||
+      input.requestedDeadlineAt !== parsedKey.notAfter
+    )
+      throw Error("Control root requested deadline must equal its expiry within seven days");
+    origin = {
+      version: 1,
+      rootKey: execution.operationKey,
+      issuer: execution.executor,
+      notAfter: parsedKey.notAfter,
+    };
+  }
+  if (execution.deadlineAt > origin.notAfter)
+    throw Error("Control execution widens origin deadline");
+  assertControlStorageAvailable(installation);
+  return {
+    admission: { ...requested, origin },
+    progress: {
+      phase: "held",
+      effectStartedAt: null,
+      settlement: null,
+      settledAt: null,
+      children: requested.reservations.map((r) => ({
+        ordinal: r.ordinal,
+        binding: null,
+        delegation: null,
+      })),
+    },
+  };
+}
+/** Checks an admission against its kind and composes what its row keeps, except the origin. */
+function requestedAdmission(
+  installation: ControlInstallation,
+  input: ControlAdmissionInput,
+): Omit<ExecutionAdmission, "origin"> {
   const state = installationState(installation);
   if (input.leaseChild) leaseChildRefSchema.parse(input.leaseChild);
   const execution = Object.freeze(executionRefSchema.parse(input.execution));
@@ -317,52 +395,7 @@ export async function retainAdmittedControlExecution(
     plan,
     reservations,
   };
-  const existing = await state.rows.read(execution.operationKey);
-  if (existing) {
-    const { origin: _origin, ...retained } = existing.admission;
-    if (canonicalJson(retained) !== canonicalJson(requested))
-      throw Error("Conflicting retained execution identity");
-    return handleOf(state, existing.admission);
-  }
-  let origin: ControlExecutionOrigin;
-  const inherited = input.parent && verifiedParentOrigins.get(input.parent);
-  if (inherited) {
-    if (!input.parent || !verifiedParents.has(input.parent))
-      throw Error("Unverified parent origin");
-    origin = controlOriginSchema.parse(inherited);
-  } else {
-    if (input.parent && (input.parent.issuer !== "api" || !verifiedParents.has(input.parent)))
-      throw Error("A child needs its parent's verified origin; this parent can only be observed");
-    const parsedKey = parseControlRootOperationKey(execution.operationKey);
-    const now = Date.now();
-    if (parsedKey.notAfter <= now) throw Error("Expired control root expiry");
-    if (
-      parsedKey.notAfter - now > 7 * 24 * 3600_000 ||
-      input.requestedDeadlineAt !== parsedKey.notAfter
-    )
-      throw Error("Control root requested deadline must equal its expiry within seven days");
-    origin = {
-      version: 1,
-      rootKey: execution.operationKey,
-      issuer: execution.executor,
-      notAfter: parsedKey.notAfter,
-    };
-  }
-  if (execution.deadlineAt > origin.notAfter)
-    throw Error("Control execution widens origin deadline");
-  const admission: ExecutionAdmission = { ...requested, origin };
-  assertControlStorageAvailable(installation);
-  await state.rows.admit({
-    admission,
-    progress: {
-      phase: "held",
-      effectStartedAt: null,
-      settlement: null,
-      settledAt: null,
-      children: reservations.map((r) => ({ ordinal: r.ordinal, binding: null, delegation: null })),
-    },
-  });
-  return handleOf(state, admission);
+  return requested;
 }
 export interface PeerState {
   installation: InstallationState;
@@ -524,6 +557,8 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
     status: dataExecutionStatusSchema,
     workerId: uuid,
     childrenDigest: digest,
+    /** The finish time the job row commits with this terminal. */
+    terminalAt: z.number().int().positive().safe(),
   }),
   z.strictObject({ kind: z.literal("data-command"), status: dataExecutionStatusSchema }),
   z.strictObject({ kind: z.literal("ops-result"), result: z.unknown() }),

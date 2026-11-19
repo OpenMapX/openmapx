@@ -544,8 +544,6 @@ export async function reserveOwnedProxyRecovery(
     if (!saved?.continuation) throw new DataOpsObservationPending(slot.operationKey);
     return { record: saved.record, value: saved.continuation };
   });
-  if (!context.store.controlJournal) throw Error("Original proxy recovery journal missing");
-  await context.store.controlJournal.retainProxyRecoveryIntent(context.authority, backupDigest);
   await context.assertForward();
   return reserved;
 }

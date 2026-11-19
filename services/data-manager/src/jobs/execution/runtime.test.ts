@@ -127,9 +127,7 @@ describe.skipIf(
             })
           ).status,
         ).toBe(terminal?.status.status);
-        const proof = await journal.repairTerminal(terminal!.execution);
-        expect(proof.execution).toEqual(terminal!.execution);
-        await journal.publishTerminal(terminal!.execution);
+        await journal.verifyContainedTerminal(terminal!.execution);
         await expect(
           runtime.admit(
             { kind: "download-fonts" },
@@ -581,12 +579,9 @@ describe.skipIf(
       id = admitted.id;
       await expect
         .poll(
-          async () => {
-            const { existsSync } = await import("node:fs");
-            return existsSync(
-              join(root, "state/data-manager/control/observations", `worker-${key}.json`),
-            );
-          },
+          async () =>
+            (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id!}`)[0]
+              ?.execution_completion != null,
           { timeout: 15000 },
         )
         .toBe(true);

@@ -58,13 +58,17 @@ export const jobs = dataManager.table(
     /** Agent operations of in-process work: reserved at admission, recorded as
      * attempted before the request and as terminal once the agent answers. */
     executionAgentOperations: jsonb("execution_agent_operations").notNull().default([]),
-    /** The execution row, recorded once the execution is admitted: the parts of
-     * its admission the columns above do not carry (targets, planned and
-     * reserved children, origin), fixed when recorded. */
+    /** The execution row, inserted with the job row: the parts of its admission
+     * the columns above do not carry (targets, planned and reserved children,
+     * origin), fixed when recorded. */
     executionAdmission: jsonb("execution_admission"),
-    /** The execution row's progress: phase, effect start, settlement and the
-     * grants of its reserved children. Changes never touch `ownership_version`. */
+    /** The execution row's progress: phase, effect start, settlement (with the
+     * terminal it committed) and the grants of its reserved children. Changes
+     * never touch `ownership_version`. */
     executionProgress: jsonb("execution_progress"),
+    /** How the worker ended, recorded once after its work returned or failed,
+     * or by recovery for a worker that died with its process. */
+    executionCompletion: jsonb("execution_completion"),
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
@@ -77,7 +81,7 @@ export const jobs = dataManager.table(
     ),
     check(
       "data_manager_jobs_execution_row",
-      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2)`,
+      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL)`,
     ),
     check(
       "data_manager_jobs_execution_shape",
