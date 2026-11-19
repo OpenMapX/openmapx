@@ -376,9 +376,9 @@ pins none and product services are included; they keep existing pins. Exact
 helper pull failures never build a replacement image.
 
 Each configuration generation records the local image its services' tags named
-when it was applied. `compose up` and `services start|update` pull the images the
-host lacks before they write their generation, so the first `compose up` of an
-installation using tags records its images too. A pulled tag therefore leaves
+when it was applied. `compose up` pulls the images the host lacks before it writes
+its generation, so the first `compose up` of an installation using tags records
+its images too. A pulled tag therefore leaves
 running containers in place and under the operations agent's control until they
 are recreated: a Data Manager update cancelled after its image downloaded blocks
 no later configuration change.

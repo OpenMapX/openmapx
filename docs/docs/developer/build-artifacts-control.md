@@ -383,11 +383,12 @@ failed without effect; anything else is unknown and moves the record to
 
 Each generation records, in `images.json`, the local image ID that each enabled
 service's reference named when the generation was committed. The agent and the
-host CLI record the images present at that moment. The host CLI's starting writes
-(`compose up`, `services start|update`) first pull the images the host lacks, so a
-fresh installation's first generation records every image it starts; a reference
-that cannot be pulled (a local tag not built yet) stays unrecorded, and starting it
-fails anyway. A pinned release reference names its image by digest; a tag can move
+host CLI record the images present at that moment. `compose up` first pulls the
+images the host lacks, so a fresh installation's first generation records every
+image it starts; a reference that cannot be pulled (a local tag not built yet)
+stays unrecorded, and starting it fails anyway. `services update` pulls before it
+writes its generation, and a service `services start` enables later is recorded by
+the next generation written after its image is present. A pinned release reference names its image by digest; a tag can move
 when an image is pulled.
 
 The agent counts a container as its own when it was created from a retained
