@@ -140,7 +140,7 @@ schema-checked. Docker and host administrators remain trusted.
 | Helper progress                                                                                                                                                                                                    | `maintenance/<maintenanceId>.handoff.json` beside the maintenance file                                                                                                                                                                                                                            | helper                                                                            | agent, after the helper container exited                             |
 | Lease rows and their children                                                                                                                                                                                      | `state/ops-agent/leases.json`                                                                                                                                                                                                                                                                     | agent, host CLI, fixed children and helper under the lock; data-manager over HTTP | holders by lease ID; children by `{leaseId, childKey}`               |
 | Data-manager fence, and its record of the agent's fence child (prepared, settled or refused)                                                                                                                       | `data_manager.configuration_fence`                                                                                                                                                                                                                                                                | data-manager on the agent's request                                               | data-manager, agent                                                  |
-| Data job row (status, publication, lease children, agent operations of in-process work) with the job's execution row                                                                                               | `data_manager.jobs`                                                                                                                                                                                                                                                                               | data-manager                                                                      | data-manager; agent and host CLI through `lookupDataExecution`       |
+| Data job row (status, publication, lease children, agent operations of in-process work, worker completion) with the job's execution row                                                                            | `data_manager.jobs`                                                                                                                                                                                                                                                                               | data-manager                                                                      | data-manager; agent and host CLI through `lookupDataExecution`       |
 
 The API's keyed digests (the source fingerprint of a candidate and the intent
 digest of an immediate configuration request) use a key derived from the API's own
@@ -490,14 +490,27 @@ releases. A preparation removes the rows that were settled or refused more than
 
 Every data job is a durable execution in `data_manager.jobs`; there is one
 admission. The job row is also the execution row: the job's columns already hold
-its execution, operation, admission time, deadline and parent, and admission adds
-`execution_admission` (targets, reserved children, origin) once, after the job
-row is inserted and before the lease and the worker. `execution_progress` holds
-the progress; each change is a compare-and-set on it that leaves the job's own
-version alone, and is durable before the effect, grant or cancellation it
-precedes. The same key with another admission is a conflict, and a later process
-reads the row back from the table, so a restart observes an attempted job and
-never dispatches it again. Exclusive jobs (transit syncs, imports, builds, catalog proposals,
+its execution, operation, admission time, deadline and parent, and the job row is
+inserted together with `execution_admission` (targets, reserved children,
+origin) and `execution_progress`, in one statement; the table refuses an open
+job row without them. `execution_progress` holds the progress; each change is a
+compare-and-set on it that leaves the job's own version alone, and is durable
+before the effect, grant or cancellation it precedes. The same key with another
+admission is a conflict, and a later process reads the row back from the table,
+so a restart observes an attempted job and never dispatches it again.
+
+A job ends in three steps on its row. When its work returns or fails, the worker
+records how it ended in `execution_completion`, once; recovery reads it back
+instead of running the work again, and records the end of in-process work that
+died with its process. The settlement on `execution_progress` then records the
+terminal status with the finish time the job row will carry; a repeat after a
+crash before the job row commits reuses that time. Last, the job row commits the
+terminal. Before the job's own lease is released, data-manager checks that the
+committed row matches its settlement and that every child is terminal. A proxy
+restore's obligation is the restore child reserved on the row, which names the
+backup it restores. The only per-job file data-manager keeps is the Transitous
+runner attempt journal in its private state: it holds each runner request's
+capability, which stays out of the database and its backups. Exclusive jobs (transit syncs, imports, builds, catalog proposals,
 dataset reloads, ambient publication, `generation-link`) take the data-admission
 lock exclusively, are refused while another exclusive job is unfinished and lease
 `data-manager` at the agent. Live, predicted and maintenance traffic runs are
@@ -677,7 +690,10 @@ their own, the spawn records of its fixed children and, for a preparation, its
 maintenance and helper progress records. A record of another execution that
 merely names it stays. The execution row goes last; on the agent, removing it
 removes the operation's journal row, and on data-manager its finished job row. A pass that stopped in between leaves strays
-that a later pass removes once they are 72 hours old. A pass examines at most 256
+that a later pass removes once they are 72 hours old. A backup restore closes the
+data jobs it found open and drops their execution rows; data-manager's prune
+deletes such a job row once it finished 72 hours ago and was admitted more than
+ten days ago, by which time its key has expired. A pass examines at most 256
 executions and resumes where the previous pass stopped; a store too large for one
 pass is reported and pruned in part. The records of a recovery-required execution
 stay regardless of age, and the agent also keeps those of a preparation a
