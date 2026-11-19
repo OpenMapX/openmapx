@@ -175,6 +175,7 @@ Terminal states carry `errorClass` when they are not `succeeded`.
 | From                                       | Event                                                       | To                                                              |
 | ------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------- |
 | (none)                                     | Operation admitted and journaled                            | `queued`                                                        |
+| (none)                                     | Admission planning refuses it before any lease              | `failed` with the refusal's `errorClass`; nothing ran           |
 | `queued`                                   | Worker starts                                               | `running`                                                       |
 | `running`                                  | Typed result                                                | `succeeded`                                                     |
 | `running`                                  | Classified failure                                          | `failed` with its `errorClass`                                  |
@@ -203,8 +204,25 @@ operation's lease when the kind needs one, and writes the journal row and the
 execution's admission record before the worker starts. A held target refuses the
 operation before anything is recorded, with HTTP 409 and the error class `busy`;
 the message names the holder's executor, operation key, kind and state and points
-to `openmapx control status`. Slow containment of a failed admission runs outside
-the admission lock.
+to `openmapx control status`.
+
+Before the lease, a root's admission plans: it reads its targets and, for a
+`configurationMaintenance.prepare`, the API's candidate, the host sources and the
+rendered configuration. Planning only reads, so a refusal there records the job as
+`failed` with the refusal's class instead of `recovery_required`: sources that
+changed since the candidate read them (another update committed meanwhile) are a
+`conflict`, anything else `runtime`. The API settles such a preparation as not
+committed without waiting for an operator.
+
+The agent's code follows these parts: `admission.ts` (the request guards and this
+one pipeline), `job-table.ts` (the journal rows, their events, the handles a root
+runs under, the admission lock and the one transition that records a state),
+`settlement.ts` (a per-kind table of what a kind adds to running and settling a
+root, and the terminal settlement of receipts and leases), `job-run.ts` (the
+worker's context and lifecycle) and `server.ts` (startup recovery and thin routes).
+A terminal transition runs slow containment (a failed artifact validation) and
+published reads (a committed catalog approval) before it takes the admission lock,
+so they never hold up another admission.
 
 The five configuration apply kinds carry their payload in the operation body.
 The journal row keeps a digest of the body and its non-secret fields, never the
@@ -293,19 +311,19 @@ A configuration change is an administrative job whose candidate lives in
 `admin_job.protocol.candidate` and moves through three phases. Each phase runs
 the same forward code after an API restart.
 
-| From                 | Event                                                                                                                                                             | To                                                                             |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| (none)               | Payload built and retained at the agent; hardlink preview and coordinator and capacity preflights pass                                                            | `candidate_prepared`                                                           |
-| (none)               | A preflight refuses                                                                                                                                               | no candidate; the record is discarded                                          |
-| `candidate_prepared` | A change that recreates services: the coordinator image pull and the old revision's coordinator prerequisite, then the agent's `configurationMaintenance.prepare` | `candidate_prepared`, maintenance prepared                                     |
-| `candidate_prepared` | The agent refuses the preparation (`busy` or failed) and settles it itself                                                                                        | no candidate; the record is discarded, outcome not committed (`busy`/`failed`) |
-| `candidate_prepared` | The candidate expired before the preparation, or the coordinator pull failed                                                                                      | abandoned, outcome not committed (`conflict`)                                  |
-| `candidate_prepared` | The commit participant's verification refuses                                                                                                                     | abandoned with the participant's conflict                                      |
-| `candidate_prepared` | One transaction: job row locked and still running, source fingerprint unchanged, maintenance still prepared, rows saved by row-version check                      | `rows_saved`                                                                   |
-| `candidate_prepared` | Cancelled, stale or the save rolled back                                                                                                                          | abandoned: `settle{abandon}`, record discarded, outcome not committed          |
-| `rows_saved`         | Apply operation (or maintenance apply) terminal with a known outcome                                                                                              | `generation_applied`                                                           |
-| `rows_saved`         | Apply outcome unknown                                                                                                                                             | stays `rows_saved`; the job waits for `control resolve`                        |
-| `generation_applied` | Follow-ups finished                                                                                                                                               | candidate retired, record discarded                                            |
+| From                 | Event                                                                                                                                                             | To                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| (none)               | Payload built and retained at the agent; hardlink preview and coordinator and capacity preflights pass                                                            | `candidate_prepared`                                                          |
+| (none)               | A preflight refuses                                                                                                                                               | no candidate; the record is discarded                                         |
+| `candidate_prepared` | A change that recreates services: the coordinator image pull and the old revision's coordinator prerequisite, then the agent's `configurationMaintenance.prepare` | `candidate_prepared`, maintenance prepared                                    |
+| `candidate_prepared` | The agent refuses the preparation (`busy`, `conflict` or failed) and settles it itself                                                                            | no candidate; the record is discarded, outcome not committed with that reason |
+| `candidate_prepared` | The candidate expired before the preparation, or the coordinator pull failed                                                                                      | abandoned, outcome not committed (`conflict`)                                 |
+| `candidate_prepared` | The commit participant's verification refuses                                                                                                                     | abandoned with the participant's conflict                                     |
+| `candidate_prepared` | One transaction: job row locked and still running, source fingerprint unchanged, maintenance still prepared, rows saved by row-version check                      | `rows_saved`                                                                  |
+| `candidate_prepared` | Cancelled, stale or the save rolled back                                                                                                                          | abandoned: `settle{abandon}`, record discarded, outcome not committed         |
+| `rows_saved`         | Apply operation (or maintenance apply) terminal with a known outcome                                                                                              | `generation_applied`                                                          |
+| `rows_saved`         | Apply outcome unknown                                                                                                                                             | stays `rows_saved`; the job waits for `control resolve`                       |
+| `generation_applied` | Follow-ups finished                                                                                                                                               | candidate retired, record discarded                                           |
 
 A recovered job before `rows_saved` continues from the agent's record when it was
 queued and abandons when it was an immediate request, a cancelled job or a
