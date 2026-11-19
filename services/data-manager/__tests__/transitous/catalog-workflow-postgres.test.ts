@@ -632,7 +632,11 @@ it
           singleFlight,
           operationsPolicy: policy,
         });
-      runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
+      runtime = createDataExecutionRuntime({
+        store,
+        dispatch: dispatcher.dispatch,
+        openSql: () => ({ sql: state.db.sql, close: async () => {} }),
+      });
       const receiver = createDataExecutionReceiver({
         runtime,
         installation,

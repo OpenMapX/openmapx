@@ -41,7 +41,8 @@ export async function ownedDataManager(options: {
   const store = createPostgresDataExecutionStore(options.sql, { controlJournal: journal, configurationFence: fence });
   const singleFlight = getSingleFlightController(), operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
   const dispatcher = createDataExecutionDispatcher({ dataDir, state: new StateStore(dataDir), sql: options.sql, singleFlight, operationsPolicy });
-  const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
+  // Workers share the fixture's pool; their cancellation is covered by data-manager's runtime suite.
+  const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch, openSql: () => ({ sql: options.sql, close: async () => {} }) });
   const receiver = createDataExecutionReceiver({ runtime, installation, configurationFence: fence, dispatcher, operationsPolicy });
   const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0;
   const maintenanceIds = new Set<string>();

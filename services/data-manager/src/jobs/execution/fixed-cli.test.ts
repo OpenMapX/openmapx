@@ -133,7 +133,11 @@ it.skipIf(
         singleFlight,
         operationsPolicy,
       }),
-      runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch }),
+      runtime = createDataExecutionRuntime({
+        store,
+        dispatch: dispatcher.dispatch,
+        openSql: () => ({ sql, close: async () => {} }),
+      }),
       receiver = createDataExecutionReceiver({
         runtime,
         installation: dm,

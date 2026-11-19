@@ -202,6 +202,7 @@ it.skipIf(!enabled)(
         controlJournal: createDataExecutionControlJournal(dmInstallation, state.fixture.sql),
         configurationFence: fence,
       }),
+      openSql: () => ({ sql: state.fixture.sql, close: async () => {} }),
       dispatch: async () => {
         throw Error("Unexpected dispatched data job");
       },
@@ -314,7 +315,11 @@ it.skipIf(!enabled)(
       controlJournal: createDataExecutionControlJournal(dmInstallation, state.fixture.sql),
       configurationFence: fence,
     });
-    const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
+    const runtime = createDataExecutionRuntime({
+      store,
+      dispatch: dispatcher.dispatch,
+      openSql: () => ({ sql: state.fixture.sql, close: async () => {} }),
+    });
     const receiver = createDataExecutionReceiver({
       runtime,
       installation: dmInstallation,
