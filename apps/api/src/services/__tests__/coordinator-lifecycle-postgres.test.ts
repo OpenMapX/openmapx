@@ -18,7 +18,6 @@ import {
   assertCoordinatorPullLeaseCompatibility,
   closeControlInstallation,
   leaseStoreDirectory,
-  lookupControlChildPhase,
   openControlInstallation,
   openLeaseStore,
   releaseArtifactTargetLease,
@@ -28,7 +27,6 @@ import {
   rootLeaseId,
   settleArtifactTargetLeaseChild,
   verifyControlEffectSettlement,
-  verifyLocalArtifactTargetRootRelease,
 } from "@openmapx/core/build-artifacts";
 import {
   createControlRootOperationKey,
@@ -1346,7 +1344,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       90000,
     );
-    it("refuses a normal ordinary root admitted DURING actual image pull before publication or CLI dispatch", async () => {
+    it("ends a coordinator update as a conflict without effect when an ordinary update commits during its image pull", async () => {
       const reached = Promise.withResolvers<void>(),
         release = Promise.withResolvers<void>(),
         terminalReached = Promise.withResolvers<void>(),
@@ -1394,21 +1392,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           );
         if (admitted.execution !== "async")
           throw Error("Actual normal managed CLI admission required");
-        const source = JSON.parse(
-          readFileSync(
-            join(host.infraDir, "state/ops-agent/control/executions", `${operationKey}.json`),
-            "utf8",
-          ),
+        // The pull holds no lease, so the ordinary update takes every target.
+        expect(heldTargets(host.infraDir)).toEqual(
+          expect.arrayContaining(["data-manager", "motis"]),
         );
-        expect(
-          JSON.parse(
-            readFileSync(
-              join(host.infraDir, "state/ops-agent/control/effect-started", `${operationKey}.json`),
-              "utf8",
-            ),
-          ),
-        ).toBeNull();
-        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
         release.resolve();
         await terminalReached.promise;
         let state = await client.status("service.update", admitted.operationId);
@@ -1418,19 +1405,35 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await delay(25);
           state = await client.status("service.update", admitted.operationId);
         }
-        expect(state).toMatchObject({ state: "failed", errorClass: "configuration_prerequisite" });
-        const authority = restoreAdmittedControlExecution(installation, source.execution);
-        expect(lookupControlChildPhase(authority, { phase: "lifecycle", ordinal: 0 })).toBeNull();
-        verifyLocalArtifactTargetRootRelease(authority);
-        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
-          host.initial.revisionId,
-        );
+        expect(state.state).toBe("succeeded");
+        const racingRevision = (state.result as { revisionId: string }).revisionId;
+        expect(racingRevision).not.toBe(host.initial.revisionId);
+        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(racingRevision);
+        // The coordinator update now prepares against a configuration that
+        // changed under it: the agent refuses the preparation as a conflict
+        // before any lease or fence, and the job ends without effect.
         terminalRelease.resolve();
-        expect((await finished(jobId)).status).toBe("success");
+        const row = await finished(jobId);
         completed = true;
+        expect(row.status, row.error ?? "No public error").toBe("failed");
+        const prepare = Object.values(
+          (
+            row.protocol as {
+              operations: {
+                operations: Record<string, { kind: string; phase: string; errorClass?: string }>;
+              };
+            }
+          ).operations.operations,
+        ).find((op) => op.kind === "configurationMaintenance.prepare");
+        expect(prepare).toMatchObject({ phase: "terminal", errorClass: "conflict" });
         expect(posts.get("service.pull")).toBe(1);
         expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-        expect(dm.settlementResponseStatuses).toEqual([200]);
+        expect(posts.get("configurationMaintenance.apply")).toBeUndefined();
+        expect(dm.settlementResponseStatuses).toEqual([]);
+        expect((await dm.diagnostics()).maintenanceReplies).toEqual([]);
+        expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
+        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(racingRevision);
+        expect(heldTargets(host.infraDir)).toEqual([]);
       } finally {
         release.resolve();
         terminalRelease.resolve();

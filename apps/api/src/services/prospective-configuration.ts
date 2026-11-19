@@ -536,7 +536,10 @@ export async function persistAndApplyProspectiveConfiguration(
             job,
             candidate.operationKey,
             notCommitted(
-              error instanceof ApiOpsError && error.errorClass === "busy" ? "busy" : "failed",
+              error instanceof ApiOpsError &&
+                (error.errorClass === "busy" || error.errorClass === "conflict")
+                ? error.errorClass
+                : "failed",
             ),
           );
           throw error;

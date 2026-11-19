@@ -2184,10 +2184,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 : undefined;
             // The target lease is the one admission: a held target refuses the
             // operation as busy before anything is recorded. Its targets, and a
-            // maintenance plan, are read first; a failure there is raised once the
-            // job is recorded, so the attempt stays visible.
+            // maintenance plan, are read first. Planning only reads, so a
+            // refusal there ends the recorded job failed with that refusal, and
+            // nothing waits for an operator.
             const rootAdmission =
               !controlAdmission && opsKindRequiresControlAuthority(operation.kind);
+            let planningRefusal: OpsErrorClass | undefined;
             let admissionFailure: { error: unknown } | undefined;
             let maintenanceAdmission:
               | Awaited<ReturnType<typeof planConfigurationMaintenance>>
@@ -2236,9 +2238,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                       ? [operation.serviceId]
                       : controlRegisteredServiceIds(options.controlInstallation));
               } catch (error) {
-                admissionFailure = { error };
+                planningRefusal =
+                  error instanceof OpsExecutionFailure ? error.errorClass : "runtime";
               }
-              if (!admissionFailure && LEASED_KINDS.has(operation.kind) && options.leaseStore)
+              if (!planningRefusal && LEASED_KINDS.has(operation.kind) && options.leaseStore)
                 try {
                   admittedLease = (
                     await localLeaseBackend(options.leaseStore).acquire({
@@ -2264,6 +2267,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   }
                 }
             }
+            if (planningRefusal) {
+              job.state = "failed";
+              job.errorClass = planningRefusal;
+              job.terminalAt = now().getTime();
+              job.cursor += 1;
+              pushEvent(job, { cursor: job.cursor, type: "state", state: job.state });
+            }
             try {
               await journal.replace([...jobsById.values()].map(persisted).concat(persisted(job)));
             } catch (error) {
@@ -2274,6 +2284,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             }
             jobsById.set(job.operationId, job);
             jobsByKey.set(ownerKey, job);
+            if (planningRefusal) return { type: "refused", job } as const;
             if (rootAdmission) {
               try {
                 if (admissionFailure) throw admissionFailure.error;
@@ -2407,8 +2418,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   ? new RequestGuardError("busy", 409, error.message)
                   : new RequestGuardError("runtime", 500);
             });
-          if (admission.type === "retained") {
+          if (admission.type === "retained" || admission.type === "refused") {
             active -= 1;
+            if (admission.type === "refused")
+              audit(role, kind, resourceId, "error", startedAt, admission.job.errorClass);
             return reply.code(202).send(opsSuccess(parsed.requestId, admissionFor(admission.job)));
           }
           const { job } = admission;

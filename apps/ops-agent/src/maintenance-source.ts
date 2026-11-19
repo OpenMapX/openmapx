@@ -34,7 +34,7 @@ import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OpsJobJournal } from "./journal";
 import { readMaintenance } from "./maintenance";
 import type { OwnedServiceResolver } from "./owned-services";
-import type { OpsExecutionContext, OpsRuntime } from "./runtime";
+import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
 import { coordinatorCandidateMetadata, renderCoordinatorCandidate } from "./service-pull-runtime";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
 
@@ -243,21 +243,19 @@ export async function planConfigurationMaintenance(
   const coordinator = candidate.record.privateCoordinatorLifecycle
     ? renderCoordinatorCandidate(candidate, authority, source.infraDir)
     : undefined;
-  if (coordinator)
-    verifyConfigurationReleaseSourceWitness({
+  // Another change committed since the candidate's sources were read (or they
+  // expired): the candidate is stale, which the API reports as a conflict.
+  try {
+    (coordinator ? verifyConfigurationReleaseSourceWitness : verifyConfigurationSourceWitness)({
       installation: input.installation,
       infraDir: source.infraDir,
       sourceRevision: input.operation.expectedSourceRevision,
       expectedCurrentRevisionId: input.operation.expectedCurrentRevisionId,
       authorityRevision: authority.revisionId,
     });
-  verifyConfigurationSourceWitness({
-    installation: input.installation,
-    infraDir: source.infraDir,
-    sourceRevision: input.operation.expectedSourceRevision,
-    expectedCurrentRevisionId: input.operation.expectedCurrentRevisionId,
-    authorityRevision: authority.revisionId,
-  });
+  } catch {
+    throw new OpsExecutionFailure("conflict", {});
+  }
   const desired = services.readDesiredSelection(source.infraDir);
   const rendered = services.renderConfiguration({
     infraDir: source.infraDir,
