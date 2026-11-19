@@ -25,7 +25,6 @@ import {
   type OriginalConfigurationGenerationNonCommit,
   originalConfigurationGenerationNonCommitSource,
 } from "../services/configuration-generation";
-import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import {
   type DataControlDelegation,
   dataControlDelegationSchema,
@@ -198,8 +197,6 @@ export async function retainAdmittedControlExecution(
       "artifactTransfer.validate",
       "transit-maintenance",
       ...LOCAL_DATA_EXECUTION_KINDS,
-      "configuration-maintenance.prepare",
-      "configuration-maintenance.settle",
       "configurationMaintenance.prepare",
       "configurationHandoff.prepare",
       "configuration-helper",
@@ -285,12 +282,6 @@ export async function retainAdmittedControlExecution(
         return 3600000;
       if (input.kind === "catalog-pins.initialize") return 60000;
       if (input.kind === LOCAL_CREDENTIAL_TEMPLATE_KIND) return 300000;
-      if (
-        ["configuration-maintenance.prepare", "configuration-maintenance.settle"].includes(
-          input.kind,
-        )
-      )
-        return 60000;
       throw Error("Unknown control kind budget");
     }
   })();
@@ -527,16 +518,7 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
       cleanupFailed: z.literal(false),
     }),
   }),
-  z.strictObject({
-    kind: z.literal("data-configuration-fence-refused"),
-    maintenanceId: uuid,
-    reason: z.literal("busy"),
-  }),
   z.strictObject({ kind: z.literal("configuration-fence-not-prepared"), maintenanceId: uuid }),
-  z.strictObject({
-    kind: z.literal("data-configuration-fence"),
-    receipt: dataConfigurationFenceReceiptSchema,
-  }),
   z.strictObject({
     kind: z.literal("data-execution"),
     status: dataExecutionStatusSchema,

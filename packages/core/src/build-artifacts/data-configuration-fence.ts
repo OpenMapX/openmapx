@@ -3,7 +3,9 @@
  * is admitted. Only the operations agent prepares and settles it, authenticated
  * by its own data-manager token; both calls are idempotent on the same body.
  * The agent records the fence leaf in its lease store and settles it from the
- * receipt this returns. */
+ * receipt this returns. The row is data-manager's own record of that leaf: a
+ * preparation either inserts the prepared row or, refused before any change,
+ * a refused row, so a repeat of the same request gets the same answer. */
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { executionFingerprint } from "../ops/execution-identity";
@@ -20,17 +22,10 @@ import {
 } from "../services/data-manager/contracts/configuration-maintenance";
 import { type ControlInstallation, controlDigest } from "./control-records";
 import {
-  beginControlEffect,
   type ControlDelegation,
   type ControlTransportPrincipal,
-  type EffectReceipt,
-  type ExecutionHandle,
   inspectRemoteDelegation,
-  restoreAdmittedControlExecution,
-  retainAdmittedControlExecution,
   retainedControlParent,
-  settleExecution,
-  verifyControlEffectSettlement,
 } from "./execution-record";
 import { rootLeaseId } from "./lease-store";
 import { installationState } from "./private-records";
@@ -50,10 +45,12 @@ const fenceRowSchema = z.object({
   candidate_id: z.uuid(),
   plan_digest: z.string(),
   input: dataConfigurationFencePrepareSchema,
-  state: z.enum(["prepared", "settled"]),
+  state: z.enum(["prepared", "settled", "refused"]),
   outcome: dataConfigurationFenceOutcomeSchema.nullable(),
 });
 type FenceRow = z.infer<typeof fenceRowSchema>;
+const FENCE_COLUMNS = "maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input";
+const FENCE_VALUES = "$1::uuid,$2::uuid,$3,$4::uuid,$5,$6::text::jsonb";
 /** Data jobs whose publication was not observed keep the data plane fenced. */
 const UNKNOWN_DATA_JOB =
   "SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown' LIMIT 1";
@@ -70,6 +67,8 @@ function forbidden(message: string): Error {
   return Object.assign(Error(message), { statusCode: 403 });
 }
 function receiptOf(row: FenceRow): DataConfigurationFenceReceipt {
+  // A refused preparation fenced nothing; it answers as busy.
+  if (row.state === "refused") throw new DataFenceBusy();
   const { serviceIds: _serviceIds, coordinatorMode: _coordinatorMode, ...binding } = row.input;
   return {
     ...binding,
@@ -149,79 +148,11 @@ export function createDataConfigurationFenceStore(
         canonicalJson(delegation.serviceIds) !== canonicalJson(body.serviceIds)
       )
         throw Error("Configuration fence delegation identity conflict");
-      return { delegation, operation };
+      return delegation.execution;
     } catch {
       // Classify verification failures before any fence SQL.
       throw forbidden("Agent configuration fence delegation rejected");
     }
-  }
-  /** Writes the leaf's own terminal effect record. */
-  function recordLeaf(
-    authority: ExecutionHandle,
-    outcome: "committed" | "failed_without_effect",
-    receipt: EffectReceipt,
-  ) {
-    return settleExecution(authority, {
-      outcome,
-      publication: outcome === "committed" ? "committed" : "not_started",
-      receipt,
-    });
-  }
-  /** Records the agent's fence leaf as this receiver's execution and runs the
-   * fence transition once. A repeated request returns the recorded result. */
-  async function withLeaf(
-    verified: ReturnType<typeof inspectDelegation>,
-    run: () => Promise<DataConfigurationFenceReceipt>,
-  ): Promise<DataConfigurationFenceReceipt> {
-    const { delegation } = verified;
-    // The fence holds the whole application closure the agent leased.
-    // Startup registers only the release's built-in services; installed
-    // community-extension services are known to the agent alone.
-    local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
-    let authority: ExecutionHandle | undefined;
-    try {
-      authority = await restoreAdmittedControlExecution(installation, delegation.execution);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    if (!authority) {
-      if (Date.now() >= delegation.execution.deadlineAt) throw new DataFenceBusy();
-      authority = await retainAdmittedControlExecution(installation, {
-        execution: delegation.execution,
-        kind: delegation.kind,
-        operation: verified.operation,
-        admittedAt: Date.now(),
-        requestedDeadlineAt: delegation.execution.deadlineAt,
-        parent: delegation.verifiedParent,
-        serviceIds: delegation.serviceIds,
-      });
-    }
-    if ((await local.rows.read(delegation.execution.operationKey))?.progress.settlement) {
-      const settled = await verifyControlEffectSettlement(installation, delegation.execution);
-      if (settled.outcome !== "committed") throw new DataFenceBusy();
-      const saved = await row(sql, "maintenance_id", verified.operation.maintenanceId);
-      if (!saved) throw new DataFenceBusy();
-      return receiptOf(saved);
-    }
-    await beginControlEffect(authority);
-    let receipt: DataConfigurationFenceReceipt;
-    try {
-      receipt = await run();
-    } catch (error) {
-      // A busy refusal made no write: the leaf failed without effect.
-      if (error instanceof DataFenceBusy)
-        await recordLeaf(authority, "failed_without_effect", {
-          kind: "data-configuration-fence-refused",
-          maintenanceId: verified.operation.maintenanceId,
-          reason: "busy",
-        });
-      throw error;
-    }
-    await recordLeaf(authority, "committed", {
-      kind: "data-configuration-fence",
-      receipt: { ...receipt, sequence: 0, state: "prepared" },
-    });
-    return receipt;
   }
   async function assertAdmission(tx: Tx) {
     if (!open) throw new DataFenceBusy();
@@ -276,33 +207,40 @@ export function createDataConfigurationFenceStore(
         return run(tx);
       });
     },
-    /** Same body returns the recorded receipt; another body for the same
-     * maintenance is a conflict; unfinished or unknown data jobs refuse. */
+    /** Same body returns the recorded receipt, or busy again when it was
+     * refused; another body for the same maintenance is a conflict; unfinished
+     * or unknown data jobs refuse. */
     async prepare(
       value: DataConfigurationFencePrepareRequest,
       transportPrincipal: ControlTransportPrincipal,
     ) {
       const { delegation, ...input } = dataConfigurationFencePrepareRequestSchema.parse(value),
-        verified = inspectDelegation(input, delegation, transportPrincipal),
-        execution = verified.delegation.execution,
-        assertSame = (existing: FenceRow) => {
+        execution = inspectDelegation(input, delegation, transportPrincipal),
+        recorded = (existing: FenceRow) => {
           if (
             canonicalJson(existing.input) !== canonicalJson(input) ||
             existing.fence_id !== execution.executionId ||
             existing.operation_key !== execution.operationKey
           )
             throw conflict("Configuration fence conflict");
+          return receiptOf(existing);
         },
+        values = [
+          input.maintenanceId,
+          execution.executionId,
+          execution.operationKey,
+          input.candidateId,
+          input.planDigest,
+          canonicalJson(input),
+        ],
         existing = await row(sql, "maintenance_id", input.maintenanceId);
-      if (existing) assertSame(existing);
-      return withLeaf(verified, () =>
-        sql.transaction(async (tx) => {
+      if (existing) return recorded(existing);
+      if (Date.now() >= execution.deadlineAt) throw new DataFenceBusy();
+      try {
+        return await sql.transaction(async (tx) => {
           await lock(tx);
           const current = await row(tx, "maintenance_id", input.maintenanceId);
-          if (current) {
-            assertSame(current);
-            return receiptOf(current);
-          }
+          if (current) return recorded(current);
           await assertAdmission(tx);
           const active = await tx.unsafe(
             "SELECT id FROM data_manager.jobs WHERE finished_at IS NULL OR execution_state->>'publication'='unknown' LIMIT 1",
@@ -311,20 +249,29 @@ export function createDataConfigurationFenceStore(
             "SELECT id FROM data_manager.offline_package_jobs WHERE status='preparing' LIMIT 1",
           );
           if (active.length || transfers.length) throw new DataFenceBusy();
+          // Rows that ended more than 72 hours ago go with the next preparation.
+          await tx.unsafe(
+            "DELETE FROM data_manager.configuration_fence WHERE state<>'prepared' AND settled_at < now() - interval '72 hours'",
+          );
           const inserted = await tx.unsafe(
-            "INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6::text::jsonb,'prepared') RETURNING *",
-            [
-              input.maintenanceId,
-              execution.executionId,
-              execution.operationKey,
-              input.candidateId,
-              input.planDigest,
-              canonicalJson(input),
-            ],
+            `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},state) VALUES(${FENCE_VALUES},'prepared') RETURNING *`,
+            values,
           );
           return receiptOf(fenceRowSchema.parse(inserted[0]));
-        }),
-      );
+        });
+      } catch (error) {
+        if (!(error instanceof DataFenceBusy)) throw error;
+        // The refusal changed nothing; recording it gives a repeat of this
+        // request the same answer. A row another copy of the request wrote
+        // first answers instead.
+        await sql.unsafe(
+          `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},state,settled_at) VALUES(${FENCE_VALUES},'refused',now()) ON CONFLICT DO NOTHING`,
+          values,
+        );
+        const after = await row(sql, "maintenance_id", input.maintenanceId);
+        if (!after) throw error;
+        return recorded(after);
+      }
     },
     /** The fence row of `maintenanceId`, for the agent and for the operator's
      * `openmapx control resolve`. */
@@ -336,7 +283,7 @@ export function createDataConfigurationFenceStore(
       if (transportPrincipal !== "ops-agent" && transportPrincipal !== "host-cli")
         throw forbidden("Agent or host CLI transport required");
       const saved = await row(sql, "maintenance_id", maintenanceId);
-      if (!saved) return null;
+      if (!saved || saved.state === "refused") return null;
       if (saved.candidate_id !== expected.candidateId)
         throw Error("Configuration fence owner changed");
       return receiptOf(saved);
@@ -372,7 +319,8 @@ export function createDataConfigurationFenceStore(
       // admission sees the row either prepared (busy) or settled (open).
       return sql.transaction(async (tx) => {
         const saved = await row(tx, "maintenance_id", input.maintenanceId);
-        if (!saved)
+        // A refused preparation fenced nothing, so there is nothing to settle.
+        if (!saved || saved.state === "refused")
           throw Object.assign(Error("Configuration maintenance identity is unknown"), {
             statusCode: 404,
           });

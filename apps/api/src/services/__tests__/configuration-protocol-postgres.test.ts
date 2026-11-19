@@ -819,8 +819,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         )
         .finally(() => fixture.sql`DELETE FROM data_manager.jobs WHERE id=${dataJob}`);
       // The job fails busy without recovery: no fence, no rows, no generation.
+      // Data-manager keeps only the record of its refusal.
       expect(outcome).toEqual({ error: "busy" });
-      expect(await dm!.fenceStates()).toEqual([]);
+      expect(await dm!.fenceStates()).toEqual(["refused"]);
       expect(phase(ctx)).toBeUndefined();
       expect(readdirSync(host.candidates)).toEqual([]);
       expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);

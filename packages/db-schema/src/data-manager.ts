@@ -78,7 +78,10 @@ export const jobs = dataManager.table(
 /**
  * The configuration fence: while a row is `prepared`, a configuration
  * maintenance owns the data plane and no data job is admitted. The agent
- * prepares and settles it; both calls are idempotent on the same body.
+ * prepares and settles it; both calls are idempotent on the same body. The
+ * row is data-manager's only record of the agent's fence child: a `refused`
+ * row records that the preparation was refused before anything changed, so
+ * the same request is refused again.
  */
 export const configurationFence = dataManager.table(
   "configuration_fence",
@@ -91,11 +94,12 @@ export const configurationFence = dataManager.table(
     planDigest: text("plan_digest").notNull(),
     /** The prepare request body, compared on a repeated prepare. */
     input: jsonb("input").notNull(),
-    /** "prepared" | "settled" */
+    /** "prepared" | "settled" | "refused" */
     state: text("state").notNull(),
     /** "applied" | "unused" | "contained", set by the settle. */
     outcome: text("outcome"),
     preparedAt: timestamp("prepared_at", { withTimezone: true }).notNull().defaultNow(),
+    /** When the row was settled or refused; a later preparation removes it after 72 hours. */
     settledAt: timestamp("settled_at", { withTimezone: true }),
   },
   (table) => [
@@ -104,7 +108,7 @@ export const configurationFence = dataManager.table(
       .where(sql`${table.state} = 'prepared'`),
     check(
       "configuration_fence_state",
-      sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL)`,
+      sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL) OR (${table.state} = 'refused' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NOT NULL)`,
     ),
   ],
 );

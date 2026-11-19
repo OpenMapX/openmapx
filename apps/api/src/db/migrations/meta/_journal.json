@@ -477,6 +477,13 @@
       "when": 1794996842050,
       "tag": "0067_data_execution_agent_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795119064271,
+      "tag": "0068_configuration_fence_refusal",
+      "breakpoints": true
     }
   ]
 }

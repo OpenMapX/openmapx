@@ -328,6 +328,74 @@ describe.skipIf(
       await f.close();
     }
   }, 60000);
+
+  it("records a refusal and refuses the same request again", async () => {
+    const f = await ownedFenceFixture(),
+      { sql, dm, child, input, delegation } = f;
+    const busyJob = randomUUID();
+    try {
+      const fence = createDataConfigurationMaintenance(sql, dm);
+      await fence.startup();
+      // An unfinished data job refuses the preparation before anything changes.
+      await sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key)
+        VALUES(${busyJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`})`;
+      await expect(fence.prepare({ ...input, delegation }, "ops-agent")).rejects.toThrow(
+        "configuration_maintenance_busy",
+      );
+      expect(
+        await sql`SELECT state,operation_key,outcome FROM data_manager.configuration_fence WHERE maintenance_id=${input.maintenanceId}`,
+      ).toEqual([{ state: "refused", operation_key: child.operationKey, outcome: null }]);
+      // The refusal stands for this request once nothing blocks a fence any more.
+      await sql`DELETE FROM data_manager.jobs WHERE id=${busyJob}`;
+      await expect(fence.prepare({ ...input, delegation }, "ops-agent")).rejects.toThrow(
+        "configuration_maintenance_busy",
+      );
+      await expect(fence.withAdmission(async () => "open")).resolves.toBe("open");
+      expect(
+        await fence.inspect(input.maintenanceId, { candidateId: input.candidateId }, "ops-agent"),
+      ).toBeNull();
+      await expect(
+        fence.settle(
+          {
+            maintenanceId: input.maintenanceId,
+            candidateId: input.candidateId,
+            planDigest: input.planDigest,
+            outcome: "unused",
+          },
+          "host-cli",
+        ),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    } finally {
+      await sql`DELETE FROM data_manager.jobs WHERE id=${busyJob}`;
+      await f.close();
+    }
+  }, 60000);
+
+  it("removes rows that ended more than 72 hours ago when it prepares a fence", async () => {
+    const f = await ownedFenceFixture(),
+      { sql, dm, input, delegation } = f;
+    const oldMaintenance = randomUUID(),
+      recentMaintenance = randomUUID();
+    try {
+      const fence = createDataConfigurationMaintenance(sql, dm);
+      await fence.startup();
+      for (const [id, age] of [
+        [oldMaintenance, "96 hours"],
+        [recentMaintenance, "1 hour"],
+      ] as const)
+        await sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state,settled_at)
+          VALUES(${id}::uuid,gen_random_uuid(),${`opk1_${randomUUID().replaceAll("-", "")}`},${input.candidateId}::uuid,${input.planDigest},${JSON.stringify(input)}::jsonb,'refused',now() - ${age}::interval)`;
+      expect((await fence.prepare({ ...input, delegation }, "ops-agent")).state).toBe("prepared");
+      expect(
+        (
+          await sql`SELECT maintenance_id FROM data_manager.configuration_fence WHERE maintenance_id IN (${oldMaintenance},${recentMaintenance})`
+        ).map((row) => row.maintenance_id),
+      ).toEqual([recentMaintenance]);
+    } finally {
+      await sql`DELETE FROM data_manager.configuration_fence WHERE maintenance_id IN (${oldMaintenance},${recentMaintenance})`;
+      await f.close();
+    }
+  }, 60000);
 });
 
 import { drizzle } from "drizzle-orm/postgres-js";
