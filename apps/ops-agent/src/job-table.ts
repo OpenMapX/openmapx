@@ -60,7 +60,7 @@ export type TransitionUpdates = Partial<
   >
 >;
 export type TerminalState = "succeeded" | "failed" | "timed_out";
-export const isTerminalState = (state: OpsJobState): state is TerminalState =>
+const isTerminalState = (state: OpsJobState): state is TerminalState =>
   state === "succeeded" || state === "failed" || state === "timed_out";
 
 /** The execution authority and target lease a root or borrowed child runs under. */
