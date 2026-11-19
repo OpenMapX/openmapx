@@ -10,7 +10,8 @@ mounts: the operations agent in `infra/docker/state/ops-agent/control`, Data
 Manager in `infra/docker/state/data-manager/control` and the host CLI in
 `infra/docker/state/host-cli/control`. Since only their owner writes them, a
 signature added nothing; every record is still checked against its schema when
-it is read.
+it is read. The agent keeps the execution record of each of its operations on
+that operation's journal row rather than in its `control` directory.
 
 `openmapx compose render` no longer creates the three Ed25519 role keys
 (`infra/docker/secrets/control-ops-agent.key`, `control-data-manager.key`,
