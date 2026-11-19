@@ -177,19 +177,30 @@ it("keeps an attempted operation interrupted by a restart for recovery, with its
   );
 });
 
-it("never prunes an unknown outcome", async () => {
+it("keeps an unknown outcome and its lease until the lease is resolved", async () => {
   const { job, handle } = await admit();
-  await beginControlEffect(handle);
-  await retainControlEffectReceipt(handle, {
-    outcome: "unknown",
-    publication: "unknown",
-    receipt: { kind: "unresolved" },
-  });
-  await finish(job, "failed");
-  expect(
-    await pruneControlRecords(installation, { now: job.deadlineAt + 30 * 24 * 3600_000 }),
-  ).toEqual([]);
-  expect(journalRow(job.operationKey)?.execution).toBeDefined();
+  const lease = await acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: handle });
+  try {
+    await beginControlEffect(handle);
+    await retainControlEffectReceipt(handle, {
+      outcome: "unknown",
+      publication: "unknown",
+      receipt: { kind: "unresolved" },
+    });
+    await finish(job, "failed");
+    await settleArtifactTargetLeaseChild(
+      lease,
+      verifyControlEffectSettlement(installation, handle.execution),
+    );
+    // Unknown never releases.
+    await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
+    expect(
+      await pruneControlRecords(installation, { now: job.deadlineAt + 30 * 24 * 3600_000 }),
+    ).toEqual([]);
+    expect(journalRow(job.operationKey)?.execution).toBeDefined();
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
+  }
 });
 
 it("prunes a settled row once its key expired, 72 hours passed and its lease was released", async () => {

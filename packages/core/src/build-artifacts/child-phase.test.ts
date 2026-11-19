@@ -497,11 +497,10 @@ it("binds one same-slot identity across actual filesystem processes", async () =
     for (const result of results)
       if (result.ok) expect(result.child).toEqual(bound);
       else {
-        // A process can read the old signed cell just before its peer publishes
-        // the binding and updates the retained digest. The indexed-record check
-        // must refuse that stale read too. Neither refusal authorizes a new
-        // identity; the fresh retry below must observe the winner exactly.
-        expect(result.error).toMatch(/busy|writer|^Error: Retained record digest changed$/);
+        // A process that finds its peer holding the row's writer guard past
+        // the wait refuses. A refusal never authorizes a new identity; the
+        // fresh retry below must observe the winner exactly.
+        expect(result.error).toMatch(/busy|writer/);
       }
     expect(
       await control.bindControlChildPhase(f.authority, { phase: "stop-primary", ordinal: 0 }),

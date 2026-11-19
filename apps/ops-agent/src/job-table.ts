@@ -351,7 +351,12 @@ export class JobTable<Observation = unknown> {
       total = 0;
     for (const job of this.byId.values()) {
       total++;
-      if (recoveryRequired(job)) recovery++;
+      // A finished row that never settled waits for recovery too; the prune keeps it.
+      if (
+        recoveryRequired(job) ||
+        (job.terminalAt !== undefined && job.execution && !job.execution.progress.settlement)
+      )
+        recovery++;
     }
     return total - recovery >= this.options.maxJobEntries || recovery >= this.options.maxJobEntries;
   }

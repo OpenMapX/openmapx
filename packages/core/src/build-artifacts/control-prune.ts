@@ -2,15 +2,16 @@
  *
  * The prune walks the role's execution rows (the agent's journal rows for its
  * own operations, a row file per execution otherwise). An execution's records
- * are removed once its effect outcome is known, its
- * root key has expired, at least 72 hours have passed since it settled, every
- * lease it owns or borrowed has released its root, and no unfinished
+ * are removed once it settled, its root key has expired, at least 72 hours
+ * have passed since it settled, every lease it owns or borrowed has released
+ * its root (so no attempted child is unsettled), and no unfinished
  * maintenance owner record names it. Only records whose names derive from the
  * execution's own identifiers go: its operation key, the child keys it planned
  * (unless the child has an admission of its own) and the spawn records of the
  * fixed children it started. A maintenance owner record goes only with its own
- * preparation. Executions whose outcome is unknown, including
- * those that need recovery, are kept.
+ * preparation. An execution that never settled is kept, and so is one that
+ * needs recovery (the agent does not offer those). An unknown outcome keeps
+ * its lease, so its records stay until that lease is resolved and released.
  *
  * Deletions are independent and can be repeated. Readers never treat a
  * missing record as permission: a missing admission, effect or lease is
@@ -128,8 +129,7 @@ async function prunable(
   if (admitted.origin.notAfter + CONTROL_PRUNE_AFTER_MS > now) return null;
   const finishedAt = row.progress.settledAt;
   if (finishedAt === null || finishedAt + CONTROL_PRUNE_AFTER_MS > now) return null;
-  const outcome = verifyControlEffectSettlement(installation, admitted.execution).outcome;
-  if (outcome === "unknown") return null;
+  verifyControlEffectSettlement(installation, admitted.execution);
   // A step stays while the maintenance it belongs to still has its record;
   // that record goes only with its own preparation.
   const operation = operationIdsSchema.parse(admitted.operation);
@@ -291,8 +291,10 @@ export async function pruneControlRecords(
       for (const entry of entries(dir, onFull)) {
         if (!entry.endsWith(".json") || !entry.startsWith("terminal-")) continue;
         const finishedAt = mtime(dir, entry);
+        // A row the store still holds, offered to the prune or not, keeps it.
         if (
           !admitted.has(entry.replace(/^terminal-/, "")) &&
+          !local.rows.read(entry.slice("terminal-".length, -".json".length)) &&
           finishedAt !== null &&
           finishedAt + CONTROL_PRUNE_AFTER_MS <= now
         )

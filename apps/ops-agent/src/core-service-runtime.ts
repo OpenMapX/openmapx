@@ -79,8 +79,8 @@ export function installCoreServiceRuntime(
         context.signal,
       );
     } catch (error) {
-      // The existing source verifies actual null effect-started, original owner
-      // and frozen/unissued children; it refuses after Docker was dispatched.
+      // Recorded only while the row shows no effect start and no attempted
+      // child; it refuses after Docker was dispatched.
       try {
         await retainConfigurationPreEffectRefusal(context.controlAuthority);
       } catch {

@@ -7,7 +7,9 @@ import { parseControlRootOperationKey } from "../ops/control-root-key";
 import type { ControlIssuer } from "../ops/execution-identity";
 import { type ControlInstallation, type InstallationState, targetSchema } from "./control-records";
 import {
+  type ExecutionRows,
   fileExecutionRows,
+  journalFileRows,
   layeredExecutionRows,
   type OwningExecutionRows,
 } from "./execution-rows";
@@ -111,7 +113,7 @@ export function openControlInstallation(options: {
       dataRoot,
       registeredTargets: new Set(options.serviceIds ?? []),
       leases: options.leases ?? agentStoreLeases(options.infraDir, options.role),
-      rows: fileExecutionRows(privateRoot),
+      rows: roleExecutionRows(options.role, options.infraDir, privateRoot),
     });
     privateRoot = undefined;
     return installation;
@@ -119,13 +121,26 @@ export function openControlInstallation(options: {
     privateRoot?.close();
   }
 }
-/** Keeps the rows `primary` owns there, such as the agent's journal; the rest stay in files. */
+/**
+ * A role's execution rows: a file per execution in its private directory.
+ * The agent's own operations keep theirs on its journal rows, which any
+ * other process opening the agent's records reads but never writes.
+ */
+export function roleExecutionRows(
+  role: ControlIssuer,
+  infraDir: string,
+  privateRoot: AnchoredDirectory,
+): ExecutionRows {
+  const files = fileExecutionRows(privateRoot);
+  return role === "ops-agent" ? layeredExecutionRows(journalFileRows(infraDir), files) : files;
+}
+/** The agent keeps its operations' rows in `primary`, its live journal; the rest stay in files. */
 export function keepExecutionRowsIn(
   installation: ControlInstallation,
   primary: OwningExecutionRows,
 ): void {
   const state = installationState(installation);
-  state.rows = layeredExecutionRows(primary, state.rows);
+  state.rows = layeredExecutionRows(primary, fileExecutionRows(state.privateRoot));
 }
 export function closeControlInstallation(installation: ControlInstallation) {
   const s = installationState(installation);

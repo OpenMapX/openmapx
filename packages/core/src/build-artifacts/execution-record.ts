@@ -53,9 +53,6 @@ import {
   type ExecutionProgress,
   type ExecutionRow,
   type ExecutionSettlement,
-  fileExecutionRows,
-  journalFileRows,
-  layeredExecutionRows,
   plannedChildSchema,
 } from "./execution-rows";
 import { AnchoredDirectory } from "./filesystem";
@@ -89,6 +86,7 @@ import {
   installationState,
   readPrivateRecord,
   registerControlInstallation,
+  roleExecutionRows,
   writePrivateRecord,
 } from "./private-records";
 
@@ -1204,7 +1202,7 @@ export function openFixedChildInstallation(options: {
       // Fixed children run in the agent's container or its helper: both use the store.
       leases: agentStoreLeases(options.infraDir, "ops-agent"),
       // Its own row is a file; its parent's, when the agent journals it, is there.
-      rows: layeredExecutionRows(journalFileRows(options.infraDir), fileExecutionRows(recovery)),
+      rows: roleExecutionRows("ops-agent", options.infraDir, recovery),
       fixedChildId: childKey,
     };
     const spawn = fixedChildSpawn(state, childKey);

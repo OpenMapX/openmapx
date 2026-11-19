@@ -17,6 +17,7 @@ import {
   acquireArtifactTargetLease,
   assertCoordinatorPullLeaseCompatibility,
   closeControlInstallation,
+  journalExecutionRow,
   leaseStoreDirectory,
   openControlInstallation,
   openLeaseStore,
@@ -29,6 +30,7 @@ import {
   verifyControlEffectSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
+  canonicalJson,
   createControlRootOperationKey,
   executionFingerprint,
   inspectPreparedConfigurationRecord,
@@ -70,6 +72,22 @@ function maintenanceIdOf(job: { protocol: unknown }): string | undefined {
     (operation) => operation.kind === "configurationMaintenance.prepare",
   );
   return (prepare?.operation as { maintenanceId?: string } | undefined)?.maintenanceId;
+}
+/** The agent's execution rows, as its journal holds them. */
+function agentRows(infraDir: string) {
+  const file = JSON.parse(readFileSync(join(infraDir, "state/ops-agent/jobs-v1.json"), "utf8")) as {
+    jobs: Parameters<typeof journalExecutionRow>[0][];
+  };
+  return file.jobs.flatMap((job) => journalExecutionRow(job) ?? []);
+}
+function agentRow(infraDir: string, operationKey: string) {
+  return agentRows(infraDir).find((row) => row.admission.execution.operationKey === operationKey);
+}
+/** The admission an agent row fixed when it was recorded; it is never rewritten. */
+function agentAdmission(infraDir: string, operationKey: string): string {
+  const row = agentRow(infraDir, operationKey);
+  if (!row) throw Error(`The agent journal has no row for ${operationKey}`);
+  return canonicalJson(row.admission);
 }
 
 const coordinatorReferenceCases = [
@@ -245,16 +263,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         if (fixed?.action !== "update") throw Error("Actual original sealed Update source missing");
         if (test.task.name.includes("stopped coordinator before pull")) {
           const helper = candidate.coordinatorPrerequisite!;
-          const actual = JSON.parse(
-            readFileSync(
-              join(
-                host.infraDir,
-                "state/ops-agent/control/executions",
-                `${helper.root.operationKey}.json`,
-              ),
-              "utf8",
-            ),
-          );
+          const actual = JSON.parse(agentAdmission(host.infraDir, helper.root.operationKey));
           console.info(
             "actual coordinator helper clamp",
             JSON.stringify({
@@ -609,14 +618,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
           ).operations.operations,
         ).find((value) => value.kind === "service.pull")!;
-        return {
-          id,
-          pullPath: join(
-            host.infraDir,
-            "state/ops-agent/control/executions",
-            `${pull.operationKey}.json`,
-          ),
-        };
+        return { id, pullKey: pull.operationKey };
       } finally {
         pullTerminalReplyGate = undefined;
         release.resolve();
@@ -727,8 +729,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
     }
     it("reconstructs staged ownership in a NEW native production agent before a fresh user Update", async () => {
-      const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-        original = readFileSync(pullPath),
+      const { pullKey } = await canceledSuccessfulCoordinatorStage(),
+        original = agentAdmission(host.infraDir, pullKey),
         stop = await restartNativeStagedAgent();
       try {
         const next = await api.inject({
@@ -745,13 +747,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(posts.get("service.pull")).toBe(2);
         expect(posts.get("configurationMaintenance.prepare")).toBe(1);
         expect(dm.settlementResponseStatuses).toEqual([200]);
-        expect(readFileSync(pullPath).equals(original)).toBe(true);
+        expect(agentAdmission(host.infraDir, pullKey)).toBe(original);
       } finally {
         await stop();
       }
     }, 240000);
     it("uses fresh authority after repeated native expiry staging without recursive provenance", async () => {
-      const originals: Array<{ path: string; bytes: Buffer }> = [];
+      const originals: Array<{ key: string; admission: string }> = [];
       try {
         for (let n = 0; n < 2; n++) {
           afterPullTerminal = () => {
@@ -798,13 +800,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(pull.receiptDelivery?.terminalReceipt.state).toBe("succeeded");
           expect(readdirSync(host.candidates)).toHaveLength(0);
           expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-          const path = join(
-            host.infraDir,
-            "state/ops-agent/control/executions",
-            `${pull.operationKey}.json`,
-          );
-          originals.push({ path, bytes: readFileSync(path) });
-          // Each request keeps its original clocks and signed bytes. Let the
+          originals.push({
+            key: pull.operationKey,
+            admission: agentAdmission(host.infraDir, pull.operationKey),
+          });
+          // Each request keeps its original clocks and admission. Let the
           // real wall/SQL clock catch up before the NEXT fresh request.
           await delay(6 * 60000 + 1000);
           vi.useRealTimers();
@@ -837,7 +837,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(posts.get("service.pull")).toBe(3);
           expect(dm.settlementResponseStatuses).toEqual([200]);
           for (const original of originals)
-            expect(readFileSync(original.path).equals(original.bytes)).toBe(true);
+            expect(agentAdmission(host.infraDir, original.key)).toBe(original.admission);
         } finally {
           await stop();
         }
@@ -863,8 +863,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(dm.settlementResponseStatuses).toEqual([200]);
     }, 300000);
     it("carries staged ownership and desired E through the installed credential follow-up's OWN generation", async () => {
-      const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-        original = readFileSync(pullPath);
+      const { pullKey } = await canceledSuccessfulCoordinatorStage(),
+        original = agentAdmission(host.infraDir, pullKey);
       const changed = await api.inject({
         method: "PUT",
         url: "/api/admin/services/data-manager/credentials/TOKEN",
@@ -878,7 +878,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("service.pull")).toBe(1);
       expect(posts.get("configurationMaintenance.prepare")).toBe(1);
       expect(dm.settlementResponseStatuses).toEqual([200]);
-      expect(readFileSync(pullPath).equals(original)).toBe(true);
+      expect(agentAdmission(host.infraDir, pullKey)).toBe(original);
       const jobs = await fixture.db.select().from(schema.adminJob),
         ownerJob = jobs.find((job) => maintenanceIdOf(job)),
         owner = JSON.parse(
@@ -982,9 +982,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect((await finished(repaired.json().jobId)).status).toBe("success");
     }, 240000);
     it("observes its genuine pull admission without target metadata writes", async () => {
-      const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-        bytes = readFileSync(pullPath),
-        actual = JSON.parse(bytes.toString("utf8")),
+      const { pullKey } = await canceledSuccessfulCoordinatorStage(),
+        bytes = agentAdmission(host.infraDir, pullKey),
+        actual = JSON.parse(bytes),
         authority = restoreAdmittedControlExecution(installation, actual.execution),
         snapshot = () =>
           Object.fromEntries(
@@ -1143,13 +1143,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
         expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
         expect(readdirSync(host.candidates)).toHaveLength(0);
-        const directory = join(host.infraDir, "state/ops-agent/control/executions"),
-          actualPulls = readdirSync(directory)
-            .filter((name) => name.endsWith(".json"))
-            .map((name) => JSON.parse(readFileSync(join(directory, name), "utf8")))
-            .filter((raw) => raw?.operation?.kind === "service.pull");
+        const actualPulls = agentRows(host.infraDir)
+          .map((row) => row.admission)
+          .filter((admission) => admission.kind === "service.pull");
         expect(actualPulls).toHaveLength(1);
-        const observer = restoreAdmittedControlExecution(installation, actualPulls[0].execution);
+        const observer = restoreAdmittedControlExecution(installation, actualPulls[0]!.execution);
         pullObserver = observer;
         const before = snapshot(),
           started = performance.now();
@@ -1336,11 +1334,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(host.calls.filter((args) => args[0] === "image" && args[1] === "pull")).toHaveLength(
           0,
         );
-        expect(
-          existsSync(
-            join(host.infraDir, "state/ops-agent/control/executions", `${operationKey}.json`),
-          ),
-        ).toBe(false);
+        expect(agentRow(host.infraDir, operationKey)).toBeUndefined();
       },
       90000,
     );
@@ -1793,9 +1787,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             pullKey = pullOperationKeyOf(before!),
             originalNormal =
               inspected.privateCoordinatorLifecycle?.action === "update" && pullKey
-                ? readFileSync(
-                    join(host.infraDir, "state/ops-agent/control/executions", `${pullKey}.json`),
-                  )
+                ? agentAdmission(host.infraDir, pullKey)
                 : undefined;
           expect(candidate.phase).toBe(
             point === "candidate unlink"
@@ -1889,12 +1881,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 (row.protocol as { candidate?: { rowVersions?: unknown } }).candidate?.rowVersions,
               ),
             ).toBe(decision);
-          if (originalNormal) {
-            expect(
-              readFileSync(
-                join(host.infraDir, "state/ops-agent/control/executions", `${pullKey}.json`),
-              ).equals(originalNormal),
-            ).toBe(true);
+          if (originalNormal && pullKey) {
+            expect(agentAdmission(host.infraDir, pullKey)).toBe(originalNormal);
             expect(posts.get("service.pull")).toBe(1);
           }
           expect(posts.get("configurationMaintenance.prepare")).toBe(1);

@@ -654,13 +654,8 @@ describe.skipIf(
         await runtime.close();
         const record = await store.inspect(id);
         expect(record?.reservations).toHaveLength(8);
-        const cells = record!.reservations.map((slot) =>
-          join(
-            root,
-            "state/data-manager/control/observations",
-            `phase-${key}-${slot.ordinal}.json`,
-          ),
-        );
+        // The execution's row holds its reservations' bindings and grants.
+        const cells = [join(root, "state/data-manager/control/executions", `${key}.json`)];
         expect(cells.every((path) => requireExists(path))).toBe(true);
         vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
         if (phase === "startup")

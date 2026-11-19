@@ -884,7 +884,9 @@ it
       const lease = () => targetLease(data, kind === "promotion" ? "motis" : "motis-feed-proxy"),
         held = lease(),
         rootReceipt = join(root, "state/data-manager/control/executions", `${key}.json`),
-        original = readFileSync(rootReceipt);
+        // The root's admission is never rewritten; its progress records the cancel.
+        admission = () => JSON.parse(readFileSync(rootReceipt, "utf8")).admission,
+        original = admission();
       await receiver.requestCancel({ id, operationKey: key, fingerprint: admitted.fingerprint });
       expect((await next()).type).toBe("aborted");
       expect(held).toBeDefined();
@@ -904,7 +906,7 @@ it
         .toBe("canceled");
       expect((await receiver.inspect(id))?.publication).toBe("committed");
       await expect.poll(lease, { timeout: 10000 }).toBeUndefined();
-      expect(readFileSync(rootReceipt)).toEqual(original);
+      expect(admission()).toEqual(original);
       expect(posts).toBe(1);
       expect(cancels).toBe(1);
       expect((await store.inspect(id))?.children).toMatchObject([
