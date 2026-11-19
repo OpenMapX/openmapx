@@ -375,6 +375,15 @@ the release the configured selection resolves to when the applied configuration
 pins none and product services are included; they keep existing pins. Exact
 helper pull failures never build a replacement image.
 
+Each configuration generation records the local image its services' tags named
+when it was applied. A pulled tag therefore leaves running containers in place
+and under the operations agent's control until they are recreated: a Data Manager
+update cancelled after its image downloaded blocks no later configuration change.
+A generation written before its images were present, such as the first
+`compose up` of an installation using tags, records none; apply any
+configuration change once the stack runs, so a later Data Manager update can
+replace the running container.
+
 To reconcile the **entire** enabled stack while retaining the selected app
 release, use the CLI:
 

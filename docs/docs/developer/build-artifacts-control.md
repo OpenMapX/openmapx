@@ -126,7 +126,7 @@ schema-checked. Docker and host administrators remain trusted.
 | Agent journal row per operation                                                                                                           | `state/ops-agent/jobs-v1.json`                                             | agent                                                                             | agent; callers through the operation routes                    |
 | Execution records: admission (operation, identity, origin, reserved children), lifecycle, effect started, effect settlement, fixed spawns | each role's `control` directory                                            | that role                                                                         | that role                                                      |
 | Configuration candidate (payload, snapshot, apply operation, private intents)                                                             | agent state, behind `configuration.candidate.retain`, `read` and `discard` | API through the agent                                                             | API on recovery; agent when the apply step runs                |
-| Maintenance file: record, plan, the containers it replaces, the Data Manager image pull it depends on                                     | `state/ops-agent/control/…/maintenance/<maintenanceId>.json`               | agent; the host CLI only for `control resolve` of a record in recovery_required   | agent; API through `configurationMaintenance.*` results        |
+| Maintenance file: record, plan (with the Data Manager image it commits), the containers it replaces                                       | `state/ops-agent/control/…/maintenance/<maintenanceId>.json`               | agent; the host CLI only for `control resolve` of a record in recovery_required   | agent; API through `configurationMaintenance.*` results        |
 | Helper progress                                                                                                                           | `maintenance/<maintenanceId>.handoff.json` beside the maintenance file     | helper                                                                            | agent, after the helper container exited                       |
 | Lease rows and their children                                                                                                             | `state/ops-agent/leases.json`                                              | agent, host CLI, fixed children and helper under the lock; data-manager over HTTP | holders by lease ID; children by `{leaseId, childKey}`         |
 | Data-manager fence                                                                                                                        | `data_manager.configuration_fence`                                         | data-manager on the agent's request                                               | data-manager, agent                                            |
@@ -379,13 +379,38 @@ no container, no progress and no adoption (also a launch the daemon refused) is
 failed without effect; anything else is unknown and moves the record to
 `recovery_required`.
 
+### Image identities in the generation
+
+Each generation records, in `images.json`, the local image ID that each enabled
+service's reference named when the generation was committed. The agent and the
+host CLI record the images present at that moment; a generation committed before
+its images existed (a first `compose up`) records none. A pinned release reference
+names its image by digest anyway; a tag can move when an image is pulled.
+
+The agent counts a container as its own when it was created from a retained
+generation's own compose file and runs either the image that generation recorded
+or the image its reference names now. When its generation recorded no image for
+the service, the applied generation's record counts instead. A pull that moves a
+tag therefore leaves the running containers the agent's own until they are
+recreated, and a later generation records the newer image. An installation whose
+generations recorded nothing yet (a first `compose up` with tags) cannot tell a
+container it pulled a new image for; any configuration change applied while the
+stack runs records the images and closes that gap.
+
 ### Data Manager updates
 
-A maintenance that updates Data Manager also records the Data Manager image pull
-it depends on and the running Data Manager container it replaces in the
-maintenance file, and refuses to proceed when either no longer matches.
-`services update data-manager` on the host is refused; a Data Manager update goes
-through the administrative job.
+The pull comes first. A Data Manager update sends `service.pull` for
+`data-manager` as an ordinary keyed step of its job, naming its candidate; the
+agent pulls only while the old coordinator runs and no lease holds data-manager.
+The maintenance then reads the image ID the pull reported from the agent's own
+journal, and finds the containers as they are at preparation; the old coordinator
+is still the agent's own because its generation recorded its image. The commit
+step records the generation's images and refuses, without committing, when the
+coordinator's reference no longer names the pulled image. The recreate step
+replaces the old container and is verified against the image the committed
+generation recorded. A pull whose update was cancelled leaves an unused image and
+blocks nothing. `services update data-manager` on the host is refused; a Data
+Manager update goes through the administrative job.
 
 ## Data-manager admission
 
@@ -445,11 +470,17 @@ compose render), artifact imports, data updates, the service lifecycle commands,
 `control rollback`, `compose up`, `data link` and `services build`.
 
 - **Under the sender's lease.** A caller whose operation holds a lease names it
-  (`leaseId`). Data-manager then runs the `generation-link` job under that lease
-  and takes none of its own; the caller settles its lease from the answer it got.
-  While a configuration fence is prepared, only the agent's request for that
-  maintenance is admitted: its lease must be the maintenance's root lease, and its
-  revision and plan digest the ones the fence names. Every other request is busy.
+  (`leaseId`). Data-manager reads that lease from the agent first (`lease.read`
+  shows data-manager another holder's lease on data-manager, read-only) and runs
+  the `generation-link` job under it only when the lease is held by the sender
+  (the agent or the host CLI, by its token) and covers data-manager; it takes no
+  lease of its own, and the caller settles its lease from the answer it got. A
+  lease the agent does not show that way is refused with 403, and an agent that
+  does not answer with 503; neither admits a job. While a configuration fence is
+  prepared, only the agent's request for that maintenance is admitted: its lease
+  must be the maintenance's root lease, and its revision and plan digest the ones
+  the fence names. Every other request is busy. A repeat under the same operation
+  key observes the first application whatever the lease shows now.
 - **Without a lease** (`compose up`, `data link` on the host), data-manager leases
   itself and runs the job exclusively, as any other data job.
 
@@ -460,13 +491,14 @@ again. While the application runs past a request's wait, `/link` answers 202 and
 the caller asks again; it asks for up to two minutes, never past its own deadline.
 Answers mean:
 
-| Answer | Meaning                                                    | Caller                                                               |
-| ------ | ---------------------------------------------------------- | -------------------------------------------------------------------- |
-| 200    | Applied; the link counts                                   | settles its lease as committed                                       |
-| 409    | Busy: another holder or a fence refused it; nothing linked | fails without effect (`compose up` warns and starts)                 |
-| 503    | Data-manager or the agent did not answer; nothing linked   | fails without effect (`compose up` warns and starts)                 |
-| 500    | The plan failed part-way; links may have changed           | fails with a known outcome; the job is final                         |
-| none   | No answer within its retries                               | outcome unknown: the lease stays held for `openmapx control resolve` |
+| Answer | Meaning                                                                        | Caller                                                               |
+| ------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| 200    | Applied; the link counts                                                       | settles its lease as committed                                       |
+| 409    | Busy: another holder or a fence refused it; nothing linked                     | fails without effect (`compose up` warns and starts)                 |
+| 403    | The named lease is not the sender's live lease on data-manager; nothing linked | fails without effect                                                 |
+| 503    | Data-manager or the agent did not answer; nothing linked                       | fails without effect (`compose up` warns and starts)                 |
+| 500    | The plan failed part-way; links may have changed                               | fails with a known outcome; the job is final                         |
+| none   | No answer within its retries                                                   | outcome unknown: the lease stays held for `openmapx control resolve` |
 
 A failure part-way through linking is recorded as a committed ("may have changed")
 publication, so the job ends and holds nothing; applying the same plan again links
