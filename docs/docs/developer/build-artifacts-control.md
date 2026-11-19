@@ -479,6 +479,16 @@ terminal answer it ends as `interrupted`, and until then it keeps data work
 fenced. Data-manager's advisory locks are named in one registry,
 `@openmapx/core/data-manager-sdk`'s `DATA_ADVISORY_LOCKS`.
 
+Each job's worker gets its own database handle, a pool whose connections carry
+the job's application name, passed to the worker explicitly. Cancelling the job,
+or reaching its deadline, makes the handle refuse new queries and cancels every
+statement running on it. Worker transactions go through one helper,
+`cancellableTransaction`: it never commits once the job was cancelled or its
+deadline passed, a transaction that ended before its `COMMIT` was sent restores the
+job's earlier publication state, and a `COMMIT` that failed or was cancelled leaves
+the publication `unknown`. The handle is closed before the job's terminal is
+written, so no statement of a worker outlives its job.
+
 ### Hardlink plans
 
 A generation's hardlink plan is applied inside data-manager, under its data
