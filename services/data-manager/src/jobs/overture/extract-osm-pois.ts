@@ -292,7 +292,7 @@ export async function extractOsmPois(
         `Emitted ${emitted} OSM geometries and retained ${extracted} unique POIs; ` +
           "publishing the staged snapshot...",
       );
-      assertDataPublication();
+      await assertDataPublication();
       await publishDataChange(() =>
         cancellableTransaction(sql, async (tx) => {
           await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);

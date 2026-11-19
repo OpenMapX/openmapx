@@ -178,7 +178,10 @@ it("retains one data-manager owner and one agent receiver across path aliases", 
     publication: "not_started",
     receipt: { kind: "not-started" },
   });
-  await settleArtifactTargetLeaseChild(lease, verifyControlEffectSettlement(installation, rootRef));
+  await settleArtifactTargetLeaseChild(
+    lease,
+    await verifyControlEffectSettlement(installation, rootRef),
+  );
   await releaseArtifactTargetLease(lease);
 });
 it("keeps owner-death recovery fenced until a separately admitted child settles", async () => {
@@ -401,7 +404,7 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
   });
   await settleArtifactTargetLeaseChild(
     lease,
-    c.verifyControlEffectSettlement(installation, execution),
+    await c.verifyControlEffectSettlement(installation, execution),
   );
   await releaseArtifactTargetLease(lease);
   c.closeControlInstallation(installation);

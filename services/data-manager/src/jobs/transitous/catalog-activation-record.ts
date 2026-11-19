@@ -18,7 +18,7 @@ export async function retainCatalogActivationRecord(
   context: DataExecutionContext,
   approval: ExecutionRef,
 ): Promise<void> {
-  context.assertForward();
+  await context.assertForward();
   const record = await context.record();
   if (record.input.kind !== "catalog.activate") throw Error("Original activation input required");
   const input = record.input,

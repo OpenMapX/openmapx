@@ -43,9 +43,9 @@ export function overtureReleaseRetentionFromEnv(value: string | undefined): numb
  * It is called only after ingest, fused quality validation, and conflation have
  * all completed, so a failed refresh never destroys its rollback input.
  */
-export function pruneOvertureReleases(
+export async function pruneOvertureReleases(
   opts: PruneOvertureReleasesOptions,
-): PruneOvertureReleasesResult {
+): Promise<PruneOvertureReleasesResult> {
   assertValidOvertureRelease(opts.activeRelease);
   const retain = opts.retain ?? 2;
   if (!Number.isSafeInteger(retain) || retain < 1) {
@@ -79,7 +79,7 @@ export function pruneOvertureReleases(
     if (target !== join(root, release)) {
       throw new Error(`Refusing to prune Overture release outside ${root}: ${target}`);
     }
-    assertDataPublication();
+    await assertDataPublication();
     rmSync(target, { recursive: true, force: true });
     removed.push(release);
     opts.onProgress?.(`Pruned superseded Overture snapshot ${release}.`);
@@ -113,7 +113,7 @@ export async function finalizeOvertureReleaseFiles(
   if (state.release_files_pruned_at !== null) return null;
 
   const result = await publishDataChange(() => pruneOvertureReleases(opts));
-  assertDataPublication();
+  await assertDataPublication();
   await sql.unsafe(
     `UPDATE "${schema}".conflation_state
      SET release_files_pruned_at = COALESCE(release_files_pruned_at, NOW()),

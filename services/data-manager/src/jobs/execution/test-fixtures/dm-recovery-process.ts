@@ -113,7 +113,7 @@ for await (const line of { [Symbol.asyncIterator]: () => messages }) {
     const pendingRunners =
       record?.input.kind === "transit-sync"
         ? journal.pendingRunnerAttempts(
-            control.restoreAdmittedControlExecution(installation, record.execution),
+            await control.restoreAdmittedControlExecution(installation, record.execution),
           ).length
         : undefined;
     send({ type: "probe", dispatches, pendingRunners });

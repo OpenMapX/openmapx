@@ -96,7 +96,7 @@ export async function withCliControlContext<T>(
       });
     } else {
       // The parent recorded this child's spawn in its own private state.
-      parent = verifiedRetainedControlParent(installation, intent.parent);
+      parent = await verifiedRetainedControlParent(installation, intent.parent);
     }
     // The lease grant's parent is verified in admission; role fingerprints were checked by the fixed runner.
     const authority = await retainAdmittedControlExecution(installation, {
@@ -113,9 +113,9 @@ export async function withCliControlContext<T>(
       ...(intent.reservations ? { reservations: intent.reservations } : {}),
     });
     if (intent.dataUpdatePlan) retainDataUpdatePlan(authority, intent.dataUpdatePlan);
-    beginFixedCliExecution(installation, execution);
+    await beginFixedCliExecution(installation, execution);
     if (lease) bindBorrowedControlExecution(lease, authority);
-    if (lease) assertArtifactTargetLeaseForward(lease);
+    if (lease) await assertArtifactTargetLeaseForward(lease);
     try {
       let result: T;
       try {
@@ -145,7 +145,7 @@ export async function withCliControlContext<T>(
       if (lease)
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(installation, execution),
+          await verifyControlEffectSettlement(installation, execution),
         );
       return result;
     } catch (e) {
@@ -157,7 +157,7 @@ export async function withCliControlContext<T>(
       if (lease)
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(installation, execution),
+          await verifyControlEffectSettlement(installation, execution),
         );
       throw e;
     }
@@ -178,9 +178,9 @@ export function withHostDataControlContext<T>(
 
 /** Restriction at actual host mutation boundaries; observation remains usable
  * after cancellation and cannot acquire authority through this helper. */
-export function assertCliControlForward(): void {
+export async function assertCliControlForward(): Promise<void> {
   const context = contexts.getStore();
   if (!context) return;
-  assertControlExecutionForward(context.authority);
-  if (context.lease) assertArtifactTargetLeaseForward(context.lease);
+  await assertControlExecutionForward(context.authority);
+  if (context.lease) await assertArtifactTargetLeaseForward(context.lease);
 }

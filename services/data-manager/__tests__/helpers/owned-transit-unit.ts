@@ -4,7 +4,7 @@ import type { DataOpsChildPhase } from "../../src/jobs/execution/ops-children.js
 import { publishDataChange } from "../../src/jobs/execution/worker-scope.js";
 import type { JobContext } from "../../src/jobs/transitous/types.js";
 import { runOpsOperation } from "../../src/ops-client.js";
-export function assertTransitForward(ctx: JobContext) {
+export async function assertTransitForward(ctx: JobContext) {
   ctx.abortSignal.throwIfAborted();
 }
 export function retainTransitPhaseCandidate() {
@@ -18,11 +18,11 @@ export async function publishTransitChange<T>(
   ctx: JobContext,
   run: () => T | Promise<T>,
 ): Promise<T> {
-  assertTransitForward(ctx);
+  await assertTransitForward(ctx);
   return publishDataChange(run);
 }
 export async function runTransitOwnedPhase(ctx: JobContext, phase: DataOpsChildPhase) {
-  assertTransitForward(ctx);
+  await assertTransitForward(ctx);
   switch (phase) {
     case "stop-primary":
       return runOpsOperation({ kind: "motis.primary.stop" });

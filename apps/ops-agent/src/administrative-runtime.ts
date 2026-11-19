@@ -1034,7 +1034,7 @@ export function createAdministrativeRuntime(
       throw new OpsHostUpdateRequiredError();
     const plan = readFixedSingleDataPlan(context.controlAuthority),
       bound = await bindControlChildPhase(context.controlAuthority, plan.rootReservation);
-    retainFixedCliSpawnIntent(context.controlAuthority, {
+    await retainFixedCliSpawnIntent(context.controlAuthority, {
       childKey: plan.delegationId,
       execution: bound.execution,
       operation,
@@ -1046,7 +1046,7 @@ export function createAdministrativeRuntime(
       ordinal: 0,
       childKey: plan.delegationId,
     });
-    consumeControlChildDispatch(issued.dispatchTicket);
+    await consumeControlChildDispatch(issued.dispatchTicket);
     const fixedChild = { leaseId: null, childKey: issued.delegation.childKey };
     await runFixedCli(coreFixedCliArguments(operation), {
       ...context,
@@ -1059,7 +1059,7 @@ export function createAdministrativeRuntime(
       child: fixedChild,
     });
     try {
-      verifyControlEffectSettlement(child, bound.execution);
+      await verifyControlEffectSettlement(child, bound.execution);
     } finally {
       closeControlInstallation(child);
     }

@@ -101,7 +101,7 @@ export async function withVerifiedLifecycleOwnership<T>(
   run: (ownership: VerifiedLifecycleOwnership) => Promise<T>,
 ): Promise<T> {
   assertConfigurationGenerationWriter(options.writer);
-  assertArtifactTargetLeaseExecution(options.lease, options.authority.execution);
+  await assertArtifactTargetLeaseExecution(options.lease, options.authority.execution);
   const ownership = Object.freeze({
     writer: options.writer,
     lease: options.lease,
@@ -417,7 +417,7 @@ export async function openServiceLifecycleReceipt(options: {
     existing.seedRevisionId !== options.seedRevisionId
   )
     throw Error("Lifecycle receipt identity conflict");
-  const write = (
+  const write = async (
     expectedSequence: number,
     next: ServiceLifecycleReceipt,
     writer: ConfigurationGenerationWriter,
@@ -455,7 +455,7 @@ export async function openServiceLifecycleReceipt(options: {
     if (current.receipt.commit === "final_committed" && receipt.commit !== "final_committed")
       throw Error("Lifecycle commit evidence cannot regress");
     if (!["failed", "unknown"].includes(receipt.phase))
-      assertArtifactTargetLeaseExecution(lease, authority.execution);
+      await assertArtifactTargetLeaseExecution(lease, authority.execution);
     if (
       !same(authority.execution, receipt.execution) ||
       controlIdentity(owner.installation.installation) !== current.seed.childId ||

@@ -186,7 +186,7 @@ describe.skipIf(
           }),
         ).rejects.toThrow(/unsettled/i);
         const exact = await control.bindControlChildPhase(authority, child);
-        const binding = control.lookupControlChildPhaseBinding(authority, child);
+        const binding = await control.lookupControlChildPhaseBinding(authority, child);
         if (!binding) throw Error("Missing original binding");
         const bound = {
           ...child,
@@ -203,7 +203,7 @@ describe.skipIf(
           ordinal: child.ordinal,
           lease,
         });
-        const reference = control.lookupControlChildPhaseAttempt(authority, child);
+        const reference = await control.lookupControlChildPhaseAttempt(authority, child);
         if (!reference?.leaseId) throw Error("Missing original grant reference");
         const attempted = {
           ...bound,
@@ -245,8 +245,10 @@ describe.skipIf(
             winner.continuation,
           );
           expect(claimed?.children[0]).toEqual(attempted);
-          control.consumeControlChildDispatch(issued.dispatchTicket);
-          expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow();
+          await control.consumeControlChildDispatch(issued.dispatchTicket);
+          await expect(
+            control.consumeControlChildDispatch(issued.dispatchTicket),
+          ).rejects.toThrow();
           await expect(
             store.claimChildDispatch(
               record.status.id,

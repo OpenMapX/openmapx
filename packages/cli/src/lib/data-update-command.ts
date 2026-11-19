@@ -215,7 +215,7 @@ export async function runCliDataUpdate(options: {
       if (lease) {
         await control.settleArtifactTargetLeaseChild(
           lease,
-          control.verifyControlEffectSettlement(context.installation, authority.execution),
+          await control.verifyControlEffectSettlement(context.installation, authority.execution),
         );
         await releaseOwned(lease);
       }

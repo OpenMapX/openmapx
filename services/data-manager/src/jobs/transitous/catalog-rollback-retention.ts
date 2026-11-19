@@ -52,8 +52,8 @@ export async function retainPreviousHealthyCatalogSlot(
 ): Promise<void> {
   const owner = context.authority,
     record = await context.record();
-  assertControlExecutionForward(context.authority);
-  assertArtifactTargetLeaseForward(ownedLease(context));
+  await assertControlExecutionForward(context.authority);
+  await assertArtifactTargetLeaseForward(ownedLease(context));
   if (
     owner.kind !== "catalog.validate" ||
     record.input.kind !== "catalog.validate" ||
@@ -181,7 +181,7 @@ export async function retainPreviousHealthyCatalogSlot(
         }),
         true,
       );
-      context.assertForward();
+      await context.assertForward();
       if (controlDigest(readMotisSlotState(dataDir)) !== controlDigest(state))
         throw Error("MOTIS slot state changed before rollback retention");
       atomicWriteJsonSync(

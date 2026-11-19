@@ -660,7 +660,7 @@ export async function publishOvertureLinks(
 ): Promise<{ linked: number }> {
   assertValidOvertureSchema(schema);
 
-  assertDataPublication();
+  await assertDataPublication();
   await publishDataChange(() =>
     cancellableTransaction(sql, async (tx) => {
       await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);

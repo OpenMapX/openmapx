@@ -985,7 +985,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const { pullKey } = await canceledSuccessfulCoordinatorStage(),
         bytes = agentAdmission(host.infraDir, pullKey),
         actual = JSON.parse(bytes),
-        authority = restoreAdmittedControlExecution(installation, actual.execution),
+        authority = await restoreAdmittedControlExecution(installation, actual.execution),
         snapshot = () =>
           Object.fromEntries(
             [
@@ -1077,7 +1077,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id).sort(),
         });
       expect(lease.serviceIds).toContain("data-manager");
-      let pullObserver: ReturnType<typeof restoreAdmittedControlExecution> | undefined;
+      let pullObserver: Awaited<ReturnType<typeof restoreAdmittedControlExecution>> | undefined;
       const leases = () =>
         JSON.stringify(
           openLeaseStore({ directory: leaseStoreDirectory(host.infraDir), purpose: "test" }).list(),
@@ -1147,7 +1147,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .map((row) => row.admission)
           .filter((admission) => admission.kind === "service.pull");
         expect(actualPulls).toHaveLength(1);
-        const observer = restoreAdmittedControlExecution(installation, actualPulls[0]!.execution);
+        const observer = await restoreAdmittedControlExecution(
+          installation,
+          actualPulls[0]!.execution,
+        );
         pullObserver = observer;
         const before = snapshot(),
           started = performance.now();
@@ -1167,7 +1170,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(hostInstallation, execution),
+          await verifyControlEffectSettlement(hostInstallation, execution),
         );
         await releaseArtifactTargetLease(lease);
         closeControlInstallation(hostInstallation);
@@ -1233,7 +1236,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         await settleArtifactTargetLeaseChild(
           unrelatedLease,
-          verifyControlEffectSettlement(unrelatedInstallation, unrelatedExecution),
+          await verifyControlEffectSettlement(unrelatedInstallation, unrelatedExecution),
         );
         await releaseArtifactTargetLease(unrelatedLease);
         closeControlInstallation(unrelatedInstallation);

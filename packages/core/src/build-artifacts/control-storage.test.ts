@@ -75,7 +75,7 @@ it("refuses a new admission before any record while the control filesystem is ne
     );
     expect(fs.existsSync(record)).toBe(false);
     space.low = false;
-    control.retainAdmittedControlExecution(installation, input);
+    await control.retainAdmittedControlExecution(installation, input);
     expect(fs.existsSync(record)).toBe(true);
   } finally {
     control.closeControlInstallation(installation);

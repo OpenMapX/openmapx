@@ -180,7 +180,7 @@ export async function verifyDataUpdatePrerequisites(
   try {
     let dataHandle = handle;
     if (handle.execution.executor === "ops-agent") {
-      const attempt = lookupControlChildPhaseAttempt(handle, {
+      const attempt = await lookupControlChildPhaseAttempt(handle, {
         phase: "data-workflow",
         ordinal: 0,
       });
@@ -189,8 +189,8 @@ export async function verifyDataUpdatePrerequisites(
         infraDir,
         child: { leaseId: attempt.leaseId, childKey: attempt.childKey },
       });
-      dataHandle = restoreAdmittedControlExecution(childInstallation, attempt.execution);
-      const settlement = verifyControlEffectSettlement(childInstallation, attempt.execution);
+      dataHandle = await restoreAdmittedControlExecution(childInstallation, attempt.execution);
+      const settlement = await verifyControlEffectSettlement(childInstallation, attempt.execution);
       if (settlement.outcome !== "committed" || settlement.publication !== "committed")
         throw Error("Full Update data phase unsettled");
     }
@@ -203,7 +203,7 @@ export async function verifyDataUpdatePrerequisites(
       throw Error("Full Update data checkpoint missing");
     if (!transport) throw Error("Full Update prerequisites are read from data-manager");
     for (const [index, slot] of plan.dataChildren.entries()) {
-      const bound = lookupControlChildPhase(dataHandle, slot);
+      const bound = await lookupControlChildPhase(dataHandle, slot);
       if (!bound) throw Error("Full Update prerequisite missing");
       const child = receipt.children[index],
         terminal = await readDataManagerTerminal(bound.execution, transport, signal);

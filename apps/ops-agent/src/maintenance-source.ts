@@ -289,7 +289,7 @@ export async function planConfigurationMaintenance(
         input.operation.expectedCurrentRevisionId
     )
       throw Error("Original settled old-revision coordinator prerequisite required");
-    verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
+    await verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
   }
   let coordinatorImage: FixedConfigurationMaintenancePlan["coordinatorImage"];
   if (coordinator) {
@@ -298,8 +298,8 @@ export async function planConfigurationMaintenance(
     // coordinator needs no Compose up and is observed again above.
     const helper = candidate.record.coordinatorPrerequisite;
     if (helper) {
-      if (installationState(input.installation).rows.read(helper.root.operationKey))
-        verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
+      if (await installationState(input.installation).rows.read(helper.root.operationKey))
+        await verifyMaintenanceCoordinatorPrerequisite(input.installation, candidate.record);
     }
     if (fixed.action === "update") {
       // The image this update pulled, as the agent's own journal recorded the

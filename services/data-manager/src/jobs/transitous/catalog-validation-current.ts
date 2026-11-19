@@ -10,14 +10,14 @@ import {
 import { currentCatalogValidationSchema, readCatalogValidation } from "@openmapx/core/catalog-pins";
 import { canonicalJson } from "@openmapx/core/ops";
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
-export function publishCatalogValidationCurrent(
+export async function publishCatalogValidationCurrent(
   owner: ExecutionHandle,
   lease: TargetLeaseAuthority,
   proposalId?: string,
-): void {
-  assertControlExecutionForward(owner);
-  assertArtifactTargetLeaseForward(lease);
-  assertArtifactTargetLeaseExecution(lease, owner.execution);
+): Promise<void> {
+  await assertControlExecutionForward(owner);
+  await assertArtifactTargetLeaseForward(lease);
+  await assertArtifactTargetLeaseExecution(lease, owner.execution);
   if (
     owner.installation.installation.role !== "data-manager" ||
     lease.mode !== "owner" ||

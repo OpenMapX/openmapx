@@ -27,7 +27,7 @@ export function installCoreServiceRuntime(
         options.infraDir,
         async () => {
           context.signal.throwIfAborted();
-          assertArtifactTargetLeaseForward(context.ownedTargetLease!);
+          await assertArtifactTargetLeaseForward(context.ownedTargetLease!);
           if (
             services.currentConfigurationGeneration(options.infraDir) !==
             operation.expectedConfigurationRevisionId

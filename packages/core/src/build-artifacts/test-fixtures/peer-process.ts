@@ -60,7 +60,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       });
       l.bindBorrowedControlExecution(lease, authority);
       if (input.action === "cancel") await l.cancelArtifactTargetLease(lease);
-      if (input.action === "run") c.beginFixedCliExecution(installation, input.execution);
+      if (input.action === "run") await c.beginFixedCliExecution(installation, input.execution);
       let delegation: c.ControlDelegation | undefined;
       if (input.child) delegation = await l.delegateArtifactTargetLease(lease, input.child);
       if (input.action === "settle") {
@@ -71,7 +71,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         });
         await l.settleArtifactTargetLeaseChild(
           lease,
-          c.verifyControlEffectSettlement(installation, input.execution),
+          await c.verifyControlEffectSettlement(installation, input.execution),
         );
       }
       process.stdout.write(`${JSON.stringify({ ok: true, leaseId: lease.leaseId, delegation })}\n`);
@@ -119,7 +119,7 @@ for await (const line of createInterface({ input: process.stdin })) {
             };
           })();
       const lease = await admission.adopt(input.execution);
-      if (input.forward) l.assertArtifactTargetLeaseForward(lease);
+      if (input.forward) await l.assertArtifactTargetLeaseForward(lease);
       const authority = await c.retainAdmittedControlExecution(installation, {
         requestedDeadlineAt: input.execution.deadlineAt,
         execution: input.execution,
@@ -138,7 +138,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         });
         await l.settleArtifactTargetLeaseChild(
           lease,
-          c.verifyControlEffectSettlement(installation, input.execution),
+          await c.verifyControlEffectSettlement(installation, input.execution),
         );
       }
       if (input.cancel) await l.cancelArtifactTargetLease(lease);

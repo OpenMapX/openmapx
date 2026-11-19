@@ -356,17 +356,17 @@ function snapshot(
 }
 const name = (authority: ExecutionHandle, ordinal: number) =>
   `candidate-${authority.execution.operationKey}-${ordinal}.json`;
-export function retainOwnedDataTransitCandidate(
+export async function retainOwnedDataTransitCandidate(
   authority: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
-): string | null {
+): Promise<string | null> {
   const value = snapshot(authority, input.phase, input.ordinal, input.phase === "promote-primary");
   if (!value) return null;
   const s = authority,
     reserved = s.reservations.some(
       (slot) => slot.phase === input.phase && slot.ordinal === input.ordinal,
     ),
-    publication = reserved ? inspectControlChildPublication(authority, input) : undefined;
+    publication = reserved ? await inspectControlChildPublication(authority, input) : undefined;
   let saved: unknown;
   try {
     saved = readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192);
@@ -381,7 +381,7 @@ export function retainOwnedDataTransitCandidate(
   }
   if (publication && (publication.binding || publication.publication.state !== "unissued"))
     throw Error("Attempted candidate cannot be reconstructed");
-  assertControlExecutionForward(authority);
+  await assertControlExecutionForward(authority);
   const parsed = schema.parse(value);
   writePrivateRecord(s.installation, "observations", name(authority, input.ordinal), parsed, true);
   return controlDigest(parsed);
@@ -547,13 +547,13 @@ export function verifyDataTransitCandidateForExecution(
   )
     throw Error("Candidate differs from original borrowed admission");
 }
-export function assertDataTransitCandidateForExecution(
+export async function assertDataTransitCandidateForExecution(
   authority: ExecutionHandle,
   operation: OpsOperation,
   expectedDigest: string,
-): void {
+): Promise<void> {
   verifyDataTransitCandidateForExecution(authority, operation, expectedDigest);
-  assertControlExecutionForward(authority);
+  await assertControlExecutionForward(authority);
 }
 
 /** Fixed proxy proof helpers share the original candidate verifier and indexed
@@ -640,13 +640,13 @@ export const {
       validationExitCode,
     });
   }
-  function reserveFeedProxyValidation(
+  async function reserveFeedProxyValidation(
     authority: ExecutionHandle,
     candidateId: string,
     candidateDigest: string,
-  ): void {
+  ): Promise<void> {
     const s = state(authority);
-    assertControlExecutionForward(authority);
+    await assertControlExecutionForward(authority);
     verifyDataTransitCandidateForExecution(
       authority,
       { kind: "feedProxy.validateAndReload", candidateId },
@@ -749,6 +749,6 @@ export const {
   };
 })();
 /** Records that the proxy reload began, while the execution may still go forward. */
-export function markFeedProxyReloadAttempted(authority: ExecutionHandle): void {
-  withControlExecutionForward(authority, () => recordFeedProxyReloadAttempted(authority));
+export async function markFeedProxyReloadAttempted(authority: ExecutionHandle): Promise<void> {
+  await withControlExecutionForward(authority, () => recordFeedProxyReloadAttempted(authority));
 }

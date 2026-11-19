@@ -80,7 +80,7 @@ export function installImageStageRuntime(
         async () => {
           const source = await (async () => {
             try {
-              assertControlExecutionForward(authority);
+              await assertControlExecutionForward(authority);
               if (
                 services.currentConfigurationGeneration(options.infraDir) !==
                 operation.expectedConfigurationRevisionId
@@ -133,7 +133,7 @@ export function installImageStageRuntime(
               )
                 throw Error("Image-stage source changed");
               assertImageStageLeaseCompatibility(authority);
-              assertControlExecutionForward(authority);
+              await assertControlExecutionForward(authority);
               return {
                 requestedReference,
                 stagedReference,

@@ -109,7 +109,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
       operationFingerprint: child.operationFingerprint,
       admittedAt: late,
       requestedDeadlineAt: deadlineAt,
-      parent: control.verifiedRetainedControlParent(dm, owner),
+      parent: await control.verifiedRetainedControlParent(dm, owner),
     });
     const bound = await control.bindControlChildPhase(authority, {
       phase: "stop-primary",
@@ -126,8 +126,10 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
       lease,
     });
     expect(issued.channel).toBe("delegation");
-    control.consumeControlChildDispatch(issued.dispatchTicket);
-    expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow(/consumed/);
+    await control.consumeControlChildDispatch(issued.dispatchTicket);
+    await expect(control.consumeControlChildDispatch(issued.dispatchTicket)).rejects.toThrow(
+      /consumed/,
+    );
     // The admission is never rewritten; only the row's progress records the child.
     expect(admission()).toEqual(original);
     expect(heldLeases(root).map((value) => value.leaseId)).toEqual(
@@ -250,7 +252,7 @@ it("returns the original binding after cancel/expiry and cannot bind another pha
     await expect(
       control.bindControlChildPhase(f.authority, { phase: "stop-staging", ordinal: 1 }),
     ).rejects.toThrow(/fenced|clock|expir|elapsed/i);
-    expect(control.lookupControlChildPhase(f.authority, phase)).toEqual(first);
+    expect(await control.lookupControlChildPhase(f.authority, phase)).toEqual(first);
   } finally {
     f.close();
   }
@@ -264,7 +266,7 @@ it("observes one same-slot binding under concurrent binds", async () => {
       control.bindControlChildPhase(f.authority, phase),
     ]);
     expect(results[0]).toEqual(results[1]);
-    expect(control.lookupControlChildPhase(f.authority, phase)).toEqual(results[0]);
+    expect(await control.lookupControlChildPhase(f.authority, phase)).toEqual(results[0]);
   } finally {
     f.close();
   }
@@ -336,7 +338,7 @@ it.each(["reference"] as const)(
       // An ambiguous indexed write is recovery-required; a fully indexed reference
       // is readable but never issues another nominal ticket or mutation.
       try {
-        expect(control.lookupControlChildPhase(f.authority, phase)?.execution).toEqual(
+        expect((await control.lookupControlChildPhase(f.authority, phase))?.execution).toEqual(
           bound.execution,
         );
       } catch (error) {
@@ -353,7 +355,7 @@ it.each(["reference"] as const)(
       } catch {
         /* Torn private/shared publication is itself a closed recovery fence. */
       }
-      expect(() => control.assertControlExecutionForward(f.authority)).toThrow();
+      await expect(control.assertControlExecutionForward(f.authority)).rejects.toThrow();
       expect(heldLeases(f.root).map((value) => value.leaseId)).toEqual([lease.leaseId]);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
     } finally {
@@ -383,7 +385,7 @@ it.each(["body", "phase", "ordinal", "target", "recipient"] as const)(
         control.retainAdmittedControlExecution(f.dm, { ...f.input, reservations }),
       ).rejects.toThrow();
       expect(
-        control.lookupControlChildPhase(f.authority, { phase: "stop-primary", ordinal: 0 }),
+        await control.lookupControlChildPhase(f.authority, { phase: "stop-primary", ordinal: 0 }),
       ).toBeNull();
       expect(readFileSync(f.cell)).toEqual(original);
     } finally {
@@ -443,7 +445,9 @@ it("rechecks durable cancellation inside publication after the outside identity 
       }),
     ).rejects.toThrow(/fenced|cancel/i);
     expect(fired).toBe(true);
-    expect(inspectControlChildPublication(f.authority, phase).publication.state).toBe("unissued");
+    expect((await inspectControlChildPublication(f.authority, phase)).publication.state).toBe(
+      "unissued",
+    );
     expect(await control.cancelControlExecution(f.authority)).toEqual([]);
   } finally {
     vi.restoreAllMocks();
@@ -489,7 +493,7 @@ it("binds one same-slot identity across actual filesystem processes", async () =
     };
     const results = await Promise.all([run(), run()]);
     expect(results.some((result) => result.ok)).toBe(true);
-    const bound = control.lookupControlChildPhase(f.authority, {
+    const bound = await control.lookupControlChildPhase(f.authority, {
       phase: "stop-primary",
       ordinal: 0,
     });
@@ -528,7 +532,7 @@ it("refuses a prospective phase plan above the combined64 slots before exposure"
       control.retainAdmittedControlExecution(f.dm, { ...f.input, reservations }),
     ).rejects.toThrow();
     expect(
-      control.lookupControlChildPhase(f.authority, { phase: "stop-primary", ordinal: 0 }),
+      await control.lookupControlChildPhase(f.authority, { phase: "stop-primary", ordinal: 0 }),
     ).toBeNull();
   } finally {
     f.close();
@@ -625,7 +629,7 @@ async function deadlineFixture(
   control.retainFixedSingleDataPlan(authority, plan);
   const bound = await control.bindControlChildPhase(authority, plan.rootReservation),
     args = control.fixedCliArguments(operation);
-  control.retainFixedCliSpawnIntent(authority, {
+  await control.retainFixedCliSpawnIntent(authority, {
     childKey: plan.delegationId,
     execution: bound.execution,
     operation,
@@ -636,13 +640,13 @@ async function deadlineFixture(
     ...plan.rootReservation,
     childKey: plan.delegationId,
   });
-  control.consumeControlChildDispatch(issued.dispatchTicket);
+  await control.consumeControlChildDispatch(issued.dispatchTicket);
   const cli = control.openFixedChildInstallation({
       infraDir: root,
       child: { leaseId: null, childKey: issued.delegation.childKey },
     }),
     intent = control.readFixedCliSpawnIntent(cli, bound.execution, args),
-    parent = control.verifiedRetainedControlParent(cli, intent.parent),
+    parent = await control.verifiedRetainedControlParent(cli, intent.parent),
     cliAuthority = await control.retainAdmittedControlExecution(cli, {
       execution: bound.execution,
       kind: operation.kind,
@@ -653,7 +657,7 @@ async function deadlineFixture(
       serviceIds: intent.serviceIds,
       reservations: intent.reservations,
     });
-  control.beginFixedCliExecution(cli, bound.execution);
+  await control.beginFixedCliExecution(cli, bound.execution);
   return {
     root,
     agent,
@@ -684,10 +688,10 @@ it.each(["cancel-first", "grant-first"] as const)(
         // Cancel the ancestor when the child first reads it.
         const rows = installationState(f.cli).rows,
           read = rows.read.bind(rows);
-        vi.spyOn(rows, "read").mockImplementation((key) => {
+        vi.spyOn(rows, "read").mockImplementation(async (key) => {
           if (!fired && key === f.execution.operationKey) {
             fired = true;
-            void control.cancelControlExecution(f.authority);
+            await control.cancelControlExecution(f.authority);
           }
           return read(key);
         });
@@ -697,9 +701,9 @@ it.each(["cancel-first", "grant-first"] as const)(
           }),
         ).rejects.toThrow(/cancel|fenced/i);
         expect(fired).toBe(true);
-        expect(inspectControlChildPublication(f.cliAuthority, f.slot).publication.state).toBe(
-          "unissued",
-        );
+        expect(
+          (await inspectControlChildPublication(f.cliAuthority, f.slot)).publication.state,
+        ).toBe("unissued");
         expect(await control.cancelControlExecution(f.cliAuthority)).toEqual([]);
       } else {
         const issued = await control.issueControlChildPhase(f.cliAuthority, {
@@ -707,12 +711,12 @@ it.each(["cancel-first", "grant-first"] as const)(
         });
         await control.cancelControlExecution(f.authority);
         expect(await control.cancelControlExecution(f.cliAuthority)).toEqual([bound.execution]);
-        expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow(
+        await expect(control.consumeControlChildDispatch(issued.dispatchTicket)).rejects.toThrow(
           /cancel|fenced/i,
         );
-        expect(control.lookupControlChildPhaseAttempt(f.cliAuthority, f.slot)?.execution).toEqual(
-          bound.execution,
-        );
+        expect(
+          (await control.lookupControlChildPhaseAttempt(f.cliAuthority, f.slot))?.execution,
+        ).toEqual(bound.execution);
       }
     } finally {
       vi.restoreAllMocks();
@@ -747,11 +751,11 @@ it.each(["Pull", "Ingest", "Extract"] as const)(
       const issued = await control.issueControlChildPhase(f.cliAuthority, {
         ...f.slot,
       });
-      control.consumeControlChildDispatch(issued.dispatchTicket);
-      expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow();
-      expect(control.lookupControlChildPhaseAttempt(f.cliAuthority, f.slot)?.execution).toEqual(
-        original.execution,
-      );
+      await control.consumeControlChildDispatch(issued.dispatchTicket);
+      await expect(control.consumeControlChildDispatch(issued.dispatchTicket)).rejects.toThrow();
+      expect(
+        (await control.lookupControlChildPhaseAttempt(f.cliAuthority, f.slot))?.execution,
+      ).toEqual(original.execution);
     } finally {
       f.close();
     }

@@ -805,7 +805,7 @@ it
       const child = completedValidation!.children.find((child) => child.state === "terminal");
       if (!child || child.state !== "terminal")
         throw Error("Expected actual settled validation child");
-      const originalOwner = control.restoreAdmittedControlExecution(
+      const originalOwner = await control.restoreAdmittedControlExecution(
         installation,
         proof.sourceExecution,
       );

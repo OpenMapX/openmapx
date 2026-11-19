@@ -173,7 +173,7 @@ export async function runReservedAgentOperation(
     (entry) => entry.kind === operation.kind && entry.state === "reserved",
   );
   if (!slot) throw Error(`This data execution has no ${operation.kind} reservation left`);
-  context.assertForward();
+  await context.assertForward();
   const requestedDeadlineAt = requestedDeadline(slot),
     admission = normalizeExecutionAdmission({
       kind: operation.kind,

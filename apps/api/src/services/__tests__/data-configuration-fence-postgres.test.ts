@@ -592,7 +592,7 @@ async function ownedFenceFixture(
   const { input, delegation } = await Promise.race([captured.promise, pending]);
   const child = delegation.execution,
     owner = input.ownerPrepare,
-    authority = control.restoreAdmittedControlExecution(agent, owner),
+    authority = await control.restoreAdmittedControlExecution(agent, owner),
     lease = control.restoreArtifactTargetLeaseForSettlement(authority);
   return {
     sql: fixture.sql,

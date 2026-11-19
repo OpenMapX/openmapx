@@ -149,7 +149,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
   };
   /** The lease handle of each preparation while its operation runs. */
   const preparing = new Map<string, ArtifactTargetLease>();
-  const root = (file: MaintenanceFile): ExecutionHandle =>
+  const root = (file: MaintenanceFile): Promise<ExecutionHandle> =>
     restoreAdmittedControlExecution(installation, file.plan.prepare);
   const reservationOf = (file: MaintenanceFile, phase: string, ordinal?: number) => {
     const found = file.plan.reservations.find(
@@ -158,9 +158,9 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
     if (!found) throw Error("Maintenance reservation missing");
     return found;
   };
-  const fenceDelegation = (file: MaintenanceFile) => {
-    const attempt = lookupControlChildPhaseAttempt(
-      root(file),
+  const fenceDelegation = async (file: MaintenanceFile) => {
+    const attempt = await lookupControlChildPhaseAttempt(
+      await root(file),
       reservationOf(file, "configuration-fence"),
     );
     if (!attempt || attempt.channel !== "delegation") throw Error("Fence child was not issued");
@@ -187,13 +187,13 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       isTrustedConfigurationApplyOperation(operation) &&
       (run.result as { outcome?: string }).outcome === "not_committed"
     ) {
-      const actual = inspectConfigurationGenerationNonCommit(installation, execution);
+      const actual = await inspectConfigurationGenerationNonCommit(installation, execution);
       if (canonicalJson(actual.result) !== canonicalJson(run.result))
         throw Error("Generation non-commit changed");
       recorded = true;
     } else if (!succeeded) {
       try {
-        inspectConfigurationPreEffectRefusal(authority);
+        await inspectConfigurationPreEffectRefusal(authority);
         recorded = true;
       } catch {
         /* Only a recorded refusal before the effect is known. */
@@ -213,21 +213,21 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
             ? { kind: "reported-failure" }
             : { kind: "unresolved" },
       });
-    const evidence = verifyControlEffectSettlement(installation, execution);
+    const evidence = await verifyControlEffectSettlement(installation, execution);
     await settleArtifactTargetLeaseChild(lease, evidence);
     return evidence.outcome;
   }
 
   const adapters: MaintenanceAdapters = {
     now: deps.now ?? (() => new Date()),
-    fenceDelegated(file) {
-      return !!lookupControlChildPhaseBinding(
-        root(file),
+    async fenceDelegated(file) {
+      return !!(await lookupControlChildPhaseBinding(
+        await root(file),
         reservationOf(file, "configuration-fence"),
-      );
+      ));
     },
     async prepareFence(file, signal) {
-      const authority = root(file);
+      const authority = await root(file);
       // The plan is made again under the lease: a host that changed since
       // admission is refused before anything is recorded for the data-manager.
       let current: Awaited<ReturnType<typeof planConfigurationMaintenance>>;
@@ -261,7 +261,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           planDigest: file.plan.dmPrepare.planDigest,
         },
       });
-      consumeControlChildDispatch(issued.dispatchTicket);
+      await consumeControlChildDispatch(issued.dispatchTicket);
       let receipt: Awaited<ReturnType<typeof prepareDataConfigurationFence>>;
       try {
         receipt = await retryDataManager(
@@ -314,6 +314,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       return receipt;
     },
     async settleFence(file, outcome, signal) {
+      const delegation = await fenceDelegation(file);
       // A settlement data-manager does not answer now is sent again by the agent's own check.
       const receipt = await retryDataManager(signal, Date.now() + 10_000, () =>
         settleDataConfigurationFence(
@@ -325,7 +326,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           },
           {
             transport: configurationDataManagerTransport(),
-            delegation: fenceDelegation(file),
+            delegation,
             signal,
           },
         ),
@@ -342,10 +343,11 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       const planned = file.plan.steps[ordinal]!;
       const operation = planned.operation as OpsOperation;
       const reservation = reservationOf(file, step.phase, ordinal);
-      const authority = root(file);
+      const authority = await root(file);
       // A binding left by an earlier run is an attempt this run cannot repeat.
-      if (lookupControlChildPhaseBinding(authority, reservation)) return { outcome: "unknown" };
-      const issuer = restoreConfigurationMaintenancePhaseIssuer(
+      if (await lookupControlChildPhaseBinding(authority, reservation))
+        return { outcome: "unknown" };
+      const issuer = await restoreConfigurationMaintenancePhaseIssuer(
         authority,
         step.phase as Parameters<typeof restoreConfigurationMaintenancePhaseIssuer>[1],
       );
@@ -358,14 +360,14 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           ordinal,
           lease: issuer,
         });
-        consumeControlChildDispatch(issued.dispatchTicket);
+        await consumeControlChildDispatch(issued.dispatchTicket);
         leaseChild = { leaseId: issuer.leaseId, childKey: issued.delegation.childKey };
       } finally {
         closeArtifactTargetLeaseHandle(issuer);
       }
       // The child is attempted from here: anything that fails is unknown.
       const execution = child.execution;
-      const binding = lookupControlChildPhaseBinding(authority, reservation)!;
+      const binding = (await lookupControlChildPhaseBinding(authority, reservation))!;
       const inspected = inspectArtifactDelegation({ installation, leaseChild });
       const lease = await adoptArtifactTargetLease({
         peer: verifyLocalControlPeer(installation, {
@@ -617,13 +619,13 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           await leaseBackend().cancel({ leaseId: lease.leaseId, key: child.key });
     },
     async releaseLease(file) {
-      const authority = root(file);
+      const authority = await root(file);
       const { record } = file;
       // The root's own effect is the preparation's, receipted when its operation
       // ends. A preparation that ended without one is receipted from the record:
       // a fence data-manager prepared, or one settled through recovery, is its
       // effect; otherwise nothing ran under it. The receipt lets the records go.
-      if (!executionSettled(authority))
+      if (!(await executionSettled(authority)))
         await retainControlEffectReceipt(
           authority,
           record.fence || record.fenceOutcome
@@ -646,7 +648,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       try {
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(installation, file.plan.prepare),
+          await verifyControlEffectSettlement(installation, file.plan.prepare),
         );
         await releaseArtifactTargetLease(lease);
       } finally {

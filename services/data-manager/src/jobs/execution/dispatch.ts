@@ -110,7 +110,7 @@ export function createDataExecutionDispatcher(deps: {
             emit(context.execution.executionId, { event: "progress", bytes, totalBytes }),
           withPublishLock: (publish) =>
             withOvertureOperationLock(async () => {
-              context.assertForward();
+              await context.assertForward();
               publish();
             }),
         });
@@ -425,7 +425,7 @@ export function createDataExecutionDispatcher(deps: {
         const slot = (await context.record()).reservations[0];
         if (!slot) throw Error("Maintenance child reservation missing");
         if (input.action === "reload-feed-proxy")
-          retainOwnedDataTransitCandidate(context.authority, slot);
+          await retainOwnedDataTransitCandidate(context.authority, slot);
         await runOwnedDataOpsOperation(slot.operation, {
           context,
           phase: slot.phase,

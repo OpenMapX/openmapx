@@ -106,7 +106,7 @@ export async function settleCliReadOnlyExport(owner: CliArtifactOwner) {
   });
   await control.settleArtifactTargetLeaseChild(
     owner.lease,
-    control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
+    await control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
   );
   await control.releaseArtifactTargetLease(owner.lease);
 }
@@ -123,7 +123,7 @@ export async function settleCliArtifactOwner(
   });
   await control.settleArtifactTargetLeaseChild(
     owner.lease,
-    control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
+    await control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
   );
   await control.releaseArtifactTargetLease(owner.lease);
 }

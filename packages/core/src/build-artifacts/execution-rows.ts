@@ -115,16 +115,17 @@ export const executionRowSchema = z.strictObject({
 
 /**
  * Where a role keeps its execution rows: the agent's journal for its
- * operations, a file per execution for a process that has no journal of its
- * own. Every change is durable before `admit`, `update` or `remove` resolves.
+ * operations, data-manager's job table for its executions, a file per
+ * execution for a process that has neither. Every change is durable before
+ * `admit`, `update` or `remove` resolves.
  */
 export interface ExecutionRows {
-  read(operationKey: string): ExecutionRow | undefined;
+  read(operationKey: string): Promise<ExecutionRow | undefined>;
   /** Records a new row; the same key with a different admission is a conflict. */
   admit(row: ExecutionRow): Promise<"admitted" | "retained">;
   update<T>(operationKey: string, change: (progress: ExecutionProgress) => T): Promise<T>;
   /** Up to `limit` keys the prune may consider; `complete` when none were left out. */
-  keys(limit: number): { keys: string[]; complete: boolean };
+  keys(limit: number): Promise<{ keys: string[]; complete: boolean }>;
   remove(operationKeys: readonly string[]): Promise<void>;
 }
 /** A store that keeps only some keys, in front of another one. */
@@ -201,7 +202,7 @@ export function fileExecutionRows(privateRoot: AnchoredDirectory): ExecutionRows
     }
   };
   return {
-    read,
+    read: async (key) => read(key),
     async admit(row) {
       return guarded(row.admission.execution.operationKey, () => {
         const existing = read(row.admission.execution.operationKey);
@@ -223,7 +224,7 @@ export function fileExecutionRows(privateRoot: AnchoredDirectory): ExecutionRows
         return result;
       });
     },
-    keys(limit) {
+    async keys(limit) {
       const dir = existing();
       if (!dir) return { keys: [], complete: true };
       try {
@@ -372,10 +373,10 @@ export function journalFileRows(infraDir: string): OwningExecutionRows {
   const readOnly = () => Promise.reject(Error("Only the agent writes its journal"));
   return {
     owns: (key) => rows().has(key),
-    read: (key) => rows().get(key),
+    read: async (key) => rows().get(key),
     admit: readOnly,
     update: readOnly,
-    keys: () => ({ keys: [], complete: true }),
+    keys: async () => ({ keys: [], complete: true }),
     remove: readOnly,
   };
 }
@@ -390,9 +391,9 @@ export function layeredExecutionRows(
     read: (key) => of(key).read(key),
     admit: (row) => of(row.admission.execution.operationKey).admit(row),
     update: (key, change) => of(key).update(key, change),
-    keys(limit) {
-      const first = primary.keys(limit),
-        second = fallback.keys(Math.max(0, limit - first.keys.length));
+    async keys(limit) {
+      const first = await primary.keys(limit),
+        second = await fallback.keys(Math.max(0, limit - first.keys.length));
       return {
         keys: [...first.keys, ...second.keys],
         complete: first.complete && second.complete,

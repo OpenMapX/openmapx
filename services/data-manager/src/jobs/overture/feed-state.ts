@@ -10,7 +10,7 @@ export async function writeOvertureFeedState(
   log: { warn: (message: string, extra?: Record<string, unknown>) => void },
 ): Promise<void> {
   try {
-    assertDataPublication();
+    await assertDataPublication();
     const db = drizzle(sql);
     const feedRegion = `overture-places-${region}`;
     const feedName = "overture-places";

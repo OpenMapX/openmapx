@@ -158,7 +158,7 @@ it("prunes a root only once its released lease left the store", async () => {
   await settle(authority);
   await settleArtifactTargetLeaseChild(
     lease,
-    verifyControlEffectSettlement(installation, execution),
+    await verifyControlEffectSettlement(installation, execution),
   );
   const later = execution.deadlineAt + CONTROL_PRUNE_AFTER_MS + 60_000;
   expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
@@ -220,15 +220,15 @@ it("refuses a pruned and expired execution to its readers", async () => {
   expect(
     await pruneControlRecords(installation, { now: notAfter + CONTROL_PRUNE_AFTER_MS + 1 }),
   ).toEqual([execution.operationKey]);
-  expect(() => restoreAdmittedControlExecution(installation, execution)).toThrow();
-  expect(() => verifyControlEffectSettlement(installation, execution)).toThrow();
+  await expect(restoreAdmittedControlExecution(installation, execution)).rejects.toThrow();
+  await expect(verifyControlEffectSettlement(installation, execution)).rejects.toThrow();
 });
 
 it("keeps an unsettled execution, with its lease held", async () => {
   const { execution } = await admit(),
     lease = await acquireArtifactTargetLease({
       serviceIds: ["osrm"],
-      owner: restoreAdmittedControlExecution(installation, execution),
+      owner: await restoreAdmittedControlExecution(installation, execution),
     });
   for (const now of [Date.now(), execution.deadlineAt + 30 * 24 * 3600_000])
     expect(await pruneControlRecords(installation, { now })).toEqual([]);
@@ -254,7 +254,7 @@ it("keeps a borrower while the lease it ran under is held", async () => {
   await settle(owner.authority);
   await settleArtifactTargetLeaseChild(
     lease,
-    verifyControlEffectSettlement(installation, owner.execution),
+    await verifyControlEffectSettlement(installation, owner.execution),
   );
   await releaseArtifactTargetLease(lease);
   expect((await pruneControlRecords(installation, { now: later })).sort()).toEqual(

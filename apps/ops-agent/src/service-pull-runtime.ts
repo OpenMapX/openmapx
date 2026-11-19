@@ -100,7 +100,7 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
           const authority = context.controlAuthority;
           if (!authority || !context.execution || context.artifactLease || context.ownedTargetLease)
             throw Error("Normal pull admission without a target lease required");
-          assertControlExecutionForward(authority);
+          await assertControlExecutionForward(authority);
           const admitted = authority;
           if (
             services.currentConfigurationGeneration(options.infraDir) !==
@@ -198,7 +198,7 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
             )
           ).stdout.trim();
           context.signal.throwIfAborted();
-          assertControlExecutionForward(authority);
+          await assertControlExecutionForward(authority);
           if (
             (await options.loadAuthority()).revisionId !== registry.revisionId ||
             services.currentConfigurationGeneration(options.infraDir) !==

@@ -197,11 +197,14 @@ export function readCliDataAttempt(
   }
   return dataChildAttemptSchema.parse(raw);
 }
-export function retainCliDataAttempt(authority: ExecutionHandle, value: DataChildAttempt): void {
+export async function retainCliDataAttempt(
+  authority: ExecutionHandle,
+  value: DataChildAttempt,
+): Promise<void> {
   const s = authority,
     attempt = dataChildAttemptSchema.parse(value),
     slot = s.reservations.find((item) => item.execution.operationKey === attempt.operationKey),
-    binding = slot ? lookupControlChildPhase(authority, slot) : null;
+    binding = slot ? await lookupControlChildPhase(authority, slot) : null;
   if (
     !slot ||
     !binding ||
@@ -237,13 +240,13 @@ export function retainCliDataAttempt(authority: ExecutionHandle, value: DataChil
     !prior,
   );
 }
-export function verifyCliDataTerminal(
+export async function verifyCliDataTerminal(
   authority: ExecutionHandle,
   status: import("../services/data-manager/contracts/executions").DataExecutionStatus,
 ) {
   const s = authority,
     slot = s.reservations.find((item) => item.execution.operationKey === status.operationKey),
-    binding = slot ? lookupControlChildPhase(authority, slot) : null;
+    binding = slot ? await lookupControlChildPhase(authority, slot) : null;
   if (
     !binding ||
     binding.execution.executionId !== status.id ||

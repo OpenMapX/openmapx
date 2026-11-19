@@ -68,7 +68,7 @@ export async function initializeManagedCatalogPins(options: {
     });
     await settleArtifactTargetLeaseChild(
       lease,
-      verifyControlEffectSettlement(options.installation, authority.execution),
+      await verifyControlEffectSettlement(options.installation, authority.execution),
     );
     await releaseArtifactTargetLease(lease);
     lease = undefined;

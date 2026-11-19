@@ -219,7 +219,7 @@ beforeEach(() => {
       order.push("prepare-fence");
       return fence("prepared", file);
     }),
-    fenceDelegated: () => true,
+    fenceDelegated: async () => true,
     settleFence: vi.fn(async (file, outcome) => {
       order.push(`settle-fence:${outcome}`);
       return fence("settled", file);
@@ -565,7 +565,7 @@ describe("configuration maintenance in the agent", () => {
 
   it("settles a preparation whose fence child was never recorded, on restart", async () => {
     admit();
-    adapters.fenceDelegated = () => false;
+    adapters.fenceDelegated = async () => false;
     await new ConfigurationMaintenance(installation, adapters).recover(AbortSignal.timeout(5000));
     expect(readMaintenance(installation, maintenanceId).record.state).toBe("settled");
     expect(order).toEqual(["release"]);

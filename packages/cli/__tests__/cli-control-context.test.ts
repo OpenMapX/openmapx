@@ -30,7 +30,9 @@ it("reclaims an expired host-command family before another standalone command", 
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
   try {
     await pruneHostControlRecords(owner.installation);
-    expect(() => c.restoreAdmittedControlExecution(owner.installation, owner.execution)).toThrow();
+    await expect(
+      c.restoreAdmittedControlExecution(owner.installation, owner.execution),
+    ).rejects.toThrow();
   } finally {
     clock.mockRestore();
     c.closeControlInstallation(owner.installation);
@@ -103,7 +105,7 @@ it.each([0, 1, 130])(
     });
     const childKey = randomUUID();
     const args = c.fixedCliArguments(operation);
-    c.retainFixedCliSpawnIntent(authority, { childKey, execution: child, operation, args });
+    await c.retainFixedCliSpawnIntent(authority, { childKey, execution: child, operation, args });
     await c.delegateArtifactTargetLease(lease, { ...plan, childKey });
     const fixedChild = { leaseId: lease.leaseId, childKey };
     const receiptOptions = {
@@ -157,8 +159,10 @@ it.each([0, 1, 130])(
         child: fixedChild,
       });
       try {
-        const childAuthority = c.restoreAdmittedControlExecution(childInstallation, child);
-        expect(() => c.verifyControlEffectSettlement(childInstallation, child)).not.toThrow();
+        const childAuthority = await c.restoreAdmittedControlExecution(childInstallation, child);
+        await expect(
+          c.verifyControlEffectSettlement(childInstallation, child),
+        ).resolves.toBeTruthy();
         const receipt = await services.withServiceLifecycleReceiptAuthority(childAuthority, () =>
           services.readServiceLifecycleReceipt(receiptOptions),
         );
@@ -180,7 +184,7 @@ it.each([0, 1, 130])(
         });
         await c.settleArtifactTargetLeaseChild(
           lease,
-          c.verifyControlEffectSettlement(installation, execution),
+          await c.verifyControlEffectSettlement(installation, execution),
         );
         await c.releaseArtifactTargetLease(lease);
       }

@@ -106,7 +106,7 @@ async function fixture(
       serviceIds: ["motis-feed-proxy"],
       owner: authority,
     });
-  control.retainOwnedDataTransitCandidate(authority, slot);
+  await control.retainOwnedDataTransitCandidate(authority, slot);
   const bound = await control.bindControlChildPhase(authority, slot),
     issued = await control.issueControlChildPhase(authority, {
       ...slot,
@@ -224,7 +224,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
       fault === "validation-replaced" ? "validation" : fault,
     );
     try {
-      control.consumeControlChildDispatch(f.issued.dispatchTicket);
+      await control.consumeControlChildDispatch(f.issued.dispatchTicket);
       const accepted = await f.client.execute(f.operation, {
         operationKey: f.slot.execution.operationKey,
         execution: { requestedDeadlineAt: f.bound.execution.deadlineAt },
@@ -236,7 +236,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
           timeout: 15000,
         })
         .toBe("failed");
-      const authority = control.restoreAdmittedControlExecution(f.agent, f.bound.execution);
+      const authority = await control.restoreAdmittedControlExecution(f.agent, f.bound.execution);
       if (fault === "validation") {
         await expect
           .poll(
@@ -269,7 +269,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
         expect(() =>
           control.commitFeedProxyValidationFailure(authority, { ...input, validationExitCode: 2 }),
         ).toThrow();
-        expect(() => control.markFeedProxyReloadAttempted(authority)).toThrow();
+        await expect(control.markFeedProxyReloadAttempted(authority)).rejects.toThrow();
       } else {
         expect(
           await control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.bound.execution),
@@ -293,7 +293,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
 it("accepts the production hardlinked proxy candidate through validation and reload", async () => {
   const f = await fixture();
   try {
-    control.consumeControlChildDispatch(f.issued.dispatchTicket);
+    await control.consumeControlChildDispatch(f.issued.dispatchTicket);
     const accepted = await f.client.execute(f.operation, {
       operationKey: f.slot.execution.operationKey,
       execution: { requestedDeadlineAt: f.bound.execution.deadlineAt },
@@ -393,10 +393,10 @@ it.each([
           ),
         ).toBeNull();
       if (mode === "canceled")
-        expect(() => control.consumeControlChildDispatch(f.issued.dispatchTicket)).toThrow(
+        await expect(control.consumeControlChildDispatch(f.issued.dispatchTicket)).rejects.toThrow(
           /fenced|cancel/i,
         );
-      else control.consumeControlChildDispatch(f.issued.dispatchTicket);
+      else await control.consumeControlChildDispatch(f.issued.dispatchTicket);
       await expect(
         f.client.execute(operation, {
           operationKey: key,
@@ -414,7 +414,7 @@ it.each([
 it("rechecks the retained snapshot after nginx validation and before reload", async () => {
   const f = await fixture(true);
   try {
-    control.consumeControlChildDispatch(f.issued.dispatchTicket);
+    await control.consumeControlChildDispatch(f.issued.dispatchTicket);
     const accepted = await f.client.execute(f.operation, {
       operationKey: f.slot.execution.operationKey,
       execution: { requestedDeadlineAt: f.bound.execution.deadlineAt },
@@ -438,7 +438,7 @@ it.each(["stricter", "late"] as const)(
     const f = await fixture(false, policy);
     try {
       const original = f.bound.execution;
-      control.consumeControlChildDispatch(f.issued.dispatchTicket);
+      await control.consumeControlChildDispatch(f.issued.dispatchTicket);
       await expect(
         f.client.execute(f.operation, {
           operationKey: original.operationKey,
@@ -447,7 +447,9 @@ it.each(["stricter", "late"] as const)(
         }),
       ).rejects.toThrow();
       expect(f.calls()).toBe(0);
-      expect(control.lookupControlChildPhase(f.authority, f.slot)?.execution).toEqual(original);
+      expect((await control.lookupControlChildPhase(f.authority, f.slot))?.execution).toEqual(
+        original,
+      );
     } finally {
       await f.close();
     }

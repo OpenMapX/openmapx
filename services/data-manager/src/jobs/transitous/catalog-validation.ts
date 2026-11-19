@@ -55,7 +55,7 @@ export async function runCatalogValidation(options: {
     throw Error("Enable and apply two-slot MOTIS and the paired GBFS compiler before validation");
   const input = record.input,
     selection = await loadOwnedCatalogSelection(context, input.proposalId),
-    evidence = ownedCatalogSelectionEvidence(selection, context);
+    evidence = await ownedCatalogSelectionEvidence(selection, context);
   if (!evidence.runtimeInputs)
     throw Error("Verified catalog runtime inputs required before validation");
   const runtimeInputs = scopeCatalogRuntimeInputs(evidence.runtimeInputs, input.countries);
@@ -146,14 +146,14 @@ export async function runCatalogValidation(options: {
   } catch (error) {
     if (error instanceof DataOpsObservationPending || error instanceof DataPublicationUnknown)
       throw error;
-    context.assertForward();
+    await context.assertForward();
     failure = true;
   }
   // Restoration is part of validation, not best-effort cleanup. An uncertain
   // child throws and keeps this root fenced; it cannot publish passing evidence.
   await rollbackProxyTransaction(ctx);
   await child(4);
-  context.assertForward();
+  await context.assertForward();
   const fresh = await runOpsOperation(
     { kind: "transitousLock.inspect", proposalId: input.proposalId, offset: 0 },
     { signal: context.signal },

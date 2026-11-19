@@ -80,7 +80,7 @@ export interface DataExecutionContext {
   write<T>(
     run: (record: DataExecutionRecord) => Promise<{ record: DataExecutionRecord; value: T }>,
   ): Promise<T>;
-  assertForward(): void;
+  assertForward(): Promise<void>;
 }
 export interface DataExecutionRuntime {
   admit(
@@ -129,7 +129,7 @@ async function releaseOwnLease(
   }
   await settleArtifactTargetLeaseChild(
     lease,
-    verifyControlEffectSettlement(journal.installation, execution),
+    await verifyControlEffectSettlement(journal.installation, execution),
   );
   await journal.verifyContainedTerminal(execution);
   await releaseArtifactTargetLease(lease);
@@ -173,9 +173,9 @@ export function createDataExecutionRuntime(deps: {
       throw new DataExecutionRuntimeUnavailable("Durable control prerequisites are unavailable");
     return journal;
   }
-  function observationContext(record: DataExecutionRecord): DataExecutionContext {
+  async function observationContext(record: DataExecutionRecord): Promise<DataExecutionContext> {
     const owner = requireJournal(),
-      authority = restoreAdmittedControlExecution(owner.installation, record.execution),
+      authority = await restoreAdmittedControlExecution(owner.installation, record.execution),
       lease = dataExecutionHoldsLease(record.input)
         ? restoreArtifactTargetLeaseForSettlement(authority)
         : undefined;
@@ -237,7 +237,7 @@ export function createDataExecutionRuntime(deps: {
           return { record: saved, value: undefined };
         });
       },
-      assertForward() {
+      async assertForward() {
         throw new DataExecutionOwnershipLost("Recovery permits observation/settlement only");
       },
     };
@@ -249,7 +249,7 @@ export function createDataExecutionRuntime(deps: {
       .then(async () => {
         let context: DataExecutionContext | undefined;
         try {
-          context = observationContext(record);
+          context = await observationContext(record);
           // A stale or contended forward writer is not containment evidence.
           // It must not prevent authenticated cancellation of an already live child.
           const owned = context;
@@ -299,7 +299,7 @@ export function createDataExecutionRuntime(deps: {
         let context: DataExecutionContext | undefined, lease: ArtifactTargetLease | undefined;
         try {
           if (pause) await settleDelay(pause, undefined, { signal: closing.signal });
-          context = observationContext(record);
+          context = await observationContext(record);
           if (
             (await settleAgentOperations(context, true, opsClient)) !== "settled" ||
             (await cancelAndSettleOwnedDataOpsChildren(context)) !== "settled"
@@ -457,10 +457,10 @@ export function createDataExecutionRuntime(deps: {
           return { record: saved, value: undefined };
         });
       },
-      assertForward() {
+      async assertForward() {
         controller.signal.throwIfAborted();
-        assertControlExecutionForward(authority);
-        if (lease) assertArtifactTargetLeaseForward(lease);
+        await assertControlExecutionForward(authority);
+        if (lease) await assertArtifactTargetLeaseForward(lease);
       },
     };
     entry = { record, controller, context, task: Promise.resolve(), tail: Promise.resolve() };
@@ -476,18 +476,22 @@ export function createDataExecutionRuntime(deps: {
       Math.max(0, record.status.deadlineAt - now()),
     );
     timer.unref();
+    let checking = false;
     const ancestry = setInterval(() => {
-      if (controller.signal.aborted) return;
-      try {
-        assertControlExecutionForward(authority);
-      } catch (error) {
-        if (error instanceof ControlExecutionFencedError || now() >= record.status.deadlineAt)
-          void cancel({
-            id: record.status.id,
-            operationKey: record.status.operationKey,
-            fingerprint: record.status.fingerprint,
-          }).catch(() => {});
-      }
+      if (controller.signal.aborted || checking) return;
+      checking = true;
+      assertControlExecutionForward(authority)
+        .catch((error: unknown) => {
+          if (error instanceof ControlExecutionFencedError || now() >= record.status.deadlineAt)
+            void cancel({
+              id: record.status.id,
+              operationKey: record.status.operationKey,
+              fingerprint: record.status.fingerprint,
+            }).catch(() => {});
+        })
+        .finally(() => {
+          checking = false;
+        });
     }, 250);
     ancestry.unref();
     entry.task = (async () => {
@@ -503,12 +507,12 @@ export function createDataExecutionRuntime(deps: {
         const contained = await owner.contain(
           authority,
           Promise.resolve()
-            .then(() => {
+            .then(async () => {
               if (refusal) {
                 refused?.(refusal);
                 throw refusal;
               }
-              context.assertForward();
+              await context.assertForward();
               return withDataExecutionScope(context, () =>
                 work ? work(context) : deps.dispatch(record.input, context),
               );
@@ -640,7 +644,7 @@ export function createDataExecutionRuntime(deps: {
         const owner = requireJournal(),
           authority =
             entry?.context.authority ??
-            restoreAdmittedControlExecution(owner.installation, saved.execution);
+            (await restoreAdmittedControlExecution(owner.installation, saved.execution));
         if (entry) await cancelControlExecution(authority);
         else cancelRecovered(saved);
         const own = entry?.context.targetAuthority;
@@ -702,7 +706,10 @@ export function createDataExecutionRuntime(deps: {
             await owner.assertOwnedProxyRecoverySettled(record.execution);
             await owner.repairTerminal(record.execution);
             await owner.publishTerminal(record.execution);
-            const authority = restoreAdmittedControlExecution(owner.installation, record.execution),
+            const authority = await restoreAdmittedControlExecution(
+                owner.installation,
+                record.execution,
+              ),
               lease = dataExecutionHoldsLease(record.input)
                 ? restoreArtifactTargetLeaseForSettlement(authority)
                 : undefined;
@@ -722,7 +729,7 @@ export function createDataExecutionRuntime(deps: {
         try {
           // Recover authentic observation authority without assuming that the
           // killed local producer ever reached worker completion publication.
-          observation = observationContext(record);
+          observation = await observationContext(record);
           try {
             recovered = await owner.restoreCompletion(record.execution);
           } catch (error) {
@@ -800,7 +807,7 @@ export function createDataExecutionRuntime(deps: {
             if (latest && !isDataExecutionTerminal(latest.status)) {
               try {
                 await cancelControlExecution(
-                  restoreAdmittedControlExecution(owner.installation, record.execution),
+                  await restoreAdmittedControlExecution(owner.installation, record.execution),
                 );
               } catch {}
               await store.checkpoint(latest.status.id, latest.version, {

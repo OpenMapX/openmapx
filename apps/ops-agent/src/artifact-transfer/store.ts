@@ -933,7 +933,7 @@ export class ArtifactTransferStore {
       opsOperationFingerprint(operation) !== context.execution.operationFingerprint
     )
       throw Error("Original prepared export execution differs");
-    assertArtifactTargetLeaseExecution(lease, context.execution);
+    await assertArtifactTargetLeaseExecution(lease, context.execution);
     const stage = await this.createStage({
       ownerId: operation.ownerId,
       purpose: "prepared-artifact",
@@ -1004,7 +1004,7 @@ export class ArtifactTransferStore {
       work = [writing, generating];
       await Promise.all(work);
       signal.throwIfAborted();
-      assertArtifactTargetLeaseExecution(lease, context.execution);
+      await assertArtifactTargetLeaseExecution(lease, context.execution);
       return this.lock(() => {
         const meta = this.owned(stage.stageId, operation.ownerId, "prepared-artifact");
         if (meta.stage.state !== "uploaded" || !meta.stage.sha256)
@@ -1442,7 +1442,7 @@ export class ArtifactTransferStore {
   async releaseUnstartedPreparedImport(
     authority: import("@openmapx/core/build-artifacts").ExecutionHandle,
   ) {
-    const operation = inspectUnstartedArtifactImport(authority);
+    const operation = await inspectUnstartedArtifactImport(authority);
     return this.lock(() => {
       const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact");
       const entry = meta.claims.find(
@@ -1487,7 +1487,7 @@ export class ArtifactTransferStore {
       publication.archiveSha256 !== operation.expectedSha256
     )
       failed(409, "Restored original publication required");
-    verifyLocalArtifactTargetRootRelease(authority);
+    await verifyLocalArtifactTargetRootRelease(authority);
     const retained = this.lock(() => {
       const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
         entry = meta.claims.find(
@@ -1502,7 +1502,7 @@ export class ArtifactTransferStore {
         : null;
     });
     if (retained) return retained; // Historical replay cannot change a later stage owner.
-    cleanupRestoredArtifactPublication(authority);
+    await cleanupRestoredArtifactPublication(authority);
     return this.lock(() => {
       const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
         entry = meta.claims.find(

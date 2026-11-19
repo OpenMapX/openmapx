@@ -123,13 +123,13 @@ async function prunable(
   now: number,
   spawns: () => Map<string, string[]>,
 ): Promise<Prunable | null> {
-  const row = local.rows.read(key);
+  const row = await local.rows.read(key);
   if (!row) return null;
   const admitted = row.admission;
   if (admitted.origin.notAfter + CONTROL_PRUNE_AFTER_MS > now) return null;
   const finishedAt = row.progress.settledAt;
   if (finishedAt === null || finishedAt + CONTROL_PRUNE_AFTER_MS > now) return null;
-  verifyControlEffectSettlement(installation, admitted.execution);
+  await verifyControlEffectSettlement(installation, admitted.execution);
   // A step stays while the maintenance it belongs to still has its record;
   // that record goes only with its own preparation.
   const operation = operationIdsSchema.parse(admitted.operation);
@@ -151,7 +151,8 @@ async function prunable(
   // their own in this role.
   add(["*"], key);
   for (const child of [...admitted.plan, ...admitted.reservations])
-    if (!local.rows.read(child.execution.operationKey)) add(["*"], child.execution.operationKey);
+    if (!(await local.rows.read(child.execution.operationKey)))
+      add(["*"], child.execution.operationKey);
   if (operation.handoffId) add(["observations"], operation.handoffId);
   // Fixed children it started: their spawn records.
   for (const id of spawns().get(key) ?? []) add(["spawns", "spawn-started"], id);
@@ -226,7 +227,7 @@ export async function pruneControlRecords(
     reported = true;
   };
   if (local.fixedChildId) return [];
-  const listed = local.rows.keys(MAX_ENTRIES);
+  const listed = await local.rows.keys(MAX_ENTRIES);
   if (!listed.complete) onFull();
   const names = listed.keys.sort();
   // Strays are recognised only against the complete list of admissions.
@@ -286,21 +287,28 @@ export async function pruneControlRecords(
   const admitted = new Set(
     names.filter((name) => !keys.includes(name)).map((key) => `${key}.json`),
   );
-  if (complete)
+  if (complete) {
+    const strays =
+      withNamespace(local, "observations", (dir) =>
+        entries(dir, onFull).filter((entry) => {
+          if (!entry.endsWith(".json") || !entry.startsWith("terminal-")) return false;
+          const finishedAt = mtime(dir, entry);
+          return (
+            !admitted.has(entry.replace(/^terminal-/, "")) &&
+            finishedAt !== null &&
+            finishedAt + CONTROL_PRUNE_AFTER_MS <= now
+          );
+        }),
+      ) ?? [];
+    // A row the store still holds, offered to the prune or not, keeps it.
+    const orphaned: string[] = [];
+    for (const entry of strays)
+      if (!(await local.rows.read(entry.slice("terminal-".length, -".json".length))))
+        orphaned.push(entry);
     withNamespace(local, "observations", (dir) => {
-      for (const entry of entries(dir, onFull)) {
-        if (!entry.endsWith(".json") || !entry.startsWith("terminal-")) continue;
-        const finishedAt = mtime(dir, entry);
-        // A row the store still holds, offered to the prune or not, keeps it.
-        if (
-          !admitted.has(entry.replace(/^terminal-/, "")) &&
-          !local.rows.read(entry.slice("terminal-".length, -".json".length)) &&
-          finishedAt !== null &&
-          finishedAt + CONTROL_PRUNE_AFTER_MS <= now
-        )
-          optional(() => dir.removeFile(entry));
-      }
+      for (const entry of orphaned) optional(() => dir.removeFile(entry));
     });
+  }
   // Source witnesses no maintenance owner references any more, once old enough.
   if (complete) {
     const referenced = new Set<string>();

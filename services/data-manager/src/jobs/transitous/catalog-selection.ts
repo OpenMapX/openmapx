@@ -28,8 +28,8 @@ export async function loadOwnedCatalogSelection(
 ): Promise<ReviewedCatalogSelection> {
   const owner = context.authority,
     record = await context.record();
-  assertControlExecutionForward(context.authority);
-  context.assertForward();
+  await assertControlExecutionForward(context.authority);
+  await context.assertForward();
   if (
     owner.kind !== "catalog.validate" ||
     record.input.kind !== "catalog.validate" ||
@@ -62,7 +62,7 @@ export async function loadOwnedCatalogSelection(
   });
   return handle;
 }
-export function selectedCatalogPins(ctx: JobContext) {
+export async function selectedCatalogPins(ctx: JobContext) {
   const selected = ctx.reviewedCatalog && selections.get(ctx.reviewedCatalog);
   if (
     !selected ||
@@ -70,18 +70,18 @@ export function selectedCatalogPins(ctx: JobContext) {
     selected.context.execution.executionId !== ctx.jobId
   )
     throw Error("Verified owned catalog proposal required");
-  assertControlExecutionForward(selected.context.authority);
-  selected.context.assertForward();
+  await assertControlExecutionForward(selected.context.authority);
+  await selected.context.assertForward();
   return parseCatalogPinSet(structuredClone(selected.proposal.pins));
 }
 
-export function ownedCatalogSelectionEvidence(
+export async function ownedCatalogSelectionEvidence(
   handle: ReviewedCatalogSelection,
   context: DataExecutionContext,
 ) {
   const selected = selections.get(handle);
   if (!selected || selected.context !== context) throw Error("Original catalog selection required");
-  assertControlExecutionForward(context.authority);
+  await assertControlExecutionForward(context.authority);
   return {
     proposal: structuredClone(selected.proposal),
     runtimeInputs: selected.runtimeInputs && structuredClone(selected.runtimeInputs),

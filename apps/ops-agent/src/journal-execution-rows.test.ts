@@ -141,7 +141,9 @@ it("keeps an operation's execution on its journal row, durable before the effect
   closeControlInstallation(installation);
   await start();
   expect(
-    executionEffectStarted(restoreAdmittedControlExecution(installation, executionFor(job))),
+    await executionEffectStarted(
+      await restoreAdmittedControlExecution(installation, executionFor(job)),
+    ),
   ).toBe(true);
 });
 
@@ -151,7 +153,7 @@ it("refuses the same key with a different admission", async () => {
     execution: executionFor(job),
   });
   const rows = table.executionRows(),
-    row = rows.read(job.operationKey);
+    row = await rows.read(job.operationKey);
   if (!row) throw Error("Row missing");
   await expect(
     rows.admit({ ...row, admission: { ...row.admission, serviceIds: ["motis", "osrm"] } }),
@@ -168,7 +170,7 @@ it("keeps an attempted operation interrupted by a restart for recovery, with its
   const restored = table.byId.get(job.operationId);
   expect(restored).toMatchObject({ state: "failed", errorClass: "recovery_required" });
   // Nothing re-dispatches it, and the prune is not offered its row.
-  expect(table.executionRows().keys(16).keys).toEqual([]);
+  expect((await table.executionRows().keys(16)).keys).toEqual([]);
   expect(
     await pruneControlRecords(installation, { now: job.deadlineAt + 30 * 24 * 3600_000 }),
   ).toEqual([]);
@@ -190,7 +192,7 @@ it("keeps an unknown outcome and its lease until the lease is resolved", async (
     await finish(job, "failed");
     await settleArtifactTargetLeaseChild(
       lease,
-      verifyControlEffectSettlement(installation, handle.execution),
+      await verifyControlEffectSettlement(installation, handle.execution),
     );
     // Unknown never releases.
     await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
@@ -219,7 +221,7 @@ it("prunes a settled row once its key expired, 72 hours passed and its lease was
     expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
     await settleArtifactTargetLeaseChild(
       lease,
-      verifyControlEffectSettlement(installation, handle.execution),
+      await verifyControlEffectSettlement(installation, handle.execution),
     );
     await releaseArtifactTargetLease(lease);
     expect(await pruneControlRecords(installation, { now: later })).toEqual([job.operationKey]);
@@ -234,6 +236,6 @@ it("lets another process read the agent's rows from its journal, never write the
   const { job } = await admit();
   const rows = journalFileRows(root);
   expect(rows.owns(job.operationKey)).toBe(true);
-  expect(rows.read(job.operationKey)?.admission.execution).toEqual(executionFor(job));
+  expect((await rows.read(job.operationKey))?.admission.execution).toEqual(executionFor(job));
   await expect(rows.update(job.operationKey, () => undefined)).rejects.toThrow(/Only the agent/);
 });

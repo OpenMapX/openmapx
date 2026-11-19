@@ -169,7 +169,7 @@ it.skipIf(
           if (input.kind === "transit-sync") {
             transitStarted();
             await held;
-            context.assertForward();
+            await context.assertForward();
             await retainDataPublication();
             return {
               kind: input.kind,

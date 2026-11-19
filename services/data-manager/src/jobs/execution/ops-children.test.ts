@@ -124,7 +124,7 @@ it.each(["promotion", "reload"] as const)(
     });
     if (kind === "promotion") {
       writePreparedFixture(join(root, "data/motis/staging"), executionId);
-      control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
+      await control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
       renameSync(join(root, "data/motis/staging"), join(root, "data/motis/live"));
     } else {
       mkdirSync(join(root, "data/motis-feed-proxy/conf"), { mode: 0o700, recursive: true });
@@ -137,7 +137,7 @@ it.each(["promotion", "reload"] as const)(
         mode: 0o600,
       });
       linkProxyFixture(join(root, "data"));
-      control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
+      await control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
     }
     const delegation = await control.delegateArtifactTargetLease(lease, {
       ...plan,
@@ -1033,7 +1033,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       serviceIds: ["motis-feed-proxy"],
       owner: authority,
     });
-    control.retainOwnedDataTransitCandidate(authority, reservation);
+    await control.retainOwnedDataTransitCandidate(authority, reservation);
     const bound = await control.bindControlChildPhase(authority, reservation),
       issued = await control.issueControlChildPhase(authority, {
         ...reservation,
@@ -1083,7 +1083,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       restarted: Awaited<ReturnType<typeof start>> | undefined;
     try {
       first = await start(crash);
-      control.consumeControlChildDispatch(issued.dispatchTicket);
+      await control.consumeControlChildDispatch(issued.dispatchTicket);
       await first.client
         .execute(operation, {
           operationKey: bound.execution.operationKey,

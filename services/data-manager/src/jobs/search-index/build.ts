@@ -214,7 +214,7 @@ export async function buildOsmSearchIndex(
       const live = await opts.sql.unsafe<{ exists: boolean }[]>(
         `SELECT to_regnamespace('osm_search') IS NOT NULL AS exists`,
       );
-      assertDataPublication();
+      await assertDataPublication();
       await publishDataChange(() =>
         cancellableTransaction(opts.sql, async (transaction) => {
           await transaction.unsafe(

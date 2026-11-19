@@ -15,11 +15,11 @@ export async function isolateOwnedTransitProducer(
   minimumFreeBytes: number,
 ): Promise<void> {
   if (dataExecutionWorkerContext() !== context) throw Error("Original transit worker required");
-  context.assertForward();
+  await context.assertForward();
   const owner = context.authority,
     record = await context.record();
-  assertArtifactTargetLeaseForward(ownedLease(context));
-  assertArtifactTargetLeaseExecution(ownedLease(context), context.execution);
+  await assertArtifactTargetLeaseForward(ownedLease(context));
+  await assertArtifactTargetLeaseExecution(ownedLease(context), context.execution);
   if (
     owner.installation.installation.role !== "data-manager" ||
     !["transit-sync", "catalog.validate"].includes(owner.kind) ||
@@ -53,7 +53,7 @@ export async function isolateOwnedTransitProducer(
     );
     // A canceled copy has settled and only identical producer bytes were published.
     // Record that containment before the original cancellation stops the pipeline.
-    context.assertForward();
+    await context.assertForward();
   } finally {
     producer?.close();
     data.close();

@@ -397,7 +397,7 @@ it.each([false, true])(
         role: "host-cli",
         serviceIds: ["alpha", "beta"],
       });
-      const authority = restoreAdmittedControlExecution(restarted, o.execution);
+      const authority = await restoreAdmittedControlExecution(restarted, o.execution);
       // An unscoped read never repairs a private high-water mark.
       await expect(readServiceLifecycleReceipt(options(o.execution))).rejects.toThrow();
       const recovered = withServiceLifecycleReceiptAuthority(authority, () =>

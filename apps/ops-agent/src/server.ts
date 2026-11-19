@@ -412,7 +412,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (!job.leaseChild) return false;
     const execution = executionFor(job);
     if (job.state === "succeeded") {
-      verifyRetainedArtifactTargetSettlement(installation, job.leaseChild, execution);
+      await verifyRetainedArtifactTargetSettlement(installation, job.leaseChild, execution);
       return false;
     }
     const admission = inspectControlAdmission(installation, {
@@ -425,7 +425,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       requestedDeadlineAt: execution.deadlineAt,
     });
     const lease = await admission.adopt(execution);
-    const authority = restoreAdmittedControlExecution(installation, execution);
+    const authority = await restoreAdmittedControlExecution(installation, execution);
     table.leases.set(job.operationId, lease);
     table.authorities.set(job.operationId, authority);
     let changed = false;
@@ -455,7 +455,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     }
     await settleArtifactTargetLeaseChild(
       lease,
-      verifyControlEffectSettlement(installation, execution),
+      await verifyControlEffectSettlement(installation, execution),
     );
     return changed;
   };

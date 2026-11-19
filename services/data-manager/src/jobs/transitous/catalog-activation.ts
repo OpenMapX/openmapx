@@ -155,7 +155,7 @@ export async function runCatalogActivation(options: {
   } catch (error) {
     if (error instanceof DataOpsObservationPending || error instanceof DataPublicationUnknown)
       throw error;
-    context.assertForward();
+    await context.assertForward();
     await rollbackProxyTransaction(ctx);
     await runTransitOwnedPhase(ctx, "stop-staging");
     const current = readMotisSlotState(dataDir);

@@ -232,7 +232,7 @@ export function createDataExecutionControlJournal(
     execution: ExecutionRef,
   ): Promise<"not_required" | "settled"> {
     const value = await load(execution),
-      authority = restoreAdmittedControlExecution(installation, execution),
+      authority = await restoreAdmittedControlExecution(installation, execution),
       s = authority;
     const restore = s.reservations.find((slot) => slot.phase === "proxy-restore");
     const children = value.row.execution_children.map((raw) =>
@@ -438,7 +438,7 @@ export function createDataExecutionControlJournal(
   async function verifyStored(execution: ExecutionRef, digest?: string) {
     await assertOwnedProxyRecoverySettled(execution);
     const value = await load(execution),
-      authority = restoreAdmittedControlExecution(installation, execution),
+      authority = await restoreAdmittedControlExecution(installation, execution),
       proof = readProof(authority);
     if (
       !isDataExecutionTerminal(value.status) ||
@@ -450,7 +450,7 @@ export function createDataExecutionControlJournal(
       value.row.execution_children.some((raw) => childSchema.parse(raw).state !== "terminal")
     )
       throw Error("Data journal terminal containment is not proved");
-    verifyControlEffectSettlement(installation, execution);
+    await verifyControlEffectSettlement(installation, execution);
     return { value, authority, proof };
   }
   return {
@@ -466,7 +466,7 @@ export function createDataExecutionControlJournal(
       } catch {
         /* Below requires the original retained proxy plan and current row. */
       }
-      const s = restoreAdmittedControlExecution(installation, execution),
+      const s = await restoreAdmittedControlExecution(installation, execution),
         value = await load(execution);
       if (
         !s.reservations.some((slot) => slot.phase === "proxy-restore") ||
@@ -731,7 +731,7 @@ export function createDataExecutionControlJournal(
       return { completion, result, error, partial, publication };
     },
     async repairCommittedCatalogActivation(execution: ExecutionRef): Promise<void> {
-      const authority = restoreAdmittedControlExecution(installation, execution);
+      const authority = await restoreAdmittedControlExecution(installation, execution);
       if (authority.kind !== "catalog.activate")
         throw Error("Original catalog activation owner required");
       // This closes all future issuance under the original owner, even when its
@@ -751,7 +751,7 @@ export function createDataExecutionControlJournal(
     },
     async restoreCompletion(execution: ExecutionRef) {
       const value = await load(execution),
-        authority = restoreAdmittedControlExecution(installation, execution),
+        authority = await restoreAdmittedControlExecution(installation, execution),
         state = authority;
       const proof = workerSchema.parse(
         readPrivateRecord(local, "observations", `worker-${execution.operationKey}.json`, 65536),
@@ -809,7 +809,7 @@ export function createDataExecutionControlJournal(
      * worker may have changed data. */
     async containAbandoned(execution: ExecutionRef, publication: "not_started" | "committed") {
       const value = await load(execution),
-        authority = restoreAdmittedControlExecution(installation, execution),
+        authority = await restoreAdmittedControlExecution(installation, execution),
         state = authority,
         name = `worker-${execution.operationKey}.json`;
       if (!(LOCAL_DATA_EXECUTION_KINDS as readonly string[]).includes(value.status.kind))
@@ -972,7 +972,7 @@ export function createDataExecutionControlJournal(
     async publishTerminal(execution: ExecutionRef) {
       await assertOwnedProxyRecoverySettled(execution);
       const value = await load(execution),
-        authority = restoreAdmittedControlExecution(installation, execution),
+        authority = await restoreAdmittedControlExecution(installation, execution),
         proof = readProof(authority);
       if (
         !isDataExecutionTerminal(value.status) ||
@@ -981,7 +981,7 @@ export function createDataExecutionControlJournal(
         controlDigest(value.row.execution_children) !== proof.childrenDigest
       )
         throw Error("Original committed data terminal tuple/time required");
-      verifyControlEffectSettlement(installation, execution);
+      await verifyControlEffectSettlement(installation, execution);
       if (proof.phase !== "canonical")
         writePrivateRecord(
           local,
@@ -999,7 +999,7 @@ export function createDataExecutionControlJournal(
     repairTerminal: async (execution: ExecutionRef) => {
       await assertOwnedProxyRecoverySettled(execution);
       // existing recorded commitment only; never reconstruct one from a row
-      const authority = restoreAdmittedControlExecution(installation, execution);
+      const authority = await restoreAdmittedControlExecution(installation, execution);
       readProof(authority);
       await (async () => {
         const value = await load(execution);

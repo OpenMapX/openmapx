@@ -75,7 +75,7 @@ it.each(["commit", "rollback", "release"] as const)(
           },
         }),
       ).resolves.toBeUndefined();
-      expect(verifyControlEffectSettlement(installation, execution)).toBeTruthy();
+      expect(await verifyControlEffectSettlement(installation, execution)).toBeTruthy();
     } finally {
       closeControlInstallation(installation);
       rmSync(root, { recursive: true, force: true });

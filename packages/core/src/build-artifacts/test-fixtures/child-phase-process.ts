@@ -13,7 +13,7 @@ for await (const line of lines) {
       role: "data-manager",
       serviceIds: ["motis", "motis-staging"],
     });
-    const authority = restoreAdmittedControlExecution(installation, input.execution);
+    const authority = await restoreAdmittedControlExecution(installation, input.execution);
     const child = await bindControlChildPhase(authority, { phase: "stop-primary", ordinal: 0 });
     writeSync(1, JSON.stringify({ ok: true, child }) + "\n");
   } catch (error) {

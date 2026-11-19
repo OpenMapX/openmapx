@@ -180,7 +180,7 @@ export function createDataConfigurationFenceStore(
     local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
     let authority: ExecutionHandle | undefined;
     try {
-      authority = restoreAdmittedControlExecution(installation, delegation.execution);
+      authority = await restoreAdmittedControlExecution(installation, delegation.execution);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
@@ -196,8 +196,8 @@ export function createDataConfigurationFenceStore(
         serviceIds: delegation.serviceIds,
       });
     }
-    if (local.rows.read(delegation.execution.operationKey)?.progress.settlement) {
-      const settled = verifyControlEffectSettlement(installation, delegation.execution);
+    if ((await local.rows.read(delegation.execution.operationKey))?.progress.settlement) {
+      const settled = await verifyControlEffectSettlement(installation, delegation.execution);
       if (settled.outcome !== "committed") throw new DataFenceBusy();
       const saved = await row(sql, "maintenance_id", verified.operation.maintenanceId);
       if (!saved) throw new DataFenceBusy();

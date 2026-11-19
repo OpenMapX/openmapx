@@ -110,13 +110,13 @@ it("settles the actual unissued root and consumes only its indexed not-started e
       owner,
     });
   await retainConfigurationPreEffectRefusal(owner);
-  inspectConfigurationPreEffectRefusal(owner);
+  await inspectConfigurationPreEffectRefusal(owner);
   await settleArtifactTargetLeaseChild(
     lease,
-    verifyControlEffectSettlement(installation, owner.execution),
+    await verifyControlEffectSettlement(installation, owner.execution),
   );
   await releaseArtifactTargetLease(lease);
-  verifyLocalArtifactTargetRootRelease(owner);
+  await verifyLocalArtifactTargetRootRelease(owner);
   await expect(beginControlEffect(owner)).rejects.toThrow();
 });
 it.each(["begun", "bound", "issued"])(
@@ -147,7 +147,7 @@ it.each(["begun", "bound", "issued"])(
             serviceId: "motis",
             expectedConfigurationRevisionId: revision,
           };
-        retainFixedCliSpawnIntent(owner, {
+        await retainFixedCliSpawnIntent(owner, {
           childKey,
           execution: bound.execution,
           operation,
@@ -157,8 +157,8 @@ it.each(["begun", "bound", "issued"])(
       }
     }
     await expect(retainConfigurationPreEffectRefusal(owner)).rejects.toThrow();
-    expect(() => inspectConfigurationPreEffectRefusal(owner)).toThrow();
-    expect(() => verifyLocalArtifactTargetRootRelease(owner)).toThrow();
+    await expect(inspectConfigurationPreEffectRefusal(owner)).rejects.toThrow();
+    await expect(verifyLocalArtifactTargetRootRelease(owner)).rejects.toThrow();
     expect(
       openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })
         .list()

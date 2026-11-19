@@ -444,8 +444,8 @@ describe("actual CLI service lifecycle preparation", () => {
           serviceIds: ["alpha", "beta"],
         });
       try {
-        control.cancelControlExecution(
-          control.restoreAdmittedControlExecution(installation, envelope.seed.execution),
+        await control.cancelControlExecution(
+          await control.restoreAdmittedControlExecution(installation, envelope.seed.execution),
         );
       } finally {
         control.closeControlInstallation(installation);

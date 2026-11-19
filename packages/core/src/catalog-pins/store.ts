@@ -49,27 +49,42 @@ function optionalRead(
     throw error;
   }
 }
+function openDirectories(rootDir: string, create: boolean) {
+  // The trusted mount is infra/docker; Docker may own its unmounted ancestors.
+  const docker = new AnchoredDirectory(join(rootDir, "infra/docker"));
+  try {
+    return { docker, pins: docker.directory("catalog-pins", create, true) };
+  } catch (error) {
+    if (!create && missing(error)) return { docker, pins: null };
+    docker.close();
+    throw error;
+  }
+}
 function directories<T>(
   rootDir: string,
   create: boolean,
   run: (docker: AnchoredDirectory, pins: AnchoredDirectory | null) => T,
 ): T {
-  const opened: AnchoredDirectory[] = [];
+  const { docker, pins } = openDirectories(rootDir, create);
   try {
-    // The trusted mount is infra/docker; Docker may own its unmounted ancestors.
-    const docker = new AnchoredDirectory(join(rootDir, "infra/docker"));
-    opened.push(docker);
-    let pins: AnchoredDirectory;
-    try {
-      pins = docker.directory("catalog-pins", create, true);
-      opened.push(pins);
-    } catch (error) {
-      if (!create && missing(error)) return run(docker, null);
-      throw error;
-    }
     return run(docker, pins);
   } finally {
-    for (const dir of opened.reverse()) dir.close();
+    pins?.close();
+    docker.close();
+  }
+}
+/** `directories` for a writer that checks its owner again before it commits. */
+async function writeDirectories<T>(
+  rootDir: string,
+  run: (docker: AnchoredDirectory, pins: AnchoredDirectory) => Promise<T>,
+): Promise<T> {
+  const { docker, pins } = openDirectories(rootDir, true);
+  try {
+    if (!pins) throw Error("Catalog pin directory unavailable");
+    return await run(docker, pins);
+  } finally {
+    pins?.close();
+    docker.close();
   }
 }
 function pointer(dir: AnchoredDirectory) {
@@ -143,10 +158,9 @@ export async function initializeCatalogPinSet(options: {
   rootDir: string;
   lease: TargetLeaseAuthority;
 }): Promise<CatalogPinSet | null> {
-  const owner = catalogPinTargetOwner(options.lease);
+  const owner = await catalogPinTargetOwner(options.lease);
   assertCatalogRoot(options.rootDir, owner.installation);
-  return directories(options.rootDir, true, (docker, pins) => {
-    if (!pins) throw Error("Catalog pin directory unavailable");
+  return writeDirectories(options.rootDir, async (docker, pins) => {
     const record = (pair: CatalogPinSet | null) => {
       const state = installationState(owner.installation),
         marker = pointer(pins);
@@ -178,7 +192,7 @@ export async function initializeCatalogPinSet(options: {
       decodeLegacyPin(gbfs, gbfsPinSchema),
     );
     writeGeneration(pins, pair);
-    catalogPinTargetOwner(options.lease);
+    await catalogPinTargetOwner(options.lease);
     if (
       canonicalJson(tIdentity) !==
         canonicalJson(docker.fileIdentity("transitous.lock.json", false)) ||
@@ -204,7 +218,7 @@ export async function initializeCatalogPinSet(options: {
     return record(pair);
   });
 }
-function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
+async function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
   if (commit.execution.executor !== "ops-agent") throw Error("Agent-owned catalog commit required");
   const installation = openControlInstallation({
     infraDir: join(rootDir, "infra/docker"),
@@ -213,7 +227,7 @@ function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
   });
   try {
     const state = installationState(installation),
-      origin = retainedExecutionOrigin(state, commit.execution);
+      origin = await retainedExecutionOrigin(state, commit.execution);
     if (!origin) throw Error("Retained catalog execution origin required");
     const read = (name: string) => {
       const raw = readPrivateRecord(state, "catalog-commits", name, 65536);
@@ -276,22 +290,20 @@ export async function readCatalogPinCommit(options: {
   commit: CatalogPinCommitIdentity;
 }): Promise<CatalogPinCommitReceipt | null> {
   const commit = catalogPinCommitIdentitySchema.parse(options.commit),
-    journal = readJournal(options.rootDir, commit);
+    journal = await readJournal(options.rootDir, commit);
   if (!journal) return null;
   return directories(options.rootDir, false, (_docker, pins) => {
     const receipt = reconcile(journal, pins ? pointer(pins) : null);
     if (receipt.phase === "committed" && journal.receipt.phase !== "committed") {
+      // Reading the journal checked the execution's admission.
       const installation = openControlInstallation({
         infraDir: join(options.rootDir, "infra/docker"),
         role: "ops-agent",
         serviceIds: ["motis"],
       });
       try {
-        const state = installationState(installation),
-          origin = retainedExecutionOrigin(state, commit.execution);
-        if (!origin) throw Error("Original catalog receipt origin required");
         writePrivateRecord(
-          state,
+          installationState(installation),
           "catalog-commits",
           `${commit.execution.operationKey}.json`,
           { ...journal, receipt },
@@ -326,11 +338,11 @@ export async function publishCatalogPinSet(options: {
 }): Promise<CatalogPinCommitReceipt> {
   const pair = parseCatalogPinSet(options.pins),
     commit = catalogPinCommitIdentitySchema.parse(options.commit);
-  const owner = catalogPinTargetOwner(options.lease);
+  const owner = await catalogPinTargetOwner(options.lease);
   assertCatalogRoot(options.rootDir, owner.installation);
   if (owner.installation.role !== "ops-agent")
     throw Error("Only the agent may activate catalog pins");
-  assertArtifactTargetLeaseExecution(options.lease, commit.execution);
+  await assertArtifactTargetLeaseExecution(options.lease, commit.execution);
   const state = installationState(owner.installation);
   const save = (journal: z.infer<typeof journalSchema>, intent = false) => {
     if (Buffer.byteLength(canonicalJson(journal)) > 65536)
@@ -343,10 +355,9 @@ export async function publishCatalogPinSet(options: {
       intent,
     );
   };
-  return directories(options.rootDir, true, (_docker, store) => {
-    if (!store) throw Error("Catalog pin store unavailable");
+  return writeDirectories(options.rootDir, async (_docker, store) => {
     const current = pointer(store),
-      retained = readJournal(options.rootDir, commit);
+      retained = await readJournal(options.rootDir, commit);
     if (retained) {
       if (
         retained.receipt.generationId !== pair.generationId ||
@@ -397,7 +408,7 @@ export async function publishCatalogPinSet(options: {
     );
     try {
       writeGeneration(store, pair);
-      catalogPinTargetOwner(options.lease);
+      await catalogPinTargetOwner(options.lease);
       if (canonicalJson(pointer(store)) !== canonicalJson(current))
         throw Error("Catalog pin pointer changed");
       store.write("current.json", canonicalJson(next));

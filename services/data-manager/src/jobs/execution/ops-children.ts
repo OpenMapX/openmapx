@@ -532,7 +532,7 @@ export async function reserveOwnedProxyRecovery(
   context: DataExecutionContext,
   backupDigest: string,
 ): Promise<FreshDataChildReservation> {
-  context.assertForward();
+  await context.assertForward();
   const record = await context.record(),
     slot = record.reservations.find((child) => child.phase === "proxy-restore");
   if (!slot) throw Error("Original proxy restore reservation missing");
@@ -546,7 +546,7 @@ export async function reserveOwnedProxyRecovery(
   });
   if (!context.store.controlJournal) throw Error("Original proxy recovery journal missing");
   await context.store.controlJournal.retainProxyRecoveryIntent(context.authority, backupDigest);
-  context.assertForward();
+  await context.assertForward();
   return reserved;
 }
 export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
@@ -570,7 +570,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
     (value) => value.operationKey === slot.operationKey,
   );
   if (!child || (child.state === "reserved" && options.reservedContinuation)) {
-    context.assertForward();
+    await context.assertForward();
     const candidateDigest = assertOwnedDataTransitCandidate(context.authority, slot);
     if (!child && slot.phase === "proxy-restore")
       throw Error("Restore must reserve before filesystem writes");
@@ -585,7 +585,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
     if (reserved.continuation) {
       const reservedBody = child?.state === "reserved" ? child : slot;
       const exact = await bindControlChildPhase(context.authority, slot),
-        binding = lookupControlChildPhaseBinding(context.authority, slot);
+        binding = await lookupControlChildPhaseBinding(context.authority, slot);
       if (!binding) throw new DataOpsObservationPending(slot.operationKey);
       const bound: DataOpsChildAttempt = {
         ...reservedBody,
@@ -597,7 +597,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
       };
       await context.checkpointChild(bound);
       child = bound;
-      context.assertForward();
+      await context.assertForward();
       if (operation.kind === "transitousLock.approve")
         await retainCatalogActivationRecord(context, exact.execution);
       if (assertOwnedDataTransitCandidate(context.authority, slot) !== candidateDigest)
@@ -608,7 +608,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
         lease: ownedLease(context),
         evidence: publishedDataTransitCandidate(context.authority, slot),
       });
-      const reference = lookupControlChildPhaseAttempt(context.authority, slot);
+      const reference = await lookupControlChildPhaseAttempt(context.authority, slot);
       if (!reference?.leaseId) throw new DataOpsObservationPending(slot.operationKey);
       const attempted: DataOpsChildAttempt = {
         ...bound,
@@ -631,7 +631,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
       });
       child = attempted;
       await context.checkpoint({ publication: "unknown" });
-      consumeControlChildDispatch(issued.dispatchTicket);
+      await consumeControlChildDispatch(issued.dispatchTicket);
       try {
         const admitted = await opsClient().execute(operation, {
           operationKey: child.operationKey,
@@ -693,9 +693,9 @@ export async function cancelAndSettleOwnedDataOpsChildren(
   let pending = false;
   for (const slot of record.reservations) {
     let child = record.children.find((value) => value.operationKey === slot.operationKey);
-    let reference: ReturnType<typeof lookupControlChildPhaseAttempt>;
+    let reference: Awaited<ReturnType<typeof lookupControlChildPhaseAttempt>>;
     try {
-      reference = lookupControlChildPhaseAttempt(context.authority, slot);
+      reference = await lookupControlChildPhaseAttempt(context.authority, slot);
     } catch {
       pending = true;
       continue;
@@ -705,7 +705,7 @@ export async function cancelAndSettleOwnedDataOpsChildren(
     try {
       if (reference && (!child || child.state === "reserved" || child.state === "bound")) {
         // Recover only the original binding/grant. No issuance or dispatch ticket.
-        const binding = lookupControlChildPhaseBinding(context.authority, slot);
+        const binding = await lookupControlChildPhaseBinding(context.authority, slot);
         if (!binding || !reference.leaseId) throw new DataOpsObservationPending(slot.operationKey);
         if (!child) throw new DataOpsObservationPending(slot.operationKey);
         const bound = {

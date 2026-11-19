@@ -81,7 +81,7 @@ it.each(["old-directory", "build-record"])(
         serviceIds: ["osrm"],
       });
     cleanup.push(() => control.closeControlInstallation(installation));
-    const authority = control.restoreAdmittedControlExecution(
+    const authority = await control.restoreAdmittedControlExecution(
       installation,
       executionRefSchema.parse(state.execution),
     );
@@ -114,7 +114,7 @@ it.each(["old-directory", "build-record"])(
       outcome: "not_committed",
       reason: "failed",
     });
-    expect(() => leases.verifyLocalArtifactTargetRootRelease(authority)).toThrow();
+    await expect(leases.verifyLocalArtifactTargetRootRelease(authority)).rejects.toThrow();
     await control.retainControlEffectReceipt(authority, {
       outcome: "contained",
       publication: "not_started",
@@ -125,10 +125,10 @@ it.each(["old-directory", "build-record"])(
     });
     await leases.settleArtifactTargetLeaseChild(
       lease,
-      control.verifyControlEffectSettlement(installation, authority.execution),
+      await control.verifyControlEffectSettlement(installation, authority.execution),
     );
     await leases.releaseArtifactTargetLease(lease);
-    expect(() => leases.verifyLocalArtifactTargetRootRelease(authority)).not.toThrow();
+    await expect(leases.verifyLocalArtifactTargetRootRelease(authority)).resolves.toBeUndefined();
   },
   60000,
 );

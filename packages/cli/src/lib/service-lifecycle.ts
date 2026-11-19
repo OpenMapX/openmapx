@@ -19,7 +19,7 @@ export type LifecycleOwnershipRequest = {
 };
 export type ServiceLifecycleEffects = {
   withOwnership<T>(request: LifecycleOwnershipRequest, run: () => Promise<T>): Promise<T>;
-  assertForward(signal?: AbortSignal): void;
+  assertForward(signal?: AbortSignal): Promise<void>;
   validatePins(ids: readonly string[], signal?: AbortSignal): Promise<void>;
   pull(ids: readonly string[], signal?: AbortSignal): Promise<void>;
   prepare(options: {
@@ -34,7 +34,7 @@ export function prepareServiceLifecycle(
   effects: ServiceLifecycleEffects,
 ): Promise<ServicePreparationResult> {
   return effects.withOwnership(request, async () => {
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     return effects.prepare({
       coordinatorMode: request.coordinatorMode,
       signal: request.signal,
@@ -46,16 +46,16 @@ export function runServiceUpdate(
   effects: ServiceLifecycleEffects,
 ): Promise<{ changed: true; revisionId: string }> {
   return effects.withOwnership(request, async () => {
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     await effects.validatePins(request.serviceIds, request.signal);
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     await effects.pull(request.serviceIds, request.signal);
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     const prepared = await prepareServiceLifecycle(
       { ...request, coordinatorMode: "ensure-running" },
       effects,
     );
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     await effects.recreate(request.serviceIds, request.noDeps ?? false, request.signal);
     return { changed: true, revisionId: prepared.revisionId };
   });
@@ -224,11 +224,11 @@ export async function runCliServiceLifecycle(options: {
     await store.checkpoint(receipt.sequence, next, owned);
     receipt = next;
   };
-  const assertForward = (signal?: AbortSignal) => {
+  const assertForward = async (signal?: AbortSignal) => {
     signal?.throwIfAborted();
     if (!lease) throw Error("Lifecycle target lease unavailable");
-    assertControlExecutionForward(authority);
-    assertArtifactTargetLeaseForward(lease);
+    await assertControlExecutionForward(authority);
+    await assertArtifactTargetLeaseForward(lease);
   };
   const failureEvidence = (
     last: services.ServiceLifecycleReceipt,
@@ -305,7 +305,7 @@ export async function runCliServiceLifecycle(options: {
         services.withVerifiedLifecycleOwnership(
           { writer, lease: held, authority },
           async (owned) => {
-            assertForward(signal);
+            await assertForward(signal);
             try {
               return await run(owned);
             } catch (error) {
@@ -333,7 +333,7 @@ export async function runCliServiceLifecycle(options: {
    */
   const beforeDockerEffect = async (revisionId: string, conflict: string, signal?: AbortSignal) => {
     await withWriterStep(async () => assertConfigurationUnchanged(revisionId, conflict), signal);
-    assertForward(signal);
+    await assertForward(signal);
   };
   const committedRevisionId = () => {
     if (!receipt?.finalRevisionId) throw Error("Lifecycle generation is not committed");
@@ -349,7 +349,7 @@ export async function runCliServiceLifecycle(options: {
     assertForward,
     async withOwnership(inner, run) {
       if (owning) {
-        assertForward(inner.signal);
+        await assertForward(inner.signal);
         if (
           ops.canonicalJson(inner.execution) !== ops.canonicalJson(execution) ||
           inner.serviceIds.some((id) => !ids.includes(id))
@@ -562,7 +562,7 @@ export async function runCliServiceLifecycle(options: {
       }
       await control.settleArtifactTargetLeaseChild(
         held,
-        control.verifyControlEffectSettlement(installation, execution),
+        await control.verifyControlEffectSettlement(installation, execution),
       );
       await control.releaseArtifactTargetLease(held);
       lease = undefined;
@@ -614,7 +614,7 @@ export async function runCliServiceLifecycle(options: {
       });
       await control.settleArtifactTargetLeaseChild(
         lease,
-        control.verifyControlEffectSettlement(installation, execution),
+        await control.verifyControlEffectSettlement(installation, execution),
       );
       await control.releaseArtifactTargetLease(lease);
       lease = undefined;

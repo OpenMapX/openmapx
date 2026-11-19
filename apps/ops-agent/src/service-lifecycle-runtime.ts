@@ -43,7 +43,7 @@ export function installServiceLifecycleRuntime(
     const plan = readFixedServiceLifecyclePlan(authority);
     const child = await bindControlChildPhase(authority, { phase: "lifecycle", ordinal: 0 });
     const args = fixedCliArguments(operation);
-    retainFixedCliSpawnIntent(authority, {
+    await retainFixedCliSpawnIntent(authority, {
       childKey: plan.delegationId,
       execution: child.execution,
       operation,
@@ -72,7 +72,7 @@ export function installServiceLifecycleRuntime(
         }),
       { execution: child.execution, childKey: plan.delegationId },
     );
-    consumeControlChildDispatch(issued.dispatchTicket);
+    await consumeControlChildDispatch(issued.dispatchTicket);
     let failure: unknown;
     try {
       await options.runFixedCli(args, {
@@ -89,7 +89,7 @@ export function installServiceLifecycleRuntime(
       child: fixedChild,
     });
     try {
-      const childAuthority = restoreAdmittedControlExecution(installation, child.execution);
+      const childAuthority = await restoreAdmittedControlExecution(installation, child.execution);
       const receipt = await services.withServiceLifecycleReceiptAuthority(childAuthority, () =>
         services.readServiceLifecycleReceipt({
           dataRoot: join(options.infraDir, "data"),
@@ -116,7 +116,7 @@ export function installServiceLifecycleRuntime(
           receipt.phase === "failed" ? "runtime" : "recovery_required",
           { serviceLifecycle: evidence },
         );
-      verifyControlEffectSettlement(installation, child.execution);
+      await verifyControlEffectSettlement(installation, child.execution);
       const settled = inspectLocalLeaseChildSettlement(lease, child.execution);
       if (settled?.outcome !== "committed" || settled.publication !== "committed")
         throw new OpsExecutionFailure("recovery_required", { serviceLifecycle: evidence });

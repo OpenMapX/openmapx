@@ -125,7 +125,7 @@ export function installCatalogApprovalRuntime(
       !operation.acknowledgeLicenseChanges
     )
       throw Error("Original reviewed activation borrower required");
-    assertControlExecutionForward(authority);
+    await assertControlExecutionForward(authority);
     const own = authority,
       installation = own.installation.installation;
     if (
@@ -188,7 +188,10 @@ export function installCatalogApprovalRuntime(
       canonicalJson(own.operation) !== canonicalJson(operation)
     )
       throw Error("Approval differs from its actual parent admission");
-    const promoted = restoreAdmittedControlExecution(installation, activation.promotion.execution),
+    const promoted = await restoreAdmittedControlExecution(
+        installation,
+        activation.promotion.execution,
+      ),
       promotion = promoted;
     if (
       promotion.kind !== "motis.primary.promote" ||
@@ -205,19 +208,22 @@ export function installCatalogApprovalRuntime(
       controlDigest(grant.owner) !== controlDigest(lease.owner)
     )
       throw Error("Original promotion grant required");
-    verifyRetainedArtifactTargetSettlement(
+    await verifyRetainedArtifactTargetSettlement(
       installation,
       activation.promotion.leaseChild,
       activation.promotion.execution,
     );
-    const settlement = verifyControlEffectSettlement(installation, activation.promotion.execution);
+    const settlement = await verifyControlEffectSettlement(
+      installation,
+      activation.promotion.execution,
+    );
     if (
       settlement.outcome !== "committed" ||
       settlement.publication !== "committed" ||
       settlement.terminalReceiptDigest !== activation.promotion.terminalReceiptDigest
     )
       throw Error("Original successful promotion settlement required");
-    const effect = executionReceipt(promoted);
+    const effect = await executionReceipt(promoted);
     if (
       effect.kind !== "ops-result" ||
       parseOpsResult("motis.primary.promote", effect.result).activeRunId !== passed.epoch

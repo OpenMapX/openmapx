@@ -187,7 +187,7 @@ it("lets a fixed CLI child without a lease follow its parent's lifecycle", async
   });
   const id = randomUUID();
   const args = c.fixedCliArguments(operation);
-  c.retainFixedCliSpawnIntent(authority, {
+  await c.retainFixedCliSpawnIntent(authority, {
     childKey: id,
     execution: cli,
     operation,
@@ -202,7 +202,7 @@ it("lets a fixed CLI child without a lease follow its parent's lifecycle", async
   });
   expect(c.controlIdentity(fixed)).toBe(id);
   const intent = c.readFixedCliSpawnIntent(fixed, cli, args);
-  const parent = c.verifiedRetainedControlParent(fixed, intent.parent);
+  const parent = await c.verifiedRetainedControlParent(fixed, intent.parent);
   const cliAuthority = await c.retainAdmittedControlExecution(fixed, {
     requestedDeadlineAt: cli.deadlineAt,
     execution: cli,
@@ -217,7 +217,9 @@ it("lets a fixed CLI child without a lease follow its parent's lifecycle", async
   const remoteParent = () => c.inspectRemoteDelegation(dm, next, "ops-agent").parent;
   expect(remoteParent()).toMatchObject({ operationKey: cli.operationKey });
   await c.cancelControlExecution(authority);
-  expect(() => c.assertControlExecutionForward(cliAuthority)).toThrow(/ancestor|observation/);
+  await expect(c.assertControlExecutionForward(cliAuthority)).rejects.toThrow(
+    /ancestor|observation/,
+  );
   // An exact retry of the admitted child stays readable after the cancellation.
   expect(remoteParent()).toMatchObject({ operationKey: cli.operationKey });
   c.closeControlInstallation(fixed);

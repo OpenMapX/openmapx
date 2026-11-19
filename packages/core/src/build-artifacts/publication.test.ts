@@ -180,7 +180,7 @@ it("rejects undeclared staged files before beginning publication", async () => {
     reason: "invalid",
   });
   expect(readFileSync(join(f.dataRoot, "osrm-graph/old"), "utf8")).toBe("old graph");
-  expect(control.executionEffectStarted(f.authority)).toBe(false);
+  expect(await control.executionEffectStarted(f.authority)).toBe(false);
 }, 60000);
 
 it("restores directories and old metadata when build-record publication fails", async () => {

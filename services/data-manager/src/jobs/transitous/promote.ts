@@ -224,7 +224,7 @@ async function stopBeforeSwap(ctx: JobContext, prepare?: () => Promise<void>): P
     const failure = (error as Error).message;
     if (primary?.state !== "stopped" || !primary.changed || live === null) throw error;
     preserveTransitPending(ctx, error);
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     try {
       if (
         dataIdentity(ctx.motisDataDir) !== live ||
@@ -269,25 +269,25 @@ async function restartPrimary(ctx: JobContext, recovery = false): Promise<string
  * operator can then manually rescue via `mv data/motis/live.previous-broken
  * data/motis/live`.
  */
-function tryRollback(
+async function tryRollback(
   ctx: JobContext,
   currentDir: string,
   stagingDir: string,
   previousDir: string,
-): { ok: true } | { ok: false; reason: string } {
+): Promise<{ ok: true } | { ok: false; reason: string }> {
   try {
     if (!existsSync(previousDir)) {
       return { ok: false, reason: `previous dir ${previousDir} missing; cannot rollback` };
     }
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     if (existsSync(stagingDir)) {
       // Staging was recreated empty after the swap; remove the empty shell
       // so we can move current → staging cleanly.
       rmSync(stagingDir, { recursive: true, force: true });
     }
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     if (existsSync(currentDir)) renameSync(currentDir, stagingDir);
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     renameSync(previousDir, currentDir);
     return { ok: true };
   } catch (error) {
@@ -310,18 +310,18 @@ async function promoteTwoSlot(
     throw new Error("MOTIS slot aliases do not identify distinct active/inactive slots");
   }
   const rollback = async (): Promise<string | null> => {
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     await publishTransitChange(ctx, () => flipMotisSlotAliases(layout, previous));
     return restartPrimary(ctx, true);
   };
 
   await stopBeforeSwap(ctx);
-  assertTransitForward(ctx);
+  await assertTransitForward(ctx);
   await publishTransitChange(ctx, () => flipMotisSlotAliases(layout, candidate));
   const restartStart = Date.now();
   const restartError = await restartPrimary(ctx);
   if (restartError) {
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     const rollbackError = await rollback();
     return {
       stage: "promote",
@@ -342,7 +342,7 @@ async function promoteTwoSlot(
     ? null
     : await runFunctionalProbes(PRIMARY_URL, manifest, Date.now() + SMOKE_BUDGET_MS);
   if (healthError || !primaryReport?.ok) {
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     const rollbackError = await rollback();
     return {
       stage: "promote",
@@ -362,7 +362,7 @@ async function promoteTwoSlot(
     await commitProxyTransaction(ctx);
   } catch (error) {
     preserveTransitPending(ctx, error);
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     const rollbackError = await rollback();
     return {
       stage: "promote",
@@ -512,7 +512,7 @@ export const run: StageFn = async (ctx) => {
     let firstRenameDone = false;
     try {
       if (existsSync(currentDir)) {
-        assertTransitForward(ctx);
+        await assertTransitForward(ctx);
         await publishTransitChange(ctx, () => renameSync(currentDir, previousDir));
         firstRenameDone = true;
       }
@@ -545,7 +545,7 @@ export const run: StageFn = async (ctx) => {
       // disappeared between the pre-flight check and the swap.
     }
     try {
-      assertTransitForward(ctx);
+      await assertTransitForward(ctx);
       await publishTransitChange(ctx, () => renameSync(stagingDir, currentDir));
     } catch (error) {
       preserveTransitPending(ctx, error);
@@ -570,7 +570,7 @@ export const run: StageFn = async (ctx) => {
       } satisfies StageResult;
     }
 
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     // Recreate an empty staging dir for the next cycle.
     try {
       mkdirSync(stagingDir, { recursive: true, mode: stagingMode });
@@ -587,7 +587,7 @@ export const run: StageFn = async (ctx) => {
     if (restartErr) {
       // Rollback rename and try to restart again so we at least restore the
       // previous live state.
-      assertTransitForward(ctx);
+      await assertTransitForward(ctx);
       const rb = await publishTransitChange(ctx, () =>
         tryRollback(ctx, currentDir, stagingDir, previousDir),
       );
@@ -629,7 +629,7 @@ export const run: StageFn = async (ctx) => {
     const restartDurationMs = Date.now() - restartStart;
     if (healthErr) {
       // Roll back rename and restart again — same flow as restart failure.
-      assertTransitForward(ctx);
+      await assertTransitForward(ctx);
       const rb = await publishTransitChange(ctx, () =>
         tryRollback(ctx, currentDir, stagingDir, previousDir),
       );
@@ -660,7 +660,7 @@ export const run: StageFn = async (ctx) => {
       Date.now() + SMOKE_BUDGET_MS,
     );
     if (!primaryReport.ok) {
-      assertTransitForward(ctx);
+      await assertTransitForward(ctx);
       const rb = await publishTransitChange(ctx, () =>
         tryRollback(ctx, currentDir, stagingDir, previousDir),
       );
@@ -689,7 +689,7 @@ export const run: StageFn = async (ctx) => {
       await commitProxyTransaction(ctx);
     } catch (error) {
       preserveTransitPending(ctx, error);
-      assertTransitForward(ctx);
+      await assertTransitForward(ctx);
       const rb = await publishTransitChange(ctx, () =>
         tryRollback(ctx, currentDir, stagingDir, previousDir),
       );

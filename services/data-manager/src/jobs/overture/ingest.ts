@@ -111,7 +111,7 @@ export async function activateOvertureStagingSchema(
     `SELECT to_regclass($1) IS NOT NULL AS exists`,
     [`${schema}.osm_pois`],
   );
-  assertDataPublication();
+  await assertDataPublication();
   await publishDataChange(() =>
     cancellableTransaction(sql, async (tx) => {
       if (existingOsmSnapshot?.exists) {

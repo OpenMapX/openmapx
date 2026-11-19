@@ -379,7 +379,7 @@ export async function generateTransitousApiKeys(
       throw Error("Catalog pins changed; inspect the new pin before retrying");
     if (existingSnapshot(outputPath)?.identity !== before?.identity)
       throw Error("Credential file changed; review before retrying");
-    control.assertArtifactTargetLeaseForward(lease);
+    await control.assertArtifactTargetLeaseForward(lease);
     await control.beginControlEffect(authority);
     began = true;
     replacement = preparePlatformFileReplacement(outputPath, contents, {
@@ -397,7 +397,7 @@ export async function generateTransitousApiKeys(
     });
     await control.settleArtifactTargetLeaseChild(
       lease,
-      control.verifyControlEffectSettlement(installation, execution),
+      await control.verifyControlEffectSettlement(installation, execution),
     );
     await control.releaseArtifactTargetLease(lease);
     lease = undefined;
@@ -420,7 +420,7 @@ export async function generateTransitousApiKeys(
       if (lease) {
         await control.settleArtifactTargetLeaseChild(
           lease,
-          control.verifyControlEffectSettlement(installation, authority.execution),
+          await control.verifyControlEffectSettlement(installation, authority.execution),
         );
         await control.releaseArtifactTargetLease(lease);
         lease = undefined;

@@ -213,8 +213,8 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
         if (!workerContext?.artifactLease || !workerContext.controlAuthority)
           throw Error("Missing real adopted authority");
         const { artifactLease, controlAuthority } = workerContext;
-        expect(() => control.assertArtifactTargetLeaseForward(artifactLease)).toThrow();
-        expect(() => control.assertControlExecutionForward(controlAuthority)).toThrow();
+        await expect(control.assertArtifactTargetLeaseForward(artifactLease)).rejects.toThrow();
+        await expect(control.assertControlExecutionForward(controlAuthority)).rejects.toThrow();
         await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
         if (scenario === "canceled")
           expect(journal.records()[0]).toMatchObject({ state: "termination_pending" });
@@ -259,7 +259,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
       });
       await control.settleArtifactTargetLeaseChild(
         lease,
-        control.verifyControlEffectSettlement(dm, owner),
+        await control.verifyControlEffectSettlement(dm, owner),
       );
       await control.releaseArtifactTargetLease(lease);
       const releasedRestart = buildOpsAgentServer({

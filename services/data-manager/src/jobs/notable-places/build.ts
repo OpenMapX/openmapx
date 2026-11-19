@@ -330,7 +330,7 @@ export async function buildNotablePlaces(
       const live = await opts.sql.unsafe<{ exists: boolean }[]>(
         `SELECT to_regnamespace('notable_places') IS NOT NULL AS exists`,
       );
-      assertDataPublication();
+      await assertDataPublication();
       await publishDataChange(() =>
         cancellableTransaction(opts.sql, async (transaction) => {
           await transaction.unsafe(

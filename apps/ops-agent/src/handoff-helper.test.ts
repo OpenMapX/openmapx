@@ -170,7 +170,7 @@ async function launched() {
       sequence: 0,
       state: "prepared",
     }),
-    fenceDelegated: () => true,
+    fenceDelegated: async () => true,
     settleFence: vi.fn(),
     runStep: async () => ({ outcome: "committed", appliedRevisionId: revisionId, result: {} }),
     settleHandoff: async () => {},

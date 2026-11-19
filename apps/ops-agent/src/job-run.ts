@@ -158,10 +158,10 @@ export function createJobRunner(options: {
       controlAuthority: table.authorities.get(job.operationId),
       ...(job.operation.kind === "data.update"
         ? {
-            ownDataFinalizationLease(lease: ArtifactTargetLease) {
+            async ownDataFinalizationLease(lease: ArtifactTargetLease) {
               if (table.leases.has(job.operationId))
                 throw Error("Original Full Update lease already retained");
-              assertArtifactTargetLeaseExecution(lease, executionFor(job));
+              await assertArtifactTargetLeaseExecution(lease, executionFor(job));
               table.leases.set(job.operationId, lease);
             },
             async checkpointDataWorkflow(dataWorkflow: DataWorkflowReceipt) {
@@ -186,7 +186,7 @@ export function createJobRunner(options: {
             async markFeedProxyReloadAttempted() {
               const authority = table.authorities.get(job.operationId);
               if (!authority) throw Error("Original validation authority missing");
-              markFeedProxyReloadAttempted(authority);
+              await markFeedProxyReloadAttempted(authority);
             },
           }
         : {}),
@@ -379,7 +379,7 @@ export function createJobRunner(options: {
         const authority = table.authorities.get(job.operationId);
         if (authority) {
           const lease = table.leases.get(job.operationId);
-          if (lease) assertArtifactTargetLeaseForward(lease);
+          if (lease) await assertArtifactTargetLeaseForward(lease);
           if (options.literalProductionRuntime) {
             try {
               await assertManagedCliConfigurationPreflight(
@@ -396,7 +396,7 @@ export function createJobRunner(options: {
               throw error;
             }
           }
-          beforeEffect(job, authority, claim);
+          await beforeEffect(job, authority, claim);
           if (beginsEffectAtDispatch(job.operation)) await beginControlEffect(authority);
         }
         try {

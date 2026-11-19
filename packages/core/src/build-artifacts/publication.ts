@@ -585,7 +585,7 @@ export async function publishValidatedBuild(
         return { outcome: "not_committed", reason: "failed", cleanupFailed: false };
       }
       input.signal?.throwIfAborted();
-      assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+      await assertArtifactTargetLeaseExecution(input.lease, owner.execution);
       if (controlDigest(snapshot(root, serviceId)) !== input.expectedFingerprint)
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       let bundle = input.bundle,
@@ -651,7 +651,7 @@ export async function publishValidatedBuild(
       )
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       input.signal?.throwIfAborted();
-      assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+      await assertArtifactTargetLeaseExecution(input.lease, owner.execution);
       if (
         manifest.dirs.some(
           (path) => directoryMetadata(source!.dir, path) !== sourceMetadata.get(path),
@@ -704,11 +704,12 @@ export async function publishValidatedBuild(
         cleanupFailed: false,
       };
       writeJournal(owner, journal);
-      if (!executionEffectStarted(input.authority)) await beginControlEffect(input.authority);
+      if (!(await executionEffectStarted(input.authority)))
+        await beginControlEffect(input.authority);
       try {
         for (const entry of journal.directories) {
           input.signal?.throwIfAborted();
-          assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+          await assertArtifactTargetLeaseExecution(input.lease, owner.execution);
           if (journal.motisLayout) assertMotisPublicationAliases(root, journal.motisLayout);
           if (entry.old) moveDirectory(root, targetPath(entry), backups, entry.backup, entry.old);
           moveDirectory(source.dir, entry.path, root, targetPath(entry), entry.next);
@@ -831,7 +832,9 @@ export function inspectArtifactPublication(authority: ExecutionHandle) {
 
 /** Remove only the empty owned rollback directory after proved restoration and
  * physical release. This permits a new deliberate import of the same stage. */
-export function cleanupRestoredArtifactPublication(authority: ExecutionHandle): void {
+export async function cleanupRestoredArtifactPublication(
+  authority: ExecutionHandle,
+): Promise<void> {
   const state = authority;
   if (state.kind !== "artifactTransfer.import") throw Error("Original import authority required");
   const journal = readJournal({ ...state, origin: state.origin });
@@ -841,7 +844,7 @@ export function cleanupRestoredArtifactPublication(authority: ExecutionHandle): 
     journal.executionDigest !== controlDigest(state.execution)
   )
     throw Error("Original restored publication required");
-  verifyLocalArtifactTargetRootRelease(authority);
+  await verifyLocalArtifactTargetRootRelease(authority);
   const root = new AnchoredDirectory(state.installation.dataRoot);
   let source: ReturnType<typeof directoryAt> | undefined, backups: AnchoredDirectory | undefined;
   try {
@@ -882,8 +885,11 @@ export async function inspectSettledArtifactImport(
   const journal = readJournal({ ...owner, origin: owner.origin });
   if (!journal || !["committed", "restored"].includes(journal.phase))
     throw Error("Original settled import required");
-  verifyLocalArtifactTargetRootRelease(authority);
-  const effect = verifyControlEffectSettlement(owner.installation.installation, owner.execution);
+  await verifyLocalArtifactTargetRootRelease(authority);
+  const effect = await verifyControlEffectSettlement(
+    owner.installation.installation,
+    owner.execution,
+  );
   if (
     journal.phase === "committed"
       ? effect.outcome !== "committed" || effect.publication !== "committed"
@@ -918,18 +924,21 @@ export async function inspectSettledArtifactImport(
 
 /** A transfer claim may be released only after this exact import never began
  * publication and the original whole target tree is physically released. */
-export function inspectUnstartedArtifactImport(authority: ExecutionHandle) {
+export async function inspectUnstartedArtifactImport(authority: ExecutionHandle) {
   const owner = authority;
   if (owner.kind !== "artifactTransfer.import" || readJournal({ ...owner, origin: owner.origin }))
     throw Error("Unstarted original import required");
-  if (executionEffectStarted(authority)) throw Error("Import publication began");
-  const effect = verifyControlEffectSettlement(owner.installation.installation, owner.execution);
+  if (await executionEffectStarted(authority)) throw Error("Import publication began");
+  const effect = await verifyControlEffectSettlement(
+    owner.installation.installation,
+    owner.execution,
+  );
   if (
     !["failed_without_effect", "contained"].includes(effect.outcome) ||
     effect.publication !== "not_started"
   )
     throw Error("Unstarted import containment required");
-  verifyLocalArtifactTargetRootRelease(authority);
+  await verifyLocalArtifactTargetRootRelease(authority);
   return originalArtifactImportOperation(authority);
 }
 
@@ -939,15 +948,14 @@ export async function retainUnstartedArtifactImport(authority: ExecutionHandle) 
   const owner = authority;
   if (owner.kind !== "artifactTransfer.import" || readJournal({ ...owner, origin: owner.origin }))
     throw Error("Unstarted import required");
-  if (executionEffectStarted(authority)) throw Error("Import publication began");
-  if (
-    (await cancelControlExecution(authority)).length ||
-    owner.reservations.some((slot) => {
-      const source = inspectControlChildPublication(authority, slot);
-      return source.binding !== null || source.publication.state !== "unissued";
-    })
-  )
+  if (await executionEffectStarted(authority)) throw Error("Import publication began");
+  if ((await cancelControlExecution(authority)).length)
     throw Error("Original import child remains attempted");
+  for (const slot of owner.reservations) {
+    const source = await inspectControlChildPublication(authority, slot);
+    if (source.binding !== null || source.publication.state !== "unissued")
+      throw Error("Original import child remains attempted");
+  }
   await retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
@@ -989,12 +997,16 @@ export function originalArtifactValidationOperation(authority: ExecutionHandle) 
  * store producer first proves its extraction is contained and cleaned. Match
  * its actual recorded effect result before upgrading only the retained knowledge;
  * the original public status tuple, deadline and timestamp remain unchanged. */
-export function assertKnownArtifactStageReceipt(authority: ExecutionHandle) {
+export async function assertKnownArtifactStageReceipt(authority: ExecutionHandle) {
   const owner = authority;
   if (!["artifactTransfer.import", "artifactTransfer.validate"].includes(owner.kind))
     throw Error("Original prepared purpose required");
-  const effect = verifyControlEffectSettlement(owner.installation.installation, owner.execution);
+  const effect = await verifyControlEffectSettlement(
+    owner.installation.installation,
+    owner.execution,
+  );
   if (effect.outcome === "unknown" || effect.publication === "unknown")
     throw Error("Prepared purpose remains unknown");
-  if (owner.kind === "artifactTransfer.import") verifyLocalArtifactTargetRootRelease(authority);
+  if (owner.kind === "artifactTransfer.import")
+    await verifyLocalArtifactTargetRootRelease(authority);
 }

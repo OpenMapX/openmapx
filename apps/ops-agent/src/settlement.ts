@@ -79,7 +79,7 @@ interface KindSettlement {
   /** The fixed runtime begins its effect itself, immediately before its first host call. */
   beginsOwnEffect?: (operation: OpsOperation) => boolean;
   /** Recorded under the root's authority before the effect begins. */
-  beforeEffect?: (job: JobRecord, authority: ExecutionHandle, claim: Claim) => void;
+  beforeEffect?: (job: JobRecord, authority: ExecutionHandle, claim: Claim) => Promise<void>;
   /** A failed run records that it was refused before any effect, unless one began. */
   refusesBeforeEffectOnError?: true;
   /** Completes with its validated result after a cancel or timeout: its host call had settled. */
@@ -197,11 +197,11 @@ const KIND_SETTLEMENT: Partial<Record<OpsOperationKind, KindSettlement>> = {
   },
   "feedProxy.validateAndReload": {
     completesAfterCancel: onlyFor("data-manager"),
-    beforeEffect: (job, authority, claim) => {
+    beforeEffect: async (job, authority, claim) => {
       if (job.operation.kind !== "feedProxy.validateAndReload") return;
       const digest = claim.capability.values.candidateDigest;
       if (typeof digest !== "string") throw Error("Original candidate claim missing");
-      reserveFeedProxyValidation(authority, job.operation.candidateId, digest);
+      await reserveFeedProxyValidation(authority, job.operation.candidateId, digest);
     },
     verdict: ({ state, authority }) => {
       if (state !== "failed") return undefined;
@@ -262,14 +262,17 @@ const KIND_SETTLEMENT: Partial<Record<OpsOperationKind, KindSettlement>> = {
 
 /** A trusted apply that did not commit has its writer's own non-commit record. */
 const TRUSTED_APPLY: KindSettlement = {
-  verdict: ({ state, updates, authority, deps }) => {
+  verdict: async ({ state, updates, authority, deps }) => {
     if (
       state !== "succeeded" ||
       !updates.result ||
       (updates.result as { outcome?: string }).outcome !== "not_committed"
     )
       return undefined;
-    const actual = inspectConfigurationGenerationNonCommit(deps.installation, authority.execution);
+    const actual = await inspectConfigurationGenerationNonCommit(
+      deps.installation,
+      authority.execution,
+    );
     if (canonicalJson(actual.result) !== canonicalJson(updates.result))
       throw Error("Original writer noncommit result changed");
     return { type: "own" };
@@ -287,8 +290,12 @@ function kindSettlement(operation: OpsOperation): KindSettlement | undefined {
 export function beginsEffectAtDispatch(operation: OpsOperation): boolean {
   return !kindSettlement(operation)?.beginsOwnEffect?.(operation);
 }
-export function beforeEffect(job: JobRecord, authority: ExecutionHandle, claim: Claim): void {
-  kindSettlement(job.operation)?.beforeEffect?.(job, authority, claim);
+export async function beforeEffect(
+  job: JobRecord,
+  authority: ExecutionHandle,
+  claim: Claim,
+): Promise<void> {
+  await kindSettlement(job.operation)?.beforeEffect?.(job, authority, claim);
 }
 export function refusesBeforeEffectOnError(operation: OpsOperation): boolean {
   return kindSettlement(operation)?.refusesBeforeEffectOnError === true;
@@ -349,7 +356,7 @@ export function createTerminalSettlement(options: {
       let unstartedConfiguration = false;
       if (state === "failed") {
         try {
-          inspectConfigurationPreEffectRefusal(authority);
+          await inspectConfigurationPreEffectRefusal(authority);
           unstartedConfiguration = true;
         } catch {
           /* Only the actual fixed pre-effect source qualifies. */
@@ -378,7 +385,7 @@ export function createTerminalSettlement(options: {
       if (lease && !entry?.keepsRootLease) {
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(resolved.installation, authority.execution),
+          await verifyControlEffectSettlement(resolved.installation, authority.execution),
         );
         if (lease.mode === "owner" && (committed || reportedFailure)) {
           await releaseArtifactTargetLease(lease);
@@ -409,7 +416,7 @@ export function createTerminalSettlement(options: {
           ? {
               async beforeWrite() {
                 await releaseArtifactTargetLease(lease);
-                verifyLocalArtifactTargetRootRelease(authority);
+                await verifyLocalArtifactTargetRootRelease(authority);
                 if (entry?.reconcilesAfterRelease)
                   await resolved.artifactTransfers?.reconcileReleasedPreparedImport(authority);
               },

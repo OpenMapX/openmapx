@@ -47,7 +47,7 @@ export interface MaintenanceAdapters {
   /** Records the data-manager fence child in the lease, then asks data-manager to prepare. */
   prepareFence(file: MaintenanceFile, signal: AbortSignal): Promise<DataConfigurationFenceReceipt>;
   /** Whether the fence child was recorded in the lease, so data-manager may hold a fence. */
-  fenceDelegated(file: MaintenanceFile): boolean;
+  fenceDelegated(file: MaintenanceFile): Promise<boolean>;
   settleFence(
     file: MaintenanceFile,
     outcome: MaintenanceFenceOutcome,
@@ -601,7 +601,7 @@ export class ConfigurationMaintenance {
       if (file.record.state === "settled") continue;
       const next = await this.change(file.record.maintenanceId, {
         type: "startup",
-        fenceDelegated: this.adapters.fenceDelegated(file),
+        fenceDelegated: await this.adapters.fenceDelegated(file),
       });
       await this.run(file.record.maintenanceId, next.effects, signal).catch(() => undefined);
     }

@@ -48,7 +48,7 @@ export function createImportRecovery(options: {
     if (prior) return prior;
     const pending = (async () => {
       try {
-        const authority = restoreAdmittedControlExecution(installation, executionFor(job)),
+        const authority = await restoreAdmittedControlExecution(installation, executionFor(job)),
           lease = restoreArtifactTargetLeaseForSettlement(authority);
         table.authorities.set(job.operationId, authority);
         table.leases.set(job.operationId, lease);
@@ -75,7 +75,7 @@ export function createImportRecovery(options: {
           });
           await settleArtifactTargetLeaseChild(
             lease,
-            verifyControlEffectSettlement(installation, authority.execution),
+            await verifyControlEffectSettlement(installation, authority.execution),
           );
           await releaseArtifactTargetLease(lease);
           table.leases.delete(job.operationId);
@@ -123,7 +123,7 @@ export function createImportRecovery(options: {
       if (!found) return null;
     }
     try {
-      const authority = restoreAdmittedControlExecution(installation, executionFor(job));
+      const authority = await restoreAdmittedControlExecution(installation, executionFor(job));
       if (
         job.operation.kind === "artifactTransfer.validate" &&
         found.claim.use === "validate-build"
@@ -161,7 +161,7 @@ export function createImportRecovery(options: {
       if (job.operation.kind !== "artifactTransfer.import" || job.state === "succeeded") return;
       let lease: ReturnType<typeof restoreArtifactTargetLeaseForSettlement> | undefined;
       try {
-        const authority = restoreAdmittedControlExecution(installation, executionFor(job));
+        const authority = await restoreAdmittedControlExecution(installation, executionFor(job));
         lease = restoreArtifactTargetLeaseForSettlement(authority);
         await cancelControlExecution(authority);
         await cancelArtifactTargetLease(lease);
@@ -181,7 +181,7 @@ export function createImportRecovery(options: {
         return;
       try {
         await artifactTransfers.reconcileReleasedPreparedImport(
-          restoreAdmittedControlExecution(installation, executionFor(job)),
+          await restoreAdmittedControlExecution(installation, executionFor(job)),
         );
       } catch {
         /* No conclusive nonissuance/root release; keep claim pinned. */

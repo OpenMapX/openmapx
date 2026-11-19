@@ -139,7 +139,7 @@ try {
       const record = journal.records()[0];
       if (!record?.operationFingerprint || !record.deadlineAt)
         throw Error("Missing original admission");
-      const authority = restoreAdmittedControlExecution(installation, {
+      const authority = await restoreAdmittedControlExecution(installation, {
         executor: "ops-agent",
         principal: "data-manager",
         executionId: record.operationId,
@@ -150,7 +150,7 @@ try {
       });
       let forward = true;
       try {
-        assertControlExecutionForward(authority);
+        await assertControlExecutionForward(authority);
       } catch {
         forward = false;
       }

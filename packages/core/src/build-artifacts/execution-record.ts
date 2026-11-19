@@ -111,32 +111,32 @@ function handleOf(state: InstallationState, admission: ExecutionAdmission): Exec
   });
 }
 /** The handle's current row; a row whose admission changed is refused. */
-function rowOf(handle: ExecutionHandle): ExecutionRow {
+async function rowOf(handle: ExecutionHandle): Promise<ExecutionRow> {
   handle.installation.privateRoot.check();
-  const row = handle.installation.rows.read(handle.execution.operationKey);
+  const row = await handle.installation.rows.read(handle.execution.operationKey);
   if (!row) throw missingRow();
   if (controlDigest(row.admission) !== handle.receiptDigest)
     throw Error("Durable execution authority changed");
   return row;
 }
-function progressOf(handle: ExecutionHandle): ExecutionProgress {
-  return rowOf(handle).progress;
+async function progressOf(handle: ExecutionHandle): Promise<ExecutionProgress> {
+  return (await rowOf(handle)).progress;
 }
 /** Applies `change` to the handle's progress and saves it before resolving. */
-function updateProgress<T>(
+async function updateProgress<T>(
   handle: ExecutionHandle,
   change: (progress: ExecutionProgress) => T,
 ): Promise<T> {
-  rowOf(handle);
+  await rowOf(handle);
   return handle.installation.rows.update(handle.execution.operationKey, change);
 }
 
 /** The origin an execution recorded at admission. */
-export function retainedExecutionOrigin(
+export async function retainedExecutionOrigin(
   state: InstallationState,
   execution: ExecutionRef,
-): ControlExecutionOrigin {
-  const row = state.rows.read(execution.operationKey);
+): Promise<ControlExecutionOrigin> {
+  const row = await state.rows.read(execution.operationKey);
   if (!row) throw missingRow();
   if (controlDigest(execution) !== controlDigest(row.admission.execution))
     throw Error("Execution origin identity mismatch");
@@ -326,7 +326,7 @@ export async function retainAdmittedControlExecution(
     plan,
     reservations,
   };
-  const existing = state.rows.read(execution.operationKey);
+  const existing = await state.rows.read(execution.operationKey);
   if (existing) {
     const { origin: _origin, ...retained } = existing.admission;
     if (canonicalJson(retained) !== canonicalJson(requested))
@@ -665,12 +665,12 @@ export async function retainConfigurationGenerationNonCommit(
   });
 }
 /** Actual private source, not a caller outcome flag. */
-export function inspectConfigurationGenerationNonCommit(
+export async function inspectConfigurationGenerationNonCommit(
   installation: ControlInstallation,
   execution: ExecutionRef,
 ) {
-  const handle = restoreAdmittedControlExecution(installation, execution),
-    effect = settlementOf(rowOf(handle));
+  const handle = await restoreAdmittedControlExecution(installation, execution),
+    effect = settlementOf(await rowOf(handle));
   if (
     !effect ||
     effect.receipt.kind !== "configuration-generation-not-committed" ||
@@ -681,26 +681,26 @@ export function inspectConfigurationGenerationNonCommit(
   return effect.receipt;
 }
 /** The receipt the execution's own settlement recorded. */
-export function executionReceipt(handle: ExecutionHandle): EffectReceipt {
-  const settlement = settlementOf(rowOf(handle));
+export async function executionReceipt(handle: ExecutionHandle): Promise<EffectReceipt> {
+  const settlement = settlementOf(await rowOf(handle));
   if (!settlement) throw Error("Execution is not settled");
   return settlement.receipt;
 }
 /** Whether the execution recorded its own settlement. */
-export function executionSettled(handle: ExecutionHandle): boolean {
-  return progressOf(handle).settlement !== null;
+export async function executionSettled(handle: ExecutionHandle): Promise<boolean> {
+  return (await progressOf(handle)).settlement !== null;
 }
 /** Whether the execution recorded the start of its effects. */
-export function executionEffectStarted(handle: ExecutionHandle): boolean {
-  return progressOf(handle).effectStartedAt !== null;
+export async function executionEffectStarted(handle: ExecutionHandle): Promise<boolean> {
+  return (await progressOf(handle)).effectStartedAt !== null;
 }
 /** Records the start of effects, before the first one; never twice, never after cancellation. */
 export async function beginControlEffect(handle: ExecutionHandle): Promise<void> {
-  assertControlExecutionForward(handle);
+  await assertControlExecutionForward(handle);
   await updateProgress(handle, (progress) => {
     if (progress.settlement) throw Error("Settled execution cannot restart effects");
     if (progress.effectStartedAt !== null) throw Error("Execution effects already started");
-    assertForward(handle, progress);
+    assertOwnForward(handle, progress);
     progress.effectStartedAt = Date.now();
   });
 }
@@ -732,7 +732,7 @@ function anyChildAttempted(progress: ExecutionProgress): boolean {
  * and every reserved child remains unissued and unbound. */
 export async function retainConfigurationPreEffectRefusal(handle: ExecutionHandle): Promise<void> {
   assertConfigurationPreEffectSource(handle);
-  if ((await cancelControlExecution(handle)).length || anyChildAttempted(progressOf(handle)))
+  if ((await cancelControlExecution(handle)).length || anyChildAttempted(await progressOf(handle)))
     throw Error("Issued or bound managed configuration must remain fenced");
   await retainControlEffectReceipt(handle, {
     outcome: "failed_without_effect",
@@ -742,9 +742,9 @@ export async function retainConfigurationPreEffectRefusal(handle: ExecutionHandl
 }
 /** The transition/restart observer consumes the actual recorded effect;
  * an error class or caller status never qualifies nonissuance. */
-export function inspectConfigurationPreEffectRefusal(handle: ExecutionHandle): void {
+export async function inspectConfigurationPreEffectRefusal(handle: ExecutionHandle): Promise<void> {
   assertConfigurationPreEffectSource(handle);
-  const row = rowOf(handle),
+  const row = await rowOf(handle),
     effect = settlementOf(row);
   if (
     !effect ||
@@ -851,11 +851,11 @@ export async function retainControlEffectReceipt(
   });
 }
 /** The settlement an execution recorded about its own effect. */
-export function verifyControlEffectSettlement(
+export async function verifyControlEffectSettlement(
   installation: ControlInstallation,
   execution: ExecutionRef,
-): ChildSettlement {
-  const row = installationState(installation).rows.read(execution.operationKey);
+): Promise<ChildSettlement> {
+  const row = await installationState(installation).rows.read(execution.operationKey);
   if (!row) throw missingRow();
   if (controlDigest(row.admission.execution) !== controlDigest(execution))
     throw Error("Settlement immutable identity mismatch");
@@ -867,10 +867,10 @@ export function verifyControlEffectSettlement(
 /** Fixed read-only source check for maintenance's pre-root ordinary DM Start.
  * It reads this role's actual original admission, terminal, effect result and
  * released target tree. Candidate metadata alone proves nothing. */
-export function verifyMaintenanceCoordinatorPrerequisite(
+export async function verifyMaintenanceCoordinatorPrerequisite(
   installation: ControlInstallation,
   record: PreparedConfigurationRecord,
-) {
+): Promise<void> {
   const local = installationState(installation),
     fixed = record.coordinatorPrerequisite;
   if (
@@ -886,7 +886,7 @@ export function verifyMaintenanceCoordinatorPrerequisite(
     fixed.root.parent.deadlineAt !== record.parentDeadlineAt
   )
     throw Error("Original maintenance coordinator prerequisite required");
-  const row = local.rows.read(fixed.root.operationKey);
+  const row = await local.rows.read(fixed.root.operationKey);
   if (!row) throw missingRow();
   const admitted = row.admission,
     parent = retainedParentExecutionSchema
@@ -926,7 +926,7 @@ export function verifyMaintenanceCoordinatorPrerequisite(
       .changed !== true
   )
     throw Error("Conclusive successful coordinator prerequisite required");
-  verifyLocalArtifactTargetRootRelease(handle);
+  await verifyLocalArtifactTargetRootRelease(handle);
 }
 
 /** The maintenance file of a `configurationMaintenance.prepare` root, by its admitted body. */
@@ -960,29 +960,33 @@ export function retainedControlParent(execution: ExecutionRef): RetainedParentEx
 }
 
 /** Whether a fixed child's parent, which holds no lease, still permits forward effects. */
-function fixedParentForward(state: InstallationState): boolean {
+async function fixedParentForward(state: InstallationState): Promise<boolean> {
   const parent = state.fixedParent;
   if (!parent) return true;
-  const row = state.rows.read(parent.operationKey);
+  const row = await state.rows.read(parent.operationKey);
   if (!row || controlDigest(row.admission.execution) !== controlDigest(parent)) return false;
   return row.progress.phase === "held" && Date.now() < parent.deadlineAt;
 }
 /** Narrow local runtime fence; exact duplicate admission alone never grants forward permission. */
 export class ControlExecutionFencedError extends Error {}
-function assertForward(handle: ExecutionHandle, progress: ExecutionProgress): void {
+/** The execution's own phase and deadline still permit forward effects. */
+function assertOwnForward(handle: ExecutionHandle, progress: ExecutionProgress): void {
   if (progress.phase !== "held" || Date.now() >= handle.execution.deadlineAt)
     throw new ControlExecutionFencedError(
       "Execution cannot restart effects; observation/settlement only; forward phase fenced",
     );
-  if (!fixedParentForward(handle.installation))
-    throw new ControlExecutionFencedError("Canceled/terminal ancestor permits observation only");
 }
-export function withControlExecutionForward<T>(handle: ExecutionHandle, run: () => T): T {
-  assertForward(handle, progressOf(handle));
+export async function withControlExecutionForward<T>(
+  handle: ExecutionHandle,
+  run: () => T,
+): Promise<T> {
+  await assertControlExecutionForward(handle);
   return run();
 }
-export function assertControlExecutionForward(handle: ExecutionHandle): void {
-  assertForward(handle, progressOf(handle));
+export async function assertControlExecutionForward(handle: ExecutionHandle): Promise<void> {
+  assertOwnForward(handle, await progressOf(handle));
+  if (!(await fixedParentForward(handle.installation)))
+    throw new ControlExecutionFencedError("Canceled/terminal ancestor permits observation only");
 }
 const PREPARED_MAINTENANCE_PHASES: readonly string[] = [
   "configuration-commit",
@@ -1021,30 +1025,30 @@ function assertDelegationForward(
     );
   if (progress.phase === "settled")
     verifyControlPreparedTerminal(handle.installation, handle.execution);
-  if (!fixedParentForward(handle.installation))
-    throw Error("Canceled ancestor prevents grant publication");
 }
 /**
  * Runs `run` on the row's progress while it may still issue `phase`, and saves
  * what it recorded before resolving: a child is attempted once this resolves.
  */
-export function withControlDelegationPublication<T>(
+export async function withControlDelegationPublication<T>(
   handle: ExecutionHandle,
   phase: ControlChildPhase,
   run: (progress: ExecutionProgress) => T,
 ): Promise<T> {
-  assertDelegationForward(handle, phase, progressOf(handle));
+  await assertControlDelegationForward(handle, phase);
   return updateProgress(handle, (progress) => {
     assertDelegationForward(handle, phase, progress);
     return run(progress);
   });
 }
 /** Only the protocol's frozen terminal preparation edges may outlive their local worker. */
-export function assertControlDelegationForward(
+export async function assertControlDelegationForward(
   handle: ExecutionHandle,
   phase: ControlChildPhase,
-): void {
-  assertDelegationForward(handle, phase, progressOf(handle));
+): Promise<void> {
+  assertDelegationForward(handle, phase, await progressOf(handle));
+  if (!(await fixedParentForward(handle.installation)))
+    throw Error("Canceled ancestor prevents grant publication");
 }
 function attemptedChildren(progress: ExecutionProgress): ExecutionRef[] {
   const distinct = new Map<string, ExecutionRef>();
@@ -1084,7 +1088,7 @@ export async function attestParentExecution(
   },
 ): Promise<ControlDelegation> {
   if (Date.now() >= handle.execution.deadlineAt) throw Error("Expired parent execution");
-  const plan = resolveControlChildPlan(handle, child);
+  const plan = await resolveControlChildPlan(handle, child);
   if (!plan || !childPhaseKinds[child.phase].includes(plan.kind))
     throw Error("Child absent from retained plan");
   if (await handle.installation.leases.read(rootLeaseId(handle.execution)))
@@ -1214,7 +1218,7 @@ export function fixedChildSpawn(
     throw Error("Fixed child spawn identity mismatch");
   return { ...saved, childKey };
 }
-export function retainFixedCliSpawnIntent(
+export async function retainFixedCliSpawnIntent(
   handle: ExecutionHandle,
   input: {
     childKey: string;
@@ -1226,7 +1230,7 @@ export function retainFixedCliSpawnIntent(
     dataUpdatePlan?: import("./data-update-records").DataUpdatePlan;
     dataWorkflowInitial?: import("../ops/job-evidence").DataWorkflowReceipt;
   },
-): void {
+): Promise<void> {
   if (handle.installation.installation.role !== "ops-agent" || handle.installation.fixedChildId)
     throw Error("Only the agent spawns fixed children");
   const id = uuid.parse(input.childKey);
@@ -1235,7 +1239,7 @@ export function retainFixedCliSpawnIntent(
     (p) => p.execution.executionId === input.execution.executionId && p.recipient === "fixed-cli",
   );
   const plan = slot
-    ? resolveControlChildPlan(handle, {
+    ? await resolveControlChildPlan(handle, {
         phase: slot.phase,
         execution: input.execution,
         recipient: "fixed-cli",
@@ -1360,34 +1364,35 @@ export function readFixedCliSpawnIntent(
   s.registeredTargets = new Set(saved.serviceIds);
   return saved;
 }
-export function beginFixedCliExecution(
+export async function beginFixedCliExecution(
   installation: ControlInstallation,
   execution: ExecutionRef,
-): void {
+): Promise<void> {
   const s = installationState(installation);
   if (!s.fixedChildId) throw Error("Fixed CLI authority required");
-  if (!fixedParentForward(s)) throw Error("Canceled/terminal parent prevents fixed CLI start");
+  if (!(await fixedParentForward(s)))
+    throw Error("Canceled/terminal parent prevents fixed CLI start");
   writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
 }
 
 /** The original admission only; this grants no permission to dispatch again. */
-export function restoreAdmittedControlExecution(
+export async function restoreAdmittedControlExecution(
   installation: ControlInstallation,
   execution: ExecutionRef,
-): ExecutionHandle {
+): Promise<ExecutionHandle> {
   const state = installationState(installation);
-  const row = state.rows.read(execution.operationKey);
+  const row = await state.rows.read(execution.operationKey);
   if (!row) throw missingRow();
   if (controlDigest(row.admission.execution) !== controlDigest(execution))
     throw Error("Recovery execution ownership mismatch");
   return handleOf(state, row.admission);
 }
 /** Fixed local continuation adapter: private retained admission, never a bare request identity. */
-export function verifiedRetainedControlParent(
+export async function verifiedRetainedControlParent(
   installation: ControlInstallation,
   execution: ExecutionRef,
-): import("../ops/execution-identity").VerifiedParentExecution {
-  const handle = restoreAdmittedControlExecution(installation, execution);
+): Promise<import("../ops/execution-identity").VerifiedParentExecution> {
+  const handle = await restoreAdmittedControlExecution(installation, execution);
   const parent = Object.freeze(
     retainedControlParent(execution),
   ) as import("../ops/execution-identity").VerifiedParentExecution;
@@ -1534,17 +1539,17 @@ function cellOf(
   } else if (cell.delegation) throw Error("An unbound phase cannot have a grant");
   return cell;
 }
-export function lookupControlChildPhase(
+export async function lookupControlChildPhase(
   handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
-): ControlPlannedChild | null {
-  return cellOf(handle, progressOf(handle), input).binding?.child ?? null;
+): Promise<ControlPlannedChild | null> {
+  return cellOf(handle, await progressOf(handle), input).binding?.child ?? null;
 }
 export async function bindControlChildPhase(
   handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ): Promise<ControlPlannedChild> {
-  const retained = cellOf(handle, progressOf(handle), input);
+  const retained = cellOf(handle, await progressOf(handle), input);
   if (retained.binding) return retained.binding.child;
   const value = reservation(handle, input),
     boundAt = Date.now();
@@ -1558,7 +1563,7 @@ export async function bindControlChildPhase(
     operationFingerprint: value.operationFingerprint,
     admittedAt: boundAt,
     requestedDeadlineAt,
-    parent: verifiedRetainedControlParent(handle.installation.installation, handle.execution),
+    parent: await verifiedRetainedControlParent(handle.installation.installation, handle.execution),
   });
   const child: ControlPlannedChild = {
     phase: value.phase,
@@ -1598,11 +1603,11 @@ export function prepareControlChildPublication(
     throw Error("Reserved phase publication requires observation");
   cell.delegation = delegation;
 }
-export function inspectControlChildPublication(
+export async function inspectControlChildPublication(
   handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  const cell = cellOf(handle, progressOf(handle), input);
+  const cell = cellOf(handle, await progressOf(handle), input);
   return {
     binding: cell.binding,
     publication: cell.delegation
@@ -1611,22 +1616,22 @@ export function inspectControlChildPublication(
     bindingDigest: controlDigest(cell.binding),
   };
 }
-export function lookupControlChildPhaseBinding(
+export async function lookupControlChildPhaseBinding(
   handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  const cell = cellOf(handle, progressOf(handle), input);
+  const cell = cellOf(handle, await progressOf(handle), input);
   return cell.binding
     ? Object.freeze({ ...cell.binding, bindingDigest: controlDigest(cell.binding) })
     : null;
 }
 /** The child an attempted phase issued, for observation and cancellation only.
  * This returns no ticket and never repairs or reissues a missing attempt. */
-export function lookupControlChildPhaseAttempt(
+export async function lookupControlChildPhaseAttempt(
   handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  const cell = cellOf(handle, progressOf(handle), input);
+  const cell = cellOf(handle, await progressOf(handle), input);
   if (!cell.delegation) return null;
   if (!cell.binding) throw Error("Attempted phase has no exact binding");
   const delegation = cell.delegation;
@@ -1645,10 +1650,10 @@ export function lookupControlChildPhaseAttempt(
     bindingDigest: controlDigest(cell.binding),
   });
 }
-export function resolveControlChildPlan(
+export async function resolveControlChildPlan(
   handle: ExecutionHandle,
   input: { phase: ControlChildPhase; execution: ExecutionRef; recipient: ControlRecipient },
-): ControlPlannedChild | undefined {
+): Promise<ControlPlannedChild | undefined> {
   const exact = handle.plan.find(
     (p) =>
       p.phase === input.phase &&
@@ -1660,7 +1665,7 @@ export function resolveControlChildPlan(
     (r) => r.phase === input.phase && r.execution.operationKey === input.execution.operationKey,
   );
   if (!slot) return undefined;
-  const bound = lookupControlChildPhase(handle, slot);
+  const bound = await lookupControlChildPhase(handle, slot);
   if (
     bound &&
     bound.recipient === input.recipient &&
@@ -1674,10 +1679,10 @@ export function resolveControlChildPlan(
  * Checks that the execution's own root is released: its own effect settled
  * with a known outcome and its lease is gone from the store.
  */
-export function verifyLocalArtifactTargetRootRelease(handle: ExecutionHandle): void {
-  if (!localRootReleased(handle)) throw Error("Original root release is not proved");
+export async function verifyLocalArtifactTargetRootRelease(handle: ExecutionHandle): Promise<void> {
+  if (!(await localRootReleased(handle))) throw Error("Original root release is not proved");
 }
-export function localRootReleased(handle: ExecutionHandle): boolean {
-  verifyControlEffectSettlement(handle.installation.installation, handle.execution);
+export async function localRootReleased(handle: ExecutionHandle): Promise<boolean> {
+  await verifyControlEffectSettlement(handle.installation.installation, handle.execution);
   return !requireLocalLeases(handle.installation.leases).readSync(rootLeaseId(handle.execution));
 }

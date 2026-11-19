@@ -22,8 +22,8 @@ export function dataWorkerSignal(signal?: AbortSignal): AbortSignal | undefined 
 export function dataWorkerDeadline(): number | undefined {
   return workers.getStore()?.execution.deadlineAt;
 }
-export function assertDataPublication(): void {
-  workers.getStore()?.assertForward();
+export async function assertDataPublication(): Promise<void> {
+  await workers.getStore()?.assertForward();
 }
 export async function retainDataPublication(): Promise<void> {
   await workers.getStore()?.checkpoint({ publication: "committed" });
@@ -44,10 +44,10 @@ const rolledBack = new WeakSet<object>();
 export async function publishDataChange<T>(run: () => Promise<T> | T): Promise<T> {
   const context = workers.getStore();
   if (!context) return run();
-  context.assertForward();
+  await context.assertForward();
   const previous = (await context.record()).status.publication;
   await context.checkpoint({ publication: "unknown" });
-  context.assertForward();
+  await context.assertForward();
   try {
     const value = await run();
     await context.checkpoint({ publication: "committed" });

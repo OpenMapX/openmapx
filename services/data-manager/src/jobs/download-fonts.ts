@@ -108,7 +108,7 @@ export async function downloadFonts(opts: DownloadFontsOptions): Promise<void> {
     else if (previousMoved && existsSync(backup)) {
       try {
         opts.signal?.throwIfAborted();
-        assertDataPublication();
+        await assertDataPublication();
         renameSync(backup, fontsDir);
         previousMoved = false;
       } catch {

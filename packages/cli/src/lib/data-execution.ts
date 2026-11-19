@@ -166,7 +166,7 @@ export async function executeDurableDataStep(
   if (checkpointError) throw checkpointError;
   // Data-manager releases its own lease just after its terminal; a next step
   // that claims the same targets waits for that in its own acquisition.
-  verifyCliDataTerminal(context.authority, terminal);
+  await verifyCliDataTerminal(context.authority, terminal);
   await options.checkpointAttempt({ ...attempt, state: "terminal" });
   return terminal;
 }
@@ -208,7 +208,7 @@ export async function runOwnedDataStep(
       ordinal: slot.ordinal,
     });
     delegation = issued.delegation;
-    consumeControlChildDispatch(issued.dispatchTicket);
+    await consumeControlChildDispatch(issued.dispatchTicket);
   }
   const result = await executeDurableDataStep(input, {
     phase,

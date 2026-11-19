@@ -294,7 +294,7 @@ export class JobTable<Observation = unknown> {
       !this.activeControllers.has(job.operationId);
     return {
       owns: (key) => jobOf(key) !== undefined,
-      read: (key) => {
+      read: async (key) => {
         const job = jobOf(key);
         return job && journalExecutionRow(job);
       },
@@ -322,7 +322,7 @@ export class JobTable<Observation = unknown> {
         await this.persist();
         return result;
       },
-      keys: (limit) => {
+      keys: async (limit) => {
         const keys = [...this.byId.values()].filter(offered).map((job) => job.operationKey);
         return { keys: keys.slice(0, limit), complete: keys.length <= limit };
       },

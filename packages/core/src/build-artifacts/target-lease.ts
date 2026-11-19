@@ -139,7 +139,7 @@ export async function acquireArtifactTargetLease(options: {
     throw Error("Target closure or execution deadline mismatch");
   if (authority.kind === "data.update")
     await verifyDataUpdatePrerequisites(options.owner, options.dataManager, options.signal);
-  assertControlExecutionForward(options.owner);
+  await assertControlExecutionForward(options.owner);
   options.signal?.throwIfAborted();
   // The store returns an existing lease to a repeated acquisition, so a lost
   // reply can be retried; a second root handle in this process is refused.
@@ -186,7 +186,7 @@ export async function delegateArtifactTargetLease(
   if (!record) throw Error("Target lease is not held");
   if (!leaseNodeForward(record, s.node, Date.now()) || Date.now() >= s.execution.deadlineAt)
     throw Error("Lease does not permit forward delegation");
-  let plan = resolveControlChildPlan(authority, child);
+  let plan = await resolveControlChildPlan(authority, child);
   if (plan && canonicalJson(plan.serviceIds) !== canonicalJson(child.serviceIds))
     throw Error("Reserved child target subset changed");
   const parent = s.node === null ? undefined : record.children.find((c) => c.key === s.node);
@@ -388,10 +388,10 @@ export async function cancelArtifactTargetLease(
 }
 
 /** Observation/adoption of an old identity is not permission to start another forward effect. */
-export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): void {
+export async function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): Promise<void> {
   const s = stateOf(lease);
   if (s.settlementOnly || s.canceled) throw Error("Recovered lease permits settlement only");
-  if (s.authority) assertControlExecutionForward(s.authority);
+  if (s.authority) await assertControlExecutionForward(s.authority);
   const record = current(s);
   if (
     !record ||
@@ -400,13 +400,13 @@ export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): v
   )
     throw Error("Target lease permits observation/settlement only");
 }
-export function assertArtifactTargetLeaseExecution(
+export async function assertArtifactTargetLeaseExecution(
   lease: TargetLeaseAuthority,
   execution: ExecutionRef,
-): void {
+): Promise<void> {
   if (!sameExecution(stateOf(lease).execution, execution))
     throw Error("Lifecycle lease execution mismatch");
-  assertArtifactTargetLeaseForward(lease);
+  await assertArtifactTargetLeaseForward(lease);
 }
 /** Receipt-only evidence: the exact owner may record containment after cancellation. */
 export function assertArtifactTargetLeaseReceiptOwner(
@@ -464,7 +464,10 @@ export async function reconcileArtifactTargetLease(options: {
   const lease = await backend.read(options.leaseId);
   if (!lease) return "released";
   if (!sameExecution(lease.owner, owner.execution)) throw Error("Foreign recovery execution");
-  const evidence = verifyControlEffectSettlement(owner.installation.installation, owner.execution);
+  const evidence = await verifyControlEffectSettlement(
+    owner.installation.installation,
+    owner.execution,
+  );
   if (!knownSettlement(evidence) || lease.children.some((child) => !settledKnown(child)))
     return "fenced";
   if (lease.state !== "settled")
@@ -591,8 +594,8 @@ export async function assertRetainedCatalogActivationChildrenSettled(
 }
 
 /** Holder of MOTIS for catalog pins: the agent or the standalone host CLI. */
-export function catalogPinTargetOwner(lease: TargetLeaseAuthority) {
-  assertArtifactTargetLeaseForward(lease);
+export async function catalogPinTargetOwner(lease: TargetLeaseAuthority) {
+  await assertArtifactTargetLeaseForward(lease);
   const s = stateOf(lease);
   if (!s.serviceIds.includes("motis"))
     throw Error("MOTIS target authority required for catalog pins");
@@ -615,15 +618,15 @@ export function assertArtifactDelegationRootHeld(
   if (!lease || lease.state === "settled") throw Error("Original owner lease is no longer held");
 }
 /** Read-only terminal evidence of a borrowed child after the agent restarted. */
-export function verifyRetainedArtifactTargetSettlement(
+export async function verifyRetainedArtifactTargetSettlement(
   installation: import("./control-records").ControlInstallation,
   leaseChild: LeaseChildRef,
   execution: ExecutionRef,
-): void {
+): Promise<void> {
   const local = installationState(installation);
   const lease = localLeases(local.leases)?.readSync(leaseChild.leaseId);
   const child = lease?.children.find((value) => value.key === leaseChild.childKey);
-  const proof = verifyControlEffectSettlement(installation, execution);
+  const proof = await verifyControlEffectSettlement(installation, execution);
   if (
     lease &&
     (!child ||
@@ -634,20 +637,20 @@ export function verifyRetainedArtifactTargetSettlement(
     throw Error("Terminal child settlement is not proved");
 }
 
-export function restoreConfigurationMaintenancePhaseIssuer(
+export async function restoreConfigurationMaintenancePhaseIssuer(
   owner: ExecutionHandle,
   phase:
     | "configuration-commit"
     | "maintenance-hardlinks"
     | "maintenance-recreate"
     | "maintenance-handoff",
-): ArtifactTargetLease {
+): Promise<ArtifactTargetLease> {
   if (owner.kind !== "configurationMaintenance.prepare")
     throw Error("Original authorized maintenance phase issuer required");
   const lease = restoreArtifactTargetLeaseForSettlement(owner),
     s = stateOf(lease);
   try {
-    assertControlDelegationForward(owner, phase);
+    await assertControlDelegationForward(owner, phase);
     if (current(s)?.state !== "held" || !owner.reservations.some((value) => value.phase === phase))
       throw Error("Original frozen maintenance root is fenced");
     s.settlementOnly = false;
@@ -681,9 +684,9 @@ export async function issueControlChildPhase(
     evidence?: Record<string, unknown>;
   },
 ) {
-  const child = lookupControlChildPhase(authority, input);
+  const child = await lookupControlChildPhase(authority, input);
   if (!child) throw Error("Child phase is not bound");
-  const before = inspectControlChildPublication(authority, input);
+  const before = await inspectControlChildPublication(authority, input);
   if (before.publication.state !== "unissued") throw Error("Attempted child requires observation");
   if (
     input.lease &&
@@ -701,7 +704,7 @@ export async function issueControlChildPhase(
         ...child,
         ...(input.childKey ? { childKey: input.childKey } : {}),
       });
-  const saved = inspectControlChildPublication(authority, input);
+  const saved = await inspectControlChildPublication(authority, input);
   if (saved.publication.state !== "grant_prepared")
     throw Error("Child publication was not retained");
   const dispatchTicket = Object.freeze({ [dispatchBrand]: true as const });
@@ -717,10 +720,12 @@ export async function issueControlChildPhase(
     dispatchTicket,
   };
 }
-export function consumeControlChildDispatch(ticket: FreshControlChildDispatch): void {
+export async function consumeControlChildDispatch(
+  ticket: FreshControlChildDispatch,
+): Promise<void> {
   const saved = tickets.get(ticket);
   if (!saved || saved.used) throw Error("Missing or consumed child dispatch ticket");
   saved.used = true;
-  assertControlDelegationForward(saved.authority, saved.phase);
+  await assertControlDelegationForward(saved.authority, saved.phase);
   if (Date.now() >= saved.deadlineAt) throw Error("Child dispatch deadline elapsed");
 }

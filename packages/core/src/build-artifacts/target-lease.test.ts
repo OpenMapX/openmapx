@@ -53,7 +53,7 @@ it("reconciles a settled root after a crash between settlement and release", asy
   });
   await a.settleArtifactTargetLeaseChild(
     lease,
-    verifyControlEffectSettlement(installation, authority.execution),
+    await verifyControlEffectSettlement(installation, authority.execution),
   );
   a.closeArtifactTargetLeaseHandle(lease);
   expect(heldLeases().map((value) => value.leaseId)).toEqual([lease.leaseId]);
@@ -63,7 +63,7 @@ it("reconciles a settled root after a crash between settlement and release", asy
     role: "host-cli",
     serviceIds: ["osrm", "motis"],
   });
-  const restored = c.restoreAdmittedControlExecution(installation, authority.execution);
+  const restored = await c.restoreAdmittedControlExecution(installation, authority.execution);
   const input = { leaseId: lease.leaseId, authority: restored };
   await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
   await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
@@ -126,7 +126,7 @@ describe("certified target leases", () => {
     });
     await a.settleArtifactTargetLeaseChild(
       lease,
-      verifyControlEffectSettlement(installation, authority.execution),
+      await verifyControlEffectSettlement(installation, authority.execution),
     );
     await a.releaseArtifactTargetLease(lease);
     expect(heldLeases()).toEqual([]);
@@ -317,7 +317,7 @@ it("holds a target lease and the configuration writer together", async () => {
   });
   await a.settleArtifactTargetLeaseChild(
     lease,
-    c.verifyControlEffectSettlement(installation, authority.execution),
+    await c.verifyControlEffectSettlement(installation, authority.execution),
   );
   await a.releaseArtifactTargetLease(lease);
 });

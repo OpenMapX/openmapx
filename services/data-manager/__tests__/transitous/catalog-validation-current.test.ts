@@ -123,13 +123,13 @@ it("selects only original signed validation bytes, then invalidates before reuse
     withCatalogProposalDirectory(f.installation, f.proposalId, (dir) =>
       dir.write(`validation-${f.execution.executionId}.json`, canonicalJson(record)),
     );
-    publishCatalogValidationCurrent(f.authority, f.lease, f.proposalId);
+    await publishCatalogValidationCurrent(f.authority, f.lease, f.proposalId);
     expect(readCurrentCatalogValidation(f.installation)?.selected).toEqual({
       proposalId: f.proposalId,
       validationId: f.execution.executionId,
       validationDigest: controlDigest(record),
     });
-    publishCatalogValidationCurrent(f.authority, f.lease);
+    await publishCatalogValidationCurrent(f.authority, f.lease);
     expect(readCurrentCatalogValidation(f.installation)?.selected).toBeNull();
   } finally {
     f.close();
@@ -138,19 +138,19 @@ it("selects only original signed validation bytes, then invalidates before reuse
 it("permits ordinary owned transit invalidation but not a different kind", async () => {
   const ordinary = await fixture("transit-sync");
   try {
-    publishCatalogValidationCurrent(ordinary.authority, ordinary.lease);
+    await publishCatalogValidationCurrent(ordinary.authority, ordinary.lease);
     expect(readCurrentCatalogValidation(ordinary.installation)?.sourceExecution).toEqual(
       ordinary.execution,
     );
-    expect(() =>
+    await expect(
       publishCatalogValidationCurrent(ordinary.authority, ordinary.lease, ordinary.proposalId),
-    ).toThrow(/Only the original validation/);
+    ).rejects.toThrow(/Only the original validation/);
   } finally {
     ordinary.close();
   }
   const foreign = await fixture("download-fonts");
   try {
-    expect(() => publishCatalogValidationCurrent(foreign.authority, foreign.lease)).toThrow(
+    await expect(publishCatalogValidationCurrent(foreign.authority, foreign.lease)).rejects.toThrow(
       /Original complete transit/,
     );
     expect(readCurrentCatalogValidation(foreign.installation)).toBeNull();

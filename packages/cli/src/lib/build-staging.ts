@@ -21,9 +21,9 @@ function previousBuildDir(liveDir: string): string {
  * Clear leftovers from an earlier run before any work starts, so a stale dir
  * that can't be removed fails the build up front rather than after it.
  */
-export function prepareStagedBuildDir(liveDir: string): string {
+export async function prepareStagedBuildDir(liveDir: string): Promise<string> {
   assertCliExecutionAvailable();
-  assertCliControlForward();
+  await assertCliControlForward();
   const nextDir = stagedBuildDir(liveDir);
   rmSync(previousBuildDir(liveDir), { recursive: true, force: true });
   rmSync(nextDir, { recursive: true, force: true });
@@ -42,9 +42,9 @@ export interface StagedSwap {
  * dir. Removing the old copies afterwards is best-effort, since the new
  * artifact is already live by then.
  */
-export function promoteStagedBuildDirs(swaps: readonly StagedSwap[]): void {
+export async function promoteStagedBuildDirs(swaps: readonly StagedSwap[]): Promise<void> {
   assertCliExecutionAvailable();
-  assertCliControlForward();
+  await assertCliControlForward();
   const moved: StagedSwap[] = [];
   const installed: StagedSwap[] = [];
   try {
@@ -76,8 +76,8 @@ export function promoteStagedBuildDirs(swaps: readonly StagedSwap[]): void {
   }
 }
 
-export function promoteStagedBuildDir(liveDir: string, nextDir: string): void {
-  promoteStagedBuildDirs([{ liveDir, nextDir }]);
+export function promoteStagedBuildDir(liveDir: string, nextDir: string): Promise<void> {
+  return promoteStagedBuildDirs([{ liveDir, nextDir }]);
 }
 
 /**
@@ -88,7 +88,7 @@ export async function withStagedBuildDir<T>(
   liveDir: string,
   build: (nextDir: string) => Promise<T>,
 ): Promise<T> {
-  const nextDir = prepareStagedBuildDir(liveDir);
+  const nextDir = await prepareStagedBuildDir(liveDir);
   let result: T;
   try {
     result = await build(nextDir);
@@ -96,6 +96,6 @@ export async function withStagedBuildDir<T>(
     rmSync(nextDir, { recursive: true, force: true });
     throw error;
   }
-  promoteStagedBuildDir(liveDir, nextDir);
+  await promoteStagedBuildDir(liveDir, nextDir);
   return result;
 }
