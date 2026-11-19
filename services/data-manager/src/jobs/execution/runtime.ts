@@ -548,6 +548,9 @@ export function createDataExecutionRuntime(deps: {
             await settleDelay(1000);
           }
         }
+        // No statement of the worker outlives it: its connections close
+        // before the terminal is written and the lease is released.
+        await database?.close();
         await owner.assertOwnedProxyRecoverySettled(record.execution);
         await context.write(async (current) => {
           const result =

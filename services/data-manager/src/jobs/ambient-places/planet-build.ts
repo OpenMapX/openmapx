@@ -8,6 +8,7 @@ import {
 } from "@openmapx/core/ambient-places";
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import postgres from "postgres";
+import { cancellableTransaction } from "../execution/worker-scope.js";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import { assertPlanetDiskCapacity, planetPlaceLimit } from "./capacity.js";
 import type { AmbientBuildOptions } from "./germany.js";
@@ -74,10 +75,10 @@ async function planetTransaction<T>(
   pid: number,
   operation: (tx: postgres.TransactionSql) => Promise<T>,
 ): Promise<T> {
-  return connection.begin(async (tx) => {
+  return cancellableTransaction(connection, async (tx) => {
     await assertSession(tx, pid);
     return operation(tx);
-  }) as Promise<T>;
+  });
 }
 const initial: PlanetCheckpoint = {
   phase: "osm",

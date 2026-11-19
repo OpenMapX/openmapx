@@ -35,11 +35,8 @@ export class DataPublicationUnknown extends Error {
     });
   }
 }
-class DataSqlRolledBack extends Error {
-  constructor(readonly original: unknown) {
-    super("Owned database transaction rolled back", { cause: original });
-  }
-}
+/** Errors of transactions that ended before their COMMIT was sent. */
+const rolledBack = new WeakSet<object>();
 /** The marker precedes the actual live write. A lost commit/rename response
  * keeps publication unknown; a transaction that ended before its COMMIT was
  * sent restores the prior publication. Only the static worker consumers call
@@ -56,9 +53,9 @@ export async function publishDataChange<T>(run: () => Promise<T> | T): Promise<T
     await context.checkpoint({ publication: "committed" });
     return value;
   } catch (error) {
-    if (error instanceof DataSqlRolledBack) {
+    if (typeof error === "object" && error !== null && rolledBack.has(error)) {
       await context.checkpoint({ publication: previous });
-      throw error.original;
+      throw error;
     }
     throw new DataPublicationUnknown(error);
   }
@@ -106,7 +103,8 @@ export function openCancellableSql(
  * nothing commits once the worker was cancelled or its deadline passed. A
  * failure before COMMIT was sent rolls the transaction back, so it cannot have
  * committed: publishDataChange then restores the prior publication. A COMMIT
- * that fails or is cancelled leaves the publication unknown.
+ * that fails or is cancelled leaves the publication unknown. Every worker
+ * transaction goes through here; errors keep their type.
  */
 export async function cancellableTransaction<T>(
   sql: postgres.Sql,
@@ -115,9 +113,9 @@ export async function cancellableTransaction<T>(
 ): Promise<T> {
   const context = workers.getStore();
   if (!context) return (await sql.begin(isolation, work)) as T;
-  context.signal.throwIfAborted();
   let committing = false;
   try {
+    context.signal.throwIfAborted();
     return (await sql.begin(isolation, async (transaction) => {
       const result = await work(transaction);
       context.signal.throwIfAborted();
@@ -128,6 +126,12 @@ export async function cancellableTransaction<T>(
     })) as T;
   } catch (error) {
     if (committing) throw error;
-    throw new DataSqlRolledBack(error);
+    // The signal's reason is shared by every abort, so it is never marked itself.
+    const marked =
+      typeof error === "object" && error !== null && error !== context.signal.reason
+        ? error
+        : new DOMException("Data transaction rolled back", "AbortError");
+    rolledBack.add(marked);
+    throw marked;
   }
 }
