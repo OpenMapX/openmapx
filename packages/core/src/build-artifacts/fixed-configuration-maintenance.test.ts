@@ -142,7 +142,6 @@ it("rebuilds the same plan from the frozen coordinator image", () => {
     imageReference: "example/data-manager:1",
     imageId: `sha256:${"e".repeat(64)}`,
     releaseSelectionDigest: "f".repeat(64),
-    pullSubmissionDigest: null,
   };
   const plan = buildFixedConfigurationMaintenancePlan({ ...source, coordinatorImage });
   const rebuilt = buildFixedConfigurationMaintenancePlan({

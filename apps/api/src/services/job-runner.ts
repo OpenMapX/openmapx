@@ -545,9 +545,9 @@ class AdminJobRunner {
       .from(adminJob)
       .where(jobOwnership(ctx.jobId, ctx.execution, ["canceled"]));
     if (canceled) {
-      // The fixed producer already published its actual canceled/nonissuance
-      // completion under this nonce. Observe it; generic settlement must not
-      // overwrite that terminal source with success or failure.
+      // The producer already recorded its own canceled completion under this
+      // nonce. Observe it; generic settlement must not overwrite it with
+      // success or failure.
       this.announce(ctx.jobId, "canceled", {
         result: canceled.result as Record<string, unknown> | null,
         finishedAt: canceled.finishedAt?.toISOString(),
@@ -1559,10 +1559,10 @@ class AdminJobRunner {
               return;
             }
             // Routing only: before any child admission the generic canceller
-            // has no terminal to observe. The fixed producer must authenticate
-            // its private candidate and locked nonissuance state before cleanup
-            // or canceled publication. The cancel marker still blocks forward
-            // admission; neither an empty projection nor this status grants it.
+            // has no terminal to observe. The producer reads its own candidate
+            // before cleanup or canceled publication. The cancel marker still
+            // blocks forward admission; neither an empty projection nor this
+            // status grants it.
           }
           if (outcome === "canceled") {
             const finishedAt = new Date();

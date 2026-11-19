@@ -31,7 +31,6 @@ import {
   verifyLocalArtifactTargetRootRelease,
 } from "@openmapx/core/build-artifacts";
 import {
-  type CoordinatorPullSubmission,
   createControlRootOperationKey,
   executionFingerprint,
   inspectPreparedConfigurationRecord,
@@ -43,22 +42,25 @@ import Fastify, { type FastifyRequest } from "fastify";
 import type postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
-import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
-import { configurationPolicyRevision } from "../../../../ops-agent/src/configured-resource-authority";
 import { runContainedProcess } from "../../../../ops-agent/src/docker-runtime";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
-import {
-  createPolicyResourceClaimer,
-  createProductionRegistryResourceClaimer,
-  denyAllTrustedOpsData,
-} from "../../../../ops-agent/src/policy";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
 import { createConfigurationPostgresFixture } from "../../test/configuration-postgres-fixture";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
 
+/** The operation key of the coordinator pull a job sent, if it sent one. */
+function pullOperationKeyOf(job: { protocol: unknown }): string | undefined {
+  const recorded = (
+    job.protocol as {
+      operations?: { operations?: Record<string, { kind?: string; operationKey?: string }> };
+    }
+  )?.operations?.operations;
+  return Object.values(recorded ?? {}).find((operation) => operation.kind === "service.pull")
+    ?.operationKey;
+}
 /** The maintenance a job prepared, as its recorded prepare operation names it. */
 function maintenanceIdOf(job: { protocol: unknown }): string | undefined {
   const recorded = (
@@ -118,22 +120,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       issuedKnownRollbacks = 0;
     let nativeTrace: string;
     let pulledImageId: string | null;
-    let originalPull: CoordinatorPullSubmission | undefined;
     let afterImageStaging: (() => void) | undefined;
     let afterPullTerminal: (() => void) | undefined;
     let beforeLifecycleProcess: ((args: readonly string[]) => Promise<void>) | undefined;
     let decisionReplyGate: { reached: () => void; release: Promise<void> } | undefined;
-    let pullAdmissionReplyGate: { reached: () => void; release: Promise<void> } | undefined;
     let pullTerminalReplyGate: { reached: () => void; release: Promise<void> } | undefined;
-    let claimCase:
-      | "genuine"
-      | "generic resolver"
-      | "policy-only"
-      | "missing raw revision"
-      | "raw suffix drift"
-      | "consumed capture" = "genuine";
-    let copyPullClaim = false,
-      observePullReply: ((status: number) => void) | undefined;
     const posts = new Map<string, number>();
     const arrivals = new Map<string, number>();
 
@@ -186,16 +177,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           }),
         };
       pulledImageId = null;
-      originalPull = undefined;
       afterImageStaging = undefined;
       afterPullTerminal = undefined;
       beforeLifecycleProcess = undefined;
       decisionReplyGate = undefined;
       pullTerminalReplyGate = undefined;
-      pullAdmissionReplyGate = undefined;
-      copyPullClaim = false;
-      claimCase = "genuine";
-      observePullReply = undefined;
       vi.stubEnv("BETTER_AUTH_SECRET", "task012-coordinator-synthetic-auth-fixture");
       vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
       vi.stubEnv("OPENMAPX_RELEASE", "local");
@@ -213,19 +199,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
             }
           : {}),
-        ...(test.task.name.includes("all current configuration producers")
-          ? {
-              schemas: {
-                motis: {
-                  type: "object",
-                  properties: {
-                    MODE: { type: "string", default: "old" },
-                    TOKEN: { type: "string", "x-openmapx-secret": true },
-                  },
-                },
-              },
-            }
-          : {}),
         ...(test.task.name.includes("installed credential follow-up")
           ? {
               schemas: {
@@ -236,7 +209,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
             }
           : {}),
-        ...(test.task.name.includes("3072-byte baseline") ? { nestedRootSegments: 20 } : {}),
         ...(references
           ? { imageReferences: { motis: references.sibling, "data-manager": references.target } }
           : {}),
@@ -245,29 +217,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           new URL("../../../../ops-agent/src/index.ts", import.meta.url),
         ),
       });
-      if (test.task.name.includes("all current configuration producers")) {
-        for (const id of ["alpha", "beta"]) {
-          const directory = join(host.root, "integrations", id);
-          mkdirSync(directory, { recursive: true });
-          writeFileSync(
-            join(directory, "manifest.json"),
-            JSON.stringify({
-              id,
-              version: "1.0.0",
-              author: "Task01.2 fixture",
-              license: "MIT",
-              domains: ["knowledge"],
-              quality: "built-in",
-              configSchema: {
-                properties: {
-                  VALUE: { type: "string", default: "old" },
-                  TOKEN: { type: "string", "x-openmapx-secret": true },
-                },
-              },
-            }),
-          );
-        }
-      }
       dm = await ownedDataManager({
         sql: fixture.sql,
         infraDir: host.infraDir,
@@ -296,7 +245,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ).record,
           fixed = candidate.privateCoordinatorLifecycle;
         if (fixed?.action !== "update") throw Error("Actual original sealed Update source missing");
-        originalPull = fixed.pull;
         if (test.task.name.includes("stopped coordinator before pull")) {
           const helper = candidate.coordinatorPrerequisite!;
           const actual = JSON.parse(
@@ -412,57 +360,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "data-manager": Buffer.alloc(32, 23).toString("base64url"),
         },
         runtime: host.runtime,
-        resourceClaimer: {
-          claim: async (...args) => {
-            if (
-              args[0].kind === "service.pull" &&
-              claimCase !== "genuine" &&
-              claimCase !== "consumed capture"
-            ) {
-              if (claimCase === "policy-only")
-                return createPolicyResourceClaimer({ allowService: () => true }).claim(...args);
-              const source = await host.loadAuthority(),
-                applied = await host.actionAuthority();
-              const registered = source.services.map((s) => ({
-                serviceId: s.manifest.id,
-                enabled: s.enabled,
-                isBuiltIn: s.isBuiltIn,
-              }));
-              return createProductionRegistryResourceClaimer({
-                services: registered,
-                integrationIds: [],
-                trustedData: denyAllTrustedOpsData,
-                ownedServices:
-                  claimCase === "generic resolver"
-                    ? { inspectOwnedServices: (signal) => host.owned.inspectOwnedServices(signal) }
-                    : host.owned,
-                enabledServiceIds: () => applied.enabledServiceIds,
-                serviceMetadata: (ss) => ss.map((value) => ({ ...value, buildable: false })),
-                loadAuthority: async () => ({
-                  revisionId: configurationPolicyRevision(source.revisionId),
-                  services: registered,
-                  integrationIds: [],
-                  ...(claimCase === "missing raw revision"
-                    ? {}
-                    : {
-                        configurationAuthorityRevision:
-                          claimCase === "raw suffix drift"
-                            ? `${source.revisionId.slice(0, -1)}${source.revisionId.endsWith("A") ? "B" : "A"}`
-                            : source.revisionId,
-                      }),
-                }),
-              }).claim(...args);
-            }
-            const raw = await host.claimer.claim(...args);
-            return raw && copyPullClaim && args[0].kind === "service.pull"
-              ? {
-                  ...raw,
-                  operation: structuredClone(raw.operation),
-                  capability: structuredClone(raw.capability),
-                }
-              : raw;
-          },
-        },
+        resourceClaimer: host.claimer,
         journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
         controlInstallation: installation,
       });
@@ -478,13 +376,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ?.kind;
         if (request.method === "POST" && request.url === "/v1/operations" && kind)
           posts.set(kind, (posts.get(kind) ?? 0) + 1);
-        if (kind === "service.pull") {
-          observePullReply?.(_reply.statusCode);
-          if (pullAdmissionReplyGate) {
-            pullAdmissionReplyGate.reached();
-            await pullAdmissionReplyGate.release;
-          }
-        }
         if (
           request.method === "GET" &&
           (pullTerminalReplyGate || afterPullTerminal) &&
@@ -566,28 +457,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       api = Fastify({ logger: false });
       api.setErrorHandler((await import("../../server-wiring")).uniformErrorHandler);
       const { initIntegrations } = await import("../../integration-host");
-      await initIntegrations(
-        api,
-        test.task.name.includes("all current configuration producers")
-          ? [{ directory: join(host.root, "integrations"), isBuiltIn: true }]
-          : [],
-      );
+      await initIntegrations(api, []);
       const { requireAdmin } = await import("../../utils/require-admin");
       api.addHook("preHandler", async (request: FastifyRequest) => {
         request.adminSession = await requireAdmin(request);
       });
       const { adminServicesRoute } = await import("../../routes/admin-services");
       await api.register(adminServicesRoute, { prefix: "/api" });
-      if (test.task.name.includes("all current configuration producers")) {
-        const { adminIntegrationsRoute } = await import("../../routes/admin-integrations"),
-          { registerAdminComposeRoutes } = await import("../../routes/admin-compose");
-        await api.register(adminIntegrationsRoute, { prefix: "/api" });
-        const { adminIntegrationCredentialsRoute } = await import(
-          "../../routes/admin-integration-credentials"
-        );
-        await api.register(adminIntegrationCredentialsRoute, { prefix: "/api" });
-        await api.register(registerAdminComposeRoutes, { prefix: "/api" });
-      }
       await api.ready();
     }, 60000);
     afterEach(async () => {
@@ -988,210 +864,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("configurationMaintenance.prepare")).toBe(1);
       expect(dm.settlementResponseStatuses).toEqual([200]);
     }, 300000);
-    it("guards all current configuration producers before any desired write while staged DM is required", async () => {
-      await fixture.db
-        .insert(schema.serviceConfig)
-        .values({ id: randomUUID(), serviceId: "motis", config: { MODE: "old" } });
-      await fixture.db.insert(schema.integrationConfig).values({
-        id: randomUUID(),
-        integrationId: "alpha",
-        config: { VALUE: "old", enabled: true },
-      });
-      const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-        original = readFileSync(pullPath),
-        before = services.currentConfigurationGeneration(host.infraDir),
-        rows = async () =>
-          Promise.all([
-            fixture.sql`SELECT id,xmin::text AS version FROM service_config ORDER BY id`,
-            fixture.sql`SELECT id,xmin::text AS version FROM integration_config ORDER BY id`,
-            fixture.sql`SELECT id,xmin::text AS version FROM service_secret ORDER BY id`,
-            fixture.sql`SELECT id,xmin::text AS version FROM integration_secret ORDER BY id`,
-          ]),
-        unchanged = await rows(),
-        selection = services.readDesiredSelection(host.infraDir),
-        sdk = await import("@openmapx/core/api-admin-sdk"),
-        { createApiClient } = await import("@openmapx/core"),
-        baseUrl = await api.listen({ host: "127.0.0.1", port: 0 }),
-        options = {
-          client: createApiClient({ baseUrl }),
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
-        },
-        credentialView = sdk.unwrapAdminResponse(
-          await sdk.getAdminIntegrationCredentials("alpha", options),
-        ),
-        mutations: readonly [
-          string,
-          (headers: { "idempotency-key": string }) => Promise<{ status: number; data: unknown }>,
-        ][] = [
-          [
-            "service config",
-            (headers) =>
-              sdk.updateAdminServiceConfig("motis", { config: { MODE: "new" } }, headers, options),
-          ],
-          [
-            "service credential set",
-            (headers) =>
-              sdk.setAdminServiceCredential(
-                "motis",
-                "TOKEN",
-                { value: "synthetic-new-secret" },
-                headers,
-                options,
-              ),
-          ],
-          [
-            "service credential delete",
-            (headers) =>
-              sdk.deleteAdminServiceCredential("motis", "TOKEN", headers, undefined, options),
-          ],
-          [
-            "selection",
-            (headers) =>
-              sdk.setAdminServiceSelection(
-                { selectedRoots: ["data-manager", "motis"] },
-                headers,
-                options,
-              ),
-          ],
-          [
-            "integration config",
-            (headers) =>
-              sdk.patchAdminIntegrationConfig("alpha", { VALUE: "new" }, headers, options),
-          ],
-          [
-            "integration credential set",
-            (headers) =>
-              sdk.setAdminIntegrationCredential(
-                "alpha",
-                "TOKEN",
-                {
-                  value: "synthetic-new-secret",
-                  expectedRevision: credentialView.configurationRevision,
-                },
-                headers,
-                options,
-              ),
-          ],
-          [
-            "integration credential delete",
-            (headers) =>
-              sdk.deleteAdminIntegrationCredential(
-                "alpha",
-                "TOKEN",
-                { expectedRevision: credentialView.configurationRevision },
-                headers,
-                options,
-              ),
-          ],
-          [
-            "integration enable",
-            (headers) => sdk.enableAdminIntegration("alpha", headers, undefined, options),
-          ],
-          [
-            "integration disable",
-            (headers) => sdk.disableAdminIntegration("alpha", headers, undefined, options),
-          ],
-          ["Compose Up", (headers) => sdk.startAdminCompose(headers, undefined, options)],
-        ];
-      let index = 0;
-      for (const [name, run] of mutations) {
-        const response = await run({ "idempotency-key": `task012-staged-current-${index++}` });
-        expect(response.status, `${name}: ${JSON.stringify(response.data)}`).toBe(409);
-        expect(JSON.stringify(response.data), name).toContain(
-          "Apply or update Data Manager before changing instance configuration.",
-        );
-        expect(await rows()).toEqual(unchanged);
-        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
-        expect(services.readDesiredSelection(host.infraDir)).toEqual(selection);
-        expect(readFileSync(pullPath)).toEqual(original);
-        expect(readdirSync(host.candidates)).toEqual([]);
-      }
-      expect(posts.get("service.pull")).toBe(1);
-      expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      for (const kind of [
-        "stack.render",
-        "serviceSelection.apply",
-        "serviceConfig.apply",
-        "integrationConfig.apply",
-        "vault.apply",
-        "stack.start",
-      ])
-        expect(posts.get(kind) ?? 0).toBe(0);
-      const preview = await api.inject({
-        method: "GET",
-        url: "/api/admin/compose/preview",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
-      });
-      expect(preview.statusCode, preview.body).toBe(200);
-      const repair = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      expect((await finished(repair.json().jobId)).status).toBe("success");
-      // An original failed request remains failed after repair; only a new key
-      // can evaluate new source state.
-      const [name, run] = mutations[4]!;
-      const replay = await run({ "idempotency-key": "task012-staged-current-4" });
-      expect(replay.status, name).toBe(409);
-      expect(JSON.stringify(replay.data)).toContain(
-        "Apply or update Data Manager before changing instance configuration.",
-      );
-    }, 300000);
-    it("checks the literal staged prerequisite before current release-source writes", async () => {
-      const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-        originalPull = readFileSync(pullPath);
-      const { productionReleaseEffects } = await import(
-          "../../../../ops-agent/src/production-runtime"
-        ),
-        directory = services.releaseCacheDirectory(host.infraDir),
-        manifest = services.parseReleaseManifest(
-          JSON.stringify({
-            schemaVersion: 1,
-            release: "interlock-release",
-            images: Object.fromEntries(
-              services.RELEASE_IMAGE_NAMES.map((name) => [
-                name,
-                `ghcr.io/openmapx/${name}@sha256:${"f".repeat(64)}`,
-              ]),
-            ),
-            ...releaseProvenance(),
-          }),
-        );
-      services.cacheReleaseManifest(host.infraDir, manifest);
-      const effects = productionReleaseEffects(host.runtime),
-        context = { signal: new AbortController().signal, emitLog() {} },
-        before = services.currentConfigurationGeneration(host.infraDir),
-        originalFiles = readdirSync(directory).sort(),
-        outcome = await effects.resolve(context).then(
-          () => null,
-          (error) => error,
-        );
-      expect(services.readAppliedRelease(host.infraDir)).toBeNull();
-      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
-      expect(readdirSync(directory).sort()).toEqual(originalFiles);
-      expect(readFileSync(pullPath)).toEqual(originalPull);
-      expect(outcome).toMatchObject({ errorClass: "configuration_prerequisite" });
-      const repair = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      expect((await finished(repair.json().jobId)).status).toBe("success");
-      // Local release selection keeps its existing refusal after the real DM
-      // prerequisite is resolved.
-      await expect(effects.resolve(context)).rejects.toBeInstanceOf(
-        services.ReleaseChannelDisabledError,
-      );
-    }, 240000);
     it("carries staged ownership and desired E through the installed credential follow-up's OWN generation", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
         original = readFileSync(pullPath);
@@ -1671,80 +1343,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       90000,
     );
-    it("settles only the original unstarted normal CLI Update root when staged configuration is required", async () => {
-      await canceledSuccessfulCoordinatorStage();
-      const { createApiOpsClient } = await import("../ops-client"),
-        client = createApiOpsClient(),
-        before = services.currentConfigurationGeneration(host.infraDir),
-        deadlineAt = Date.now() + 180000,
-        operationKey = createControlRootOperationKey({
-          notAfter: deadlineAt,
-          nonce: randomBytes(16),
-        }),
-        submitted = await client.execute(
-          { kind: "service.update", serviceId: "motis", expectedConfigurationRevisionId: before! },
-          { operationKey, execution: { requestedDeadlineAt: deadlineAt } },
-        );
-      if (submitted.execution !== "async") throw Error("Actual normal CLI admission required");
-      const until = performance.now() + 90000;
-      let terminal = await client.status("service.update", submitted.operationId);
-      while (!["succeeded", "failed", "timed_out"].includes(terminal.state)) {
-        if (performance.now() > until) throw Error("Actual managed CLI did not settle");
-        await delay(25);
-        terminal = await client.status("service.update", submitted.operationId);
-      }
-      console.info(
-        "actual staged CLI pre-effect",
-        JSON.stringify({
-          state: terminal.state,
-          errorClass: terminal.errorClass,
-          nativeCalls: existsSync(nativeTrace)
-            ? readFileSync(nativeTrace, "utf8").trim().split("\n").filter(Boolean).length
-            : 0,
-          currentUnchanged: services.currentConfigurationGeneration(host.infraDir) === before,
-        }),
-      );
-      expect(terminal.state).toBe("failed");
-      expect(terminal.errorClass).toBe("configuration_prerequisite");
-      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
-      const native = existsSync(nativeTrace)
-        ? readFileSync(nativeTrace, "utf8")
-            .trim()
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as string[])
-        : [];
-      expect(
-        native.filter((args) => args.includes("up") || (args[0] === "image" && args[1] === "pull")),
-      ).toHaveLength(0);
-      const privateRoot = join(host.infraDir, "state/ops-agent/control"),
-        admitted = JSON.parse(
-          readFileSync(join(privateRoot, "executions", `${operationKey}.json`), "utf8"),
-        ),
-        effect = JSON.parse(
-          readFileSync(join(privateRoot, "effects", `${operationKey}.json`), "utf8"),
-        );
-      expect(
-        JSON.parse(
-          readFileSync(join(privateRoot, "effect-started", `${operationKey}.json`), "utf8"),
-        ),
-      ).toBeNull();
-      expect(effect.receipt.kind).toBe("not-started");
-      expect(effect.outcome).toBe("failed_without_effect");
-      const originalRoot = restoreAdmittedControlExecution(installation, admitted.execution);
-      expect(lookupControlChildPhase(originalRoot, { phase: "lifecycle", ordinal: 0 })).toBeNull();
-      verifyLocalArtifactTargetRootRelease(originalRoot);
-      const repaired = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      expect((await finished(repaired.json().jobId)).status).toBe("success");
-    }, 240000);
     it("refuses a normal ordinary root admitted DURING actual image pull before publication or CLI dispatch", async () => {
       const reached = Promise.withResolvers<void>(),
         release = Promise.withResolvers<void>(),
@@ -1916,37 +1514,41 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       420000,
     );
-    it("refuses an ordinary unrelated configuration write until explicit guarded DM repair and a NEW request", async () => {
+    it("applies an ordinary unrelated configuration change after an update was canceled once its pull finished", async () => {
       await fixture.db
         .insert(schema.serviceConfig)
         .values({ id: crypto.randomUUID(), serviceId: "motis", config: { MODE: "old" } });
-      const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-        original = readFileSync(pullPath),
-        before = services.currentConfigurationGeneration(host.infraDir),
-        rows = await fixture.sql`SELECT id,config,xmin::text AS version FROM service_config`,
-        request = {
-          method: "POST",
-          url: "/api/admin/services/motis/config" as const,
-          headers: {
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
-            "idempotency-key": "task012-unrelated-config-after-staging",
-          },
-          payload: { config: { MODE: "new" } },
-        } as const;
-      const saved = await api.inject(request);
-      expect(saved.statusCode, saved.body).toBe(409);
-      expect(saved.json()).toEqual({
-        error: "Apply or update Data Manager before changing instance configuration.",
+      await canceledSuccessfulCoordinatorStage();
+      const before = services.currentConfigurationGeneration(host.infraDir);
+      // The pulled image moved the tag; the running coordinator still runs the
+      // image its generation recorded, so it stays the agent's own.
+      expect(
+        (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
+          (s) => s.serviceId === "data-manager",
+        )?.provenance.imageId,
+      ).toBe(`sha256:${"b".repeat(64)}`);
+      const saved = await api.inject({
+        method: "POST",
+        url: "/api/admin/services/motis/config",
+        headers: {
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          "idempotency-key": "task012-unrelated-config-after-pull",
+        },
+        payload: { config: { MODE: "new" } },
       });
-      expect(await fixture.sql`SELECT id,config,xmin::text AS version FROM service_config`).toEqual(
-        rows,
-      );
-      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
-      expect(readFileSync(pullPath).equals(original)).toBe(true);
-      expect(readdirSync(host.candidates)).toEqual([]);
-      expect(posts.get("serviceConfig.apply") ?? 0).toBe(0);
-      expect(posts.get("stack.render") ?? 0).toBe(0);
-      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
+      expect(saved.statusCode, saved.body).toBe(200);
+      expect((await fixture.db.select().from(schema.serviceConfig))[0]?.config).toEqual({
+        MODE: "new",
+      });
+      expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(before);
+      // The new generation records the image its coordinator reference names now.
+      expect(
+        services.readGenerationImageIds(
+          host.infraDir,
+          services.currentConfigurationGeneration(host.infraDir)!,
+        )["data-manager"],
+      ).toBe(pulledImageId);
+      // A later update recreates the coordinator with the image it pulls.
       const next = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
@@ -1959,82 +1561,27 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         row = await finished(next.json().jobId);
       expect(row.status, row.error ?? "No public error").toBe("success");
       expect(posts.get("service.pull")).toBe(2);
-      expect((await api.inject(request)).statusCode).toBe(409);
-      const retried = await api.inject({
-        ...request,
-        headers: { ...request.headers, "idempotency-key": "task012-unrelated-config-after-repair" },
-      });
-      expect(retried.statusCode, retried.body).toBe(200);
-      expect((await fixture.db.select().from(schema.serviceConfig))[0]?.config).toEqual({
-        MODE: "new",
-      });
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
     }, 180000);
-    it.each([
-      "container-id",
-      "image-id",
-      "reference",
-      "old-compose-inode",
-      "current-generation",
-      "ambiguous-duplicate",
-    ] as const)(
-      "refuses staged provenance after actual %s drift",
+    it.each(["image-id", "reference"] as const)(
+      "does not count a coordinator as its own after its %s drifted from what its generation names",
       async (kind) => {
         await canceledSuccessfulCoordinatorStage();
-        if (kind === "old-compose-inode") {
-          const file = services.configurationGenerationComposeFile(
-              host.infraDir,
-              host.initial.revisionId,
-            ),
-            bytes = readFileSync(file);
-          renameSync(file, `${file}.fixture-original`);
-          writeFileSync(file, bytes, { mode: 0o600, flag: "wx" });
-        } else if (kind === "current-generation") {
-          const owned = await host.owned.inspectOwnedServices(new AbortController().signal);
-          await services.commitConfigurationGeneration({
-            infraDir: host.infraDir,
-            services: host.loaded,
-            input: {
-              domain: "competing.example.test",
-              selectedRoots: ["data-manager", "motis"],
-              serviceConfigs: [],
-              integrationConfigs: [],
-              serviceSecrets: [],
-            },
-            ownedServiceGenerations: owned.map((service) => ({
-              containerId: service.containerId,
-              revisionIds: service.provenance.composeConfigFiles
-                .map((file) => dirname(file).split("/").at(-1)!)
-                .filter((id) => /^cfg1_[A-Za-z0-9_-]{43}$/.test(id)),
-            })),
-          });
-        } else {
-          const rows = (
-            await host.execFile("docker", ["container", "inspect", "--format", "owned-snapshot"], {
-              signal: new AbortController().signal,
-              timeout: 15000,
-              maxBuffer: 1024 * 1024,
-            })
-          ).stdout
-            .trim()
-            .split("\n")
-            .map((row) => JSON.parse(row));
-          const dm = rows.find(
-            (row) => row.Labels["com.docker.compose.service"] === "data-manager",
-          );
-          if (kind === "container-id") dm.Id = "f".repeat(64);
-          if (kind === "image-id") dm.Image = `sha256:${"f".repeat(64)}`;
-          if (kind === "reference") dm.ConfigImage = "example/unrelated:1";
-          if (kind === "ambiguous-duplicate") {
-            const extra = structuredClone(dm);
-            extra.Id = "f".repeat(64);
-            extra.Image = pulledImageId;
-            dm.Labels["com.docker.compose.project.config_files"] =
-              "/tmp/untrusted-staged-compose.yml";
-            rows.push(extra);
-          }
-          host.setRows(rows);
-        }
+        const rows = (
+          await host.execFile("docker", ["container", "inspect", "--format", "owned-snapshot"], {
+            signal: new AbortController().signal,
+            timeout: 15000,
+            maxBuffer: 1024 * 1024,
+          })
+        ).stdout
+          .trim()
+          .split("\n")
+          .map((row) => JSON.parse(row));
+        const dm = rows.find((row) => row.Labels["com.docker.compose.service"] === "data-manager");
+        // Neither the recorded image nor the pulled one the reference names now.
+        if (kind === "image-id") dm.Image = `sha256:${"f".repeat(64)}`;
+        if (kind === "reference") dm.ConfigImage = "example/unrelated:1";
+        host.setRows(rows);
         let observed: { serviceId: string }[] | undefined;
         try {
           observed = await host.owned.inspectOwnedServices(new AbortController().signal);
@@ -2140,8 +1687,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "utf8",
         ),
       );
-      expect(owner.coordinatorPull.imageId).toBe(pulledImageId);
-      expect(owner.coordinatorPull.version).toBe(2);
       expect(owner.record.state).toBe("settled");
       expect(owner.record.fenceOutcome).toBe("applied");
       expect(dm.settlePosts).toBe(1);
@@ -2151,22 +1696,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         (s) => s.serviceId === "data-manager",
       );
       expect(actual?.provenance.imageId).toBe(pulledImageId);
-      const baseline = owner.coordinatorPull.baseline;
-      expect(baseline.policyRevision).not.toBe(baseline.configurationAuthorityRevision);
-      expect(baseline.container).toEqual(
-        owner.originalContainers.find((s: { serviceId: string }) => s.serviceId === "data-manager"),
-      );
-      expect(Buffer.byteLength(JSON.stringify(baseline))).toBeLessThanOrEqual(3072);
-      expect(Buffer.byteLength(JSON.stringify(owner.coordinatorPull))).toBeLessThanOrEqual(8192);
+      // The maintenance found the old coordinator, committed the pulled image
+      // in the new generation, and recreated it with that image.
       expect(
         owner.originalContainers.find((s: { serviceId: string }) => s.serviceId === "data-manager")
           .provenance.imageId,
-      ).not.toBe(pulledImageId);
+      ).toBe(`sha256:${"b".repeat(64)}`);
       expect(owner.plan.coordinatorImage.imageId).toBe(pulledImageId);
-      expect(originalPull).toBeDefined();
-      expect(owner.coordinatorPull.pull.operationKey).toBe(originalPull!.operationKey);
-      expect(owner.coordinatorPull.pull.deadlineAt).toBeLessThan(originalPull!.requestedDeadlineAt);
-      expect(Object.hasOwn(originalPull!, "executionId")).toBe(false);
+      expect(
+        services.readGenerationImageIds(host.infraDir, owner.plan.operation.revisionId)[
+          "data-manager"
+        ],
+      ).toBe(pulledImageId);
       const native = readFileSync(nativeTrace, "utf8")
         .trim()
         .split("\n")
@@ -2360,14 +1901,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             inspected = inspectPreparedConfigurationRecord(
               JSON.parse(bytes.toString("utf8")),
             ).record,
+            pullKey = pullOperationKeyOf(before!),
             originalNormal =
-              inspected.privateCoordinatorLifecycle?.action === "update"
+              inspected.privateCoordinatorLifecycle?.action === "update" && pullKey
                 ? readFileSync(
-                    join(
-                      host.infraDir,
-                      "state/ops-agent/control/executions",
-                      `${inspected.privateCoordinatorLifecycle.pull.operationKey}.json`,
-                    ),
+                    join(host.infraDir, "state/ops-agent/control/executions", `${pullKey}.json`),
                   )
                 : undefined;
           expect(candidate.phase).toBe(
@@ -2462,14 +2000,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 (row.protocol as { candidate?: { rowVersions?: unknown } }).candidate?.rowVersions,
               ),
             ).toBe(decision);
-          if (originalNormal && inspected.privateCoordinatorLifecycle?.action === "update") {
+          if (originalNormal) {
             expect(
               readFileSync(
-                join(
-                  host.infraDir,
-                  "state/ops-agent/control/executions",
-                  `${inspected.privateCoordinatorLifecycle.pull.operationKey}.json`,
-                ),
+                join(host.infraDir, "state/ops-agent/control/executions", `${pullKey}.json`),
               ).equals(originalNormal),
             ).toBe(true);
             expect(posts.get("service.pull")).toBe(1);
@@ -2489,33 +2023,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       240000,
     );
-    it("denies a structural copy of the real production pull claim before signed admission or image staging", async () => {
-      copyPullClaim = true;
-      const observed = new Promise<number>((resolve) => {
-        observePullReply = resolve;
-      });
-      const response = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      expect(response.statusCode).toBe(200);
-      const observedStatus = await observed;
-      const id = (response.json() as { jobId: string }).jobId;
-      await finished(id);
-      expect(observedStatus).toBe(403);
-      expect(host.calls.filter((args) => args[0] === "image" && args[1] === "pull")).toHaveLength(
-        0,
-      );
-      expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
-    }, 60000);
-    it.each(coordinatorReferenceCases.slice(0, 3).map((value) => value.name))(
-      "refuses a %s before actual image staging",
+    it.each(coordinatorReferenceCases.map((value) => value.name))(
+      "updates the coordinator while another service's reference names its image (%s)",
       async () => {
         const reply = await api.inject({
           method: "POST",
@@ -2526,113 +2035,22 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
-        expect(reply.statusCode).toBe(200);
         const row = await finished(reply.json().jobId);
-        expect(row.status).toBe("failed");
-        expect(host.calls.filter((args) => args[0] === "image" && args[1] === "pull")).toHaveLength(
-          0,
+        expect(row.status, row.error ?? "No public error").toBe("success");
+        expect(posts.get("service.pull")).toBe(1);
+        expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
+        // The other service keeps the image its generation recorded until it is recreated.
+        const snapshots = await host.owned.inspectOwnedServices(new AbortController().signal);
+        expect(snapshots.find((s) => s.serviceId === "motis")?.provenance.imageId).toBe(
+          `sha256:${"b".repeat(64)}`,
         );
-        expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-        expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
+        expect(snapshots.find((s) => s.serviceId === "data-manager")?.provenance.imageId).toBe(
+          pulledImageId,
+        );
+        expect(await dm.fenceStates()).toEqual(["settled"]);
       },
       180000,
     );
-    it("allows distinct sibling coordinator tags currently sharing the OLD image", async () => {
-      const reply = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      const row = await finished(reply.json().jobId);
-      expect(row.status).toBe("success");
-      expect(posts.get("service.pull")).toBe(1);
-      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
-      const snapshots = await host.owned.inspectOwnedServices(new AbortController().signal);
-      expect(snapshots.find((s) => s.serviceId === "motis")?.provenance.imageId).toBe(
-        `sha256:${"b".repeat(64)}`,
-      );
-      expect(snapshots.find((s) => s.serviceId === "data-manager")?.provenance.imageId).toBe(
-        pulledImageId,
-      );
-      expect(await dm.fenceStates()).toEqual(["settled"]);
-    }, 180000);
-    it.each([
-      "generic resolver",
-      "policy-only",
-      "missing raw revision",
-      "raw suffix drift",
-      "consumed capture",
-    ] as const)(
-      "rejects %s at the actual candidate pull server before first signed admission",
-      async (mode) => {
-        claimCase = mode;
-        const observed = new Promise<number>((resolve) => {
-          observePullReply = resolve;
-        });
-        const reply = await api.inject({
-          method: "POST",
-          url: "/api/admin/services/bulk-action",
-          headers: {
-            "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
-          },
-          payload: { action: "update", serviceIds: ["data-manager"] },
-        });
-        expect(reply.statusCode).toBe(200);
-        const status = await observed;
-        await finished(reply.json().jobId);
-        expect(status).toBe(403);
-        expect(host.calls.filter((args) => args[0] === "image" && args[1] === "pull")).toHaveLength(
-          0,
-        );
-        expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-        expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
-        const executions = join(host.infraDir, "state/ops-agent/control/executions");
-        expect(
-          (existsSync(executions) ? readdirSync(executions) : []).filter(
-            (name) =>
-              JSON.parse(readFileSync(join(executions, name), "utf8"))?.kind === "service.pull",
-          ),
-        ).toHaveLength(0);
-      },
-      60000,
-    );
-    it("rejects actual canonical Compose provenance exceeding the 3072-byte baseline before first admission", async () => {
-      const owned = await host.owned.inspectOwnedServices(new AbortController().signal);
-      const dmOwned = owned.find((value) => value.serviceId === "data-manager");
-      expect(dmOwned?.state).toBe("running");
-      expect(dmOwned?.provenance.composeConfigFiles).toHaveLength(1);
-      const observed = new Promise<number>((resolve) => {
-        observePullReply = resolve;
-      });
-      const reply = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      const status = await observed;
-      await finished(reply.json().jobId);
-      expect(status).toBe(403);
-      expect(host.calls.filter((args) => args[0] === "image" && args[1] === "pull")).toHaveLength(
-        0,
-      );
-      expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      const executions = join(host.infraDir, "state/ops-agent/control/executions");
-      expect(
-        (existsSync(executions) ? readdirSync(executions) : []).filter(
-          (name) =>
-            JSON.parse(readFileSync(join(executions, name), "utf8"))?.kind === "service.pull",
-        ),
-      ).toHaveLength(0);
-    }, 60000);
     it("starts an initially stopped coordinator before pull using only its clamped original old-revision helper", async () => {
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
       await expect(fetch(dm.baseUrl + "/health")).rejects.toThrow();
@@ -2661,7 +2079,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(host.calls.filter((args) => args.includes("--no-recreate"))).toHaveLength(1);
       expect(await dm.fenceStates()).toEqual(["settled"]);
     }, 180000);
-    it("closes a prepared pull locally after whole-candidate coordinator refusal without inventing an admission", async () => {
+    it("sends no pull when the whole candidate is refused before the update starts", async () => {
       services.writeServiceSelectionFile(host.infraDir, ["motis"]);
       const reply = await api.inject({
         method: "POST",
@@ -2688,20 +2106,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await delay(10);
       }
       expect(row!.status).toBe("failed");
-      const result = row!.protocol as {
-        operations: {
-          operations: Record<
-            string,
-            { phase: string; terminal: boolean; operationId?: string; receiptDelivery?: unknown }
-          >;
-        };
-      };
-      const entries = Object.values(result.operations.operations);
-      expect(entries).toHaveLength(1);
-      expect(entries[0]!.phase).toBe("unissued");
-      expect(entries[0]!.terminal).toBe(true);
-      expect(entries[0]!.operationId).toBeUndefined();
-      expect(entries[0]!.receiptDelivery).toBeUndefined();
+      expect(pullOperationKeyOf(row!)).toBeUndefined();
       expect(posts.get("service.pull") ?? 0).toBe(0);
       expect(posts.get("service.start") ?? 0).toBe(0);
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
@@ -2780,101 +2185,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
       expect(row.error ?? "").not.toContain('update "admin_job"');
       expect(row.error ?? "").not.toContain(host.root);
-    }, 180000);
-    it("preserves actual first-delivery CAS against stale prepared and forged unissued generic checkpoints", async () => {
-      const reached = Promise.withResolvers<void>(),
-        release = Promise.withResolvers<void>();
-      pullAdmissionReplyGate = { reached: () => reached.resolve(), release: release.promise };
-      try {
-        const response = await api.inject({
-            method: "POST",
-            url: "/api/admin/services/bulk-action",
-            headers: {
-              "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
-            },
-            payload: { action: "update", serviceIds: ["data-manager"] },
-          }),
-          id = response.json().jobId;
-        await reached.promise;
-        const [row] = await fixture.db
-            .select()
-            .from(schema.adminJob)
-            .where(eq(schema.adminJob.id, id)),
-          original = row!.result as Record<string, unknown>,
-          originalProtocol = row!.protocol as Record<string, unknown>,
-          stale = structuredClone(originalProtocol.operations) as {
-            operations: Record<string, never>;
-          };
-        type Entry = {
-          phase: string;
-          terminal: boolean;
-          operation: { candidateId: string };
-          nonissuance?: unknown;
-        };
-        const entries = (stale as unknown as { operations: Record<string, Entry> }).operations,
-          key = Object.keys(entries)[0]!,
-          entry = entries[key]!;
-        expect(entry.phase).toBe("admitting");
-        entry.phase = "prepared";
-        const { jobCheckpoint } = await import("../admin-job-state");
-        const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint"),
-          execution = originalProtocol.execution as { owner: string; version: number };
-        const merged = await checkpointOwnedAdminJob(
-          id,
-          execution,
-          original,
-          stale as never,
-          undefined,
-          undefined,
-          undefined,
-          original,
-        );
-        expect(
-          (merged.protocol.operations as { operations: Record<string, Entry> }).operations[key]!
-            .phase,
-        ).toBe("admitting");
-        const forged = structuredClone(originalProtocol.operations) as {
-            operations: Record<string, Entry>;
-          },
-          fake = forged.operations[key]!;
-        fake.phase = "unissued";
-        fake.terminal = true;
-        fake.nonissuance = {
-          version: 1,
-          candidateId: fake.operation.candidateId,
-          checkedOwnerVersion: execution.version,
-          checkedAt: Date.now(),
-        };
-        await expect(
-          checkpointOwnedAdminJob(
-            id,
-            execution,
-            original,
-            forged as never,
-            undefined,
-            undefined,
-            undefined,
-            original,
-          ),
-        ).rejects.toThrow();
-        const [unchanged] = await fixture.db
-          .select()
-          .from(schema.adminJob)
-          .where(eq(schema.adminJob.id, id));
-        // The stored result is the public part of the checkpoint the CAS returned.
-        expect(JSON.stringify(jobCheckpoint(unchanged!.result, unchanged!.protocol))).toBe(
-          JSON.stringify(merged.result),
-        );
-        expect(JSON.stringify(unchanged!.protocol)).toBe(JSON.stringify(merged.protocol));
-        pullAdmissionReplyGate = undefined;
-        release.resolve();
-        expect((await finished(id)).status).toBe("success");
-        expect(posts.get("service.pull")).toBe(1);
-      } finally {
-        pullAdmissionReplyGate = undefined;
-        release.resolve();
-      }
     }, 180000);
     it.each([
       { name: "original cleanup", retry: false },

@@ -8,11 +8,9 @@ export { readProjection } from "./admin-job-projection";
 
 import { createHash, randomUUID } from "node:crypto";
 import {
-  type CoordinatorPullSubmission,
   canonicalJson,
   configurationApplyResultSchema,
   controlTerminalReceiptDigest,
-  coordinatorPullSubmissionSchema,
   createControlRootOperationKey,
   isTrustedConfigurationApplyOperation,
   type OpsJobStatus,
@@ -40,11 +38,6 @@ import {
   JobStepAllocationConflict,
 } from "./admin-job-state";
 import { readArtifactPurposeObservation } from "./artifact-purpose-observation";
-import {
-  assertCoordinatorPullIntent,
-  type CoordinatorLifecycleIntent,
-  claimCoordinatorPullDelivery,
-} from "./coordinator-lifecycle";
 import type { JobContext } from "./job-runner";
 import {
   type ApiOpsClient,
@@ -111,7 +104,6 @@ export async function checkpointTerminalCopy(
 ): Promise<void> {
   if (
     projected.phase === "refused" ||
-    projected.phase === "unissued" ||
     !projected.attempt ||
     !Object.values(projection.steps).some((s) => s.operationKey === projected.operationKey) ||
     !opsKindRequiresControlAuthority(projected.kind)
@@ -186,8 +178,6 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   let projection = readProjection(context.protocol, context.checkpointResult);
   const retainedKey = projection.steps[stepAddress]?.operationKey ?? stepAddress;
   let restored = projection.operations[retainedKey];
-  if (restored?.phase === "prepared" || restored?.phase === "unissued")
-    throw new JobObservationPending("recovery_required");
   if (restored && restored.kind !== operation.kind)
     throw new JobObservationPending("invalid_identity");
   if (restored)
@@ -262,91 +252,6 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   return observeOperation(context, projection, admitted, client, options, true) as Promise<
     OpsResultFor<K>
   >;
-}
-
-/** Finite preallocation for the nominal coordinator Update only. No dispatch
- * occurs; the original attempt is checkpointed before the candidate is sealed. */
-export async function reserveCoordinatorPullSubmission(
-  context: JobContext,
-  intent: CoordinatorLifecycleIntent,
-  expectedConfigurationRevisionId: string,
-  parent: ApiPreparedRoot["parent"],
-): Promise<CoordinatorPullSubmission> {
-  const fixed = await assertCoordinatorPullIntent(intent, context),
-    stepAddress = createDurableOpsKey(
-      "configuration.coordinator-pull",
-      `${context.jobId}:${fixed.originalOrdinal}`,
-    ),
-    operation = {
-      kind: "service.pull" as const,
-      serviceId: "data-manager" as const,
-      expectedConfigurationRevisionId,
-      candidateId: fixed.candidateId,
-    },
-    root = prepareApiJobRoot(
-      { ...context, checkpointResult: { ...context.checkpointResult, _parentExecution: parent } },
-      "service.pull",
-      stepAddress,
-    ),
-    attempt = prepareApiJobChildAttempt(context, operation, root.operationKey, root);
-  if (!attempt) throw Error("Original coordinator job owner required");
-  const submission = coordinatorPullSubmissionSchema.parse({
-      version: 1,
-      requestVersion: 2,
-      expectedExecutor: "ops-agent",
-      expectedPrincipal: "api",
-      stepAddress,
-      operation,
-      operationKey: root.operationKey,
-      operationFingerprint: attempt.childOperationFingerprint,
-      requestedDeadlineAt: attempt.requestedDeadlineAt,
-      attempt,
-    }),
-    entry: ProjectedOperation = {
-      kind: "service.pull",
-      operationKey: root.operationKey,
-      operation,
-      attempt,
-      phase: "prepared",
-      cursor: 0,
-      events: 0,
-      bytes: 0,
-      truncated: false,
-      terminal: false,
-    },
-    projection = readProjection(context.protocol, context.checkpointResult);
-  await persistProjection(
-    context,
-    {
-      ...projection,
-      version: 3,
-      steps: {
-        [stepAddress]: {
-          operationKey: root.operationKey,
-          requestedDeadlineAt: root.requestedDeadlineAt,
-        },
-      },
-      operations: { [root.operationKey]: entry },
-    },
-    root.operationKey,
-    stepAddress,
-    parent,
-  );
-  const retained = readProjection(context.protocol, context.checkpointResult).operations[
-    root.operationKey
-  ];
-  if (!retained || canonicalJson(retained.attempt) !== canonicalJson(attempt))
-    throw new JobObservationPending("recovery_required");
-  return submission;
-}
-/** Only the fixed original MAC candidate/owned-row CAS may release a prepared
- * normal pull for its first delivery, including after API owner reclaim. */
-export async function deliverCoordinatorPullSubmission(context: JobContext, candidateId: string) {
-  const original = await claimCoordinatorPullDelivery(context, candidateId),
-    projection = readProjection(context.protocol, context.checkpointResult),
-    entry = projection.operations[original.operationKey];
-  if (!entry) throw new JobObservationPending("recovery_required");
-  return observeOperation(context, projection, entry, createApiOpsClient(), {}, original.fresh);
 }
 
 export function prepareAdminJobOperationRoot(
@@ -846,7 +751,7 @@ export async function cancelAdminJobOperations(
       ? AbortSignal.any([options.signal, AbortSignal.timeout(2_000)])
       : AbortSignal.timeout(2_000);
   for (const operation of pending) {
-    if (operation.phase === "refused" || operation.phase === "unissued") {
+    if (operation.phase === "refused") {
       outcomes.push("already_terminal");
       continue;
     }

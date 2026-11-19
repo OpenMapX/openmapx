@@ -122,10 +122,11 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
               fixed = source.fixed;
             if (
               fixed.action !== "update" ||
-              canonicalJson(fixed.pull.operation) !== canonicalJson(operation) ||
-              fixed.pull.operationKey !== context.execution.operationKey
+              candidate.operation.kind !== "stack.render" ||
+              candidate.operation.expectedCurrentRevisionId !==
+                operation.expectedConfigurationRevisionId
             )
-              throw Error("Original coordinator pull submission changed");
+              throw Error("Coordinator update candidate required");
             verifyConfigurationReleaseSourceWitness({
               installation: admitted.installation.installation,
               infraDir: options.infraDir,

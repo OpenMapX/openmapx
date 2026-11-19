@@ -89,7 +89,6 @@ const policyAuthority = async () => {
   const a = await loadAuthority();
   return {
     revisionId: configurationPolicyRevision(a.revisionId),
-    configurationAuthorityRevision: a.revisionId,
     services: a.services.map((s) => ({
       serviceId: s.manifest.id,
       enabled: s.enabled,

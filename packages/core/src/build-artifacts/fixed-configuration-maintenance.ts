@@ -49,7 +49,6 @@ const coordinatorImageSchema = z.strictObject({
   imageReference: servicePullResultSchema.shape.imageReference,
   imageId: servicePullResultSchema.shape.imageId,
   releaseSelectionDigest: servicePullResultSchema.shape.releaseSelectionDigest,
-  pullSubmissionDigest: digest.nullable(),
 });
 export const fixedConfigurationMaintenancePlanSchema = z.strictObject({
   version: z.literal(1),
@@ -206,10 +205,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
   if (
     input.coordinatorImage &&
     (canonicalJson(recreates) !== '["data-manager"]' ||
-      (input.coordinatorImage.action === "apply" &&
-        (input.coordinatorImage.noDeps || input.coordinatorImage.pullSubmissionDigest !== null)) ||
-      (input.coordinatorImage.action === "update" &&
-        input.coordinatorImage.pullSubmissionDigest === null))
+      (input.coordinatorImage.action === "apply" && input.coordinatorImage.noDeps))
   )
     throw Error("Fixed coordinator image expectation conflict");
   if (

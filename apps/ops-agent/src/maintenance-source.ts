@@ -14,7 +14,6 @@ import {
 import {
   type ConfigurationMaintenancePrepare,
   canonicalJson,
-  coordinatorPullSubmissionDigest,
   type ExecutionRef,
   type OpsOperation,
   opsOperationFingerprint,
@@ -319,16 +318,19 @@ export async function planConfigurationMaintenance(
     }
     if (fixed.action === "update") {
       // The image this update pulled, as the agent's own journal recorded the
-      // pull's result; the commit step records it in the generation.
+      // result of the pull that names this candidate; the commit step records
+      // it in the generation.
       const matches = input.journal
         .records()
-        .filter((job) => job.role === "api" && job.operationKey === fixed.pull.operationKey);
+        .filter(
+          (job) =>
+            job.role === "api" &&
+            job.operation.kind === "service.pull" &&
+            job.operation.serviceId === "data-manager" &&
+            job.operation.candidateId === candidate.record.candidateId,
+        );
       const job = matches.length === 1 ? matches[0] : undefined;
-      if (
-        job?.operation.kind !== "service.pull" ||
-        job.state !== "succeeded" ||
-        canonicalJson(job.operation) !== canonicalJson(fixed.pull.operation)
-      )
+      if (job?.state !== "succeeded")
         throw Error("Actual successful current coordinator pull required");
       const pulled = servicePullResultSchema.parse(job.result);
       if (
@@ -343,7 +345,6 @@ export async function planConfigurationMaintenance(
         imageReference: pulled.imageReference,
         imageId: pulled.imageId,
         releaseSelectionDigest: pulled.releaseSelectionDigest,
-        pullSubmissionDigest: coordinatorPullSubmissionDigest(fixed.pull),
       };
     } else {
       const observed = await source.execFile(
@@ -357,7 +358,6 @@ export async function planConfigurationMaintenance(
         imageReference: coordinator.imageReference,
         imageId: observed.stdout.trim(),
         releaseSelectionDigest: coordinator.releaseSelectionDigest,
-        pullSubmissionDigest: null,
       };
     }
   }
@@ -384,7 +384,6 @@ export async function planConfigurationMaintenance(
       imageReference,
       imageId: actual.stdout.trim(),
       releaseSelectionDigest: selected.releaseSelectionDigest,
-      pullSubmissionDigest: null,
     };
   }
   // The containers as the maintenance finds them; each recreate replaces one.

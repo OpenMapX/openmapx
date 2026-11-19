@@ -21,7 +21,6 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-c
 import {
   persistAndApplyProspectiveConfiguration,
   prepareProspectiveConfiguration,
-  reconcileUnstagedCoordinatorPull,
   resumeConfigurationCandidate,
 } from "./prospective-configuration";
 import {
@@ -53,7 +52,6 @@ export async function applyCoordinatorService(
     withAdministrativeConfigurationWriter(
       { actorId: ctx.jobId, operationKey, integrationIds: [], signal: ctx.signal },
       async () => {
-        await reconcileUnstagedCoordinatorPull();
         let application: unknown;
         if (retained?.operationKey === operationKey) {
           const result = await resumeConfigurationCandidate();

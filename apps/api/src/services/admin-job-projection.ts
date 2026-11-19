@@ -43,8 +43,7 @@ export interface ProjectedOperation {
   operationKey: string;
   operationId?: string;
   operation?: OpsOperation;
-  phase: "unissued" | "prepared" | "admitting" | "observing" | "terminal" | "refused";
-  nonissuance?: { version: 1; candidateId: string; checkedOwnerVersion: number; checkedAt: number };
+  phase: "admitting" | "observing" | "terminal" | "refused";
   attempt?: ApiJobChildAttempt;
   fingerprint?: string;
   deadlineAt?: number;
@@ -133,11 +132,7 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
     }
     if (!Object.hasOwn(OPS_KIND_POLICIES, operation.kind as string))
       throw new JobObservationPending("invalid_identity");
-    if (
-      !["admitting", "observing", "terminal", "refused", "prepared", "unissued"].includes(
-        operation.phase as string,
-      )
-    )
+    if (!["admitting", "observing", "terminal", "refused"].includes(operation.phase as string))
       throw new JobObservationPending("invalid_identity");
     const checked =
       operation.operation === undefined
@@ -145,53 +140,6 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
         : opsOperationSchema.safeParse(operation.operation);
     if (checked && !checked.success) throw new JobObservationPending("invalid_identity");
     const parsed = checked?.data;
-    if (
-      operation.phase === "prepared" &&
-      (parsed?.kind !== "service.pull" ||
-        !parsed.candidateId ||
-        parsed.serviceId !== "data-manager" ||
-        !operation.attempt ||
-        operation.terminal ||
-        operation.operationId !== undefined ||
-        operation.fingerprint !== undefined ||
-        operation.deadlineAt !== undefined ||
-        operation.result !== undefined ||
-        operation.receiptDelivery !== undefined)
-    )
-      throw new JobObservationPending("invalid_identity");
-    if (operation.phase === "unissued") {
-      const closed = operation.nonissuance as ProjectedOperation["nonissuance"];
-      if (
-        parsed?.kind !== "service.pull" ||
-        parsed.serviceId !== "data-manager" ||
-        !parsed.candidateId ||
-        !operation.attempt ||
-        operation.terminal !== true ||
-        operation.operationId !== undefined ||
-        operation.fingerprint !== undefined ||
-        operation.deadlineAt !== undefined ||
-        operation.result !== undefined ||
-        operation.failureResult !== undefined ||
-        operation.diagnostics !== undefined ||
-        operation.errorClass !== undefined ||
-        operation.receiptDelivery !== undefined ||
-        operation.outcome !== undefined ||
-        operation.cursor !== 0 ||
-        operation.events !== 0 ||
-        operation.bytes !== 0 ||
-        operation.truncated ||
-        !closed ||
-        Object.keys(closed).length !== 4 ||
-        closed.version !== 1 ||
-        closed.candidateId !== parsed.candidateId ||
-        !Number.isSafeInteger(closed.checkedOwnerVersion) ||
-        closed.checkedOwnerVersion < 1 ||
-        !Number.isSafeInteger(closed.checkedAt) ||
-        closed.checkedAt < 0
-      )
-        throw new JobObservationPending("invalid_identity");
-    } else if (operation.nonissuance !== undefined)
-      throw new JobObservationPending("invalid_identity");
     if (
       operation.fingerprint !== undefined &&
       (typeof operation.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(operation.fingerprint))
@@ -216,9 +164,6 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
       const attempt = apiJobChildAttemptSchema.safeParse(operation.attempt);
       if (
         !attempt.success ||
-        (operation.phase === "unissued" &&
-          (operation.nonissuance as ProjectedOperation["nonissuance"])!.checkedOwnerVersion <
-            attempt.data.apiOwnerVersion) ||
         !parsed ||
         attempt.data.childOperationKey !== key ||
         attempt.data.childOperationFingerprint !== opsOperationFingerprint(parsed)
@@ -303,7 +248,6 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
     if (
       entry.terminal &&
       entry.phase !== "refused" &&
-      entry.phase !== "unissued" &&
       opsKindRequiresControlAuthority(entry.kind) &&
       !entry.receiptDelivery
     )

@@ -57,19 +57,10 @@ export async function checkpointOwnedAdminJob(
         !operation?.attempt ||
         operation.attempt.apiJobId !== id ||
         operation.attempt.apiOwnerVersion !== execution.version ||
-        !["admitting", "prepared"].includes(operation.phase) ||
+        operation.phase !== "admitting" ||
         operation.terminal
       )
         throw Error("Invalid stable step reservation");
-      if (
-        operation.phase === "prepared" &&
-        (row.type !== "service.bulk" ||
-          (row.payload as { action?: unknown })?.action !== "update" ||
-          operation.operation?.kind !== "service.pull" ||
-          operation.operation.serviceId !== "data-manager" ||
-          !operation.operation.candidateId)
-      )
-        throw Error("Only the fixed coordinator pull can be preallocated");
       if (old.steps[stepAddress] || old.operations[stepAddress] || old.operations[admissionKey])
         return { conflict: true as const, result: current, protocol: currentProtocol };
       if (Object.keys(old.steps).length >= 64 || Object.keys(old.operations).length >= 64)
@@ -129,18 +120,6 @@ export async function checkpointOwnedAdminJob(
       for (const [key, entry] of Object.entries(next.operations)) {
         const previous = old.operations[key];
         if (!previous) throw Error("New operation requires stable address reservation");
-        // A stale checkpoint cannot resurrect an unattempted slot after the
-        // fixed delivery/nonissuance CAS has won. Keep that actual winner.
-        if (previous.phase !== "prepared" && entry.phase === "prepared") {
-          operations[key] = previous;
-          continue;
-        }
-        if (entry.phase === "unissued" && previous.phase !== "unissued")
-          throw Error("Local nonissuance requires its fixed source CAS");
-        if (previous.phase === "unissued" && !equal(previous, entry))
-          throw Error("Immutable local nonissuance changed");
-        if (previous.phase === "prepared" && entry.phase !== "prepared")
-          throw Error("Original coordinator delivery requires its fixed source CAS");
         for (const field of ["kind", "operationKey", "operation", "attempt"] as const)
           if (!equal(previous[field], entry[field]))
             throw Error("Immutable managed operation changed");

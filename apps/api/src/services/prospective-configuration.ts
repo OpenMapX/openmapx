@@ -38,11 +38,10 @@ import { getIntegration, inspectIntegrationRuntime } from "../integration-host";
 import { apiKeyedDigest } from "./admin-job-digest";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
-  deliverCoordinatorPullSubmission,
   executeAdminJobOperation,
+  hasRetainedAdminJobOperation,
   prepareAdminJobOperationRoot,
   readProjection,
-  reserveCoordinatorPullSubmission,
 } from "./admin-job-ops";
 import { issueApiJobChildAssertion, prepareApiJobChildAttempt } from "./admin-job-parent";
 import {
@@ -98,7 +97,7 @@ import {
   assertCoordinatorLifecycleIntent,
   assertRetainedCoordinatorLifecycleProvenance,
   type CoordinatorLifecycleIntent,
-  closeUnissuedCoordinatorPull,
+  coordinatorPullStepAddress,
 } from "./coordinator-lifecycle";
 import {
   assertIntegrationBindingOverlay,
@@ -477,8 +476,6 @@ async function abandonCandidate(
     }
     if (prepared) await settleConfigurationMaintenance(record.maintenanceId, "abandon");
   }
-  if (record.privateCoordinatorLifecycle?.action === "update")
-    await closeUnissuedCoordinatorPull(job, candidate.candidateId, record.operationKey);
   await discardConfigurationCandidate(record.operationKey);
   const application = notCommitted(reason);
   await concludeWithoutChange(job, candidate.operationKey, application);
@@ -589,31 +586,37 @@ async function prepareMaintenance(candidate: ValidatedConfigurationCandidate): P
     { job } = administrativeConfigurationState(state.writer),
     record = state.record;
   if (!readProjection(job.protocol).operations[record.prepareOperationKey!]?.attempt) {
-    const pull =
-      record.privateCoordinatorLifecycle?.action === "update"
-        ? record.privateCoordinatorLifecycle.pull
+    // A coordinator update pulls its image first, as an ordinary keyed step
+    // that names the candidate; the maintenance commits what it pulled.
+    const lifecycle = record.privateCoordinatorLifecycle;
+    const pullStep =
+      lifecycle?.action === "update"
+        ? coordinatorPullStepAddress(job.jobId, lifecycle.originalOrdinal)
         : undefined;
-    const deliverPull = async () => {
+    const pull = async (step: string) => {
       try {
-        await deliverCoordinatorPullSubmission(job, candidate.candidateId);
+        await executeAdminJobOperation(
+          job,
+          {
+            kind: "service.pull",
+            serviceId: "data-manager",
+            expectedConfigurationRevisionId: candidate.expectedCurrentRevisionId!,
+            candidateId: candidate.candidateId,
+          },
+          "configuration.coordinator-pull",
+          { operationKey: step },
+        );
       } catch (error) {
-        const entry = readProjection(job.protocol).operations[pull!.operationKey];
-        if (
-          error instanceof ApiOpsError &&
-          error.errorClass !== "recovery_required" &&
-          entry?.phase === "terminal" &&
-          entry.errorClass
-        )
+        if (error instanceof ApiOpsError && error.errorClass !== "recovery_required")
           throw new CandidateRefused("Original coordinator pull failed before maintenance");
         throw error;
       }
     };
-    const attemptedPull = pull && readProjection(job.protocol).operations[pull.operationKey];
     // A pull sent before a restart is observed before the coordinator's state is read.
-    if (attemptedPull && attemptedPull.phase !== "prepared" && attemptedPull.phase !== "unissued")
-      await deliverPull();
-    await prepareMaintenanceCoordinator(candidate, state);
-    if (pull) await deliverPull();
+    const pullSent = pullStep !== undefined && hasRetainedAdminJobOperation(job, pullStep);
+    if (pullStep && pullSent) await pull(pullStep);
+    await prepareMaintenanceCoordinator(candidate, state, pullSent);
+    if (pullStep && !pullSent) await pull(pullStep);
     // A candidate that expired while its image downloaded acquires no maintenance.
     if (Date.parse(record.snapshot.expiresAt) <= Date.now())
       throw new CandidateRefused("Configuration candidate expired");
@@ -1673,12 +1676,6 @@ export async function prepareProspectiveConfiguration(input: {
                 action: "update" as const,
                 originalOrdinal: coordinator.originalOrdinal!,
                 noDeps: coordinator.noDeps,
-                pull: await reserveCoordinatorPullSubmission(
-                  owner.job,
-                  input.coordinatorIntent!,
-                  input.expectedCurrentRevisionId!,
-                  root.parent,
-                ),
               }
           : undefined;
         const applyOperationKey = maintenanceId
@@ -1849,8 +1846,6 @@ export async function prepareProspectiveConfiguration(input: {
           preflightStage = "capacity";
           assertMaintenanceIntentCapacity(state, owner.job.protocol);
         } catch (error) {
-          if (coordinator?.action === "update")
-            await closeUnissuedCoordinatorPull(owner.job, candidateId, record.operationKey);
           // The preview is read-only and nothing was admitted for this candidate.
           await discardConfigurationCandidate(record.operationKey);
           if (error instanceof ApiOpsError && error.errorClass === "configuration_prerequisite") {
@@ -1871,11 +1866,7 @@ export async function prepareProspectiveConfiguration(input: {
         closeAdministrativeConfigurationRead(read);
       }
     },
-  ).catch(async (error) => {
-    if (coordinator?.action === "update")
-      await closeUnissuedCoordinatorPull(owner.job, coordinator.candidateId, cleanupOperationKey);
-    throw error;
-  });
+  );
   // A migration preview prepares a candidate only to drop it again.
   if (owner.participant?.mode !== "preview" && result.candidateId !== own?.candidateId)
     owner.job.protocol = await writeAdminJobCandidate(
@@ -2415,6 +2406,7 @@ async function coordinatorState(candidate: ValidatedConfigurationCandidate, stat
 async function prepareMaintenanceCoordinator(
   candidate: ValidatedConfigurationCandidate,
   state: CandidateState,
+  pullSent: boolean,
 ): Promise<void> {
   if (
     !state.record.maintenanceId ||
@@ -2434,12 +2426,8 @@ async function prepareMaintenanceCoordinator(
   if (Date.parse(state.record.snapshot.expiresAt) <= Date.now())
     throw new CandidateRefused("Configuration candidate expired");
   const lifecycle = state.record.privateCoordinatorLifecycle,
-    projection = readProjection(job.protocol),
-    beforePull =
-      lifecycle?.action === "update"
-        ? projection.operations[lifecycle.pull.operationKey]
-        : undefined;
-  if (lifecycle && beforePull && beforePull.phase !== "prepared") {
+    projection = readProjection(job.protocol);
+  if (lifecycle && pullSent) {
     if (projection.operations[fixed.root.operationKey])
       await executeAdminJobOperation(
         job,
@@ -2455,8 +2443,6 @@ async function prepareMaintenanceCoordinator(
     return;
   }
   if (lifecycle && state.preview?.coordinatorState === "running") return;
-  if (beforePull && beforePull.phase !== "prepared")
-    throw new JobObservationPending("recovery_required");
   await executeAdminJobOperation(job, fixed.operation, "configuration-maintenance.coordinator", {
     operationKey: fixed.stepAddress,
     preparedRoot: fixed.root,
@@ -2903,29 +2889,4 @@ export async function persistPreparedFeedCredentialPatch(input: {
     "./transit-feed-credential-participant"
   );
   return persistPreparedFeedCredentialRow({ ...input, candidateState: state });
-}
-
-/** A coordinator update that stopped after reserving its pull but before its
- * candidate was recorded never sent the pull: the slot is closed, an orphaned
- * candidate dropped, and the job ends without the update. */
-export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
-  const writer = currentAdministrativeConfigurationWriter(),
-    { job } = administrativeConfigurationState(writer);
-  if (job.jobType !== "service.bulk" || protocolCandidate(job)) return;
-  const { parseServiceUpdateBatch } = await import("./service-update-batch"),
-    batch = parseServiceUpdateBatch(job.payload, job.checkpointResult),
-    ordinal = batch.serviceIds.indexOf("data-manager"),
-    projection = readProjection(job.protocol),
-    address = createDurableOpsKey("configuration.coordinator-pull", `${job.jobId}:${ordinal}`),
-    entry = projection.operations[projection.steps[address]?.operationKey ?? address];
-  if (!entry) return;
-  const operation = entry.operation;
-  if (entry.phase !== "prepared" || operation?.kind !== "service.pull" || !operation.candidateId)
-    throw new JobObservationPending("recovery_required");
-  const orphan = await findConfigurationCandidate(operation.candidateId);
-  await closeUnissuedCoordinatorPull(job, operation.candidateId, orphan?.record.operationKey);
-  if (orphan) await discardConfigurationCandidate(orphan.record.operationKey);
-  throw new AdminJobFailure("Original configuration candidate was not issued", {
-    configuration: notCommitted("conflict"),
-  });
 }
