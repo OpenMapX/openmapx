@@ -6,7 +6,6 @@ import {
   assertControlExecutionForward,
   ControlExecutionFencedError,
   type ControlInstallation,
-  type ControlTransportPrincipal,
   cancelArtifactTargetLease,
   cancelControlExecution,
   closeArtifactTargetLeaseHandle,
@@ -45,7 +44,12 @@ import {
   dataChildControlReservation,
 } from "./ops-children.js";
 import { ownedLease } from "./owned-lease.js";
-import type { DataExecutionPatch, DataExecutionRecord, DataExecutionStore } from "./store.js";
+import type {
+  DataExecutionAdmissionOptions,
+  DataExecutionPatch,
+  DataExecutionRecord,
+  DataExecutionStore,
+} from "./store.js";
 import { withDataExecutionScope } from "./worker-scope.js";
 export type DataExecutionProgressPatch = Partial<
   Pick<DataExecutionStatus, "progress" | "diagnostics" | "publication">
@@ -84,8 +88,7 @@ export interface DataExecutionRuntime {
       parent?: VerifiedParentExecution;
       id?: string;
       principal?: ExecutionRef["principal"];
-      /** Who sent a hardlink application under its own lease. */
-      linkCaller?: ControlTransportPrincipal;
+      linkSender?: DataExecutionAdmissionOptions["linkSender"];
       triggeredBy?: string;
       idempotencyKey?: string;
       /** Checks the normalized identity against what the caller named. */

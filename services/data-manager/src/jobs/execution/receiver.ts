@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   type ControlInstallation,
   inspectDataExecutionAdmission,
+  inspectSenderLease,
   TargetBusyError,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -124,10 +125,19 @@ export function createDataExecutionReceiver(deps: {
       const request = linkRequestSchema.parse(value),
         prune = request.prune ?? false,
         leaseId = request.leaseId ?? null;
-      if (leaseId && transportPrincipal !== "ops-agent" && transportPrincipal !== "host-cli")
-        throw Object.assign(Error("Only the agent or the host CLI links under its own lease"), {
-          statusCode: 403,
-        });
+      let linkSender: Parameters<DataExecutionRuntime["admit"]>[1]["linkSender"];
+      if (leaseId) {
+        if (transportPrincipal !== "ops-agent" && transportPrincipal !== "host-cli")
+          throw Object.assign(Error("Only the agent or the host CLI links under its own lease"), {
+            statusCode: 403,
+          });
+        // Read before admission, outside its lock. Admission checks the answer
+        // unless the request repeats an application or belongs to the prepared fence.
+        linkSender = {
+          caller: transportPrincipal,
+          lease: await inspectSenderLease(installation, leaseId, transportPrincipal),
+        };
+      }
       const input = normalizeDataExecutionInput({
         kind: "generation-link",
         revisionId: request.revisionId,
@@ -140,7 +150,7 @@ export function createDataExecutionReceiver(deps: {
       const admitted = await runtime.admit(input, {
         operationKey: request.operationKey,
         requestedDeadlineAt: request.requestedDeadlineAt,
-        ...(leaseId ? { linkCaller: transportPrincipal } : {}),
+        ...(linkSender ? { linkSender } : {}),
         // From the first link on, a failure part-way may have changed links: it
         // is a known partial outcome, never an unknown publication.
         work: async () => {

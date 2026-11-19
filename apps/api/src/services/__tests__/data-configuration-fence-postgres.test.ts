@@ -714,10 +714,14 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
           planDigest: f.input.hardlinkPlanDigest ?? "f".repeat(64),
           leaseId: control.rootLeaseId(f.input.ownerPrepare),
         },
+        // Beside a prepared fence what the agent shows of the lease does not
+        // matter: only the fence's own maintenance gets through.
         admit = (
           input: typeof own,
-          caller: Parameters<typeof fence.assertLinkAdmission>[2],
-        ): Promise<unknown> => f.sql.begin((tx) => fence.assertLinkAdmission(tx, input, caller));
+          caller: Parameters<typeof fence.assertLinkAdmission>[2]["caller"],
+          lease: "held" | "not_held" = caller === "host-cli" ? "held" : "not_held",
+        ): Promise<unknown> =>
+          f.sql.begin((tx) => fence.assertLinkAdmission(tx, input, { caller, lease }));
       // The host CLI, another lease, another revision and another plan stay out.
       for (const [input, caller] of [
         [own, "host-cli"],

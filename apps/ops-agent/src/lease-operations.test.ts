@@ -107,4 +107,30 @@ describe("lease operations for data-manager", () => {
       runLeaseOperation(installation, store(), "api", { kind: "lease.read", leaseId }),
     ).rejects.toBeInstanceOf(LeaseRefused);
   });
+
+  it("shows another holder's lease on data-manager without letting data-manager change it", async () => {
+    const host = owner("host-cli");
+    const leaseId = await store().update(
+      (leases) =>
+        leaseRules.acquire(
+          leases,
+          { owner: host, ownerKind: "control.rollback", targets: ["data-manager", "redis"] },
+          Date.now(),
+        ).leaseId,
+    );
+    expect(
+      await runLeaseOperation(installation, store(), "data-manager", {
+        kind: "lease.read",
+        leaseId,
+      }),
+    ).toMatchObject({ lease: { leaseId, owner: host, state: "held" } });
+    expect(
+      await runLeaseOperation(installation, store(), "data-manager", {
+        kind: "lease.update",
+        leaseId,
+        action: { action: "release" },
+      }),
+    ).toEqual({ lease: null });
+    expect(store().get(leaseId)).toMatchObject({ state: "held" });
+  });
 });

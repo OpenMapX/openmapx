@@ -80,6 +80,28 @@ function receiptOf(row: FenceRow): DataConfigurationFenceReceipt {
     state: row.state,
   };
 }
+/** What the agent's store shows about the lease a hardlink plan's sender
+ * names: `held` while that sender holds it live on data-manager, `unreadable`
+ * when the agent did not answer. */
+export type SenderLease = "held" | "not_held" | "unreadable";
+export async function inspectSenderLease(
+  installation: ControlInstallation,
+  leaseId: string,
+  sender: "ops-agent" | "host-cli",
+): Promise<SenderLease> {
+  const leases = installationState(installation).leases;
+  let lease: Awaited<ReturnType<typeof leases.read>>;
+  try {
+    lease = await leases.read(leaseId);
+  } catch {
+    return "unreadable";
+  }
+  return lease?.state === "held" &&
+    lease.owner.executor === sender &&
+    lease.targets.includes("data-manager")
+    ? "held"
+    : "not_held";
+}
 export function createDataConfigurationFenceStore(
   installation: ControlInstallation,
   sql: DataFenceSql,
@@ -224,14 +246,16 @@ export function createDataConfigurationFenceStore(
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
   }
   /** A generation's hardlink plan sent with the sender's lease id. Outside a
-   * maintenance it is admitted like any data job. While a fence is prepared
-   * only the maintenance's own plan runs: the agent sends it under the lease
-   * the maintenance owner holds, for the revision and plan the fence names. */
+   * maintenance it is admitted only under a lease the agent's store shows the
+   * sender holding on data-manager. While a fence is prepared only the
+   * maintenance's own plan runs: the agent sends it under the lease the
+   * maintenance owner holds, for the revision and plan the fence names. */
   async function assertLinkAdmission(
     tx: Tx,
     input: { revisionId: string; planDigest: string; leaseId: string },
-    caller: ControlTransportPrincipal,
+    sender: { caller: ControlTransportPrincipal; lease: SenderLease },
   ) {
+    const { caller } = sender;
     if (caller !== "ops-agent" && caller !== "host-cli")
       throw forbidden("Only the agent or the host CLI links under its own lease");
     if (!open) throw new DataFenceBusy();
@@ -245,7 +269,12 @@ export function createDataConfigurationFenceStore(
         input.planDigest !== receipt.hardlinkPlanDigest
       )
         throw new DataFenceBusy();
-    }
+    } else if (sender.lease === "unreadable")
+      throw Object.assign(Error("The agent did not answer for the sender's lease"), {
+        statusCode: 503,
+      });
+    else if (sender.lease !== "held")
+      throw forbidden("The sender holds no live lease on data-manager under this id");
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
   }
   return {

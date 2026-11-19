@@ -17,6 +17,8 @@ export {
 export {
   createDataConfigurationFenceStore,
   type DataFenceSql,
+  inspectSenderLease,
+  type SenderLease,
 } from "./data-configuration-fence";
 export { retainedDataDatabaseTimestamp } from "./data-database-time";
 export * from "./data-evidence";

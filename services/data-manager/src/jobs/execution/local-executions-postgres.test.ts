@@ -135,7 +135,9 @@ describe.skipIf(
     resetOpsClient();
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   });
-  async function harness(options: { infraDir?: string; fence?: boolean } = {}) {
+  async function harness(
+    options: { infraDir?: string; fence?: boolean; leases?: control.LeaseBackend } = {},
+  ) {
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
     const sql = postgres(url, { max: 6 });
@@ -146,6 +148,7 @@ describe.skipIf(
         infraDir: root,
         role: "data-manager",
         serviceIds: ["data-manager"],
+        ...(options.leases ? { leases: options.leases } : {}),
       }),
       journal = control.createDataExecutionControlJournal(installation, sql),
       fence = options.fence ? createDataConfigurationMaintenance(sql, installation) : undefined;
@@ -411,7 +414,9 @@ describe.skipIf(
   /** A checkout whose applied generation names a plan with work, and
    * data-manager's `/link` on the durable runtime, both over one data
    * directory. Requests can be sent as the host CLI or the agent. */
-  async function linkFixture(options: { fence?: boolean; entries?: HardlinkEntry[] } = {}) {
+  async function linkFixture(
+    options: { fence?: boolean; entries?: HardlinkEntry[]; leases?: control.LeaseBackend } = {},
+  ) {
     const repo = mkdtempSync(join(tmpdir(), "omx-link-checkout-")),
       infra = join(repo, "infra", "docker"),
       data = join(infra, "data"),
@@ -425,7 +430,7 @@ describe.skipIf(
     symlinkSync(`generations/${revisionId}`, join(infra, services.CURRENT_CONFIGURATION));
     // Removed last, after the harness has closed the installation inside it.
     cleanups.push(async () => rmSync(repo, { recursive: true, force: true }));
-    const h = await harness({ infraDir: infra, fence: options.fence }),
+    const h = await harness({ infraDir: infra, fence: options.fence, leases: options.leases }),
       runtime = h.runtime();
     const entries = options.entries ?? [
       {
@@ -570,6 +575,91 @@ describe.skipIf(
       },
     });
     await leases.release({ leaseId: held.leaseId });
+  }, 60_000);
+
+  /** A root owner for a sender's lease, as the agent or the host CLI records it. */
+  function senderOwner(executor: "host-cli" | "ops-agent") {
+    const deadline = Date.now() + 60_000;
+    return {
+      executor,
+      principal: executor === "ops-agent" ? ("api" as const) : ("host-cli" as const),
+      executionId: executor === "ops-agent" ? `job1_${"s".repeat(32)}` : randomUUID(),
+      operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+      operationFingerprint: "a".repeat(64),
+      deadlineAt: deadline,
+      fingerprint: "b".repeat(64),
+    };
+  }
+
+  /** Leases in the agent's store, taken and given back the way their holders do. */
+  function senderLeases(root: string) {
+    const leases = control.agentStoreLeases(root, "host-cli");
+    return {
+      take: async (executor: "host-cli" | "ops-agent", targets: string[]) => {
+        const owner = senderOwner(executor);
+        const lease = await control.admitRootLease(leases, {
+          owner,
+          ownerKind: "control.rollback",
+          targets,
+        });
+        return { leaseId: lease.leaseId, owner };
+      },
+      giveBack: async (held: { leaseId: string; owner: ReturnType<typeof senderOwner> }) => {
+        await leases.settle({
+          leaseId: held.leaseId,
+          key: null,
+          settlement: {
+            identity: held.owner,
+            outcome: "committed",
+            publication: "committed",
+            terminalReceiptDigest: "0".repeat(64),
+          },
+        });
+        await leases.release({ leaseId: held.leaseId });
+      },
+    };
+  }
+
+  it("refuses without effect a lease its sender does not hold live on data-manager", async () => {
+    const { h, data, send } = await linkFixture({ fence: true });
+    const leases = senderLeases(h.root);
+    const refused = async (leaseId: string) => {
+      await expect(send("host-cli", leaseId)).rejects.toMatchObject({ reason: "refused" });
+      expect(await linkRows(h)).toEqual([]);
+      expect(() => statSync(join(data, "valhalla", "osm-pbf", "planet.osm.pbf"))).toThrow();
+    };
+    // A lease off data-manager, a released one and an unknown one.
+    const elsewhere = await leases.take("host-cli", ["valhalla"]);
+    await refused(elsewhere.leaseId);
+    await leases.giveBack(elsewhere);
+    const released = await leases.take("host-cli", ["data-manager"]);
+    await leases.giveBack(released);
+    await refused(released.leaseId);
+    await refused(randomUUID());
+    // Another sender's lease is refused; its own sender is accepted under it.
+    const agents = await leases.take("ops-agent", ["data-manager"]);
+    await refused(agents.leaseId);
+    expect(await send("ops-agent", agents.leaseId)).toMatchObject({ linked: 1 });
+    expect((await linkRows(h)).map((row) => [row.status, row.lease_id])).toEqual([
+      ["ok", agents.leaseId],
+    ]);
+    expect(statSync(join(data, "valhalla", "osm-pbf", "planet.osm.pbf")).ino).toBe(
+      statSync(join(data, "osm", "planet.osm.pbf")).ino,
+    );
+    await leases.giveBack(agents);
+  }, 60_000);
+
+  it("refuses without effect a lease the agent cannot be asked about", async () => {
+    const unreachable = control.remoteLeaseBackend(async () => {
+      throw new OpsClientError("timeout");
+    });
+    const { h, data, send } = await linkFixture({ fence: true, leases: unreachable });
+    const leases = senderLeases(h.root);
+    const held = await leases.take("host-cli", ["data-manager"]);
+    await expect(send("host-cli", held.leaseId)).rejects.toMatchObject({ reason: "unavailable" });
+    expect(await linkRows(h)).toEqual([]);
+    expect(() => statSync(join(data, "valhalla", "osm-pbf", "planet.osm.pbf"))).toThrow();
+    await leases.giveBack(held);
   }, 60_000);
 
   it("beside a prepared fence admits only its maintenance's own plan, under that maintenance's lease", async () => {

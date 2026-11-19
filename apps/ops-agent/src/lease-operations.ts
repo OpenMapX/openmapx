@@ -20,8 +20,9 @@ type LeaseOperation = Extract<
 >;
 
 /**
- * Leases data-manager holds through the agent. It sees and changes only
- * leases its own executions own, and the same rules apply as to the agent's
+ * Leases data-manager holds through the agent. It changes only leases its own
+ * executions own, and sees those and any lease on data-manager itself. The
+ * same rules apply as to the agent's
  * leases: one admission path, children recorded before they start, release
  * only once everything has a known outcome.
  */
@@ -55,8 +56,14 @@ export async function runLeaseOperation(
       };
     }
   }
-  if (operation.kind === "lease.read")
-    return { lease: owned(store.get(operation.leaseId)) ?? null };
+  if (operation.kind === "lease.read") {
+    // Another holder's lease on data-manager is shown, never changed, so
+    // data-manager can check the lease a hardlink plan's sender names.
+    const lease = store.get(operation.leaseId);
+    return {
+      lease: owned(lease) ?? (lease?.targets.includes("data-manager") ? lease : null),
+    };
+  }
   const lease = await store.update((leases) => {
     const current = owned(leases.find((value) => value.leaseId === operation.leaseId));
     if (!current) {

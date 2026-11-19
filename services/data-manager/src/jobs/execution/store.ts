@@ -5,6 +5,7 @@ import {
   type DataExecutionControlJournal,
   retainedControlParent,
   retainedDataDatabaseTimestamp,
+  type SenderLease,
 } from "@openmapx/core/build-artifacts";
 import {
   type DataExecutionIdentity,
@@ -76,8 +77,9 @@ export interface DataExecutionRecord {
   finishedAt: number | null;
 }
 export interface DataExecutionAdmissionOptions {
-  /** Who sent a hardlink application under its own lease. */
-  linkCaller?: ControlTransportPrincipal;
+  /** Who sent a hardlink application under its own lease, and what the agent
+   * showed of that lease. */
+  linkSender?: { caller: ControlTransportPrincipal; lease: SenderLease };
   operationKey: string;
   requestedDeadlineAt?: number;
   parent?: VerifiedParentExecution;
@@ -551,9 +553,9 @@ export function createPostgresDataExecutionStore(
         // A hardlink application under its sender's lease: admitted beside a
         // prepared fence only for that fence's own maintenance.
         const fence = options.configurationFence,
-          caller = admission.linkCaller,
+          sender = admission.linkSender,
           leaseId = input.leaseId;
-        if (!fence || !caller) throw new DataConfigurationMaintenanceBusy();
+        if (!fence || !sender) throw new DataConfigurationMaintenanceBusy();
         const result = await sql.begin(async (tx) => {
           const held =
             await tx`SELECT pg_try_advisory_xact_lock(${DATA_ADMISSION_LOCK[0]},${DATA_ADMISSION_LOCK[1]}) AS held`;
@@ -561,7 +563,7 @@ export function createPostgresDataExecutionStore(
           await fence.assertLinkAdmission(
             tx,
             { revisionId: input.revisionId, planDigest: input.planDigest, leaseId },
-            caller,
+            sender,
           );
           return { value: await run(tx) };
         });
