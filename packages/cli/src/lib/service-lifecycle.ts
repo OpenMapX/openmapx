@@ -432,6 +432,7 @@ export async function runCliServiceLifecycle(options: {
           {
             expectedCurrentRevisionId: expected,
             revisionId: finalRevisionId,
+            pullMissingImages: true,
           },
           owned.writer,
         );

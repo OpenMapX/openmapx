@@ -39,6 +39,13 @@ vi.mock("../src/lib/container-mounts", () => ({
 vi.mock("../src/lib/release-service-files", () => ({
   selectedReleaseServiceFiles: vi.fn(async () => "none"),
 }));
+// A starting render pulls what the host lacks; here the pull reports one image.
+vi.mock("../src/lib/docker", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/lib/docker")>()),
+  pulledImageIds: vi.fn(async (references: Record<string, string>) =>
+    Object.fromEntries(Object.keys(references).map((id) => [id, `sha256:${"f".repeat(64)}`])),
+  ),
+}));
 // The host CLI by default; a test switches to the operations agent's fixed CLI.
 vi.mock("../src/lib/agent-integrations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/agent-integrations")>()),
@@ -293,6 +300,20 @@ describe("renderComposeForRepo", () => {
     const backups = lstatSync(join(tmp, "infra", "docker", "backups"));
     expect(backups.isDirectory()).toBe(true);
     expect(backups.mode & 0o777).toBe(0o700);
+  });
+
+  it("records the pulled images in the first generation of a starting render", async () => {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+
+    const result = await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["alpha"],
+      pullMissingImages: true,
+    });
+    expect(
+      coreServices.readGenerationImageIds(join(tmp, "infra", "docker"), result.revisionId),
+    ).toEqual({ alpha: `sha256:${"f".repeat(64)}` });
   });
 
   it("binds the initialized erasure journal to the generated journal key", async () => {

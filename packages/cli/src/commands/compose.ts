@@ -7,7 +7,7 @@ import { type Command, Option } from "commander";
 import { runsInAgent } from "../lib/agent-integrations";
 import { containerBindMounts } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
-import { dockerComposeStream, localImageIds } from "../lib/docker";
+import { dockerComposeStream, localImageIds, pulledImageIds } from "../lib/docker";
 import { assertCliExecutionAvailable } from "../lib/execution-deadline";
 import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
 import { leasedHostEffect } from "../lib/host-effect";
@@ -63,6 +63,8 @@ export interface RenderRepoOptions {
   release?: coreServices.ReleaseManifest | null;
   /** A retained generation whose saved configuration to render instead of the applied one's. */
   configurationFrom?: string;
+  /** Pull the images this host lacks before the generation records them (`compose up`). */
+  pullMissingImages?: boolean;
 }
 
 export interface RenderRepoResult {
@@ -388,7 +390,7 @@ export async function renderComposeWithWriter(
   assertCliExecutionAvailable();
   const committed = await writer.commit({
     release,
-    imageIds: localImageIds,
+    imageIds: opts.pullMissingImages ? pulledImageIds : localImageIds,
     ...(mounts ? { containerBindMounts: mounts } : {}),
     ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
     services,
@@ -513,6 +515,7 @@ export function registerComposeCommands(program: Command): void {
           domain: options.domain,
           services,
           release: release.manifest,
+          pullMissingImages: true,
         });
         enabledServiceIds = r.enabledServiceIds;
         log.ok(`Rendered ${r.servicesRendered} services → ${r.revisionId}`);

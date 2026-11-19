@@ -383,19 +383,19 @@ failed without effect; anything else is unknown and moves the record to
 
 Each generation records, in `images.json`, the local image ID that each enabled
 service's reference named when the generation was committed. The agent and the
-host CLI record the images present at that moment; a generation committed before
-its images existed (a first `compose up`) records none. A pinned release reference
-names its image by digest anyway; a tag can move when an image is pulled.
+host CLI record the images present at that moment. The host CLI's starting writes
+(`compose up`, `services start|update`) first pull the images the host lacks, so a
+fresh installation's first generation records every image it starts; a reference
+that cannot be pulled (a local tag not built yet) stays unrecorded, and starting it
+fails anyway. A pinned release reference names its image by digest; a tag can move
+when an image is pulled.
 
 The agent counts a container as its own when it was created from a retained
 generation's own compose file and runs either the image that generation recorded
 or the image its reference names now. When its generation recorded no image for
 the service, the applied generation's record counts instead. A pull that moves a
 tag therefore leaves the running containers the agent's own until they are
-recreated, and a later generation records the newer image. An installation whose
-generations recorded nothing yet (a first `compose up` with tags) cannot tell a
-container it pulled a new image for; any configuration change applied while the
-stack runs records the images and closes that gap.
+recreated, and a later generation records the newer image.
 
 ### Data Manager updates
 
