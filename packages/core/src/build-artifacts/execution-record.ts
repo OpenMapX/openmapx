@@ -22,7 +22,6 @@ import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import {
-  currentConfigurationGeneration,
   type OriginalConfigurationGenerationNonCommit,
   originalConfigurationGenerationNonCommitSource,
 } from "../services/configuration-generation";
@@ -33,7 +32,6 @@ import {
   dataExecutionStatusSchema,
   LOCAL_DATA_EXECUTION_KINDS,
 } from "../services/data-manager/contracts/executions";
-import type { DataManagerTransport } from "../services/data-manager/transport";
 import {
   type ControlInstallation,
   controlDigest,
@@ -43,9 +41,7 @@ import {
   targetSchema,
   uuid,
 } from "./control-records";
-import { readDataManagerTerminal } from "./data-manager-terminal";
 import { dataUpdatePlanSchema } from "./data-update-records";
-import { dataUpdateSourcesDigest } from "./data-update-sources";
 import {
   type ChildCell,
   type ControlPlannedChild,
@@ -81,7 +77,6 @@ import {
 import {
   agentStoreLeases,
   assertControlStorageAvailable,
-  closeControlInstallation,
   controlPrivateRoot,
   installationState,
   readPrivateRecord,
@@ -760,27 +755,6 @@ export function inspectConfigurationPreEffectRefusal(handle: ExecutionHandle): v
     throw Error("Actual unstarted managed configuration receipt required");
   if (attemptedChildren(row.progress).length || anyChildAttempted(row.progress))
     throw Error("Unstarted managed configuration child source changed");
-}
-/** Original indexed progress is business evidence only. A success producer must
- * additionally prove its actual children/target tree before committing. */
-function readDataWorkflowProgress(handle: ExecutionHandle) {
-  if (handle.kind !== "data.update") throw Error("Original Full Update owner required");
-  const name = `data-workflow-${handle.execution.operationKey}.json`,
-    raw = readPrivateRecord(handle.installation, "observations", name, 65536);
-  const body = z
-    .strictObject({
-      version: z.literal(1),
-      operationKey: z.string(),
-      fingerprint: z.string(),
-      receipt: dataWorkflowReceiptSchema,
-    })
-    .parse(raw);
-  if (
-    body.operationKey !== handle.execution.operationKey ||
-    body.fingerprint !== handle.execution.fingerprint
-  )
-    throw Error("Full Update checkpoint identity changed");
-  return body.receipt;
 }
 /** The settlement a receipt states. The execution's owner writes it about its
  * own effect, so only the kind's own rules apply: a result that commits, a
@@ -1469,74 +1443,6 @@ export function verifyControlPreparedTerminal(
     jobs?.close();
     stateDir?.close();
     infra.close();
-  }
-}
-
-/** Target acquisition observes only its original data-phase owner and all three
- * recorded, physically settled DM children. No progress object is authority. */
-export async function verifyDataUpdatePrerequisites(
-  handle: ExecutionHandle,
-  transport: DataManagerTransport | undefined,
-  signal?: AbortSignal,
-) {
-  if (handle.kind !== "data.update" || handle.installation.fixedChildId)
-    throw Error("Original Full Update root required");
-  const name = `data-update-plan-${handle.execution.operationKey}.json`,
-    raw = readPrivateRecord(handle.installation, "observations", name, 128 * 1024);
-  const plan = dataUpdatePlanSchema.parse(raw),
-    infraDir = dirname(handle.installation.dataRoot);
-  if (
-    controlDigest(plan.parent) !== controlDigest(handle.execution) ||
-    opsOperationFingerprint(plan.operation) !== handle.execution.operationFingerprint ||
-    currentConfigurationGeneration(infraDir) !== plan.revisionId ||
-    dataUpdateSourcesDigest(infraDir) !== plan.sourcesDigest
-  )
-    throw Error("Original Full Update sources changed");
-  let childInstallation: ControlInstallation | undefined;
-  try {
-    let dataHandle = handle;
-    if (handle.execution.executor === "ops-agent") {
-      const attempt = lookupControlChildPhaseAttempt(handle, {
-        phase: "data-workflow",
-        ordinal: 0,
-      });
-      if (!attempt) throw Error("Full Update data phase not admitted");
-      childInstallation = openFixedChildInstallation({
-        infraDir,
-        child: { leaseId: attempt.leaseId, childKey: attempt.childKey },
-      });
-      dataHandle = restoreAdmittedControlExecution(childInstallation, attempt.execution);
-      const settlement = verifyControlEffectSettlement(childInstallation, attempt.execution);
-      if (settlement.outcome !== "committed" || settlement.publication !== "committed")
-        throw Error("Full Update data phase unsettled");
-    }
-    const receipt = readDataWorkflowProgress(dataHandle);
-    if (
-      receipt.phase !== "build" ||
-      receipt.children.length !== 3 ||
-      receipt.children.some((c) => c.status !== "succeeded")
-    )
-      throw Error("Full Update data checkpoint missing");
-    if (!transport) throw Error("Full Update prerequisites are read from data-manager");
-    for (const [index, slot] of plan.dataChildren.entries()) {
-      const bound = lookupControlChildPhase(dataHandle, slot);
-      if (!bound) throw Error("Full Update prerequisite missing");
-      const child = receipt.children[index],
-        terminal = await readDataManagerTerminal(bound.execution, transport, signal);
-      if (
-        !child ||
-        child.operationKey !== bound.execution.operationKey ||
-        child.jobId !== bound.execution.executionId ||
-        child.fingerprint !== bound.execution.fingerprint ||
-        child.deadlineAt !== bound.execution.deadlineAt ||
-        terminal.status !== "ok" ||
-        terminal.publication !== "committed"
-      )
-        throw Error("Full Update prerequisite did not complete");
-    }
-    return receipt;
-  } finally {
-    if (childInstallation) closeControlInstallation(childInstallation);
   }
 }
 

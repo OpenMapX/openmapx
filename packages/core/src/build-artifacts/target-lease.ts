@@ -7,6 +7,7 @@ import { opsOperationFingerprint } from "../ops/fingerprint";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import type { DataManagerTransport } from "../services/data-manager/transport";
 import { controlDigest, type InstallationState, targetSchema } from "./control-records";
+import { verifyDataUpdatePrerequisites } from "./data-update";
 import {
   assertControlDelegationForward,
   assertControlExecutionForward,
@@ -25,7 +26,6 @@ import {
   type VerifiedControlPeer,
   verifyControlEffectSettlement,
   verifyControlPreparedTerminal,
-  verifyDataUpdatePrerequisites,
   withControlDelegationPublication,
 } from "./execution-record";
 import {
