@@ -43,7 +43,11 @@ import {
   prepareAdminJobOperationRoot,
   readProjection,
 } from "./admin-job-ops";
-import { issueApiJobChildAssertion, prepareApiJobChildAttempt } from "./admin-job-parent";
+import {
+  issueApiJobChildAssertion,
+  prepareApiJobChildAttempt,
+  prepareApiJobRoot,
+} from "./admin-job-parent";
 import {
   type AdminJobCandidate,
   type CandidatePhase,
@@ -604,7 +608,25 @@ async function prepareMaintenance(candidate: ValidatedConfigurationCandidate): P
             candidateId: candidate.candidateId,
           },
           "configuration.coordinator-pull",
-          { operationKey: step },
+          {
+            operationKey: step,
+            // Under the candidate's parent, which its maintenance preparation shares.
+            preparedRoot: prepareApiJobRoot(
+              {
+                ...job,
+                checkpointResult: {
+                  ...job.checkpointResult,
+                  _parentExecution: {
+                    operationKey: record.parentOperationKey,
+                    fingerprint: record.parentFingerprint,
+                    deadlineAt: record.parentDeadlineAt,
+                  },
+                },
+              },
+              "service.pull",
+              step,
+            ),
+          },
         );
       } catch (error) {
         if (error instanceof ApiOpsError && error.errorClass !== "recovery_required")

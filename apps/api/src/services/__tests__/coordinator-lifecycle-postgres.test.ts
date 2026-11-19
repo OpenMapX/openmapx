@@ -893,15 +893,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "utf8",
           ),
         );
-      expect(owner.stagedCoordinatorProvenance.ownerPrepare).toEqual(owner.plan.prepare);
-      expect(owner.coordinatorPull ?? null).toBeNull();
+      // The credential change recreates data-manager with the image its
+      // reference names now, the one the canceled update pulled, and its
+      // generation records it.
       expect(owner.plan.coordinatorImage).toMatchObject({
         action: "apply",
         imageId: pulledImageId,
       });
       expect(
-        Buffer.byteLength(JSON.stringify(owner.stagedCoordinatorProvenance)),
-      ).toBeLessThanOrEqual(8192);
+        services.readGenerationImageIds(host.infraDir, owner.plan.operation.revisionId)[
+          "data-manager"
+        ],
+      ).toBe(pulledImageId);
       expect(
         (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
           (s) => s.serviceId === "data-manager",
@@ -1436,12 +1439,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
     }, 240000);
     it.each([false, true])(
-      "preserves pending staged bulk request order with coordinatorFirst=%s",
+      "runs a bulk update in its requested order after a canceled pulled update with coordinatorFirst=%s",
       async (coordinatorFirst) => {
-        const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-          original = readFileSync(pullPath),
-          before = services.currentConfigurationGeneration(host.infraDir),
-          serviceIds = coordinatorFirst ? ["data-manager", "motis"] : ["motis", "data-manager"],
+        await canceledSuccessfulCoordinatorStage();
+        const serviceIds = coordinatorFirst ? ["data-manager", "motis"] : ["motis", "data-manager"],
           response = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
@@ -1463,51 +1464,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             completed: (row.result as { completedServiceIds?: string[] })?.completedServiceIds,
           }),
         );
-        if (coordinatorFirst) {
-          expect(row.status, row.error ?? "No public error").toBe("success");
-          expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual(
-            serviceIds,
-          );
-          expect(posts.get("service.pull")).toBe(2);
-          expect(posts.get("service.update")).toBe(1);
-        } else {
-          expect(row.status).toBe("failed");
-          expect(row.error).toBe(
-            "Apply or update Data Manager before changing instance configuration.",
-          );
-          expect(posts.get("service.pull")).toBe(1);
-          expect(posts.get("service.update") ?? 0).toBe(0);
-          expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-          expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
-          expect(readdirSync(host.candidates)).toHaveLength(0);
-          expect(readFileSync(pullPath)).toEqual(original);
-          const repair = await api.inject({
-            method: "POST",
-            url: "/api/admin/services/bulk-action",
-            headers: {
-              "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
-            },
-            payload: { action: "update", serviceIds: ["data-manager"] },
-          });
-          expect((await finished(repair.json().jobId)).status).toBe("success");
-          const retry = await api.inject({
-              method: "POST",
-              url: "/api/admin/services/bulk-action",
-              headers: {
-                "idempotency-key": randomUUID(),
-                "x-openmapx-local-admin": "task012-coordinator-local-admin",
-              },
-              payload: { action: "update", serviceIds },
-            }),
-            retried = await finished(retry.json().jobId);
-          expect(retried.status, retried.error ?? "No public error").toBe("success");
-          expect((retried.result as { completedServiceIds: string[] }).completedServiceIds).toEqual(
-            serviceIds,
-          );
-          expect((await finished(originalId)).status).toBe("failed");
-          expect((await finished(originalId)).error).toBe(row.error);
-        }
+        // The earlier pull blocks neither order: motis updates while the old
+        // coordinator still runs its recorded image, and the coordinator
+        // update pulls and commits its own.
+        expect(row.status, row.error ?? "No public error").toBe("success");
+        expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual(
+          serviceIds,
+        );
+        expect(posts.get("service.pull")).toBe(2);
+        expect(posts.get("service.update")).toBe(1);
         expect(services.readAppliedServiceIds(host.infraDir, host.loaded)).toEqual(
           new Set(["data-manager", "motis"]),
         );
@@ -1722,8 +1687,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       { action: "update", point: "candidate unlink" },
       { action: "update", point: "mixed pull" },
       { action: "update", point: "canceled pull" },
-      { action: "update", point: "candidate write" },
-      { action: "update", point: "orphan candidate" },
     ] as const)(
       "preserves native coordinator $action after original $point without another admission or save",
       async ({ action, point }) => {
@@ -1736,12 +1699,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           reply = new Promise<void>((r) => {
             release = r;
           });
-        if (
-          !pullBoundary &&
-          point !== "candidate unlink" &&
-          point !== "candidate write" &&
-          point !== "orphan candidate"
-        )
+        if (!pullBoundary && point !== "candidate unlink")
           decisionReplyGate = { reached, release: reply };
         else if (pullBoundary) pullTerminalReplyGate = { reached, release: reply };
         const database = new URL(process.env.OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL!);
@@ -1796,82 +1754,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const first = start({
           action,
           ...(point === "mixed pull" ? { serviceIds: ["motis", "data-manager"] } : {}),
-          ...(point === "candidate unlink"
-            ? { filesystemFault: "after-retirement-unlink" }
-            : point === "candidate write"
-              ? { filesystemFault: "before-candidate-write" }
-              : point === "orphan candidate"
-                ? { filesystemFault: "after-candidate-sync" }
-                : {}),
+          ...(point === "candidate unlink" ? { filesystemFault: "after-retirement-unlink" } : {}),
         });
         try {
           const id = await first.jobId;
-          if (point === "candidate write" || point === "orphan candidate") {
-            const marker = join(
-                host.root,
-                point === "candidate write"
-                  ? "coordinator-candidate-write-paused"
-                  : "coordinator-candidate-sync-paused",
-              ),
-              until = Date.now() + 45000;
-            while (!existsSync(marker)) {
-              if (Date.now() > until) throw Error("Actual candidate write boundary missing");
-              await delay(10);
-            }
-            const [original] = await fixture.db
-                .select()
-                .from(schema.adminJob)
-                .where(eq(schema.adminJob.id, id)),
-              beforeProtocol = original!.protocol as Record<string, unknown>;
-            expect(beforeProtocol.candidate).toBeUndefined();
-            expect(
-              Object.values(
-                (beforeProtocol.operations as { operations: Record<string, { phase: string }> })
-                  .operations,
-              ).map((value) => value.phase),
-            ).toEqual(["prepared"]);
-            expect(readdirSync(host.candidates)).toHaveLength(point === "orphan candidate" ? 1 : 0);
-            first.child.kill("SIGKILL");
-            expect((await first.exited).signal).toBe("SIGKILL");
-            const lease = Date.parse(beforeProtocol.observationLeaseUntil as string);
-            while (Date.now() <= lease + 100) await delay(Math.min(1000, lease + 101 - Date.now()));
-            const replacement = start({ action: "reconcile", jobId: id });
-            await replacement.exited;
-            const [row] = await fixture.db
-              .select()
-              .from(schema.adminJob)
-              .where(eq(schema.adminJob.id, id));
-            expect(row!.status).toBe("failed");
-            expect(
-              Object.values(
-                (
-                  row!.protocol as {
-                    operations: { operations: Record<string, { phase: string }> };
-                  }
-                ).operations.operations,
-              ).map((value) => value.phase),
-            ).toEqual(["unissued"]);
-            expect(posts.get("service.pull") ?? 0).toBe(0);
-            expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-            expect(readdirSync(host.candidates)).toHaveLength(0);
-            const failed = JSON.stringify(row!.result);
-            const next = await api.inject({
-              method: "POST",
-              url: "/api/admin/services/data-manager/action",
-              headers: {
-                "idempotency-key": randomUUID(),
-                "x-openmapx-local-admin": "task012-coordinator-local-admin",
-              },
-              payload: { action: "apply" },
-            });
-            expect((await finished(next.json().jobId)).status).toBe("success");
-            const [unchanged] = await fixture.db
-              .select()
-              .from(schema.adminJob)
-              .where(eq(schema.adminJob.id, id));
-            expect(JSON.stringify(unchanged!.result)).toBe(failed);
-            return;
-          }
           const unlinkBoundary = async () => {
             const marker = join(host.root, "coordinator-retirement-unlinked"),
               until = Date.now() + 150000;

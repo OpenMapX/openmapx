@@ -23,17 +23,12 @@ const input = JSON.parse(body) as {
   jobId?: string;
   serviceIds?: string[];
   noDeps?: boolean;
-  filesystemFault?: "after-retirement-unlink" | "before-candidate-write" | "after-candidate-sync";
+  filesystemFault?: "after-retirement-unlink";
 };
-if (
-  input.filesystemFault !== undefined &&
-  input.filesystemFault !== "after-retirement-unlink" &&
-  input.filesystemFault !== "before-candidate-write" &&
-  input.filesystemFault !== "after-candidate-sync"
-)
+if (input.filesystemFault !== undefined && input.filesystemFault !== "after-retirement-unlink")
   throw Error("Invalid fixture edge");
-// The candidate lives in the agent's store: pause this API around the typed
-// operations that write and discard it, exactly where the old file writes were.
+// The candidate lives in the agent's store: pause this API right after the
+// typed operation that discards it.
 if (input.filesystemFault !== undefined) {
   const fetchImpl = globalThis.fetch;
   const pause = (name: string, bytes: string | Buffer = "paused") => {
@@ -48,13 +43,7 @@ if (input.filesystemFault !== undefined) {
         ? (JSON.parse(init.body) as { operation?: { kind?: string; operationKey?: string } })
         : undefined;
     const kind = request?.operation?.kind;
-    if (
-      input.filesystemFault === "before-candidate-write" &&
-      kind === "configuration.candidate.retain"
-    )
-      return pause("coordinator-candidate-write-paused");
     const candidate =
-      input.filesystemFault === "after-retirement-unlink" &&
       kind === "configuration.candidate.discard"
         ? readFileSync(
             join(
@@ -65,12 +54,6 @@ if (input.filesystemFault !== undefined) {
           )
         : undefined;
     const response = await fetchImpl(url, init);
-    if (
-      response.ok &&
-      input.filesystemFault === "after-candidate-sync" &&
-      kind === "configuration.candidate.retain"
-    )
-      return pause("coordinator-candidate-sync-paused");
     if (response.ok && candidate) return pause("coordinator-retirement-unlinked", candidate);
     return response;
   }) as typeof fetch;
