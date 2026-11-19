@@ -88864,9 +88864,6 @@
                         "currentReleaseId": {
                           "type": "string"
                         },
-                        "selectedReleaseId": {
-                          "type": "string"
-                        },
                         "availableReleaseId": {
                           "type": "string"
                         },

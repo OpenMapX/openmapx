@@ -1223,8 +1223,8 @@ export const OPS_RESULT_SCHEMAS = {
       .max(CONFIGURATION_RELEASE_IMAGE_NAMES.length),
   }),
   "release.inspect": z.strictObject({
+    /** The release the applied configuration pins: what runs, and what an update replaces. */
     currentReleaseId: stableIdSchema.optional(),
-    selectedReleaseId: stableIdSchema.optional(),
     availableReleaseId: stableIdSchema.optional(),
     configuredSelector: z.string().max(128).optional(),
     currentVersion: z.string().max(128).optional(),
@@ -1256,7 +1256,6 @@ export const OPS_RESULT_SCHEMAS = {
     maintenanceReady: z.boolean(),
     release: z.strictObject({
       currentReleaseId: stableIdSchema.optional(),
-      selectedReleaseId: stableIdSchema.optional(),
       availableReleaseId: stableIdSchema.optional(),
       configuredSelector: z.string().max(128).optional(),
       currentVersion: z.string().max(128).optional(),

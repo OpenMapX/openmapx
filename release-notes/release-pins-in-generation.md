@@ -9,7 +9,7 @@ compose file and keeps the release manifest beside it. The release overlay
 `infra/docker/state/ops-agent/releases/docker-compose.release.yml`, the release
 store's `current.json`, `latest.json` and `selections.json` and the release-store
 lock are gone. `compose release` renders a new generation pinning the resolved
-release, `compose release --clear` and **Clear selected release pin** render the
+release, `compose release --clear` and **Clear the release pin** render the
 applied configuration again without pins, and every other render keeps the
 applied pins; a start without pins pins the configured release. The agent keeps a cache of the manifests it checked, named by
 digest, under `state/ops-agent/releases/`.

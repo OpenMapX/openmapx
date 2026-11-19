@@ -898,7 +898,6 @@ describe("ops contract", () => {
       maintenanceReady: true,
       release: {
         currentReleaseId: "release-old",
-        selectedReleaseId: "release-selected",
         availableReleaseId: "release-new",
       },
       services: [

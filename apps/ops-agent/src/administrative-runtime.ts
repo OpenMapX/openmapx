@@ -612,14 +612,13 @@ export function createDefaultReleaseEffects(
   };
   const inspectRelease = async (): Promise<OpsResultFor<"release.inspect">> => {
     const configured = coreServices.readAppliedReleaseSelection(infraDir);
-    // The applied generation's pins are both the selected and the current release.
+    // The applied generation's pin is the current release.
     const applied = coreServices.readAppliedRelease(infraDir)?.manifest;
     const checked = available();
     return {
       configuredSelector: configured.kind === "local" ? "local" : configured.selector,
       ...(applied
         ? {
-            selectedReleaseId: applied.release,
             currentReleaseId: applied.release,
             ...(applied.product ? { currentVersion: applied.product.version } : {}),
           }

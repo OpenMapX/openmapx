@@ -650,7 +650,7 @@ it("clears the retry timer when the page is disposed during a wait", async () =>
   }
 });
 
-it("clears the selected pin rather than the running release, retaining the request key after a lost response", async () => {
+it("clears the pin of the current release, retaining the request key after a lost response", async () => {
   const posts: { url: string; body: unknown; key: string | null }[] = [];
   const status = {
     deployment: {
@@ -660,8 +660,7 @@ it("clears the selected pin rather than the running release, retaining the reque
       maintenanceReady: true,
     },
     release: {
-      currentReleaseId: "running-release",
-      selectedReleaseId: "selected-pin",
+      currentReleaseId: "pinned-release",
       configuredSelector: "main",
     },
     images: [],
@@ -691,8 +690,8 @@ it("clears the selected pin rather than the running release, retaining the reque
         <SystemMaintenance />
       </QueryClientProvider>,
     );
-    await screen.findByText("Selected pin: selected-pin");
-    fireEvent.click(screen.getByRole("button", { name: "Clear selected release pin" }));
+    await screen.findByText("Current release (pinned): pinned-release");
+    fireEvent.click(screen.getByRole("button", { name: "Clear the release pin" }));
     const confirm = screen.getByRole("button", { name: "Clear release pin" });
     expect(confirm).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Clear confirmation"), {
@@ -705,7 +704,7 @@ it("clears the selected pin rather than the running release, retaining the reque
     await waitFor(() => expect(posts).toHaveLength(2));
     expect(posts[0]?.url).toBe("http://api.test/api/admin/system/release/clear");
     expect(posts[0]?.body).toEqual({
-      expectedReleaseId: "selected-pin",
+      expectedReleaseId: "pinned-release",
       confirmation: "CLEAR RELEASE PIN",
     });
     expect(posts[0]?.key).toBeTruthy();

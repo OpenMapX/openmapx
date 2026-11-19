@@ -132,14 +132,13 @@ describe("assembled production service authority", () => {
       release: manifest,
     });
     expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
-      selectedReleaseId: "checked-pin",
       currentReleaseId: "checked-pin",
     });
     const inspection = await productionReleaseEffects(host.runtime).inspectSystem({
       signal: new AbortController().signal,
       emitLog() {},
     });
-    expect(parseOpsResult("system.inspect", inspection).release.selectedReleaseId).toBe(
+    expect(parseOpsResult("system.inspect", inspection).release.currentReleaseId).toBe(
       "checked-pin",
     );
     const pinned = services.currentConfigurationGeneration(host.infraDir);

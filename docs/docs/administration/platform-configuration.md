@@ -66,10 +66,11 @@ bootstrap credentials, offline agent recovery and destructive full-stack shutdow
 remain host operations. The UI does not expose arbitrary environment variables,
 mount paths, executable options or Docker socket access.
 
-## Clear a selected release pin
+## Clear the release pin
 
-In **System → Updates**, **Selected pin** names the release the applied
-configuration generation pins. **Clear selected release pin** requires the exact
+In **System → Updates**, **Current release (pinned)** names the release the
+applied configuration generation pins, which is the release the services run.
+**Clear the release pin** requires the exact
 `CLEAR RELEASE PIN` confirmation and queues an Activity job bound to that pin. A
 changed pin is refused. Clearing renders the applied configuration again as a new
 generation without pins; running containers keep their images until they are next

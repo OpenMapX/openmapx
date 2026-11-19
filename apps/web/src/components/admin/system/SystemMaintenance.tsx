@@ -66,8 +66,8 @@ interface ImageStatus {
 
 interface ReleaseStatus {
   configuredSelector?: string;
+  /** The release the applied configuration pins, which the services run. */
   currentReleaseId?: string;
-  selectedReleaseId?: string;
   availableReleaseId?: string;
   currentVersion?: string;
   availableVersion?: string;
@@ -584,10 +584,7 @@ export function SystemMaintenance({
               Configured channel: {status?.release?.configuredSelector ?? "unknown"}
             </Typography>
             <Typography variant="body2">
-              Current release: {status?.release?.currentReleaseId ?? "unknown"}
-            </Typography>
-            <Typography variant="body2">
-              Selected pin: {status?.release?.selectedReleaseId ?? "none or unavailable"}
+              Current release (pinned): {status?.release?.currentReleaseId ?? "none"}
             </Typography>
             <Typography variant="body2">
               Checked release: {status?.release?.availableReleaseId ?? "not checked"}
@@ -605,16 +602,16 @@ export function SystemMaintenance({
               resolve the configured channel again.
             </Typography>
             <Button
-              disabled={active || !status?.release?.selectedReleaseId}
+              disabled={active || !status?.release?.currentReleaseId}
               onClick={() => {
-                const releaseId = status?.release?.selectedReleaseId;
+                const releaseId = status?.release?.currentReleaseId;
                 if (releaseId) {
                   setPinToClear({ releaseId, key: crypto.randomUUID(), origin: apiUrl });
                   setClearConfirmation("");
                 }
               }}
             >
-              Clear selected release pin
+              Clear the release pin
             </Button>
           </Paper>
 
