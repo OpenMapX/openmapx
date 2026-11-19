@@ -44,7 +44,7 @@ it("starts an unavailable coordinator without recreation under actual existing o
           deadlineAt,
         }),
       };
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,

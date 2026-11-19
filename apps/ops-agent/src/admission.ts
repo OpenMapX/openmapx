@@ -768,7 +768,7 @@ export function createAdmission(options: {
                       targets,
                     )
                   : undefined;
-              const authority = retainAdmittedControlExecution(options.controlInstallation, {
+              const authority = await retainAdmittedControlExecution(options.controlInstallation, {
                 execution: executionFor(job),
                 operation: job.operation,
                 kind: job.operation.kind,
@@ -824,7 +824,7 @@ export function createAdmission(options: {
               if (!options.controlInstallation)
                 throw Error("Missing durable control admission context");
               const lease = await controlAdmission.adopt(executionFor(job));
-              const authority = retainAdmittedControlExecution(options.controlInstallation, {
+              const authority = await retainAdmittedControlExecution(options.controlInstallation, {
                 execution: executionFor(job),
                 kind: job.operation.kind,
                 operation: job.operation,

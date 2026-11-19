@@ -23,19 +23,17 @@ import {
   beginControlEffect,
   type ControlDelegation,
   type ControlTransportPrincipal,
-  childSettlementState,
-  executionAuthorityState,
+  type EffectReceipt,
+  type ExecutionHandle,
   inspectRemoteDelegation,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainedControlParent,
-  settleExecutionLifecycle,
-  type VerifiedExecutionAuthority,
+  settleExecution,
   verifyControlEffectSettlement,
-  withPrivateEffectWriter,
 } from "./execution-record";
 import { rootLeaseId } from "./lease-store";
-import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
+import { installationState } from "./private-records";
 
 export interface DataFenceSql {
   unsafe(
@@ -159,21 +157,14 @@ export function createDataConfigurationFenceStore(
   }
   /** Writes the leaf's own terminal effect record. */
   function recordLeaf(
-    authority: VerifiedExecutionAuthority,
+    authority: ExecutionHandle,
     outcome: "committed" | "failed_without_effect",
-    receipt: unknown,
+    receipt: EffectReceipt,
   ) {
-    const state = executionAuthorityState(authority),
-      effect = {
-        identity: state.execution,
-        outcome,
-        publication: outcome === "committed" ? "committed" : "not_started",
-        terminalReceiptDigest: controlDigest(receipt),
-        receipt,
-      };
-    withPrivateEffectWriter(state, () => {
-      settleExecutionLifecycle(state);
-      writePrivateRecord(local, "effects", `${state.execution.operationKey}.json`, effect, false);
+    return settleExecution(authority, {
+      outcome,
+      publication: outcome === "committed" ? "committed" : "not_started",
+      receipt,
     });
   }
   /** Records the agent's fence leaf as this receiver's execution and runs the
@@ -187,7 +178,7 @@ export function createDataConfigurationFenceStore(
     // Startup registers only the release's built-in services; installed
     // community-extension services are known to the agent alone.
     local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
-    let authority: VerifiedExecutionAuthority | undefined;
+    let authority: ExecutionHandle | undefined;
     try {
       authority = restoreAdmittedControlExecution(installation, delegation.execution);
     } catch (error) {
@@ -195,7 +186,7 @@ export function createDataConfigurationFenceStore(
     }
     if (!authority) {
       if (Date.now() >= delegation.execution.deadlineAt) throw new DataFenceBusy();
-      authority = retainAdmittedControlExecution(installation, {
+      authority = await retainAdmittedControlExecution(installation, {
         execution: delegation.execution,
         kind: delegation.kind,
         operation: verified.operation,
@@ -205,36 +196,28 @@ export function createDataConfigurationFenceStore(
         serviceIds: delegation.serviceIds,
       });
     }
-    let prior: unknown;
-    try {
-      prior = readPrivateRecord(local, "effects", `${delegation.execution.operationKey}.json`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    if (prior !== undefined && prior !== null) {
-      const settled = childSettlementState(
-        verifyControlEffectSettlement(installation, delegation.execution),
-      ).evidence;
+    if (local.rows.read(delegation.execution.operationKey)?.progress.settlement) {
+      const settled = verifyControlEffectSettlement(installation, delegation.execution);
       if (settled.outcome !== "committed") throw new DataFenceBusy();
       const saved = await row(sql, "maintenance_id", verified.operation.maintenanceId);
       if (!saved) throw new DataFenceBusy();
       return receiptOf(saved);
     }
-    beginControlEffect(authority);
+    await beginControlEffect(authority);
     let receipt: DataConfigurationFenceReceipt;
     try {
       receipt = await run();
     } catch (error) {
       // A busy refusal made no write: the leaf failed without effect.
       if (error instanceof DataFenceBusy)
-        recordLeaf(authority, "failed_without_effect", {
+        await recordLeaf(authority, "failed_without_effect", {
           kind: "data-configuration-fence-refused",
           maintenanceId: verified.operation.maintenanceId,
           reason: "busy",
         });
       throw error;
     }
-    recordLeaf(authority, "committed", {
+    await recordLeaf(authority, "committed", {
       kind: "data-configuration-fence",
       receipt: { ...receipt, sequence: 0, state: "prepared" },
     });

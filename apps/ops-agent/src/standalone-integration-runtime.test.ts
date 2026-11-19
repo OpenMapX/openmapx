@@ -99,7 +99,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         source: { kind: "uploaded-artifact", stageId: stage.stageId, expectedSha256: sha256 },
       };
       const retainedContexts = new Map<string, OpsExecutionContext>();
-      const makeContext = (operation: OpsOperation): OpsExecutionContext => {
+      const makeContext = async (operation: OpsOperation): Promise<OpsExecutionContext> => {
         const operationFingerprint = opsOperationFingerprint(operation);
         const retained = retainedContexts.get(operationFingerprint);
         if (retained) return retained;
@@ -124,7 +124,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
           deadlineAt: admission.deadlineAt,
           fingerprint: admission.fingerprint,
         };
-        const authority = control.retainAdmittedControlExecution(installation, {
+        const authority = await control.retainAdmittedControlExecution(installation, {
           execution,
           kind: operation.kind,
           operation,
@@ -147,7 +147,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         retainedContexts.set(operationFingerprint, context);
         return context;
       };
-      const context = makeContext(operation);
+      const context = await makeContext(operation);
       const runtime = createUnavailableRuntime();
       installStandaloneIntegrationRuntime(runtime, { rootDir: root, store });
       const inspection = await dispatchOpsOperation(runtime, operation, context);
@@ -169,7 +169,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         dispatchOpsOperation(
           runtime,
           { ...installing, ownerId: "foreign" },
-          makeContext({ ...installing, ownerId: "foreign" }),
+          await makeContext({ ...installing, ownerId: "foreign" }),
         ),
       ).rejects.toThrow(/owner/);
       if (scenario === "upload-mutated") {
@@ -177,12 +177,12 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
           mode: 0o644,
         });
         await expect(
-          dispatchOpsOperation(runtime, installing, makeContext(installing)),
+          dispatchOpsOperation(runtime, installing, await makeContext(installing)),
         ).rejects.toThrow(/content changed/);
         expect(existsSync(join(root, "custom_integrations", "upload-fixture"))).toBe(false);
         return;
       }
-      const installContext = makeContext(installing);
+      const installContext = await makeContext(installing);
       const result = await dispatchOpsOperation(runtime, installing, installContext);
       expect(result).toMatchObject({
         outcome: "published",
@@ -212,9 +212,9 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
           decision: "commit",
           expectedContentDigest: inspection.contentDigest,
         };
-        await expect(dispatchOpsOperation(runtime, settle, makeContext(settle))).rejects.toThrow(
-          /journal|publication|changed|auth/i,
-        );
+        await expect(
+          dispatchOpsOperation(runtime, settle, await makeContext(settle)),
+        ).rejects.toThrow(/journal|publication|changed|auth/i);
         expect(
           (
             await store.getStage({
@@ -252,7 +252,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         decision: "commit",
         expectedContentDigest: inspection.contentDigest,
       };
-      const settleContext = makeContext(settle);
+      const settleContext = await makeContext(settle);
       expect(await dispatchOpsOperation(replacement, settle, settleContext)).toMatchObject({
         outcome: "committed",
         transactionId,
@@ -274,14 +274,14 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         dispatchOpsOperation(
           replacement,
           { ...settle, decision: "restore" },
-          makeContext({ ...settle, decision: "restore" }),
+          await makeContext({ ...settle, decision: "restore" }),
         ),
       ).rejects.toThrow(/different decision/);
       const inventoryOperation: OpsOperation = { kind: "integration.inventory" };
       const inventory = await dispatchOpsOperation(
         replacement,
         inventoryOperation,
-        makeContext(inventoryOperation),
+        await makeContext(inventoryOperation),
       );
       expect(inventory.entries).toContainEqual(
         expect.objectContaining({
@@ -299,14 +299,16 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
             operationId: transactionId,
             expectedContentDigest: inspection.contentDigest,
           };
-        const checked = await dispatchOpsOperation(replacement, own, makeContext(own));
+        const checked = await dispatchOpsOperation(replacement, own, await makeContext(own));
         expect(checked).toMatchObject({ allowed: true, transactionId, version: "1.0.0" });
         const remove: OpsOperation = {
           kind: "integration.remove",
           transactionId,
           expectedContentDigest: inspection.contentDigest,
         };
-        expect(await dispatchOpsOperation(replacement, remove, makeContext(remove))).toMatchObject({
+        expect(
+          await dispatchOpsOperation(replacement, remove, await makeContext(remove)),
+        ).toMatchObject({
           outcome: "removed",
         });
         expect(existsSync(join(root, "custom_integrations/upload-fixture"))).toBe(false);
@@ -325,7 +327,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
             decision,
             expectedContentDigest: inspection.contentDigest,
           },
-          ctx = makeContext(settling);
+          ctx = await makeContext(settling);
         expect(await dispatchOpsOperation(replacement, settling, ctx)).toMatchObject({
           outcome: decision === "commit" ? "committed" : "restored",
         });
@@ -355,7 +357,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         const checkedInventory = await dispatchOpsOperation(
             replacement,
             inventoryOperation,
-            makeContext(inventoryOperation),
+            await makeContext(inventoryOperation),
           ),
           entry = checkedInventory.entries.find((x) => x.integrationId === "upload-fixture");
         if (!entry?.contentDigest) throw Error("Missing real inventory digest");
@@ -367,7 +369,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
             ownerId: "fixture-admin",
             expectedContentDigest: entry.contentDigest,
           };
-        expect(await dispatchOpsOperation(replacement, own, makeContext(own))).toMatchObject({
+        expect(await dispatchOpsOperation(replacement, own, await makeContext(own))).toMatchObject({
           allowed: true,
         });
         renameSync(directory, join(root, "original-directory"));
@@ -381,7 +383,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
           expectedContentDigest: entry.contentDigest,
         };
         await expect(
-          dispatchOpsOperation(replacement, remove, makeContext(remove)),
+          dispatchOpsOperation(replacement, remove, await makeContext(remove)),
         ).rejects.toThrow(/manifest|changed/);
         expect(readFileSync(join(directory, "foreign.txt"), "utf8")).toBe(
           "preserve this foreign replacement",

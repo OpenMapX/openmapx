@@ -104,12 +104,12 @@ function start() {
   });
 }
 it("settles the actual unissued root and consumes only its indexed not-started effect", async () => {
-  const owner = start(),
+  const owner = await start(),
     lease = await acquireArtifactTargetLease({
       serviceIds: targets,
       owner,
     });
-  retainConfigurationPreEffectRefusal(owner);
+  await retainConfigurationPreEffectRefusal(owner);
   inspectConfigurationPreEffectRefusal(owner);
   await settleArtifactTargetLeaseChild(
     lease,
@@ -117,15 +117,15 @@ it("settles the actual unissued root and consumes only its indexed not-started e
   );
   await releaseArtifactTargetLease(lease);
   verifyLocalArtifactTargetRootRelease(owner);
-  expect(() => beginControlEffect(owner)).toThrow();
+  await expect(beginControlEffect(owner)).rejects.toThrow();
 });
 it.each(["begun", "bound", "issued"])(
   "keeps an actual %s root fenced rather than claiming not-started",
   async (boundary) => {
     const owner =
         boundary === "begun"
-          ? start()
-          : admit(
+          ? await start()
+          : await admit(
               {
                 kind: "service.update",
                 serviceId: "motis",
@@ -137,7 +137,7 @@ it.each(["begun", "bound", "issued"])(
         serviceIds: targets,
         owner,
       });
-    if (boundary === "begun") beginControlEffect(owner);
+    if (boundary === "begun") await beginControlEffect(owner);
     else {
       const bound = await bindControlChildPhase(owner, { phase: "lifecycle", ordinal: 0 });
       if (boundary === "issued") {
@@ -156,7 +156,7 @@ it.each(["begun", "bound", "issued"])(
         await issueControlChildPhase(owner, { phase: "lifecycle", ordinal: 0, lease, childKey });
       }
     }
-    expect(() => retainConfigurationPreEffectRefusal(owner)).toThrow();
+    await expect(retainConfigurationPreEffectRefusal(owner)).rejects.toThrow();
     expect(() => inspectConfigurationPreEffectRefusal(owner)).toThrow();
     expect(() => verifyLocalArtifactTargetRootRelease(owner)).toThrow();
     expect(

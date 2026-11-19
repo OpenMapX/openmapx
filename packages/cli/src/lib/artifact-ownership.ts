@@ -74,7 +74,7 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
             ).plan,
           }
         : undefined;
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
@@ -97,9 +97,9 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
 /** Export reads managed targets; it publishes no managed files. The fixed
  * caller invokes this only after its external output stream has completed. */
 export async function settleCliReadOnlyExport(owner: CliArtifactOwner) {
-  if (control.executionAuthorityState(owner.authority).kind !== "artifactTransfer.export")
+  if (owner.authority.kind !== "artifactTransfer.export")
     throw Error("Original read-only export required");
-  control.retainControlEffectReceipt(owner.authority, {
+  await control.retainControlEffectReceipt(owner.authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -116,7 +116,7 @@ export async function settleCliArtifactOwner(
   result: ArtifactPublicationResult | OpsResultFor<"artifactTransfer.export">,
 ) {
   const notCommitted = "outcome" in result && result.outcome === "not_committed";
-  control.retainControlEffectReceipt(owner.authority, {
+  await control.retainControlEffectReceipt(owner.authority, {
     outcome: notCommitted ? "contained" : "committed",
     publication: notCommitted ? "not_started" : "committed",
     receipt: { kind: "ops-result", result },

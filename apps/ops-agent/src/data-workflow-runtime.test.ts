@@ -51,7 +51,7 @@ it("freezes distinct original data/finalization slots and refuses targets before
       });
     expect(plan.dataChildren.map((s) => s.ordinal)).toEqual([0, 1, 2]);
     expect(plan.finalizationReservation.ordinal).toBe(1);
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution: parent,
       operation,
       kind: operation.kind,

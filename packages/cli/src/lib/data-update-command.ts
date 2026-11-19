@@ -77,7 +77,7 @@ export async function runCliDataUpdate(options: {
         serviceIds: targets,
         defaultRegion: process.env.OPENMAPX_REGION,
       });
-      const authority = control.retainAdmittedControlExecution(installation, {
+      const authority = await control.retainAdmittedControlExecution(installation, {
         execution,
         operation,
         kind: operation.kind,
@@ -207,7 +207,7 @@ export async function runCliDataUpdate(options: {
       },
     );
     if (!managed) {
-      control.retainControlEffectReceipt(authority, {
+      await control.retainControlEffectReceipt(authority, {
         outcome: "committed",
         publication: "committed",
         receipt: { kind: "ops-result", result: { completed: true, dataWorkflow: receipt } },

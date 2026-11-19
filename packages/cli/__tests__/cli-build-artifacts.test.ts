@@ -219,7 +219,7 @@ describe("build bundles", () => {
               deadlineAt,
             }),
           },
-          authority = control.retainAdmittedControlExecution(installation, {
+          authority = await control.retainAdmittedControlExecution(installation, {
             execution,
             kind: operation.kind,
             operation,

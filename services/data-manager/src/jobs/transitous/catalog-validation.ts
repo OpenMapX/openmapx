@@ -1,7 +1,7 @@
 /** The admitted validation root owns the inactive slot through proxy restoration and final stop. */
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { controlDigest, executionAuthorityState } from "@openmapx/core/build-artifacts";
+import { controlDigest } from "@openmapx/core/build-artifacts";
 import {
   type CatalogRuntimeInputs,
   type CatalogValidation,
@@ -218,7 +218,6 @@ export async function runCatalogValidation(options: {
       imageDigest: runtimeInputs.imageDigest,
     };
   }
-  executionAuthorityState(context.authority);
   const retained = catalogValidationRecordSchema.parse({
     version: 1,
     sourceExecution: context.execution,

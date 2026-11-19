@@ -13,13 +13,13 @@ for await (const line of createInterface({ input: process.stdin })) {
         role: input.role,
         serviceIds: ["motis", "osrm"],
       });
-      const authority = c.retainAdmittedControlExecution(installation, input.admitted);
+      const authority = await c.retainAdmittedControlExecution(installation, input.admitted);
       const lease = await l.acquireArtifactTargetLease({
         serviceIds: input.admitted.serviceIds,
         owner: authority,
       });
       const delegation = await l.delegateArtifactTargetLease(lease, input.child);
-      c.retainControlEffectReceipt(authority, {
+      await c.retainControlEffectReceipt(authority, {
         outcome: "failed_without_effect",
         publication: "not_started",
         receipt: { kind: "not-started" },
@@ -47,7 +47,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         execution: input.execution,
         serviceIds: intent.serviceIds,
       });
-      const authority = c.retainAdmittedControlExecution(installation, {
+      const authority = await c.retainAdmittedControlExecution(installation, {
         requestedDeadlineAt: input.execution.deadlineAt,
         execution: input.execution,
         kind: intent.operation.kind,
@@ -64,7 +64,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       let delegation: c.ControlDelegation | undefined;
       if (input.child) delegation = await l.delegateArtifactTargetLease(lease, input.child);
       if (input.action === "settle") {
-        c.retainControlEffectReceipt(authority, {
+        await c.retainControlEffectReceipt(authority, {
           outcome: "committed",
           publication: "committed",
           receipt: { kind: "fixed-cli-exit", args: input.args, exitCode: 0 },
@@ -120,7 +120,7 @@ for await (const line of createInterface({ input: process.stdin })) {
           })();
       const lease = await admission.adopt(input.execution);
       if (input.forward) l.assertArtifactTargetLeaseForward(lease);
-      const authority = c.retainAdmittedControlExecution(installation, {
+      const authority = await c.retainAdmittedControlExecution(installation, {
         requestedDeadlineAt: input.execution.deadlineAt,
         execution: input.execution,
         kind: input.kind,
@@ -131,7 +131,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         serviceIds: lease.serviceIds,
       });
       if (input.settle) {
-        c.retainControlEffectReceipt(authority, {
+        await c.retainControlEffectReceipt(authority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },

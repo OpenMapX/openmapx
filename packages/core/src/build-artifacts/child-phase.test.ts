@@ -78,7 +78,7 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
       operationKey: child.operationKey,
     },
   };
-  const authority = control.retainAdmittedControlExecution(dm, {
+  const authority = await control.retainAdmittedControlExecution(dm, {
     execution: owner,
     kind: operation.kind,
     operation,
@@ -92,9 +92,14 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     owner: authority,
   });
   try {
-    const original = readFileSync(
-      join(root, "state/data-manager/control/executions", `${owner.operationKey}.json`),
-    );
+    const admission = () =>
+      JSON.parse(
+        readFileSync(
+          join(root, "state/data-manager/control/executions", `${owner.operationKey}.json`),
+          "utf8",
+        ),
+      ).admission;
+    const original = admission();
     const held = heldLeases(root);
     const late = admittedAt + 4 * 3600000;
     vi.spyOn(Date, "now").mockReturnValue(late);
@@ -123,15 +128,12 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     expect(issued.channel).toBe("delegation");
     control.consumeControlChildDispatch(issued.dispatchTicket);
     expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow(/consumed/);
-    expect(
-      readFileSync(
-        join(root, "state/data-manager/control/executions", `${owner.operationKey}.json`),
-      ),
-    ).toEqual(original);
+    // The admission is never rewritten; only the row's progress records the child.
+    expect(admission()).toEqual(original);
     expect(heldLeases(root).map((value) => value.leaseId)).toEqual(
       held.map((value) => value.leaseId),
     );
-    expect(control.cancelControlExecution(authority)).toEqual([bound.execution]);
+    expect(await control.cancelControlExecution(authority)).toEqual([bound.execution]);
     await expect(
       control.issueControlChildPhase(authority, {
         phase: "stop-primary",
@@ -218,11 +220,11 @@ async function fixture(exact = false, services = ["motis", "motis-staging"]) {
     plan,
     ...(exact ? {} : { reservations }),
   };
-  const authority = control.retainAdmittedControlExecution(dm, input);
+  const authority = await control.retainAdmittedControlExecution(dm, input);
   const cell = join(
     root,
-    "state/data-manager/control/observations",
-    `phase-${execution.operationKey}-0.json`,
+    "state/data-manager/control/executions",
+    `${execution.operationKey}.json`,
   );
   return {
     root,
@@ -242,12 +244,12 @@ it("returns the original binding after cancel/expiry and cannot bind another pha
   try {
     const phase = { phase: "stop-primary" as const, ordinal: 0 };
     const first = await control.bindControlChildPhase(f.authority, phase);
-    control.cancelControlExecution(f.authority);
+    await control.cancelControlExecution(f.authority);
     vi.spyOn(Date, "now").mockReturnValue(f.execution.deadlineAt + 1);
     expect(await control.bindControlChildPhase(f.authority, phase)).toEqual(first);
     await expect(
       control.bindControlChildPhase(f.authority, { phase: "stop-staging", ordinal: 1 }),
-    ).rejects.toThrow(/fenced|clock|expir/i);
+    ).rejects.toThrow(/fenced|clock|expir|elapsed/i);
     expect(control.lookupControlChildPhase(f.authority, phase)).toEqual(first);
   } finally {
     f.close();
@@ -267,16 +269,15 @@ it("observes one same-slot binding under concurrent binds", async () => {
     f.close();
   }
 });
-it("keeps an old exact admission's signed bytes when a duplicate supplies empty reservations", async () => {
+it("keeps an exact admission's row when a duplicate supplies empty reservations", async () => {
   const f = await fixture(true);
   try {
-    const path = join(
-        f.root,
-        "state/data-manager/control/executions",
-        `${f.execution.operationKey}.json`,
-      ),
+    const path = f.cell,
       original = readFileSync(path);
-    const repeated = control.retainAdmittedControlExecution(f.dm, { ...f.input, reservations: [] });
+    const repeated = await control.retainAdmittedControlExecution(f.dm, {
+      ...f.input,
+      reservations: [],
+    });
     expect(repeated.execution).toEqual(f.execution);
     expect(readFileSync(path)).toEqual(original);
   } finally {
@@ -314,9 +315,9 @@ it.each(["reference"] as const)(
         const selected =
           !fired &&
           point === "reference" &&
-          path.endsWith("/observations") &&
-          name.startsWith("phase-") &&
-          text.includes('"grant_prepared"');
+          path.endsWith("/executions") &&
+          name.startsWith(f.execution.operationKey) &&
+          text.includes('"delegation":{');
         const value = Reflect.apply(original, this, args);
         if (selected) {
           fired = true;
@@ -348,7 +349,7 @@ it.each(["reference"] as const)(
         }),
       ).rejects.toThrow();
       try {
-        expect(control.cancelControlExecution(f.authority)).toContainEqual(bound.execution);
+        expect(await control.cancelControlExecution(f.authority)).toContainEqual(bound.execution);
       } catch {
         /* Torn private/shared publication is itself a closed recovery fence. */
       }
@@ -378,9 +379,9 @@ it.each(["body", "phase", "ordinal", "target", "recipient"] as const)(
       if (field === "target") slot.serviceIds = ["motis-staging"];
       if (field === "recipient") slot.recipient = "data-manager";
       const original = readFileSync(f.cell);
-      expect(() =>
+      await expect(
         control.retainAdmittedControlExecution(f.dm, { ...f.input, reservations }),
-      ).toThrow();
+      ).rejects.toThrow();
       expect(
         control.lookupControlChildPhase(f.authority, { phase: "stop-primary", ordinal: 0 }),
       ).toBeNull();
@@ -390,15 +391,15 @@ it.each(["body", "phase", "ordinal", "target", "recipient"] as const)(
     }
   },
 );
-it.each(["signature", "missing"] as const)(
-  "rejects %s phase evidence rather than binding a new identity",
+it.each(["changed", "missing"] as const)(
+  "rejects a %s execution row rather than binding a new identity",
   async (field) => {
     const f = await fixture();
     try {
       if (field === "missing") rmSync(f.cell);
       else {
         const raw = JSON.parse(readFileSync(f.cell, "utf8"));
-        raw.signature = "a".repeat(86);
+        raw.admission.serviceIds = ["motis"];
         writeFileSync(f.cell, JSON.stringify(raw));
       }
       await expect(
@@ -431,7 +432,7 @@ it("rechecks durable cancellation inside publication after the outside identity 
       const value = await read(leaseId);
       if (!fired) {
         fired = true;
-        control.cancelControlExecution(f.authority);
+        await control.cancelControlExecution(f.authority);
       }
       return value;
     });
@@ -443,7 +444,7 @@ it("rechecks durable cancellation inside publication after the outside identity 
     ).rejects.toThrow(/fenced|cancel/i);
     expect(fired).toBe(true);
     expect(inspectControlChildPublication(f.authority, phase).publication.state).toBe("unissued");
-    expect(control.cancelControlExecution(f.authority)).toEqual([]);
+    expect(await control.cancelControlExecution(f.authority)).toEqual([]);
   } finally {
     vi.restoreAllMocks();
     control.closeArtifactTargetLeaseHandle(lease);
@@ -524,9 +525,9 @@ it("refuses a prospective phase plan above the combined64 slots before exposure"
         ),
       },
     }));
-    expect(() =>
+    await expect(
       control.retainAdmittedControlExecution(f.dm, { ...f.input, reservations }),
-    ).toThrow();
+    ).rejects.toThrow();
     expect(
       control.lookupControlChildPhase(f.authority, { phase: "stop-primary", ordinal: 0 }),
     ).toBeNull();
@@ -535,69 +536,54 @@ it("refuses a prospective phase plan above the combined64 slots before exposure"
   }
 });
 
-it.each(["cell", "aggregate"] as const)(
-  "rejects signed %s capacity before publishing any phase bindings",
-  async (limit) => {
-    const services =
-        limit === "cell"
-          ? Array.from(
-              { length: 256 },
-              (_, n) => `svc-${String(n).padStart(3, "0")}-${"a".repeat(50)}`,
-            )
-          : [
-              "motis",
-              "motis-staging",
-              ...Array.from({ length: 10 }, (_, n) => `svc-${n}-${"a".repeat(50)}`),
-            ],
-      f = await fixture(false, services);
-    try {
-      const deadlineAt = f.execution.deadlineAt,
-        execution = {
-          ...f.execution,
-          executionId: randomUUID(),
-          operationKey: createControlRootOperationKey({
-            notAfter: deadlineAt,
-            nonce: randomBytes(16),
-          }),
-        },
-        base = f.input.reservations![0]!,
-        reservations = Array.from({ length: limit === "cell" ? 1 : 64 }, (_, ordinal) => ({
-          ...base,
-          ordinal,
-          serviceIds: [...services].sort(),
-          execution: {
-            ...base.execution,
-            executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-            operationKey: control.controlChildOperationKey(
-              execution.operationKey,
-              "stop-primary",
-              ordinal,
-            ),
-          },
-        }));
-      expect(() =>
-        control.retainAdmittedControlExecution(f.dm, {
-          ...f.input,
-          execution,
-          reservations,
-          serviceIds: services,
+it("refuses an execution row above its capacity before writing it", async () => {
+  const services = Array.from(
+      { length: 256 },
+      (_, n) => `svc-${String(n).padStart(3, "0")}-${"a".repeat(50)}`,
+    ),
+    f = await fixture(false, services);
+  try {
+    const deadlineAt = f.execution.deadlineAt,
+      execution = {
+        ...f.execution,
+        executionId: randomUUID(),
+        operationKey: createControlRootOperationKey({
+          notAfter: deadlineAt,
+          nonce: randomBytes(16),
         }),
-      ).toThrow(limit === "cell" ? /cell capacity/ : /aggregate capacity/);
-      expect(
-        (await import("node:fs")).existsSync(
-          join(
-            f.root,
-            "state/data-manager/control/observations",
-            `phase-${execution.operationKey}-0.json`,
+      },
+      base = f.input.reservations![0]!,
+      reservations = Array.from({ length: 64 }, (_, ordinal) => ({
+        ...base,
+        ordinal,
+        serviceIds: [...services].sort(),
+        execution: {
+          ...base.execution,
+          executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+          operationKey: control.controlChildOperationKey(
+            execution.operationKey,
+            "stop-primary",
+            ordinal,
           ),
-        ),
-      ).toBe(false);
-    } finally {
-      f.close();
-    }
-  },
-  30000,
-);
+        },
+      }));
+    await expect(
+      control.retainAdmittedControlExecution(f.dm, {
+        ...f.input,
+        execution,
+        reservations,
+        serviceIds: services,
+      }),
+    ).rejects.toThrow(/Execution row capacity/);
+    expect(
+      (await import("node:fs")).existsSync(
+        join(f.root, "state/data-manager/control/executions", `${execution.operationKey}.json`),
+      ),
+    ).toBe(false);
+  } finally {
+    f.close();
+  }
+}, 30000);
 
 async function deadlineFixture(
   operation: import("../ops/contract").OpsOperation = { kind: "data.downloadFonts" },
@@ -628,7 +614,7 @@ async function deadlineFixture(
       fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
     },
     plan = control.planFixedSingleDataCommand(execution, operation, services),
-    authority = control.retainAdmittedControlExecution(agent, {
+    authority = await control.retainAdmittedControlExecution(agent, {
       execution,
       kind: operation.kind,
       operation,
@@ -658,7 +644,7 @@ async function deadlineFixture(
     }),
     intent = control.readFixedCliSpawnIntent(cli, bound.execution, args),
     parent = control.verifiedRetainedControlParent(cli, intent.parent),
-    cliAuthority = control.retainAdmittedControlExecution(cli, {
+    cliAuthority = await control.retainAdmittedControlExecution(cli, {
       execution: bound.execution,
       kind: operation.kind,
       operation,
@@ -696,20 +682,15 @@ it.each(["cancel-first", "grant-first"] as const)(
       const bound = await control.bindControlChildPhase(f.cliAuthority, f.slot);
       expect(heldLeases(f.root)).toEqual([]);
       if (order === "cancel-first") {
-        const original = AnchoredDirectory.prototype.name;
-        vi.spyOn(AnchoredDirectory.prototype, "name").mockImplementation(function (
-          this: AnchoredDirectory,
-          name: string,
-        ) {
-          if (
-            !fired &&
-            name === `${f.execution.operationKey}.writer` &&
-            this.path.endsWith("/ops-agent")
-          ) {
+        // Cancel the ancestor when the child first reads it.
+        const rows = installationState(f.cli).rows,
+          read = rows.read.bind(rows);
+        vi.spyOn(rows, "read").mockImplementation((key) => {
+          if (!fired && key === f.execution.operationKey) {
             fired = true;
-            control.cancelControlExecution(f.authority);
+            void control.cancelControlExecution(f.authority);
           }
-          return original.call(this, name);
+          return read(key);
         });
         await expect(
           control.issueControlChildPhase(f.cliAuthority, {
@@ -720,13 +701,13 @@ it.each(["cancel-first", "grant-first"] as const)(
         expect(inspectControlChildPublication(f.cliAuthority, f.slot).publication.state).toBe(
           "unissued",
         );
-        expect(control.cancelControlExecution(f.cliAuthority)).toEqual([]);
+        expect(await control.cancelControlExecution(f.cliAuthority)).toEqual([]);
       } else {
         const issued = await control.issueControlChildPhase(f.cliAuthority, {
           ...f.slot,
         });
-        control.cancelControlExecution(f.authority);
-        expect(control.cancelControlExecution(f.cliAuthority)).toEqual([bound.execution]);
+        await control.cancelControlExecution(f.authority);
+        expect(await control.cancelControlExecution(f.cliAuthority)).toEqual([bound.execution]);
         expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow(
           /cancel|fenced/i,
         );

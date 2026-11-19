@@ -4,6 +4,7 @@ import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import type { ControlExecutionOrigin } from "../ops/control-root-key";
 import type { ControlIssuer, ExecutionRef } from "../ops/execution-identity";
+import type { ExecutionRows } from "./execution-rows";
 import type { AnchoredDirectory } from "./filesystem";
 import type { LeaseBackend } from "./lease-store";
 
@@ -22,6 +23,8 @@ export interface InstallationState {
   registeredTargets: ReadonlySet<string>;
   /** Where this role claims targets: the agent's store, directly or through the agent. */
   leases: LeaseBackend;
+  /** Where this role keeps its execution rows. */
+  rows: ExecutionRows;
 }
 export { controlOriginSchema } from "../ops/control-root-key";
 export function sameControlOrigin(

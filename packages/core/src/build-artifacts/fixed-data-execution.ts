@@ -13,12 +13,7 @@ import {
 } from "../services/data-manager/contracts/executions";
 import { controlDigest } from "./control-records";
 import { assertDataManagerTerminal } from "./data-manager-terminal";
-import {
-  executionAuthorityState,
-  lookupControlChildPhase,
-  type VerifiedExecutionAuthority,
-  withPrivateEffectWriter,
-} from "./execution-record";
+import { type ExecutionHandle, lookupControlChildPhase } from "./execution-record";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
@@ -149,10 +144,10 @@ export function planFixedSingleDataCommand(
   });
 }
 export function retainFixedSingleDataPlan(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   plan: ReturnType<typeof planFixedSingleDataCommand>,
 ): void {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     body = bundleSchema.parse(plan);
   if (
     s.installation.installation.role !== "ops-agent" ||
@@ -170,8 +165,8 @@ export function retainFixedSingleDataPlan(
     true,
   );
 }
-export function readFixedSingleDataPlan(authority: VerifiedExecutionAuthority) {
-  const s = executionAuthorityState(authority),
+export function readFixedSingleDataPlan(authority: ExecutionHandle) {
+  const s = authority,
     body = bundleSchema.parse(
       readPrivateRecord(
         s.installation,
@@ -189,10 +184,10 @@ export function readFixedSingleDataPlan(authority: VerifiedExecutionAuthority) {
   return body;
 }
 export function readCliDataAttempt(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   key: string,
 ): DataChildAttempt | null {
-  const s = executionAuthorityState(authority);
+  const s = authority;
   let raw: unknown;
   try {
     raw = readPrivateRecord(s.installation, "observations", `data-attempt-${key}.json`, 8192);
@@ -202,11 +197,8 @@ export function readCliDataAttempt(
   }
   return dataChildAttemptSchema.parse(raw);
 }
-export function retainCliDataAttempt(
-  authority: VerifiedExecutionAuthority,
-  value: DataChildAttempt,
-): void {
-  const s = executionAuthorityState(authority),
+export function retainCliDataAttempt(authority: ExecutionHandle, value: DataChildAttempt): void {
+  const s = authority,
     attempt = dataChildAttemptSchema.parse(value),
     slot = s.reservations.find((item) => item.execution.operationKey === attempt.operationKey),
     binding = slot ? lookupControlChildPhase(authority, slot) : null;
@@ -224,34 +216,32 @@ export function retainCliDataAttempt(
     (attempt.fingerprint && attempt.fingerprint !== binding.execution.fingerprint)
   )
     throw Error("Exact retained data command binding required");
-  withPrivateEffectWriter(s, () => {
-    const prior = readCliDataAttempt(authority, attempt.operationKey);
-    if (prior) {
-      const { state: _old, id: _id, fingerprint: _fp, deadlineAt: _deadline, ...before } = prior,
-        { state: _next, id: _id2, fingerprint: _fp2, deadlineAt: _deadline2, ...after } = attempt;
-      if (
-        canonicalJson(before) !== canonicalJson(after) ||
-        (prior.state !== "prepared" && attempt.state === "prepared") ||
-        (prior.id && prior.id !== attempt.id) ||
-        (prior.fingerprint && prior.fingerprint !== attempt.fingerprint) ||
-        (prior.state === "terminal" && canonicalJson(prior) !== canonicalJson(attempt))
-      )
-        throw Error("Retained CLI data attempt is immutable");
-    }
-    writePrivateRecord(
-      s.installation,
-      "observations",
-      `data-attempt-${attempt.operationKey}.json`,
-      attempt,
-      !prior,
-    );
-  });
+  const prior = readCliDataAttempt(authority, attempt.operationKey);
+  if (prior) {
+    const { state: _old, id: _id, fingerprint: _fp, deadlineAt: _deadline, ...before } = prior,
+      { state: _next, id: _id2, fingerprint: _fp2, deadlineAt: _deadline2, ...after } = attempt;
+    if (
+      canonicalJson(before) !== canonicalJson(after) ||
+      (prior.state !== "prepared" && attempt.state === "prepared") ||
+      (prior.id && prior.id !== attempt.id) ||
+      (prior.fingerprint && prior.fingerprint !== attempt.fingerprint) ||
+      (prior.state === "terminal" && canonicalJson(prior) !== canonicalJson(attempt))
+    )
+      throw Error("Retained CLI data attempt is immutable");
+  }
+  writePrivateRecord(
+    s.installation,
+    "observations",
+    `data-attempt-${attempt.operationKey}.json`,
+    attempt,
+    !prior,
+  );
 }
 export function verifyCliDataTerminal(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   status: import("../services/data-manager/contracts/executions").DataExecutionStatus,
 ) {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     slot = s.reservations.find((item) => item.execution.operationKey === status.operationKey),
     binding = slot ? lookupControlChildPhase(authority, slot) : null;
   if (
@@ -266,10 +256,10 @@ export function verifyCliDataTerminal(
 }
 
 export function cliDataReservation(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   phase: "data-step" | "osm" | "transit" | "fonts" = "data-step",
 ) {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     slots = s.reservations.filter(
       (slot) => slot.recipient === "data-manager" && slot.phase === phase,
     );

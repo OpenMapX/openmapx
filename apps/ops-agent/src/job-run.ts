@@ -392,12 +392,12 @@ export function createJobRunner(options: {
                 error instanceof OpsExecutionFailure &&
                 error.errorClass === "configuration_prerequisite"
               )
-                retainConfigurationPreEffectRefusal(authority);
+                await retainConfigurationPreEffectRefusal(authority);
               throw error;
             }
           }
           beforeEffect(job, authority, claim);
-          if (beginsEffectAtDispatch(job.operation)) beginControlEffect(authority);
+          if (beginsEffectAtDispatch(job.operation)) await beginControlEffect(authority);
         }
         try {
           return await options.dispatchJob(job, contextFor(job, controller.signal, claim));
@@ -406,7 +406,7 @@ export function createJobRunner(options: {
             try {
               // The nominal producer checks the original started cell and all
               // children. A begun stage cannot be relabeled as unissued.
-              retainConfigurationPreEffectRefusal(authority);
+              await retainConfigurationPreEffectRefusal(authority);
             } catch {
               // Existing begun/unknown evidence remains fenced.
             }

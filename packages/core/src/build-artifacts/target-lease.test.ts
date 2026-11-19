@@ -44,9 +44,9 @@ function heldLeases() {
 it("reconciles a settled root after a crash between settlement and release", async () => {
   const c = await import("./test-fixtures/control"),
     a = await api();
-  const authority = owner();
+  const authority = await owner();
   const lease = await a.acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: authority });
-  retainControlEffectReceipt(authority, {
+  await retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -63,9 +63,8 @@ it("reconciles a settled root after a crash between settlement and release", asy
     role: "host-cli",
     serviceIds: ["osrm", "motis"],
   });
-  const restored = c.restoreAdmittedControlExecution(installation, authority.execution),
-    recovery = c.verifyControlRecoveryAuthority(restored);
-  const input = { leaseId: lease.leaseId, authority: recovery };
+  const restored = c.restoreAdmittedControlExecution(installation, authority.execution);
+  const input = { leaseId: lease.leaseId, authority: restored };
   await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
   await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
   expect(heldLeases()).toEqual([]);
@@ -103,15 +102,9 @@ async function api() {
   return import("./target-lease");
 }
 describe("certified target leases", () => {
-  it("requires nominal durable ownership, then fences unknown own effects", async () => {
+  it("fences unknown own effects", async () => {
     const a = await api();
-    const authority = owner();
-    await expect(
-      a.acquireArtifactTargetLease({
-        serviceIds: ["osrm"],
-        owner: { execution: authority.execution } as typeof authority,
-      }),
-    ).rejects.toThrow(/authority/);
+    const authority = await owner();
     const lease = await a.acquireArtifactTargetLease({
       serviceIds: ["osrm"],
       owner: authority,
@@ -121,12 +114,12 @@ describe("certified target leases", () => {
   });
   it("releases a certified target after durable no-effect settlement", async () => {
     const a = await api();
-    const authority = owner();
+    const authority = await owner();
     const lease = await a.acquireArtifactTargetLease({
       serviceIds: ["osrm"],
       owner: authority,
     });
-    retainControlEffectReceipt(authority, {
+    await retainControlEffectReceipt(authority, {
       outcome: "failed_without_effect",
       publication: "not_started",
       receipt: { kind: "not-started" },
@@ -140,9 +133,9 @@ describe("certified target leases", () => {
   });
   it("refuses a second owner of a held target and names the holder", async () => {
     const a = await api();
-    const first = owner();
+    const first = await owner();
     await a.acquireArtifactTargetLease({ serviceIds: ["osrm"], owner: first });
-    const second = owner();
+    const second = await owner();
     vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
     try {
       const refused = expect(
@@ -158,7 +151,7 @@ describe("certified target leases", () => {
 });
 it("never reacquires or expands a retained execution's root", async () => {
   const a = await api();
-  const authority = owner();
+  const authority = await owner();
   await a.acquireArtifactTargetLease({
     serviceIds: ["osrm"],
     owner: authority,
@@ -177,14 +170,14 @@ it("never reacquires or expands a retained execution's root", async () => {
   ).rejects.toThrow(/closure/);
 });
 it("rejects arbitrary caller text as effect evidence", async () => {
-  const authority = owner();
-  expect(() =>
+  const authority = await owner();
+  await expect(
     retainControlEffectReceipt(authority, {
       outcome: "committed",
       publication: "committed",
       receipt: "trust me",
     }),
-  ).toThrow(/evidence|receipt/);
+  ).rejects.toThrow(/evidence|receipt/);
 });
 it("issues no maintenance step from a bare terminal summary without the maintenance record", async () => {
   const c = await import("./test-fixtures/control");
@@ -250,7 +243,7 @@ it("issues no maintenance step from a bare terminal summary without the maintena
     serviceIds: ["motis"],
     recipient: "ops-agent" as const,
   };
-  const authority = c.retainAdmittedControlExecution(agent, {
+  const authority = await c.retainAdmittedControlExecution(agent, {
     requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
@@ -285,7 +278,7 @@ it("issues no maintenance step from a bare terminal summary without the maintena
     }),
     { mode: 0o600 },
   );
-  c.retainControlEffectReceipt(authority, {
+  await c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -308,7 +301,7 @@ it("holds a target lease and the configuration writer together", async () => {
   );
   const a = await api();
   const c = await import("./test-fixtures/control");
-  const authority = owner();
+  const authority = await owner();
   const lease = await a.acquireArtifactTargetLease({
     serviceIds: ["osrm"],
     owner: authority,
@@ -317,7 +310,7 @@ it("holds a target lease and the configuration writer together", async () => {
   const releaseWriter = await acquireConfigurationOwnership(root);
   expect(existsSync(configurationWriterLockPath(root))).toBe(true);
   releaseWriter();
-  c.retainControlEffectReceipt(authority, {
+  await c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -330,25 +323,25 @@ it("holds a target lease and the configuration writer together", async () => {
 });
 it("does not turn an already-started execution into no-effect evidence", async () => {
   const c = await import("./test-fixtures/control");
-  const authority = owner();
-  c.beginControlEffect(authority);
-  expect(() =>
+  const authority = await owner();
+  await c.beginControlEffect(authority);
+  await expect(
     c.retainControlEffectReceipt(authority, {
       outcome: "failed_without_effect",
       publication: "not_started",
       receipt: { kind: "not-started" },
     }),
-  ).toThrow(/Started/);
+  ).rejects.toThrow(/Started/);
 });
 it("does not restart effects after retaining unused-execution evidence", async () => {
   const c = await import("./test-fixtures/control");
-  const authority = owner();
-  c.retainControlEffectReceipt(authority, {
+  const authority = await owner();
+  await c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
   });
-  expect(() => c.beginControlEffect(authority)).toThrow(/cannot restart/);
+  await expect(c.beginControlEffect(authority)).rejects.toThrow(/cannot restart/);
 });
 
 it("does not accumulate temporary authority records after failed atomic updates", async () => {

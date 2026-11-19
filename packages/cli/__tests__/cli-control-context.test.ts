@@ -25,8 +25,8 @@ it("reclaims an expired host-command family before another standalone command", 
   const root = mkdtempSync(join(tmpdir(), "omx-host-retention-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
   await c.provisionControlDirectories(root);
-  const owner = admittedRoot(root);
-  terminalWithoutEffect(owner.authority);
+  const owner = await admittedRoot(root);
+  await terminalWithoutEffect(owner.authority);
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
   try {
     await pruneHostControlRecords(owner.installation);
@@ -88,7 +88,7 @@ it.each([0, 1, 130])(
       serviceIds: ["motis"],
       recipient: "fixed-cli" as const,
     };
-    const authority = c.retainAdmittedControlExecution(installation, {
+    const authority = await c.retainAdmittedControlExecution(installation, {
       requestedDeadlineAt: execution.deadlineAt,
       execution,
       kind: operation.kind,
@@ -173,7 +173,7 @@ it.each([0, 1, 130])(
       ).rejects.toThrow();
       expect(calls).toBe(1);
       if (exitCode === 0) {
-        c.retainControlEffectReceipt(authority, {
+        await c.retainControlEffectReceipt(authority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },

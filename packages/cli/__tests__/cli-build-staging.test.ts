@@ -104,7 +104,7 @@ it("keeps staged and live bytes unchanged when the retained parent cancels befor
           deadlineAt,
         }),
       };
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
@@ -117,7 +117,7 @@ it("keeps staged and live bytes unchanged when the retained parent cancels befor
     writeFileSync(join(liveDir, "old"), "old");
     const nextDir = prepareStagedBuildDir(liveDir);
     writeFileSync(join(nextDir, "new"), "new");
-    control.cancelControlExecution(authority);
+    await control.cancelControlExecution(authority);
     await withHostDataControlContext(installation, authority, async () => {
       expect(() => promoteStagedBuildDir(liveDir, nextDir)).toThrow();
       expect(() => prepareStagedBuildDir(liveDir)).toThrow();

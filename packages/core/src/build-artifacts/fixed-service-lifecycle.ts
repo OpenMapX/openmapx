@@ -6,7 +6,7 @@ import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { currentConfigurationGeneration } from "../services/configuration-generation";
 import { controlDigest } from "./control-records";
-import { executionAuthorityState, type VerifiedExecutionAuthority } from "./execution-record";
+import type { ExecutionHandle } from "./execution-record";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
@@ -36,10 +36,8 @@ export function serviceLifecycleFinalRevisionId(rootOperationKey: string): strin
     throw Error("Lifecycle root identity required");
   return `cfg1_${createHash("sha256").update(`${domain}\0final-generation\0${rootOperationKey}`).digest("base64url")}`;
 }
-export function ownedServiceLifecycleFinalRevisionId(
-  authority: VerifiedExecutionAuthority,
-): string {
-  const s = executionAuthorityState(authority);
+export function ownedServiceLifecycleFinalRevisionId(authority: ExecutionHandle): string {
+  const s = authority;
   if (!["service.start", "service.update"].includes(s.kind))
     throw Error("Original lifecycle authority required");
   return serviceLifecycleFinalRevisionId(s.origin.rootKey);
@@ -84,10 +82,10 @@ export function planFixedServiceUpdate(options: {
   });
 }
 export function retainFixedServiceLifecyclePlan(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   value: FixedServiceLifecyclePlan,
 ): void {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     plan = schema.parse(value);
   if (
     s.kind !== "service.update" ||
@@ -107,9 +105,9 @@ export function retainFixedServiceLifecyclePlan(
   );
 }
 export function readFixedServiceLifecyclePlan(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
 ): FixedServiceLifecyclePlan {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     plan = schema.parse(
       readPrivateRecord(
         s.installation,

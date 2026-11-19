@@ -65,7 +65,7 @@ it("refuses a new admission before any record while the control filesystem is ne
         serviceIds: ["osrm"],
       };
     space.low = true;
-    expect(() => control.retainAdmittedControlExecution(installation, input)).toThrow(
+    await expect(control.retainAdmittedControlExecution(installation, input)).rejects.toThrow(
       /nearly full/,
     );
     const record = join(

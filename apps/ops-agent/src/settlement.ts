@@ -2,13 +2,13 @@ import {
   type ControlInstallation,
   cancelArtifactTargetLease,
   cancelControlExecution,
+  type ExecutionHandle,
   inspectConfigurationPreEffectRefusal,
   inspectFeedProxyValidationFailure,
   releaseArtifactTargetLease,
   reserveFeedProxyValidation,
   retainControlEffectReceipt,
   settleArtifactTargetLeaseChild,
-  type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
   verifyLocalArtifactTargetRootRelease,
 } from "@openmapx/core/build-artifacts";
@@ -79,7 +79,7 @@ interface KindSettlement {
   /** The fixed runtime begins its effect itself, immediately before its first host call. */
   beginsOwnEffect?: (operation: OpsOperation) => boolean;
   /** Recorded under the root's authority before the effect begins. */
-  beforeEffect?: (job: JobRecord, authority: VerifiedExecutionAuthority, claim: Claim) => void;
+  beforeEffect?: (job: JobRecord, authority: ExecutionHandle, claim: Claim) => void;
   /** A failed run records that it was refused before any effect, unless one began. */
   refusesBeforeEffectOnError?: true;
   /** Completes with its validated result after a cancel or timeout: its host call had settled. */
@@ -96,10 +96,10 @@ interface KindSettlement {
     job: JobRecord;
     state: TerminalState;
     updates: TransitionUpdates;
-    authority: VerifiedExecutionAuthority;
+    authority: ExecutionHandle;
     committed: boolean;
     deps: SettlementDeps;
-  }) => KindVerdict | undefined;
+  }) => KindVerdict | undefined | Promise<KindVerdict | undefined>;
   /** The maintenance record, not the operation, settles and releases the root lease. */
   keepsRootLease?: true;
   /** A released root reconciles the kind's prepared files. */
@@ -154,10 +154,10 @@ const KIND_SETTLEMENT: Partial<Record<OpsOperationKind, KindSettlement>> = {
     beginsOwnEffect: always,
     completesAfterCancel: (job, result) =>
       job.role === "api" && (result as { outcome?: string }).outcome === "committed",
-    verdict: ({ state, updates, authority, committed }) => {
+    verdict: async ({ state, updates, authority, committed }) => {
       if (state === "failed") {
         try {
-          retainUnstartedArtifactImport(authority);
+          await retainUnstartedArtifactImport(authority);
           return { type: "unstarted" };
         } catch {
           return undefined; /* Attempted publication remains fenced. */
@@ -184,7 +184,7 @@ const KIND_SETTLEMENT: Partial<Record<OpsOperationKind, KindSettlement>> = {
       if (state !== "failed" || !authority || !deps.artifactTransfers) return undefined;
       try {
         const contained = await deps.artifactTransfers.containPreparedValidation(authority);
-        retainControlEffectReceipt(authority, {
+        await retainControlEffectReceipt(authority, {
           outcome: "committed",
           publication: "committed",
           receipt: { kind: "ops-result", result: contained },
@@ -287,11 +287,7 @@ function kindSettlement(operation: OpsOperation): KindSettlement | undefined {
 export function beginsEffectAtDispatch(operation: OpsOperation): boolean {
   return !kindSettlement(operation)?.beginsOwnEffect?.(operation);
 }
-export function beforeEffect(
-  job: JobRecord,
-  authority: VerifiedExecutionAuthority,
-  claim: Claim,
-): void {
+export function beforeEffect(job: JobRecord, authority: ExecutionHandle, claim: Claim): void {
   kindSettlement(job.operation)?.beforeEffect?.(job, authority, claim);
 }
 export function refusesBeforeEffectOnError(operation: OpsOperation): boolean {
@@ -328,7 +324,7 @@ export function createTerminalSettlement(options: {
       return (await entry.observe(job, state, handles, deps())) ?? {};
     },
     async cancel({ authority, lease }) {
-      if (authority) cancelControlExecution(authority);
+      if (authority) await cancelControlExecution(authority);
       if (lease) await cancelArtifactTargetLease(lease);
     },
     dropsFailureResultOnSuccess(job) {
@@ -349,7 +345,7 @@ export function createTerminalSettlement(options: {
       const committed = state === "succeeded" && updates.result !== undefined;
       const verdict =
         observation?.verdict ??
-        entry?.verdict?.({ job, state, updates, authority, committed, deps: resolved });
+        (await entry?.verdict?.({ job, state, updates, authority, committed, deps: resolved }));
       let unstartedConfiguration = false;
       if (state === "failed") {
         try {
@@ -364,7 +360,7 @@ export function createTerminalSettlement(options: {
       const reportedFailure = state === "failed" && reportedFailures.delete(job.operationId);
       const unstarted = unstartedConfiguration || verdict?.type === "unstarted";
       if (!unstarted && verdict?.type !== "own")
-        retainControlEffectReceipt(
+        await retainControlEffectReceipt(
           authority,
           verdict?.type === "receipt"
             ? verdict.record

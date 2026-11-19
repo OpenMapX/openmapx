@@ -56,7 +56,7 @@ it.each(["commit", "rollback", "release"] as const)(
           deadlineAt,
         }),
       };
-      const authority = retainAdmittedControlExecution(installation, {
+      const authority = await retainAdmittedControlExecution(installation, {
         execution,
         operation,
         kind: operation.kind,
@@ -64,8 +64,8 @@ it.each(["commit", "rollback", "release"] as const)(
         requestedDeadlineAt: deadlineAt,
         serviceIds: ["motis"],
       });
-      beginControlEffect(authority);
-      expect(() =>
+      await beginControlEffect(authority);
+      await expect(
         retainControlEffectReceipt(authority, {
           outcome: "committed",
           publication: "committed",
@@ -74,7 +74,7 @@ it.each(["commit", "rollback", "release"] as const)(
             result: { repository: operation.repository, outcome, changed: true },
           },
         }),
-      ).not.toThrow();
+      ).resolves.toBeUndefined();
       expect(verifyControlEffectSettlement(installation, execution)).toBeTruthy();
     } finally {
       closeControlInstallation(installation);

@@ -47,7 +47,7 @@ async function fixture() {
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
   };
-  const authority = retainAdmittedControlExecution(installation, {
+  const authority = await retainAdmittedControlExecution(installation, {
     execution,
     operation,
     kind: operation.kind,

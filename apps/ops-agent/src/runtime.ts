@@ -1,7 +1,7 @@
 import type {
   ArtifactTargetLease,
   BorrowedArtifactTargetLease,
-  VerifiedExecutionAuthority,
+  ExecutionHandle,
 } from "@openmapx/core/build-artifacts";
 import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
 import {
@@ -53,7 +53,7 @@ export interface OpsExecutionContext {
   readonly execution: ExecutionRef;
   readonly artifactLease?: BorrowedArtifactTargetLease;
   readonly ownedTargetLease?: ArtifactTargetLease;
-  readonly controlAuthority?: VerifiedExecutionAuthority;
+  readonly controlAuthority?: ExecutionHandle;
   commitFeedProxyValidationFailure?(input: {
     candidateDigest: string;
     validationExitCode: number;

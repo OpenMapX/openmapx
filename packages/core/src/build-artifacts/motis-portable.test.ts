@@ -241,7 +241,7 @@ it.each([false, true])(
             deadlineAt,
           }),
         },
-        authority = control.retainAdmittedControlExecution(installation, {
+        authority = await control.retainAdmittedControlExecution(installation, {
           execution,
           kind: operation.kind,
           operation,

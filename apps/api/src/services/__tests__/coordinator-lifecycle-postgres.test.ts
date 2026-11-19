@@ -1064,7 +1064,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             deadlineAt,
           }),
         },
-        authority = retainAdmittedControlExecution(hostInstallation, {
+        authority = await retainAdmittedControlExecution(hostInstallation, {
           execution,
           operation,
           kind: operation.kind,
@@ -1162,7 +1162,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(() => assertCoordinatorPullLeaseCompatibility(observer)).toThrow();
         expect(snapshot()).toEqual(expired);
       } finally {
-        retainControlEffectReceipt(authority, {
+        await retainControlEffectReceipt(authority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },
@@ -1211,7 +1211,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             deadlineAt: unrelatedDeadline,
           }),
         },
-        unrelatedAuthority = retainAdmittedControlExecution(unrelatedInstallation, {
+        unrelatedAuthority = await retainAdmittedControlExecution(unrelatedInstallation, {
           execution: unrelatedExecution,
           operation: unrelatedOperation,
           kind: unrelatedOperation.kind,
@@ -1228,7 +1228,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         assertCoordinatorPullLeaseCompatibility(releasedObserver);
         expect(snapshot()).toEqual(before);
       } finally {
-        retainControlEffectReceipt(unrelatedAuthority, {
+        await retainControlEffectReceipt(unrelatedAuthority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },

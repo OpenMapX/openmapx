@@ -197,14 +197,14 @@ export async function runCliServiceLifecycle(options: {
     : control.serviceLifecycleFinalRevisionId(execution.operationKey);
   const authority =
     inherited?.authority ??
-    control.retainAdmittedControlExecution(installation, {
+    (await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
       admittedAt,
       requestedDeadlineAt: deadlineAt,
       serviceIds: targets,
-    });
+    }));
   // Set when data-manager never answered for this lifecycle's hardlink plan.
   let hardlinkOutcomeUnknown = false;
   if (inherited && !inherited.lease)
@@ -535,7 +535,7 @@ export async function runCliServiceLifecycle(options: {
     try {
       // A failure before the receipt opened has run nothing and has nothing to record.
       if (!receipt)
-        control.retainControlEffectReceipt(authority, {
+        await control.retainControlEffectReceipt(authority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },
@@ -551,7 +551,7 @@ export async function runCliServiceLifecycle(options: {
             );
           return;
         }
-        control.retainControlEffectReceipt(authority, {
+        await control.retainControlEffectReceipt(authority, {
           outcome: "contained",
           publication: "committed",
           receipt: {
@@ -601,7 +601,7 @@ export async function runCliServiceLifecycle(options: {
       );
       if (verified.phase !== "complete" || !verified.finalRevisionId)
         throw Error("Exact completed lifecycle receipt required");
-      control.retainControlEffectReceipt(authority, {
+      await control.retainControlEffectReceipt(authority, {
         outcome: "committed",
         publication: "committed",
         receipt: {

@@ -2,11 +2,7 @@
  * records so retention/capacity/recovery remain owned by the control family. */
 import { z } from "zod";
 import { controlDigest } from "../build-artifacts/control-records";
-import {
-  executionAuthorityState,
-  type VerifiedExecutionAuthority,
-  withPrivateEffectWriter,
-} from "../build-artifacts/execution-record";
+import type { ExecutionHandle } from "../build-artifacts/execution-record";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import { readPrivateRecord, writePrivateRecord } from "../build-artifacts/private-records";
 import { canonicalJson } from "../ops/canonical-json";
@@ -23,12 +19,12 @@ export async function openAdminDataWorkflow(options: {
   dataRoot: string;
   operationKey: string;
   fingerprint: string;
-  authority: VerifiedExecutionAuthority;
+  authority: ExecutionHandle;
 }): Promise<{
   read(): DataWorkflowReceipt | null;
   checkpoint(receipt: DataWorkflowReceipt): Promise<void>;
 }> {
-  const state = executionAuthorityState(options.authority);
+  const state = options.authority;
   if (
     state.kind !== "data.update" ||
     state.execution.operationKey !== options.operationKey ||
@@ -65,39 +61,37 @@ export async function openAdminDataWorkflow(options: {
     read,
     async checkpoint(value) {
       const receipt = dataWorkflowReceiptSchema.parse(value);
-      withPrivateEffectWriter(state, () => {
-        const prior = read();
-        if (prior) {
-          if (
-            phases.indexOf(receipt.phase) < phases.indexOf(prior.phase) ||
-            prior.children.some(
-              (child, index) => controlDigest(child) !== controlDigest(receipt.children[index]),
-            ) ||
-            prior.completedBuildIds.some((id) => !receipt.completedBuildIds.includes(id)) ||
-            prior.failedBuildIds.some((id) => !receipt.failedBuildIds.includes(id))
-          )
-            throw Error("Workflow progress cannot be replaced or rewound");
-          if (canonicalJson(prior) === canonicalJson(receipt)) return;
-        }
+      const prior = read();
+      if (prior) {
         if (
-          receipt.phase === "complete" &&
-          (receipt.children.length !== 3 ||
-            receipt.children.some((child) => child.status !== "succeeded") ||
-            receipt.failedBuildIds.length ||
-            receipt.skippedBuildIds.length ||
-            !receipt.revisionId)
+          phases.indexOf(receipt.phase) < phases.indexOf(prior.phase) ||
+          prior.children.some(
+            (child, index) => controlDigest(child) !== controlDigest(receipt.children[index]),
+          ) ||
+          prior.completedBuildIds.some((id) => !receipt.completedBuildIds.includes(id)) ||
+          prior.failedBuildIds.some((id) => !receipt.failedBuildIds.includes(id))
         )
-          throw Error("Incomplete Full Update cannot be reported complete");
-        const record = {
-          version: 1 as const,
-          operationKey: state.execution.operationKey,
-          fingerprint: state.execution.fingerprint,
-          receipt,
-        };
-        if (Buffer.byteLength(canonicalJson(record)) > 65536)
-          throw Error("Workflow checkpoint exceeds retention capacity");
-        writePrivateRecord(state.installation, "observations", name, record, !prior);
-      });
+          throw Error("Workflow progress cannot be replaced or rewound");
+        if (canonicalJson(prior) === canonicalJson(receipt)) return;
+      }
+      if (
+        receipt.phase === "complete" &&
+        (receipt.children.length !== 3 ||
+          receipt.children.some((child) => child.status !== "succeeded") ||
+          receipt.failedBuildIds.length ||
+          receipt.skippedBuildIds.length ||
+          !receipt.revisionId)
+      )
+        throw Error("Incomplete Full Update cannot be reported complete");
+      const record = {
+        version: 1 as const,
+        operationKey: state.execution.operationKey,
+        fingerprint: state.execution.fingerprint,
+        receipt,
+      };
+      if (Buffer.byteLength(canonicalJson(record)) > 65536)
+        throw Error("Workflow checkpoint exceeds retention capacity");
+      writePrivateRecord(state.installation, "observations", name, record, !prior);
     },
   };
 }

@@ -7,7 +7,6 @@ import {
   assertControlExecutionForward,
   assertCoordinatorPullLeaseCompatibility,
   beginControlEffect,
-  executionAuthorityState,
   retainConfigurationPreEffectRefusal,
   verifyConfigurationReleaseSourceWitness,
 } from "@openmapx/core/build-artifacts";
@@ -102,7 +101,7 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
           if (!authority || !context.execution || context.artifactLease || context.ownedTargetLease)
             throw Error("Normal pull admission without a target lease required");
           assertControlExecutionForward(authority);
-          const admitted = executionAuthorityState(authority);
+          const admitted = authority;
           if (
             services.currentConfigurationGeneration(options.infraDir) !==
             operation.expectedConfigurationRevisionId
@@ -172,10 +171,10 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
             try {
               assertCoordinatorPullLeaseCompatibility(authority);
             } catch {
-              retainConfigurationPreEffectRefusal(authority);
+              await retainConfigurationPreEffectRefusal(authority);
               throw new OpsExecutionFailure("busy", {});
             }
-            beginControlEffect(authority);
+            await beginControlEffect(authority);
           }
           const pullArgs = ["image", "pull", imageReference];
           if (options.execFile)

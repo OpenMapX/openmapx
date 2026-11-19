@@ -17,7 +17,6 @@ import {
   AnchoredDirectory,
   artifactFingerprint,
   assertArtifactTargetLeaseExecution,
-  executionAuthorityState,
   parseBundleManifest,
   type ValidatedBuildBundle,
   validateBuildBundle,
@@ -925,7 +924,7 @@ export class ArtifactTransferStore {
       lease = context.ownedTargetLease;
     if (operation.kind !== "artifactTransfer.export" || !authority || !lease)
       throw Error("Original prepared export owner required");
-    const owner = executionAuthorityState(authority);
+    const owner = authority;
     if (
       owner.kind !== operation.kind ||
       owner.installation.installation.role !== "ops-agent" ||
@@ -1361,7 +1360,7 @@ export class ArtifactTransferStore {
     });
   }
   async containPreparedValidation(
-    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+    authority: import("@openmapx/core/build-artifacts").ExecutionHandle,
   ) {
     const operation = originalArtifactValidationOperation(authority);
     if (this.purposeOwners.has(operation.stageId) || this.streams.has(operation.stageId))
@@ -1387,7 +1386,7 @@ export class ArtifactTransferStore {
     }
   }
   async recoverPreparedValidation(
-    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+    authority: import("@openmapx/core/build-artifacts").ExecutionHandle,
   ) {
     const operation = originalArtifactValidationOperation(authority);
     return this.lock(() => {
@@ -1441,7 +1440,7 @@ export class ArtifactTransferStore {
     return this.completePreparedImport(context, claim, result);
   }
   async releaseUnstartedPreparedImport(
-    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+    authority: import("@openmapx/core/build-artifacts").ExecutionHandle,
   ) {
     const operation = inspectUnstartedArtifactImport(authority);
     return this.lock(() => {
@@ -1469,14 +1468,14 @@ export class ArtifactTransferStore {
     return this.releaseRestoredArtifactClaim(context.controlAuthority);
   }
   async reconcileReleasedPreparedImport(
-    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+    authority: import("@openmapx/core/build-artifacts").ExecutionHandle,
   ) {
     const publication = inspectArtifactPublication(authority);
     if (publication?.phase === "restored") return this.releaseRestoredArtifactClaim(authority);
     if (!publication) return this.releaseUnstartedPreparedImport(authority);
   }
   private async releaseRestoredArtifactClaim(
-    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+    authority: import("@openmapx/core/build-artifacts").ExecutionHandle,
   ) {
     const operation = originalArtifactImportOperation(authority),
       context = { execution: authority.execution };
@@ -1528,7 +1527,7 @@ export class ArtifactTransferStore {
   }
   private preparedContext(context: OpsExecutionContext) {
     if (!context.controlAuthority) throw Error("Prepared artifact execution authority required");
-    const authority = executionAuthorityState(context.controlAuthority),
+    const authority = context.controlAuthority,
       operation = context.claim.operation;
     if (
       (operation.kind !== "artifactTransfer.validate" &&
@@ -1731,7 +1730,7 @@ export class ArtifactTransferStore {
   }
   private integrationContext(context: OpsExecutionContext) {
     if (!context.controlAuthority) throw Error("Integration execution authority is required");
-    const authority = executionAuthorityState(context.controlAuthority);
+    const authority = context.controlAuthority;
     const operation = context.claim.operation;
     if (
       authority.installation.installation.role !== "ops-agent" ||

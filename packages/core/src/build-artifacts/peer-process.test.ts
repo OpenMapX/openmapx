@@ -135,7 +135,7 @@ it("retains one data-manager owner and one agent receiver across path aliases", 
     serviceIds: ["motis"],
     recipient: "ops-agent",
   };
-  const authority = retainAdmittedControlExecution(installation, {
+  const authority = await retainAdmittedControlExecution(installation, {
     requestedDeadlineAt: rootRef.deadlineAt,
     execution: rootRef,
     kind,
@@ -173,7 +173,7 @@ it("retains one data-manager owner and one agent receiver across path aliases", 
   ).toMatchObject({ ok: false });
   expect(await child({ ...input, settle: true })).toMatchObject({ ok: true, retained: true });
   await expect(delegateArtifactTargetLease(lease, plan)).rejects.toThrow(/replay/);
-  retainControlEffectReceipt(authority, {
+  await retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -182,7 +182,6 @@ it("retains one data-manager owner and one agent receiver across path aliases", 
   await releaseArtifactTargetLease(lease);
 });
 it("keeps owner-death recovery fenced until a separately admitted child settles", async () => {
-  const { verifyControlRecoveryAuthority } = await import("./test-fixtures/control");
   const { reconcileArtifactTargetLease } = await import("./target-lease");
   const role = "data-manager";
   const operation = { kind: "transit-sync" };
@@ -207,7 +206,7 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
     serviceIds: ["motis"],
     plan: [plan],
   };
-  const authority = retainAdmittedControlExecution(installation, admitted);
+  const authority = await retainAdmittedControlExecution(installation, admitted);
   const lease = await acquireArtifactTargetLease({
     serviceIds: ["motis"],
     owner: authority,
@@ -223,15 +222,14 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
     admittedAt: childRef.deadlineAt - 60000,
   };
   expect(await child(input)).toMatchObject({ ok: true });
-  retainControlEffectReceipt(authority, {
+  await retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
   });
   // Reopen role-private receipts exactly as a replacement owner does; no live handle is passed to recovery.
   const replacement = openControlInstallation({ infraDir: root, role, serviceIds: ["motis"] });
-  const recovered = retainAdmittedControlExecution(replacement, admitted);
-  const recovery = verifyControlRecoveryAuthority(recovered);
+  const recovery = await retainAdmittedControlExecution(replacement, admitted);
   expect(
     await reconcileArtifactTargetLease({
       leaseId: lease.leaseId,
@@ -298,8 +296,7 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
     role: "data-manager",
     serviceIds: ["motis"],
   });
-  const authority = c.retainAdmittedControlExecution(installation, admitted);
-  const recovery = c.verifyControlRecoveryAuthority(authority);
+  const recovery = await c.retainAdmittedControlExecution(installation, admitted);
   expect(
     await l.reconcileArtifactTargetLease({
       leaseId: owned.leaseId,
@@ -365,7 +362,7 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
     role: "data-manager",
     serviceIds: ["motis"],
   });
-  const authority = c.retainAdmittedControlExecution(installation, {
+  const authority = await c.retainAdmittedControlExecution(installation, {
     requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
@@ -397,7 +394,7 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
     expect(await child({ ...input, ...patch })).toMatchObject({ ok: false });
   expect(await child({ ...input, settle: true })).toMatchObject({ ok: true });
   await expect(delegateArtifactTargetLease(lease, plan)).rejects.toThrow(/replay/);
-  c.retainControlEffectReceipt(authority, {
+  await c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -436,7 +433,7 @@ it("rejects a logical configuration-fence delegation without the actual maintena
     role: "ops-agent",
     serviceIds: ["motis"],
   });
-  const authority = c.retainAdmittedControlExecution(installation, {
+  const authority = await c.retainAdmittedControlExecution(installation, {
     requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,

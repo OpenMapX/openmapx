@@ -330,7 +330,7 @@ export async function generateTransitousApiKeys(
     serviceIds: ["motis"],
   });
   let lease: control.ArtifactTargetLease | undefined;
-  let authority: control.VerifiedExecutionAuthority | undefined;
+  let authority: control.ExecutionHandle | undefined;
   let began = false;
   let replacement: PreparedPlatformFileReplacement | undefined;
   try {
@@ -358,7 +358,7 @@ export async function generateTransitousApiKeys(
       operationFingerprint,
       fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
     };
-    authority = control.retainAdmittedControlExecution(installation, {
+    authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       kind: operation.kind,
       operation,
@@ -380,7 +380,7 @@ export async function generateTransitousApiKeys(
     if (existingSnapshot(outputPath)?.identity !== before?.identity)
       throw Error("Credential file changed; review before retrying");
     control.assertArtifactTargetLeaseForward(lease);
-    control.beginControlEffect(authority);
+    await control.beginControlEffect(authority);
     began = true;
     replacement = preparePlatformFileReplacement(outputPath, contents, {
       temporaryFileOps: { chmod: (fd) => fchmodSync(fd, 0o600) },
@@ -390,7 +390,7 @@ export async function generateTransitousApiKeys(
     replacement.assertTargetUnchanged();
     replacement.commit();
     fsyncDirectory(dirname(outputPath));
-    control.retainControlEffectReceipt(authority, {
+    await control.retainControlEffectReceipt(authority, {
       outcome: "committed",
       publication: "committed",
       receipt: { kind: "feed-credential-template-written", fileDigest: operation.fileDigest },
@@ -412,7 +412,7 @@ export async function generateTransitousApiKeys(
     };
   } catch (error) {
     if (authority && !began) {
-      control.retainControlEffectReceipt(authority, {
+      await control.retainControlEffectReceipt(authority, {
         outcome: "failed_without_effect",
         publication: "not_started",
         receipt: { kind: "not-started" },
@@ -420,10 +420,7 @@ export async function generateTransitousApiKeys(
       if (lease) {
         await control.settleArtifactTargetLeaseChild(
           lease,
-          control.verifyControlEffectSettlement(
-            installation,
-            control.executionAuthorityState(authority).execution,
-          ),
+          control.verifyControlEffectSettlement(installation, authority.execution),
         );
         await control.releaseArtifactTargetLease(lease);
         lease = undefined;

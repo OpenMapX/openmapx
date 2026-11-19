@@ -44,7 +44,7 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function admit(
+async function admit(
   notAfter = Date.now() + 60_000,
   role: "host-cli" | "ops-agent" = "host-cli",
   operation: Parameters<typeof opsOperationFingerprint>[0] = {
@@ -84,11 +84,11 @@ function admit(
     input,
     execution,
     target,
-    authority: retainAdmittedControlExecution(target, input),
+    authority: await retainAdmittedControlExecution(target, input),
   };
 }
-function settle(authority: ReturnType<typeof admit>["authority"]) {
-  retainControlEffectReceipt(authority, {
+function settle(authority: Awaited<ReturnType<typeof admit>>["authority"]) {
+  return retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -98,8 +98,8 @@ const record = (namespace: string, key: string) =>
   join(root, "state/host-cli/control", namespace, `${key}.json`);
 
 it("prunes a finished execution only after its key expired and 72 hours passed", async () => {
-  const { execution, authority } = admit();
-  settle(authority);
+  const { execution, authority } = await admit();
+  await settle(authority);
   const expiry = execution.deadlineAt;
   expect(
     await pruneControlRecords(installation, { now: expiry + CONTROL_PRUNE_AFTER_MS - 1 }),
@@ -108,20 +108,19 @@ it("prunes a finished execution only after its key expired and 72 hours passed",
   const later = expiry + CONTROL_PRUNE_AFTER_MS + 60_000;
   expect(await pruneControlRecords(installation, { now: later })).toEqual([execution.operationKey]);
   expect(existsSync(record("executions", execution.operationKey))).toBe(false);
-  expect(existsSync(record("effects", execution.operationKey))).toBe(false);
   expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
 });
 
 it("keeps an execution whose effect outcome is unknown", async () => {
-  const { execution } = admit();
+  const { execution } = await admit();
   const later = execution.deadlineAt + 30 * 24 * 3600_000;
   expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
   expect(existsSync(record("executions", execution.operationKey))).toBe(true);
 });
 
 it("keeps a finished execution the role asks to keep", async () => {
-  const { execution, authority } = admit();
-  settle(authority);
+  const { execution, authority } = await admit();
+  await settle(authority);
   const later = execution.deadlineAt + 30 * 24 * 3600_000;
   expect(
     await pruneControlRecords(installation, {
@@ -134,14 +133,14 @@ it("keeps a finished execution the role asks to keep", async () => {
 
 it("refuses an expired root whether or not its records were pruned", async () => {
   const notAfter = Date.now() + 1_000;
-  const { input, execution, authority } = admit(notAfter);
-  settle(authority);
+  const { input, execution, authority } = await admit(notAfter);
+  await settle(authority);
   expect(
     await pruneControlRecords(installation, { now: notAfter + CONTROL_PRUNE_AFTER_MS + 1 }),
   ).toEqual([execution.operationKey]);
   await new Promise((resolve) => setTimeout(resolve, 1_100));
   expect(() => assertFreshControlRoot(execution.operationKey, notAfter)).toThrow(/expired/i);
-  expect(() => retainAdmittedControlExecution(installation, input)).toThrow();
+  await expect(retainAdmittedControlExecution(installation, input)).rejects.toThrow();
   expect(existsSync(record("executions", execution.operationKey))).toBe(false);
 });
 
@@ -151,12 +150,12 @@ const heldLeases = () =>
     .map((value) => value.leaseId);
 
 it("prunes a root only once its released lease left the store", async () => {
-  const { execution, authority } = admit();
+  const { execution, authority } = await admit();
   const lease = await acquireArtifactTargetLease({
     serviceIds: ["osrm"],
     owner: authority,
   });
-  settle(authority);
+  await settle(authority);
   await settleArtifactTargetLeaseChild(
     lease,
     verifyControlEffectSettlement(installation, execution),
@@ -171,8 +170,8 @@ it("prunes a root only once its released lease left the store", async () => {
 });
 
 it("bounds each pass and continues where the previous pass stopped", async () => {
-  const admitted = [admit(), admit(), admit()];
-  for (const { authority } of admitted) settle(authority);
+  const admitted = [await admit(), await admit(), await admit()];
+  for (const { authority } of admitted) await settle(authority);
   const later =
     Math.max(...admitted.map((value) => value.execution.deadlineAt)) +
     CONTROL_PRUNE_AFTER_MS +
@@ -188,13 +187,13 @@ it("bounds each pass and continues where the previous pass stopped", async () =>
 
 it("keeps a finished maintenance step while its maintenance record exists", async () => {
   const maintenanceId = randomUUID(),
-    { execution, authority } = admit(undefined, "host-cli", {
+    { execution, authority } = await admit(undefined, "host-cli", {
       kind: "service.recreate",
       serviceId: "osrm",
       expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
       maintenanceId,
     });
-  settle(authority);
+  await settle(authority);
   // The record of a maintenance that is still kept holds each step it ran.
   const owner = record("maintenance", maintenanceId);
   mkdirSync(dirname(owner), { recursive: true, mode: 0o700 });
@@ -216,8 +215,8 @@ it("keeps a finished maintenance step while its maintenance record exists", asyn
 
 it("refuses a pruned and expired execution to its readers", async () => {
   const notAfter = Date.now() + 60_000,
-    { execution, authority } = admit(notAfter);
-  settle(authority);
+    { execution, authority } = await admit(notAfter);
+  await settle(authority);
   expect(
     await pruneControlRecords(installation, { now: notAfter + CONTROL_PRUNE_AFTER_MS + 1 }),
   ).toEqual([execution.operationKey]);
@@ -225,13 +224,12 @@ it("refuses a pruned and expired execution to its readers", async () => {
   expect(() => verifyControlEffectSettlement(installation, execution)).toThrow();
 });
 
-it("keeps an execution whose effect record is absent, with its lease held", async () => {
-  const { execution } = admit(),
+it("keeps an unsettled execution, with its lease held", async () => {
+  const { execution } = await admit(),
     lease = await acquireArtifactTargetLease({
       serviceIds: ["osrm"],
       owner: restoreAdmittedControlExecution(installation, execution),
     });
-  rmSync(record("effects", execution.operationKey));
   for (const now of [Date.now(), execution.deadlineAt + 30 * 24 * 3600_000])
     expect(await pruneControlRecords(installation, { now })).toEqual([]);
   expect(existsSync(record("executions", execution.operationKey))).toBe(true);
@@ -240,20 +238,20 @@ it("keeps an execution whose effect record is absent, with its lease held", asyn
 });
 
 it("keeps a borrower while the lease it ran under is held", async () => {
-  const owner = admit(),
+  const owner = await admit(),
     lease = await acquireArtifactTargetLease({
       serviceIds: ["osrm"],
       owner: owner.authority,
     }),
-    borrower = admit(undefined, undefined, undefined, {
+    borrower = await admit(undefined, undefined, undefined, {
       leaseId: lease.leaseId,
       childKey: randomUUID(),
     });
-  settle(borrower.authority);
+  await settle(borrower.authority);
   const later =
     Math.max(owner.execution.deadlineAt, borrower.execution.deadlineAt) + 30 * 24 * 3600_000;
   expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
-  settle(owner.authority);
+  await settle(owner.authority);
   await settleArtifactTargetLeaseChild(
     lease,
     verifyControlEffectSettlement(installation, owner.execution),

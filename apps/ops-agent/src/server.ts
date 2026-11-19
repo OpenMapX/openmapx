@@ -223,7 +223,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               : claimed.capability,
           });
           if (!context.controlAuthority) throw Error("Maintenance step authority missing");
-          beginControlEffect(context.controlAuthority);
+          await beginControlEffect(context.controlAuthority);
           return parseBoundedOpsResult(
             operation.kind,
             await dispatch(operation, runtime, { ...context, claim }),
@@ -433,7 +433,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         job.operation,
       );
       if (published) {
-        retainControlEffectReceipt(authority, {
+        await retainControlEffectReceipt(authority, {
           outcome: "committed",
           publication: "committed",
           receipt: { kind: "ops-result", result: published.result },

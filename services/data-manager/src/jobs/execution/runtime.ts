@@ -10,13 +10,13 @@ import {
   cancelControlExecution,
   closeArtifactTargetLeaseHandle,
   dataExecutionHoldsLease,
+  type ExecutionHandle,
   releaseArtifactTargetLease,
   restoreAdmittedControlExecution,
   restoreArtifactTargetLeaseForSettlement,
   retainAdmittedControlExecution,
   settleArtifactTargetLeaseChild,
   TargetBusyError,
-  type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -69,7 +69,7 @@ export interface DataExecutionContext {
    * sent with a lease id runs under its sender's lease, and a short traffic run
    * under none. */
   readonly targetAuthority?: ArtifactTargetLease;
-  readonly authority: VerifiedExecutionAuthority;
+  readonly authority: ExecutionHandle;
   readonly installation: ControlInstallation;
   readonly store: DataExecutionStore;
   readonly dataRoot: string;
@@ -259,7 +259,7 @@ export function createDataExecutionRuntime(deps: {
               let executionCanceled = false,
                 leaseCanceled = false;
               try {
-                cancelControlExecution(owned.authority);
+                await cancelControlExecution(owned.authority);
                 executionCanceled = true;
               } catch {}
               try {
@@ -363,7 +363,7 @@ export function createDataExecutionRuntime(deps: {
     if (LOCAL_DATA_EXECUTION_KINDS.includes(record.input.kind as never) !== (work !== undefined))
       throw Error("In-process work runs only as a local data execution");
     await adopt?.(record.execution);
-    const authority = retainAdmittedControlExecution(owner.installation, {
+    const authority = await retainAdmittedControlExecution(owner.installation, {
       execution: record.execution,
       kind: record.input.kind,
       operation: record.input,
@@ -641,7 +641,7 @@ export function createDataExecutionRuntime(deps: {
           authority =
             entry?.context.authority ??
             restoreAdmittedControlExecution(owner.installation, saved.execution);
-        if (entry) cancelControlExecution(authority);
+        if (entry) await cancelControlExecution(authority);
         else cancelRecovered(saved);
         const own = entry?.context.targetAuthority;
         if (own) {
@@ -740,13 +740,13 @@ export function createDataExecutionRuntime(deps: {
               throw error;
             // Final approval is the fixed graph's last effect. Reconcile only
             // its original address and authenticated, fully settled child tree.
-            cancelControlExecution(observation.authority);
+            await cancelControlExecution(observation.authority);
             await cancelArtifactTargetLease(ownedLease(observation));
             if ((await cancelAndSettleOwnedDataOpsChildren(observation)) !== "settled") throw error;
             await owner.repairCommittedCatalogActivation(record.execution);
             recovered = await owner.restoreCompletion(record.execution);
           }
-          cancelControlExecution(recovered.authority);
+          await cancelControlExecution(recovered.authority);
           if (recovered.lease) await cancelArtifactTargetLease(recovered.lease);
           const context = observation;
           if (
@@ -799,7 +799,7 @@ export function createDataExecutionRuntime(deps: {
             const latest = await store.inspect(record.status.id);
             if (latest && !isDataExecutionTerminal(latest.status)) {
               try {
-                cancelControlExecution(
+                await cancelControlExecution(
                   restoreAdmittedControlExecution(owner.installation, record.execution),
                 );
               } catch {}

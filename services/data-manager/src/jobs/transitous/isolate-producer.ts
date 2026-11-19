@@ -3,7 +3,6 @@ import {
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseForward,
   controlDigest,
-  executionAuthorityState,
 } from "@openmapx/core/build-artifacts";
 import { isolateArtifactHardlinks } from "../../../../../packages/core/src/build-artifacts/copy-tree";
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
@@ -17,7 +16,7 @@ export async function isolateOwnedTransitProducer(
 ): Promise<void> {
   if (dataExecutionWorkerContext() !== context) throw Error("Original transit worker required");
   context.assertForward();
-  const owner = executionAuthorityState(context.authority),
+  const owner = context.authority,
     record = await context.record();
   assertArtifactTargetLeaseForward(ownedLease(context));
   assertArtifactTargetLeaseExecution(ownedLease(context), context.execution);

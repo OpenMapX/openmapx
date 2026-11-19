@@ -93,7 +93,7 @@ async function fixture(
   // The candidate identifier is fixed by the original root, before any grant.
   operation.candidateId = `ctrl-${createHash("sha256").update(`openmapx-transit-candidate-v1\0${key}\0${phase}\0${0}`).digest("hex").slice(0, 32)}`;
   slot.operationFingerprint = opsOperationFingerprint(operation);
-  const authority = control.retainAdmittedControlExecution(dm, {
+  const authority = await control.retainAdmittedControlExecution(dm, {
       execution: parent,
       kind: input.kind,
       operation: input,
@@ -380,7 +380,7 @@ it.each([
         else (await import("node:fs")).symlinkSync(join(f.proxy, "conf/default.conf"), path);
       }
       if (mode === "canceled") {
-        control.cancelControlExecution(f.authority);
+        await control.cancelControlExecution(f.authority);
         await control.cancelArtifactTargetLease(f.lease);
       }
       if (mode !== "canceled")

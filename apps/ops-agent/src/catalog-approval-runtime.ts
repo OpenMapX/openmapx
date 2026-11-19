@@ -2,14 +2,10 @@
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { join, sep } from "node:path";
-import type {
-  TargetLeaseAuthority,
-  VerifiedExecutionAuthority,
-} from "@openmapx/core/build-artifacts";
+import type { ExecutionHandle, TargetLeaseAuthority } from "@openmapx/core/build-artifacts";
 import {
   assertControlExecutionForward,
   controlDigest,
-  executionAuthorityState,
   inspectArtifactDelegation,
   inspectDataTransitCandidate,
   restoreAdmittedControlExecution,
@@ -38,7 +34,6 @@ import {
   parseOpsResult,
 } from "@openmapx/core/ops";
 import { verifyDataTransitCandidateForExecution } from "../../../packages/core/src/build-artifacts/data-execution-candidate";
-import { childSettlementState } from "../../../packages/core/src/build-artifacts/execution-record";
 import { AnchoredDirectory } from "../../../packages/core/src/build-artifacts/filesystem";
 import { readPrivateRecord } from "../../../packages/core/src/build-artifacts/private-records";
 import { dataManagerTerminal } from "./data-manager-terminal";
@@ -50,13 +45,13 @@ const installedRoots = new WeakMap<OpsRuntime, string>();
  * reevaluates eligibility, acquires a root, or changes the active pointer. */
 export async function readCommittedCatalogApproval(
   runtime: OpsRuntime,
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   lease: TargetLeaseAuthority,
   operation: Extract<OpsOperation, { kind: "transitousLock.approve" }>,
 ) {
   const rootDir = installedRoots.get(runtime);
   if (!rootDir) return null;
-  const own = executionAuthorityState(authority);
+  const own = authority;
   if (
     own.kind !== operation.kind ||
     own.execution.operationFingerprint !== opsOperationFingerprint(operation) ||
@@ -133,7 +128,7 @@ export function installCatalogApprovalRuntime(
     )
       throw Error("Original reviewed activation borrower required");
     assertControlExecutionForward(authority);
-    const own = executionAuthorityState(authority),
+    const own = authority,
       installation = own.installation.installation;
     if (
       own.kind !== operation.kind ||
@@ -204,7 +199,7 @@ export function installCatalogApprovalRuntime(
     )
       throw Error("Approval differs from its actual parent admission");
     const promoted = restoreAdmittedControlExecution(installation, activation.promotion.execution),
-      promotion = executionAuthorityState(promoted);
+      promotion = promoted;
     if (
       promotion.kind !== "motis.primary.promote" ||
       activation.promotion.leaseChild.leaseId !== lease.leaseId
@@ -225,9 +220,7 @@ export function installCatalogApprovalRuntime(
       activation.promotion.leaseChild,
       activation.promotion.execution,
     );
-    const settlement = childSettlementState(
-      verifyControlEffectSettlement(installation, activation.promotion.execution),
-    ).evidence;
+    const settlement = verifyControlEffectSettlement(installation, activation.promotion.execution);
     if (
       settlement.outcome !== "committed" ||
       settlement.publication !== "committed" ||

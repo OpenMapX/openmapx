@@ -4,7 +4,6 @@ import {
   assertControlExecutionForward,
   assertImageStageLeaseCompatibility,
   beginControlEffect,
-  executionAuthorityState,
   retainConfigurationPreEffectRefusal,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson, opsOperationFingerprint } from "@openmapx/core/ops";
@@ -32,7 +31,7 @@ export function installImageStageRuntime(
     const authority = context.controlAuthority;
     if (!authority || !context.execution || context.artifactLease || context.ownedTargetLease)
       throw Error("Original normal image-stage execution required");
-    const admitted = executionAuthorityState(authority);
+    const admitted = authority;
     if (
       admitted.kind !== operation.kind ||
       admitted.execution.operationFingerprint !== opsOperationFingerprint(operation) ||
@@ -144,11 +143,11 @@ export function installImageStageRuntime(
                 releaseSelectionDigest: selected.releaseSelectionDigest,
               };
             } catch (error) {
-              retainConfigurationPreEffectRefusal(authority);
+              await retainConfigurationPreEffectRefusal(authority);
               throw error;
             }
           })();
-          beginControlEffect(authority);
+          await beginControlEffect(authority);
           const args = ["image", "pull", source.stagedReference];
           if (options.execFile)
             await run("docker", args, {

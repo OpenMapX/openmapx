@@ -45,7 +45,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   rmSync(root, { recursive: true, force: true });
 });
-function owner() {
+async function owner() {
   const installation = openControlInstallation({
     infraDir: root,
     role: "host-cli",
@@ -67,7 +67,7 @@ function owner() {
     operationFingerprint,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
   };
-  const authority = retainAdmittedControlExecution(installation, {
+  const authority = await retainAdmittedControlExecution(installation, {
     operation,
     execution,
     kind: operation.kind,
@@ -77,7 +77,7 @@ function owner() {
   });
   return { installation, authority, execution };
 }
-function options(execution: ReturnType<typeof owner>["execution"]) {
+function options(execution: Awaited<ReturnType<typeof owner>>["execution"]) {
   return {
     dataRoot: join(root, "data"),
     execution,
@@ -90,7 +90,7 @@ function options(execution: ReturnType<typeof owner>["execution"]) {
   };
 }
 it("signs exact seed and checkpoints only with the live writer and physical target owner", async () => {
-  const o = owner();
+  const o = await owner();
   let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
   try {
     lease = await acquireArtifactTargetLease({
@@ -126,7 +126,7 @@ it("signs exact seed and checkpoints only with the live writer and physical targ
   }
 });
 it("rejects a foreign data root before creating any shared receipt", async () => {
-  const o = owner(),
+  const o = await owner(),
     foreign = join(root, "foreign");
   mkdirSync(foreign, { mode: 0o755 });
   try {
@@ -141,7 +141,7 @@ it("rejects a foreign data root before creating any shared receipt", async () =>
   }
 });
 it("rejects targets outside the original admitted closure before creating a receipt", async () => {
-  const o = owner();
+  const o = await owner();
   try {
     await expect(
       withServiceLifecycleReceiptAuthority(o.authority, () =>
@@ -153,7 +153,7 @@ it("rejects targets outside the original admitted closure before creating a rece
   }
 });
 it("refuses a final revision that the owned writer did not commit", async () => {
-  const o = owner();
+  const o = await owner();
   let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
   try {
     lease = await acquireArtifactTargetLease({
@@ -193,13 +193,13 @@ it("refuses a final revision that the owned writer did not commit", async () => 
 });
 async function withPinsValidatedReceipt(
   run: (context: {
-    o: ReturnType<typeof owner>;
+    o: Awaited<ReturnType<typeof owner>>;
     lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>>;
     store: Awaited<ReturnType<typeof openServiceLifecycleReceipt>>;
     receipt: ServiceLifecycleReceipt;
   }) => Promise<void>,
 ) {
-  const o = owner();
+  const o = await owner();
   let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
   try {
     const held = await acquireArtifactTargetLease({
@@ -237,7 +237,7 @@ function failedReceipt(receipt: ServiceLifecycleReceipt): ServiceLifecycleReceip
 }
 it("records containment for a cancelled lease that can no longer take ownership", async () => {
   await withPinsValidatedReceipt(async ({ o, lease, store, receipt }) => {
-    cancelControlExecution(o.authority);
+    await cancelControlExecution(o.authority);
     await withConfigurationGenerationWriter(root, async (writer) => {
       await expect(
         withVerifiedLifecycleOwnership(
@@ -337,7 +337,7 @@ it("refuses containment from a writer that is no longer live", async () => {
 it.each([false, true])(
   "repairs only the original signed lifecycle publication after restart with shared commit=%s",
   async (committed) => {
-    const o = owner();
+    const o = await owner();
     let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
     let restarted: ReturnType<typeof openControlInstallation> | undefined;
     try {

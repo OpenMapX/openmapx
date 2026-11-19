@@ -5,7 +5,6 @@ import {
   assertArtifactTargetLeaseForward,
   assertControlExecutionForward,
   controlDigest,
-  executionAuthorityState,
   inspectArtifactTargetLeaseChildSettlement,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson } from "@openmapx/core/ops";
@@ -51,7 +50,7 @@ export async function retainPreviousHealthyCatalogSlot(
   proposalId: string,
   minimumDiskBytes: number,
 ): Promise<void> {
-  const owner = executionAuthorityState(context.authority),
+  const owner = context.authority,
     record = await context.record();
   assertControlExecutionForward(context.authority);
   assertArtifactTargetLeaseForward(ownedLease(context));

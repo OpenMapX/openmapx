@@ -4,7 +4,11 @@ import { type ControlIssuer, executionFingerprint } from "../../ops/execution-id
 import { opsOperationFingerprint } from "../../ops/fingerprint";
 import * as c from "./control";
 
-export function admittedRoot(root: string, role: ControlIssuer = "host-cli", lifetime = 60000) {
+export async function admittedRoot(
+  root: string,
+  role: ControlIssuer = "host-cli",
+  lifetime = 60000,
+) {
   const installation = c.openControlInstallation({
     infraDir: root,
     role,
@@ -34,7 +38,7 @@ export function admittedRoot(root: string, role: ControlIssuer = "host-cli", lif
     }),
   };
   try {
-    const authority = c.retainAdmittedControlExecution(installation, {
+    const authority = await c.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
@@ -48,8 +52,8 @@ export function admittedRoot(root: string, role: ControlIssuer = "host-cli", lif
     throw error;
   }
 }
-export function terminalWithoutEffect(authority: c.VerifiedExecutionAuthority) {
-  c.retainControlEffectReceipt(authority, {
+export function terminalWithoutEffect(authority: c.ExecutionHandle) {
+  return c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },

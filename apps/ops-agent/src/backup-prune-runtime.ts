@@ -4,7 +4,6 @@ import { rmdir, unlink } from "node:fs/promises";
 import {
   AnchoredDirectory,
   beginControlEffect,
-  executionAuthorityState,
   retainConfigurationPreEffectRefusal,
 } from "@openmapx/core/build-artifacts";
 import { type BackupPruneProof, canonicalJson, opsOperationFingerprint } from "@openmapx/core/ops";
@@ -141,7 +140,7 @@ export function installBackupPruneRuntime(
     locked(context.signal, async () => {
       const authority = context.controlAuthority;
       if (!authority || !options.token) throw new OpsNotWiredError();
-      const admitted = executionAuthorityState(authority);
+      const admitted = authority;
       if (
         admitted.kind !== operation.kind ||
         admitted.execution.operationFingerprint !== opsOperationFingerprint(operation) ||
@@ -165,10 +164,10 @@ export function installBackupPruneRuntime(
           throw new OpsExecutionFailure("stale", {});
         context.signal.throwIfAborted();
       } catch (error) {
-        retainConfigurationPreEffectRefusal(authority);
+        await retainConfigurationPreEffectRefusal(authority);
         throw error;
       }
-      beginControlEffect(authority);
+      await beginControlEffect(authority);
       const infra = new AnchoredDirectory(options.infraDir),
         deleted: string[] = [];
       let root: AnchoredDirectory | undefined;

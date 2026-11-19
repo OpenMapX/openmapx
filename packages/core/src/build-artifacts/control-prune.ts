@@ -23,21 +23,15 @@ import {
   controlOriginSchema,
   type InstallationState,
 } from "./control-records";
-import { childSettlementState, verifyControlEffectSettlement } from "./execution-record";
+import { verifyControlEffectSettlement } from "./execution-record";
 import { AnchoredDirectory } from "./filesystem";
 import { rootLeaseId } from "./lease-store";
 import { MAINTENANCE_NAMESPACE } from "./maintenance-file";
 import { installationState, readPrivateRecord } from "./private-records";
 
 export const CONTROL_PRUNE_AFTER_MS = 72 * 3600_000;
-/** Namespaces swept by name. `executions` and `effects` go last; `configuration-maintenance` goes with its preparation. */
-const NAMESPACES = [
-  "effect-started",
-  "observations",
-  "spawns",
-  "spawn-started",
-  "catalog-commits",
-] as const;
+/** Namespaces swept by name. The execution row goes last; `configuration-maintenance` goes with its preparation. */
+const NAMESPACES = ["observations", "spawns", "spawn-started", "catalog-commits"] as const;
 const MAX_ENTRIES = 65536;
 const childSchema = z.object({ execution: z.object({ operationKey: z.string() }) });
 const admissionSchema = z
@@ -122,10 +116,6 @@ function mtime(dir: AnchoredDirectory, name: string): number | null {
     throw error;
   }
 }
-/** The role's execution witnesses, in its own private state. */
-function witnessDirectory(local: InstallationState): string {
-  return join(local.privateRoot.path, "execution-witnesses", local.installation.role);
-}
 /** The fixed children each parent started, by the parent's operation key. */
 function spawnIndex(local: InstallationState, onFull: () => void): Map<string, string[]> {
   const index = new Map<string, string[]>();
@@ -149,14 +139,18 @@ async function prunable(
   now: number,
   spawns: () => Map<string, string[]>,
 ): Promise<Prunable | null> {
-  const admitted = admissionSchema.parse(readPrivateRecord(local, "executions", name, 65536));
+  const row = z
+    .object({ admission: admissionSchema, progress: z.object({ settlement: z.unknown() }) })
+    .parse(readPrivateRecord(local, "executions", name, 256 * 1024));
+  const admitted = row.admission;
   const key = admitted.execution.operationKey;
   if (admitted.origin.notAfter + CONTROL_PRUNE_AFTER_MS > now) return null;
-  const finishedAt = withNamespace(local, "effects", (dir) => mtime(dir, name)) ?? null;
+  // The row's last write is its settlement; a settled row is not written again.
+  const finishedAt = row.progress.settlement
+    ? (withNamespace(local, "executions", (dir) => mtime(dir, name)) ?? null)
+    : null;
   if (finishedAt === null || finishedAt + CONTROL_PRUNE_AFTER_MS > now) return null;
-  const outcome = childSettlementState(
-    verifyControlEffectSettlement(installation, admitted.execution),
-  ).evidence.outcome;
+  const outcome = verifyControlEffectSettlement(installation, admitted.execution).outcome;
   if (outcome === "unknown") return null;
   // A step stays while the maintenance it belongs to still has its record;
   // that record goes only with its own preparation.
@@ -204,46 +198,33 @@ async function prunable(
     ...(ownerRecord && preparation ? { ownerRecord } : {}),
   };
 }
-/** The role's execution records, named after the operation key, and the
- * service lifecycle receipts whose recorded seed names a pruned root. */
+/** The service lifecycle receipts named after a pruned root or whose recorded seed names one. */
 function removeShared(local: InstallationState, keys: readonly string[], onFull: () => void): void {
-  const role = local.installation.role,
-    paths = [
-      { path: witnessDirectory(local), seed: false },
-      ...(role === "ops-agent" || role === "host-cli"
-        ? [
-            {
-              path: join(dirname(local.dataRoot), "state", "ops-agent", "lifecycle"),
-              seed: true,
-            },
-          ]
-        : []),
-    ];
-  for (const { path, seed } of paths) {
-    let dir: AnchoredDirectory;
-    try {
-      dir = new AnchoredDirectory(path);
-    } catch (error) {
-      if (missing(error)) continue;
-      throw error;
+  const role = local.installation.role;
+  if (role !== "ops-agent" && role !== "host-cli") return;
+  let dir: AnchoredDirectory;
+  try {
+    dir = new AnchoredDirectory(join(dirname(local.dataRoot), "state", "ops-agent", "lifecycle"));
+  } catch (error) {
+    if (missing(error)) return;
+    throw error;
+  }
+  try {
+    for (const entry of entries(dir, onFull)) {
+      let owned = keys.some((key) => entry.startsWith(`${key}.`));
+      if (!owned)
+        try {
+          const root = lifecycleReceiptSchema.parse(
+            JSON.parse(dir.read(entry, 65536, false).toString("utf8")),
+          ).seed.root.operationKey;
+          owned = keys.includes(root);
+        } catch {
+          /* Unreadable entries are left alone. */
+        }
+      if (owned) rmSync(dir.name(entry), { recursive: true, force: true });
     }
-    try {
-      for (const entry of entries(dir, onFull)) {
-        let owned = keys.some((key) => entry.startsWith(`${key}.`));
-        if (!owned && seed)
-          try {
-            const root = lifecycleReceiptSchema.parse(
-              JSON.parse(dir.read(entry, 65536, false).toString("utf8")),
-            ).seed.root.operationKey;
-            owned = keys.includes(root);
-          } catch {
-            /* Unreadable entries are left alone. */
-          }
-        if (owned) rmSync(dir.name(entry), { recursive: true, force: true });
-      }
-    } finally {
-      dir.close();
-    }
+  } finally {
+    dir.close();
   }
 }
 /** One bounded pass over at most `limit` admissions. Returns the operation
@@ -319,41 +300,32 @@ export async function pruneControlRecords(
     // A namespace read only in part may still hold records of these
     // executions; their admissions stay so a later pass finds them again.
     if (reported) return [];
-    // The admission goes first, then its terminal commitment and effect: a pass
-    // interrupted in between leaves only those, removed as strays below.
+    // The row goes first, then its terminal commitment: a pass interrupted in
+    // between leaves only that, removed as a stray below.
     for (const [namespace, name] of [
       ["executions", (key: string) => `${key}.json`],
       ["observations", (key: string) => `terminal-${key}.json`],
-      ["effects", (key: string) => `${key}.json`],
     ] as const)
       withNamespace(local, namespace, (dir) => {
         for (const key of keys) optional(() => dir.removeFile(name(key)));
       });
   }
-  // Effects and terminal commitments whose admission is gone, from an
-  // interrupted pass, go once they are 72 hours old.
+  // Terminal commitments whose row is gone, from an interrupted pass, go
+  // once they are 72 hours old.
   const admitted = new Set(names.filter((name) => !keys.some((key) => name === `${key}.json`)));
   if (complete)
-    for (const [namespace, admission] of [
-      ["effects", (entry: string) => entry],
-      ["observations", (entry: string) => entry.replace(/^terminal-/, "")],
-    ] as const)
-      withNamespace(local, namespace, (dir) => {
-        for (const entry of entries(dir, onFull)) {
-          if (
-            !entry.endsWith(".json") ||
-            (namespace === "observations" && !entry.startsWith("terminal-"))
-          )
-            continue;
-          const finishedAt = mtime(dir, entry);
-          if (
-            !admitted.has(admission(entry)) &&
-            finishedAt !== null &&
-            finishedAt + CONTROL_PRUNE_AFTER_MS <= now
-          )
-            optional(() => dir.removeFile(entry));
-        }
-      });
+    withNamespace(local, "observations", (dir) => {
+      for (const entry of entries(dir, onFull)) {
+        if (!entry.endsWith(".json") || !entry.startsWith("terminal-")) continue;
+        const finishedAt = mtime(dir, entry);
+        if (
+          !admitted.has(entry.replace(/^terminal-/, "")) &&
+          finishedAt !== null &&
+          finishedAt + CONTROL_PRUNE_AFTER_MS <= now
+        )
+          optional(() => dir.removeFile(entry));
+      }
+    });
   // Source witnesses no maintenance owner references any more, once old enough.
   if (complete) {
     const referenced = new Set<string>();

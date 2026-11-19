@@ -1,8 +1,8 @@
 import {
   CONTROL_PRUNE_AFTER_MS,
   closeArtifactTargetLeaseHandle,
+  type ExecutionHandle,
   type TargetLeaseAuthority,
-  type VerifiedExecutionAuthority,
 } from "@openmapx/core/build-artifacts";
 import {
   canonicalJson,
@@ -65,7 +65,7 @@ const isTerminalState = (state: OpsJobState): state is TerminalState =>
 
 /** The execution authority and target lease a root or borrowed child runs under. */
 export interface JobHandles {
-  authority: VerifiedExecutionAuthority | undefined;
+  authority: ExecutionHandle | undefined;
   lease: TargetLeaseAuthority | undefined;
 }
 /** An outcome a kind establishes before its terminal write, replacing the worker's. */
@@ -118,7 +118,7 @@ export class JobTable<Observation = unknown> {
   readonly activeControllers = new Map<string, AbortController>();
   readonly activeSettlements = new Map<string, Promise<void>>();
   readonly leases = new Map<string, TargetLeaseAuthority>();
-  readonly authorities = new Map<string, VerifiedExecutionAuthority>();
+  readonly authorities = new Map<string, ExecutionHandle>();
   readonly stickyRecoveryRequired = new Set<string>();
   /** Trusted configuration applies whose terminal event is not published yet. */
   readonly configurationResultsSettling = new Set<string>();

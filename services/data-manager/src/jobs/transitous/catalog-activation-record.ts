@@ -1,7 +1,6 @@
 /** The fixed approval child receives the actual already-settled promotion, never a caller assertion. */
 import {
   controlDigest,
-  executionAuthorityState,
   inspectArtifactTargetLeaseChildSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -75,7 +74,6 @@ export async function retainCatalogActivationRecord(
     },
     approval,
   });
-  executionAuthorityState(context.authority);
   await publishDataChange(() =>
     withCatalogProposalDirectory(context.installation, input.proposalId, (directory) => {
       const name = `activation-${context.execution.executionId}.json`,

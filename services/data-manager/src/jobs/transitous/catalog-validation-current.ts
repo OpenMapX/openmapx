@@ -4,20 +4,18 @@ import {
   assertArtifactTargetLeaseForward,
   assertControlExecutionForward,
   controlDigest,
-  executionAuthorityState,
+  type ExecutionHandle,
   type TargetLeaseAuthority,
-  type VerifiedExecutionAuthority,
 } from "@openmapx/core/build-artifacts";
 import { currentCatalogValidationSchema, readCatalogValidation } from "@openmapx/core/catalog-pins";
 import { canonicalJson } from "@openmapx/core/ops";
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
 export function publishCatalogValidationCurrent(
-  authority: VerifiedExecutionAuthority,
+  owner: ExecutionHandle,
   lease: TargetLeaseAuthority,
   proposalId?: string,
 ): void {
-  const owner = executionAuthorityState(authority);
-  assertControlExecutionForward(authority);
+  assertControlExecutionForward(owner);
   assertArtifactTargetLeaseForward(lease);
   assertArtifactTargetLeaseExecution(lease, owner.execution);
   if (

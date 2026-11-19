@@ -64,12 +64,12 @@ it.each(["ops-agent", "data-manager"] as const)(
   async (role) => {
     const installation = await fixture(role);
     try {
-      expect(() =>
+      await expect(
         retainAdmittedControlExecution(
           installation,
           input(role, role === "ops-agent" ? "api" : "data-manager"),
         ),
-      ).toThrow(/local/);
+      ).rejects.toThrow(/local/);
       expect(() => localFeedCredentialTemplateDigest(installation, operation, "{}\n")).toThrow(
         /Local host/,
       );
@@ -81,12 +81,12 @@ it.each(["ops-agent", "data-manager"] as const)(
 it("requires local host intent and exactly the MOTIS closure", async () => {
   const installation = await fixture("host-cli");
   try {
-    expect(() => retainAdmittedControlExecution(installation, input("host-cli", "api"))).toThrow(
-      /local/,
-    );
-    expect(() =>
+    await expect(
+      retainAdmittedControlExecution(installation, input("host-cli", "api")),
+    ).rejects.toThrow(/local/);
+    await expect(
       retainAdmittedControlExecution(installation, input("host-cli", "host-cli", ["valhalla"])),
-    ).toThrow(/local/);
+    ).rejects.toThrow(/local/);
   } finally {
     closeControlInstallation(installation);
   }

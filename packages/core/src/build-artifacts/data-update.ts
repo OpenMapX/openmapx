@@ -17,7 +17,7 @@ import {
   dataUpdatePlanSchema,
 } from "./data-update-records";
 import { dataUpdateHostDefaults, dataUpdateSourcesDigest } from "./data-update-sources";
-import { executionAuthorityState, type VerifiedExecutionAuthority } from "./execution-record";
+import type { ExecutionHandle } from "./execution-record";
 import { readPrivateRecord, writePrivateRecord } from "./private-records";
 
 export function planDataUpdate(options: {
@@ -66,8 +66,8 @@ export function planDataUpdate(options: {
     serviceIds: options.serviceIds,
   });
 }
-function validate(authority: VerifiedExecutionAuthority, plan: DataUpdatePlan) {
-  const s = executionAuthorityState(authority);
+function validate(authority: ExecutionHandle, plan: DataUpdatePlan) {
+  const s = authority;
   if (
     s.kind !== "data.update" ||
     opsOperationFingerprint(plan.operation) !== s.execution.operationFingerprint
@@ -90,13 +90,10 @@ function validate(authority: VerifiedExecutionAuthority, plan: DataUpdatePlan) {
   if (canonicalJson(s.reservations) !== canonicalJson(expected))
     throw Error("Full Update phase plan changed");
 }
-export function retainDataUpdatePlan(
-  authority: VerifiedExecutionAuthority,
-  value: DataUpdatePlan,
-): void {
+export function retainDataUpdatePlan(authority: ExecutionHandle, value: DataUpdatePlan): void {
   const plan = dataUpdatePlanSchema.parse(value);
   validate(authority, plan);
-  const s = executionAuthorityState(authority);
+  const s = authority;
   writePrivateRecord(
     s.installation,
     "observations",
@@ -105,16 +102,16 @@ export function retainDataUpdatePlan(
     true,
   );
 }
-export function readDataUpdatePlan(authority: VerifiedExecutionAuthority): DataUpdatePlan {
-  const s = executionAuthorityState(authority),
+export function readDataUpdatePlan(authority: ExecutionHandle): DataUpdatePlan {
+  const s = authority,
     name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
   const plan = dataUpdatePlanSchema.parse(raw);
   validate(authority, plan);
   return plan;
 }
-export function assertDataUpdateSources(authority: VerifiedExecutionAuthority) {
-  const s = executionAuthorityState(authority),
+export function assertDataUpdateSources(authority: ExecutionHandle) {
+  const s = authority,
     plan = readDataUpdatePlan(authority),
     infraDir = dirname(s.installation.dataRoot);
   if (

@@ -1,9 +1,5 @@
 /** A proposal becomes a pipeline input only through its actual admitted owner. */
-import {
-  assertControlExecutionForward,
-  controlDigest,
-  executionAuthorityState,
-} from "@openmapx/core/build-artifacts";
+import { assertControlExecutionForward, controlDigest } from "@openmapx/core/build-artifacts";
 import {
   type CatalogProposal,
   type CatalogRuntimeInputs,
@@ -30,7 +26,7 @@ export async function loadOwnedCatalogSelection(
   context: DataExecutionContext,
   proposalId: string,
 ): Promise<ReviewedCatalogSelection> {
-  const owner = executionAuthorityState(context.authority),
+  const owner = context.authority,
     record = await context.record();
   assertControlExecutionForward(context.authority);
   context.assertForward();

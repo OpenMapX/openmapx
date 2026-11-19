@@ -149,7 +149,7 @@ describe.skipIf(
         role: "ops-agent",
         serviceIds: services,
       });
-      const authority = control.retainAdmittedControlExecution(dm, {
+      const authority = await control.retainAdmittedControlExecution(dm, {
         execution: record.execution,
         kind: record.input.kind,
         operation: record.input,

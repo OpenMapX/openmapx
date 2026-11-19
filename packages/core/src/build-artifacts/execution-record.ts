@@ -1,7 +1,7 @@
 /** One execution as its role recorded it: the admitted operation, its
- * lifecycle, its effect start and settlement, and the children it reserved. */
+ * lifecycle, its effect start and settlement, and the children it reserved.
+ * The record is one row in the role's store (`ExecutionRows`). */
 import { randomUUID } from "node:crypto";
-import { fsyncSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { PreparedConfigurationRecord } from "../ops/configuration-preparation";
@@ -46,7 +46,17 @@ import {
 import { readDataManagerTerminal } from "./data-manager-terminal";
 import { dataUpdatePlanSchema } from "./data-update-records";
 import { dataUpdateSourcesDigest } from "./data-update-sources";
-import { AnchoredDirectory, identity } from "./filesystem";
+import {
+  type ChildCell,
+  type ControlPlannedChild,
+  type ExecutionAdmission,
+  type ExecutionProgress,
+  type ExecutionRow,
+  type ExecutionSettlement,
+  fileExecutionRows,
+  plannedChildSchema,
+} from "./execution-rows";
+import { AnchoredDirectory } from "./filesystem";
 import {
   type ControlChildPhase,
   type ControlChildReservation,
@@ -81,85 +91,64 @@ import {
 } from "./private-records";
 
 export type { ControlExecutionOrigin } from "../ops/control-root-key";
+export type { ControlPlannedChild } from "./execution-rows";
 
-declare const authorityBrand: unique symbol,
-  peerBrand: unique symbol,
-  settlementBrand: unique symbol,
-  recoveryBrand: unique symbol;
-export type VerifiedExecutionAuthority = Readonly<{
-  execution: ExecutionRef;
-  [authorityBrand]: true;
-}>;
+/** An admitted execution: its row's admission, and the store it lives in. */
+export type ExecutionHandle = Readonly<
+  ExecutionAdmission & {
+    installation: InstallationState;
+    /** Digest of the admission; module records name the execution by it. */
+    receiptDigest: string;
+  }
+>;
+declare const peerBrand: unique symbol;
 export type VerifiedControlPeer = Readonly<{ [peerBrand]: true }>;
-export type VerifiedChildSettlement = Readonly<{ [settlementBrand]: true }>;
-export type VerifiedRecoveryAuthority = Readonly<{ [recoveryBrand]: true }>;
-export type ChildSettlement = {
-  identity: ExecutionRef;
-  outcome: "contained" | "committed" | "failed_without_effect" | "unknown";
-  publication: "not_started" | "committed" | "unknown";
-  terminalReceiptDigest: string;
-};
+export type ChildSettlement = Omit<ExecutionSettlement, "receipt">;
 
-export interface ControlPlannedChild {
-  phase: ControlChildPhase;
-  ordinal: number;
-  kind: string;
-  execution: ExecutionRef;
-  serviceIds: readonly string[];
-  recipient: ControlRecipient;
+function missingRow(): Error {
+  return Object.assign(Error("Missing execution row"), { code: "ENOENT" });
 }
-const plannedChildSchema = z.strictObject({
-  phase: z.enum(Object.keys(childPhaseKinds) as [ControlChildPhase, ...ControlChildPhase[]]),
-  ordinal: z.number().int().min(0).max(63),
-  kind: z.string().max(128),
-  execution: executionRefSchema,
-  serviceIds: targetSchema,
-  recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
-});
-export interface AuthorityState {
-  installation: InstallationState;
-  execution: ExecutionRef;
-  kind: string;
-  serviceIds: readonly string[];
-  plan: readonly ControlPlannedChild[];
-  reservations: readonly ControlChildReservation[];
-  receiptDigest: string;
-  origin: ControlExecutionOrigin;
+function handleOf(state: InstallationState, admission: ExecutionAdmission): ExecutionHandle {
+  return Object.freeze({
+    ...admission,
+    installation: state,
+    receiptDigest: controlDigest(admission),
+  });
 }
-const authorities = new WeakMap<object, AuthorityState>();
-export function executionAuthorityState(value: VerifiedExecutionAuthority) {
-  const s = authorities.get(value);
-  if (!s) throw Error("Unverified execution authority");
-  s.installation.privateRoot.check();
-  const current = readPrivateRecord(
-    s.installation,
-    `executions`,
-    `${s.execution.operationKey}.json`,
-    65536,
-  );
-  if (controlDigest(current) !== s.receiptDigest)
+/** The handle's current row; a row whose admission changed is refused. */
+function rowOf(handle: ExecutionHandle): ExecutionRow {
+  handle.installation.privateRoot.check();
+  const row = handle.installation.rows.read(handle.execution.operationKey);
+  if (!row) throw missingRow();
+  if (controlDigest(row.admission) !== handle.receiptDigest)
     throw Error("Durable execution authority changed");
-  return s;
+  return row;
 }
+function progressOf(handle: ExecutionHandle): ExecutionProgress {
+  return rowOf(handle).progress;
+}
+/** Applies `change` to the handle's progress and saves it before resolving. */
+function updateProgress<T>(
+  handle: ExecutionHandle,
+  change: (progress: ExecutionProgress) => T,
+): Promise<T> {
+  rowOf(handle);
+  return handle.installation.rows.update(handle.execution.operationKey, change);
+}
+
+/** The origin an execution recorded at admission. */
 export function retainedExecutionOrigin(
   state: InstallationState,
   execution: ExecutionRef,
 ): ControlExecutionOrigin {
-  const raw = readPrivateRecord(state, "executions", `${execution.operationKey}.json`, 65536);
-  const admitted = z
-    .object({
-      version: z.literal(2),
-      execution: executionRefSchema,
-      origin: controlOriginSchema,
-    })
-    .passthrough()
-    .parse(raw);
-  if (controlDigest(execution) !== controlDigest(admitted.execution))
+  const row = state.rows.read(execution.operationKey);
+  if (!row) throw missingRow();
+  if (controlDigest(execution) !== controlDigest(row.admission.execution))
     throw Error("Execution origin identity mismatch");
-  return admitted.origin;
+  return row.admission.origin;
 }
 /** Fixed adapters call after their own durable admission, passing the complete typed operation, never only its IDs. */
-export function retainAdmittedControlExecution(
+export async function retainAdmittedControlExecution(
   installation: ControlInstallation,
   input: {
     execution: ExecutionRef;
@@ -174,7 +163,7 @@ export function retainAdmittedControlExecution(
     plan?: readonly ControlPlannedChild[];
     reservations?: readonly ControlChildReservation[];
   },
-): VerifiedExecutionAuthority {
+): Promise<ExecutionHandle> {
   const state = installationState(installation);
   if (input.leaseChild) leaseChildRefSchema.parse(input.leaseChild);
   const execution = Object.freeze(executionRefSchema.parse(input.execution));
@@ -315,10 +304,7 @@ export function retainAdmittedControlExecution(
   if (plan.length + reservations.length > 64) throw Error("Control child intent capacity");
   const keys = new Set<string>();
   for (const child of plan) {
-    executionRefSchema.parse(child.execution);
-    targetSchema.parse(child.serviceIds);
     if (
-      !Number.isSafeInteger(child.ordinal) ||
       keys.has(child.execution.operationKey) ||
       child.execution.operationKey !==
         controlChildOperationKey(execution.operationKey, child.phase, child.ordinal) ||
@@ -331,28 +317,26 @@ export function retainAdmittedControlExecution(
   }
   if (Object.hasOwn(input, "origin"))
     throw Error("Caller-supplied origin is not verified authority");
-  const existingName = `${execution.operationKey}.json`;
-  let existing: unknown;
-  try {
-    existing = readPrivateRecord(state, "executions", existingName, 65536);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
+  const requested: Omit<ExecutionAdmission, "origin"> = {
+    execution,
+    kind: input.kind,
+    operation: input.operation,
+    admittedAt: input.admittedAt,
+    ...(input.requestedDeadlineAt === undefined
+      ? {}
+      : { requestedDeadlineAt: input.requestedDeadlineAt }),
+    ...(input.parent ? { parent: input.parent } : {}),
+    ...(input.leaseChild ? { leaseChild: input.leaseChild } : {}),
+    serviceIds,
+    plan,
+    reservations,
+  };
+  const existing = state.rows.read(execution.operationKey);
   if (existing) {
-    const stored = z
-      .object({
-        version: z.literal(2),
-        origin: controlOriginSchema,
-      })
-      .passthrough()
-      .parse(existing);
-    const { version: _version, origin: _origin, ...oldInput } = stored;
-    if (
-      controlDigest({ ...oldInput, reservations: oldInput.reservations ?? [] }) !==
-      controlDigest({ ...input, execution, serviceIds, plan, reservations })
-    )
+    const { origin: _origin, ...retained } = existing.admission;
+    if (canonicalJson(retained) !== canonicalJson(requested))
       throw Error("Conflicting retained execution identity");
-    return restoreAdmittedControlExecution(installation, execution);
+    return handleOf(state, existing.admission);
   }
   let origin: ControlExecutionOrigin;
   const inherited = input.parent && verifiedParentOrigins.get(input.parent);
@@ -363,58 +347,35 @@ export function retainAdmittedControlExecution(
   } else {
     if (input.parent && (input.parent.issuer !== "api" || !verifiedParents.has(input.parent)))
       throw Error("A child needs its parent's verified origin; this parent can only be observed");
-    const parsed = parseControlRootOperationKey(execution.operationKey);
+    const parsedKey = parseControlRootOperationKey(execution.operationKey);
     const now = Date.now();
-    if (parsed.notAfter <= now) throw Error("Expired control root expiry");
-    if (parsed.notAfter - now > 7 * 24 * 3600_000 || input.requestedDeadlineAt !== parsed.notAfter)
+    if (parsedKey.notAfter <= now) throw Error("Expired control root expiry");
+    if (
+      parsedKey.notAfter - now > 7 * 24 * 3600_000 ||
+      input.requestedDeadlineAt !== parsedKey.notAfter
+    )
       throw Error("Control root requested deadline must equal its expiry within seven days");
     origin = {
       version: 1,
       rootKey: execution.operationKey,
       issuer: execution.executor,
-      notAfter: parsed.notAfter,
+      notAfter: parsedKey.notAfter,
     };
   }
   if (execution.deadlineAt > origin.notAfter)
     throw Error("Control execution widens origin deadline");
-  const receipt = {
-    version: 2,
-    ...input,
-    execution,
-    serviceIds,
-    plan,
-    origin,
-  };
-  if (Buffer.byteLength(canonicalJson(receipt)) > 65536)
-    throw Error("Execution authority receipt capacity");
-  const name = `${execution.operationKey}.json`;
-  let newlyAdmitted = false;
-  try {
-    const old = readPrivateRecord(state, "executions", name, 65536);
-    if (controlDigest(old) !== controlDigest(receipt))
-      throw Error("Conflicting retained execution identity");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    assertControlStorageAvailable(installation);
-    writePrivateRecord(state, "executions", name, receipt, true);
-    writePrivateRecord(state, "effects", name, null, true);
-    writePrivateRecord(state, "effect-started", name, null, true);
-    newlyAdmitted = true;
-  }
-  const authority = Object.freeze({ execution }) as VerifiedExecutionAuthority;
-  authorities.set(authority, {
-    installation: state,
-    execution,
-    kind: input.kind,
-    serviceIds,
-    plan,
-    reservations,
-    receiptDigest: controlDigest(receipt),
-    origin,
+  const admission: ExecutionAdmission = { ...requested, origin };
+  assertControlStorageAvailable(installation);
+  await state.rows.admit({
+    admission,
+    progress: {
+      phase: "held",
+      effectStartedAt: null,
+      settlement: null,
+      children: reservations.map((r) => ({ ordinal: r.ordinal, binding: null, delegation: null })),
+    },
   });
-  if (newlyAdmitted) initializeControlChildReservations(authority);
-  initializeLifecycle(state, execution, newlyAdmitted);
-  return authority;
+  return handleOf(state, admission);
 }
 export interface PeerState {
   installation: InstallationState;
@@ -552,18 +513,6 @@ export function verifyFixedCliControlPeer(
   });
   return peer;
 }
-const settlements = new WeakMap<object, { state: InstallationState; evidence: ChildSettlement }>();
-export function childSettlementState(evidence: VerifiedChildSettlement) {
-  const result = settlements.get(evidence);
-  if (!result) throw Error("Unverified child settlement");
-  return result;
-}
-const settlementSchema = z.strictObject({
-  identity: executionRefSchema,
-  outcome: z.enum(["contained", "committed", "failed_without_effect", "unknown"]),
-  publication: z.enum(["not_started", "committed", "unknown"]),
-  terminalReceiptDigest: digest,
-});
 const effectObservationSchema = z.discriminatedUnion("kind", [
   localCredentialTemplateReceiptSchema,
   z.strictObject({ kind: z.literal("catalog-pins-initialized"), generationId: digest.nullable() }),
@@ -615,6 +564,7 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("unresolved") }),
   z.strictObject({ kind: z.literal("reported-failure") }),
 ]);
+export type EffectReceipt = z.infer<typeof effectObservationSchema>;
 /** Leased Docker effects whose command reports its failure: it ran to its end, so its outcome is known. */
 const REPORTED_FAILURE_KINDS = new Set([
   "service.stop",
@@ -625,63 +575,96 @@ const REPORTED_FAILURE_KINDS = new Set([
   "backup.create",
   "backup.restore",
 ]);
+/** The settlement recorded on a row, with its receipt checked against its kind's schema. */
+function settlementOf(row: ExecutionRow) {
+  const settlement = row.progress.settlement;
+  if (!settlement) return null;
+  const receipt = effectObservationSchema.parse(settlement.receipt);
+  if (
+    settlement.terminalReceiptDigest !== controlDigest(receipt) ||
+    controlDigest(settlement.identity) !== controlDigest(row.admission.execution)
+  )
+    throw Error("Effect receipt digest mismatch");
+  return { ...settlement, receipt };
+}
+/** Records the owner's terminal settlement on its row; a settled row keeps a known outcome. */
+function recordSettlement(
+  progress: ExecutionProgress,
+  payload: ExecutionSettlement,
+  options: { replaceUnknown: boolean },
+): void {
+  const prior = progress.settlement;
+  progress.phase = "settled";
+  if (prior) {
+    if (canonicalJson(prior) === canonicalJson(payload)) return;
+    // A later transport or journal failure must never erase a proved outcome.
+    if (!options.replaceUnknown || prior.outcome !== "unknown") return;
+  }
+  progress.settlement = payload;
+}
+/** Records the owner's terminal settlement as given; the module producing it proved it. */
+export function settleExecution(
+  handle: ExecutionHandle,
+  settlement: {
+    outcome: ChildSettlement["outcome"];
+    publication: ChildSettlement["publication"];
+    receipt: EffectReceipt;
+  },
+): Promise<void> {
+  const receipt = effectObservationSchema.parse(settlement.receipt);
+  const payload: ExecutionSettlement = {
+    identity: handle.execution,
+    outcome: settlement.outcome,
+    publication: settlement.publication,
+    terminalReceiptDigest: controlDigest(receipt),
+    receipt,
+  };
+  return updateProgress(handle, (progress) =>
+    recordSettlement(progress, payload, { replaceUnknown: true }),
+  );
+}
 /** Fixed writer producer only. A DTO, caller error or parsed result cannot
  * substitute for the actual completed native writer observation. */
-export function retainConfigurationGenerationNonCommit(
-  authority: VerifiedExecutionAuthority,
+export async function retainConfigurationGenerationNonCommit(
+  handle: ExecutionHandle,
   observation: OriginalConfigurationGenerationNonCommit,
-): void {
-  const state = executionAuthorityState(authority),
-    actual = originalConfigurationGenerationNonCommitSource(observation),
-    admitted = readPrivateRecord(
-      state.installation,
-      "executions",
-      `${state.execution.operationKey}.json`,
-      65536,
-    ) as { operation: unknown },
-    operation = opsOperationSchema.parse(admitted.operation);
+): Promise<void> {
+  const actual = originalConfigurationGenerationNonCommitSource(observation),
+    operation = opsOperationSchema.parse(handle.operation);
   if (
-    state.installation.fixedChildId ||
-    state.installation.installation.role !== "ops-agent" ||
+    handle.installation.fixedChildId ||
+    handle.installation.installation.role !== "ops-agent" ||
     ![
       "stack.render",
       "serviceSelection.apply",
       "serviceConfig.apply",
       "integrationConfig.apply",
       "vault.apply",
-    ].includes(state.kind) ||
+    ].includes(handle.kind) ||
     !("revisionId" in operation) ||
     !("expectedCurrentRevisionId" in operation) ||
-    state.execution.operationKey !== actual.operationKey ||
+    handle.execution.operationKey !== actual.operationKey ||
     operation.revisionId !== actual.revisionId ||
-    operation.expectedCurrentRevisionId !== actual.expectedCurrentRevisionId ||
-    controlDigest(admitted) !== state.receiptDigest
+    operation.expectedCurrentRevisionId !== actual.expectedCurrentRevisionId
   )
     throw Error("Original writer/execution noncommit binding required");
-  withPrivateEffectWriter(state, () => {
-    const receipt = effectObservationSchema.parse({
-        kind: "configuration-generation-not-committed",
-        revisionId: actual.revisionId,
-        expectedCurrentRevisionId: actual.expectedCurrentRevisionId,
-        result: actual.result,
-      }),
-      payload = {
-        identity: state.execution,
-        outcome: "contained" as const,
-        publication: "not_started" as const,
-        terminalReceiptDigest: controlDigest(receipt),
-        receipt,
-      },
-      name = `${state.execution.operationKey}.json`;
-    const prior = readPrivateRecord(state.installation, "effects", name);
-    if (prior !== null) {
-      const retained = settlementSchema.extend({ receipt: effectObservationSchema }).parse(prior);
-      if (canonicalJson(retained) !== canonicalJson(payload))
-        throw Error("Original writer noncommit source changed");
-      return;
-    }
-    settleExecutionLifecycle(state);
-    writePrivateRecord(state.installation, "effects", name, payload, false);
+  const receipt = effectObservationSchema.parse({
+    kind: "configuration-generation-not-committed",
+    revisionId: actual.revisionId,
+    expectedCurrentRevisionId: actual.expectedCurrentRevisionId,
+    result: actual.result,
+  });
+  const payload: ExecutionSettlement = {
+    identity: handle.execution,
+    outcome: "contained",
+    publication: "not_started",
+    terminalReceiptDigest: controlDigest(receipt),
+    receipt,
+  };
+  await updateProgress(handle, (progress) => {
+    if (progress.settlement && canonicalJson(progress.settlement) !== canonicalJson(payload))
+      throw Error("Original writer noncommit source changed");
+    recordSettlement(progress, payload, { replaceUnknown: false });
   });
 }
 /** Actual private source, not a caller outcome flag. */
@@ -689,78 +672,41 @@ export function inspectConfigurationGenerationNonCommit(
   installation: ControlInstallation,
   execution: ExecutionRef,
 ) {
-  // The original admission must still verify before its effect is read.
-  restoreAdmittedControlExecution(installation, execution);
-  const local = installationState(installation),
-    raw = readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
-    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(raw);
+  const handle = restoreAdmittedControlExecution(installation, execution),
+    effect = settlementOf(rowOf(handle));
   if (
+    !effect ||
     effect.receipt.kind !== "configuration-generation-not-committed" ||
     effect.outcome !== "contained" ||
-    effect.publication !== "not_started" ||
-    canonicalJson(effect.identity) !== canonicalJson(execution) ||
-    effect.terminalReceiptDigest !== controlDigest(effect.receipt)
+    effect.publication !== "not_started"
   )
     throw Error("Actual original generation noncommit required");
   return effect.receipt;
 }
-export function withPrivateEffectWriter<T>(s: AuthorityState, write: () => T): T {
-  const guards = s.installation.privateRoot.directory("effect-writers", true, true);
-  try {
-    const name = s.execution.operationKey;
-    mkdirSync(guards.name(name), { mode: 0o700 });
-    fsyncSync(guards.fd);
-    const guard = guards.directory(name);
-    const held = identity(guard.stat);
-    try {
-      return write();
-    } finally {
-      guard.close();
-      guards.removeDirectory(name, held);
-    }
-  } finally {
-    guards.close();
-  }
+/** Whether the execution recorded its own settlement. */
+export function executionSettled(handle: ExecutionHandle): boolean {
+  return progressOf(handle).settlement !== null;
 }
-export function beginControlEffect(authority: VerifiedExecutionAuthority): void {
-  const s = executionAuthorityState(authority);
-  withControlExecutionForward(authority, () =>
-    withPrivateEffectWriter(s, () => {
-      try {
-        if (
-          readPrivateRecord(s.installation, "effects", `${s.execution.operationKey}.json`) !== null
-        )
-          throw Error("Settled execution cannot restart effects");
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      }
-      const name = `${s.execution.operationKey}.json`;
-      if (readPrivateRecord(s.installation, "effect-started", name) !== null)
-        throw Error("Execution effects already started");
-      writePrivateRecord(
-        s.installation,
-        "effect-started",
-        name,
-        { execution: s.execution, receiptDigest: s.receiptDigest },
-        false,
-      );
-    }),
-  );
+/** Whether the execution recorded the start of its effects. */
+export function executionEffectStarted(handle: ExecutionHandle): boolean {
+  return progressOf(handle).effectStartedAt !== null;
 }
-function configurationPreEffectState(authority: VerifiedExecutionAuthority) {
-  const state = executionAuthorityState(authority),
-    raw = readPrivateRecord(
-      state.installation,
-      "executions",
-      `${state.execution.operationKey}.json`,
-      65536,
-    ),
-    operation = opsOperationSchema.parse((raw as { operation: unknown }).operation);
+/** Records the start of effects, before the first one; never twice, never after cancellation. */
+export async function beginControlEffect(handle: ExecutionHandle): Promise<void> {
+  assertControlExecutionForward(handle);
+  await updateProgress(handle, (progress) => {
+    if (progress.settlement) throw Error("Settled execution cannot restart effects");
+    if (progress.effectStartedAt !== null) throw Error("Execution effects already started");
+    assertForward(handle, progress);
+    progress.effectStartedAt = Date.now();
+  });
+}
+function assertConfigurationPreEffectSource(handle: ExecutionHandle) {
+  const operation = opsOperationSchema.parse(handle.operation);
   if (
-    state.installation.fixedChildId ||
-    state.installation.installation.role !== "ops-agent" ||
-    controlDigest(raw) !== state.receiptDigest ||
-    opsOperationFingerprint(operation) !== state.execution.operationFingerprint ||
+    handle.installation.fixedChildId ||
+    handle.installation.installation.role !== "ops-agent" ||
+    opsOperationFingerprint(operation) !== handle.execution.operationFingerprint ||
     !(
       operation.kind === "service.update" ||
       operation.kind === "service.image.stage" ||
@@ -774,58 +720,45 @@ function configurationPreEffectState(authority: VerifiedExecutionAuthority) {
     )
   )
     throw Error("Fixed managed configuration pre-effect source required");
-  return state;
+}
+/** Whether any reserved child was bound or sent. */
+function anyChildAttempted(progress: ExecutionProgress): boolean {
+  return progress.children.some((cell) => cell.binding !== null || cell.delegation !== null);
 }
 /** Existing not-started evidence, only after the original lifecycle is frozen
- * and every exact/reserved child remains unissued and unbound. */
-export function retainConfigurationPreEffectRefusal(authority: VerifiedExecutionAuthority): void {
-  const state = configurationPreEffectState(authority);
-  if (
-    cancelControlExecution(authority).length ||
-    state.reservations.some((slot) => {
-      const retained = inspectControlChildPublication(authority, slot);
-      return retained.binding !== null || retained.publication.state !== "unissued";
-    })
-  )
+ * and every reserved child remains unissued and unbound. */
+export async function retainConfigurationPreEffectRefusal(handle: ExecutionHandle): Promise<void> {
+  assertConfigurationPreEffectSource(handle);
+  if ((await cancelControlExecution(handle)).length || anyChildAttempted(progressOf(handle)))
     throw Error("Issued or bound managed configuration must remain fenced");
-  retainControlEffectReceipt(authority, {
+  await retainControlEffectReceipt(handle, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
   });
 }
-/** The transition/restart observer consumes the actual indexed recorded effect;
+/** The transition/restart observer consumes the actual recorded effect;
  * an error class or caller status never qualifies nonissuance. */
-export function inspectConfigurationPreEffectRefusal(authority: VerifiedExecutionAuthority): void {
-  const state = configurationPreEffectState(authority),
-    name = `${state.execution.operationKey}.json`,
-    raw = readPrivateRecord(state.installation, "effects", name),
-    effect = settlementSchema.extend({ receipt: effectObservationSchema }).parse(raw);
+export function inspectConfigurationPreEffectRefusal(handle: ExecutionHandle): void {
+  assertConfigurationPreEffectSource(handle);
+  const row = rowOf(handle),
+    effect = settlementOf(row);
   if (
+    !effect ||
     effect.receipt.kind !== "not-started" ||
     effect.outcome !== "failed_without_effect" ||
-    effect.publication !== "not_started" ||
-    controlDigest(effect.identity) !== controlDigest(state.execution) ||
-    effect.terminalReceiptDigest !== controlDigest(effect.receipt)
+    effect.publication !== "not_started"
   )
     throw Error("Actual unstarted managed configuration receipt required");
-  if (
-    cancelControlExecution(authority).length ||
-    state.reservations.some((slot) => {
-      const retained = inspectControlChildPublication(authority, slot);
-      return retained.binding !== null || retained.publication.state !== "unissued";
-    })
-  )
+  if (attemptedChildren(row.progress).length || anyChildAttempted(row.progress))
     throw Error("Unstarted managed configuration child source changed");
 }
-/** Fixed executor adapters supply their parsed result or exact fixed-command exit; arbitrary text is never proof. */
 /** Original indexed progress is business evidence only. A success producer must
  * additionally prove its actual children/target tree before committing. */
-function readDataWorkflowProgress(authority: VerifiedExecutionAuthority) {
-  const s = executionAuthorityState(authority);
-  if (s.kind !== "data.update") throw Error("Original Full Update owner required");
-  const name = `data-workflow-${s.execution.operationKey}.json`,
-    raw = readPrivateRecord(s.installation, "observations", name, 65536);
+function readDataWorkflowProgress(handle: ExecutionHandle) {
+  if (handle.kind !== "data.update") throw Error("Original Full Update owner required");
+  const name = `data-workflow-${handle.execution.operationKey}.json`,
+    raw = readPrivateRecord(handle.installation, "observations", name, 65536);
   const body = z
     .strictObject({
       version: z.literal(1),
@@ -835,8 +768,8 @@ function readDataWorkflowProgress(authority: VerifiedExecutionAuthority) {
     })
     .parse(raw);
   if (
-    body.operationKey !== s.execution.operationKey ||
-    body.fingerprint !== s.execution.fingerprint
+    body.operationKey !== handle.execution.operationKey ||
+    body.fingerprint !== handle.execution.fingerprint
   )
     throw Error("Full Update checkpoint identity changed");
   return body.receipt;
@@ -845,8 +778,9 @@ function readDataWorkflowProgress(authority: VerifiedExecutionAuthority) {
  * own effect, so only the kind's own rules apply: a result that commits, a
  * failure its command reported, and "not started" only before any effect. */
 function receiptSettlement(
-  s: AuthorityState,
-  receipt: z.infer<typeof effectObservationSchema>,
+  handle: ExecutionHandle,
+  progress: ExecutionProgress,
+  receipt: EffectReceipt,
 ): Pick<ChildSettlement, "outcome" | "publication"> {
   switch (receipt.kind) {
     case "catalog-pins-initialized":
@@ -861,48 +795,41 @@ function receiptSettlement(
     case "service-lifecycle-contained-failure":
       return { outcome: "contained", publication: "committed" };
     case "reported-failure":
-      if (!REPORTED_FAILURE_KINDS.has(s.kind) || s.installation.installation.role !== "ops-agent")
+      if (
+        !REPORTED_FAILURE_KINDS.has(handle.kind) ||
+        handle.installation.installation.role !== "ops-agent"
+      )
         throw Error("Only a leased agent Docker effect reports its own failure");
       return { outcome: "contained", publication: "committed" };
     case "feed-proxy-validation-failure":
       return { outcome: "contained", publication: "not_started" };
     case "configuration-fence-not-prepared":
       return { outcome: "failed_without_effect", publication: "not_started" };
-    case "not-started": {
-      if (s.installation.fixedChildId) throw Error("Fixed child cannot assert unused execution");
-      try {
-        if (
-          readPrivateRecord(
-            s.installation,
-            "effect-started",
-            `${s.execution.operationKey}.json`,
-          ) !== null
-        )
-          throw Error("Started effects require containment evidence");
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      }
+    case "not-started":
+      if (handle.installation.fixedChildId)
+        throw Error("Fixed child cannot assert unused execution");
+      if (progress.effectStartedAt !== null)
+        throw Error("Started effects require containment evidence");
       return { outcome: "failed_without_effect", publication: "not_started" };
-    }
     case "ops-result": {
-      receipt.result = parseBoundedOpsResult(s.kind as OpsOperationKind, receipt.result);
+      receipt.result = parseBoundedOpsResult(handle.kind as OpsOperationKind, receipt.result);
       const result = receipt.result as { outcome?: string };
       // A restored import published nothing.
-      if (s.kind === "artifactTransfer.import" && result.outcome === "not_committed")
+      if (handle.kind === "artifactTransfer.import" && result.outcome === "not_committed")
         return { outcome: "contained", publication: "not_started" };
       if (
         !result.outcome ||
         ["applied", "unchanged", "committed"].includes(result.outcome) ||
-        (s.kind === "transitousLock.approve" && result.outcome === "activated") ||
+        (handle.kind === "transitousLock.approve" && result.outcome === "activated") ||
         // These closed results settle their own awaited filesystem leaf. A
         // published install still holds its component lock until API bookkeeping
         // selects the separate commit/restore operation.
-        (s.kind === "integration.install" && result.outcome === "published") ||
-        (s.kind === "integration.remove" && result.outcome === "removed") ||
-        (s.kind === "integration.settle" && result.outcome === "restored") ||
-        (s.kind === "catalogIntegration.settle" &&
+        (handle.kind === "integration.install" && result.outcome === "published") ||
+        (handle.kind === "integration.remove" && result.outcome === "removed") ||
+        (handle.kind === "integration.settle" && result.outcome === "restored") ||
+        (handle.kind === "catalogIntegration.settle" &&
           ["commit", "rollback"].includes(result.outcome)) ||
-        (s.kind === "serviceRepository.settle" &&
+        (handle.kind === "serviceRepository.settle" &&
           ["commit", "rollback", "release"].includes(result.outcome))
       )
         return { outcome: "committed", publication: "committed" };
@@ -912,73 +839,52 @@ function receiptSettlement(
       return { outcome: "unknown", publication: "unknown" };
   }
 }
-export function retainControlEffectReceipt(
-  authority: VerifiedExecutionAuthority,
+/** Records the owner's settlement after checking that its receipt proves it. */
+export async function retainControlEffectReceipt(
+  handle: ExecutionHandle,
   effect: {
     outcome: ChildSettlement["outcome"];
     publication: ChildSettlement["publication"];
     receipt: unknown;
   },
-): void {
-  const s = executionAuthorityState(authority);
-  withPrivateEffectWriter(s, () => {
-    const parsed = effectObservationSchema.safeParse(effect.receipt);
-    if (!parsed.success) throw Error("Unsupported effect receipt evidence");
-    const receipt = parsed.data;
-    const { outcome, publication } = receiptSettlement(s, receipt);
+): Promise<void> {
+  const parsed = effectObservationSchema.safeParse(effect.receipt);
+  if (!parsed.success) throw Error("Unsupported effect receipt evidence");
+  const receipt = parsed.data;
+  await updateProgress(handle, (progress) => {
+    const { outcome, publication } = receiptSettlement(handle, progress, receipt);
     if (effect.outcome !== outcome || effect.publication !== publication)
       throw Error("Effect evidence does not prove requested settlement");
-    settleExecutionLifecycle(s);
-    const payload = {
-      identity: s.execution,
-      outcome,
-      publication,
-      terminalReceiptDigest: controlDigest(receipt),
-      receipt,
-    };
-    const name = `${s.execution.operationKey}.json`;
-    try {
-      const raw = readPrivateRecord(s.installation, "effects", name);
-      if (raw === null) {
-        writePrivateRecord(s.installation, "effects", name, payload, false);
-        return;
-      }
-      const prior = settlementSchema.extend({ receipt: effectObservationSchema }).parse(raw);
-      if (controlDigest(prior) === controlDigest(payload)) {
-        // A completed helper may have lost the write acknowledgement after
-        // the effect record landed but before its terminal record. Repair
-        // only this exact source using its original recorded completion time.
-        return;
-      }
-      // A later transport/journal failure must never erase proved committed effects.
-      if (prior.outcome !== "unknown") return;
-      writePrivateRecord(s.installation, "effects", name, payload, false);
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      writePrivateRecord(s.installation, "effects", name, payload, true);
-    }
+    recordSettlement(
+      progress,
+      {
+        identity: handle.execution,
+        outcome,
+        publication,
+        terminalReceiptDigest: controlDigest(receipt),
+        receipt,
+      },
+      { replaceUnknown: true },
+    );
   });
 }
+/** The settlement an execution recorded about its own effect. */
 export function verifyControlEffectSettlement(
   installation: ControlInstallation,
   execution: ExecutionRef,
-): VerifiedChildSettlement {
-  const s = installationState(installation);
-  const evidence = settlementSchema
-    .extend({ receipt: effectObservationSchema })
-    .parse(readPrivateRecord(s, "effects", `${execution.operationKey}.json`));
-  if (evidence.terminalReceiptDigest !== controlDigest(evidence.receipt))
-    throw Error("Effect receipt digest mismatch");
-  if (controlDigest(evidence.identity) !== controlDigest(execution))
+): ChildSettlement {
+  const row = installationState(installation).rows.read(execution.operationKey);
+  if (!row) throw missingRow();
+  if (controlDigest(row.admission.execution) !== controlDigest(execution))
     throw Error("Settlement immutable identity mismatch");
-  const verified = Object.freeze({}) as VerifiedChildSettlement;
-  const { receipt: _privateReceipt, ...publicEvidence } = evidence;
-  settlements.set(verified, { state: s, evidence: publicEvidence });
-  return verified;
+  const settlement = settlementOf(row);
+  if (!settlement) throw Error("Execution is not settled");
+  const { receipt: _receipt, ...known } = settlement;
+  return known;
 }
 /** Fixed read-only source check for maintenance's pre-root ordinary DM Start.
- * It reads this role's actual original admission, canonical terminal, effect
- * result and released target tree. Candidate metadata alone proves nothing. */
+ * It reads this role's actual original admission, terminal, effect result and
+ * released target tree. Candidate metadata alone proves nothing. */
 export function verifyMaintenanceCoordinatorPrerequisite(
   installation: ControlInstallation,
   record: PreparedConfigurationRecord,
@@ -998,19 +904,15 @@ export function verifyMaintenanceCoordinatorPrerequisite(
     fixed.root.parent.deadlineAt !== record.parentDeadlineAt
   )
     throw Error("Original maintenance coordinator prerequisite required");
-  const raw = readPrivateRecord(local, "executions", `${fixed.root.operationKey}.json`, 65536);
-  const admitted = z
-    .object({
-      execution: executionRefSchema,
-      kind: z.literal("service.start"),
-      operation: opsOperationSchema,
-      admittedAt: z.number().int().nonnegative().safe(),
-      requestedDeadlineAt: z.number().int().nonnegative().safe(),
-      parent: retainedParentExecutionSchema.refine((parent) => parent.issuer === "api"),
-    })
-    .passthrough()
-    .parse(raw);
+  const row = local.rows.read(fixed.root.operationKey);
+  if (!row) throw missingRow();
+  const admitted = row.admission,
+    parent = retainedParentExecutionSchema
+      .refine((value) => value.issuer === "api")
+      .parse(admitted.parent);
   if (
+    admitted.kind !== "service.start" ||
+    admitted.requestedDeadlineAt === undefined ||
     admitted.execution.operationKey !== fixed.root.operationKey ||
     admitted.requestedDeadlineAt !== fixed.root.requestedDeadlineAt ||
     admitted.execution.deadlineAt > admitted.requestedDeadlineAt ||
@@ -1021,20 +923,20 @@ export function verifyMaintenanceCoordinatorPrerequisite(
         kind: "service.start",
         operationFingerprint: opsOperationFingerprint(fixed.operation),
         deadlineAt: admitted.execution.deadlineAt,
-        parent: admitted.parent,
+        parent,
       }) ||
-    canonicalJson(admitted.operation) !== canonicalJson(fixed.operation) ||
-    admitted.parent.apiJobId !== record.apiJobId ||
-    admitted.parent.operationKey !== record.parentOperationKey ||
-    admitted.parent.fingerprint !== record.parentFingerprint ||
-    admitted.parent.deadlineAt !== record.parentDeadlineAt
+    canonicalJson(opsOperationSchema.parse(admitted.operation)) !==
+      canonicalJson(fixed.operation) ||
+    parent.apiJobId !== record.apiJobId ||
+    parent.operationKey !== record.parentOperationKey ||
+    parent.fingerprint !== record.parentFingerprint ||
+    parent.deadlineAt !== record.parentDeadlineAt
   )
     throw Error("Original coordinator admission changed");
-  const authority = restoreAdmittedControlExecution(installation, admitted.execution),
-    effect = settlementSchema
-      .extend({ receipt: effectObservationSchema })
-      .parse(readPrivateRecord(local, "effects", `${fixed.root.operationKey}.json`));
+  const handle = handleOf(local, admitted),
+    effect = settlementOf(row);
   if (
+    !effect ||
     effect.outcome !== "committed" ||
     effect.publication !== "committed" ||
     effect.receipt.kind !== "ops-result" ||
@@ -1042,42 +944,25 @@ export function verifyMaintenanceCoordinatorPrerequisite(
       .changed !== true
   )
     throw Error("Conclusive successful coordinator prerequisite required");
-  verifyLocalArtifactTargetRootRelease(authority);
+  verifyLocalArtifactTargetRootRelease(handle);
 }
 
 /** The maintenance file of a `configurationMaintenance.prepare` root, by its admitted body. */
-function maintenanceFileOf(state: InstallationState, execution: ExecutionRef): MaintenanceFile {
-  const admitted = readPrivateRecord(
-    state,
-    "executions",
-    `${execution.operationKey}.json`,
-    65536,
-  ) as { operation?: { maintenanceId?: string } };
-  const maintenanceId = uuid.parse(admitted.operation?.maintenanceId);
+function maintenanceFileOf(handle: ExecutionHandle): MaintenanceFile {
+  const maintenanceId = uuid.parse(
+    (handle.operation as { maintenanceId?: string } | undefined)?.maintenanceId,
+  );
   const file = parseMaintenanceFile(
-    readPrivateRecord(state, MAINTENANCE_NAMESPACE, maintenanceFileName(maintenanceId)),
+    readPrivateRecord(
+      handle.installation,
+      MAINTENANCE_NAMESPACE,
+      maintenanceFileName(maintenanceId),
+    ),
     maintenanceId,
   );
-  if (canonicalJson(file.plan.prepare) !== canonicalJson(execution))
+  if (canonicalJson(file.plan.prepare) !== canonicalJson(handle.execution))
     throw Error("Original maintenance root changed");
   return file;
-}
-const recovery = new WeakMap<object, { authority: AuthorityState; evidence: ChildSettlement }>();
-export function verifyControlRecoveryAuthority(
-  authority: VerifiedExecutionAuthority,
-): VerifiedRecoveryAuthority {
-  const s = executionAuthorityState(authority);
-  const evidence = childSettlementState(
-    verifyControlEffectSettlement(s.installation.installation, s.execution),
-  ).evidence;
-  const result = Object.freeze({}) as VerifiedRecoveryAuthority;
-  recovery.set(result, { authority: s, evidence });
-  return result;
-}
-export function recoveryAuthorityState(value: VerifiedRecoveryAuthority) {
-  const s = recovery.get(value);
-  if (!s) throw Error("Unverified recovery authority");
-  return s;
 }
 
 /** Exact role parent identity is independent of the assertion that binds its child (no hash cycle). */
@@ -1092,229 +977,113 @@ export function retainedControlParent(execution: ExecutionRef): RetainedParentEx
   };
 }
 
-function executionWitnessDirectory(state: InstallationState, issuer: ControlIssuer) {
-  // Execution witnesses stay in the role's own private state. Another role
-  // learns about an execution from the request that names it, never from here.
-  const executions = state.privateRoot.directory("execution-witnesses", true, true),
-    role = executions.directory(issuer, true, true);
-  return {
-    role,
-    close() {
-      role.close();
-      executions.close();
-    },
-  };
-}
-const lifecycleSchema = z.strictObject({
-  version: z.literal(1),
-  execution: executionRefSchema,
-  sequence: z.number().int().nonnegative().safe(),
-  phase: z.enum(["held", "cancel_pending", "recovery_required", "settled"]),
-});
-type ExecutionLifecycle = z.infer<typeof lifecycleSchema>;
-function withExecutionWriter<T>(
-  state: InstallationState,
-  execution: ExecutionRef,
-  run: (dir: AnchoredDirectory) => T,
-): T {
-  const d = executionWitnessDirectory(state, execution.executor);
-  const name = `${execution.operationKey}.writer`;
-  let guard: AnchoredDirectory | undefined;
-  try {
-    mkdirSync(d.role.name(name), { mode: 0o700 });
-    fsyncSync(d.role.fd);
-    guard = d.role.directory(name);
-    return run(d.role);
-  } finally {
-    if (guard) {
-      const held = identity(guard.stat);
-      guard.close();
-      d.role.removeDirectory(name, held);
-    }
-    d.close();
-  }
-}
-function readLifecycle(dir: AnchoredDirectory, execution: ExecutionRef): ExecutionLifecycle {
-  const current = lifecycleSchema.parse(
-    JSON.parse(dir.read(`${execution.operationKey}.lifecycle.json`, 65536).toString("utf8")),
-  );
-  if (controlDigest(current.execution) !== controlDigest(execution))
-    throw Error("Execution lifecycle identity mismatch");
-  return current;
-}
-function writeLifecycle(dir: AnchoredDirectory, lifecycle: ExecutionLifecycle, exclusive = false) {
-  const bytes = canonicalJson(lifecycle);
-  if (Buffer.byteLength(bytes) > 65536) throw Error("Execution lifecycle capacity");
-  dir.write(`${lifecycle.execution.operationKey}.lifecycle.json`, bytes, exclusive);
-}
-function initializeLifecycle(
-  state: InstallationState,
-  execution: ExecutionRef,
-  newlyAdmitted: boolean,
-) {
-  withExecutionWriter(state, execution, (dir) => {
-    try {
-      readLifecycle(dir, execution);
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      if (!newlyAdmitted)
-        throw Error("Missing retained execution lifecycle requires supervised recovery");
-      writeLifecycle(
-        dir,
-        {
-          version: 1,
-          execution,
-          sequence: 0,
-          phase: "held",
-        },
-        true,
-      );
-    }
-  });
-}
 /** Whether a fixed child's parent, which holds no lease, still permits forward effects. */
 function fixedParentForward(state: InstallationState): boolean {
   const parent = state.fixedParent;
   if (!parent) return true;
-  return withExecutionWriter(state, parent, (dir) => {
-    const lifecycle = readLifecycle(dir, parent);
-    return lifecycle.phase === "held" && Date.now() < parent.deadlineAt;
-  });
+  const row = state.rows.read(parent.operationKey);
+  if (!row || controlDigest(row.admission.execution) !== controlDigest(parent)) return false;
+  return row.progress.phase === "held" && Date.now() < parent.deadlineAt;
 }
 /** Narrow local runtime fence; exact duplicate admission alone never grants forward permission. */
 export class ControlExecutionFencedError extends Error {}
-export function withControlExecutionForward<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const s = executionAuthorityState(authority);
-  const check = () =>
-    withExecutionWriter(s.installation, s.execution, (dir) => {
-      const lifecycle = readLifecycle(dir, s.execution);
-      if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
-        throw new ControlExecutionFencedError(
-          "Execution cannot restart effects; observation/settlement only; forward phase fenced",
-        );
-      return run();
-    });
-  if (!fixedParentForward(s.installation))
+function assertForward(handle: ExecutionHandle, progress: ExecutionProgress): void {
+  if (progress.phase !== "held" || Date.now() >= handle.execution.deadlineAt)
+    throw new ControlExecutionFencedError(
+      "Execution cannot restart effects; observation/settlement only; forward phase fenced",
+    );
+  if (!fixedParentForward(handle.installation))
     throw new ControlExecutionFencedError("Canceled/terminal ancestor permits observation only");
-  return check();
 }
-/** Internal publication scope. All filesystem writes complete before guards
- * release; callers may not await HTTP/DB or acquire a lease from this scope. */
-const publicationScopes = new WeakMap<VerifiedExecutionAuthority, AnchoredDirectory>();
-export function assertControlPublicationScope(
-  authority: VerifiedExecutionAuthority,
-): AnchoredDirectory {
-  const directory = publicationScopes.get(authority);
-  if (!directory) throw Error("Control publication scope is not held");
-  return directory;
+export function withControlExecutionForward<T>(handle: ExecutionHandle, run: () => T): T {
+  assertForward(handle, progressOf(handle));
+  return run();
 }
-export function withControlDelegationPublication<T>(
-  authority: VerifiedExecutionAuthority,
+export function assertControlExecutionForward(handle: ExecutionHandle): void {
+  assertForward(handle, progressOf(handle));
+}
+const PREPARED_MAINTENANCE_PHASES: readonly string[] = [
+  "configuration-commit",
+  "maintenance-hardlinks",
+  "maintenance-recreate",
+  "maintenance-handoff",
+];
+/** Whether `phase` may still issue: only the protocol's prepared edges outlive the worker. */
+function assertDelegationForward(
+  handle: ExecutionHandle,
   phase: ControlChildPhase,
-  run: (directory: AnchoredDirectory) => T,
-): T {
-  const s = executionAuthorityState(authority);
-  const own = () =>
-    withExecutionWriter(s.installation, s.execution, (directory) => {
-      const current = readLifecycle(directory, s.execution);
-      if (s.kind === "configurationMaintenance.prepare") {
-        const owner = maintenanceFileOf(s.installation, s.execution);
-        if (canonicalJson(owner.plan.reservations) !== canonicalJson(s.reservations))
-          throw Error("Original maintenance issuer changed");
-        if (
-          [
-            "configuration-commit",
-            "maintenance-hardlinks",
-            "maintenance-recreate",
-            "maintenance-handoff",
-          ].includes(phase) &&
-          (owner.record.state !== "applying" ||
-            owner.record.cancelRequestedAt !== null ||
-            owner.record.fence?.state !== "prepared")
-        )
-          throw new ControlExecutionFencedError(
-            "Original applying configuration maintenance required",
-          );
-      }
-      const prepared =
-        (s.kind === "configurationMaintenance.prepare" &&
-          [
-            "configuration-commit",
-            "maintenance-hardlinks",
-            "maintenance-recreate",
-            "maintenance-handoff",
-          ].includes(phase)) ||
-        (s.kind === "configurationHandoff.prepare" && phase === "configuration-handoff");
-      if (
-        Date.now() >= s.execution.deadlineAt ||
-        !(current.phase === "held" || (current.phase === "settled" && prepared))
-      )
-        throw new ControlExecutionFencedError(
-          "Control grant publication is fenced; terminal or canceled execution prevents forward effects",
-        );
-      if (current.phase === "settled") verifyControlPreparedTerminal(s.installation, s.execution);
-      if (publicationScopes.has(authority)) throw Error("Nested control publication scope");
-      publicationScopes.set(authority, directory);
-      try {
-        return run(directory);
-      } finally {
-        publicationScopes.delete(authority);
-      }
-    });
-  if (!fixedParentForward(s.installation))
+  progress: ExecutionProgress,
+): void {
+  if (handle.kind === "configurationMaintenance.prepare") {
+    const owner = maintenanceFileOf(handle);
+    if (canonicalJson(owner.plan.reservations) !== canonicalJson(handle.reservations))
+      throw Error("Original maintenance issuer changed");
+    if (
+      PREPARED_MAINTENANCE_PHASES.includes(phase) &&
+      (owner.record.state !== "applying" ||
+        owner.record.cancelRequestedAt !== null ||
+        owner.record.fence?.state !== "prepared")
+    )
+      throw new ControlExecutionFencedError("Original applying configuration maintenance required");
+  }
+  const prepared =
+    (handle.kind === "configurationMaintenance.prepare" &&
+      PREPARED_MAINTENANCE_PHASES.includes(phase)) ||
+    (handle.kind === "configurationHandoff.prepare" && phase === "configuration-handoff");
+  if (
+    Date.now() >= handle.execution.deadlineAt ||
+    !(progress.phase === "held" || (progress.phase === "settled" && prepared))
+  )
+    throw new ControlExecutionFencedError(
+      "Control grant publication is fenced; terminal or canceled execution prevents forward effects",
+    );
+  if (progress.phase === "settled")
+    verifyControlPreparedTerminal(handle.installation, handle.execution);
+  if (!fixedParentForward(handle.installation))
     throw Error("Canceled ancestor prevents grant publication");
-  return own();
 }
-export function assertControlExecutionForward(authority: VerifiedExecutionAuthority): void {
-  withControlExecutionForward(authority, () => {});
+/**
+ * Runs `run` on the row's progress while it may still issue `phase`, and saves
+ * what it recorded before resolving: a child is attempted once this resolves.
+ */
+export function withControlDelegationPublication<T>(
+  handle: ExecutionHandle,
+  phase: ControlChildPhase,
+  run: (progress: ExecutionProgress) => T,
+): Promise<T> {
+  assertDelegationForward(handle, phase, progressOf(handle));
+  return updateProgress(handle, (progress) => {
+    assertDelegationForward(handle, phase, progress);
+    return run(progress);
+  });
 }
 /** Only the protocol's frozen terminal preparation edges may outlive their local worker. */
 export function assertControlDelegationForward(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   phase: ControlChildPhase,
 ): void {
-  withControlDelegationPublication(authority, phase, () => {});
+  assertDelegationForward(handle, phase, progressOf(handle));
 }
-/** Persist before a runtime publishes canceled state; return original attempted child identities for cancellation/lookup. */
-export function cancelControlExecution(
-  authority: VerifiedExecutionAuthority,
-): readonly ExecutionRef[] {
-  const s = executionAuthorityState(authority);
-  return withExecutionWriter(s.installation, s.execution, (dir) => {
-    const lifecycle = readLifecycle(dir, s.execution);
-    if (lifecycle.phase !== "settled" && lifecycle.phase !== "cancel_pending") {
-      lifecycle.phase = "cancel_pending";
-      lifecycle.sequence++;
-      writeLifecycle(dir, lifecycle);
-    }
+function attemptedChildren(progress: ExecutionProgress): ExecutionRef[] {
+  const distinct = new Map<string, ExecutionRef>();
+  for (const cell of progress.children) {
+    if (!cell.delegation || !cell.binding) continue;
+    const child = Object.freeze({ ...cell.binding.child.execution });
+    const prior = distinct.get(child.operationKey);
+    if (prior && controlDigest(prior) !== controlDigest(child))
+      throw Error("Cancellation child identity disagreement");
+    distinct.set(child.operationKey, child);
+  }
+  return [...distinct.values()];
+}
+/** Persist before a runtime publishes canceled state; return the attempted children for cancellation. */
+export async function cancelControlExecution(
+  handle: ExecutionHandle,
+): Promise<readonly ExecutionRef[]> {
+  return updateProgress(handle, (progress) => {
+    if (progress.phase === "held") progress.phase = "cancel_pending";
     // Every child is a reserved phase, recorded as attempted before it is issued.
-    const children: ExecutionRef[] = [];
-    for (const reserved of s.reservations) {
-      const saved = inspectControlChildPublication(authority, reserved);
-      if (saved.publication.state === "grant_prepared" && saved.binding)
-        children.push(Object.freeze({ ...saved.binding.child.execution }));
-    }
-    const distinct = new Map<string, ExecutionRef>();
-    for (const child of children) {
-      const prior = distinct.get(child.operationKey);
-      if (prior && controlDigest(prior) !== controlDigest(child))
-        throw Error("Cancellation child identity disagreement");
-      distinct.set(child.operationKey, child);
-    }
-    return Object.freeze([...distinct.values()]);
-  });
-}
-export function settleExecutionLifecycle(s: AuthorityState) {
-  withExecutionWriter(s.installation, s.execution, (dir) => {
-    const lifecycle = readLifecycle(dir, s.execution);
-    if (lifecycle.phase !== "settled") {
-      lifecycle.phase = "settled";
-      lifecycle.sequence++;
-      writeLifecycle(dir, lifecycle);
-    }
+    return Object.freeze(attemptedChildren(progress));
   });
 }
 /**
@@ -1323,7 +1092,7 @@ export function settleExecutionLifecycle(s: AuthorityState) {
  * lease; the reserved phase records the child before it is sent.
  */
 export async function attestParentExecution(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   child: {
     execution: ExecutionRef;
     phase: ControlChildPhase;
@@ -1332,43 +1101,41 @@ export async function attestParentExecution(
     childKey?: string;
   },
 ): Promise<ControlDelegation> {
-  const s = executionAuthorityState(authority);
-  if (Date.now() >= s.execution.deadlineAt) throw Error("Expired parent execution");
-  const plan = resolveControlChildPlan(authority, child);
+  if (Date.now() >= handle.execution.deadlineAt) throw Error("Expired parent execution");
+  const plan = resolveControlChildPlan(handle, child);
   if (!plan || !childPhaseKinds[child.phase].includes(plan.kind))
     throw Error("Child absent from retained plan");
-  if (await s.installation.leases.read(rootLeaseId(s.execution)))
+  if (await handle.installation.leases.read(rootLeaseId(handle.execution)))
     throw Error("Deadline-only parent must not hold targets");
   if (
     child.recipient === "fixed-cli"
-      ? child.phase !== "data-workflow" || s.installation.installation.role !== "ops-agent"
+      ? child.phase !== "data-workflow" || handle.installation.installation.role !== "ops-agent"
       : child.recipient !== "data-manager" ||
         !["osm", "transit", "fonts", "data-step"].includes(child.phase)
   )
     throw Error("Unauthorized deadline-only edge");
-  if (["osm", "transit", "fonts"].includes(child.phase) && s.kind !== "data.update")
+  if (["osm", "transit", "fonts"].includes(child.phase) && handle.kind !== "data.update")
     throw Error("Only Full Update may delegate data phases");
-  verifyDeadlineEdge(s.kind, child.phase, child.recipient, plan.kind);
+  verifyDeadlineEdge(handle.kind, child.phase, child.recipient, plan.kind);
   const childKey =
     child.recipient === "fixed-cli"
-      ? fixedChildSpawn(s.installation, uuid.parse(child.childKey), child.execution).childKey
+      ? fixedChildSpawn(handle.installation, uuid.parse(child.childKey), child.execution).childKey
       : randomUUID();
   const delegation = dataControlDelegationSchema.parse({
     leaseId: null,
     childKey,
-    owner: s.execution,
-    parent: s.execution,
+    owner: handle.execution,
+    parent: handle.execution,
     execution: child.execution,
     kind: plan.kind,
     phase: child.phase,
     targets: [],
-    origin: s.origin,
+    origin: handle.origin,
   });
-  return withControlDelegationPublication(authority, child.phase, (dir) => {
-    const lifecycle = readLifecycle(dir, s.execution);
-    if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
+  return withControlDelegationPublication(handle, child.phase, (progress) => {
+    if (progress.phase !== "held")
       throw Error("Canceled/terminal execution cannot authorize forward children");
-    prepareControlChildPublication(authority, plan, delegation);
+    prepareControlChildPublication(handle, progress, plan, delegation);
     return delegation;
   });
 }
@@ -1426,6 +1193,7 @@ export function openFixedChildInstallation(options: {
       registeredTargets: new Set(),
       // Fixed children run in the agent's container or its helper: both use the store.
       leases: agentStoreLeases(options.infraDir, "ops-agent"),
+      rows: fileExecutionRows(recovery),
       fixedChildId: childKey,
     };
     const spawn = fixedChildSpawn(state, childKey);
@@ -1464,7 +1232,7 @@ export function fixedChildSpawn(
   return { ...saved, childKey };
 }
 export function retainFixedCliSpawnIntent(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: {
     childKey: string;
     execution: ExecutionRef;
@@ -1476,16 +1244,15 @@ export function retainFixedCliSpawnIntent(
     dataWorkflowInitial?: import("../ops/job-evidence").DataWorkflowReceipt;
   },
 ): void {
-  const s = executionAuthorityState(authority);
-  if (s.installation.installation.role !== "ops-agent" || s.installation.fixedChildId)
+  if (handle.installation.installation.role !== "ops-agent" || handle.installation.fixedChildId)
     throw Error("Only the agent spawns fixed children");
   const id = uuid.parse(input.childKey);
   const operation = opsOperationSchema.parse(input.operation);
-  const slot = [...s.plan, ...s.reservations].find(
+  const slot = [...handle.plan, ...handle.reservations].find(
     (p) => p.execution.executionId === input.execution.executionId && p.recipient === "fixed-cli",
   );
   const plan = slot
-    ? resolveControlChildPlan(authority, {
+    ? resolveControlChildPlan(handle, {
         phase: slot.phase,
         execution: input.execution,
         recipient: "fixed-cli",
@@ -1499,11 +1266,11 @@ export function retainFixedCliSpawnIntent(
   )
     throw Error("Fixed command does not match retained child plan");
   writePrivateRecord(
-    s.installation,
+    handle.installation,
     "spawns",
     `${id}.json`,
     spawnIntentSchema.parse({
-      parent: s.execution,
+      parent: handle.execution,
       execution: input.execution,
       operation,
       ...(input.dataUpdatePlan ? { dataUpdatePlan: input.dataUpdatePlan } : {}),
@@ -1620,52 +1387,29 @@ export function beginFixedCliExecution(
   writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
 }
 
-/** Restore only the original retained admission; this grants no permission to redispatch. */
+/** The original admission only; this grants no permission to dispatch again. */
 export function restoreAdmittedControlExecution(
   installation: ControlInstallation,
   execution: ExecutionRef,
-): VerifiedExecutionAuthority {
+): ExecutionHandle {
   const state = installationState(installation);
-  const raw = readPrivateRecord(state, "executions", `${execution.operationKey}.json`, 65536);
-  const payload = z
-    .object({
-      version: z.literal(2),
-      execution: executionRefSchema,
-      kind: z.string(),
-      serviceIds: targetSchema,
-      origin: controlOriginSchema,
-      plan: z.array(plannedChildSchema).max(64),
-      reservations: z.array(controlChildReservationSchema).max(64).optional(),
-    })
-    .passthrough()
-    .parse(raw);
-  if (controlDigest(payload.execution) !== controlDigest(execution))
+  const row = state.rows.read(execution.operationKey);
+  if (!row) throw missingRow();
+  if (controlDigest(row.admission.execution) !== controlDigest(execution))
     throw Error("Recovery execution ownership mismatch");
-  const authority = Object.freeze({ execution: payload.execution }) as VerifiedExecutionAuthority;
-  authorities.set(authority, {
-    installation: state,
-    execution: payload.execution,
-    kind: payload.kind,
-    serviceIds: payload.serviceIds,
-    plan: payload.plan,
-    reservations: payload.reservations ?? [],
-    receiptDigest: controlDigest(raw),
-    origin: payload.origin,
-  });
-  return authority;
+  return handleOf(state, row.admission);
 }
 /** Fixed local continuation adapter: private retained admission, never a bare request identity. */
 export function verifiedRetainedControlParent(
   installation: ControlInstallation,
   execution: ExecutionRef,
 ): import("../ops/execution-identity").VerifiedParentExecution {
-  const authority = restoreAdmittedControlExecution(installation, execution);
-  const s = executionAuthorityState(authority);
+  const handle = restoreAdmittedControlExecution(installation, execution);
   const parent = Object.freeze(
     retainedControlParent(execution),
   ) as import("../ops/execution-identity").VerifiedParentExecution;
   verifiedParents.add(parent);
-  verifiedParentOrigins.set(parent, s.origin);
+  verifiedParentOrigins.set(parent, handle.origin);
   return parent;
 }
 /** Whether the agent journal records this maintenance or handoff preparation
@@ -1722,29 +1466,28 @@ export function verifyControlPreparedTerminal(
 /** Target acquisition observes only its original data-phase owner and all three
  * recorded, physically settled DM children. No progress object is authority. */
 export async function verifyDataUpdatePrerequisites(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   transport: DataManagerTransport | undefined,
   signal?: AbortSignal,
 ) {
-  const s = executionAuthorityState(authority);
-  if (s.kind !== "data.update" || s.installation.fixedChildId)
+  if (handle.kind !== "data.update" || handle.installation.fixedChildId)
     throw Error("Original Full Update root required");
-  const name = `data-update-plan-${s.execution.operationKey}.json`,
-    raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
+  const name = `data-update-plan-${handle.execution.operationKey}.json`,
+    raw = readPrivateRecord(handle.installation, "observations", name, 128 * 1024);
   const plan = dataUpdatePlanSchema.parse(raw),
-    infraDir = dirname(s.installation.dataRoot);
+    infraDir = dirname(handle.installation.dataRoot);
   if (
-    controlDigest(plan.parent) !== controlDigest(s.execution) ||
-    opsOperationFingerprint(plan.operation) !== s.execution.operationFingerprint ||
+    controlDigest(plan.parent) !== controlDigest(handle.execution) ||
+    opsOperationFingerprint(plan.operation) !== handle.execution.operationFingerprint ||
     currentConfigurationGeneration(infraDir) !== plan.revisionId ||
     dataUpdateSourcesDigest(infraDir) !== plan.sourcesDigest
   )
     throw Error("Original Full Update sources changed");
   let childInstallation: ControlInstallation | undefined;
   try {
-    let dataAuthority = authority;
-    if (s.execution.executor === "ops-agent") {
-      const attempt = lookupControlChildPhaseAttempt(authority, {
+    let dataHandle = handle;
+    if (handle.execution.executor === "ops-agent") {
+      const attempt = lookupControlChildPhaseAttempt(handle, {
         phase: "data-workflow",
         ordinal: 0,
       });
@@ -1753,14 +1496,12 @@ export async function verifyDataUpdatePrerequisites(
         infraDir,
         child: { leaseId: attempt.leaseId, childKey: attempt.childKey },
       });
-      dataAuthority = restoreAdmittedControlExecution(childInstallation, attempt.execution);
-      const settlement = childSettlementState(
-        verifyControlEffectSettlement(childInstallation, attempt.execution),
-      ).evidence;
+      dataHandle = restoreAdmittedControlExecution(childInstallation, attempt.execution);
+      const settlement = verifyControlEffectSettlement(childInstallation, attempt.execution);
       if (settlement.outcome !== "committed" || settlement.publication !== "committed")
         throw Error("Full Update data phase unsettled");
     }
-    const receipt = readDataWorkflowProgress(dataAuthority);
+    const receipt = readDataWorkflowProgress(dataHandle);
     if (
       receipt.phase !== "build" ||
       receipt.children.length !== 3 ||
@@ -1769,7 +1510,7 @@ export async function verifyDataUpdatePrerequisites(
       throw Error("Full Update data checkpoint missing");
     if (!transport) throw Error("Full Update prerequisites are read from data-manager");
     for (const [index, slot] of plan.dataChildren.entries()) {
-      const bound = lookupControlChildPhase(dataAuthority, slot);
+      const bound = lookupControlChildPhase(dataHandle, slot);
       if (!bound) throw Error("Full Update prerequisite missing");
       const child = receipt.children[index],
         terminal = await readDataManagerTerminal(bound.execution, transport, signal);
@@ -1830,79 +1571,31 @@ export function validateControlChildReservations(input: {
       throw Error("Reserved receiver execution address mismatch");
   }
 }
-const planSchema = z.lazy(() =>
-  z.strictObject({
-    phase: z.enum(Object.keys(childPhaseKinds) as [ControlChildPhase, ...ControlChildPhase[]]),
-    ordinal: z.number().int().min(0).max(63),
-    kind: z.string(),
-    recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
-    serviceIds: z.array(z.string()).max(256),
-    execution: executionRefSchema,
-  }),
-);
-const publicationSchema = z.discriminatedUnion("state", [
-  z.strictObject({ state: z.literal("unissued") }),
-  z.strictObject({
-    state: z.literal("grant_prepared"),
-    delegation: dataControlDelegationSchema,
-  }),
-]);
-const cellSchema = z.strictObject({
-  version: z.literal(2),
-  origin: controlOriginSchema,
-  parent: executionRefSchema,
-  admissionDigest: digest,
-  reservationDigest: digest,
-  binding: z
-    .strictObject({
-      child: planSchema,
-      boundAt: z.number().int().nonnegative().safe(),
-      requestedDeadlineAt: z.number().int().nonnegative().safe(),
-    })
-    .nullable(),
-  publication: publicationSchema,
-});
-type Cell = z.infer<typeof cellSchema>;
-const cellName = (authority: VerifiedExecutionAuthority, ordinal: number) =>
-  `phase-${authority.execution.operationKey}-${ordinal}.json`;
 function reservation(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  const state = executionAuthorityState(authority);
-  const value = state.reservations.find(
+  const value = handle.reservations.find(
     (r) => r.phase === input.phase && r.ordinal === input.ordinal,
   );
   if (!value) throw Error("Phase is absent from immutable reservations");
-  return { state, value };
+  return value;
 }
-function readCell(
-  authority: VerifiedExecutionAuthority,
+/** The reserved child's cell, checked against its reservation. */
+function cellOf(
+  handle: ExecutionHandle,
+  progress: ExecutionProgress,
   input: { phase: ControlChildPhase; ordinal: number },
-): Cell {
-  const { state, value } = reservation(authority, input);
-  const raw = readPrivateRecord(
-    state.installation,
-    "observations",
-    cellName(authority, input.ordinal),
-    8192,
-  );
-  const cell = cellSchema.parse(raw);
-  if (
-    controlDigest(cell.origin) !== controlDigest(state.origin) ||
-    controlDigest(cell.parent) !== controlDigest(state.execution) ||
-    cell.admissionDigest !== state.receiptDigest ||
-    cell.reservationDigest !== controlDigest(value)
-  )
-    throw Error("Reserved phase binding identity changed");
+): ChildCell {
+  const value = reservation(handle, input);
+  const cell = progress.children.find((entry) => entry.ordinal === input.ordinal);
+  if (!cell) throw Error("Reserved phase binding identity changed");
   if (cell.binding) {
     const { child, boundAt, requestedDeadlineAt } = cell.binding;
     const expected = {
       phase: value.phase,
       ordinal: value.ordinal,
       kind: value.kind,
-      recipient: value.recipient,
-      serviceIds: value.serviceIds,
       execution: {
         ...value.execution,
         operationFingerprint: value.operationFingerprint,
@@ -1911,189 +1604,103 @@ function readCell(
           kind: value.kind,
           operationFingerprint: value.operationFingerprint,
           deadlineAt: requestedDeadlineAt,
-          parent: retainedControlParent(state.execution),
+          parent: retainedControlParent(handle.execution),
         }),
       },
+      serviceIds: value.serviceIds,
+      recipient: value.recipient,
     };
     if (
       requestedDeadlineAt <= boundAt ||
-      requestedDeadlineAt > state.execution.deadlineAt ||
+      requestedDeadlineAt > handle.execution.deadlineAt ||
       controlDigest(child) !== controlDigest(expected)
     )
       throw Error("Reserved phase exact identity mismatch");
-  } else if (cell.publication.state !== "unissued")
-    throw Error("An unbound phase cannot have a grant");
+  } else if (cell.delegation) throw Error("An unbound phase cannot have a grant");
   return cell;
 }
-function writeCell(
-  authority: VerifiedExecutionAuthority,
-  ordinal: number,
-  cell: Cell,
-  exclusive = false,
-) {
-  const state = executionAuthorityState(authority);
-  const record = cellSchema.parse(cell);
-  if (Buffer.byteLength(canonicalJson(record)) > 8192)
-    throw Error("Phase binding capacity exceeded");
-  writePrivateRecord(
-    state.installation,
-    "observations",
-    cellName(authority, ordinal),
-    record,
-    exclusive,
-  );
-}
-/** Called by durable admission before any forward witness/effect becomes ready. */
-export function initializeControlChildReservations(authority: VerifiedExecutionAuthority): void {
-  const state = executionAuthorityState(authority);
-  const cells = state.reservations.map((r) => ({
-    r,
-    cell: cellSchema.parse({
-      version: 2,
-      origin: state.origin,
-      parent: state.execution,
-      admissionDigest: state.receiptDigest,
-      reservationDigest: controlDigest(r),
-      binding: null,
-      publication: { state: "unissued" },
-    }),
-  }));
-  // Bound exact identities, decimal epoch lengths and UUID/digest publication
-  // fields have fixed maxima. Budget their complete records up front.
-  const maximum = cells.reduce((total, { r, cell }) => {
-    const largestExecution = {
-      executor: "ops-agent",
-      principal: "data-manager",
-      executionId: "f".repeat(68),
-      operationKey: "f".repeat(69),
-      operationFingerprint: "f".repeat(64),
-      fingerprint: "f".repeat(64),
-      deadlineAt: Number.MAX_SAFE_INTEGER,
-    };
-    const largest = {
-      ...cell,
-      binding: {
-        boundAt: Number.MAX_SAFE_INTEGER,
-        requestedDeadlineAt: Number.MAX_SAFE_INTEGER,
-        child: {
-          phase: r.phase,
-          ordinal: r.ordinal,
-          kind: r.kind,
-          recipient: r.recipient,
-          serviceIds: r.serviceIds,
-          execution: {
-            ...r.execution,
-            operationFingerprint: r.operationFingerprint,
-            deadlineAt: Number.MAX_SAFE_INTEGER,
-            fingerprint: "f".repeat(64),
-          },
-        },
-      },
-      publication: {
-        state: "grant_prepared",
-        delegation: {
-          leaseId: "f".repeat(36),
-          childKey: "f".repeat(36),
-          owner: largestExecution,
-          parent: largestExecution,
-          execution: largestExecution,
-          kind: r.kind,
-          phase: r.phase,
-          targets: r.serviceIds,
-          origin: state.origin,
-        },
-      },
-    };
-    const size = Buffer.byteLength(canonicalJson(largest));
-    if (size > 8192) throw Error("Phase binding cell capacity exceeded");
-    return total + size;
-  }, 0);
-  if (maximum > 128 * 1024) throw Error("Phase binding aggregate capacity exceeded");
-  for (const { r, cell } of cells) writeCell(authority, r.ordinal, cell, true);
-}
 export function lookupControlChildPhase(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ): ControlPlannedChild | null {
-  return readCell(authority, input).binding?.child ?? null;
+  return cellOf(handle, progressOf(handle), input).binding?.child ?? null;
 }
 export async function bindControlChildPhase(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ): Promise<ControlPlannedChild> {
-  const retained = readCell(authority, input);
+  const retained = cellOf(handle, progressOf(handle), input);
   if (retained.binding) return retained.binding.child;
-  return withControlDelegationPublication(authority, input.phase, () => {
-    const current = readCell(authority, input);
-    if (current.binding) return current.binding.child;
-    const { state, value } = reservation(authority, input),
-      boundAt = Date.now();
-    const requestedDeadlineAt = Math.min(
-      state.execution.deadlineAt,
-      boundAt + opsExecutionBudget(value.kind).processMs,
-    );
-    const normalized = normalizeExecutionAdmission({
-      kind: value.kind,
-      operationKey: value.execution.operationKey,
+  const value = reservation(handle, input),
+    boundAt = Date.now();
+  const requestedDeadlineAt = Math.min(
+    handle.execution.deadlineAt,
+    boundAt + opsExecutionBudget(value.kind).processMs,
+  );
+  const normalized = normalizeExecutionAdmission({
+    kind: value.kind,
+    operationKey: value.execution.operationKey,
+    operationFingerprint: value.operationFingerprint,
+    admittedAt: boundAt,
+    requestedDeadlineAt,
+    parent: verifiedRetainedControlParent(handle.installation.installation, handle.execution),
+  });
+  const child: ControlPlannedChild = {
+    phase: value.phase,
+    ordinal: value.ordinal,
+    kind: value.kind,
+    execution: {
+      ...value.execution,
       operationFingerprint: value.operationFingerprint,
-      admittedAt: boundAt,
+      deadlineAt: normalized.deadlineAt,
+      fingerprint: normalized.fingerprint,
+    },
+    serviceIds: [...value.serviceIds],
+    recipient: value.recipient,
+  };
+  return withControlDelegationPublication(handle, input.phase, (progress) => {
+    const current = cellOf(handle, progress, input);
+    if (current.binding) return current.binding.child;
+    current.binding = {
+      child: { ...child, serviceIds: [...child.serviceIds] },
+      boundAt,
       requestedDeadlineAt,
-      parent: verifiedRetainedControlParent(state.installation.installation, state.execution),
-    });
-    const child = {
-      phase: value.phase,
-      ordinal: value.ordinal,
-      kind: value.kind,
-      recipient: value.recipient,
-      serviceIds: [...value.serviceIds],
-      execution: {
-        ...value.execution,
-        operationFingerprint: value.operationFingerprint,
-        deadlineAt: normalized.deadlineAt,
-        fingerprint: normalized.fingerprint,
-      },
     };
-    writeCell(authority, value.ordinal, {
-      ...current,
-      binding: { child, boundAt, requestedDeadlineAt },
-    });
     return child;
   });
 }
-/** Internal fixed issuer hook, invoked while the actual publication guards are held. */
+/** Records the grant of a bound reserved child; called with the progress `withControlDelegationPublication` saves. */
 export function prepareControlChildPublication(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
+  progress: ExecutionProgress,
   input: { phase: ControlChildPhase; ordinal: number },
   delegation: ControlDelegation,
 ): void {
-  assertControlPublicationScope(authority);
-  const state = executionAuthorityState(authority);
-  if (!state.reservations.some((r) => r.phase === input.phase && r.ordinal === input.ordinal))
+  if (!handle.reservations.some((r) => r.phase === input.phase && r.ordinal === input.ordinal))
     return;
-  const cell = readCell(authority, input);
-  if (!cell.binding || cell.publication.state !== "unissued")
+  const cell = cellOf(handle, progress, input);
+  if (!cell.binding || cell.delegation)
     throw Error("Reserved phase publication requires observation");
-  writeCell(authority, input.ordinal, {
-    ...cell,
-    publication: { state: "grant_prepared", delegation },
-  });
+  cell.delegation = delegation;
 }
 export function inspectControlChildPublication(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  const cell = readCell(authority, input);
+  const cell = cellOf(handle, progressOf(handle), input);
   return {
     binding: cell.binding,
-    publication: cell.publication,
+    publication: cell.delegation
+      ? { state: "grant_prepared" as const, delegation: cell.delegation }
+      : { state: "unissued" as const },
     bindingDigest: controlDigest(cell.binding),
   };
 }
 export function lookupControlChildPhaseBinding(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  const cell = readCell(authority, input);
+  const cell = cellOf(handle, progressOf(handle), input);
   return cell.binding
     ? Object.freeze({ ...cell.binding, bindingDigest: controlDigest(cell.binding) })
     : null;
@@ -2101,18 +1708,17 @@ export function lookupControlChildPhaseBinding(
 /** The child an attempted phase issued, for observation and cancellation only.
  * This returns no ticket and never repairs or reissues a missing attempt. */
 export function lookupControlChildPhaseAttempt(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
-  const cell = readCell(authority, input),
-    s = executionAuthorityState(authority);
-  if (cell.publication.state === "unissued") return null;
+  const cell = cellOf(handle, progressOf(handle), input);
+  if (!cell.delegation) return null;
   if (!cell.binding) throw Error("Attempted phase has no exact binding");
-  const delegation = cell.publication.delegation;
+  const delegation = cell.delegation;
   if (
     delegation.kind !== cell.binding.child.kind ||
     controlDigest(delegation.execution) !== controlDigest(cell.binding.child.execution) ||
-    controlDigest(delegation.parent) !== controlDigest(s.execution)
+    controlDigest(delegation.parent) !== controlDigest(handle.execution)
   )
     throw Error("Original phase child identity changed");
   return Object.freeze({
@@ -2125,22 +1731,21 @@ export function lookupControlChildPhaseAttempt(
   });
 }
 export function resolveControlChildPlan(
-  authority: VerifiedExecutionAuthority,
+  handle: ExecutionHandle,
   input: { phase: ControlChildPhase; execution: ExecutionRef; recipient: ControlRecipient },
 ): ControlPlannedChild | undefined {
-  const state = executionAuthorityState(authority);
-  const exact = state.plan.find(
+  const exact = handle.plan.find(
     (p) =>
       p.phase === input.phase &&
       p.recipient === input.recipient &&
       controlDigest(p.execution) === controlDigest(input.execution),
   );
   if (exact) return exact;
-  const slot = state.reservations.find(
+  const slot = handle.reservations.find(
     (r) => r.phase === input.phase && r.execution.operationKey === input.execution.operationKey,
   );
   if (!slot) return undefined;
-  const bound = lookupControlChildPhase(authority, slot);
+  const bound = lookupControlChildPhase(handle, slot);
   if (
     bound &&
     bound.recipient === input.recipient &&
@@ -2154,11 +1759,10 @@ export function resolveControlChildPlan(
  * Checks that the execution's own root is released: its own effect settled
  * with a known outcome and its lease is gone from the store.
  */
-export function verifyLocalArtifactTargetRootRelease(authority: VerifiedExecutionAuthority): void {
-  if (!localRootReleased(authority)) throw Error("Original root release is not proved");
+export function verifyLocalArtifactTargetRootRelease(handle: ExecutionHandle): void {
+  if (!localRootReleased(handle)) throw Error("Original root release is not proved");
 }
-export function localRootReleased(authority: VerifiedExecutionAuthority): boolean {
-  const a = executionAuthorityState(authority);
-  childSettlementState(verifyControlEffectSettlement(a.installation.installation, a.execution));
-  return !requireLocalLeases(a.installation.leases).readSync(rootLeaseId(a.execution));
+export function localRootReleased(handle: ExecutionHandle): boolean {
+  verifyControlEffectSettlement(handle.installation.installation, handle.execution);
+  return !requireLocalLeases(handle.installation.leases).readSync(rootLeaseId(handle.execution));
 }

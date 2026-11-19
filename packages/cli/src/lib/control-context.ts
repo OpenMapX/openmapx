@@ -9,6 +9,7 @@ import {
   type ControlInstallation,
   closeArtifactTargetLeaseHandle,
   closeControlInstallation,
+  type ExecutionHandle,
   openFixedChildInstallation,
   pruneControlRecords,
   readFixedCliSpawnIntent,
@@ -16,7 +17,6 @@ import {
   retainControlEffectReceipt,
   retainDataUpdatePlan,
   settleArtifactTargetLeaseChild,
-  type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
   verifiedRetainedControlParent,
   verifyControlEffectSettlement,
@@ -31,7 +31,7 @@ const fixedChildSchema = z.strictObject({
   childKey: z.uuid(),
 });
 const contexts = new AsyncLocalStorage<{
-  authority: VerifiedExecutionAuthority;
+  authority: ExecutionHandle;
   installation: ControlInstallation;
   lease?: BorrowedArtifactTargetLease;
   dataWorkflowInitial?: import("@openmapx/core/ops").DataWorkflowReceipt;
@@ -99,7 +99,7 @@ export async function withCliControlContext<T>(
       parent = verifiedRetainedControlParent(installation, intent.parent);
     }
     // The lease grant's parent is verified in admission; role fingerprints were checked by the fixed runner.
-    const authority = retainAdmittedControlExecution(installation, {
+    const authority = await retainAdmittedControlExecution(installation, {
       execution,
       kind: intent.operation.kind,
       operation: intent.operation,
@@ -137,7 +137,7 @@ export async function withCliControlContext<T>(
       }
       if (process.exitCode && Number(process.exitCode) !== 0)
         throw Error("Fixed CLI command failed");
-      retainControlEffectReceipt(authority, {
+      await retainControlEffectReceipt(authority, {
         outcome: "committed",
         publication: "committed",
         receipt: { kind: "fixed-cli-exit", args: [...args], exitCode: 0 },
@@ -149,7 +149,7 @@ export async function withCliControlContext<T>(
         );
       return result;
     } catch (e) {
-      retainControlEffectReceipt(authority, {
+      await retainControlEffectReceipt(authority, {
         outcome: "unknown",
         publication: "unknown",
         receipt: { kind: "unresolved" },
@@ -169,7 +169,7 @@ export async function withCliControlContext<T>(
 
 export function withHostDataControlContext<T>(
   installation: ControlInstallation,
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   run: () => Promise<T>,
 ): Promise<T> {
   if (contexts.getStore()) throw Error("Existing CLI control context");

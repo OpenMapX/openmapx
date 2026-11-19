@@ -42,7 +42,7 @@ it("renewal refuses an expired timed root after all original identity details we
     }),
   };
   try {
-    expect(() =>
+    await expect(
       c.retainAdmittedControlExecution(installation, {
         execution,
         operation,
@@ -51,7 +51,7 @@ it("renewal refuses an expired timed root after all original identity details we
         requestedDeadlineAt: expiredAt,
         serviceIds: ["osrm"],
       }),
-    ).toThrow(/expired|expiry|deadline/i);
+    ).rejects.toThrow(/expired|expiry|deadline/i);
     expect(existsSync(join(root, `state/host-cli/control/executions/${operationKey}.json`))).toBe(
       false,
     );
@@ -176,7 +176,7 @@ it("lets a fixed CLI child without a lease follow its parent's lifecycle", async
     serviceIds: ["osrm"],
     recipient: "data-manager" as const,
   };
-  const authority = c.retainAdmittedControlExecution(agent, {
+  const authority = await c.retainAdmittedControlExecution(agent, {
     requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
@@ -203,7 +203,7 @@ it("lets a fixed CLI child without a lease follow its parent's lifecycle", async
   expect(c.controlIdentity(fixed)).toBe(id);
   const intent = c.readFixedCliSpawnIntent(fixed, cli, args);
   const parent = c.verifiedRetainedControlParent(fixed, intent.parent);
-  const cliAuthority = c.retainAdmittedControlExecution(fixed, {
+  const cliAuthority = await c.retainAdmittedControlExecution(fixed, {
     requestedDeadlineAt: cli.deadlineAt,
     execution: cli,
     kind: operation.kind,
@@ -216,7 +216,7 @@ it("lets a fixed CLI child without a lease follow its parent's lifecycle", async
   const next = await c.attestParentExecution(cliAuthority, leaf);
   const remoteParent = () => c.inspectRemoteDelegation(dm, next, "ops-agent").parent;
   expect(remoteParent()).toMatchObject({ operationKey: cli.operationKey });
-  c.cancelControlExecution(authority);
+  await c.cancelControlExecution(authority);
   expect(() => c.assertControlExecutionForward(cliAuthority)).toThrow(/ancestor|observation/);
   // An exact retry of the admitted child stays readable after the cancellation.
   expect(remoteParent()).toMatchObject({ operationKey: cli.operationKey });
@@ -269,7 +269,7 @@ async function deadlineFamily() {
       operationKey: c.controlChildOperationKey(execution.operationKey, "osm", 0),
     },
   };
-  const authority = c.retainAdmittedControlExecution(agent, {
+  const authority = await c.retainAdmittedControlExecution(agent, {
     requestedDeadlineAt: execution.deadlineAt,
     execution,
     operation,
@@ -289,7 +289,7 @@ async function deadlineFamily() {
 it("terminal deadline-only parent cannot mint an unattempted child", async () => {
   const f = await deadlineFamily();
   try {
-    f.c.retainControlEffectReceipt(f.authority, {
+    await f.c.retainControlEffectReceipt(f.authority, {
       outcome: "failed_without_effect",
       publication: "not_started",
       receipt: { kind: "not-started" },
@@ -307,10 +307,10 @@ it.each([false, true])(
     try {
       if (attempted) await f.grant();
       // The parent cancels the returned children over data-manager's route.
-      const children = f.c.cancelControlExecution(f.authority);
+      const children = await f.c.cancelControlExecution(f.authority);
       expect(children).toHaveLength(attempted ? 1 : 0);
       await expect(f.grant()).rejects.toThrow(/cancel|forward|observation/);
-      expect(() => f.c.beginControlEffect(f.authority)).toThrow(/cancel|forward/);
+      await expect(f.c.beginControlEffect(f.authority)).rejects.toThrow(/cancel|forward/);
     } finally {
       f.c.closeControlInstallation(f.dm);
       f.c.closeControlInstallation(f.agent);

@@ -4,11 +4,10 @@ import { join } from "node:path";
 import {
   buildArtifactSpec,
   controlDigest,
-  executionAuthorityState,
+  type ExecutionHandle,
   inspectGenerationLinks,
   readGenerationHardlinkPlan,
   readPrivateRecord,
-  type VerifiedExecutionAuthority,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -62,9 +61,9 @@ const planSchema = z.strictObject({
     .default(null),
 });
 type ImportPlan = z.infer<typeof planSchema>;
-const name = (a: VerifiedExecutionAuthority) => `artifact-import-${a.execution.operationKey}.json`;
-function originalImportPlan(authority: VerifiedExecutionAuthority) {
-  const owner = executionAuthorityState(authority);
+const name = (a: ExecutionHandle) => `artifact-import-${a.execution.operationKey}.json`;
+function originalImportPlan(authority: ExecutionHandle) {
+  const owner = authority;
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import owner required");
   const raw = readPrivateRecord(owner.installation, "observations", name(authority), 8192);
   return planSchema.parse(raw);
@@ -228,8 +227,8 @@ export async function prepareArtifactImportAdmission(
     throw new OpsExecutionFailure("validation", {});
   return plan;
 }
-export function retainArtifactImportPlan(authority: VerifiedExecutionAuthority, plan: ImportPlan) {
-  const owner = executionAuthorityState(authority);
+export function retainArtifactImportPlan(authority: ExecutionHandle, plan: ImportPlan) {
+  const owner = authority;
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import root required");
   writePrivateRecord(
     owner.installation,
@@ -388,7 +387,7 @@ export function installPreparedImportRuntime(
 /** A settled import's publication and its hardlink follow-up, read back for a claim. */
 export function inspectSettledImport(
   runtime: OpsRuntime,
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   revisionId: string | null | undefined,
 ) {
   const source = sources.get(runtime);
@@ -421,7 +420,7 @@ export async function recoverPreparedImportFiles(
   const published = inspectArtifactPublication(authority);
   if (!published)
     return services.withConfigurationGenerationWriter(source.infraDir, async () => {
-      retainUnstartedArtifactImport(authority);
+      await retainUnstartedArtifactImport(authority);
       return { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
     });
   if (published.phase === "committed") {

@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import {
   buildFixedConfigurationMaintenancePlan,
   type ControlInstallation,
-  executionAuthorityState,
   type FixedConfigurationMaintenancePlan,
   readPrivateRecord,
   verifyConfigurationReleaseSourceWitness,
@@ -114,7 +113,7 @@ function maintenanceStepOf(
 ) {
   if (!context.controlAuthority || !context.artifactLease || !operation.maintenanceId)
     throw Error("Maintenance step child required");
-  const child = executionAuthorityState(context.controlAuthority),
+  const child = context.controlAuthority,
     file = readMaintenance(child.installation.installation, operation.maintenanceId),
     step = file.record.steps.find((value) => value.operationKey === child.execution.operationKey),
     planned = file.plan.steps.find((value) => value.operationKey === child.execution.operationKey);

@@ -30,7 +30,7 @@ it("admits the application update target closure using the production Data Manag
     fingerprint: executionFingerprint({ kind, operationFingerprint, deadlineAt }),
   };
   try {
-    expect(() =>
+    await expect(
       control.retainAdmittedControlExecution(dm, {
         execution,
         kind,
@@ -53,8 +53,8 @@ it("admits the application update target closure using the production Data Manag
           "well-known",
         ],
       }),
-    ).not.toThrow();
-    expect(() =>
+    ).resolves.toBeDefined();
+    await expect(
       control.retainAdmittedControlExecution(dm, {
         execution,
         kind,
@@ -63,7 +63,7 @@ it("admits the application update target closure using the production Data Manag
         requestedDeadlineAt: deadlineAt,
         serviceIds: ["unregistered-service"],
       }),
-    ).toThrow("Unregistered execution role/targets");
+    ).rejects.toThrow("Unregistered execution role/targets");
   } finally {
     control.closeControlInstallation(dm);
     rmSync(root, { recursive: true, force: true });

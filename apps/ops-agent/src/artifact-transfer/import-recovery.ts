@@ -54,7 +54,7 @@ export function createImportRecovery(options: {
         table.leases.set(job.operationId, lease);
         const publication = inspectArtifactPublication(authority);
         if (publication?.phase !== "committed") {
-          cancelControlExecution(authority);
+          await cancelControlExecution(authority);
           await cancelArtifactTargetLease(lease);
         }
         const signal = AbortSignal.timeout(30000),
@@ -68,7 +68,7 @@ export function createImportRecovery(options: {
         const context = options.runner.contextFor(job, signal, claim),
           result = await recoverPreparedImportFiles(options.runtime, context);
         if (result) {
-          retainControlEffectReceipt(authority, {
+          await retainControlEffectReceipt(authority, {
             outcome: result.outcome === "committed" ? "committed" : "contained",
             publication: result.outcome === "committed" ? "committed" : "not_started",
             receipt: { kind: "ops-result", result },
@@ -129,8 +129,8 @@ export function createImportRecovery(options: {
         found.claim.use === "validate-build"
       ) {
         const validation = await artifactTransfers.recoverPreparedValidation(authority);
-        cancelControlExecution(authority);
-        retainControlEffectReceipt(authority, {
+        await cancelControlExecution(authority);
+        await retainControlEffectReceipt(authority, {
           outcome: "committed",
           publication: "committed",
           receipt: { kind: "ops-result", result: validation },
@@ -163,7 +163,7 @@ export function createImportRecovery(options: {
       try {
         const authority = restoreAdmittedControlExecution(installation, executionFor(job));
         lease = restoreArtifactTargetLeaseForSettlement(authority);
-        cancelControlExecution(authority);
+        await cancelControlExecution(authority);
         await cancelArtifactTargetLease(lease);
       } catch {
         /* Released or unverifiable roots grant no new cancellation authority. */

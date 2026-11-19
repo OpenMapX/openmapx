@@ -12,6 +12,7 @@ import {
   closeArtifactTargetLeaseHandle,
   consumeControlChildDispatch,
   controlDigest,
+  type ExecutionHandle,
   inspectArtifactDelegation,
   inspectConfigurationPreEffectRefusal,
   issueControlChildPhase,
@@ -27,7 +28,6 @@ import {
   retainControlEffectReceipt,
   settleArtifactTargetLeaseChild,
   settleIssuedLeaseChild,
-  type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
   verifyControlEffectSettlement,
   verifyLocalControlPeer,
@@ -52,7 +52,7 @@ import {
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import {
-  childSettlementState,
+  executionSettled,
   inspectConfigurationGenerationNonCommit,
 } from "../../../packages/core/src/build-artifacts/execution-record";
 import type { ControlChildReservation } from "../../../packages/core/src/build-artifacts/lease-store";
@@ -150,7 +150,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
   };
   /** The lease handle of each preparation while its operation runs. */
   const preparing = new Map<string, ArtifactTargetLease>();
-  const root = (file: MaintenanceFile): VerifiedExecutionAuthority =>
+  const root = (file: MaintenanceFile): ExecutionHandle =>
     restoreAdmittedControlExecution(installation, file.plan.prepare);
   const reservationOf = (file: MaintenanceFile, phase: string, ordinal?: number) => {
     const found = file.plan.reservations.find(
@@ -175,7 +175,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
 
   /** Settles one agent-run step child from its run, as the server settles an operation. */
   async function settleStep(
-    authority: VerifiedExecutionAuthority,
+    authority: ExecutionHandle,
     lease: Parameters<typeof settleArtifactTargetLeaseChild>[0],
     execution: ExecutionRef,
     operation: OpsOperation,
@@ -205,7 +205,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       (isReportedProcessFailure(run.error) ||
         isReportedProcessFailure((run.error as { cause?: unknown } | undefined)?.cause));
     if (!recorded)
-      retainControlEffectReceipt(authority, {
+      await retainControlEffectReceipt(authority, {
         outcome: succeeded ? "committed" : reported ? "contained" : "unknown",
         publication: succeeded || reported ? "committed" : "unknown",
         receipt: succeeded
@@ -216,7 +216,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       });
     const evidence = verifyControlEffectSettlement(installation, execution);
     await settleArtifactTargetLeaseChild(lease, evidence);
-    return childSettlementState(evidence).evidence.outcome;
+    return evidence.outcome;
   }
 
   const adapters: MaintenanceAdapters = {
@@ -378,7 +378,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         serviceIds: inspected.serviceIds,
       });
       try {
-        const childAuthority = retainAdmittedControlExecution(installation, {
+        const childAuthority = await retainAdmittedControlExecution(installation, {
           execution,
           kind: operation.kind,
           operation,
@@ -624,14 +624,8 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       // ends. A preparation that ended without one is receipted from the record:
       // a fence data-manager prepared, or one settled through recovery, is its
       // effect; otherwise nothing ran under it. The receipt lets the records go.
-      if (
-        readPrivateRecord(
-          installationState(installation),
-          "effects",
-          `${file.plan.prepare.operationKey}.json`,
-        ) === null
-      )
-        retainControlEffectReceipt(
+      if (!executionSettled(authority))
+        await retainControlEffectReceipt(
           authority,
           record.fence || record.fenceOutcome
             ? {

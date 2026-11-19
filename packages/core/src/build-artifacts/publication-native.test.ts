@@ -85,8 +85,8 @@ it.each(["old-directory", "build-record"])(
       installation,
       executionRefSchema.parse(state.execution),
     );
-    expect(control.executionAuthorityState(authority).receiptDigest).toBe(state.admissionDigest);
-    control.cancelControlExecution(authority);
+    expect(authority.receiptDigest).toBe(state.admissionDigest);
+    await control.cancelControlExecution(authority);
     const lease = leases.restoreArtifactTargetLeaseForSettlement(authority);
     cleanup.push(() => leases.closeArtifactTargetLeaseHandle(lease));
     expect(lease.leaseId).toBe(state.leaseId);
@@ -115,7 +115,7 @@ it.each(["old-directory", "build-record"])(
       reason: "failed",
     });
     expect(() => leases.verifyLocalArtifactTargetRootRelease(authority)).toThrow();
-    control.retainControlEffectReceipt(authority, {
+    await control.retainControlEffectReceipt(authority, {
       outcome: "contained",
       publication: "not_started",
       receipt: {

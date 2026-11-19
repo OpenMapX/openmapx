@@ -100,7 +100,7 @@ async function fixture() {
       },
     }),
   });
-  function context(ownerId = "fixture-admin"): OpsExecutionContext {
+  async function context(ownerId = "fixture-admin"): Promise<OpsExecutionContext> {
     const operation = opsOperationSchema.parse({
         kind: "artifactTransfer.validate",
         stageId: stage.stageId,
@@ -129,7 +129,7 @@ async function fixture() {
       deadlineAt: admission.deadlineAt,
       fingerprint: admission.fingerprint,
     };
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       kind: operation.kind,
       operation,
@@ -162,7 +162,7 @@ async function fixture() {
 }
 it("validates prepared upload under its actual retained execution and returns the same ready stage on replay", async () => {
   const f = await fixture();
-  const ctx = f.context();
+  const ctx = await f.context();
   const result = await f.store.validatePreparedArtifact(ctx);
   expect(result).toMatchObject({
     stageId: f.stage.stageId,
@@ -173,7 +173,9 @@ it("validates prepared upload under its actual retained execution and returns th
 });
 it("refuses a different owner before claiming prepared bytes", async () => {
   const f = await fixture();
-  await expect(f.store.validatePreparedArtifact(f.context("foreign-admin"))).rejects.toThrow();
+  await expect(
+    f.store.validatePreparedArtifact(await f.context("foreign-admin")),
+  ).rejects.toThrow();
   expect(
     (
       await f.store.getStage({
@@ -187,7 +189,7 @@ it("refuses a different owner before claiming prepared bytes", async () => {
 it("refuses exact manifest capacity before extracting payload and retains conservative stage accounting", async () => {
   const f = await fixture();
   f.setCapacity(1024);
-  await expect(f.store.validatePreparedArtifact(f.context())).rejects.toThrow(/capacity/);
+  await expect(f.store.validatePreparedArtifact(await f.context())).rejects.toThrow(/capacity/);
   const names = readdirSync(join(f.root, "stages", f.stage.stageId)).filter((name) =>
     name.startsWith("prepared-"),
   );
@@ -198,9 +200,9 @@ it("refuses exact manifest capacity before extracting payload and retains conser
 
 it("revalidates the same immutable upload with distinct bounded extraction claims", async () => {
   const f = await fixture();
-  await f.store.validatePreparedArtifact(f.context());
+  await f.store.validatePreparedArtifact(await f.context());
   const previous = await f.store.reservedBytes();
-  expect((await f.store.validatePreparedArtifact(f.context())).state).toBe("ready");
+  expect((await f.store.validatePreparedArtifact(await f.context())).state).toBe("ready");
   expect(await f.store.reservedBytes()).toBeGreaterThan(previous);
   expect(
     readdirSync(join(f.root, "stages", f.stage.stageId)).filter((name) =>
@@ -211,7 +213,7 @@ it("revalidates the same immutable upload with distinct bounded extraction claim
 
 it("rejects a changed execution identity before claiming uploaded bytes", async () => {
   const f = await fixture(),
-    ctx = f.context();
+    ctx = await f.context();
   const changed = {
     ...ctx,
     execution: { ...ctx.execution, executionId: `job1_${randomUUID().replaceAll("-", "")}` },
@@ -232,7 +234,7 @@ it("rejects a changed execution identity before claiming uploaded bytes", async 
 
 it("deletes a settled prepared extraction and releases its reserved bytes idempotently", async () => {
   const f = await fixture();
-  await f.store.validatePreparedArtifact(f.context());
+  await f.store.validatePreparedArtifact(await f.context());
   const retained = join(f.root, "stages", f.stage.stageId);
   expect(readdirSync(retained).some((name) => name.startsWith("prepared-"))).toBe(true);
   await f.store.deleteStage({ stageId: f.stage.stageId, ownerId: "fixture-admin" });
@@ -246,7 +248,7 @@ it("deletes a settled prepared extraction and releases its reserved bytes idempo
 
 it("retains all prepared content and accounting when a descendant was replaced by a link", async () => {
   const f = await fixture();
-  await f.store.validatePreparedArtifact(f.context());
+  await f.store.validatePreparedArtifact(await f.context());
   const retained = join(f.root, "stages", f.stage.stageId);
   const extraction = readdirSync(retained).find((name) => name.startsWith("prepared-"))!;
   const graph = join(retained, extraction, "osrm-graph", "region.osrm");
@@ -264,7 +266,7 @@ it("retains all prepared content and accounting when a descendant was replaced b
 it("deletes a conclusively failed partial extraction without renewing its upload", async () => {
   const f = await fixture();
   f.setCapacity(1024);
-  await expect(f.store.validatePreparedArtifact(f.context())).rejects.toThrow(/capacity/);
+  await expect(f.store.validatePreparedArtifact(await f.context())).rejects.toThrow(/capacity/);
   await f.store.deleteStage({ stageId: f.stage.stageId, ownerId: "fixture-admin" });
   expect(readdirSync(join(f.root, "stages", f.stage.stageId))).toEqual([]);
   expect(await f.store.reservedBytes()).toBe(0);

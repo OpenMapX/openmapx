@@ -104,7 +104,7 @@ beforeEach(async () => {
     hash = opsOperationFingerprint(operation),
     admittedAt = Date.now(),
     deadlineAt = admittedAt + 60000;
-  const authority = retainAdmittedControlExecution(installation, {
+  const authority = await retainAdmittedControlExecution(installation, {
     execution: {
       executor: "ops-agent",
       principal: "api",

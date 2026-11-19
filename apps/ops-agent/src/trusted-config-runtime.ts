@@ -287,7 +287,7 @@ async function commitGeneration(
   } catch (error) {
     const original = configurationGenerationNonCommitForError(error);
     if (original && executionContext?.controlAuthority)
-      retainConfigurationGenerationNonCommit(executionContext.controlAuthority, original);
+      await retainConfigurationGenerationNonCommit(executionContext.controlAuthority, original);
     const problem = operatorProblem(error);
     if (problem) {
       // The agent's log, and the admin panel through configuration.failure.inspect.

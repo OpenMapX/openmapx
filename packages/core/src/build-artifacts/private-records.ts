@@ -6,6 +6,7 @@ import { canonicalJson } from "../ops/canonical-json";
 import { parseControlRootOperationKey } from "../ops/control-root-key";
 import type { ControlIssuer } from "../ops/execution-identity";
 import { type ControlInstallation, type InstallationState, targetSchema } from "./control-records";
+import { type ExecutionRows, fileExecutionRows } from "./execution-rows";
 import { AnchoredDirectory, identity } from "./filesystem";
 import {
   type LeaseBackend,
@@ -106,12 +107,17 @@ export function openControlInstallation(options: {
       dataRoot,
       registeredTargets: new Set(options.serviceIds ?? []),
       leases: options.leases ?? agentStoreLeases(options.infraDir, options.role),
+      rows: fileExecutionRows(privateRoot),
     });
     privateRoot = undefined;
     return installation;
   } finally {
     privateRoot?.close();
   }
+}
+/** Keeps this role's execution rows in `rows`, such as the agent's journal. */
+export function useExecutionRows(installation: ControlInstallation, rows: ExecutionRows): void {
+  installationState(installation).rows = rows;
 }
 export function closeControlInstallation(installation: ControlInstallation) {
   const s = installationState(installation);
@@ -131,9 +137,6 @@ export function writePrivateRecord(
     if (Buffer.byteLength(bytes) > PRIVATE_RECORD_BYTES) throw Error("Private receipt limit");
     if (
       ![
-        "executions",
-        "effects",
-        "effect-started",
         "observations",
         "spawns",
         "spawn-started",

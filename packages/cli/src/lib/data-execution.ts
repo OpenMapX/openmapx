@@ -263,7 +263,7 @@ export async function runCliDataStep(
       deadlineAt: normalized.deadlineAt,
     };
   try {
-    const authority = retainAdmittedControlExecution(installation, {
+    const authority = await retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
@@ -291,7 +291,7 @@ export async function runCliDataStep(
     const result = await withHostDataControlContext(installation, authority, () =>
       runOwnedDataStep(input, transport),
     );
-    retainControlEffectReceipt(authority, {
+    await retainControlEffectReceipt(authority, {
       outcome: "committed",
       publication: "committed",
       receipt: { kind: "data-command", status: result },

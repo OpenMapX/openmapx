@@ -109,7 +109,7 @@ it.each(["promotion", "reload"] as const)(
       serviceIds,
       recipient: "ops-agent" as const,
     };
-    const authority = control.retainAdmittedControlExecution(dm, {
+    const authority = await control.retainAdmittedControlExecution(dm, {
       execution: owner,
       kind: input.kind,
       operation: input,
@@ -1018,7 +1018,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         operationKey: control.controlChildOperationKey(operationKey, "proxy-stage", 0),
       },
     };
-    const authority = control.retainAdmittedControlExecution(dm, {
+    const authority = await control.retainAdmittedControlExecution(dm, {
       execution: parent,
       kind: input.kind,
       operation: input,

@@ -34,12 +34,10 @@ import { DataExecutionPartialResult } from "./data-execution-outcome";
 import {
   beginControlEffect,
   cancelControlExecution,
-  executionAuthorityState,
+  type ExecutionHandle,
   restoreAdmittedControlExecution,
-  settleExecutionLifecycle,
-  type VerifiedExecutionAuthority,
+  settleExecution,
   verifyControlEffectSettlement,
-  withPrivateEffectWriter,
 } from "./execution-record";
 import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 import {
@@ -61,7 +59,7 @@ export type ContainedDataExecution = Readonly<{ [completionBrand]: true }>;
 const completions = new WeakMap<
   ContainedDataExecution,
   {
-    authority: VerifiedExecutionAuthority;
+    authority: ExecutionHandle;
     workerId: string;
     publication: "not_started" | "committed" | "unknown";
     childrenDigest?: string;
@@ -207,8 +205,7 @@ export function createDataExecutionControlJournal(
     restore: z.unknown(),
     backupDigest: z.string().regex(/^[a-f0-9]{64}$/),
   });
-  function recoveryIntent(authority: VerifiedExecutionAuthority) {
-    const s = executionAuthorityState(authority);
+  function recoveryIntent(s: ExecutionHandle) {
     try {
       const proof = recoverySchema.parse(
         readPrivateRecord(
@@ -237,7 +234,7 @@ export function createDataExecutionControlJournal(
   ): Promise<"not_required" | "settled"> {
     const value = await load(execution),
       authority = restoreAdmittedControlExecution(installation, execution),
-      s = executionAuthorityState(authority);
+      s = authority;
     const restore = s.reservations.find((slot) => slot.phase === "proxy-restore");
     const children = value.row.execution_children.map((raw) =>
       z
@@ -329,8 +326,8 @@ export function createDataExecutionControlJournal(
   /** Only the final fixed paired leaf can close a killed activation worker.
    * Its untrusted result is accepted solely by the exact recorded physical receipt.
    * No phase is dispatched and no public status alone proves completion. */
-  async function catalogActivationCompletion(authority: VerifiedExecutionAuthority) {
-    const state = executionAuthorityState(authority),
+  async function catalogActivationCompletion(authority: ExecutionHandle) {
+    const state = authority,
       value = await load(state.execution);
     const input = dataExecutionInputSchema.parse(value.row.execution_input);
     if (
@@ -427,8 +424,7 @@ export function createDataExecutionControlJournal(
       },
     });
   }
-  function readProof(authority: VerifiedExecutionAuthority) {
-    const s = executionAuthorityState(authority);
+  function readProof(s: ExecutionHandle) {
     const proof = terminalSchema.parse(
       readPrivateRecord(local, "observations", `terminal-${s.execution.operationKey}.json`, 8192),
     );
@@ -471,8 +467,7 @@ export function createDataExecutionControlJournal(
       } catch {
         /* Below requires the original retained proxy plan and current row. */
       }
-      const authority = restoreAdmittedControlExecution(installation, execution),
-        s = executionAuthorityState(authority),
+      const s = restoreAdmittedControlExecution(installation, execution),
         value = await load(execution);
       if (
         !s.reservations.some((slot) => slot.phase === "proxy-restore") ||
@@ -501,9 +496,9 @@ export function createDataExecutionControlJournal(
       );
       if (rows.length !== 1) throw Error("Proxy recovery finality repair CAS lost");
     },
-    async retainProxyRecoveryIntent(authority: VerifiedExecutionAuthority, backupDigest: string) {
+    async retainProxyRecoveryIntent(authority: ExecutionHandle, backupDigest: string) {
       const value = await load(authority.execution),
-        s = executionAuthorityState(authority),
+        s = authority,
         restore = s.reservations.find((slot) => slot.phase === "proxy-restore");
       const child = value.row.execution_children
         .map((raw) =>
@@ -547,8 +542,7 @@ export function createDataExecutionControlJournal(
         true,
       );
     },
-    pendingRunnerAttempts(authority: VerifiedExecutionAuthority) {
-      const state = executionAuthorityState(authority);
+    pendingRunnerAttempts(state: ExecutionHandle) {
       if (
         state.installation !== local ||
         !["transit-sync", "catalog.validate"].includes(state.kind)
@@ -571,88 +565,78 @@ export function createDataExecutionControlJournal(
         return [];
       }
     },
-    retainRunnerAttempt(authority: VerifiedExecutionAuthority, request: unknown): void {
-      const state = executionAuthorityState(authority),
-        body = transitousRunnerRequestSchema.parse(request);
+    retainRunnerAttempt(state: ExecutionHandle, request: unknown): void {
+      const body = transitousRunnerRequestSchema.parse(request);
       if (
         state.installation !== local ||
         !["transit-sync", "catalog.validate"].includes(state.kind)
       )
         throw Error("Original transit worker required");
-      withPrivateEffectWriter(state, () => {
-        const name = `runners-${state.execution.operationKey}.json`;
-        let saved: z.infer<typeof runnerJournalSchema> = {
-          version: 1,
-          execution: state.execution,
-          completed: 0,
-          completedDigest: controlDigest([]),
-          attempts: [],
-        };
-        try {
-          saved = runnerJournalSchema.parse(readPrivateRecord(local, "observations", name, 65536));
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-        if (
-          controlDigest(saved.execution) !== controlDigest(state.execution) ||
-          saved.attempts.some((attempt) => attempt.capability === body.capability) ||
-          saved.attempts.length >= 32
-        )
-          throw Error("Runner attempt replay/capacity conflict");
-        const next = { ...saved, attempts: [...saved.attempts, body] };
-        writePrivateRecord(local, "observations", name, next, false);
-      });
+      const name = `runners-${state.execution.operationKey}.json`;
+      let saved: z.infer<typeof runnerJournalSchema> = {
+        version: 1,
+        execution: state.execution,
+        completed: 0,
+        completedDigest: controlDigest([]),
+        attempts: [],
+      };
+      try {
+        saved = runnerJournalSchema.parse(readPrivateRecord(local, "observations", name, 65536));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      if (
+        controlDigest(saved.execution) !== controlDigest(state.execution) ||
+        saved.attempts.some((attempt) => attempt.capability === body.capability) ||
+        saved.attempts.length >= 32
+      )
+        throw Error("Runner attempt replay/capacity conflict");
+      const next = { ...saved, attempts: [...saved.attempts, body] };
+      writePrivateRecord(local, "observations", name, next, false);
     },
-    completeRunnerAttempt(
-      authority: VerifiedExecutionAuthority,
-      request: unknown,
-      result: unknown,
-    ): void {
-      const state = executionAuthorityState(authority),
-        body = transitousRunnerRequestSchema.parse(request),
+    completeRunnerAttempt(state: ExecutionHandle, request: unknown, result: unknown): void {
+      const body = transitousRunnerRequestSchema.parse(request),
         terminal = transitousRunnerResultSchema.parse(result);
-      withPrivateEffectWriter(state, () => {
-        const name = `runners-${state.execution.operationKey}.json`,
-          saved = runnerJournalSchema.parse(readPrivateRecord(local, "observations", name, 65536)),
-          attempt = saved.attempts.find((attempt) => attempt.capability === body.capability);
-        if (
-          controlDigest(saved.execution) !== controlDigest(state.execution) ||
-          !attempt ||
-          canonicalJson(attempt) !== canonicalJson(body)
-        )
-          throw Error("Original runner attempt required");
-        writePrivateRecord(
-          local,
-          "observations",
-          name,
-          {
-            ...saved,
-            completed: saved.completed + 1,
-            completedDigest: controlDigest({
-              previous: saved.completedDigest,
-              attempt: controlDigest(body),
-              result: terminal,
-            }),
-            attempts: saved.attempts.filter((entry) => entry.capability !== body.capability),
-          },
-          false,
-        );
-      });
+      const name = `runners-${state.execution.operationKey}.json`,
+        saved = runnerJournalSchema.parse(readPrivateRecord(local, "observations", name, 65536)),
+        attempt = saved.attempts.find((attempt) => attempt.capability === body.capability);
+      if (
+        controlDigest(saved.execution) !== controlDigest(state.execution) ||
+        !attempt ||
+        canonicalJson(attempt) !== canonicalJson(body)
+      )
+        throw Error("Original runner attempt required");
+      writePrivateRecord(
+        local,
+        "observations",
+        name,
+        {
+          ...saved,
+          completed: saved.completed + 1,
+          completedDigest: controlDigest({
+            previous: saved.completedDigest,
+            attempt: controlDigest(body),
+            result: terminal,
+          }),
+          attempts: saved.attempts.filter((entry) => entry.capability !== body.capability),
+        },
+        false,
+      );
     },
-    async begin(authority: VerifiedExecutionAuthority) {
+    async begin(authority: ExecutionHandle) {
       const value = await load(authority.execution);
       if (value.status.status !== "queued" || value.status.cancellationRequestedAt)
         throw Error("Only a newly admitted data worker may begin");
-      beginControlEffect(authority);
+      await beginControlEffect(authority);
     },
     /** The actual dispatcher promise must contain and await all of its process,
      * transfer, transaction and remote-child continuations before settling. */
     async contain(
-      authority: VerifiedExecutionAuthority,
+      authority: ExecutionHandle,
       worker: Promise<DataExecutionResult>,
       lease?: TargetLeaseAuthority,
     ) {
-      const state = executionAuthorityState(authority);
+      const state = authority;
       if (state.installation !== local) throw Error("Foreign data worker");
       let result: DataExecutionResult | undefined,
         error: unknown,
@@ -748,13 +732,12 @@ export function createDataExecutionControlJournal(
       return { completion, result, error, partial, publication };
     },
     async repairCommittedCatalogActivation(execution: ExecutionRef): Promise<void> {
-      const authority = restoreAdmittedControlExecution(installation, execution),
-        state = executionAuthorityState(authority);
-      if (state.kind !== "catalog.activate")
+      const authority = restoreAdmittedControlExecution(installation, execution);
+      if (authority.kind !== "catalog.activate")
         throw Error("Original catalog activation owner required");
       // This closes all future issuance under the original owner, even when its
       // deadline passed. Every already-issued physical child must be settled.
-      cancelControlExecution(authority);
+      await cancelControlExecution(authority);
       const proof = await catalogActivationCompletion(authority),
         name = `worker-${execution.operationKey}.json`;
       try {
@@ -770,7 +753,7 @@ export function createDataExecutionControlJournal(
     async restoreCompletion(execution: ExecutionRef) {
       const value = await load(execution),
         authority = restoreAdmittedControlExecution(installation, execution),
-        state = executionAuthorityState(authority);
+        state = authority;
       const proof = workerSchema.parse(
         readPrivateRecord(local, "observations", `worker-${execution.operationKey}.json`, 65536),
       );
@@ -828,7 +811,7 @@ export function createDataExecutionControlJournal(
     async containAbandoned(execution: ExecutionRef, publication: "not_started" | "committed") {
       const value = await load(execution),
         authority = restoreAdmittedControlExecution(installation, execution),
-        state = executionAuthorityState(authority),
+        state = authority,
         name = `worker-${execution.operationKey}.json`;
       if (!(LOCAL_DATA_EXECUTION_KINDS as readonly string[]).includes(value.status.kind))
         throw Error("Only an in-process data worker can be abandoned");
@@ -875,7 +858,7 @@ export function createDataExecutionControlJournal(
       const owned = completions.get(completion);
       if (!owned) throw Error("Actual contained data worker required");
       const { authority } = owned,
-        s = executionAuthorityState(authority),
+        s = authority,
         value = await load(authority.execution),
         terminal = dataExecutionStatusSchema.parse(status);
       await assertOwnedProxyRecoverySettled(authority.execution);
@@ -937,70 +920,60 @@ export function createDataExecutionControlJournal(
       }
       const childrenDigest = controlDigest(children),
         digest = dataTerminalReceiptDigest(terminal);
-      return withPrivateEffectWriter(s, () => {
-        let raw: unknown = null;
-        try {
-          raw = readPrivateRecord(
-            local,
-            "observations",
-            `terminal-${s.execution.operationKey}.json`,
-            8192,
-          );
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-        const prior = raw === null ? undefined : readProof(authority);
-        const original = prior?.terminalAt ?? terminalAt;
-        if (
-          prior &&
-          (prior.terminalDigest !== digest ||
-            prior.workerId !== owned.workerId ||
-            prior.childrenDigest !== childrenDigest)
-        )
-          throw Error("Original data terminal tuple is immutable");
-        const payload = terminalSchema.parse({
-          version: 1,
-          phase: "prepared",
-          origin: s.origin,
-          execution: s.execution,
-          admissionDigest: s.receiptDigest,
-          terminalDigest: digest,
-          terminalAt: original,
-          workerId: owned.workerId,
-          childrenDigest,
-        });
-        writePrivateRecord(
+      let raw: unknown = null;
+      try {
+        raw = readPrivateRecord(
           local,
           "observations",
           `terminal-${s.execution.operationKey}.json`,
-          payload,
-          false,
+          8192,
         );
-        const receipt = {
-            kind: "data-execution" as const,
-            status: terminal,
-            workerId: owned.workerId,
-            childrenDigest,
-          },
-          outcome =
-            terminal.publication === "committed" ? ("committed" as const) : ("contained" as const);
-        const effect = {
-          identity: s.execution,
-          outcome,
-          publication: terminal.publication,
-          terminalReceiptDigest: controlDigest(receipt),
-          receipt,
-        };
-        settleExecutionLifecycle(s);
-        writePrivateRecord(local, "effects", `${s.execution.operationKey}.json`, effect, false);
-        return original;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      const prior = raw === null ? undefined : readProof(authority);
+      const original = prior?.terminalAt ?? terminalAt;
+      if (
+        prior &&
+        (prior.terminalDigest !== digest ||
+          prior.workerId !== owned.workerId ||
+          prior.childrenDigest !== childrenDigest)
+      )
+        throw Error("Original data terminal tuple is immutable");
+      const payload = terminalSchema.parse({
+        version: 1,
+        phase: "prepared",
+        origin: s.origin,
+        execution: s.execution,
+        admissionDigest: s.receiptDigest,
+        terminalDigest: digest,
+        terminalAt: original,
+        workerId: owned.workerId,
+        childrenDigest,
       });
+      writePrivateRecord(
+        local,
+        "observations",
+        `terminal-${s.execution.operationKey}.json`,
+        payload,
+        false,
+      );
+      await settleExecution(s, {
+        outcome: terminal.publication === "committed" ? "committed" : "contained",
+        publication: terminal.publication,
+        receipt: {
+          kind: "data-execution",
+          status: terminal,
+          workerId: owned.workerId,
+          childrenDigest,
+        },
+      });
+      return original;
     },
     async publishTerminal(execution: ExecutionRef) {
       await assertOwnedProxyRecoverySettled(execution);
       const value = await load(execution),
         authority = restoreAdmittedControlExecution(installation, execution),
-        s = executionAuthorityState(authority),
         proof = readProof(authority);
       if (
         !isDataExecutionTerminal(value.status) ||
@@ -1010,19 +983,14 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original committed data terminal tuple/time required");
       verifyControlEffectSettlement(installation, execution);
-      withPrivateEffectWriter(s, () => {
-        if (proof.phase !== "canonical")
-          writePrivateRecord(
-            local,
-            "observations",
-            `terminal-${execution.operationKey}.json`,
-            {
-              ...proof,
-              phase: "canonical",
-            },
-            false,
-          );
-      });
+      if (proof.phase !== "canonical")
+        writePrivateRecord(
+          local,
+          "observations",
+          `terminal-${execution.operationKey}.json`,
+          { ...proof, phase: "canonical" },
+          false,
+        );
     },
     /** Checks the committed terminal and every child's terminal before the
      * execution's own lease is released. */

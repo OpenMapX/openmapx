@@ -95,7 +95,7 @@ const admittedAt = Date.now(),
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
   };
-const authority = control.retainAdmittedControlExecution(installation, {
+const authority = await control.retainAdmittedControlExecution(installation, {
     execution,
     kind: operation.kind,
     operation,
@@ -129,7 +129,7 @@ fs.renameSync = (from, to) => {
         oldRecord,
         oldDirectoryInode,
         leaseId: lease.leaseId,
-        admissionDigest: control.executionAuthorityState(authority).receiptDigest,
+        admissionDigest: authority.receiptDigest,
       }),
       { mode: 0o600 },
     );

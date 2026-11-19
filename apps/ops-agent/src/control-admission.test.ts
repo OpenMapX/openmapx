@@ -124,7 +124,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
       serviceIds,
       recipient: "ops-agent" as const,
     };
-    const authority = control.retainAdmittedControlExecution(dm, {
+    const authority = await control.retainAdmittedControlExecution(dm, {
       requestedDeadlineAt: owner.deadlineAt,
       execution: owner,
       kind: operation.kind,
@@ -252,7 +252,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
       await replacement.ready();
       expect(calls).toBe(1);
       await replacement.close();
-      control.retainControlEffectReceipt(authority, {
+      await control.retainControlEffectReceipt(authority, {
         outcome: "failed_without_effect",
         publication: "not_started",
         receipt: { kind: "not-started" },
