@@ -1,0 +1,204 @@
+import type { Attribution } from "@openmapx/integration-framework";
+import {
+  type CustomLayerInterface,
+  type CustomRenderMethodInput,
+  type Map as MaplibreMap,
+  MercatorCoordinate,
+} from "maplibre-gl";
+import {
+  AmbientLight,
+  Box3,
+  Camera,
+  DirectionalLight,
+  Frustum,
+  type Material,
+  type Mesh,
+  Plane,
+  Ray,
+  Raycaster,
+  Scene,
+  Vector3,
+  WebGLRenderer,
+} from "three";
+import { cameraMatrix, objectMatrix, unprojectRay } from "./frame";
+import type { LoadedModel } from "./models";
+
+export const LANDMARK_LAYER_ID = "openmapx-landmark-models";
+
+export interface PlacedModel {
+  assetId: string;
+  model: LoadedModel;
+  anchor: [number, number];
+  /** Terrain ground under the model (0 without terrain). */
+  groundM: number;
+  /** Provider lift; the model base sits at groundM + elevationM. */
+  elevationM: number;
+  /** Clip everything below groundM (sunken models on a flat map). */
+  clipBelowGround: boolean;
+  receipts: readonly Attribution[];
+}
+
+/** Below this the globe has fully blended to the flat map at street zoom. */
+const GLOBE_TRANSITION_LIMIT = 0.01;
+
+function materialsOf(mesh: Mesh): Material[] {
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+}
+
+/**
+ * Draws landmark models with three.js inside MapLibre's 3D pass, sharing its
+ * depth buffer so models and extruded buildings hide each other correctly.
+ * MapLibre can drop a custom layer without `onRemove` (full style swaps,
+ * context restore), so `onAdd` always starts from a fresh renderer.
+ */
+export class LandmarkModelLayer implements CustomLayerInterface {
+  readonly id = LANDMARK_LAYER_ID;
+  readonly type = "custom" as const;
+  readonly renderingMode = "3d" as const;
+  private map: MaplibreMap | undefined;
+  private renderer: WebGLRenderer | undefined;
+  private readonly scene = new Scene();
+  private readonly camera = new Camera();
+  private placed: PlacedModel[] = [];
+  private drawn: string[] = [];
+  private lastCamera: Float64Array | undefined;
+  private unsupportedReported = false;
+  private night = false;
+
+  constructor(
+    private readonly options: {
+      onUnsupported(): void;
+      onFrame?(drawn: readonly string[]): void;
+    },
+  ) {
+    this.scene.add(new AmbientLight(0xffffff, 1.4));
+    const sun = new DirectionalLight(0xfff4df, 2.2);
+    // Scene space is x east, y north, z up: light from the north-west and above.
+    sun.position.set(-1, 1, 2).normalize();
+    this.scene.add(sun);
+  }
+
+  setPlaced(models: readonly PlacedModel[]): void {
+    const next = new Set(models.map((p) => p.model.scene));
+    for (const previous of this.placed)
+      if (!next.has(previous.model.scene)) this.scene.remove(previous.model.scene);
+    for (const placed of models) {
+      const root = placed.model.scene;
+      if (root.parent !== this.scene) this.scene.add(root);
+      root.matrixAutoUpdate = false;
+      placed.model.setNight(this.night);
+    }
+    this.placed = [...models];
+    this.map?.triggerRepaint();
+  }
+
+  setNight(night: boolean): void {
+    this.night = night;
+    for (const placed of this.placed) placed.model.setNight(night);
+    this.map?.triggerRepaint();
+  }
+
+  /** Asset ids drawn in the last frame inside the view frustum. */
+  drawnAssetIds(): readonly string[] {
+    return this.drawn;
+  }
+
+  /** The asset under a canvas pixel, nearest first, or null. */
+  pick(point: { x: number; y: number }): string | null {
+    const canvas = this.map?.getCanvas();
+    if (!this.lastCamera || !canvas) return null;
+    const { origin, direction } = unprojectRay(this.lastCamera, point, {
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    });
+    const raycaster = new Raycaster();
+    raycaster.ray = new Ray(new Vector3(...origin), new Vector3(...direction));
+    let best: { assetId: string; distance: number } | null = null;
+    for (const placed of this.placed) {
+      if (!this.drawn.includes(placed.assetId)) continue;
+      const box = new Box3().setFromObject(placed.model.scene);
+      if (!raycaster.ray.intersectsBox(box)) continue;
+      const hit = raycaster.intersectObject(placed.model.scene, true)[0];
+      if (hit && (!best || hit.distance < best.distance))
+        best = { assetId: placed.assetId, distance: hit.distance };
+    }
+    return best?.assetId ?? null;
+  }
+
+  onAdd(map: MaplibreMap, gl: WebGL2RenderingContext): void {
+    this.disposeRenderer();
+    this.map = map;
+    try {
+      const renderer = new WebGLRenderer({ canvas: map.getCanvas(), context: gl });
+      renderer.autoClear = false;
+      renderer.localClippingEnabled = true;
+      this.renderer = renderer;
+    } catch {
+      this.renderer = undefined;
+      if (!this.unsupportedReported) {
+        this.unsupportedReported = true;
+        this.options.onUnsupported();
+      }
+    }
+  }
+
+  render(_gl: WebGL2RenderingContext, args: CustomRenderMethodInput): void {
+    const renderer = this.renderer;
+    const map = this.map;
+    if (!renderer || !map) return;
+    const projection = args.defaultProjectionData;
+    if (projection.projectionTransition >= GLOBE_TRANSITION_LIMIT) {
+      this.drawn = [];
+      return;
+    }
+    const center = map.getCenter();
+    const origin = MercatorCoordinate.fromLngLat([center.lng, center.lat]);
+    const camera = cameraMatrix(projection.mainMatrix, origin);
+    this.lastCamera = camera;
+    this.camera.projectionMatrix.fromArray(camera);
+    this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+
+    for (const placed of this.placed) {
+      const root = placed.model.scene;
+      root.matrix.fromArray(
+        objectMatrix(placed.anchor, placed.groundM + placed.elevationM, origin),
+      );
+      root.matrixWorldNeedsUpdate = true;
+      const planes = placed.clipBelowGround
+        ? [new Plane(new Vector3(0, 0, 1), -placed.groundM)]
+        : null;
+      root.traverse((object) => {
+        if ((object as Mesh).isMesh)
+          for (const material of materialsOf(object as Mesh)) material.clippingPlanes = planes;
+      });
+    }
+    this.scene.updateMatrixWorld();
+
+    const frustum = new Frustum().setFromProjectionMatrix(this.camera.projectionMatrix);
+    this.drawn = this.placed
+      .filter((placed) => frustum.intersectsBox(new Box3().setFromObject(placed.model.scene)))
+      .map((placed) => placed.assetId);
+
+    renderer.resetState();
+    renderer.render(this.scene, this.camera);
+    renderer.resetState();
+    this.options.onFrame?.(this.drawn);
+  }
+
+  onRemove(): void {
+    this.dispose();
+  }
+
+  /** Release the renderer; the models belong to their store and stay loaded. */
+  dispose(): void {
+    this.disposeRenderer();
+    for (const placed of this.placed) this.scene.remove(placed.model.scene);
+    this.placed = [];
+    this.drawn = [];
+  }
+
+  private disposeRenderer(): void {
+    this.renderer?.dispose();
+    this.renderer = undefined;
+  }
+}
