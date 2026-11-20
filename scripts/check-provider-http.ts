@@ -87,7 +87,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
     },
   },
   "credentialed-fetch-json": {
-    "integrations/geocoding-maptiler/provider.ts": { count: 2, reason: MOVES_TO_HOST_CLIENT },
     "integrations/hotels/liteapi.ts": { count: 2, reason: MOVES_TO_HOST_CLIENT },
     "integrations/photos-flickr/provider.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },
     "integrations/routing-valhalla/provider.ts": { count: 6, reason: MOVES_TO_HOST_CLIENT },

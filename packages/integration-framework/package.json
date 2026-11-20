@@ -32,6 +32,10 @@
       "types": "./strings/index.ts",
       "default": "./strings/index.ts"
     },
+    "./provider-daily-budget": {
+      "types": "./src/provider-daily-budget.ts",
+      "default": "./src/provider-daily-budget.ts"
+    },
     "./tile-proxy": {
       "types": "./src/tile-proxy.ts",
       "default": "./src/tile-proxy.ts"

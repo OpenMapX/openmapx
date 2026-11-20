@@ -1,7 +1,7 @@
+import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
 import { parseWebMercatorTileCoordinates } from "@openmapx/integration-framework/tile-proxy";
 import type { FastifyPluginAsync } from "fastify";
 import {
-  type ProviderDailyBudget,
   sendProviderBudgetRefusal,
   tomtomTrafficDailyBudget,
 } from "../services/provider-daily-budget.js";

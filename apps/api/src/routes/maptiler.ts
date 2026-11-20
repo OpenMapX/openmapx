@@ -6,11 +6,11 @@ import {
   VECTOR_TILE_MEDIA_TYPES,
 } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
+import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
 import { parseWebMercatorTileCoordinates } from "@openmapx/integration-framework/tile-proxy";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import {
   maptilerDailyBudget,
-  type ProviderDailyBudget,
   sendProviderBudgetRefusal,
 } from "../services/provider-daily-budget.js";
 import { loadMapSettings } from "../utils/map-settings.js";

@@ -1,22 +1,45 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { maptilerGeocodingService, resolveMaptilerApiKey, setMaptilerApiKey } from "./provider.js";
+import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
+import {
+  createNoopLogger,
+  type FakeHttpClient,
+  fakeHttpClient,
+  httpStatus,
+} from "@openmapx/integration-framework/testing";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createMaptilerGeocodingService,
+  MaptilerBudgetSpentError,
+  resolveMaptilerApiKey,
+} from "./provider.js";
 
+/** Called with each request URL, query included; answers the response body. */
 let mockFetch: ReturnType<typeof vi.fn>;
+let http: FakeHttpClient;
+let apiKey: string | undefined;
+let budget: ProviderDailyBudget | null;
+let maptilerGeocodingService: ReturnType<typeof createMaptilerGeocodingService>;
 
 function mockOk(data: unknown) {
-  return Response.json(data);
+  return data;
 }
 
 beforeEach(() => {
   mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-  setMaptilerApiKey("test-key");
-});
-
-afterEach(() => {
-  setMaptilerApiKey(undefined);
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+  http = fakeHttpClient(({ url, options }) => {
+    const requestUrl = new URL(url);
+    for (const [name, value] of Object.entries(options?.params ?? {})) {
+      if (value !== undefined) requestUrl.searchParams.set(name, String(value));
+    }
+    return mockFetch(requestUrl.toString());
+  });
+  apiKey = "test-key";
+  budget = null;
+  maptilerGeocodingService = createMaptilerGeocodingService({
+    http,
+    apiKey: () => apiKey,
+    budget: { admit: (signal) => budget?.admit(signal) ?? Promise.resolve({ allowed: true }) },
+    log: createNoopLogger(),
+  });
 });
 
 describe("MapTiler geocoding provider", () => {
@@ -565,8 +588,36 @@ describe("MapTiler geocoding provider", () => {
   });
 
   it("throws when no API key is configured", async () => {
-    setMaptilerApiKey(undefined);
+    apiKey = undefined;
     await expect(maptilerGeocodingService.geocode("anything")).rejects.toThrow(/API key/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("sends the key as a query parameter through the host client", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ features: [] }));
+    await maptilerGeocodingService.geocode("Köln Hbf", "de");
+    expect(http.calls[0]?.method).toBe("get");
+    expect(http.calls[0]?.url).toBe("https://api.maptiler.com/geocoding/K%C3%B6ln%20Hbf.json");
+    expect(http.calls[0]?.options?.params).toMatchObject({ key: "test-key", language: "de" });
+  });
+
+  it("passes an upstream status on for provider classification", async () => {
+    mockFetch.mockResolvedValueOnce(httpStatus(403));
+    await expect(maptilerGeocodingService.geocode("x")).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("refuses without a request once the shared MapTiler budget is spent", async () => {
+    budget = {
+      admit: async () => ({
+        allowed: false,
+        status: 429,
+        retryAfterSeconds: 60,
+        firstRefusalInWindow: true,
+      }),
+    };
+    const failure = maptilerGeocodingService.autocomplete("x");
+    await expect(failure).rejects.toBeInstanceOf(MaptilerBudgetSpentError);
+    await expect(failure).rejects.toMatchObject({ code: "quota_exhausted", status: 429 });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });
