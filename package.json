@@ -53,7 +53,7 @@
     "pin:gbfs-catalog": "pnpm -C scripts exec tsx pin-gbfs-catalog.ts",
     "pin:transport-apis": "pnpm -C scripts exec tsx pin-transport-apis.ts",
     "check-production-audits": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-production-audits.ts",
-    "check:policy": "pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-subject-data && pnpm check-license-metadata && pnpm check-air-quality-release-gates && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync && pnpm check-image-size-dos && pnpm check-docker-context-secrets && pnpm check-migration-order && pnpm check-ops-authority && pnpm check-declared-imports && pnpm check-integration-cache-writes && pnpm check-entur-graphql && pnpm check-entur-geocoder && pnpm check-mbta && pnpm check-otp && pnpm check-api-sdk && pnpm check-data-manager-openapi && pnpm check-data-manager-sdk",
+    "check:policy": "node scripts/run-policy-checks.mjs",
     "check-openapi": "pnpm -C apps/api exec tsx scripts/openapi/generate.ts --check",
     "check-packed-packages": "node scripts/check-packed-packages.mjs",
     "check-image-size-dos": "node scripts/check-image-size-dos.mjs",

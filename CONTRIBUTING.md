@@ -154,8 +154,10 @@ pnpm check:policy
 pnpm check-release-information --base origin/main --head HEAD --body-file <description.md>
 ```
 
-Run `pnpm check-openapi` after route or schema changes and `pnpm check-types`
-for the packages you touched. When the `lint` job fails on a pull request, CI
+`pnpm check:policy` runs every check in `scripts/run-policy-checks.mjs`, also
+after one fails, and lists each failed check at the end. Run `pnpm check-openapi`
+after route or schema changes and `pnpm check-types` for the packages you
+touched. When the `lint` job fails on a pull request, CI
 cancels that run's remaining jobs: the required gate is already red, and the
 runners go to other pull requests. Fix the lint failure and push again to get
 the test results.
