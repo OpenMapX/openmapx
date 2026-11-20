@@ -137,7 +137,7 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
     const route = checkedWalkRoute(walkRoute);
     if (!route) return { ok: false, code: "invalid-route" };
     const itinerary = repairTransitWalk(
-      session.payload.startPackage.itinerary as never,
+      storedItinerary(session.payload.startPackage.itinerary),
       legIndex,
       route,
     );
@@ -165,9 +165,9 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
         payload: {
           ...session.payload,
           navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
-          startPackage: { ...session.payload.startPackage, itinerary: itinerary as never },
+          startPackage: { ...session.payload.startPackage, itinerary: { ...itinerary } },
           tickState,
-          progress: progress as unknown as Record<string, unknown>,
+          progress: { ...progress },
         },
       },
       effects: [{ kind: "publish-snapshot", immediate: true }],
@@ -418,7 +418,7 @@ export function applyTransitReplacement(
     updatedAtMs: nowMs,
     payload: {
       startPackage: structuredClone(startPackage),
-      tickState: freshTransitTickState(nowMs, startPackage.itinerary as never),
+      tickState: freshTransitTickState(nowMs, storedItinerary(startPackage.itinerary)),
       progress: null,
       confidence: "gps",
       refreshToken,
