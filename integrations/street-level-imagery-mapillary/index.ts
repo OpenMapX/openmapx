@@ -35,7 +35,7 @@ export function setup(ctx: IntegrationContext): void {
   const token = (ctx.config.accessToken as string | undefined) ?? "";
   const provider = captureStreetLevelProviderContributors(
     ctx,
-    createMapillaryProvider({ accessToken: token, tileUrlTemplate: TILE_PATH }),
+    createMapillaryProvider({ http: ctx.http, accessToken: token, tileUrlTemplate: TILE_PATH }),
     "mapillary",
   );
 

@@ -87,10 +87,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
     },
   },
   "credentialed-fetch-json": {
-    "integrations/street-level-imagery-mapillary/provider.ts": {
-      count: 4,
-      reason: MOVES_TO_HOST_CLIENT,
-    },
     "integrations/transit-dynamic-registry/fetcher.ts": { count: 3, reason: MOVES_TO_HOST_CLIENT },
     "integrations/transit-tfl/provider.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },
     "integrations/transit-transitland/provider.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },

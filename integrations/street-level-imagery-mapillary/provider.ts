@@ -1,11 +1,14 @@
-import {
-  fetchJson,
-  type LngLat,
-  type StreetLevelImage,
-  type StreetLevelLink,
-  type StreetLevelSearchQuery,
+import type {
+  LngLat,
+  StreetLevelImage,
+  StreetLevelLink,
+  StreetLevelSearchQuery,
 } from "@openmapx/core";
-import type { StreetLevelCapabilities, StreetLevelProvider } from "@openmapx/integration-framework";
+import type {
+  HttpClient,
+  StreetLevelCapabilities,
+  StreetLevelProvider,
+} from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 const GRAPH = "https://graph.mapillary.com";
@@ -68,19 +71,20 @@ export function graphImageToStreetLevelImage(
 }
 
 export function createMapillaryProvider(options: {
+  http: HttpClient;
   accessToken: string;
   tileUrlTemplate: string;
 }): StreetLevelProvider {
   const id = "mapillary";
-  const token = options.accessToken;
+  const graph = <T>(path: string, params: Record<string, string>) =>
+    options.http.get<T>(`${GRAPH}${path}`, {
+      params: { ...params, fields: FIELDS, access_token: options.accessToken },
+    });
 
-  async function fetchImage(imageId: string): Promise<GraphImage | null> {
-    // No `nullOnError`: an upstream timeout or rate-limit must not be reported
+  async function fetchImage(imageId: string): Promise<GraphImage> {
+    // A failure rejects: an upstream timeout or rate-limit must not be reported
     // to the user as "this image does not exist".
-    return fetchJson<GraphImage>(
-      `${GRAPH}/${encodeURIComponent(imageId)}?fields=${FIELDS}&access_token=${token}`,
-      { label: "Mapillary image" },
-    );
+    return graph<GraphImage>(`/${encodeURIComponent(imageId)}`, {});
   }
 
   function toLink(raw: GraphImage, rel: StreetLevelLink["rel"]): StreetLevelLink {
@@ -136,11 +140,8 @@ export function createMapillaryProvider(options: {
 
       for (const delta of NEAREST_DELTAS) {
         const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
-        const data = await fetchJson<GraphImagesResponse>(
-          `${GRAPH}/images?bbox=${bbox}&fields=${FIELDS}&access_token=${token}&limit=20`,
-          { label: "Mapillary search" },
-        );
-        const images = data?.data ?? [];
+        const data = await graph<GraphImagesResponse>("/images", { bbox, limit: "20" });
+        const images = data.data ?? [];
         const first = images[0];
         if (!first) continue;
 
@@ -160,25 +161,24 @@ export function createMapillaryProvider(options: {
     },
 
     async getImage(imageId: string): Promise<StreetLevelImage | null> {
-      const raw = await fetchImage(imageId);
-      return raw ? graphImageToStreetLevelImage(raw, id) : null;
+      return graphImageToStreetLevelImage(await fetchImage(imageId), id);
     },
 
     async getLinks(imageId: string): Promise<StreetLevelLink[]> {
       // Mapillary exposes no cross-sequence neighbour concept, so navigation
       // is limited to stepping along the image's own sequence.
       const current = await fetchImage(imageId);
-      if (!current?.sequence) return [];
+      if (!current.sequence) return [];
 
       // The filter is `sequence_ids` (plural). A singular `sequence_id` on
       // /images returns HTTP 500. The response also carries no guaranteed
       // order, so sort by capture time before treating position as sequence
       // order — index arithmetic on an unordered response misnavigates.
-      const data = await fetchJson<GraphImagesResponse>(
-        `${GRAPH}/images?sequence_ids=${encodeURIComponent(current.sequence)}&fields=${FIELDS}&access_token=${token}&limit=500`,
-        { label: "Mapillary sequence" },
-      );
-      const images = [...(data?.data ?? [])].sort(
+      const data = await graph<GraphImagesResponse>("/images", {
+        sequence_ids: current.sequence,
+        limit: "500",
+      });
+      const images = [...(data.data ?? [])].sort(
         (a, b) => (a.captured_at ?? 0) - (b.captured_at ?? 0),
       );
       const index = images.findIndex((image) => image.id === imageId);
@@ -193,7 +193,7 @@ export function createMapillaryProvider(options: {
     },
 
     async searchImages(query: StreetLevelSearchQuery): Promise<StreetLevelImage[]> {
-      const params = new URLSearchParams();
+      const params: Record<string, string> = {};
       let latDelta = query.radiusM / 110_970;
       let lngDelta = query.radiusM / (111_320 * Math.cos((query.lngLat[1] * Math.PI) / 180));
       const area = 4 * latDelta * lngDelta;
@@ -202,29 +202,23 @@ export function createMapillaryProvider(options: {
         latDelta *= shrink;
         lngDelta *= shrink;
       }
-      params.set(
-        "bbox",
-        [
-          query.lngLat[0] - lngDelta,
-          query.lngLat[1] - latDelta,
-          query.lngLat[0] + lngDelta,
-          query.lngLat[1] + latDelta,
-        ]
-          .map((d) => d.toFixed(7))
-          .join(","),
-      );
+      params.bbox = [
+        query.lngLat[0] - lngDelta,
+        query.lngLat[1] - latDelta,
+        query.lngLat[0] + lngDelta,
+        query.lngLat[1] + latDelta,
+      ]
+        .map((d) => d.toFixed(7))
+        .join(",");
       if (query.capturedAfter) {
         const date = new Date(query.capturedAfter);
         if (!Number.isNaN(date.getTime())) {
-          params.set("start_captured_at", date.toISOString());
+          params.start_captured_at = date.toISOString();
         }
       }
-      params.set("limit", String(Math.min(query.limit ?? 20, 50)));
-      const data = await fetchJson<GraphImagesResponse>(
-        `${GRAPH}/images?${params.toString()}&fields=${FIELDS}&access_token=${token}`,
-        { label: "Mapillary search" },
-      );
-      return (data?.data ?? []).map((raw) => graphImageToStreetLevelImage(raw, id));
+      params.limit = String(Math.min(query.limit ?? 20, 50));
+      const data = await graph<GraphImagesResponse>("/images", params);
+      return (data.data ?? []).map((raw) => graphImageToStreetLevelImage(raw, id));
     },
   };
 }
