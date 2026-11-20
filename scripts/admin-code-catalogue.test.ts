@@ -122,7 +122,8 @@ interface SourceFile {
  * collector cannot read (an entry that is not an object literal, a spread
  * that may set the property, the writer or table imported under another name
  * or passed as a value, a wrapper other files can call, the table in any call
- * but an insert or a read, an unexplained expression) is reported in
+ * but an insert or a read, raw SQL that inserts audit rows or sets their
+ * action or target type, an unexplained expression) is reported in
  * `unreadable` rather than skipped.
  */
 function collectAuditCodes(
@@ -144,6 +145,9 @@ function collectAuditCodes(
     const visit = (node: ts.Node) => {
       if (ts.isIdentifier(node) && node.text === WRITER) readWriterReference(node);
       if (isTableReference(node)) readTableReference(node);
+      const text = literalText(node);
+      if (text !== undefined && writesAuditCodesInSql(text))
+        unreadable.push(`${where(node)} raw SQL writing ${property}s: ${flat(node)}`);
       ts.forEachChild(node, visit);
     };
 
@@ -319,6 +323,21 @@ function isTableReference(node: ts.Node): node is ts.Expression {
     ts.isStringLiteralLike(node.argumentExpression) &&
     node.argumentExpression.text === TABLE
   );
+}
+
+/** The fixed text of a string or template literal, its substitutions left out. */
+function literalText(node: ts.Node): string | undefined {
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isTemplateExpression(node))
+    return [node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(" ");
+  return undefined;
+}
+
+/** Raw SQL that inserts audit rows or sets their action or target type. */
+function writesAuditCodesInSql(text: string): boolean {
+  if (/\binsert\s+into\s+"?admin_audit_log\b/i.test(text)) return true;
+  const set = /\bupdate\s+"?admin_audit_log"?\s+set\b([\s\S]*?)(?:\bwhere\b|$)/i.exec(text);
+  return set !== null && /\b(action|target_type)"?\s*=/i.test(set[1]);
 }
 
 const isPrivate = (node: ts.Node) =>
@@ -591,6 +610,8 @@ describe("audit code collector", () => {
   const dataTemplate = "`data.${id}`";
   // biome-ignore lint/suspicious/noTemplateCurlyInString: source text handed to the collector.
   const stepTemplate = "`dawarich.${step}`";
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: source text handed to the collector.
+  const actionUpdate = '`UPDATE "admin_audit_log" SET action = ${next} WHERE id = ${id}`';
 
   it("reads literals, conditionals, consts and same-file wrapper parameters", () => {
     expect(
@@ -632,6 +653,7 @@ describe("audit code collector", () => {
       await audit.writeAuditLog({ action: "a.namespace" });
       await db.select({ id: adminAuditLog.id }).from(adminAuditLog).leftJoin(schema.adminAuditLog, on);
       await db.delete(adminAuditLog).where(lte(adminAuditLog.createdAt, cutoff));
+      await tx.execute(sql\`UPDATE admin_audit_log SET target_id = NULL WHERE target_id = \${id}\`);
       class Service {
         private fail(action: string) {
           return writeAuditLog({ action });
@@ -729,6 +751,8 @@ describe("audit code collector", () => {
       "a public property holding the writer",
       "export class S {\n  audit = noop;\n  constructor() { this.audit = writeAuditLog; }\n}",
     ],
+    ["a raw SQL insert", "tx.execute(sql`INSERT INTO admin_audit_log (action) VALUES ('a.b')`);"],
+    ["a raw SQL action update", `tx.execute(sql${actionUpdate});`],
   ])("fails on %s", (_shape, text) => {
     expect(collect(text).unreadable).toHaveLength(1);
   });
