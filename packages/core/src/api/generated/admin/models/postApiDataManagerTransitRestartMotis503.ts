@@ -4,7 +4,6 @@
 export type PostApiDataManagerTransitRestartMotis503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -17,4 +16,8 @@ export type PostApiDataManagerTransitRestartMotis503 =
       error: string;
       message: string;
       code?: string;
+    }
+  | {
+      error: string;
+      code: "ops-agent-unavailable";
     };

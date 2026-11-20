@@ -1,10 +1,16 @@
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fetchRegistryEntries as fetchWith } from "../fetcher";
 import { TRANSPORT_APIS_COMMIT } from "../pin";
 
+/** Called with each request URL; answers like fetch. */
 const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
-
-const { fetchRegistryEntries } = await import("../fetcher");
+const http = fakeHttpClient(async ({ url, options }) => {
+  const response = (await mockFetch(url, options)) as Response;
+  return response.ok ? response.json() : httpStatus(response.status);
+});
+const fetchRegistryEntries = (options: Omit<Parameters<typeof fetchWith>[0], "http"> = {}) =>
+  fetchWith({ http, ...options });
 
 const VALID_ENTRY = {
   name: "ÖBB",
@@ -162,5 +168,23 @@ describe("pinned transit registry fetches", () => {
       );
 
     await expect(fetchRegistryEntries()).resolves.toEqual([]);
+  });
+});
+
+describe("registry request credentials", () => {
+  it("sends the GitHub token only to the GitHub API host", async () => {
+    mockFetch
+      .mockRejectedValueOnce(new Error("JSDelivr unavailable"))
+      .mockResolvedValueOnce(
+        makeJsonResponse({ tree: [{ path: "data/at/oebb-hafas-mgate.json", type: "blob" }] }),
+      )
+      .mockResolvedValueOnce(makeJsonResponse(VALID_ENTRY));
+
+    await fetchRegistryEntries({ githubToken: "ghp_secret" });
+
+    const headers = mockFetch.mock.calls.map(([, options]) => options?.headers ?? {});
+    expect(headers[0]).toEqual({});
+    expect(headers[1]).toEqual({ Authorization: "token ghp_secret" });
+    expect(headers[2]).toEqual({});
   });
 });

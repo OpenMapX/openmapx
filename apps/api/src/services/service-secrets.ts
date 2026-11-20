@@ -3,6 +3,7 @@ import { canonicalFeedCredentialMap } from "@openmapx/core/ops";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { serviceSecret } from "../db/schema";
+import { processLogger } from "../process-logger";
 import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
@@ -41,9 +42,9 @@ export async function getServiceSecret(serviceId: string, key: string): Promise<
     if (!row) return null;
     return decrypt(row.ciphertext, row.iv, row.tag);
   } catch (err) {
-    console.warn(
-      `[service-secrets] Failed to retrieve secret "${key}" for service "${serviceId}":`,
-      err instanceof Error ? err.message : err,
+    processLogger.warn(
+      { component: "service-secrets", err, serviceId, secretKey: key },
+      "Failed to retrieve a secret",
     );
     return null;
   }
@@ -103,17 +104,17 @@ export async function resolveServiceVaultSecrets(
       try {
         result[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
       } catch (err) {
-        console.warn(
-          `[service-secrets] Failed to decrypt secret "${row.key}" for service "${serviceId}":`,
-          err instanceof Error ? err.message : err,
+        processLogger.warn(
+          { component: "service-secrets", err, serviceId, secretKey: row.key },
+          "Failed to decrypt a secret",
         );
       }
     }
     return result;
   } catch (err) {
-    console.warn(
-      `[service-secrets] Failed to query vault secrets for service "${serviceId}":`,
-      err instanceof Error ? err.message : err,
+    processLogger.warn(
+      { component: "service-secrets", err, serviceId },
+      "Failed to query vault secrets",
     );
     return {};
   }

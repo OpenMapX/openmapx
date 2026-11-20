@@ -22,6 +22,7 @@ import type {
   Departure,
   Facility,
   GeoJSONLineString,
+  RouteStop,
   ServiceAlert,
   StopTransfer,
   TransitRoute,
@@ -1077,9 +1078,9 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function getRouteStops(
     routeId: string,
     hintStopId?: string,
-  ): Promise<MobilityResult<TransitStop[]>> {
+  ): Promise<MobilityResult<RouteStop[]>> {
     const provider = await resolveByPrefix(routeId);
-    if (!provider) return emptyResult<TransitStop[]>([]);
+    if (!provider) return emptyResult<RouteStop[]>([]);
 
     if (provider.getRouteStops) {
       const fn = provider.getRouteStops.bind(provider);
@@ -1101,17 +1102,17 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
           return result;
         }
       } else if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) {
-        return emptyResult<TransitStop[]>([]);
+        return emptyResult<RouteStop[]>([]);
       }
     } else if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) {
-      return emptyResult<TransitStop[]>([]);
+      return emptyResult<RouteStop[]>([]);
     }
 
     // Compatibility fallback (pre-refactor behavior):
     // derive route stop sequence via a departure trip detail.
     const depFn = provider.getDepartures;
     const journeyFn = provider.getVehicleJourney;
-    if (!depFn || !journeyFn || !hintStopId) return emptyResult<TransitStop[]>([]);
+    if (!depFn || !journeyFn || !hintStopId) return emptyResult<RouteStop[]>([]);
 
     const boundDep = depFn.bind(provider);
     const depOutcome = await timed(
@@ -1121,12 +1122,12 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       "getRouteStops.viaDepartures",
       () => boundDep(hintStopId, 720),
     );
-    if (!depOutcome.ok) return emptyResult<TransitStop[]>([]);
+    if (!depOutcome.ok) return emptyResult<RouteStop[]>([]);
     const depRes = depOutcome.value;
     const departures = depRes?.data;
-    if (!departures) return emptyResult<TransitStop[]>([]);
+    if (!departures) return emptyResult<RouteStop[]>([]);
     const dep = departures.find((d) => d.route.id === routeId && !!d.tripId);
-    if (!dep?.tripId) return emptyResult<TransitStop[]>([]);
+    if (!dep?.tripId) return emptyResult<RouteStop[]>([]);
 
     const boundJourney = journeyFn.bind(provider);
     const journeyOutcome = await timed(
@@ -1136,37 +1137,18 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       "getRouteStops.viaJourney",
       () => boundJourney(dep.tripId as string),
     );
-    if (!journeyOutcome.ok) return emptyResult<TransitStop[]>([]);
+    if (!journeyOutcome.ok) return emptyResult<RouteStop[]>([]);
     const journeyRes = journeyOutcome.value;
     const journey = journeyRes?.data ?? null;
-    if (
-      !journey ||
-      typeof journey !== "object" ||
-      !Array.isArray((journey as { stops?: unknown[] }).stops)
-    ) {
-      return emptyResult<TransitStop[]>([]);
-    }
+    if (!journey || !Array.isArray(journey.stops)) return emptyResult<RouteStop[]>([]);
 
-    const stops = (
-      journey as {
-        stops: Array<{
-          stopId: string;
-          name: string;
-          lat: number;
-          lng: number;
-          platform?: string;
-          contributors?: readonly import("@openmapx/mobility-core/attribution").Attribution[];
-        }>;
-      }
-    ).stops.map((s, i) => ({
+    // A journey stop the provider cannot place stays in the list without coordinates.
+    const stops: RouteStop[] = journey.stops.map((s, i) => ({
       contributors: s.contributors,
       id: s.stopId,
       name: s.name,
-      lat: s.lat,
-      lng: s.lng,
-      modes: [],
+      ...(s.lat !== undefined && s.lng !== undefined ? { lat: s.lat, lng: s.lng } : {}),
       platformCode: s.platform,
-      provider: provider.id,
       sequence: i + 1,
     }));
     return {

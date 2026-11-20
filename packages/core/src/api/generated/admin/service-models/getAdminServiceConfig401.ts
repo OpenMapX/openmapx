@@ -4,7 +4,6 @@
 export type GetAdminServiceConfig401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

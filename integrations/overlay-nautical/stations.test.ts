@@ -11,6 +11,8 @@ import {
   createFencedMemoryCache,
   createNoopLogger,
   createPassthroughCache,
+  fakeHttpClient,
+  httpStatus,
 } from "@openmapx/integration-framework/testing";
 import {
   dedupTideStations,
@@ -120,17 +122,10 @@ describe("loadAllTideStations", () => {
     const cache = createPassthroughCache();
     const log = createNoopLogger();
 
+    const recent = new Date().toISOString();
+    const ancient = "1990-01-01T00:00:00Z";
     fetchJson.mockImplementation(async (url: string) => {
-      if (url.includes("ioc-sealevelmonitoring")) {
-        return [
-          { Code: "abc", Location: "Active IOC", country: "GBR", Lat: 51.5, Lon: -0.1, status: 1 },
-          { Code: "old", Location: "Inactive", Lat: 1, Lon: 1, status: 0 },
-          { Code: "nan", Location: "Bad coords", Lat: Number.NaN, Lon: 2, status: 1 },
-        ];
-      }
       if (url.includes("emodnet-physics")) {
-        const recent = new Date().toISOString();
-        const ancient = "1990-01-01T00:00:00Z";
         return {
           features: [
             {
@@ -143,6 +138,18 @@ describe("loadAllTideStations", () => {
             },
           ],
         };
+      }
+      throw new Error(`unexpected request ${url}`);
+    });
+    const http = fakeHttpClient(({ method, url }) => {
+      // Kartverket's XML list fails, so its network is reported unavailable.
+      if (method === "getText") return httpStatus(503);
+      if (url.includes("ioc-sealevelmonitoring")) {
+        return [
+          { Code: "abc", Location: "Active IOC", country: "GBR", Lat: 51.5, Lon: -0.1, status: 1 },
+          { Code: "old", Location: "Inactive", Lat: 1, Lon: 1, status: 0 },
+          { Code: "nan", Location: "Bad coords", Lat: Number.NaN, Lon: 2, status: 1 },
+        ];
       }
       if (url.includes("api-iwls.dfo")) {
         return [
@@ -157,34 +164,27 @@ describe("loadAllTideStations", () => {
           },
         ];
       }
-      // Pegelonline
-      return [
-        {
-          uuid: "uuid-1",
-          shortname: "CUXHAVEN  STEUBENHOEFT",
-          longname: "CUXHAVEN",
-          latitude: 53.87,
-          longitude: 8.72,
-        },
-      ];
+      if (url.includes("pegelonline")) {
+        return [
+          {
+            uuid: "uuid-1",
+            shortname: "CUXHAVEN  STEUBENHOEFT",
+            longname: "CUXHAVEN",
+            latitude: 53.87,
+            longitude: 8.72,
+          },
+        ];
+      }
+      throw new Error(`unexpected request ${url}`);
     });
 
-    // Kartverket uses raw fetch (XML); stub it to a non-OK response so it yields [].
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: false, status: 503 }) as Response),
-    );
-
-    const { stations: out, unavailable } = await loadAllTideStations(cache, log, "test-ua");
-    vi.unstubAllGlobals();
+    const { stations: out, unavailable } = await loadAllTideStations(http, cache, log, "test-ua");
     expect(unavailable).toEqual(["kartverket"]);
 
-    const iocRequest = fetchJson.mock.calls.find(([url]) =>
-      String(url).includes("ioc-sealevelmonitoring"),
-    );
-    expect(String(iocRequest?.[0])).toMatch(
-      /^https:\/\/www\.ioc-sealevelmonitoring\.org\/service\.php\?/,
-    );
+    const iocRequest = http.calls.find(({ url }) => url.includes("ioc-sealevelmonitoring"));
+    expect(iocRequest?.url).toMatch(/^https:\/\/www\.ioc-sealevelmonitoring\.org\/service\.php\?/);
+    const iwlsRequest = http.calls.find(({ url }) => url.includes("api-iwls.dfo"));
+    expect(iwlsRequest?.url).not.toContain("max=");
 
     const byNetwork = (n: MergedTideStation["network"]) => out.filter((s) => s.network === n);
 
@@ -234,27 +234,22 @@ describe("loadAllTideStations", () => {
   it("reports a failed network and caches only the catalogs that answered", async () => {
     const cache = createFencedMemoryCache();
     const log = createNoopLogger();
-    fetchJson.mockImplementation(async (url: string) => {
-      if (url.includes("ioc-sealevelmonitoring")) return null;
-      if (url.includes("emodnet-physics")) return { features: [] };
-      return [];
+    fetchJson.mockImplementation(async () => ({ features: [] }));
+    const http = fakeHttpClient(({ method, url }) => {
+      if (method === "getText") {
+        return {
+          status: 200,
+          headers: {},
+          body: '<?xml version="1.0"?><stationlist></stationlist>',
+        };
+      }
+      return url.includes("ioc-sealevelmonitoring") ? httpStatus(503) : [];
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response('<?xml version="1.0"?><stationlist></stationlist>', { status: 200 }),
-      ),
-    );
 
-    try {
-      const { unavailable } = await loadAllTideStations(cache, log, "test-ua");
+    const { unavailable } = await loadAllTideStations(http, cache, log, "test-ua");
 
-      expect(unavailable).toEqual(["ioc"]);
-      expect(cache.values.has("catalog:contributors-v1:ioc")).toBe(false);
-      expect(cache.values.get("catalog:contributors-v1:pegel")).toEqual([]);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    expect(unavailable).toEqual(["ioc"]);
+    expect(cache.values.has("catalog:contributors-v1:ioc")).toBe(false);
+    expect(cache.values.get("catalog:contributors-v1:pegel")).toEqual([]);
   });
 });

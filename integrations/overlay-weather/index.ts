@@ -1,15 +1,11 @@
-import { fetchJson, USER_AGENT } from "@openmapx/core";
-import {
-  createBoundedBinaryProxyStream,
-  MAX_RASTER_TILE_BYTES,
-  RASTER_IMAGE_MEDIA_TYPES,
-} from "@openmapx/core/server";
+import { USER_AGENT } from "@openmapx/core";
 import {
   captureCacheWriter,
   type IntegrationContext,
   type RouteHandler,
   scalarQueries,
 } from "@openmapx/integration-framework";
+import { createTileProxyHandler } from "@openmapx/integration-framework/tile-proxy";
 
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -90,7 +86,7 @@ export function setup(ctx: IntegrationContext): void {
   // guards with a single `if (await denyIfRadarGated(reply)) return;` (one message).
   const denyIfRadarGated = async (reply: Parameters<RouteHandler>[1]): Promise<boolean> => {
     if (!(await radarGated())) return false;
-    reply.status(451).send({ message: "RainViewer radar disabled by data-use policy" });
+    reply.status(451).send({ error: "RainViewer radar disabled by data-use policy" });
     return true;
   };
 
@@ -108,20 +104,16 @@ export function setup(ctx: IntegrationContext): void {
 
     try {
       const writer = await captureCacheWriter(ctx.cache);
-      const data = await fetchJson<{
+      const data = await ctx.http.get<{
         host: string;
         radar: { past: RadarFrame[]; nowcast: RadarFrame[] };
       }>("https://api.rainviewer.com/public/weather-maps.json", {
+        headers: { "User-Agent": USER_AGENT },
         timeoutMs: FETCH_TIMEOUT_MS,
-        nullOnError: true,
       });
-      if (!data) {
-        reply.status(502).send({ message: "RainViewer unavailable" });
-        return;
-      }
       const host = canonicalizeRainViewerHost(data.host);
       if (!host) {
-        reply.status(502).send({ message: "RainViewer unavailable" });
+        reply.status(502).send({ error: "RainViewer unavailable" });
         return;
       }
       const meta: RadarMeta = {
@@ -132,101 +124,83 @@ export function setup(ctx: IntegrationContext): void {
       await writer.set("weather:radar:meta", meta, 300);
       reply.send(meta);
     } catch {
-      reply.status(502).send({ message: "RainViewer unavailable" });
+      reply.status(502).send({ error: "RainViewer unavailable" });
     }
   });
 
-  ctx.registerRoute("GET", "/radar/tile/:z/:x/:y", async (req, reply) => {
-    if (await denyIfRadarGated(reply)) return;
-    const framePath = scalarQueries(req.query).path;
-    if (!framePath) {
-      reply.status(400).send({ message: "Missing path query parameter" });
-      return;
-    }
+  // The frame path is allowlisted against the cached metadata before the
+  // handler for that host and frame is built.
+  const radarTile = (radarHost: string, framePath: string) =>
+    createTileProxyHandler(ctx, {
+      kind: "raster",
+      label: "RainViewer tile",
+      url: ({ z, x, y }) =>
+        buildRainViewerTileUrl(radarHost, framePath, String(z), String(x), String(y)),
+      timeoutMs: FETCH_TIMEOUT_MS,
+      fallbackContentType: "image/png",
+      cacheControl: "public, max-age=300, s-maxage=300",
+    });
 
-    const cached = await ctx.cache.get<RadarMeta>("weather:radar:meta");
-    if (!cached) {
-      reply.status(503).send({ message: "Radar metadata not available" });
-      return;
-    }
-    const radarHost = canonicalizeRainViewerHost(cached.host);
-    if (!radarHost) {
-      reply.status(503).send({ message: "Radar metadata not available" });
-      return;
-    }
-
-    const allowedPaths = [...cached.past, ...cached.nowcast].map((f) => f.path);
-    if (!allowedPaths.includes(framePath as string)) {
-      reply.status(400).send({ message: "Invalid radar frame path" });
-      return;
-    }
-
-    const { z, x, y } = req.params as Record<string, string>;
-    const tileUrl = buildRainViewerTileUrl(radarHost, framePath as string, z, x, y);
-
-    try {
-      const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-      const tileRes = await fetch(tileUrl, {
-        headers: { "User-Agent": USER_AGENT },
-        signal,
-      });
-      if (!tileRes.ok) {
-        reply.status(tileRes.status).send({ message: "Radar tile fetch failed" });
+  ctx.registerRoute(
+    "GET",
+    "/radar/tile/:z/:x/:y",
+    async (req, reply) => {
+      if (await denyIfRadarGated(reply)) return;
+      const framePath = scalarQueries(req.query).path;
+      if (!framePath) {
+        reply.status(400).send({ error: "Missing path query parameter" });
         return;
       }
-      const proxy = createBoundedBinaryProxyStream(tileRes, {
-        maxBytes: MAX_RASTER_TILE_BYTES,
-        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
-        fallbackContentType: "image/png",
-        label: "RainViewer tile",
-      });
 
-      reply.header("Content-Type", "image/png");
-      reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.send(proxy.body);
-    } catch {
-      reply.status(502).send({ message: "Radar tile fetch failed" });
-    }
-  });
-
-  ctx.registerRoute("GET", "/tiles/:layer/:z/:x/:y.png", async (req, reply) => {
-    if (!owmApiKey) {
-      reply.status(503).send({ message: "OWM not configured" });
-      return;
-    }
-
-    const { layer, z, x, y } = req.params as Record<string, string>;
-    if (!ALLOWED_OWM_LAYERS.includes(layer)) {
-      reply.status(400).send({ message: "Invalid layer" });
-      return;
-    }
-
-    try {
-      const tileUrl = `https://tile.openweathermap.org/map/${layer}/${z}/${x}/${y}.png?appid=${owmApiKey}`;
-      const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-      const tileRes = await fetch(tileUrl, { signal });
-      if (!tileRes.ok) {
-        reply.status(tileRes.status).send({ message: "Tile fetch failed" });
+      const cached = await ctx.cache.get<RadarMeta>("weather:radar:meta");
+      const radarHost = cached ? canonicalizeRainViewerHost(cached.host) : null;
+      if (!cached || !radarHost) {
+        reply.status(503).send({ error: "Radar metadata not available" });
         return;
       }
-      const proxy = createBoundedBinaryProxyStream(tileRes, {
-        maxBytes: MAX_RASTER_TILE_BYTES,
-        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
-        fallbackContentType: "image/png",
-        label: "OpenWeatherMap tile",
-      });
 
-      reply.header("Content-Type", "image/png");
-      reply.header("Cache-Control", "public, max-age=600, s-maxage=600");
-      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.send(proxy.body);
-    } catch {
-      reply.status(502).send({ message: "Tile fetch failed" });
-    }
+      const allowedPaths = [...cached.past, ...cached.nowcast].map((f) => f.path);
+      if (!allowedPaths.includes(framePath)) {
+        reply.status(400).send({ error: "Invalid radar frame path" });
+        return;
+      }
+
+      await radarTile(radarHost, framePath)(req, reply);
+    },
+    { rateLimitTier: "tile" },
+  );
+
+  const owmTile = createTileProxyHandler(ctx, {
+    kind: "raster",
+    label: "OpenWeatherMap tile",
+    url: ({ z, x, y }, req) => {
+      const layer = req.params.layer;
+      if (!owmApiKey || !layer || !ALLOWED_OWM_LAYERS.includes(layer)) return null;
+      const url = new URL(`https://tile.openweathermap.org/map/${layer}/${z}/${x}/${y}.png`);
+      url.searchParams.set("appid", owmApiKey);
+      return url.toString();
+    },
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackContentType: "image/png",
+    cacheControl: "public, max-age=600, s-maxage=600",
   });
+
+  ctx.registerRoute(
+    "GET",
+    "/tiles/:layer/:z/:x/:y.png",
+    async (req, reply) => {
+      if (!owmApiKey) {
+        reply.status(503).send({ error: "OWM not configured" });
+        return;
+      }
+      if (!ALLOWED_OWM_LAYERS.includes(req.params.layer ?? "")) {
+        reply.status(400).send({ error: "Invalid layer" });
+        return;
+      }
+      await owmTile(req, reply);
+    },
+    { rateLimitTier: "tile" },
+  );
 
   ctx.registerRoute("GET", "/config", async (_req, reply) => {
     reply.send({

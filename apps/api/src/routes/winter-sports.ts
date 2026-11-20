@@ -31,12 +31,12 @@ export const winterSportsRoute: FastifyPluginAsync = async (fastify) => {
       const east = Number(req.query.east);
 
       if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
-        return reply.status(400).send({ message: "Invalid bbox coordinates" });
+        return reply.status(400).send({ error: "Invalid bbox coordinates" });
       }
 
       if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
         return reply.status(400).send({
-          message: `Bbox too large (max ${MAX_BBOX_SPAN} degree span)`,
+          error: `Bbox too large (max ${MAX_BBOX_SPAN} degree span)`,
         });
       }
 
@@ -56,10 +56,10 @@ export const winterSportsRoute: FastifyPluginAsync = async (fastify) => {
         return data;
       } catch (error) {
         if (error instanceof OverpassRateLimitError) {
-          return reply.status(429).send({ message: "Overpass rate limit exceeded" });
+          return reply.status(429).send({ error: "Overpass rate limit exceeded" });
         }
         req.log.warn({ err: error }, "Winter sports feature fetch failed");
-        return reply.status(502).send({ message: "Winter sports data unavailable" });
+        return reply.status(502).send({ error: "Winter sports data unavailable" });
       }
     },
   });

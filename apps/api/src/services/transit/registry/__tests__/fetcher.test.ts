@@ -1,12 +1,14 @@
+import { fetchRegistryEntries as fetchWith } from "@integrations/transit-dynamic-registry/fetcher";
+import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHttpClient } from "../../../../integration-clients.js";
 import { emptyResponse, streamedJsonResponse } from "../../../../test/streamed-response.js";
 
-// Mock global fetch
+// The real host client over a stubbed global fetch.
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
-
-// Import after mocks are set up
-const { fetchRegistryEntries } = await import("@integrations/transit-dynamic-registry/fetcher");
+const http = createHttpClient(createNoopLogger());
+const fetchRegistryEntries = () => fetchWith({ http });
 
 // Helpers
 

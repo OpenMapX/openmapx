@@ -4,6 +4,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./catalog": {
+      "types": "./catalog.ts",
+      "default": "./catalog.ts"
+    }
+  },
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^"

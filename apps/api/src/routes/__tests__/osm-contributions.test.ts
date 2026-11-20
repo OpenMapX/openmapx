@@ -335,7 +335,7 @@ describe("typed errors", () => {
         payload: publishBody(),
       });
       expect(response.statusCode).toBe(status);
-      expect(response.json()).toEqual({ code, message: "Safe message." });
+      expect(response.json()).toEqual({ code, error: "Safe message." });
     }
   });
 

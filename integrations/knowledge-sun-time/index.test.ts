@@ -197,7 +197,7 @@ describe("GET /times sunrise-sunset route", () => {
     const reply = await invoke("/times", { lat: "abc", lng: "13.4" });
 
     expect(reply.statusCode).toBe(400);
-    expect(reply.payload).toEqual({ message: "Invalid coordinates" });
+    expect(reply.payload).toEqual({ error: "Invalid coordinates" });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -208,7 +208,7 @@ describe("GET /times sunrise-sunset route", () => {
     const reply = await invoke("/times", { lat: "200", lng: "13.4" });
 
     expect(reply.statusCode).toBe(400);
-    expect(reply.payload).toEqual({ message: "Invalid coordinates" });
+    expect(reply.payload).toEqual({ error: "Invalid coordinates" });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -218,7 +218,7 @@ describe("GET /times sunrise-sunset route", () => {
     const reply = await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     expect(reply.statusCode).toBe(502);
-    expect(reply.payload).toEqual({ message: "Sunrise-Sunset data unavailable" });
+    expect(reply.payload).toEqual({ error: "Sunrise-Sunset data unavailable" });
   });
 
   it("502s when the API reports a non-OK status string", async () => {
@@ -229,7 +229,7 @@ describe("GET /times sunrise-sunset route", () => {
     const reply = await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     expect(reply.statusCode).toBe(502);
-    expect(reply.payload).toEqual({ message: "Sunrise-Sunset API error: INVALID_REQUEST" });
+    expect(reply.payload).toEqual({ error: "Sunrise-Sunset API error: INVALID_REQUEST" });
   });
 
   it("502s when the fetch itself throws", async () => {
@@ -238,7 +238,7 @@ describe("GET /times sunrise-sunset route", () => {
     const reply = await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     expect(reply.statusCode).toBe(502);
-    expect(reply.payload).toEqual({ message: "Sunrise-Sunset data unavailable" });
+    expect(reply.payload).toEqual({ error: "Sunrise-Sunset data unavailable" });
   });
 });
 
@@ -352,7 +352,7 @@ describe("GET /timezone route", () => {
     const reply = await invoke("/timezone", { lat: "abc", lng: "13.4" }, { cache });
 
     expect(reply.statusCode).toBe(400);
-    expect(reply.payload).toEqual({ message: "Invalid coordinates" });
+    expect(reply.payload).toEqual({ error: "Invalid coordinates" });
     expect(cache.get).not.toHaveBeenCalled();
   });
 
@@ -365,7 +365,7 @@ describe("GET /timezone route", () => {
     const reply = await invoke("/timezone", { lat: "200", lng: "13.4" }, { cache });
 
     expect(reply.statusCode).toBe(400);
-    expect(reply.payload).toEqual({ message: "Invalid coordinates" });
+    expect(reply.payload).toEqual({ error: "Invalid coordinates" });
     expect(cache.get).not.toHaveBeenCalled();
   });
 

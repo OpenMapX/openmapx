@@ -18,9 +18,10 @@ vi.mock("../ops-client.js", () => ({
   runOpsOperation: vi.fn(async () => ({ changed: true })),
 }));
 
-import { type CronSetupOptions, setupCron, TRAFFIC_LEASE_RENEWAL_MS } from "../cron.js";
+import { type CronSetupOptions, setupCron } from "../cron.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "../jobs/traffic/write-live.js";
+import { TRAFFIC_LEASE_RENEWAL_MS } from "../traffic-live-service.js";
 import { conditionRow, conditionsBody } from "./fixtures/road-condition.js";
 
 /** A full closure of situation `recordId`, fresh for twenty minutes from now. */
@@ -95,7 +96,7 @@ async function tempCachePath(): Promise<string> {
 afterEach(async () => {
   for (const cron of crons) cron.stop();
   try {
-    await Promise.all(crons.splice(0).map((cron) => cron.closeTrafficWriter()));
+    await Promise.all(crons.splice(0).map((cron) => cron.trafficLive.closeWriter()));
   } finally {
     vi.useRealTimers();
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -196,9 +197,9 @@ describe("traffic-live conditions merge", () => {
   it("keeps shadow candidates out of the shared graph and applied receipts", async () => {
     const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
     const cron = setupCronWithSeams({ roadConditionsMode: "shadow", writeLiveTraffic: write });
-    await cron.runTrafficLiveNow();
+    await cron.trafficLive.run();
     expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
-    expect(cron.getTrafficConditionsApplied().observationIds).toEqual([]);
+    expect(cron.trafficLive.conditionsApplied().observationIds).toEqual([]);
     cron.stop();
   });
 
@@ -216,11 +217,11 @@ describe("traffic-live conditions merge", () => {
       },
       writeLiveTraffic: write,
     });
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
     expect(write.mock.calls[0]?.[0].waysToEdges.size).toBe(0);
-    expect(handles.getTrafficConditionsApplied().receipts).toEqual([]);
-    expect(handles.getTrafficConditionsApplied().engineBootId).toBeNull();
+    expect(handles.trafficLive.conditionsApplied().receipts).toEqual([]);
+    expect(handles.trafficLive.conditionsApplied().engineBootId).toBeNull();
     handles.stop();
   });
 
@@ -230,12 +231,12 @@ describe("traffic-live conditions merge", () => {
     );
     const handles = setupCronWithSeams({ writeLiveTraffic: writeLive });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     const call = writeLive.mock.calls[0]?.[0];
     expect(call?.overrides?.get("0:1:2")).toMatchObject({ closed: true, observationId: A1 });
 
-    const applied = handles.getTrafficConditionsApplied();
+    const applied = handles.trafficLive.conditionsApplied();
     expect(applied.observationIds).toEqual([A1]);
     expect(applied.writtenAt).not.toBeNull();
     expect(applied.resolverVersion).toBe("r1");
@@ -264,9 +265,9 @@ describe("traffic-live conditions merge", () => {
         return [{ forward: true, level: 0, tile: 1, index: 2 }];
       },
     });
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
+    expect(handles.trafficLive.conditionsApplied().observationIds).toEqual([]);
     handles.stop();
   });
 
@@ -288,28 +289,28 @@ describe("traffic-live conditions merge", () => {
       },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(writeLive.mock.calls[0]?.[0].overrides?.size).toBe(1);
 
     // Second cycle fails while a renewal could still replace the last good set.
     failing = true;
     vi.advanceTimersByTime(staleMs - TRAFFIC_LEASE_RENEWAL_MS - 1);
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(writeLive.mock.calls[1]?.[0].overrides?.get("0:1:2")).toMatchObject({ closed: true });
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([A1]);
+    expect(handles.trafficLive.conditionsApplied().observationIds).toEqual([A1]);
     expect(writeLive.mock.calls[1]?.[0].validUntil).toBe("2026-09-06T00:10:00.000Z");
-    expect(handles.getTrafficConditionsApplied().validUntil).toBe("2026-09-06T00:10:00.000Z");
+    expect(handles.trafficLive.conditionsApplied().validUntil).toBe("2026-09-06T00:10:00.000Z");
 
     // Past it the closures are dropped rather than held open forever.
     vi.advanceTimersByTime(2);
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(writeLive.mock.calls[2]?.[0].overrides?.size).toBe(0);
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
+    expect(handles.trafficLive.conditionsApplied().observationIds).toEqual([]);
 
     // Past the window the set itself is gone.
     vi.advanceTimersByTime(TRAFFIC_LEASE_RENEWAL_MS);
-    await handles.runTrafficLiveNow();
-    expect(handles.getTrafficConditionsApplied().resolverVersion).toBeNull();
+    await handles.trafficLive.run();
+    expect(handles.trafficLive.conditionsApplied().resolverVersion).toBeNull();
 
     handles.stop();
   });
@@ -319,7 +320,7 @@ describe("traffic-live conditions merge", () => {
     vi.setSystemTime(new Date("2026-09-06T00:00:00.000Z"));
     const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
     const handles = setupCronWithSeams({ roadConditionsMode: "shadow", writeLiveTraffic: write });
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
     expect(write.mock.calls[0]?.[0].validUntil).toBe("2026-09-06T00:05:00.000Z");
     handles.stop();
@@ -334,7 +335,7 @@ describe("traffic-live conditions merge", () => {
       trafficLiveCronExpression: "0 0 1 1 *",
       writeLiveTraffic: write,
     });
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(write.mock.calls[0]?.[0].overrides?.size).toBe(1);
     expect(write.mock.calls[0]?.[0].validUntil).toBe("2026-09-06T00:02:30.000Z");
 
@@ -364,7 +365,7 @@ describe("traffic-live conditions merge", () => {
           }),
         ]),
     });
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
     expect(write.mock.calls[0]?.[0].validUntil).toBe("2026-09-06T00:05:00.000Z");
     handles.stop();
@@ -378,9 +379,9 @@ describe("traffic-live conditions merge", () => {
       refreshWaysToEdges,
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     await flush();
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     await flush();
 
     expect(refreshWaysToEdges).toHaveBeenCalledTimes(1);
@@ -396,7 +397,7 @@ describe("traffic-live conditions merge", () => {
       refreshWaysToEdges,
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     await flush();
 
     expect(refreshWaysToEdges).not.toHaveBeenCalled();
@@ -415,13 +416,13 @@ describe("traffic-live conditions merge", () => {
       logger: { info: () => {}, warn: () => {}, error: errorLog },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     expect(writeLive).toHaveBeenCalledTimes(1);
     expect(writeLive.mock.calls[0]?.[0].overrides?.size).toBe(0);
     // A bad conditions body is not a failed cycle: the live speeds still land.
     expect(errorLog).not.toHaveBeenCalled();
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
+    expect(handles.trafficLive.conditionsApplied().observationIds).toEqual([]);
 
     handles.stop();
   });
@@ -440,7 +441,7 @@ describe("traffic-live conditions merge", () => {
       logger: { info: infoLog, warn: () => {}, error: () => {} },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     expect(trace).toHaveBeenCalledTimes(1);
     expect([...(writeLive.mock.calls[0]?.[0].overrides?.keys() ?? [])]).toEqual(["0:1:7"]);
@@ -475,7 +476,7 @@ describe("traffic-live conditions merge", () => {
       logger: { info: infoLog, warn: () => {}, error: () => {} },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     expect([...(writeLive.mock.calls[0]?.[0].overrides?.keys() ?? [])].sort()).toEqual([]);
     expect(infoLog).toHaveBeenCalledWith(
@@ -500,7 +501,7 @@ describe("traffic-live conditions merge", () => {
       logger: { info: infoLog, warn: () => {}, error: () => {} },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     expect(infoLog).toHaveBeenCalledWith(
       "traffic-live: conditions applied",
@@ -523,7 +524,7 @@ describe("traffic-live conditions merge", () => {
       logger: { info: infoLog, warn: () => {}, error: () => {} },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     expect(writeLive.mock.calls[0]?.[0].overrides?.size).toBe(0);
     expect(infoLog).toHaveBeenCalledWith(
@@ -552,7 +553,7 @@ describe("traffic-live conditions merge", () => {
       logger: { info: infoLog, warn: () => {}, error: () => {} },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     const overrides = writeLive.mock.calls[0]?.[0].overrides;
     expect([...(overrides?.keys() ?? [])].sort()).toEqual([]);
@@ -565,7 +566,7 @@ describe("traffic-live conditions merge", () => {
       "traffic-live: span tracing",
       expect.objectContaining({ unanswered: 1, negative: 0 }),
     );
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
+    expect(handles.trafficLive.conditionsApplied().observationIds).toEqual([]);
 
     handles.stop();
   });
@@ -592,7 +593,7 @@ describe("traffic-live conditions merge", () => {
       logger: { info: () => {}, warn: warnLog, error: () => {} },
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     expect(writeLive).toHaveBeenCalledTimes(1);
     expect(writeLive.mock.calls[0]?.[0].overrides?.size).toBe(0);
@@ -600,7 +601,7 @@ describe("traffic-live conditions merge", () => {
       "traffic-live: conditions classification failed, writing no overrides",
       expect.objectContaining({ err: "way to edge lookup exploded" }),
     );
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
+    expect(handles.trafficLive.conditionsApplied().observationIds).toEqual([]);
 
     handles.stop();
   });
@@ -613,7 +614,7 @@ describe("traffic-live conditions merge", () => {
       traceSpanEdges: async () => [{ forward: true, level: 0, tile: 1, index: 7 }],
       spanEdgeCachePath,
     });
-    await first.runTrafficLiveNow();
+    await first.trafficLive.run();
     first.stop();
 
     const infoLog = vi.fn();
@@ -632,7 +633,7 @@ describe("traffic-live conditions merge", () => {
       logger: { info: infoLog, warn: () => {}, error: () => {} },
     });
 
-    await second.runTrafficLiveNow();
+    await second.trafficLive.run();
 
     expect(trace).not.toHaveBeenCalled();
     expect([...(writeLive.mock.calls[0]?.[0].overrides?.keys() ?? [])]).toEqual(["0:1:7"]);
@@ -659,17 +660,17 @@ describe("traffic-live conditions merge", () => {
       trafficConditionsStaleMs: 1_000,
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(trace).toHaveBeenCalledTimes(1);
 
     // Past the stale window, so the outage cycle runs with no conditions at all.
     failing = true;
     vi.advanceTimersByTime(2_000);
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     // Back up: the trace from before the outage is still cached.
     failing = false;
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(trace).toHaveBeenCalledTimes(1);
 
     handles.stop();
@@ -684,17 +685,17 @@ describe("traffic-live conditions merge", () => {
       traceSpanEdges: trace,
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(trace).toHaveBeenCalledTimes(1);
 
     // The closure is lifted: its span leaves both the file and this process.
     feed = conditionsBody([]);
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
     // Re-reported later, it is traced again rather than served from a cache
     // entry that was never pruned.
     feed = closureFeedWithGeometry();
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
     expect(trace).toHaveBeenCalledTimes(2);
 
     handles.stop();
@@ -722,9 +723,9 @@ describe("traffic-live conditions merge", () => {
       }),
     });
 
-    await handles.runTrafficLiveNow();
+    await handles.trafficLive.run();
 
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([A1]);
+    expect(handles.trafficLive.conditionsApplied().observationIds).toEqual([A1]);
 
     handles.stop();
   });
@@ -746,7 +747,7 @@ it("reconciles conditions even when the flow request fails", async () => {
       return writeResult(deps);
     },
   });
-  await cron.runTrafficLiveNow();
+  await cron.trafficLive.run();
   expect(checks).toBe(1);
   expect(writes).toBe(1);
   cron.stop();

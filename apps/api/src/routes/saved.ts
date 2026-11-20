@@ -23,6 +23,7 @@ import { db } from "../db/index";
 import { SAVED_LIST_NAME_UNIQUE } from "../db/saved-schema";
 import { labeledPlace, savedList, savedPlace, user } from "../db/schema";
 import { isUniqueViolation } from "../db/unique-violation";
+import { planSavedImport, suffixedListName } from "../services/saved-import-plan";
 import { savedImportLimit } from "../utils/rate-limit";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
@@ -223,8 +224,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
             }
             const base = name;
             for (let suffix = 1; ; suffix++) {
-              const ending = suffix === 1 ? "" : ` (${suffix})`;
-              name = `${base.slice(0, 200 - ending.length).replace(/[\uD800-\uDBFF]$/, "")}${ending}`;
+              name = suffixedListName(base, suffix);
               const id = crypto.randomUUID();
               // ON CONFLICT permits concurrent imports and ordinary list creation to race safely.
               const inserted = await tx
@@ -247,44 +247,16 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
             })
             .from(savedPlace)
             .where(eq(savedPlace.listId, listId));
-          const cells = new Map<string, { lat: number; lng: number }[]>();
-          const cellKey = (name: string, x: number, y: number) => JSON.stringify([name, x, y]);
-          const remember = (place: { name: string; lat: number; lng: number }) => {
-            const key = cellKey(
-              place.name,
-              Math.floor(place.lat / 1e-5),
-              Math.floor(place.lng / 1e-5),
-            );
-            const cell = cells.get(key) || [];
-            cell.push(place);
-            cells.set(key, cell);
-          };
-          for (const place of existing) remember(place);
-          let order = existing.reduce((max, place) => Math.max(max, place.sortOrder), -1);
-          const rows: (typeof savedPlace.$inferInsert)[] = [];
-          for (const place of places) {
-            const x = Math.floor(place.lat / 1e-5);
-            const y = Math.floor(place.lng / 1e-5);
-            let duplicate = false;
-            for (let dx = -1; dx <= 1 && !duplicate; dx++) {
-              for (let dy = -1; dy <= 1 && !duplicate; dy++) {
-                duplicate = (cells.get(cellKey(place.name, x + dx, y + dy)) || []).some(
-                  (other) =>
-                    Math.abs(other.lat - place.lat) <= 1e-5 &&
-                    Math.abs(other.lng - place.lng) <= 1e-5,
-                );
-              }
-            }
-            if (duplicate) continue;
-            remember(place);
-            rows.push({
+          const plan = planSavedImport(existing, places);
+          const rows: (typeof savedPlace.$inferInsert)[] = plan.accepted.map(
+            ({ place, sortOrder }) => ({
               ...place,
               id: crypto.randomUUID(),
               listId,
               placeId: null,
-              sortOrder: ++order,
-            });
-          }
+              sortOrder,
+            }),
+          );
           // All or nothing: a batch that would pass the cap is refused whole, and
           // the throw also rolls back a list created for it above.
           if (
@@ -304,7 +276,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
             listId,
             name,
             imported: rows.length,
-            skippedDuplicates: places.length - rows.length,
+            skippedDuplicates: plan.skippedDuplicates,
           };
         })
         .catch((error: unknown) => {

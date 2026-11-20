@@ -1752,7 +1752,7 @@ describe("GET /places/:id", () => {
 
 describe("socialContactTag", () => {
   it("maps known social hosts to their OSM contact tag", async () => {
-    const { socialContactTag } = await import("../places.js");
+    const { socialContactTag } = await import("../../services/place-details/merge.js");
     expect(socialContactTag("https://www.facebook.com/1967663743283516")).toBe("contact:facebook");
     expect(socialContactTag("https://instagram.com/openmapx")).toBe("contact:instagram");
     expect(socialContactTag("https://x.com/openmapx")).toBe("contact:twitter");
@@ -1760,7 +1760,7 @@ describe("socialContactTag", () => {
   });
 
   it("returns null for unsupported or unparseable hosts", async () => {
-    const { socialContactTag } = await import("../places.js");
+    const { socialContactTag } = await import("../../services/place-details/merge.js");
     expect(socialContactTag("https://example.com/x")).toBeNull();
     expect(socialContactTag("not a url")).toBeNull();
   });
@@ -1768,7 +1768,7 @@ describe("socialContactTag", () => {
 
 describe("pickMoreSpecificWebsite", () => {
   it("prefers the deeper-path URL (specific outlet over brand homepage)", async () => {
-    const { pickMoreSpecificWebsite } = await import("../places.js");
+    const { pickMoreSpecificWebsite } = await import("../../services/place-details/merge.js");
     expect(
       pickMoreSpecificWebsite(
         "http://www.shell.de/",
@@ -1778,7 +1778,7 @@ describe("pickMoreSpecificWebsite", () => {
   });
 
   it("keeps the present one when only one is set, and OSM on ties", async () => {
-    const { pickMoreSpecificWebsite } = await import("../places.js");
+    const { pickMoreSpecificWebsite } = await import("../../services/place-details/merge.js");
     expect(pickMoreSpecificWebsite("https://a.de/", undefined)).toBe("https://a.de/");
     expect(pickMoreSpecificWebsite(undefined, "https://b.de/x")).toBe("https://b.de/x");
     expect(pickMoreSpecificWebsite("https://a.de/menu", "https://b.de/info")).toBe(
@@ -1787,7 +1787,7 @@ describe("pickMoreSpecificWebsite", () => {
   });
 
   it("never lets an aggregator host displace an OSM-curated URL", async () => {
-    const { pickMoreSpecificWebsite } = await import("../places.js");
+    const { pickMoreSpecificWebsite } = await import("../../services/place-details/merge.js");
     expect(
       pickMoreSpecificWebsite("https://restaurant-mueller.de/", "https://www.lieferando.de/x/y/z"),
     ).toBe("https://restaurant-mueller.de/");

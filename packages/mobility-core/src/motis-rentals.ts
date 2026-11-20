@@ -1,4 +1,3 @@
-import { type Client, createClient } from "@hey-api/client-fetch";
 import type {
   RentalReturnConstraint as MotisRentalReturnConstraint,
   MultiPolygon,
@@ -11,7 +10,6 @@ import type {
   RentalZone,
   RentalZoneRestrictions,
 } from "@motis-project/motis-client";
-import { rentals } from "@motis-project/motis-client";
 import { withContributors } from "./contributors.js";
 import { decodePolyline } from "./polyline.js";
 import type { Attribution } from "./types/attribution.js";
@@ -32,8 +30,25 @@ import type {
   VehicleTypeDetail,
 } from "./types/shared-mobility.js";
 
+/**
+ * The text request the rental client needs. The integration host's `ctx.http`
+ * satisfies it; a non-2xx answer must resolve with its status, not reject.
+ */
+export interface MotisRentalsHttp {
+  getText(
+    url: string,
+    options: {
+      params: Record<string, string | boolean>;
+      maxBytes: number;
+      contentTypes: readonly string[];
+      discardErrorBody: true;
+      timeoutMs: number;
+    },
+  ): Promise<{ status: number; body: string }>;
+}
+
 interface MotisInstance {
-  client: Client;
+  baseUrl: string;
   origin: RentalServingOrigin;
 }
 
@@ -55,6 +70,9 @@ const DEFAULT_TRANSITOUS_URL = process.env.TRANSITOUS_URL ?? "https://api.transi
 const DEFAULT_MOTIS_URL = process.env.MOTIS_URL?.trim() || undefined;
 const LOCAL_BREAKER_FAILURES = 2;
 const LOCAL_BREAKER_OPEN_MS = 15_000;
+const RENTALS_TIMEOUT_MS = 15_000;
+/** A dense city viewport with zones answers a few MiB. */
+const MAX_RENTALS_BYTES = 32 * 1024 * 1024;
 
 function configuredUrl(url: string | undefined, fallback: string): string {
   const trimmed = url?.trim();
@@ -656,36 +674,48 @@ interface RentalQueryOutcome {
   failure?: string;
 }
 
+/** Drops trailing slashes in linear time, whatever the configured base URL holds. */
+function withoutTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  return value.slice(0, end);
+}
+
 async function queryRentals(
+  http: MotisRentalsHttp,
   instance: MotisInstance,
   bbox: [number, number, number, number],
 ): Promise<RentalQueryOutcome> {
   const [west, south, east, north] = bbox;
   try {
-    const response = await rentals({
-      client: instance.client,
-      fetch: globalThis.fetch,
-      query: {
-        min: `${south},${west}`,
-        max: `${north},${east}`,
-        withProviders: true,
-        withStations: true,
-        withVehicles: true,
-        withZones: true,
+    const response = await http.getText(
+      `${withoutTrailingSlashes(instance.baseUrl)}/api/v1/rentals`,
+      {
+        params: {
+          min: `${south},${west}`,
+          max: `${north},${east}`,
+          withProviders: true,
+          withStations: true,
+          withVehicles: true,
+          withZones: true,
+        },
+        maxBytes: MAX_RENTALS_BYTES,
+        contentTypes: ["application/json"],
+        discardErrorBody: true,
+        timeoutMs: RENTALS_TIMEOUT_MS,
       },
-    });
-    if (response.data) return { data: response.data, fallbackEligible: false };
-    const status = response.response?.status ?? 0;
-    return {
-      fallbackEligible: status === 0 || status >= 500,
-      failure: status > 0 ? `HTTP ${status}` : "MOTIS rental request failed",
-    };
+    );
+    if (response.status >= 200 && response.status < 300) {
+      return { data: JSON.parse(response.body) as RentalsResponse, fallbackEligible: false };
+    }
+    return { fallbackEligible: response.status >= 500, failure: `HTTP ${response.status}` };
   } catch (error) {
     return { fallbackEligible: true, failure: (error as Error).message };
   }
 }
 
 export function createMotisRentalsClient(options: {
+  http: MotisRentalsHttp;
   motisUrl?: string;
   transitousUrl?: string;
   rentalSourceIndex?: readonly MotisRentalSourceIndexEntry[];
@@ -693,10 +723,10 @@ export function createMotisRentalsClient(options: {
 }): MotisRentalsClient {
   const localUrl = options.motisUrl?.trim() || DEFAULT_MOTIS_URL;
   const localInstance: MotisInstance | undefined = localUrl
-    ? { client: createClient({ baseUrl: localUrl }), origin: "motis-local" }
+    ? { baseUrl: localUrl, origin: "motis-local" }
     : undefined;
   const hostedInstance: MotisInstance = {
-    client: createClient({ baseUrl: configuredUrl(options.transitousUrl, DEFAULT_TRANSITOUS_URL) }),
+    baseUrl: configuredUrl(options.transitousUrl, DEFAULT_TRANSITOUS_URL),
     origin: "transitous",
   };
   const sources = options.rentalSourceIndex ?? [];
@@ -707,7 +737,7 @@ export function createMotisRentalsClient(options: {
     async fetchMotisRentals(bbox, formFactors, resolveContributors = options.resolveContributors) {
       const now = Date.now();
       if (localInstance && now >= localBreakerOpenUntil) {
-        const local = await queryRentals(localInstance, bbox);
+        const local = await queryRentals(options.http, localInstance, bbox);
         if (local.data) {
           localFailures = 0;
           localBreakerOpenUntil = 0;
@@ -731,7 +761,7 @@ export function createMotisRentalsClient(options: {
         }
       }
 
-      const hosted = await queryRentals(hostedInstance, bbox);
+      const hosted = await queryRentals(options.http, hostedInstance, bbox);
       if (hosted.data) {
         return mapMotisRentalSnapshot(
           hosted.data,

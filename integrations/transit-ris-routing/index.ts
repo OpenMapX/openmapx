@@ -1,14 +1,13 @@
 import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
+import { createRisClient } from "@openmapx/mobility-core/ris-client";
 import * as ris from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   const { attribution, wrapRT } = defineTransitProvider(ctx);
   const clientId = ctx.config.clientId as string | undefined;
   const apiKey = ctx.config.apiKey as string | undefined;
-  ctx.onActivate(() => {
-    ris.setRisCredentials({ clientId, apiKey });
-  });
-  if (!clientId?.trim() || !apiKey?.trim()) return;
+  const risClient = createRisClient({ clientId, apiKey }, ctx.http);
+  if (!risClient.isConfigured()) return;
 
   ctx.registerTransitProvider({
     id: "transit-ris-routing",
@@ -44,6 +43,7 @@ export function setup(ctx: IntegrationContext): void {
       const { date, time } = ris.germanWallClock(when ? new Date(when) : new Date());
 
       const plan = await ris.planJourney(
+        risClient,
         params.from.lat,
         params.from.lng,
         params.to.lat,

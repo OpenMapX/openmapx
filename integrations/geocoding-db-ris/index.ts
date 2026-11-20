@@ -4,8 +4,9 @@ import {
   type IntegrationContext,
   type Wgs84BoundingBox,
 } from "@openmapx/integration-framework";
+import { createRisClient } from "@openmapx/mobility-core/ris-client";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { dbRisGeocodingService, lookupDbStation, setRisCredentials } from "./provider.js";
+import { createDbRisGeocodingService, lookupDbStation } from "./provider.js";
 
 const ATTRIBUTION_SOURCE_ID = "db-ris-stations";
 
@@ -17,12 +18,14 @@ const ATTRIBUTION_SOURCE_ID = "db-ris-stations";
 const COVERAGE: Wgs84BoundingBox = [5.5, 45.5, 17.5, 55.5];
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.onActivate(() => {
-    setRisCredentials({
+  const risClient = createRisClient(
+    {
       clientId: ctx.config.clientId as string | undefined,
       apiKey: ctx.config.apiKey as string | undefined,
-    });
-  });
+    },
+    ctx.http,
+  );
+  const dbRisGeocodingService = createDbRisGeocodingService(risClient);
   ctx.registerGeocodingProvider(dbRisGeocodingService);
   ctx.registerSearchSuggestionProvider(
     createGeocoderSuggestionProvider({
@@ -48,6 +51,6 @@ export function setup(ctx: IntegrationContext): void {
   // core typing.
   registerPlaceResolver("eva", async (value, resolverCtx) => {
     if (!/^\d+$/.test(value)) return null;
-    return (await lookupDbStation(value, resolverCtx.lang)) as unknown as Place;
+    return (await lookupDbStation(risClient, value, resolverCtx.lang)) as unknown as Place;
   });
 }

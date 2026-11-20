@@ -233,6 +233,6 @@ it("keeps complete readings from matching boxes and skips malformed or nonmatchi
 it("rejects an unknown sensor before acquiring upstream data", async () => {
   const { body, reply, fetch } = await readStations([], "unknown");
   expect(reply.status).toHaveBeenCalledWith(400);
-  expect(body).toEqual({ message: "Invalid sensor type" });
+  expect(body).toEqual({ error: "Invalid sensor type" });
   expect(fetch).not.toHaveBeenCalled();
 });

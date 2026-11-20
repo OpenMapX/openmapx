@@ -1,17 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-// Mock fetcher at the integration path (registry code was moved to the integration)
-vi.mock("@integrations/transit-dynamic-registry/fetcher", () => ({
-  fetchRegistryEntries: vi.fn(),
-}));
-
-// Import after mocks
-import { fetchRegistryEntries } from "@integrations/transit-dynamic-registry/fetcher";
-import { registry } from "@integrations/transit-dynamic-registry/registry";
+import { RegistryManager } from "@integrations/transit-dynamic-registry/registry";
 import type {
   ProtocolType,
   RegistryEntry,
 } from "@integrations/transit-dynamic-registry/registry-types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const fetchRegistryEntries = vi.fn<() => Promise<RegistryEntry[]>>();
+const registry = new RegistryManager(fetchRegistryEntries);
 
 // Helpers
 
@@ -50,7 +45,7 @@ describe("RegistryManager (registry singleton)", () => {
 
   it("after initialize with 1 valid entry → entryCount ≥ 1, findByPrefix returns entry", async () => {
     const oebbEntry = makeEntry("at/oebb-hafas-mgate", "oebb:");
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([oebbEntry]);
+    fetchRegistryEntries.mockResolvedValue([oebbEntry]);
 
     await registry.initialize();
 
@@ -63,7 +58,7 @@ describe("RegistryManager (registry singleton)", () => {
 
   it("suppressed entries (de/db-hafas-mgate with prefix db:) → filtered out, findByPrefix returns null", async () => {
     const dbEntry = makeEntry("de/db-hafas-mgate", "db:");
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([dbEntry]);
+    fetchRegistryEntries.mockResolvedValue([dbEntry]);
 
     await registry.initialize();
 
@@ -72,7 +67,7 @@ describe("RegistryManager (registry singleton)", () => {
   });
 
   it("leaves out entries whose endpoint no longer exists", async () => {
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([
+    fetchRegistryEntries.mockResolvedValue([
       makeEntry("de/mobil-nrw-hafas-mgate", "mobil:"),
       makeEntry("de/db-regio-hafas-mgate", "dbregio:"),
       makeEntry("de/kvb-hafas-mgate", "kvb:"),
@@ -87,7 +82,7 @@ describe("RegistryManager (registry singleton)", () => {
 
   it("unsupported protocol (otpRest) → filtered out, entryCount = 0", async () => {
     const otpRestEntry = makeEntry("us/some-otp-rest", "some:", "otpRest");
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([otpRestEntry]);
+    fetchRegistryEntries.mockResolvedValue([otpRestEntry]);
 
     await registry.initialize();
 
@@ -98,7 +93,7 @@ describe("RegistryManager (registry singleton)", () => {
   it("prefix collision → keeps first entry, entryCount = 1", async () => {
     const entry1 = makeEntry("at/first-hafas-mgate", "collision:");
     const entry2 = makeEntry("de/second-hafas-mgate", "collision:");
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([entry1, entry2]);
+    fetchRegistryEntries.mockResolvedValue([entry1, entry2]);
 
     await registry.initialize();
 
@@ -127,7 +122,7 @@ describe("RegistryManager (registry singleton)", () => {
       [-74.3, 40.5, -73.7, 40.9],
     );
 
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([oebbEntry, nycEntry]);
+    fetchRegistryEntries.mockResolvedValue([oebbEntry, nycEntry]);
 
     await registry.initialize();
 
@@ -159,7 +154,7 @@ describe("RegistryManager (registry singleton)", () => {
       },
     };
 
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([entryWithAttribution]);
+    fetchRegistryEntries.mockResolvedValue([entryWithAttribution]);
 
     await registry.initialize();
 
@@ -175,7 +170,7 @@ describe("RegistryManager (registry singleton)", () => {
     const entryNoAttribution = makeEntry("fr/sncf-hafas-mgate", "sncf:");
     // Override name for clarity
     entryNoAttribution.name = "SNCF";
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([entryNoAttribution]);
+    fetchRegistryEntries.mockResolvedValue([entryNoAttribution]);
 
     await registry.initialize();
 

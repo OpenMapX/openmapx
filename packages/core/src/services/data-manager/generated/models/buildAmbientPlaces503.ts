@@ -4,7 +4,6 @@
 export type BuildAmbientPlaces503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

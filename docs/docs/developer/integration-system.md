@@ -882,6 +882,13 @@ per-client observed cooldown fallback. The
 [Entur runtime guide](https://github.com/OpenMapX/openmapx/blob/main/packages/entur-client/README.md)
 documents those limits and the separate national-situations cache contract.
 
+`http.get()` and `http.post()` return bounded JSON and reject a non-2xx answer
+with `FetchJsonHttpError` from `@openmapx/core`. It carries `status` and the
+`Retry-After` delay as `retryAfterMs`, so provider failure classification can tell
+authorization, quota and upstream failures apart. Its message never contains the
+URL, because provider keys often sit in the query string. Both methods append
+`params` to the query string.
+
 Use `http.getResponse()` or `http.postResponse()` for JSON when status or
 allowlisted rate-limit headers matter, `http.getBytes()` for buffered binary
 payloads, and `http.getText()` / `http.postText()` for XML or other text.
@@ -922,8 +929,33 @@ checked, and the original timeout covers the whole chain and body. Standard
 authorization, cookie and proxy-authorization headers are removed permanently
 after a cross-origin hop; same-origin redirects retain them. Trusted redirects
 reject HTTPS-to-HTTP downgrades and URL credentials before contacting the target.
-Omitting `redirect` retains native fetch redirect behavior.
-Integration-local raw `fetch` is not an escape hatch for provider work.
+Omitting `redirect` follows redirects, unless a caller header falls outside the
+representation headers (`Accept`, `Accept-Language`, `Content-Type`,
+`If-None-Match`, `If-Modified-Since`) and `User-Agent`. Such a header may carry a
+credential, for example `x-api-key`, so the request then refuses every redirect.
+`get()` and `post()` apply the same rule.
+
+#### Choosing the HTTP path
+
+Server-side integration code and the shared provider packages use one of three
+paths:
+
+- **`ctx.http`**, or an `HttpClient` injected from it, for credentialed requests,
+  quota-bound acquisition, binary, streamed or tile responses, and whenever the
+  status or response headers matter.
+- **`fetchJson`** from `@openmapx/core` is accepted for simple, public, unkeyed
+  JSON from a fixed provider host.
+- **`safeFetch*`** or `mobilityHttpTransport` is required when the URL comes from
+  data, users or operator configuration. It is the SSRF boundary: it pins DNS and
+  refuses private hosts unless the operator allowlists them. `ctx.http` does not
+  provide that boundary.
+
+Never use raw `fetch` in server-side integration code or the shared provider
+packages, apart from listed local-service probes. `pnpm check-provider-http`
+enforces this rule. Its exception lists in `scripts/check-provider-http.ts` name
+each remaining site with its reason. The same check refuses a coordinate that
+falls back to zero (`lat ?? 0`), which would place a record at 0° N 0° E; reject
+or omit the record instead.
 
 Route queries arrive exactly as Fastify parsed them: each value is a string, an
 array for a repeated key, or undefined. Use `scalarQuery`/`scalarQueries` and
@@ -992,6 +1024,44 @@ to the host's unmatched-route bucket before its 404. In addition, `POST`, `PUT`,
 Fastify parses their bodies. `GET` and `HEAD` do not use that admission bucket, so
 bursty integration tile traffic retains its dedicated tier. Do not add integration
 paths to the global URL-pattern limiter.
+
+#### Tile proxies
+
+A route that relays map tiles from an upstream uses `createTileProxyHandler`
+from the server-only `@openmapx/integration-framework/tile-proxy` entry instead
+of its own `fetch`:
+
+```ts
+ctx.registerRoute(
+  "GET",
+  "/tiles/:z/:x/:y.png",
+  createTileProxyHandler(ctx, {
+    kind: "raster",
+    label: "Waymarked Trails tile",
+    url: ({ z, x, y }) => `https://tile.example.org/${z}/${x}/${y}.png`,
+    maxZoom: 18,
+    fallbackContentType: "image/png",
+    cacheControl: "public, max-age=604800, s-maxage=604800",
+  }),
+  { rateLimitTier: "tile" },
+);
+```
+
+The handler accepts only decimal `z`, `x` and `y` path parameters inside the Web
+Mercator grid up to `maxZoom` (default 22) and answers 400 before any upstream
+request otherwise, so a path parameter can never reach the upstream URL
+unchecked. `url` receives the parsed tile and the request and may return `null`
+to answer 400 for other invalid parameters. `kind` selects the raster or vector
+media-type allowlist and byte ceiling. The tile streams through
+`ctx.http.getStream`; with `cache` it is buffered into `ctx.cache.withCache`
+instead. Upstream 404 answers 404, `empty` maps "no data"
+statuses to 204, and every other failure answers 502 with `{ error }`. Logs name
+the label and status but never the URL, because keys often sit in the query.
+Keep the path literal in `registerRoute` so OpenAPI extraction sees it, and wrap
+the handler in your own when a gate must answer first.
+`createUpstreamImageHandler` applies the same rules to a fixed-path image such as
+a legend. `parseWebMercatorTileCoordinates` and `tileBoundsWebMercator` (WMS
+`bbox` values) are exported for routes that need them directly.
 
 Provider health accepts only closed outcomes. Timeouts, connection failures,
 upstream 5xx responses, other upstream 4xx responses, authentication failures,

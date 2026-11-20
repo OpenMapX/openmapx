@@ -185,7 +185,7 @@ async function findNearestAirports(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  const releaseBackgroundLoad = startBackgroundLoad(ctx.log);
+  const releaseBackgroundLoad = startBackgroundLoad(ctx.http, ctx.log);
   ctx.onShutdown(async () => releaseBackgroundLoad());
   ctx.registerKnowledgeProvider(
     withKnowledgeContributors(createOurAirportsSource(ctx.log), () => {

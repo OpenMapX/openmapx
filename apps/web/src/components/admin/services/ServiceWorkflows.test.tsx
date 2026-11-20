@@ -1038,7 +1038,6 @@ describe("pending form inputs and malformed operation acceptance", () => {
         attempts++;
         return Response.json(
           {
-            ok: false,
             error: "Invalid region",
             issues: [{ path: "source.region", message: "Use a supported path" }],
           },

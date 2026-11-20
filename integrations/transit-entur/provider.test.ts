@@ -4,34 +4,33 @@ import type {
   StopPlaceFieldsFragment,
 } from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
 import { describe, expect, it } from "vitest";
+import { collectStopModes, dedupeById, isTruthyString, toTransportMode } from "./common.js";
 import {
-  buildStopIdentity,
-  calculateDelaySeconds,
-  collectStopModes,
-  datePartFromIso,
-  decodeServiceJourneyId,
-  dedupeById,
-  encodeServiceJourneyId,
   ensureClosedRing,
   formatTransportModes,
   humanizeNsrEnum,
-  isQuayId,
-  isTruthyString,
-  motisModesToEntur,
-  normalizeColor,
-  normalizeLine,
-  normalizeStopPlace,
   nsrCoordinatesFromPosList,
   nsrPrivateCodeValue,
   nsrRefValue,
   nsrTextValue,
   parkingKindFromVehicleTypes,
+} from "./nsr-mapping.js";
+import {
+  buildStopIdentity,
+  calculateDelaySeconds,
+  datePartFromIso,
+  decodeServiceJourneyId,
+  encodeServiceJourneyId,
+  isQuayId,
+  motisModesToEntur,
+  normalizeColor,
+  normalizeLine,
+  normalizeStopPlace,
   pickLocalizedText,
   shiftDate,
   stripKnownPrefix,
   toAlertSeverity,
   toOccupancyLevel,
-  toTransportMode,
 } from "./provider.js";
 
 describe("stripKnownPrefix", () => {

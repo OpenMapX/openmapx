@@ -34,12 +34,12 @@ export async function adminOperationsRoute(app: FastifyInstance): Promise<void> 
       const definition = getAdminOperation(req.params.id);
       if (!definition) {
         reply.status(404);
-        return { ok: false, error: "Unknown operation" };
+        return { error: "Unknown operation" };
       }
       const parsed = parseAdminOperationInput(definition, req.body);
       if (!parsed.ok) {
         reply.status(400);
-        return parsed;
+        return { error: parsed.error, issues: parsed.issues };
       }
       return {
         ok: true,
@@ -52,7 +52,7 @@ export async function adminOperationsRoute(app: FastifyInstance): Promise<void> 
     {
       beforeValidation: async (req, reply) => {
         if (!getAdminOperation((req.params as { id: string }).id))
-          return reply.code(404).send({ ok: false, error: "Unknown operation" });
+          return reply.code(404).send({ error: "Unknown operation" });
       },
     },
   );
@@ -64,12 +64,12 @@ export async function adminOperationsRoute(app: FastifyInstance): Promise<void> 
       const definition = getAdminOperation(req.params.id);
       if (!definition) {
         reply.status(404);
-        return { ok: false, error: "Unknown operation" };
+        return { error: "Unknown operation" };
       }
       const parsed = parseAdminOperationInput(definition, req.body);
       if (!parsed.ok) {
         reply.status(400);
-        return parsed;
+        return { error: parsed.error, issues: parsed.issues };
       }
 
       const adminSession = getAdminSession(req);
@@ -94,7 +94,7 @@ export async function adminOperationsRoute(app: FastifyInstance): Promise<void> 
     {
       beforeValidation: async (req, reply) => {
         if (!getAdminOperation((req.params as { id: string }).id))
-          return reply.code(404).send({ ok: false, error: "Unknown operation" });
+          return reply.code(404).send({ error: "Unknown operation" });
       },
     },
   );

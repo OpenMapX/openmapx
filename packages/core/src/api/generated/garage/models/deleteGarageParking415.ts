@@ -4,7 +4,6 @@
 export type DeleteGarageParking415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

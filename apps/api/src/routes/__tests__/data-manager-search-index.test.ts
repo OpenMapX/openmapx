@@ -85,12 +85,12 @@ describe("GET /data-manager/search-index/status", () => {
 
   it("preserves the data-manager 404 response for an absent index", async () => {
     fetchMock.mockResolvedValueOnce(
-      Response.json({ ok: false, error: "osm_search index not built" }, { status: 404 }),
+      Response.json({ error: "osm_search index not built" }, { status: 404 }),
     );
     const res = await app.inject({ method: "GET", url: "/data-manager/search-index/status" });
 
     expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
+    expect(res.json()).toEqual({ error: "osm_search index not built" });
   });
 });
 
@@ -131,10 +131,11 @@ describe("GET /data-manager/notable-places/status", () => {
     );
 
     fetchMock.mockResolvedValueOnce(
-      Response.json({ ok: false, error: "notable_places index not built" }, { status: 404 }),
+      Response.json({ error: "notable_places index not built" }, { status: 404 }),
     );
     const absent = await app.inject({ method: "GET", url: "/data-manager/notable-places/status" });
     expect(absent.statusCode).toBe(404);
+    expect(absent.json()).toEqual({ error: "notable_places index not built" });
   });
 });
 

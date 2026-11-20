@@ -4,7 +4,6 @@
 export type GetSearchIndexStatus429 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

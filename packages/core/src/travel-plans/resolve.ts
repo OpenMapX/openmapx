@@ -1,7 +1,6 @@
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type {
   Departure,
-  TransitPlace,
   TransitStop,
   TransitTripReference,
   TripItinerary,
@@ -11,7 +10,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import type { TransitPlanParams, TransitPlanQuery, TransitReferenceParams } from "../api/transit";
 import { preferredModesToMotis } from "../constants/transit";
-import { haversineDistance } from "../utils/coordinates";
+import { haversineDistance, latLngOrNull } from "../utils/coordinates";
 import { timeZoneAt, tzOffsetMinutes, zonedWallClockToInstant } from "../utils/timezone";
 import { transitItineraryKey } from "../utils/transitItineraryKey";
 import { itineraryMatchesTransitReference } from "../utils/transitTripReference";
@@ -47,11 +46,7 @@ const fail = (code: TravelPlanResolutionError["code"]): never => {
   throw new TravelPlanResolutionError(code);
 };
 const coords = (p: { lat: number; lng: number }): [number, number] => [p.lng, p.lat];
-const validPoint = (p: { lat: number; lng: number }) =>
-  Number.isFinite(p.lat) &&
-  Number.isFinite(p.lng) &&
-  Math.abs(p.lat) <= 90 &&
-  Math.abs(p.lng) <= 180;
+const validPoint = (p: { lat: number; lng: number }) => latLngOrNull(p.lat, p.lng) !== null;
 /** Never confuse the public line number (RE9) with the operational number (10935). */
 function trainNumber(value: string | undefined): string | undefined {
   const m = /^(?:[A-Za-z]+\s+)?(\d{1,8})$/.exec(value?.trim() ?? "");
@@ -87,11 +82,18 @@ function strictInstant(wall: string, zone: string): number {
 function sameTime(value: string | undefined, expected: number): boolean {
   return value !== undefined && Date.parse(value) === expected;
 }
-function atStation(p: TransitPlace, name: string, stops: TransitStop[]): boolean {
+type PlacedJourneyStop = VehicleJourneyStop & { lat: number; lng: number };
+/** A journey stop at the named station; one without coordinates cannot be matched. */
+function atStation(
+  p: VehicleJourneyStop,
+  name: string,
+  stops: TransitStop[],
+): p is PlacedJourneyStop {
+  const at = latLngOrNull(p.lat, p.lng);
   return (
-    validPoint(p) &&
+    at !== null &&
     stops.some((s) => {
-      const distance = haversineDistance(coords(p), coords(s));
+      const distance = haversineDistance([at.lng, at.lat], coords(s));
       return (
         distance <= 1500 && (travelStationKey(p.name) === travelStationKey(name) || distance <= 300)
       );
@@ -180,8 +182,8 @@ export async function resolveSharedTravelPlan(
     );
     const verified: Array<{
       reference: TransitTripReference["legs"][number];
-      from: VehicleJourneyStop;
-      to: VehicleJourneyStop;
+      from: PlacedJourneyStop;
+      to: PlacedJourneyStop;
     }> = [];
     for (const [index, shared] of plan.legs.entries()) {
       check();
@@ -229,9 +231,8 @@ export async function resolveSharedTravelPlan(
       if (candidates.size > 4) fail("ambiguous");
       const matches: {
         departure: Departure;
-        journey: VehicleJourney;
-        fromIndex: number;
-        toIndex: number;
+        from: PlacedJourneyStop;
+        to: PlacedJourneyStop;
       }[] = [];
       for (const d of candidates.values()) {
         const journey = await acquire(() => port.journey(d.tripId, signal));
@@ -258,7 +259,7 @@ export async function resolveSharedTravelPlan(
               sameTime(to.scheduledArrival, arrival) &&
               atStation(to, shared.to, toStops)
             )
-              matches.push({ departure: d, journey, fromIndex: a, toIndex: b });
+              matches.push({ departure: d, from, to });
           }
         }
       }
@@ -266,9 +267,8 @@ export async function resolveSharedTravelPlan(
       if (matches.length !== 1) fail("ambiguous");
       const match = matches[0],
         d = match.departure;
-      const stops = match.journey.stops.slice(match.fromIndex, match.toIndex + 1);
-      const first = stops[0],
-        last = stops.at(-1) ?? fail("invalid");
+      const first = match.from,
+        last = match.to;
       verified.push({
         reference: {
           tripId: d.tripId,

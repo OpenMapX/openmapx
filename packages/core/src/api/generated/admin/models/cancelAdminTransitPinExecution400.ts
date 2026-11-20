@@ -4,7 +4,6 @@
 export type CancelAdminTransitPinExecution400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

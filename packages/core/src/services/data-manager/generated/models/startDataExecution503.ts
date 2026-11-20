@@ -4,7 +4,6 @@
 export type StartDataExecution503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

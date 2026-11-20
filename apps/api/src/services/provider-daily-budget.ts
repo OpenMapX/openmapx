@@ -1,112 +1,14 @@
 import {
-  createLocalQuotaMeter,
-  type SharedRequestDecision,
-  type SharedRequestPolicy,
-} from "@openmapx/integration-framework";
+  maptilerDailyBudget as createMaptilerDailyBudget,
+  createProviderDailyBudget,
+  dailyRequestLimit,
+  type ProviderBudgetDecision,
+  type ProviderDailyBudget,
+  type SharedAdmission,
+} from "@openmapx/integration-framework/provider-daily-budget";
 import { redis } from "../redis.js";
 import type { UpstreamRedisClient } from "./upstream-runtime/index.js";
 import { createSharedAdmission } from "./upstream-runtime/shared-admission.js";
-
-const DAY_MS = 86_400_000;
-const STORE_UNAVAILABLE_RETRY_SECONDS = 30;
-
-export type ProviderBudgetDecision =
-  | { allowed: true }
-  | {
-      allowed: false;
-      status: 429 | 503;
-      retryAfterSeconds: number;
-      /** True for the first refusal of a spent budget in its window, so it is logged once. */
-      firstRefusalInWindow: boolean;
-    };
-
-export interface ProviderDailyBudget {
-  admit(signal?: AbortSignal): Promise<ProviderBudgetDecision>;
-}
-
-interface SharedAdmission {
-  admitSharedRequest(input: {
-    scope: string;
-    key: string;
-    policy?: SharedRequestPolicy;
-    signal?: AbortSignal;
-  }): Promise<SharedRequestDecision>;
-}
-
-/**
- * A daily request budget for one key-bearing upstream, shared by every client
- * and every API replica through the upstream runtime's shared admission. It
- * bounds what the operator's key can be made to spend, whatever the number of
- * client addresses involved; per-client limits alone cannot.
- *
- * Without a shared store (a development checkout with no Valkey) nothing is
- * metered. With a store configured but unreachable, `whenStoreUnavailable`
- * decides: `refuse` answers 503, and `meter-locally` counts the same daily
- * budget in this process (each replica then admits up to the full budget).
- * Either way a store failure never becomes unmetered use of a paid key.
- */
-export function createProviderDailyBudget(options: {
-  provider: string;
-  limit: number;
-  admission: SharedAdmission | null;
-  whenStoreUnavailable: "refuse" | "meter-locally";
-}): ProviderDailyBudget {
-  const policy: SharedRequestPolicy = {
-    id: "daily",
-    limit: options.limit,
-    durationMs: DAY_MS,
-    minIntervalMs: 0,
-  };
-  const localMeter = createLocalQuotaMeter({ maxCounters: 1 });
-  let warnedUntil = 0;
-
-  const spent = (retryAfterMs: number): ProviderBudgetDecision => {
-    const now = Date.now();
-    const firstRefusalInWindow = now >= warnedUntil;
-    if (firstRefusalInWindow) warnedUntil = now + retryAfterMs;
-    return {
-      allowed: false,
-      status: 429,
-      retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)),
-      firstRefusalInWindow,
-    };
-  };
-
-  return {
-    async admit(signal) {
-      if (!options.admission) return { allowed: true };
-      const decision = await options.admission.admitSharedRequest({
-        scope: "provider-daily-budget",
-        key: options.provider,
-        policy,
-        ...(signal ? { signal } : {}),
-      });
-      if (decision.allowed) return { allowed: true };
-      if (decision.reason !== "store_unavailable") return spent(decision.retryAfterMs ?? 60_000);
-      if (options.whenStoreUnavailable === "refuse") {
-        return {
-          allowed: false,
-          status: 503,
-          retryAfterSeconds: STORE_UNAVAILABLE_RETRY_SECONDS,
-          firstRefusalInWindow: false,
-        };
-      }
-      const local = localMeter.consume({
-        bucket: options.provider,
-        cost: 1,
-        windows: [{ id: "daily", limit: options.limit, durationMs: DAY_MS }],
-      });
-      if (local.allowed) return { allowed: true };
-      return spent((local.retryAt ?? Date.now() + 60_000) - Date.now());
-    },
-  };
-}
-
-/** A positive integer from the environment, or undefined when unset, zero or invalid. */
-function dailyLimit(name: string): number | undefined {
-  const raw = Number(process.env[name]?.trim());
-  return Number.isSafeInteger(raw) && raw > 0 ? raw : undefined;
-}
 
 let sharedAdmission: SharedAdmission | null | undefined;
 
@@ -129,28 +31,15 @@ function configuredSharedAdmission(): SharedAdmission | null {
 export function tomtomTrafficDailyBudget(): ProviderDailyBudget {
   return createProviderDailyBudget({
     provider: "tomtom-traffic",
-    limit: dailyLimit("TOMTOM_TRAFFIC_DAILY_REQUEST_LIMIT") ?? 50_000,
+    limit: dailyRequestLimit("TOMTOM_TRAFFIC_DAILY_REQUEST_LIMIT") ?? 50_000,
     admission: configuredSharedAdmission(),
     whenStoreUnavailable: "refuse",
   });
 }
 
-/**
- * MapTiler can serve the whole basemap (tiles, glyphs, sprites, satellite and
- * terrain), so a global cap stops the map for everyone. It is therefore off
- * unless the operator sets `MAPTILER_DAILY_REQUEST_LIMIT`; the per-client tile
- * tier always applies. A configured budget keeps the map working while the
- * store is unreachable by counting in process.
- */
+/** The MapTiler key's daily budget, shared with MapTiler geocoding; null when unset. */
 export function maptilerDailyBudget(): ProviderDailyBudget | null {
-  const limit = dailyLimit("MAPTILER_DAILY_REQUEST_LIMIT");
-  if (limit === undefined) return null;
-  return createProviderDailyBudget({
-    provider: "maptiler",
-    limit,
-    admission: configuredSharedAdmission(),
-    whenStoreUnavailable: "meter-locally",
-  });
+  return createMaptilerDailyBudget(configuredSharedAdmission());
 }
 
 /**
@@ -179,7 +68,7 @@ export function sendProviderBudgetRefusal(
   reply.header("Cache-Control", "no-store");
   reply.header("Retry-After", String(decision.retryAfterSeconds));
   return reply.status(decision.status).send({
-    message:
+    error:
       decision.status === 429
         ? `${provider} has used its daily request budget`
         : `${provider} is temporarily unavailable`,

@@ -1,12 +1,14 @@
 import { Readable } from "node:stream";
 import type { SharedRequestDecision } from "@openmapx/integration-framework";
+import {
+  createProviderDailyBudget,
+  type ProviderDailyBudget,
+} from "@openmapx/integration-framework/provider-daily-budget";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { uniformErrorHandler } from "../../server-wiring.js";
 import {
-  createProviderDailyBudget,
   maptilerDailyBudget,
-  type ProviderDailyBudget,
   sendProviderBudgetRefusal,
 } from "../../services/provider-daily-budget.js";
 

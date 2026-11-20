@@ -4,7 +4,6 @@
 export type GetAppliedTrafficConditions501 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

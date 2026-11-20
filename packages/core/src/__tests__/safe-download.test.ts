@@ -646,6 +646,20 @@ describe("safeFetchJson", () => {
     }
   });
 
+  it("reads a Retry-After HTTP date as the seconds until it", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    const at = new Date(Math.ceil(Date.now() / 1000) * 1000 + 120_000).toUTCString();
+    stubFetchSequence(makeResponse({ status: 429, headers: { "retry-after": at } }));
+
+    const caught = await safeFetchJsonResponse("https://ex.test/rate-limited").catch(
+      (error: unknown) => error,
+    );
+    expect(caught).toBeInstanceOf(SafeFetchHttpError);
+    const seconds = (caught as SafeFetchHttpError).retryAfterSeconds ?? 0;
+    expect(seconds).toBeGreaterThan(110);
+    expect(seconds).toBeLessThanOrEqual(121);
+  });
+
   it.each(["9000000000000000", "9007199254740992"])(
     "drops unsafe or overly long Retry-After value %s",
     async (retryAfter) => {

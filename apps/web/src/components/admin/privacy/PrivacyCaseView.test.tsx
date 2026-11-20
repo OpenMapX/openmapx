@@ -18,7 +18,7 @@ describe("privacy case view", () => {
     detail.request.identityMethod = "manual";
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => privacyJson({ code: "IDENTITY_REQUIRED" }, 409)),
+      vi.fn(async () => privacyJson({ error: "Conflict", code: "IDENTITY_REQUIRED" }, 409)),
     );
     const api = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
     render(

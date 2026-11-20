@@ -4,7 +4,6 @@
 export type PatchAdminIntegrationConfig400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -19,5 +18,6 @@ export type PatchAdminIntegrationConfig400 =
       code?: string;
     }
   | {
+      error: string;
       errors: string[];
     };

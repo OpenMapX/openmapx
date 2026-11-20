@@ -53,7 +53,7 @@ const raw: CapturedPlace[] = [
   ...wire.legs[0].intermediateStops,
   wire.legs[0].to,
 ].slice(0, 9);
-const base: VehicleJourneyStop[] = raw.map((place) => ({
+const base: Array<VehicleJourneyStop & { lat: number; lng: number }> = raw.map((place) => ({
   stopId: place.stopId ?? "",
   name: place.name ?? "",
   lat: place.lat ?? 0,

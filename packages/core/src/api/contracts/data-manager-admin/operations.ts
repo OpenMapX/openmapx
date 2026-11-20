@@ -27,6 +27,7 @@ import {
   transitPreflightSelectionSchema,
   transitPreflightStaleSchema,
   transitProfileSchema,
+  transitRestartUnavailableSchema,
   transitScopeRejectedSchema,
   transitSourceActionErrorSchema,
   transitSourceListSchema,
@@ -222,7 +223,7 @@ export const dataManagerAdminOperations = {
     responses: {
       ...common,
       200: json(z.strictObject({ ok: z.literal(true), status: z.literal("restart-initiated") })),
-      503: json(httpErrorSchema),
+      503: json(z.union([httpErrorSchema, transitRestartUnavailableSchema])),
     },
   },
   getApiDataManagerProviders: {

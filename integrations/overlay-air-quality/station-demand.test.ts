@@ -56,4 +56,17 @@ describe("deterministic OpenAQ station demand", () => {
     );
     expect(forward.selected.some((item) => item.id === 2)).toBe(true);
   });
+
+  it("leaves out a station without coordinates instead of placing it at 0° N 0° E", () => {
+    const result = rankStationDemand(
+      [
+        location(1, { isMonitor: true, coordinates: { latitude: null, longitude: null } }),
+        location(2, { coordinates: { latitude: 51.5 } }),
+        location(3),
+      ],
+      { zoom: 8, limit: 4 },
+    );
+    expect(result.selected.map((station) => station.id)).toEqual([3]);
+    expect(result.diagnostics).toEqual({ candidateCount: 3, servedCount: 1, skippedCount: 2 });
+  });
 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { processLogger } from "./process-logger";
 
 /**
  * Reads files from installed integration directories.
@@ -23,7 +24,7 @@ const warned = new Set<string>();
 function warnOnce(key: string, message: string): void {
   if (warned.has(key)) return;
   warned.add(key);
-  console.warn(`[integration-host] ${message}`);
+  processLogger.warn({ component: "integration-host" }, message);
 }
 
 /**

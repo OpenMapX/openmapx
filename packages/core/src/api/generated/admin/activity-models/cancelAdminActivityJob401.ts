@@ -4,7 +4,6 @@
 export type CancelAdminActivityJob401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -402,7 +402,9 @@ services:
   to choose the per-client bucket: `expensive` for a route that calls a costly or
   quota-bound upstream, `routing` for directions a navigating client re-requests,
   `typeahead` for one a client calls while the user types,
-  `tile` for map-tile fan-out, or the default `public`. The incoming request's headers are
+  `tile` for map-tile fan-out, or the default `public`. Relay map tiles with
+  `createTileProxyHandler`, which validates the tile coordinates first; see
+  [Tile proxies](./integration-system.md#tile-proxies). The incoming request's headers are
   forwarded as `req.headers` (`Record<string, string | string[] | undefined>`);
   Node lowercases every header name when parsing the request, so read
   `req.headers["if-none-match"]`, not `req.headers["If-None-Match"]`.
@@ -415,9 +417,24 @@ services:
   with `captureCacheWriter(ctx.cache)` before the upstream request and store
   through it. A direct `ctx.cache.set` after the request could refill a cache an
   admin cleared meanwhile, and `pnpm check-integration-cache-writes` refuses it.
-- **`ctx.http`** is a small `fetch` wrapper that can transparently cache GET
-  responses in Redis when you pass a `{ cache: { ttl } }` option.
+- **`ctx.http`** is the host HTTP client. Use it, or an `HttpClient` injected
+  from it, for credentialed requests, quota-bound acquisition, binary, streamed or
+  tile responses, and whenever the status or response headers matter. `get` and
+  `post` reject a non-2xx answer with `FetchJsonHttpError`, which carries the
+  status, and `get` can cache JSON in Redis when you pass `{ cache: { ttl } }`.
+  `fetchJson` is accepted for simple, public, unkeyed JSON from a fixed provider
+  host. Use `safeFetch*` when the URL comes from data, users or operator
+  configuration, because it is the SSRF boundary. Never call raw `fetch` from
+  server-side integration code; `pnpm check-provider-http` refuses it. See
+  [Choosing the HTTP path](./integration-system.md#choosing-the-http-path).
 - **`ctx.log`** is a structured logger already tagged with the integration id.
+- **Errors** answer the one API error envelope, `{ error, code? }`. Throw
+  `httpError(status, "Invalid coordinates")` and the host replies with that text
+  in `error`, or send the body yourself with
+  `reply.status(400).send({ error: "Invalid coordinates", code: "INVALID_QUERY" })`
+  when the reply needs a stable `code`. Keep `error` safe to show to users and
+  never put an upstream body in it. See
+  [Error responses](./api-surface.md#error-responses).
 
 `ctx` also exposes `secrets`, an optional `db` (present only when the manifest
 requires `postgis`), and an event bus,

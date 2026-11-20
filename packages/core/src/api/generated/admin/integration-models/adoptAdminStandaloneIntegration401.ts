@@ -4,7 +4,6 @@
 export type AdoptAdminStandaloneIntegration401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

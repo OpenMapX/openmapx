@@ -124,10 +124,7 @@ describe("admin Compose routes", () => {
     try {
       const response = await a.inject({ method: "POST", url: "/api/admin/compose/down" });
       expect(response.statusCode).toBe(503);
-      expect(response.json()).toMatchObject({
-        ok: false,
-        error: expect.stringContaining("host shutdown"),
-      });
+      expect(response.json()).toEqual({ error: expect.stringContaining("host shutdown") });
       expect(f.start).not.toHaveBeenCalled();
     } finally {
       await a.close();

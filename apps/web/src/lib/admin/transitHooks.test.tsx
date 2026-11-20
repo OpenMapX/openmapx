@@ -166,7 +166,11 @@ describe("transit administration acquisition", () => {
   it("treats a checked sync conflict as an error without successful invalidation", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       Response.json(
-        { ok: false, reason: "in-flight", existingJobId: "active-job" },
+        {
+          error: "Another data job is running. Try again when it finishes.",
+          code: "in-flight",
+          existingJobId: "active-job",
+        },
         { status: 409 },
       ),
     );

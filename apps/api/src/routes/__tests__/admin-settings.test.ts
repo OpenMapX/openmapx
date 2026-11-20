@@ -26,6 +26,8 @@ vi.mock("../../services/app-logger.js", () => ({
     add: vi.fn(),
     getEntries: (...args: unknown[]) => mockGetEntries(...args),
     getSources: (...args: unknown[]) => mockGetSources(...args),
+    // The process logger, reached through the integration host, mirrors into this stream.
+    createPinoStream: () => ({ write: () => true }),
   },
 }));
 

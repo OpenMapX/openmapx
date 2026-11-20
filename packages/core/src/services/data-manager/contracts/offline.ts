@@ -58,10 +58,6 @@ export const offlinePackagePreparationSchema = z.discriminatedUnion("status", [
   offlinePackageFailedSchema,
   offlinePackageExpiredSchema,
 ]);
-export const offlinePackageUnsuccessfulSchema = z.union([
-  offlinePackageFailedSchema,
-  offlinePackageExpiredSchema,
-]);
 export const offlinePackageCapabilitySchema = z.discriminatedUnion("available", [
   z.strictObject({
     available: z.literal(true),
@@ -77,16 +73,18 @@ export const offlinePackageCapabilitySchema = z.discriminatedUnion("available", 
     reason: z.literal("source-unavailable"),
   }),
 ]);
+/** An offline preparation refusal in the error envelope; `code` names the reason. */
 export const offlinePackageErrorSchema = z.strictObject({
-  ok: z.literal(false),
-  errorCode: z.enum([
+  error: z.string(),
+  code: z.enum([
     "invalid-principal",
     "invalid-request",
     "capacity",
     "principal-quota",
     "source-unavailable",
+    "generation-failed",
+    "expired",
   ]),
-  errorMessage: z.string(),
   retryAfterSeconds: countSchema.optional(),
 });
 export const offlinePrincipalHeadersSchema = z.object({

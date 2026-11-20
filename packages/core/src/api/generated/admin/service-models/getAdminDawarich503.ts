@@ -4,7 +4,6 @@
 export type GetAdminDawarich503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -19,5 +18,6 @@ export type GetAdminDawarich503 =
       code?: string;
     }
   | {
+      error: string;
       code: "DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED" | "DAWARICH_PROVISIONING_FAILED";
     };

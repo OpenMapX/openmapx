@@ -4,7 +4,6 @@
 export type PreflightTransit409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

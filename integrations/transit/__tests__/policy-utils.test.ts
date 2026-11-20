@@ -1,6 +1,7 @@
 import type { TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import { isRefreshEligible, routeZoomBucket } from "../index.js";
+import { isRefreshEligible } from "../refresh-session.js";
+import { routeZoomBucket } from "../routes/network.js";
 
 function leg(mode: TripLeg["mode"], fromStop?: string, toStop?: string): TripLeg {
   return {

@@ -4,7 +4,6 @@
 export type GetAdminActivityJobStreamMetrics415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

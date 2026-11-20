@@ -169,13 +169,13 @@ export function setup(ctx: IntegrationContext): void {
     const lang = parseLang(query.lang);
 
     if (!STATUSES.includes(status)) {
-      return reply.status(400).send({ message: "Invalid status parameter." });
+      return reply.status(400).send({ error: "Invalid status parameter." });
     }
     if (days !== undefined && !DAY_LIMITS.has(days)) {
-      return reply.status(400).send({ message: "Invalid days parameter (30, 90 or 365)." });
+      return reply.status(400).send({ error: "Invalid days parameter (30, 90 or 365)." });
     }
     if (!categories || categories.length === 0) {
-      return reply.status(400).send({ message: "Invalid category parameter." });
+      return reply.status(400).send({ error: "Invalid category parameter." });
     }
 
     // Open hazards are the current ones, and a day limit keeps those updated within it.
@@ -215,7 +215,7 @@ export function setup(ctx: IntegrationContext): void {
     } catch (err) {
       ctx.log.error("Failed to read natural events", err);
       reply.header("Cache-Control", "no-store");
-      return reply.status(503).send({ message: "Natural event data temporarily unavailable" });
+      return reply.status(503).send({ error: "Natural event data temporarily unavailable" });
     }
   });
 }

@@ -1,22 +1,45 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { maptilerGeocodingService, resolveMaptilerApiKey, setMaptilerApiKey } from "./provider.js";
+import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
+import {
+  createNoopLogger,
+  type FakeHttpClient,
+  fakeHttpClient,
+  httpStatus,
+} from "@openmapx/integration-framework/testing";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import {
+  createMaptilerGeocodingService,
+  MaptilerBudgetSpentError,
+  resolveMaptilerApiKey,
+} from "./provider.js";
 
-let mockFetch: ReturnType<typeof vi.fn>;
+/** Called with each request URL, query included; answers the response body. */
+let mockFetch: Mock<(input: unknown) => unknown>;
+let http: FakeHttpClient;
+let apiKey: string | undefined;
+let budget: ProviderDailyBudget | null;
+let maptilerGeocodingService: ReturnType<typeof createMaptilerGeocodingService>;
 
 function mockOk(data: unknown) {
-  return Response.json(data);
+  return data;
 }
 
 beforeEach(() => {
-  mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-  setMaptilerApiKey("test-key");
-});
-
-afterEach(() => {
-  setMaptilerApiKey(undefined);
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+  mockFetch = vi.fn<(input: unknown) => unknown>();
+  http = fakeHttpClient(({ url, options }) => {
+    const requestUrl = new URL(url);
+    for (const [name, value] of Object.entries(options?.params ?? {})) {
+      if (value !== undefined) requestUrl.searchParams.set(name, String(value));
+    }
+    return mockFetch(requestUrl.toString());
+  });
+  apiKey = "test-key";
+  budget = null;
+  maptilerGeocodingService = createMaptilerGeocodingService({
+    http,
+    apiKey: () => apiKey,
+    budget: () => budget,
+    log: createNoopLogger(),
+  });
 });
 
 describe("MapTiler geocoding provider", () => {
@@ -565,16 +588,72 @@ describe("MapTiler geocoding provider", () => {
   });
 
   it("throws when no API key is configured", async () => {
-    setMaptilerApiKey(undefined);
+    apiKey = undefined;
     await expect(maptilerGeocodingService.geocode("anything")).rejects.toThrow(/API key/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("sends the key as a query parameter through the host client", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ features: [] }));
+    await maptilerGeocodingService.geocode("Köln Hbf", "de");
+    expect(http.calls[0]?.method).toBe("get");
+    expect(http.calls[0]?.url).toBe("https://api.maptiler.com/geocoding/K%C3%B6ln%20Hbf.json");
+    expect(http.calls[0]?.options?.params).toMatchObject({ key: "test-key", language: "de" });
+  });
+
+  it("labels a feature without a place name by its own name, as the usability check accepts it", async () => {
+    const feature = {
+      id: "poi.9",
+      text: "Kiosk",
+      place_name: "",
+      place_type: ["poi"],
+      relevance: 1,
+      geometry: { coordinates: [13.4, 52.5] },
+    };
+    mockFetch.mockResolvedValue(mockOk({ features: [feature] }));
+
+    const [result] = await maptilerGeocodingService.geocode("kiosk");
+    const [suggestion] = await maptilerGeocodingService.autocomplete("kiosk");
+
+    expect(result?.label).toBe("Kiosk");
+    expect(suggestion?.label).toBe("Kiosk");
+  });
+
+  it("passes an upstream status on for provider classification", async () => {
+    mockFetch.mockResolvedValueOnce(httpStatus(403));
+    await expect(maptilerGeocodingService.geocode("x")).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("refuses without a request once the shared MapTiler budget is spent", async () => {
+    budget = {
+      admit: async () => ({
+        allowed: false,
+        status: 429,
+        retryAfterSeconds: 60,
+        firstRefusalInWindow: true,
+      }),
+    };
+    const failure = maptilerGeocodingService.autocomplete("x");
+    await expect(failure).rejects.toBeInstanceOf(MaptilerBudgetSpentError);
+    await expect(failure).rejects.toMatchObject({ code: "quota_exhausted", status: 429 });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
 describe("resolveMaptilerApiKey", () => {
-  it("prefers the integration's own key and falls back to MAPTILER_KEY", () => {
-    expect(resolveMaptilerApiKey("own", { MAPTILER_KEY: "shared" })).toBe("own");
-    expect(resolveMaptilerApiKey(undefined, { MAPTILER_KEY: "shared" })).toBe("shared");
+  it("prefers the integration's own key and falls back to the shared MAPTILER_KEY", () => {
+    expect(resolveMaptilerApiKey("own", { MAPTILER_KEY: "shared" })).toEqual({
+      key: "own",
+      shared: false,
+    });
+    expect(resolveMaptilerApiKey(undefined, { MAPTILER_KEY: "shared" })).toEqual({
+      key: "shared",
+      shared: true,
+    });
+    expect(resolveMaptilerApiKey("shared", { MAPTILER_KEY: "shared" })).toEqual({
+      key: "shared",
+      shared: true,
+    });
     expect(resolveMaptilerApiKey(" ", { MAPTILER_KEY: " " })).toBeUndefined();
   });
 });
@@ -630,5 +709,26 @@ describe("address primary labels", () => {
       }),
     );
     expect((await maptilerGeocodingService.autocomplete("Cafe"))[0].label).toBe("Cafe 66");
+  });
+});
+
+describe("MapTiler features that cannot be shown", () => {
+  it("drops a feature without usable coordinates, and rejects an answer with none left", async () => {
+    const feature = (id: string, coordinates: unknown) => ({
+      id,
+      text: id,
+      place_name: id,
+      place_type: ["poi"],
+      relevance: 1,
+      geometry: { coordinates },
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ features: [feature("poi.1", [13.4, 52.5]), feature("poi.2", [13.4, 95])] }),
+    );
+    const results = await maptilerGeocodingService.geocode("x");
+    expect(results.map((r) => r.id)).toEqual(["maptiler:poi.1"]);
+
+    mockFetch.mockResolvedValueOnce(mockOk({ features: [feature("poi.3", null)] }));
+    await expect(maptilerGeocodingService.autocomplete("x")).rejects.toThrow(/no usable records/);
   });
 });

@@ -4,7 +4,6 @@
 export type SettleDataConfigurationFence500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

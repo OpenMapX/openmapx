@@ -16,6 +16,16 @@ import { requestPrincipal } from "../../auth.js";
 import type { DataManagerPrincipal } from "../../principals.js";
 import { registerDataManagerRoute } from "../../route-contract.js";
 
+/** Thrown on admission of a transit sync or catalog validation that names a
+ * country outside the configured operations profile. */
+export class TransitScopeRejected extends Error {
+  readonly statusCode = 422;
+  readonly code = "outside-operations-profile";
+  constructor() {
+    super("Countries outside configured operations profile");
+  }
+}
+
 /** The receiver checks the delegation a caller names, after bearer
  * authentication. A missing receiver never authorizes a compatibility worker. */
 export interface DataExecutionReceiver {

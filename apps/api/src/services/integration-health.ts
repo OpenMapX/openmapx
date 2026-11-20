@@ -12,6 +12,7 @@ import {
   resolveIntegrationPlatformEndpoint,
   toIntegrationMeta,
 } from "@openmapx/integration-framework";
+import { processLogger } from "../process-logger";
 import { getSecretFields } from "../utils/validate-config-body";
 import { recordHealthResult } from "./health-history";
 import { serviceUrl } from "./service-registry";
@@ -620,7 +621,12 @@ export async function executeAllIntegrationHealthChecks(
       r.status === "up" ? "healthy" : r.status === "unconfigured" ? "degraded" : "unhealthy",
       r.responseTime,
       r.error,
-    ).catch((err) => console.error("[health-history] Failed to persist:", err));
+    ).catch((err) =>
+      processLogger.error(
+        { component: "health-history", err },
+        "Integration health history was not saved",
+      ),
+    );
   }
   healthCacheUpdatedAt = Date.now();
 

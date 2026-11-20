@@ -4,7 +4,6 @@
 export type SetAdminIntegrationCredential401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

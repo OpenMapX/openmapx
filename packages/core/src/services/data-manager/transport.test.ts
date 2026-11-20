@@ -36,7 +36,7 @@ describe("canonical data-manager acquisition", () => {
   it("preserves declared non-success responses and checked HTTP status policy", async () => {
     const transport = createDataManagerTransport({
       baseUrl: "http://data-manager",
-      fetch: vi.fn().mockResolvedValue(json({ ok: false, error: "absent" }, 404)),
+      fetch: vi.fn().mockResolvedValue(json({ error: "absent" }, 404)),
     });
     const result = await bindDataManagerOperation("getSearchIndexStatus")<{
       status: 404;

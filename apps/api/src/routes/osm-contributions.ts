@@ -55,7 +55,7 @@ function sendTypedError(
     }
     return reply.status(error.status).send({
       code: error.code,
-      message: error.message,
+      error: error.message,
       ...(error.retryAfterSeconds === undefined
         ? {}
         : { retryAfterSeconds: error.retryAfterSeconds }),
@@ -68,11 +68,11 @@ function sendTypedError(
     { event: "osm_contribution_unexpected_error", requestId: request.id },
     "osm contribution failed",
   );
-  return reply.status(500).send({ code: "OSM_UNAVAILABLE", message: "Something went wrong." });
+  return reply.status(500).send({ code: "OSM_UNAVAILABLE", error: "Something went wrong." });
 }
 
 function badRequest(reply: FastifyReply, message: string): FastifyReply {
-  return reply.status(400).send({ code: "INVALID_CHANGE", message });
+  return reply.status(400).send({ code: "INVALID_CHANGE", error: message });
 }
 
 export interface OsmContributionsRouteOptions {

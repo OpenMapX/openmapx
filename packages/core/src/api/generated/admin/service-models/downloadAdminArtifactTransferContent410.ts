@@ -4,7 +4,6 @@
 export type DownloadAdminArtifactTransferContent410 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -4,7 +4,6 @@
 export type UpdateGarageVehicle401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

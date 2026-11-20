@@ -11,6 +11,7 @@ import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type {
   Departure,
   Facility,
+  RouteStop,
   ServiceAlert,
   StopTransfer,
   TransitRoute,
@@ -249,7 +250,7 @@ export interface TransitProvider {
   getArrivals?(stopId: string, minutes: number): Promise<MobilityResult<Departure[]>>;
 
   getRoute?(routeId: string): Promise<MobilityResult<TransitRoute | null>>;
-  getRouteStops?(routeId: string, hintStopId?: string): Promise<MobilityResult<TransitStop[]>>;
+  getRouteStops?(routeId: string, hintStopId?: string): Promise<MobilityResult<RouteStop[]>>;
   getRoutesForStop?(stopId: string): Promise<MobilityResult<TransitRoute[]>>;
   getLegGeometry?(
     tripId: string,

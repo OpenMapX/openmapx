@@ -388,7 +388,7 @@ describe("setupCron", () => {
                 await Promise.allSettled([...pendingOperations]);
                 await vi.advanceTimersByTimeAsync(0);
               } while (pendingOperations.size > 0);
-              if (handles) await handles.closeTrafficWriter();
+              if (handles) await handles.trafficLive.closeWriter();
               if (key === "trafficLiveCron") {
                 expect(
                   logger.info.mock.calls.filter(
@@ -775,7 +775,7 @@ describe("setupCron", () => {
         }),
       );
 
-      await handles.runTrafficLiveNow();
+      await handles.trafficLive.run();
 
       expect(fetchLiveTrafficCsv).toHaveBeenCalledTimes(1);
       expect(loadWaysToEdges).toHaveBeenCalledTimes(1);
@@ -829,17 +829,17 @@ describe("setupCron", () => {
         }),
       );
 
-      await handles.runTrafficLiveNow();
+      await handles.trafficLive.run();
       await vi.waitFor(() => expect(ensureTrafficExtract).toHaveBeenCalledOnce());
 
       handles.stop();
     });
 
-    it("skips the cycle without fetching when OPENCONDITIONS_URL is unset (direct runTrafficLiveNow call)", async () => {
+    it("skips the cycle without fetching when OPENCONDITIONS_URL is unset (direct trafficLive.run call)", async () => {
       const fetchLiveTrafficCsv = vi.fn();
       const handles = setupCron(baseOptions({ fetchLiveTrafficCsv }));
 
-      await handles.runTrafficLiveNow();
+      await handles.trafficLive.run();
 
       expect(fetchLiveTrafficCsv).not.toHaveBeenCalled();
       handles.stop();

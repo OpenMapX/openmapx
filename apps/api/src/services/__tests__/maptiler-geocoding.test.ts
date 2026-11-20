@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { createMaptilerGeocodingService } from "@integrations/geocoding-maptiler/provider.js";
+import { createNoopLogger } from "@openmapx/integration-framework/testing";
+import { describe, expect, it } from "vitest";
+import { createHttpClient } from "../../integration-clients.js";
 import { geocodingAdapterContract } from "./support/geocoding-adapter-contract.js";
 
 const { mockFetch, mockOk, mockNotOk } = geocodingAdapterContract("MapTiler");
@@ -24,11 +27,17 @@ function makeBerlinFeature(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The adapter on the real host HTTP client, so global fetch sees its requests. */
 async function loadModule(opts: { withApiKey?: boolean } = { withApiKey: true }) {
-  vi.resetModules();
-  const mod = await import("@integrations/geocoding-maptiler/provider.js");
-  if (opts.withApiKey) mod.setMaptilerApiKey("test-key-123");
-  return mod;
+  const log = createNoopLogger();
+  return {
+    maptilerGeocodingService: createMaptilerGeocodingService({
+      http: createHttpClient(log),
+      apiKey: () => (opts.withApiKey ? "test-key-123" : undefined),
+      budget: () => null,
+      log,
+    }),
+  };
 }
 
 // geocode
@@ -116,9 +125,9 @@ describe("geocode", () => {
     mockFetch.mockResolvedValueOnce(mockNotOk(403));
     const { maptilerGeocodingService } = await loadModule();
 
-    await expect(maptilerGeocodingService.geocode("Berlin")).rejects.toThrow(
-      "MapTiler geocoding error 403",
-    );
+    await expect(maptilerGeocodingService.geocode("Berlin")).rejects.toMatchObject({
+      status: 403,
+    });
   });
 });
 
@@ -243,8 +252,8 @@ describe("reverseGeocode", () => {
     mockFetch.mockResolvedValueOnce(mockNotOk(500));
     const { maptilerGeocodingService } = await loadModule();
 
-    await expect(maptilerGeocodingService.reverseGeocode(52.52, 13.37)).rejects.toThrow(
-      "MapTiler reverse geocoding error 500",
-    );
+    await expect(maptilerGeocodingService.reverseGeocode(52.52, 13.37)).rejects.toMatchObject({
+      status: 500,
+    });
   });
 });

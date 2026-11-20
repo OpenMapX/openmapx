@@ -129,7 +129,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       stopAdminCompose().then(response => {
         // @ts-expect-error Compose down deliberately has no successful response.
         if (response.status === 200) {}
-        if (response.status === 503) { const guidance: string = response.data.error; const ok: false = response.data.ok; }
+        if (response.status === 503) { const guidance: string = response.data.error; }
       });
       setAdminServiceSelection({selectedRoots: []}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error An absent selection cannot mean intentional deselection.
@@ -1167,10 +1167,10 @@ describe("service administration custom-client generation", () => {
         status: 503,
         data: { error: "Registry unavailable" },
       });
-      acquire = () => Response.json({ ok: false, error: "Host guidance" }, { status: 503 });
+      acquire = () => Response.json({ error: "Host guidance" }, { status: 503 });
       await expect(sdk.stopAdminCompose(undefined, { client })).resolves.toMatchObject({
         status: 503,
-        data: { ok: false, error: "Host guidance" },
+        data: { error: "Host guidance" },
       });
       acquire = () => Response.json({ ok: true });
       await expect(sdk.stopAdminCompose(undefined, { client })).rejects.toThrow(/contract/i);

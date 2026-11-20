@@ -358,6 +358,36 @@ describe("integration cache single-flight", () => {
     expect(fetches).toBe(1);
   });
 
+  it("rejects every waiter of a shared HTTP-cache miss with the same status error", async () => {
+    const gate = deferred();
+    let fetches = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        fetches += 1;
+        await gate.promise;
+        return new Response("{}", {
+          status: 429,
+          headers: { "Content-Type": "application/json", "Retry-After": "5" },
+        });
+      }),
+    );
+    const http = createHttpClient(createNoopLogger());
+
+    const first = http.get("https://weather.test/limited", { cache: { ttl: 60 } });
+    const second = http.get("https://weather.test/limited", { cache: { ttl: 60 } });
+    await vi.waitFor(() => expect(fetches).toBe(1));
+    gate.resolve();
+
+    const [a, b] = await Promise.allSettled([first, second]);
+    expect(a).toMatchObject({
+      status: "rejected",
+      reason: { name: "FetchJsonHttpError", status: 429, retryAfterMs: 5_000 },
+    });
+    expect(b).toMatchObject({ status: "rejected", reason: { status: 429 } });
+    expect(fetches).toBe(1);
+  });
+
   it("keeps shared HTTP work alive when only one waiting caller cancels", async () => {
     const gate = deferred();
     let fetches = 0;

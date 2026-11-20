@@ -8,6 +8,7 @@ import {
   apiClient,
   parseRetryAfter,
 } from "./client";
+import { apiErrorSchema } from "./contracts/error";
 import {
   type ApiOperation,
   assertOperationContract,
@@ -310,12 +311,9 @@ export function unwrapOperationResponse<
 }
 /** Opt-in feature display; generic errors/logging retain their redacted message. */
 export function operationErrorMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof ApiClientError) || !error.payload || typeof error.payload !== "object")
-    return fallback;
-  const payload = error.payload as Record<string, unknown>;
-  for (const key of ["errorMessage", "error", "message", "reason"]) {
-    const value = payload[key];
-    if (typeof value === "string" && value.trim()) return value.slice(0, 512);
-  }
-  return fallback;
+  if (!(error instanceof ApiClientError)) return fallback;
+  const envelope = apiErrorSchema.safeParse(error.payload);
+  return envelope.success && envelope.data.error.trim()
+    ? envelope.data.error.slice(0, 512)
+    : fallback;
 }

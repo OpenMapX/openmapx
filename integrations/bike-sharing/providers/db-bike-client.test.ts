@@ -1,69 +1,62 @@
-import type {
-  MobilityHttpRequestOptions,
-  MobilityHttpTransport,
-} from "@openmapx/mobility-core/json-transport";
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { createDbBikeClient } from "./db-bike-client.js";
 
 const bbox = { west: 9, south: 48, east: 14, north: 54 };
-
-function transport(requests: Array<Record<string, string> | undefined>): MobilityHttpTransport {
-  return {
-    userAgent: "OpenMapX/test",
-    async fetchJson<T>(_url: string, options?: MobilityHttpRequestOptions) {
-      requests.push(options?.headers);
-      return { data: { stations: [], bikes: [], vehicle_types: [] } } as T;
-    },
-    async fetchText() {
-      return "";
-    },
-    hostMatchesAllowlist: () => false,
-    privateFeedHostAllowlist: () => [],
-  };
-}
+const EMPTY_FEED = { data: { stations: [], bikes: [], vehicle_types: [] } };
 
 describe("createDbBikeClient", () => {
   it("keeps credentials and response caches with the client generation", async () => {
-    const firstRequests: Array<Record<string, string> | undefined> = [];
-    const secondRequests: Array<Record<string, string> | undefined> = [];
+    const firstHttp = fakeHttpClient(() => EMPTY_FEED);
+    const secondHttp = fakeHttpClient(() => EMPTY_FEED);
     const first = createDbBikeClient({
       clientId: "first-id",
       apiKey: "first-key",
-      transport: transport(firstRequests),
+      http: firstHttp,
     });
     const second = createDbBikeClient({
       clientId: "second-id",
       apiKey: "second-key",
-      transport: transport(secondRequests),
+      http: secondHttp,
     });
 
     await Promise.all([second(bbox), first(bbox)]);
     await first(bbox);
 
-    expect(firstRequests).toHaveLength(20);
-    expect(secondRequests).toHaveLength(20);
+    expect(firstHttp.calls).toHaveLength(20);
+    expect(secondHttp.calls).toHaveLength(20);
     expect(
-      firstRequests.every(
-        (headers) =>
-          headers?.["DB-Client-ID"] === "first-id" && headers["DB-Api-Key"] === "first-key",
+      firstHttp.calls.every(
+        ({ method, options }) =>
+          method === "get" &&
+          options?.headers?.["DB-Client-ID"] === "first-id" &&
+          options.headers["DB-Api-Key"] === "first-key",
       ),
     ).toBe(true);
     expect(
-      secondRequests.every(
-        (headers) =>
-          headers?.["DB-Client-ID"] === "second-id" && headers["DB-Api-Key"] === "second-key",
+      secondHttp.calls.every(
+        ({ options }) =>
+          options?.headers?.["DB-Client-ID"] === "second-id" &&
+          options.headers["DB-Api-Key"] === "second-key",
       ),
     ).toBe(true);
+    expect(firstHttp.calls[0]?.url).toMatch(
+      /^https:\/\/apis\.deutschebahn\.com\/db-api-marketplace\/apis\/shared-mobility-gbfs\/v2\/de\//,
+    );
   });
 
   it("does not make requests without a complete credential pair", async () => {
-    const requests: Array<Record<string, string> | undefined> = [];
-    const client = createDbBikeClient({
-      clientId: "configured-id",
-      transport: transport(requests),
-    });
+    const http = fakeHttpClient();
+    const client = createDbBikeClient({ clientId: "configured-id", http });
 
     await expect(client(bbox)).resolves.toEqual({ stations: [], vehicles: [] });
-    expect(requests).toEqual([]);
+    expect(http.calls).toEqual([]);
+  });
+
+  it("answers without the provider when DB refuses the key", async () => {
+    const http = fakeHttpClient(() => httpStatus(401));
+    const client = createDbBikeClient({ clientId: "id", apiKey: "rejected", http });
+
+    await expect(client(bbox)).resolves.toEqual({ stations: [], vehicles: [] });
   });
 });

@@ -71,18 +71,23 @@ export const adminDawarichConflictCodeSchema = z.enum([
   "DAWARICH_RAILS_SECRET_CONFLICT",
 ]);
 export const adminDawarichConflictSchema = z.strictObject({
+  error: z.string(),
   code: adminDawarichConflictCodeSchema,
 });
 export const adminDawarichBundleConflictSchema = z.strictObject({
+  error: z.string(),
   code: z.enum([...adminDawarichConflictCodeSchema.options, "DAWARICH_BUNDLE_NOT_INSTALLED"]),
 });
 export const adminDawarichInvalidHostSchema = z.strictObject({
+  error: z.string(),
   code: z.literal("DAWARICH_INVALID_PUBLIC_HOST"),
 });
 export const adminDawarichUnavailableSchema = z.strictObject({
+  error: z.string(),
   code: z.enum(["DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED", "DAWARICH_PROVISIONING_FAILED"]),
 });
 export const adminDawarichConfirmationErrorSchema = z.strictObject({
+  error: z.string(),
   code: z.literal("DAWARICH_ROTATION_CONFIRMATION_REQUIRED"),
 });
 export const adminServiceSharedMobilityCategorySchema = z.enum(["bike", "scooter", "car"]);

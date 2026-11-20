@@ -4,7 +4,6 @@
 export type GetLive500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

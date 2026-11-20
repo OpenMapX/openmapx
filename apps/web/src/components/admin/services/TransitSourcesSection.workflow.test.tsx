@@ -94,7 +94,11 @@ describe("transit source administration workflow", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) =>
       (init as RequestInit | undefined)?.method === "POST"
         ? Response.json(
-            { ok: false, reason: "in-flight", existingJobId: "running" },
+            {
+              error: "Another data job is running. Try again when it finishes.",
+              code: "in-flight",
+              existingJobId: "running",
+            },
             { status: 409 },
           )
         : reads(String(input)),
@@ -102,7 +106,9 @@ describe("transit source administration workflow", () => {
     const client = view();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(await screen.findByRole("button", { name: "Disable" }));
-    expect(await screen.findByText("in-flight")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Another data job is running. Try again when it finishes."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Source change queued as/)).not.toBeInTheDocument();
     expect(invalidate).not.toHaveBeenCalled();
   });

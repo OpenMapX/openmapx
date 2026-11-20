@@ -257,3 +257,32 @@ describe("expandServiceSelection", () => {
     ]);
   });
 });
+
+describe("producer selection", () => {
+  it("adds the first of two default producers, as dependency ordering does", () => {
+    const consumer = svc("router", { consumes: [{ type: "osm-pbf", mountAt: "/osm" }] });
+    const first = svc("first", { produces: [{ type: "osm-pbf", sourceDir: "data/first" }] });
+    const second = svc("second", { produces: [{ type: "osm-pbf", sourceDir: "data/second" }] });
+
+    const selection = expandServiceSelection([consumer, first, second], ["router"]);
+
+    expect(selection.enabledIds).toContain("first");
+    expect(selection.enabledIds).not.toContain("second");
+  });
+
+  it("warns when several producer instances leave the consumer without a choice", () => {
+    const consumer = svc("router", { consumes: [{ type: "osm-pbf", mountAt: "/osm" }] });
+    const europe = svc("europe", {
+      produces: [{ type: "osm-pbf", instance: "europe", sourceDir: "data/europe" }],
+    });
+    const asia = svc("asia", {
+      produces: [{ type: "osm-pbf", instance: "asia", sourceDir: "data/asia" }],
+    });
+
+    const selection = expandServiceSelection([consumer, europe, asia], ["router"]);
+
+    expect(selection.warnings).toEqual([
+      'Service "router" consumes required data type "osm-pbf" but no unique producer is installed',
+    ]);
+  });
+});

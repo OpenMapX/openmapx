@@ -34,7 +34,13 @@ export async function enrichJourneyPlatforms(
     if (
       bbox &&
       !baseline.stops.some(
-        (s) => s.lng >= bbox[0] && s.lng <= bbox[2] && s.lat >= bbox[1] && s.lat <= bbox[3],
+        (s) =>
+          s.lng !== undefined &&
+          s.lat !== undefined &&
+          s.lng >= bbox[0] &&
+          s.lng <= bbox[2] &&
+          s.lat >= bbox[1] &&
+          s.lat <= bbox[3],
       )
     )
       continue;

@@ -18,7 +18,6 @@ import {
 } from "@openmapx/core/data-manager-contracts";
 import { RollingStreamBudget } from "@openmapx/core/server";
 import { feedState, jobs } from "@openmapx/db-schema";
-import { parseTransitSource } from "@openmapx/transitous-core";
 import { and, desc, sql as drizzleSql, eq, inArray } from "drizzle-orm";
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -27,7 +26,11 @@ import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./covera
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
-import { type DataExecutionReceiver, registerDataExecutionApi } from "./jobs/execution/api.js";
+import {
+  type DataExecutionReceiver,
+  registerDataExecutionApi,
+  TransitScopeRejected,
+} from "./jobs/execution/api.js";
 import { runLocalDataExecution, startLocalDataExecution } from "./jobs/execution/local.js";
 import { DataConfigurationMaintenanceBusy, DataExecutionConflict } from "./jobs/execution/store.js";
 import {
@@ -219,9 +222,8 @@ function registerOfflinePackageRoutes(
     const owner = principal(request);
     if (!owner) {
       return reply.code(400).send({
-        ok: false,
-        errorCode: "invalid-principal",
-        errorMessage: "Exactly one valid offline package principal is required",
+        error: "Exactly one valid offline package principal is required",
+        code: "invalid-principal",
       });
     }
     let body: OfflinePackageRequest;
@@ -229,9 +231,8 @@ function registerOfflinePackageRoutes(
       body = parseOfflinePackageRequest(request.body);
     } catch (error) {
       return reply.code(400).send({
-        ok: false,
-        errorCode: "invalid-request",
-        errorMessage: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error),
+        code: "invalid-request",
       });
     }
     try {
@@ -239,29 +240,23 @@ function registerOfflinePackageRoutes(
       if (result.status === "ready-to-download") return reply.code(200).send(result);
       if (result.status === "preparing") return reply.code(202).send(result);
       const status = result.errorCode === "capacity" ? 409 : 400;
-      return reply.code(status).send(result);
+      return reply.code(status).send({ error: result.errorMessage, code: result.errorCode });
     } catch (error) {
       if (error instanceof OfflinePackageCapacityError) {
         reply.header("Retry-After", "30");
-        return reply.code(429).send({
-          ok: false,
-          errorCode: error.errorCode,
-          errorMessage: error.message,
-        });
+        return reply.code(429).send({ error: error.message, code: error.errorCode });
       }
       if (error instanceof OfflinePackagePrincipalQuotaError) {
         reply.header("Retry-After", "30");
         return reply.code(429).send({
-          ok: false,
-          errorCode: error.errorCode,
-          errorMessage: error.message,
+          error: error.message,
+          code: error.errorCode,
           retryAfterSeconds: 30,
         });
       }
       return reply.code(503).send({
-        ok: false,
-        errorCode: "source-unavailable",
-        errorMessage: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error),
+        code: "source-unavailable",
       });
     }
   });
@@ -270,22 +265,21 @@ function registerOfflinePackageRoutes(
     const owner = principal(request);
     if (!owner) {
       return reply.code(400).send({
-        ok: false,
-        errorCode: "invalid-principal",
-        errorMessage: "Exactly one valid offline package principal is required",
+        error: "Exactly one valid offline package principal is required",
+        code: "invalid-principal",
       });
     }
     const result = await generator.getJob(owner, request.params.jobId);
-    if (!result) return reply.code(404).send({ ok: false, error: "offline package job not found" });
+    if (!result) return reply.code(404).send({ error: "offline package job not found" });
     return reply.send(result);
   });
 
   registerDataManagerRoute(app, "getOfflinePackageManifest", async (request, reply) => {
     if (!isContentAddressedPackageId(request.params.packageId)) {
-      return reply.code(400).send({ ok: false, error: "invalid offline package id" });
+      return reply.code(400).send({ error: "invalid offline package id" });
     }
     const manifest = await generator.getManifest(request.params.packageId);
-    if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
+    if (!manifest) return reply.code(404).send({ error: "offline package not found" });
     return reply.send(manifest);
   });
 
@@ -298,8 +292,7 @@ function registerOfflinePackageRoutes(
       request.params.fontstack,
       request.params.range,
     );
-    if (!asset)
-      return reply.code(404).send({ ok: false, error: "offline package glyph not found" });
+    if (!asset) return reply.code(404).send({ error: "offline package glyph not found" });
     reply
       .header("Cache-Control", "public, max-age=31536000, immutable")
       .header("Content-Type", asset.contentType)
@@ -311,10 +304,10 @@ function registerOfflinePackageRoutes(
 
   registerDataManagerRoute(app, "getOfflineGlyphCatalog", async (request, reply) => {
     if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)) {
-      return reply.code(400).send({ ok: false, error: "invalid offline glyph version" });
+      return reply.code(400).send({ error: "invalid offline glyph version" });
     }
     const catalog = await generator.glyphCatalog(request.params.version);
-    if (!catalog) return reply.code(404).send({ ok: false, error: "offline glyphs not found" });
+    if (!catalog) return reply.code(404).send({ error: "offline glyphs not found" });
     return reply.header("Cache-Control", "public, max-age=31536000, immutable").send(catalog);
   });
 
@@ -327,10 +320,10 @@ function registerOfflinePackageRoutes(
   ): Promise<FastifyReply> => {
     const { packageId } = request.params;
     if (!isContentAddressedPackageId(packageId)) {
-      return reply.code(400).send({ ok: false, error: "invalid offline package id" });
+      return reply.code(400).send({ error: "invalid offline package id" });
     }
     const manifest = await generator.getManifest(packageId);
-    if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
+    if (!manifest) return reply.code(404).send({ error: "offline package not found" });
     const total = manifest.archive.byteLength;
     const ifRange = request.headers["if-range"];
     const rangeHeader = request.headers.range;
@@ -368,20 +361,14 @@ function registerOfflinePackageRoutes(
     const admission = deliveryBudget.tryAcquire("offline-package-delivery");
     if (!admission.allowed) {
       reply.header("Retry-After", String(admission.retryAfterSeconds));
-      return reply.code(503).send({
-        ok: false,
-        error: "offline package delivery capacity exceeded",
-      });
+      return reply.code(503).send({ error: "offline package delivery capacity exceeded" });
     }
     const responseBytes = range ? range.end - range.start + 1 : total;
     const byteAdmission = admission.lease.consume(responseBytes);
     if (!byteAdmission.allowed) {
       admission.lease.release();
       reply.header("Retry-After", String(byteAdmission.retryAfterSeconds));
-      return reply.code(503).send({
-        ok: false,
-        error: "offline package delivery byte budget exceeded",
-      });
+      return reply.code(503).send({ error: "offline package delivery byte budget exceeded" });
     }
 
     let archive: Awaited<ReturnType<OfflinePackageGenerator["openArchive"]>>;
@@ -389,7 +376,7 @@ function registerOfflinePackageRoutes(
       archive = await generator.openArchive(packageId);
       if (!archive) {
         admission.lease.release();
-        return reply.code(404).send({ ok: false, error: "offline package not found" });
+        return reply.code(404).send({ error: "offline package not found" });
       }
       const stream = archiveStream(
         archive.path,
@@ -421,6 +408,35 @@ function registerOfflinePackageRoutes(
 
   registerDataManagerRoute(app, "headOfflinePackageArchive", serveArchive);
   registerDataManagerRoute(app, "getOfflinePackageArchive", serveArchive);
+}
+
+/**
+ * Answers a failed transit-source read or change. A `TransitSourceError` carries
+ * its status, a user-safe text and, for a refused action, its code. Any other
+ * failure of the route is logged and answers a 500 with a fixed text, so a store
+ * or database message never reaches the client. Request errors that already
+ * carry an HTTP status, such as an oversized body, keep Fastify's reply.
+ */
+function transitSourceErrorReply(error: Error, request: FastifyRequest, reply: FastifyReply) {
+  if (error instanceof TransitSourceError) {
+    return reply
+      .code(error.statusCode)
+      .send({ error: error.message, ...(error.code ? { code: error.code } : {}) });
+  }
+  if ("statusCode" in error) throw error;
+  request.log.error({ err: error }, "transit-sources: request failed");
+  return reply.code(500).send({ error: "Transit source request failed" });
+}
+
+/** Runs a source change's prepare step; a failure it does not classify is the caller's error. */
+function prepareSourceChange<T>(prepare: () => T): T {
+  try {
+    return prepare();
+  } catch (error) {
+    throw error instanceof TransitSourceError
+      ? error
+      : new TransitSourceError((error as Error).message);
+  }
 }
 
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
@@ -525,7 +541,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return {
         ok: false,
         status: 503,
-        body: { ok: false, error: "Durable data receiver is unavailable" },
+        body: { error: "Durable data receiver is unavailable" },
       };
     const input = normalizeDataExecutionInput({
       kind: "transit-sync",
@@ -549,12 +565,18 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         return {
           ok: false,
           status: 409,
-          body: {
-            ok: false,
-            reason:
-              error instanceof DataExecutionConflict ? "duplicate-idempotency-key" : "in-flight",
-            existingJobId: null,
-          },
+          body:
+            error instanceof DataExecutionConflict
+              ? {
+                  error: "This idempotency key was already used for a different change.",
+                  code: "duplicate-idempotency-key",
+                  existingJobId: null,
+                }
+              : {
+                  error: "Another data job is running. Try again when it finishes.",
+                  code: "in-flight",
+                  existingJobId: null,
+                },
         };
       throw error;
     }
@@ -607,12 +629,17 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     policy: publicOperationsPolicy(operationsPolicy),
   }));
 
-  registerDataManagerRoute(app, "getTransitSources", async (req, reply) => {
-    const parseCount = (raw: number | undefined, fallback: number): number => {
-      const value = Number(raw ?? fallback);
-      return Number.isFinite(value) ? value : fallback;
-    };
-    try {
+  // Transit-source reads and changes answer their refusals through one handler.
+  const transitSourceRoute = { errorHandler: transitSourceErrorReply };
+
+  registerDataManagerRoute(
+    app,
+    "getTransitSources",
+    async (req) => {
+      const parseCount = (raw: number | undefined, fallback: number): number => {
+        const value = Number(raw ?? fallback);
+        return Number.isFinite(value) ? value : fallback;
+      };
       // Desired and active evidence live on local disk; a Postgres outage
       // only degrades the fetch/import/validation columns.
       let feedStates: TransitFeedStateEvidence[] | undefined;
@@ -635,176 +662,160 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           offset: parseCount(req.query.offset, 0),
         },
       });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 500;
-      return reply.code(status).send({ ok: false, error: (error as Error).message });
-    }
-  });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "getTransitCatalog", async (_req, reply) => {
-    try {
-      return {
-        sources: listPinnedTransitCatalog(catalogDir, transitAllowedCountries(operationsPolicy)),
-      };
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 500;
-      return reply.code(status).send({ ok: false, error: (error as Error).message });
-    }
-  });
+  registerDataManagerRoute(
+    app,
+    "getTransitCatalog",
+    async () => ({
+      sources: listPinnedTransitCatalog(catalogDir, transitAllowedCountries(operationsPolicy)),
+    }),
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "addTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareAddTransitSource>;
-    try {
-      mutation = prepareAddTransitSource({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        source: {
-          spec: "gtfs",
-          type: "http",
-          region: req.body.region,
-          name: req.body.name,
-          url: req.body.url,
-          origin: "operator",
-          license: req.body.license,
-        },
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body.triggeredBy ?? "api",
-      idempotencyKey: req.body.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "add",
-      mutation: {
+  registerDataManagerRoute(
+    app,
+    "addTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareAddTransitSource({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          source: {
+            spec: "gtfs",
+            type: "http",
+            region: req.body.region,
+            name: req.body.name,
+            url: req.body.url,
+            origin: "operator",
+            license: req.body.license,
+          },
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body.triggeredBy ?? "api",
+        idempotencyKey: req.body.idempotencyKey,
+        sourceId: mutation.sourceId,
         action: "add",
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        source: {
-          region: req.body.region,
-          name: req.body.name,
-          url: req.body.url,
-          license: req.body.license,
+        mutation: {
+          action: "add",
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          source: {
+            region: req.body.region,
+            name: req.body.name,
+            url: req.body.url,
+            license: req.body.license,
+          },
         },
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "removeTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareRemoveTransitSource>;
-    try {
-      mutation = prepareRemoveTransitSource({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        sourceId: req.params.sourceId,
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body?.triggeredBy ?? "api",
-      idempotencyKey: req.body?.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "remove",
-      mutation: {
+  registerDataManagerRoute(
+    app,
+    "removeTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareRemoveTransitSource({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          sourceId: req.params.sourceId,
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body?.triggeredBy ?? "api",
+        idempotencyKey: req.body?.idempotencyKey,
+        sourceId: mutation.sourceId,
         action: "remove",
-        sourceId: mutation.sourceId,
-        expectedSourceRevision: req.body.expectedSourceRevision,
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+        mutation: {
+          action: "remove",
+          sourceId: mutation.sourceId,
+          expectedSourceRevision: req.body.expectedSourceRevision,
+        },
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "enableTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareEnableTransitSource>;
-    try {
-      mutation = prepareEnableTransitSource({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        sourceId: req.params.sourceId,
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body?.triggeredBy ?? "api",
-      idempotencyKey: req.body?.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "enable",
-      mutation: {
+  registerDataManagerRoute(
+    app,
+    "enableTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareEnableTransitSource({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          sourceId: req.params.sourceId,
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body?.triggeredBy ?? "api",
+        idempotencyKey: req.body?.idempotencyKey,
+        sourceId: mutation.sourceId,
         action: "enable",
-        sourceId: mutation.sourceId,
-        expectedSourceRevision: req.body.expectedSourceRevision,
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+        mutation: {
+          action: "enable",
+          sourceId: mutation.sourceId,
+          expectedSourceRevision: req.body.expectedSourceRevision,
+        },
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "disableTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareSetTransitSourceEnabled>;
-    try {
-      mutation = prepareSetTransitSourceEnabled({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        sourceId: req.params.sourceId,
-        enabled: false,
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body?.triggeredBy ?? "api",
-      idempotencyKey: req.body?.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "disable",
-      mutation: {
-        action: "disable",
+  registerDataManagerRoute(
+    app,
+    "disableTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareSetTransitSourceEnabled({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          sourceId: req.params.sourceId,
+          enabled: false,
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body?.triggeredBy ?? "api",
+        idempotencyKey: req.body?.idempotencyKey,
         sourceId: mutation.sourceId,
-        expectedSourceRevision: req.body.expectedSourceRevision,
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+        action: "disable",
+        mutation: {
+          action: "disable",
+          sourceId: mutation.sourceId,
+          expectedSourceRevision: req.body.expectedSourceRevision,
+        },
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
   registerDataManagerRoute(app, "preflightTransit", async (req, reply) => {
     const body = req.body ?? {};
@@ -903,7 +914,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       runtimeState: searchIndexRuntimeState,
     });
     if (!status) {
-      return reply.code(404).send({ ok: false, error: "osm_search index not built" });
+      return reply.code(404).send({ error: "osm_search index not built" });
     }
     return reply.send({ ok: true, ...status });
   });
@@ -914,7 +925,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       runtimeState: notablePlaces.runtimeState,
     });
     if (!status) {
-      return reply.code(404).send({ ok: false, error: "notable_places index not built" });
+      return reply.code(404).send({ error: "notable_places index not built" });
     }
     return reply.send({ ok: true, ...status });
   });
@@ -923,9 +934,10 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     reply.header("cache-control", "no-store");
     try {
       return await inspectOvertureRecovery(sql, dataDir, req.query.region);
-    } catch {
+    } catch (err) {
+      req.log.error({ err }, "Overture prerequisite inspection failed");
       reply.code(503);
-      return { ok: false, error: "Overture prerequisite inspection is unavailable" };
+      return { error: "Overture prerequisite inspection is unavailable" };
     }
   });
 
@@ -933,7 +945,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     const state = await getOvertureConflationState(sql);
     if (!state) {
       reply.code(404);
-      return { ok: false, error: "overture_places not ingested" };
+      return { error: "overture_places not ingested" };
     }
     const heartbeatAgeMs = Math.max(0, Date.now() - state.updatedAt.getTime());
     return {
@@ -995,14 +1007,20 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
             });
       }
     }
-    const admitted = await admitData(
-      {
-        kind: "transit-sync",
-        countries,
-        ...(preflight ? { preflight } : {}),
-      },
-      { triggeredBy: req.body?.triggeredBy, idempotencyKey: req.body?.idempotencyKey },
-    );
+    let admitted: DataExecutionStatus;
+    try {
+      admitted = await admitData(
+        {
+          kind: "transit-sync",
+          countries,
+          ...(preflight ? { preflight } : {}),
+        },
+        { triggeredBy: req.body?.triggeredBy, idempotencyKey: req.body?.idempotencyKey },
+      );
+    } catch (error) {
+      if (!(error instanceof TransitScopeRejected)) throw error;
+      return reply.code(422).send({ error: error.message, code: error.code });
+    }
     return reply.code(202).send({ ok: true, jobId: admitted.id, status: "started" });
   });
 
@@ -1012,9 +1030,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   registerDataManagerRoute(app, "restartMotis", async (_req, reply) => {
     if (!opts.executionReceiver)
       return reply.code(503).send({
-        ok: false,
-        error: "ops-agent-unavailable",
-        message: "Durable data receiver is unavailable",
+        error: "Durable data receiver is unavailable",
+        code: "ops-agent-unavailable",
       });
     const admitted = await opts.executionReceiver.admitMaintenance("restart-primary");
     await observeData(admitted, reply);

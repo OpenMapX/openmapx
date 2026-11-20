@@ -1455,6 +1455,9 @@ importers:
       '@openmapx/air-quality':
         specifier: workspace:^
         version: link:../../packages/air-quality
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
@@ -1651,6 +1654,18 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/integration-knowledge-tides-canada':
+        specifier: workspace:^
+        version: link:../knowledge-tides-canada
+      '@openmapx/integration-knowledge-tides-ioc':
+        specifier: workspace:^
+        version: link:../knowledge-tides-ioc
+      '@openmapx/integration-knowledge-tides-norway':
+        specifier: workspace:^
+        version: link:../knowledge-tides-norway
+      '@openmapx/integration-knowledge-tides-pegelonline':
+        specifier: workspace:^
+        version: link:../knowledge-tides-pegelonline
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
@@ -2565,6 +2580,9 @@ importers:
 
   integrations/transit-mobility-database:
     dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
@@ -2607,9 +2625,6 @@ importers:
 
   integrations/transit-otp:
     dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
@@ -3012,6 +3027,9 @@ importers:
 
   packages/entur-client:
     dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../integration-framework
@@ -3388,6 +3406,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../mobility-core
       zod:
         specifier: ^4.6.7
         version: 4.6.7

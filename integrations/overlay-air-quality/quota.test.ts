@@ -43,4 +43,12 @@ describe("OpenAQ distributed quota", () => {
     await quota.consume();
     expect(runtime.quotaCalls).toHaveLength(1);
   });
+
+  it("honors a Retry-After HTTP date", async () => {
+    const now = Date.parse("Sun, 30 Aug 2026 12:00:00 GMT");
+    const runtime = new MemoryUpstreamRuntime(() => now);
+    const quota = createOpenAQQuota(runtime, { now: () => now });
+    await quota.observeResponse(429, { "retry-after": "Sun, 30 Aug 2026 12:01:30 GMT" });
+    await expect(quota.consume()).resolves.toMatchObject({ allowed: false, retryAt: now + 90_000 });
+  });
 });

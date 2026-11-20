@@ -153,7 +153,22 @@ describe("generated dynamic OTP acquisition", () => {
           route: { id: family + ":feed:route", mode: "bus" },
         },
       ]);
+      // GTFS routes carry a colour, emitted without "#" like every other provider's.
+      if (family !== "trufi") expect(departures[0]?.route.color).toBe("ff0000");
       expect(f.http.calls).toHaveLength(3);
+      // The selected query must carry the caller's coordinates, text, stop and window.
+      const variables = f.http.calls.map((call) => JSON.parse(String(call.body)).variables);
+      const now = base + 89900;
+      expect(variables).toEqual([
+        { lat: 48, lon: 9, radius: 500, limit: 20 },
+        { name: "Stop" },
+        {
+          id: "feed:1",
+          range: 600,
+          limit: 100,
+          start: family === "trufi" ? new Date(now * 1000).toISOString() : now,
+        },
+      ]);
       expect(f.admit).toHaveBeenCalledTimes(3);
       for (const call of f.http.calls) {
         expect(call.options?.headers).not.toHaveProperty("ET-Client-Name");
@@ -294,6 +309,17 @@ describe("generated dynamic OTP acquisition", () => {
     expect(g.defer).toHaveBeenCalledWith(
       expect.objectContaining({ scope: "https://api.peatus.ee", key: "anonymous", delayMs: 37000 }),
     );
+    const d = fixture("peatus", {
+      status: 429,
+      headers: {
+        "retry-after": "Wed, 21 Oct 2026 07:30:00 GMT",
+        date: "Wed, 21 Oct 2026 07:29:15 GMT",
+      },
+      body: {},
+    });
+    await expect(d.adapter.searchByName!(d.entry, "X", 1)).rejects.toThrow("OTP upstream cooldown");
+    // An HTTP date is measured from the server's own Date header.
+    expect(d.defer).toHaveBeenCalledWith(expect.objectContaining({ delayMs: 45000 }));
   });
   it("shares credential bucket across Digitransit regions and isolates other keys", async () => {
     const f = fixture();

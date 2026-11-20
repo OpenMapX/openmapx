@@ -1,15 +1,11 @@
 import {
-  createBoundedBinaryProxyStream,
-  MAX_VECTOR_TILE_BYTES,
-  VECTOR_TILE_MEDIA_TYPES,
-} from "@openmapx/core/server";
-import {
   captureStreetLevelProviderContributors,
   filterImagesByHeading,
   type IntegrationContext,
   parseStreetLevelSearchQuery,
   scalarQueries,
 } from "@openmapx/integration-framework";
+import { createTileProxyHandler } from "@openmapx/integration-framework/tile-proxy";
 import { createMapillaryProvider } from "./provider.js";
 
 const TILE_PATH = "/api/integrations/street-level-imagery-mapillary/tiles/{z}/{x}/{y}";
@@ -30,7 +26,7 @@ async function upstream<T>(
     return { ok: true, value: await run() };
   } catch (error) {
     ctx.log.warn(`${what} failed: ${error instanceof Error ? error.message : String(error)}`);
-    reply.status(502).send({ message: `${what} is unavailable` });
+    reply.status(502).send({ error: `${what} is unavailable` });
     return { ok: false };
   }
 }
@@ -39,7 +35,7 @@ export function setup(ctx: IntegrationContext): void {
   const token = (ctx.config.accessToken as string | undefined) ?? "";
   const provider = captureStreetLevelProviderContributors(
     ctx,
-    createMapillaryProvider({ accessToken: token, tileUrlTemplate: TILE_PATH }),
+    createMapillaryProvider({ http: ctx.http, accessToken: token, tileUrlTemplate: TILE_PATH }),
     "mapillary",
   );
 
@@ -49,64 +45,45 @@ export function setup(ctx: IntegrationContext): void {
     reply.send(provider.capabilities());
   });
 
+  const tile = createTileProxyHandler(ctx, {
+    kind: "vector",
+    label: "Mapillary vector tile",
+    url: ({ z, x, y }) => {
+      const url = new URL(`https://tiles.mapillary.com/maps/vtp/mly1_public/2/${z}/${x}/${y}`);
+      url.searchParams.set("access_token", token);
+      return url.toString();
+    },
+    maxZoom: 14,
+    // A viewport change fans out 30-60 tile requests of hundreds of KB each;
+    // 10 s regularly overran in production and coverage went missing.
+    timeoutMs: 25_000,
+    fallbackContentType: "application/vnd.mapbox-vector-tile",
+    cacheControl: "public, max-age=86400, s-maxage=86400",
+  });
+
   ctx.registerRoute(
     "GET",
     "/tiles/:z/:x/:y",
     async (req, reply) => {
       if (!token) {
-        reply.status(503).send({ message: "Mapillary token not configured" });
+        reply.status(503).send({ error: "Mapillary token not configured" });
         return;
       }
-
-      const { z, x, y } = req.params as { z: string; x: string; y: string };
-      if (!/^[0-9]{1,2}$/.test(z) || !/^[0-9]+$/.test(x) || !/^[0-9]+$/.test(y)) {
-        reply.status(400).send({ message: "Invalid tile coordinates" });
-        return;
-      }
-
-      const url = `https://tiles.mapillary.com/maps/vtp/mly1_public/2/${z}/${x}/${y}?access_token=${token}`;
-      // Raw fetch is required because fetchJson cannot express a binary stream.
-      // 10s proved too tight in production: a viewport change fans out
-      // 30-60 tile requests and these tiles run to hundreds of KB, so the
-      // public instances regularly overran it and coverage went missing.
-      try {
-        const timeoutSignal = AbortSignal.timeout(25_000);
-        const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-        const upstream = await fetch(url, { signal });
-        if (!upstream.ok) {
-          ctx.log.warn(`Mapillary tile request failed: ${upstream.status}`);
-          reply.status(upstream.status).send({ message: "Mapillary tile unavailable" });
-          return;
-        }
-
-        const proxy = createBoundedBinaryProxyStream(upstream, {
-          maxBytes: MAX_VECTOR_TILE_BYTES,
-          allowedContentTypes: VECTOR_TILE_MEDIA_TYPES,
-          fallbackContentType: "application/vnd.mapbox-vector-tile",
-          label: "Mapillary vector tile",
-        });
-        reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-        reply.type(proxy.contentType);
-        reply.send(proxy.body);
-      } catch (error) {
-        ctx.log.warn("Mapillary tile request failed", error);
-        reply.status(502).send({ message: "Mapillary tile unavailable" });
-      }
+      await tile(req, reply);
     },
     { rateLimitTier: "tile" },
   );
 
   ctx.registerRoute("GET", "/nearest", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
 
     const lat = Number((scalarQueries(req.query) as { lat?: string }).lat);
     const lng = Number((scalarQueries(req.query) as { lng?: string }).lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 
@@ -116,7 +93,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "No imagery found near this location" });
+      reply.status(404).send({ error: "No imagery found near this location" });
       return;
     }
     reply.send(image);
@@ -124,7 +101,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/images/:id", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
 
@@ -133,7 +110,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "Image not found" });
+      reply.status(404).send({ error: "Image not found" });
       return;
     }
     reply.send(image);
@@ -141,7 +118,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/images/:id/links", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
 
@@ -157,12 +134,12 @@ export function setup(ctx: IntegrationContext): void {
   // has no heading parameter, so the route applies the heading filter itself.
   ctx.registerRoute("GET", "/search", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
     const parsed = parseStreetLevelSearchQuery(scalarQueries(req.query));
     if (!parsed) {
-      reply.status(400).send({ message: "Invalid search query" });
+      reply.status(400).send({ error: "Invalid search query" });
       return;
     }
     const found = await upstream(ctx, reply, "Mapillary imagery search", () =>

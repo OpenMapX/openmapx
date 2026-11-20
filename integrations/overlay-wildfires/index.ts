@@ -65,7 +65,7 @@ function cacheControl(ttlSeconds: number): string {
 
 function badRequest(reply: RouteReply, message: string) {
   reply.header("Cache-Control", "no-store");
-  return reply.status(400).send({ message });
+  return reply.status(400).send({ error: message });
 }
 
 /** A UTC instant in the canonical form the web validators accept; undefined when unreadable. */
@@ -388,7 +388,7 @@ export function setup(ctx: IntegrationContext): void {
     } catch (error) {
       ctx.log.error("Failed to read fire detections", error);
       reply.header("Cache-Control", "no-store");
-      return reply.status(503).send({ message: "Wildfire data temporarily unavailable" });
+      return reply.status(503).send({ error: "Wildfire data temporarily unavailable" });
     }
   });
 
@@ -441,7 +441,7 @@ export function setup(ctx: IntegrationContext): void {
     } catch (error) {
       ctx.log.error("Failed to read fire density", error);
       reply.header("Cache-Control", "no-store");
-      return reply.status(503).send({ message: "Wildfire data temporarily unavailable" });
+      return reply.status(503).send({ error: "Wildfire data temporarily unavailable" });
     }
   });
 
@@ -501,7 +501,9 @@ export function setup(ctx: IntegrationContext): void {
       } catch (error) {
         ctx.log.warn("Wildfire layer unavailable", { layer: route.layer, error });
         reply.header("Cache-Control", "no-store");
-        return reply.status(503).send({ code: UNAVAILABLE_CODE[route.layer] });
+        return reply
+          .status(503)
+          .send({ error: "Wildfire layer unavailable", code: UNAVAILABLE_CODE[route.layer] });
       }
     };
   }

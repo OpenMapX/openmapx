@@ -156,9 +156,38 @@ describe("data-manager offline package API", () => {
 
     expect(response.statusCode).toBe(429);
     expect(response.json()).toEqual({
-      ok: false,
+      error: "offline package capacity: preparation queue is full (64 waiting jobs)",
+      code: "capacity",
+    });
+    await app.close();
+  });
+
+  it("answers a failed preparation with its reason in the error envelope", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-failed-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    // The route reads only the status and the reason of a failed preparation.
+    const failed = {
+      jobId: "failed-job",
+      status: "failed",
       errorCode: "capacity",
-      errorMessage: "offline package capacity: preparation queue is full (64 waiting jobs)",
+      errorMessage: "offline package needs more disk than is free",
+    } as Awaited<ReturnType<typeof generator.prepare>>;
+    vi.spyOn(generator, "prepare").mockResolvedValue(failed);
+    const app = Fastify();
+    registerApi(app, { dataDir: root, offlinePackages: generator });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/offline/packages/prepare",
+      headers: { "x-offline-package-principal": principal },
+      payload: request,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "offline package needs more disk than is free",
+      code: "capacity",
     });
     await app.close();
   });
@@ -209,6 +238,7 @@ describe("data-manager offline package API", () => {
       headers: { "x-offline-package-principal": "b".repeat(64) },
     });
     expect(otherPrincipal.statusCode).toBe(404);
+    expect(otherPrincipal.json()).toEqual({ error: "offline package job not found" });
 
     const packageId = `omp2-${"a".repeat(64)}`;
     const manifest = await app.inject({
@@ -288,11 +318,13 @@ describe("data-manager offline package API", () => {
       url: `/offline/packages/omp2-${"f".repeat(64)}/manifest`,
     });
     expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ error: "offline package not found" });
     const traversal = await app.inject({
       method: "GET",
       url: "/offline/packages/not-a-package/manifest",
     });
     expect(traversal.statusCode).toBe(400);
+    expect(traversal.json()).toEqual({ error: "Invalid data-manager params" });
     await app.close();
   });
 
@@ -329,6 +361,7 @@ describe("data-manager offline package API", () => {
     });
 
     expect(overlapping.statusCode).toBe(503);
+    expect(overlapping.json()).toEqual({ error: "offline package delivery capacity exceeded" });
     expect(overlapping.headers["retry-after"]).toBe("10");
     expect(openArchive).toHaveBeenCalledOnce();
     expect(archiveStream).toHaveBeenCalledOnce();
@@ -413,6 +446,7 @@ describe("data-manager offline package API", () => {
     expect(suffix.statusCode).toBe(206);
     expect(suffix.body).toBe(archiveBytes.slice(-4));
     expect(fullFallback.statusCode).toBe(503);
+    expect(fullFallback.json()).toEqual({ error: "offline package delivery byte budget exceeded" });
     expect(fullFallback.headers["retry-after"]).toBe("10");
     expect(openArchive).toHaveBeenCalledOnce();
     expect(archiveStream).toHaveBeenCalledOnce();
@@ -525,7 +559,10 @@ describe("data-manager offline package API", () => {
         payload: request,
       });
       expect(response.statusCode).toBe(400);
-      expect(response.json().errorCode).toBe("invalid-principal");
+      expect(response.json()).toEqual({
+        error: "Exactly one valid offline package principal is required",
+        code: "invalid-principal",
+      });
     }
     expect(prepare).not.toHaveBeenCalled();
     await app.close();

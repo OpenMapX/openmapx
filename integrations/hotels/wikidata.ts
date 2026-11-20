@@ -1,4 +1,4 @@
-import { USER_AGENT_CONTACT } from "@openmapx/core";
+import { fetchJson, USER_AGENT_CONTACT } from "@openmapx/core";
 
 /** OTA hotel ids resolved from a Wikidata entity (any subset may be present). */
 export interface WikidataOtaIds {
@@ -76,22 +76,17 @@ const WIKIDATA_TIMEOUT_MS = 5000;
  *   - success      → parsed ids (possibly `{}` if the entity has no OTA claims)
  *   - network/timeout/non-OK/bad-JSON → `null` (transient — do NOT cache)
  */
-export async function resolveWikidataOtaIds(
-  qid: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<WikidataOtaIds | null> {
+export async function resolveWikidataOtaIds(qid: string): Promise<WikidataOtaIds | null> {
   if (!/^Q\d+$/.test(qid)) return {};
-  try {
-    const res = await fetchImpl(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`, {
-      signal: AbortSignal.timeout(WIKIDATA_TIMEOUT_MS),
-      headers: {
-        Accept: "application/json",
-        "User-Agent": USER_AGENT_CONTACT,
-      },
-    });
-    if (!res.ok) return null;
-    return parseWikidataOtaIds((await res.json()) as WdEntities, qid);
-  } catch {
-    return null;
-  }
+  const entities = await fetchJson<WdEntities>(
+    `https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`,
+    {
+      timeoutMs: WIKIDATA_TIMEOUT_MS,
+      headers: { Accept: "application/json" },
+      userAgent: USER_AGENT_CONTACT,
+      label: "Wikidata entity",
+      nullOnError: true,
+    },
+  );
+  return entities ? parseWikidataOtaIds(entities, qid) : null;
 }

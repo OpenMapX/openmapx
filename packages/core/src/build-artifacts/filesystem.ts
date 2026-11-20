@@ -18,7 +18,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 export type FileIdentity = { dev: string; ino: string };
 export const identity = (s: BigIntStats): FileIdentity => ({
   dev: String(s.dev),
@@ -108,10 +108,15 @@ export class AnchoredDirectory {
     )
       throw Error("Directory authority changed or unsafe");
   }
+  /** The anchored path of one component directly below this directory. */
   name(name: string) {
     component(name);
     this.check();
-    return join(this.anchor, name);
+    const path = resolve(this.anchor, name);
+    const below = relative(this.anchor, path);
+    if (below === ".." || below.startsWith("../") || isAbsolute(below) || below !== name)
+      throw Error("Unsafe filesystem component");
+    return path;
   }
   directory(name: string, create = false, strict = this.strict): AnchoredDirectory {
     const path = this.name(name);

@@ -4,7 +4,6 @@
 export type WriteSavedLabel400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

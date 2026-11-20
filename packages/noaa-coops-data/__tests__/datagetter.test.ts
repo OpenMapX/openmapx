@@ -1,5 +1,6 @@
 import type { Logger } from "@openmapx/integration-framework";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   fetchHighLowPredictions,
   fetchLatestMet,
@@ -27,15 +28,19 @@ function okJson(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as unknown as Response;
 }
 
-let mockFetch: ReturnType<typeof vi.fn>;
+// Answers recorded per URL; a non-ok answer becomes the host's status error.
+let mockFetch: Mock<(url: string) => Promise<Response>>;
+let http: ReturnType<typeof fakeHttpClient>;
 
 beforeEach(() => {
-  mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
+  mockFetch = vi.fn<(url: string) => Promise<Response>>();
+  http = fakeHttpClient(async (request) => {
+    const res = await mockFetch(request.url);
+    return res.ok ? res.json() : httpStatus(res.status);
+  });
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -53,7 +58,7 @@ describe("utcDateMinusOneDay (via begin_date param)", () => {
     vi.setSystemTime(new Date("2025-06-14T12:00:00.000Z"));
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchHighLowPredictions("9410230", makeLogger());
+    await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(beginDateFromCall(mockFetch.mock.calls[0])).toBe("20250613");
   });
@@ -68,7 +73,7 @@ describe("utcDateMinusOneDay (via begin_date param)", () => {
     vi.setSystemTime(new Date("2025-06-15T02:30:00.000Z"));
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchHighLowPredictions("9410230", makeLogger());
+    await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(beginDateFromCall(mockFetch.mock.calls[0])).toBe("20250614");
   });
@@ -79,7 +84,7 @@ describe("utcDateMinusOneDay (via begin_date param)", () => {
     vi.setSystemTime(new Date("2025-07-01T00:30:00.000Z"));
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchHighLowPredictions("9410230", makeLogger());
+    await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(beginDateFromCall(mockFetch.mock.calls[0])).toBe("20250630");
   });
@@ -90,7 +95,7 @@ describe("utcDateMinusOneDay (via begin_date param)", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchHighLowPredictions("9410230", makeLogger());
+    await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(beginDateFromCall(mockFetch.mock.calls[0])).toBe("20251231");
   });
@@ -101,7 +106,7 @@ describe("utcDateMinusOneDay (via begin_date param)", () => {
     vi.setSystemTime(new Date("2025-03-09T06:00:00.000Z"));
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchHighLowPredictions("9410230", makeLogger());
+    await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(beginDateFromCall(mockFetch.mock.calls[0])).toBe("20250308");
   });
@@ -118,7 +123,7 @@ describe("fetchHighLowPredictions", () => {
       }),
     );
 
-    const result = await fetchHighLowPredictions("9410230", makeLogger());
+    const result = await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(result).toEqual([
       { time: "2025-06-14 03:12", type: "L", valueFt: 1.234 },
@@ -136,7 +141,7 @@ describe("fetchHighLowPredictions", () => {
       }),
     );
 
-    const result = await fetchHighLowPredictions("9410230", makeLogger());
+    const result = await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(result?.map((e) => e.type)).toEqual(["H", "H"]);
   });
@@ -154,7 +159,7 @@ describe("fetchHighLowPredictions", () => {
       }),
     );
 
-    const result = await fetchHighLowPredictions("9410230", makeLogger());
+    const result = await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(result).toEqual([{ time: "d", type: "L", valueFt: 2.5 }]);
   });
@@ -162,7 +167,7 @@ describe("fetchHighLowPredictions", () => {
   it("returns [] when predictions is missing entirely", async () => {
     mockFetch.mockResolvedValue(okJson({}));
 
-    const result = await fetchHighLowPredictions("9410230", makeLogger());
+    const result = await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     expect(result).toEqual([]);
   });
@@ -171,7 +176,7 @@ describe("fetchHighLowPredictions", () => {
     const log = makeLogger();
     mockFetch.mockResolvedValue(okJson({ error: { message: "Wrong Date" } }));
 
-    const result = await fetchHighLowPredictions("9410230", log);
+    const result = await fetchHighLowPredictions(http, "9410230", log);
 
     expect(result).toBeNull();
     expect(log.calls.some((c) => c.level === "warn" && c.message.includes("Wrong Date"))).toBe(
@@ -183,27 +188,18 @@ describe("fetchHighLowPredictions", () => {
     const log = makeLogger();
     mockFetch.mockResolvedValue({ ok: false, status: 503 } as unknown as Response);
 
-    const result = await fetchHighLowPredictions("9410230", log);
+    const result = await fetchHighLowPredictions(http, "9410230", log);
 
     expect(result).toBeNull();
     expect(log.calls.some((c) => c.level === "warn" && c.message.includes("503"))).toBe(true);
   });
 
-  it("aborts stalled transport at the deadline and returns null with a warning", async () => {
-    vi.useFakeTimers();
+  it("bounds the request by the host deadline and returns null with a warning on failure", async () => {
     const log = makeLogger();
-    let signal: AbortSignal | undefined;
-    mockFetch.mockImplementation((_url, options) => {
-      signal = options.signal;
-      return new Promise((_resolve, reject) => {
-        signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
-      });
-    });
-    const pending = fetchHighLowPredictions("9410230", log);
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(await pending).toBeNull();
-    expect(signal?.aborted).toBe(true);
-    expect(vi.getTimerCount()).toBe(0);
+    mockFetch.mockRejectedValue(new Error("The operation was aborted due to timeout"));
+
+    expect(await fetchHighLowPredictions(http, "9410230", log)).toBeNull();
+    expect(http.calls[0]?.options).toMatchObject({ timeoutMs: 15_000 });
     expect(log.calls.some((c) => c.level === "warn" && c.message.includes("fetch failed"))).toBe(
       true,
     );
@@ -212,7 +208,7 @@ describe("fetchHighLowPredictions", () => {
   it("sends the documented hilo/predictions request params", async () => {
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchHighLowPredictions("9410230", makeLogger());
+    await fetchHighLowPredictions(http, "9410230", makeLogger());
 
     const url = new URL(mockFetch.mock.calls[0][0] as string);
     expect(url.searchParams.get("station")).toBe("9410230");
@@ -236,7 +232,7 @@ describe("fetchTideCurve", () => {
       }),
     );
 
-    const result = await fetchTideCurve("9410230", makeLogger());
+    const result = await fetchTideCurve(http, "9410230", makeLogger());
 
     expect(result).toEqual([
       { time: "2025-06-14 00:00", type: "H", valueFt: 1.1 },
@@ -257,7 +253,7 @@ describe("fetchTideCurve", () => {
       }),
     );
 
-    const result = await fetchTideCurve("9410230", makeLogger());
+    const result = await fetchTideCurve(http, "9410230", makeLogger());
 
     expect(result?.map((e) => e.time)).toEqual(["a", "d"]);
   });
@@ -265,7 +261,7 @@ describe("fetchTideCurve", () => {
   it("honors the hours arg as the range param", async () => {
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchTideCurve("9410230", makeLogger(), 24);
+    await fetchTideCurve(http, "9410230", makeLogger(), 24);
 
     const url = new URL(mockFetch.mock.calls[0][0] as string);
     expect(url.searchParams.get("range")).toBe("24");
@@ -275,7 +271,7 @@ describe("fetchTideCurve", () => {
   it("defaults the range to 48 hours when hours is omitted", async () => {
     mockFetch.mockResolvedValue(okJson({ predictions: [] }));
 
-    await fetchTideCurve("9410230", makeLogger());
+    await fetchTideCurve(http, "9410230", makeLogger());
 
     const url = new URL(mockFetch.mock.calls[0][0] as string);
     expect(url.searchParams.get("range")).toBe("48");
@@ -285,7 +281,7 @@ describe("fetchTideCurve", () => {
     const log = makeLogger();
     mockFetch.mockResolvedValue(okJson({ error: { message: "No data" } }));
 
-    const result = await fetchTideCurve("9410230", log);
+    const result = await fetchTideCurve(http, "9410230", log);
 
     expect(result).toBeNull();
   });
@@ -294,7 +290,7 @@ describe("fetchTideCurve", () => {
     const log = makeLogger();
     mockFetch.mockResolvedValue({ ok: false, status: 500 } as unknown as Response);
 
-    const result = await fetchTideCurve("9410230", log);
+    const result = await fetchTideCurve(http, "9410230", log);
 
     expect(result).toBeNull();
     expect(
@@ -305,7 +301,7 @@ describe("fetchTideCurve", () => {
   it("returns null when curve transport rejects", async () => {
     mockFetch.mockRejectedValue(new Error("network unavailable"));
 
-    const result = await fetchTideCurve("9410230", makeLogger());
+    const result = await fetchTideCurve(http, "9410230", makeLogger());
 
     expect(result).toBeNull();
   });
@@ -323,7 +319,7 @@ describe("fetchLatestWaterLevel", () => {
       }),
     );
 
-    const result = await fetchLatestWaterLevel("9410230", makeLogger());
+    const result = await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
     expect(result).toEqual({ time: "2025-06-14 12:12", valueFt: 1.3, quality: "v" });
   });
@@ -331,7 +327,7 @@ describe("fetchLatestWaterLevel", () => {
   it("preserves the preliminary quality flag", async () => {
     mockFetch.mockResolvedValue(okJson({ data: [{ t: "t", v: "0.5", q: "p" }] }));
 
-    const result = await fetchLatestWaterLevel("9410230", makeLogger());
+    const result = await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
     expect(result?.quality).toBe("p");
   });
@@ -346,7 +342,7 @@ describe("fetchLatestWaterLevel", () => {
       }),
     );
 
-    const result = await fetchLatestWaterLevel("9410230", makeLogger());
+    const result = await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
     // Only the LAST sample is considered; its empty value -> null overall.
     expect(result).toBeNull();
@@ -355,7 +351,7 @@ describe("fetchLatestWaterLevel", () => {
   it("returns null when data is empty", async () => {
     mockFetch.mockResolvedValue(okJson({ data: [] }));
 
-    const result = await fetchLatestWaterLevel("9410230", makeLogger());
+    const result = await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
     expect(result).toBeNull();
   });
@@ -363,7 +359,7 @@ describe("fetchLatestWaterLevel", () => {
   it("returns null when data is missing", async () => {
     mockFetch.mockResolvedValue(okJson({}));
 
-    const result = await fetchLatestWaterLevel("9410230", makeLogger());
+    const result = await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
     expect(result).toBeNull();
   });
@@ -372,7 +368,7 @@ describe("fetchLatestWaterLevel", () => {
     const log = makeLogger();
     mockFetch.mockResolvedValue(okJson({ error: { message: "No water level" } }));
 
-    const result = await fetchLatestWaterLevel("9410230", log);
+    const result = await fetchLatestWaterLevel(http, "9410230", log);
 
     expect(result).toBeNull();
     expect(log.calls.some((c) => c.level === "debug" && c.message.includes("No water level"))).toBe(
@@ -383,7 +379,7 @@ describe("fetchLatestWaterLevel", () => {
   it("returns null when fetch is not ok", async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 500 } as unknown as Response);
 
-    const result = await fetchLatestWaterLevel("9410230", makeLogger());
+    const result = await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
     expect(result).toBeNull();
   });
@@ -396,7 +392,7 @@ describe("fetchLatestWaterLevel", () => {
     } as unknown as Logger;
     mockFetch.mockResolvedValue(okJson({ error: { message: "nope" } }));
 
-    const result = await fetchLatestWaterLevel("9410230", noDebugLog);
+    const result = await fetchLatestWaterLevel(http, "9410230", noDebugLog);
 
     expect(result).toBeNull();
   });
@@ -404,7 +400,7 @@ describe("fetchLatestWaterLevel", () => {
   it("requests product=water_level with date=latest", async () => {
     mockFetch.mockResolvedValue(okJson({ data: [] }));
 
-    await fetchLatestWaterLevel("9410230", makeLogger());
+    await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
     const url = new URL(mockFetch.mock.calls[0][0] as string);
     expect(url.searchParams.get("product")).toBe("water_level");
@@ -436,7 +432,7 @@ describe("fetchLatestMet", () => {
       }),
     );
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toEqual({
       time: "2025-06-14 12:00",
@@ -452,7 +448,7 @@ describe("fetchLatestMet", () => {
   it("returns null when no product publishes data (all error-shaped)", async () => {
     mockFetch.mockResolvedValue(okJson({ error: { message: "Unsupported Station" } }));
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toBeNull();
   });
@@ -465,7 +461,7 @@ describe("fetchLatestMet", () => {
       }),
     );
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toEqual({ time: "2025-06-14 12:00", waterTempF: 55.0 });
   });
@@ -478,7 +474,7 @@ describe("fetchLatestMet", () => {
       }),
     );
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     // Wind value is empty -> windKnots is skipped; its direction is also not
     // applied because the switch is skipped via `continue`. time still set.
@@ -494,7 +490,7 @@ describe("fetchLatestMet", () => {
       }),
     );
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toEqual({ time: "2025-06-14 12:00", windKnots: 8.0 });
     expect(result?.windDirDeg).toBeUndefined();
@@ -508,7 +504,7 @@ describe("fetchLatestMet", () => {
       }),
     );
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toEqual({ time: "2025-06-14 12:00", windKnots: 12.0 });
   });
@@ -516,7 +512,7 @@ describe("fetchLatestMet", () => {
   it("returns null when a product's data array is empty", async () => {
     mockFetch.mockResolvedValue(okJson({ data: [] }));
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toBeNull();
   });
@@ -530,7 +526,7 @@ describe("fetchLatestMet", () => {
       return { ok: false, status: 500 } as unknown as Response;
     });
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toEqual({ time: "2025-06-14 12:00", airTempF: 68.0 });
   });
@@ -538,7 +534,7 @@ describe("fetchLatestMet", () => {
   it("returns null when every met transport rejects", async () => {
     mockFetch.mockRejectedValue(new Error("network unavailable"));
 
-    const result = await fetchLatestMet("9410230", makeLogger());
+    const result = await fetchLatestMet(http, "9410230", makeLogger());
 
     expect(result).toBeNull();
   });

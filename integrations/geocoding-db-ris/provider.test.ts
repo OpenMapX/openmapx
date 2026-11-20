@@ -3,16 +3,28 @@ import {
   runWithProviderDeadline,
 } from "@openmapx/integration-framework";
 import {
-  type FakeMobilityHttpRequest,
-  type FakeMobilityHttpTransport,
-  fakeMobilityHttpTransport,
+  type FakeHttpClient,
+  type FakeHttpRequest,
+  fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
+import {
+  createRisClient,
+  type RisClient,
+  type RisCredentials,
+} from "@openmapx/mobility-core/ris-client";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import { dbRisGeocodingService, lookupDbStation, setRisCredentials } from "./provider.js";
+import { createDbRisGeocodingService, lookupDbStation } from "./provider.js";
 import type { RisStopPlace } from "./stations-types.js";
 
-let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
-let transport: FakeMobilityHttpTransport;
+let mockFetch: Mock<(input: FakeHttpRequest) => unknown>;
+let transport: FakeHttpClient;
+let risClient: RisClient;
+let dbRisGeocodingService: ReturnType<typeof createDbRisGeocodingService>;
+
+function useCredentials(credentials: RisCredentials): void {
+  risClient = createRisClient(credentials, transport);
+  dbRisGeocodingService = createDbRisGeocodingService(risClient);
+}
 
 function mockOk(data: unknown) {
   return data;
@@ -27,13 +39,12 @@ const KOELN_HBF: RisStopPlace = {
 };
 
 beforeEach(() => {
-  mockFetch = vi.fn();
-  transport = fakeMobilityHttpTransport(mockFetch);
-  setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
+  mockFetch = vi.fn<(input: FakeHttpRequest) => unknown>();
+  transport = fakeHttpClient((request) => mockFetch(request));
+  useCredentials({ clientId: "cid", apiKey: "key" });
 });
 
 afterEach(() => {
-  setRisCredentials({}, transport);
   vi.restoreAllMocks();
 });
 
@@ -59,7 +70,7 @@ describe("dbRisGeocodingService.geocode", () => {
   });
 
   it("returns an empty array when credentials are not configured", async () => {
-    setRisCredentials({}, transport);
+    useCredentials({});
     expect(await dbRisGeocodingService.geocode("Köln")).toEqual([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -145,7 +156,7 @@ describe("lookupDbStation", () => {
       )
       .mockResolvedValueOnce(mockOk({ localServices: [{ name: "Lockers", category: "storage" }] }));
 
-    const result = await lookupDbStation("8000207", "en");
+    const result = await lookupDbStation(risClient, "8000207", "en");
 
     expect(result).toMatchObject({
       id: "eva:8000207",
@@ -164,7 +175,7 @@ describe("lookupDbStation", () => {
       .mockRejectedValueOnce(new Error("HTTP 500"))
       .mockRejectedValueOnce(new Error("HTTP 500"));
 
-    const result = await lookupDbStation("8000207");
+    const result = await lookupDbStation(risClient, "8000207");
     const detail = result.dataSourceDetail as { sections: unknown[] };
     expect(detail.sections).toEqual([]);
   });

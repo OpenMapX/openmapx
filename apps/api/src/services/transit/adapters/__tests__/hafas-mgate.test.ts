@@ -546,11 +546,13 @@ describe("planJourney", () => {
               walking: false,
               tripId: "trip-rj-123",
               origin: {
+                type: "stop",
                 id: "8100002",
                 name: "Wien Hbf",
                 location: { latitude: 48.185, longitude: 16.376 },
               },
               destination: {
+                type: "stop",
                 id: "8100008",
                 name: "Salzburg Hbf",
                 location: { latitude: 47.813, longitude: 13.046 },

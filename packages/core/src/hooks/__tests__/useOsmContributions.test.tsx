@@ -251,7 +251,7 @@ describe("mutations", () => {
     vi.spyOn(apiClient, "post").mockRejectedValue(
       new ApiClientError(
         409,
-        { code: "VERSION_CONFLICT", message: "Changed.", context: CONTEXT },
+        { code: "VERSION_CONFLICT", error: "Changed.", context: CONTEXT },
         null,
       ),
     );
@@ -274,7 +274,7 @@ describe("mutations", () => {
 
   it("exposes a bounded retry time for a throttled request", async () => {
     vi.spyOn(apiClient, "post").mockRejectedValue(
-      new ApiClientError(429, { code: "RATE_LIMITED", message: "Slow down." }, 30),
+      new ApiClientError(429, { code: "RATE_LIMITED", error: "Slow down." }, 30),
     );
     const { result } = renderHook(() => usePreviewOsmContribution(), { wrapper: wrapper() });
     const error = (await result.current

@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // `trace_attributes` edge uses along its shape, and the `/locate` answers for
 // the lookups the plan asks for (trimmed to distances, names and car access).
 import fixture from "./__fixtures__/alexanderplatz-museum-island-walk.json" with { type: "json" };
-import { setValhallaUrl, transformTrip, valhallaService } from "./provider.js";
+import { valhallaHarness } from "./__tests__/valhalla-http.js";
+import { transformTrip } from "./provider.js";
 import {
   composeWalkingSteps,
   nameLookups,
@@ -14,6 +15,8 @@ import {
   planWalkingLeg,
   type WalkManeuver,
 } from "./walking-guidance.js";
+
+const valhalla = valhallaHarness();
 
 const leg = fixture.trip.legs[0];
 const summary = (steps: RouteStep[]) =>
@@ -194,34 +197,30 @@ describe("walking guidance rules", () => {
   });
 });
 
-describe("valhallaService.getRoute walking guidance", () => {
+describe("valhalla.service.getRoute walking guidance", () => {
   afterEach(() => {
-    vi.unstubAllGlobals();
-    setValhallaUrl(undefined);
+    valhalla.settings = { ...valhalla.settings, url: undefined };
   });
 
   function stubValhalla(answers: { traceFails?: boolean; locateFails?: boolean } = {}) {
     const calls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        const path = new URL(url).pathname;
-        calls.push(path);
-        if (path === "/route") return Response.json({ trip: fixture.trip });
-        if (path === "/trace_attributes") {
-          return answers.traceFails
-            ? new Response("down", { status: 503 })
-            : Response.json({ edges: fixture.edges });
-        }
-        if (path === "/locate") {
-          return answers.locateFails
-            ? new Response("down", { status: 503 })
-            : Response.json(fixture.locate);
-        }
-        return new Response("unexpected", { status: 404 });
-      }),
-    );
-    setValhallaUrl("http://valhalla:8002");
+    valhalla.answer = vi.fn(async (url: string) => {
+      const path = new URL(url).pathname;
+      calls.push(path);
+      if (path === "/route") return Response.json({ trip: fixture.trip });
+      if (path === "/trace_attributes") {
+        return answers.traceFails
+          ? new Response("down", { status: 503 })
+          : Response.json({ edges: fixture.edges });
+      }
+      if (path === "/locate") {
+        return answers.locateFails
+          ? new Response("down", { status: 503 })
+          : Response.json(fixture.locate);
+      }
+      return new Response("unexpected", { status: 404 });
+    });
+    valhalla.settings = { ...valhalla.settings, url: "http://valhalla:8002" };
     return calls;
   }
 
@@ -232,7 +231,7 @@ describe("valhallaService.getRoute walking guidance", () => {
 
   it("rewrites walking steps with one edge trace and one batched locate", async () => {
     const calls = stubValhalla();
-    const result = await valhallaService.getRoute(WALK, "walking", { lang: "en" });
+    const result = await valhalla.service.getRoute(WALK, "walking", { lang: "en" });
     expect(calls).toEqual(["/route", "/trace_attributes", "/locate"]);
     const route = result.routes[0];
     expect(route?.steps.map((step) => step.instruction)).toContain("Cross Spandauer Straße");
@@ -243,14 +242,14 @@ describe("valhallaService.getRoute walking guidance", () => {
 
   it("keeps the route when both lookups fail", async () => {
     stubValhalla({ traceFails: true, locateFails: true });
-    const result = await valhallaService.getRoute(WALK, "walking", { lang: "en" });
+    const result = await valhalla.service.getRoute(WALK, "walking", { lang: "en" });
     expect(result.routes[0]?.steps[0]?.instruction).toBe("Head southwest");
     expect(result.routes[0]?.steps).toHaveLength(8);
   });
 
   it("leaves other modes' steps to Valhalla", async () => {
     const calls = stubValhalla();
-    const result = await valhallaService.getRoute(WALK, "cycling", { lang: "en" });
+    const result = await valhalla.service.getRoute(WALK, "cycling", { lang: "en" });
     expect(calls).toEqual(["/route"]);
     expect(result.routes[0]?.steps[0]?.instruction).toBe("Walk southwest on the walkway.");
   });

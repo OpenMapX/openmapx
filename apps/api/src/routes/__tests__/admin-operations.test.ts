@@ -99,8 +99,8 @@ describe("POST /admin/operations/:id/preview", () => {
       payload: { region: "../etc" },
     });
     expect(res.statusCode).toBe(400);
-    const body = res.json() as { ok: boolean; error: string; issues: unknown[] };
-    expect(body.ok).toBe(false);
+    const body = res.json() as { error: string; issues: unknown[] };
+    expect(Object.keys(body).sort()).toEqual(["error", "issues"]);
     expect(body.error).toMatch(/region/);
     expect(body.issues.length).toBeGreaterThan(0);
   });
@@ -112,6 +112,7 @@ describe("POST /admin/operations/:id/preview", () => {
       payload: {},
     });
     expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: "Unknown operation" });
   });
 });
 

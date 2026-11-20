@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { integrationSecret } from "../db/schema";
+import { processLogger } from "../process-logger";
 import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
@@ -93,9 +94,9 @@ export async function getSecret(integrationId: string, key: string): Promise<str
     if (!row) return null;
     return decrypt(row.ciphertext, row.iv, row.tag);
   } catch (err) {
-    console.warn(
-      `[secrets] Failed to retrieve secret "${key}" for integration "${integrationId}":`,
-      err instanceof Error ? err.message : err,
+    processLogger.warn(
+      { component: "secrets", err, integrationId, secretKey: key },
+      "Failed to retrieve a secret",
     );
     return null;
   }
@@ -133,17 +134,17 @@ export async function resolveVaultSecrets(integrationId: string): Promise<Record
       try {
         result[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
       } catch (err) {
-        console.warn(
-          `[secrets] Failed to decrypt secret "${row.key}" for integration "${integrationId}":`,
-          err instanceof Error ? err.message : err,
+        processLogger.warn(
+          { component: "secrets", err, integrationId, secretKey: row.key },
+          "Failed to decrypt a secret",
         );
       }
     }
     return result;
   } catch (err) {
-    console.warn(
-      `[secrets] Failed to query vault secrets for integration "${integrationId}":`,
-      err instanceof Error ? err.message : err,
+    processLogger.warn(
+      { component: "secrets", err, integrationId },
+      "Failed to query vault secrets",
     );
     return {};
   }

@@ -6,7 +6,7 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
  * https://ckan.open.nrw.de/dataset/stadtteilauto-munster-carsharing-stationen-und-fahrzeuge-ms
  */
 
-import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
+import { bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import { captureCacheWriter } from "@openmapx/integration-framework";
 import { type CacheClient, cacheGet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
@@ -151,11 +151,7 @@ export const deStadtteilautoClient: RegionalCarSharingClient = {
   name: "Stadtteilauto Münster",
   // Münster center, ~20km radius covers all stations
   regions: [{ center: [7.626, 51.962] as LngLat, radiusKm: 20 }],
-  async search(
-    bbox: BoundingBox,
-    cache: CacheClient,
-    contributors?: readonly Attribution[],
-  ): Promise<SharedMobilityStation[]> {
+  async search(bbox, { cache, contributors }) {
     const all = await fetchData(cache, contributors);
     return all.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0]));
   },

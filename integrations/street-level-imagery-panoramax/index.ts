@@ -1,15 +1,11 @@
 import {
-  createBoundedBinaryProxyStream,
-  MAX_VECTOR_TILE_BYTES,
-  VECTOR_TILE_MEDIA_TYPES,
-} from "@openmapx/core/server";
-import {
   captureStreetLevelProviderContributors,
   filterImagesByHeading,
   type IntegrationContext,
   parseStreetLevelSearchQuery,
   scalarQueries,
 } from "@openmapx/integration-framework";
+import { createTileProxyHandler } from "@openmapx/integration-framework/tile-proxy";
 import { createPanoramaxProvider } from "./provider.js";
 
 const DEFAULT_INSTANCE_URL = "https://api.panoramax.xyz/api";
@@ -31,7 +27,7 @@ async function upstream<T>(
     return { ok: true, value: await run() };
   } catch (error) {
     ctx.log.warn(`${what} failed: ${error instanceof Error ? error.message : String(error)}`);
-    reply.status(502).send({ message: `${what} is unavailable` });
+    reply.status(502).send({ error: `${what} is unavailable` });
     return { ok: false };
   }
 }
@@ -53,43 +49,17 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute(
     "GET",
     "/tiles/:z/:x/:y",
-    async (req, reply) => {
-      const { z, x, y } = req.params as { z: string; x: string; y: string };
-      if (!/^[0-9]{1,2}$/.test(z) || !/^[0-9]+$/.test(x) || !/^[0-9]+$/.test(y)) {
-        reply.status(400).send({ message: "Invalid tile coordinates" });
-        return;
-      }
-
-      const url = `${instanceUrl.replace(/\/$/, "")}/map/${z}/${x}/${y}.mvt`;
-      // Raw fetch is required because fetchJson cannot express a binary stream.
-      // 10s proved too tight in production: a viewport change fans out
-      // 30-60 tile requests and these tiles run to hundreds of KB, so the
-      // public instances regularly overran it and coverage went missing.
-      try {
-        const timeoutSignal = AbortSignal.timeout(25_000);
-        const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-        const upstream = await fetch(url, { signal });
-        if (!upstream.ok) {
-          ctx.log.warn(`Panoramax tile request failed: ${upstream.status}`);
-          reply.status(upstream.status).send({ message: "Panoramax tile unavailable" });
-          return;
-        }
-
-        const proxy = createBoundedBinaryProxyStream(upstream, {
-          maxBytes: MAX_VECTOR_TILE_BYTES,
-          allowedContentTypes: VECTOR_TILE_MEDIA_TYPES,
-          fallbackContentType: "application/vnd.mapbox-vector-tile",
-          label: "Panoramax vector tile",
-        });
-        reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-        reply.type(proxy.contentType);
-        reply.send(proxy.body);
-      } catch (error) {
-        ctx.log.warn("Panoramax tile request failed", error);
-        reply.status(502).send({ message: "Panoramax tile unavailable" });
-      }
-    },
+    createTileProxyHandler(ctx, {
+      kind: "vector",
+      label: "Panoramax vector tile",
+      url: ({ z, x, y }) => `${instanceUrl.replace(/\/$/, "")}/map/${z}/${x}/${y}.mvt`,
+      maxZoom: 15,
+      // A viewport change fans out 30-60 tile requests of hundreds of KB each;
+      // 10 s regularly overran on the public instances and coverage went missing.
+      timeoutMs: 25_000,
+      fallbackContentType: "application/vnd.mapbox-vector-tile",
+      cacheControl: "public, max-age=86400, s-maxage=86400",
+    }),
     { rateLimitTier: "tile" },
   );
 
@@ -97,7 +67,7 @@ export function setup(ctx: IntegrationContext): void {
     const lat = Number((scalarQueries(req.query) as { lat?: string }).lat);
     const lng = Number((scalarQueries(req.query) as { lng?: string }).lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 
@@ -107,7 +77,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "No imagery found near this location" });
+      reply.status(404).send({ error: "No imagery found near this location" });
       return;
     }
     reply.send(image);
@@ -119,7 +89,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "Image not found" });
+      reply.status(404).send({ error: "Image not found" });
       return;
     }
     reply.send(image);
@@ -141,7 +111,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/search", async (req, reply) => {
     const parsed = parseStreetLevelSearchQuery(scalarQueries(req.query));
     if (!parsed) {
-      reply.status(400).send({ message: "Invalid search query" });
+      reply.status(400).send({ error: "Invalid search query" });
       return;
     }
     const found = await upstream(ctx, reply, "Panoramax imagery search", () =>

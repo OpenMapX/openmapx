@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { HttpResponse, UpstreamRuntime } from "@openmapx/integration-framework";
 import { type GtfsFamily, OtpError } from "@openmapx/otp-client";
 import type { RegistryEntry } from "./registry-types";
@@ -90,17 +91,12 @@ export function publicOtpPolicy(
     async afterResponse(response: HttpResponse<unknown>, signal: AbortSignal) {
       if (response.status !== 429) return;
       if (!defer) throw new OtpError("unavailable");
-      const raw = response.headers["retry-after"];
-      const seconds = raw && /^\d+$/.test(raw) ? Number(raw) : NaN;
-      const serverDate = Date.parse(response.headers.date ?? "");
-      const delay = Number.isFinite(seconds)
-        ? seconds * 1000
-        : Date.parse(raw ?? "") - (Number.isFinite(serverDate) ? serverDate : Date.now());
+      const delay = parseRetryAfterMs(response.headers["retry-after"], {
+        serverDate: response.headers.date,
+      });
       // Missing/invalid Retry-After gets a conservative one-minute cooldown, not a quota allowance.
       const delayMs =
-        Number.isSafeInteger(delay) && delay > 0 && Number.isSafeInteger(Date.now() + delay)
-          ? delay
-          : 60000;
+        delay !== null && delay > 0 && Number.isSafeInteger(Date.now() + delay) ? delay : 60000;
       await defer({ ...identity, delayMs, signal });
       throw new OtpError("quota");
     },

@@ -13,6 +13,7 @@ import {
   type WaterLevelObservation,
   withContributors,
 } from "@openmapx/integration-framework";
+import { loadIwlsStations } from "./catalog.js";
 
 /**
  * Canadian tide-prediction + observation knowledge integration. Wraps the
@@ -45,22 +46,6 @@ const TIDES_TTL = 6 * 60 * 60; // 6h — predictions are deterministic
 const OBSERVATION_TTL = 5 * 60; // 5 min — observations refresh more often
 const MAX_STATION_DISTANCE_KM = 20; // Canadian tide stations are sparse — wider radius than NOAA's 2 km
 const M_TO_FT = 3.28084;
-
-interface IwlsTimeSeries {
-  code: string; // "wlo" | "wlp" | "wlp-hilo" | "wcs1" | …
-  id: string;
-}
-
-interface IwlsStationRaw {
-  id: string;
-  code: string;
-  officialName: string;
-  alternativeName?: string;
-  latitude: number;
-  longitude: number;
-  operating: boolean;
-  timeSeries: IwlsTimeSeries[];
-}
 
 interface CachedStation extends ContributingRecord {
   id: string;
@@ -102,30 +87,26 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["dfo-iwls"]);
   const writer = await captureCacheWriter(ctx.cache);
-  // Pull every station that exposes water-level predictions. The IWLS catalog
-  // is ~700 stations; `max=2000` covers the entire active set comfortably.
-  const raw = await fetchJson<IwlsStationRaw[]>(
-    `${IWLS_BASE}/stations?time-series-code=wlp&max=2000`,
-  );
-  if (!raw) {
+  let catalog: Awaited<ReturnType<typeof loadIwlsStations>>;
+  try {
+    catalog = await loadIwlsStations(ctx.http);
+  } catch {
     ctx.log.warn("IWLS station catalog unavailable");
     return [];
   }
-  const stations: CachedStation[] = raw
-    .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
-    .map((s) => {
-      const codes = new Set(s.timeSeries.map((t) => t.code));
-      return {
-        id: s.id,
-        code: s.code,
-        name: s.officialName.trim() || s.code,
-        lat: s.latitude,
-        lng: s.longitude,
-        hasWlp: codes.has("wlp"),
-        hasHilo: codes.has("wlp-hilo"),
-        hasWlo: codes.has("wlo"),
-      };
-    });
+  const stations: CachedStation[] = catalog.map((s) => {
+    const codes = new Set(s.timeSeries);
+    return {
+      id: s.id,
+      code: s.code,
+      name: s.name,
+      lat: s.lat,
+      lng: s.lng,
+      hasWlp: codes.has("wlp"),
+      hasHilo: codes.has("wlp-hilo"),
+      hasWlo: codes.has("wlo"),
+    };
+  });
   const acquired = stations.map((station) => withContributors(station, captured));
   await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);
   return acquired;

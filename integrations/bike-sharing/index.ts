@@ -18,6 +18,7 @@ export function setup(ctx: IntegrationContext): void {
     resolveContributors,
     cache: ctx.cache,
     transport: mobilityHttpTransport,
+    http: ctx.http,
     // The instances the deployment uses, as their health checks probe them.
     motisUrl: ctx.resolvePlatformEndpoint("motis")?.url,
     nominatimUrl: ctx.resolvePlatformEndpoint("nominatim")?.url,
@@ -41,7 +42,7 @@ export function setup(ctx: IntegrationContext): void {
     searchDbBikes: createDbBikeClient({
       clientId: ctx.config["db-bike-client-id"] as string | undefined,
       apiKey: ctx.config["db-bike-api-key"] as string | undefined,
-      transport: runtime.transport,
+      http: ctx.http,
       contributors: resolveContributors(["db-bike"]),
     }),
     searchDonkey,

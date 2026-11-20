@@ -5,7 +5,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
  */
 
 import type { BoundingBox } from "@openmapx/core";
-import type { Logger } from "@openmapx/integration-framework";
+import type { HttpClient, Logger } from "@openmapx/integration-framework";
 import type { CacheClient } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { clientMatchesBbox, type RegionalCarSharingClient } from "./regional-client-types.js";
@@ -13,6 +13,7 @@ import { clientMatchesBbox, type RegionalCarSharingClient } from "./regional-cli
 export function createRegionalCarSharingRegistry(options: {
   clients: readonly RegionalCarSharingClient[];
   cache: CacheClient;
+  http: HttpClient;
   log: Logger;
   resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
 }): (bbox: BoundingBox) => Promise<SharedMobilityStation[]> {
@@ -21,9 +22,11 @@ export function createRegionalCarSharingRegistry(options: {
     if (matching.length === 0) return [];
     const results = await Promise.allSettled(
       matching.map((client) =>
-        options.resolveContributors
-          ? client.search(bbox, options.cache, options.resolveContributors([client.id]))
-          : client.search(bbox, options.cache),
+        client.search(bbox, {
+          cache: options.cache,
+          http: options.http,
+          contributors: options.resolveContributors?.([client.id]),
+        }),
       ),
     );
     const stations: SharedMobilityStation[] = [];

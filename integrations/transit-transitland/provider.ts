@@ -1,5 +1,6 @@
-import { type BBox, FetchJsonHttpError, fetchJson } from "@openmapx/core";
+import { type BBox, FetchJsonHttpError } from "@openmapx/core";
 import {
+  type HttpClient,
   ProviderInputError,
   parseProviderPayload,
   parseProviderRecords,
@@ -15,14 +16,10 @@ import { z } from "zod";
 
 const BASE_URL = "https://transit.land/api/v2/rest";
 
-// Populated by setup(ctx) from the resolved integration config cascade.
-let transitlandApiKey: string | null = null;
-export function setTransitlandApiKey(value: string | undefined): void {
-  transitlandApiKey = value && value.length > 0 ? value : null;
-}
-
-function apiKey(): string | null {
-  return transitlandApiKey;
+/** The host client and the current generation's key; without a key nothing is asked. */
+export interface TransitlandAccess {
+  http: HttpClient;
+  apiKey: string | null;
 }
 
 /**
@@ -32,21 +29,17 @@ function apiKey(): string | null {
  * unknown, which is bad caller input rather than a provider failure.
  */
 async function tlFetch(
+  access: TransitlandAccess,
   path: string,
   params: Record<string, string>,
   what: string,
   callerKeyed = false,
 ): Promise<unknown> {
-  const key = apiKey();
+  const key = access.apiKey;
   if (!key) return null;
-  const url = new URL(`${BASE_URL}${path}`);
-  url.searchParams.set("apikey", key);
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
   try {
-    return await fetchJson<unknown>(url.toString(), {
-      errorMessage: ({ status }) => `TransitLand ${path} → HTTP ${status}`,
+    return await access.http.get<unknown>(`${BASE_URL}${path}`, {
+      params: { apikey: key, ...params },
     });
   } catch (error) {
     if (callerKeyed && error instanceof FetchJsonHttpError && error.status === 404)
@@ -186,7 +179,11 @@ function normalizeDeparture(d: TransitlandDeparture, platform: string | undefine
   };
 }
 
-export async function getStops(bbox: BBox, modes?: TransportMode[]): Promise<TransitStop[]> {
+export async function getStops(
+  access: TransitlandAccess,
+  bbox: BBox,
+  modes?: TransportMode[],
+): Promise<TransitStop[]> {
   const [w, s, e, n] = bbox;
   const params: Record<string, string> = {
     bbox: `${w},${s},${e},${n}`,
@@ -201,25 +198,30 @@ export async function getStops(bbox: BBox, modes?: TransportMode[]): Promise<Tra
       params.served_by_route_types = routeTypes.join(",");
     }
   }
-  const data = await tlFetch("/stops", params, "stops");
+  const data = await tlFetch(access, "/stops", params, "stops");
   if (data === null) return [];
   const { stops } = parseProviderPayload(stopsEnvelope, data, "Transitland stops");
   return parseProviderRecords(stopSchema, stops, "Transitland stops").map(normalizeStop);
 }
 
-export async function getStop(id: string): Promise<TransitStop | null> {
+export async function getStop(access: TransitlandAccess, id: string): Promise<TransitStop | null> {
   const onestopId = id.startsWith("tl:") ? id.slice(3) : id;
-  const data = await tlFetch("/stops", { onestop_id: onestopId }, "stop");
+  const data = await tlFetch(access, "/stops", { onestop_id: onestopId }, "stop");
   if (data === null) return null;
   const { stops } = parseProviderPayload(stopsEnvelope, data, "Transitland stop");
   if (stops.length === 0) return null;
   return normalizeStop(parseProviderPayload(stopSchema, stops[0], "Transitland stop"));
 }
 
-export async function getDepartures(stopId: string, minutes = 60): Promise<Departure[]> {
+export async function getDepartures(
+  access: TransitlandAccess,
+  stopId: string,
+  minutes = 60,
+): Promise<Departure[]> {
   const onestopId = stopId.startsWith("tl:") ? stopId.slice(3) : stopId;
   // A failed or malformed board throws; it must not read as "no departures".
   const data = await tlFetch(
+    access,
     `/stops/${encodeURIComponent(onestopId)}/departures`,
     { next: String(minutes * 60) },
     "timetable",
@@ -235,7 +237,10 @@ export async function getDepartures(stopId: string, minutes = 60): Promise<Depar
   );
 }
 
-export async function getRoutes(opts: { bbox?: BBox; stopId?: string }): Promise<TransitRoute[]> {
+export async function getRoutes(
+  access: TransitlandAccess,
+  opts: { bbox?: BBox; stopId?: string },
+): Promise<TransitRoute[]> {
   const params: Record<string, string> = { per_page: "100" };
   if (opts.bbox) {
     const [w, s, e, n] = opts.bbox;
@@ -245,15 +250,19 @@ export async function getRoutes(opts: { bbox?: BBox; stopId?: string }): Promise
     const id = opts.stopId.startsWith("tl:") ? opts.stopId.slice(3) : opts.stopId;
     params.served_by_stops = id;
   }
-  const data = await tlFetch("/routes", params, "routes");
+  const data = await tlFetch(access, "/routes", params, "routes");
   if (data === null) return [];
   const { routes } = parseProviderPayload(routesEnvelope, data, "Transitland routes");
   return parseProviderRecords(routeSchema, routes, "Transitland routes").map(normalizeRoute);
 }
 
-export async function getRoute(id: string): Promise<TransitRoute | null> {
+export async function getRoute(
+  access: TransitlandAccess,
+  id: string,
+): Promise<TransitRoute | null> {
   const onestopId = id.startsWith("tl:") ? id.slice(3) : id;
   const data = await tlFetch(
+    access,
     "/routes",
     { onestop_id: onestopId, include_geometry: "true" },
     "route",

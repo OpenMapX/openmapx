@@ -4,7 +4,7 @@ import type {
   AirportRunwayInfo,
   AirportType,
 } from "@openmapx/core";
-import type { Logger } from "@openmapx/integration-framework";
+import type { HttpClient, Logger } from "@openmapx/integration-framework";
 import { type CsvRecord, parseCsv, parseOptionalFloat, parseOptionalInt } from "./csv.js";
 import { buildSearchIndex, type SearchIndex } from "./search.js";
 import type { AirportRecord } from "./types.js";
@@ -14,6 +14,8 @@ const BASE_URL = "https://davidmegginson.github.io/ourairports-data";
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const RETRY_BACKOFF_MS = 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 60_000;
+/** airports.csv, the largest file, is about 13 MB. */
+const MAX_CSV_BYTES = 64 * 1024 * 1024;
 
 const AIRPORT_TYPES = new Set<AirportType>([
   "balloonport",
@@ -35,10 +37,9 @@ const SPATIAL_FALLBACK_TYPES = new Set<AirportType>([
 ]);
 
 /**
- * Per-file conditional-GET state. Keyed by file name. When an upstream
- * response carries an `ETag` or `Last-Modified` header, we send the value
- * back on the next refresh and treat a 304 as "no change — reuse the
- * previous parsed body".
+ * Per-file conditional-GET state. When an upstream response carries an
+ * `ETag` or `Last-Modified` header, we send the value back on the next
+ * refresh and treat a 304 as "no change — reuse the previous body".
  */
 interface ConditionalGet {
   etag?: string;
@@ -70,12 +71,29 @@ let store: DataStore | null = null;
 let loadPromise: Promise<DataStore | null> | null = null;
 let lastFailureAt = 0;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
-const refreshOwners = new Set<symbol>();
-const conditionalState = new Map<string, ConditionalGet>();
+/** Each live integration generation and the host client it loads with. */
+const refreshOwners = new Map<symbol, HttpClient>();
+/**
+ * Conditional-GET state belongs to the client that fetched it, so a reloaded
+ * generation starts afresh and a released one takes its bodies with it.
+ */
+const conditionalState = new WeakMap<HttpClient, Map<string, ConditionalGet>>();
 
-export function startBackgroundLoad(log: Logger): () => void {
+/** The most recently registered live owner's client, which loads run with. */
+function loaderClient(): HttpClient | undefined {
+  let latest: HttpClient | undefined;
+  for (const http of refreshOwners.values()) latest = http;
+  return latest;
+}
+
+/**
+ * Load the data with this generation's host client and keep it fresh until
+ * every owner has called its release function. Lookups answer null until an
+ * owner has registered.
+ */
+export function startBackgroundLoad(http: HttpClient, log: Logger): () => void {
   const owner = Symbol("ourairports-background-load-owner");
-  refreshOwners.add(owner);
+  refreshOwners.set(owner, http);
   void ensureLoaded(log);
   if (!refreshTimer) {
     refreshTimer = setInterval(() => {
@@ -116,8 +134,10 @@ async function ensureLoaded(log: Logger, force = false): Promise<DataStore | nul
   if (store && !force && Date.now() - store.loadedAt < REFRESH_INTERVAL_MS) return store;
   if (loadPromise) return loadPromise;
   if (!force && lastFailureAt && Date.now() - lastFailureAt < RETRY_BACKOFF_MS) return store;
+  const http = loaderClient();
+  if (!http) return store;
 
-  loadPromise = doLoad(log)
+  loadPromise = doLoad(http, log)
     .then((next) => {
       store = next;
       lastFailureAt = 0;
@@ -139,15 +159,15 @@ async function ensureLoaded(log: Logger, force = false): Promise<DataStore | nul
   return loadPromise;
 }
 
-async function doLoad(log: Logger): Promise<DataStore> {
+async function doLoad(http: HttpClient, log: Logger): Promise<DataStore> {
   log.info("ourairports-data: fetching CSV dumps");
   const start = Date.now();
 
   const [airportsCsv, runwaysCsv, frequenciesCsv, navaidsCsv] = await Promise.all([
-    fetchText(`${BASE_URL}/airports.csv`),
-    fetchText(`${BASE_URL}/runways.csv`),
-    fetchText(`${BASE_URL}/airport-frequencies.csv`),
-    fetchText(`${BASE_URL}/navaids.csv`),
+    fetchText(http, `${BASE_URL}/airports.csv`),
+    fetchText(http, `${BASE_URL}/runways.csv`),
+    fetchText(http, `${BASE_URL}/airport-frequencies.csv`),
+    fetchText(http, `${BASE_URL}/navaids.csv`),
   ]);
 
   const airportRows = parseCsv(airportsCsv);
@@ -335,32 +355,35 @@ function sortNavaids(navaids: AirportNavaidInfo[] | undefined): AirportNavaidInf
 /**
  * Fetch one CSV file with conditional-GET support. Sends `If-None-Match` and
  * `If-Modified-Since` from the previous response; if the server returns 304
- * (Not Modified) we reuse the previously-parsed body — saves ~19 MB of
- * download per refresh when upstream is unchanged (which is most days for
- * stable feeds like `countries.csv`).
+ * (Not Modified) we reuse the previous body, which saves about 19 MB of
+ * download per refresh when upstream is unchanged.
  */
-async function fetchText(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+async function fetchText(http: HttpClient, url: string): Promise<string> {
+  let state = conditionalState.get(http);
+  if (!state) {
+    state = new Map();
+    conditionalState.set(http, state);
+  }
+  const prior = state.get(url);
   const headers: Record<string, string> = {};
-  const prior = conditionalState.get(url);
   if (prior?.etag) headers["If-None-Match"] = prior.etag;
   if (prior?.lastModified) headers["If-Modified-Since"] = prior.lastModified;
 
-  try {
-    const res = await fetch(url, { signal: controller.signal, headers });
-    if (res.status === 304 && prior?.body) {
-      return prior.body;
-    }
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
-    const body = await res.text();
-    conditionalState.set(url, {
-      etag: res.headers.get("etag") ?? undefined,
-      lastModified: res.headers.get("last-modified") ?? undefined,
-      body,
-    });
-    return body;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await http.getText(url, {
+    maxBytes: MAX_CSV_BYTES,
+    contentTypes: ["text/csv", "text/plain"],
+    successStatuses: [200],
+    discardErrorBody: true,
+    responseHeaders: ["etag", "last-modified"],
+    headers,
+    timeoutMs: FETCH_TIMEOUT_MS,
+  });
+  if (res.status === 304 && prior?.body) return prior.body;
+  if (res.status !== 200) throw new Error(`OurAirports CSV HTTP ${res.status}`);
+  state.set(url, {
+    etag: res.headers.etag,
+    lastModified: res.headers["last-modified"],
+    body: res.body,
+  });
+  return res.body;
 }

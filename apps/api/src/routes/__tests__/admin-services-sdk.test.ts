@@ -740,7 +740,7 @@ describe("actual service producers through final exported SDK", () => {
       ).toBe(200);
       expect(await sdk.stopAdminCompose(undefined, options)).toMatchObject({
         status: 503,
-        data: { ok: false, error: expect.stringContaining("host shutdown") },
+        data: { error: expect.stringContaining("host shutdown") },
       });
       const chunks: string[] = [];
       expect(
@@ -875,7 +875,7 @@ describe("actual service producers through final exported SDK", () => {
         payload: [1],
       });
       expect(unknown.statusCode).toBe(404);
-      expect(unknown.json()).toEqual({ ok: false, error: "Unknown operation" });
+      expect(unknown.json()).toEqual({ error: "Unknown operation" });
     } finally {
       await close();
     }
@@ -984,7 +984,6 @@ it("retains structured domain failures and retained credential jobs through SDK 
     ).toMatchObject({
       status: 400,
       data: {
-        ok: false,
         error: expect.any(String),
         issues: expect.arrayContaining([{ path: expect.any(String), message: expect.any(String) }]),
       },
@@ -1228,7 +1227,6 @@ it("preserves Compose idempotency failure before invalid optional body", async (
     });
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
-      ok: false,
       error: "Idempotency-Key must be a single 16-128 character caller-retained identifier",
     });
     expect(execute).not.toHaveBeenCalled();

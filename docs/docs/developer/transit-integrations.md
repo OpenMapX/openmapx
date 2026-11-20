@@ -182,8 +182,14 @@ Validate only the fields the adapter consumes, with a zod schema, through
 `ProviderPayloadError`, which provider health records as `invalid_payload`.
 For lists of independent records (stops, departures, alerts), a record missing a
 consumed field is dropped and its valid neighbours kept; a non-empty list with no
-usable record is malformed. Reject a stop without coordinates rather than placing
-it at 0,0. An ordered structure such as a journey's stop sequence is valid only as
+usable record is malformed. Never place a record without coordinates at 0,0. Drop
+a stop record without coordinates, but keep a journey stop or a route stop
+without them in its stop list with `lat` and `lng` left out, so only drawing and
+distance skip it. A route stop's `sequence` counts from 1 without gaps, unplaced
+stops included. Fill a trip leg's unplaced end from what the trip proves (its polyline,
+the neighbouring leg, the requested origin or destination) before giving up on
+the trip. An end placed only at the requested coordinate carries no stop id, and a
+leg's own duration times it before its neighbour's time does. An ordered structure such as a journey's stop sequence is valid only as
 a whole. Use recorded or documented example responses as fixtures, note their
 source in a `PROVENANCE.md`, and have test doubles assert the request they
 receive.
@@ -211,7 +217,7 @@ getArrivals?(stopId, minutes): Promise<MobilityResult<Departure[]>>;
 
 // Routes / lines
 getRoute?(routeId): Promise<MobilityResult<TransitRoute | null>>;
-getRouteStops?(routeId, hintStopId?): Promise<MobilityResult<TransitStop[]>>;
+getRouteStops?(routeId, hintStopId?): Promise<MobilityResult<RouteStop[]>>;
 getRoutesForStop?(stopId): Promise<MobilityResult<TransitRoute[]>>;
 getLegGeometry?(tripId, fromStopId?, toStopId?): Promise<MobilityResult<LineString | null>>;
 

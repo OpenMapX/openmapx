@@ -196,7 +196,7 @@ describe("pending integration family operation binding", () => {
         path: "/api/admin/integrations/sample/config",
         method: "PATCH",
         status: 400,
-        data: { errors: ["Invalid field"] },
+        data: { error: "Invalid configuration", errors: ["Invalid field"] },
       },
       {
         id: "setAdminIntegrationCredential",

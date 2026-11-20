@@ -149,6 +149,10 @@
       "types": "./src/motis-rentals.ts",
       "default": "./src/motis-rentals.ts"
     },
+    "./station-intelligence": {
+      "types": "./src/station-intelligence.ts",
+      "default": "./src/station-intelligence.ts"
+    },
     "./nominatim": {
       "types": "./src/nominatim.ts",
       "default": "./src/nominatim.ts"

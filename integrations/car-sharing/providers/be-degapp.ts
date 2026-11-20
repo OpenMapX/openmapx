@@ -143,6 +143,7 @@ export const beCoopstroomClient = createStaticCarSharingClient({
   id: "be-coopstroom",
   name: "CoopStroom",
   url: "https://app.coopstroom.be/api/partago/v1/fleet/coopstroom",
+  contentTypes: ["application/json"],
   regions: [{ center: [3.71, 51.11] as LngLat, radiusKm: 70 }],
   parse: (body) => parseDegapp(body, { sourceId: "be-coopstroom", operator: "CoopStroom" }),
 });
@@ -151,6 +152,8 @@ export const beDegageClient = createStaticCarSharingClient({
   id: "be-degage",
   name: "Dégage",
   url: "https://degapp.be/api/car/stands",
+  // Dégage serves its JSON as text/plain.
+  contentTypes: ["application/json", "text/plain"],
   regions: [{ center: [3.72, 51.05] as LngLat, radiusKm: 80 }],
   parse: (body) => parseDegapp(body, { sourceId: "be-degage", operator: "Dégage" }),
 });

@@ -320,7 +320,7 @@ describe("retry after a failed publish", () => {
     const { OsmContributionRequestError } = await import("@openmapx/core");
     state.nextPublishError = new OsmContributionRequestError(502, {
       code: "OSM_UNAVAILABLE",
-      message: "Unavailable.",
+      error: "Unavailable.",
     });
 
     const button = await reachPublish();
@@ -349,7 +349,7 @@ describe("conflict", () => {
     };
     state.nextPublishError = new OsmContributionRequestError(409, {
       code: "VERSION_CONFLICT",
-      message: "Changed upstream.",
+      error: "Changed upstream.",
       context: latest,
     });
 
@@ -503,7 +503,7 @@ describe("errors", () => {
       isPending: false,
       error: new OsmContributionRequestError(502, {
         code: "OSM_UNAVAILABLE",
-        message: leaked,
+        error: leaked,
       }),
     };
     renderDialog();
@@ -518,7 +518,7 @@ describe("errors", () => {
       isPending: false,
       error: new OsmContributionRequestError(502, {
         code: "AMBIGUOUS_RESULT",
-        message: "Unknown.",
+        error: "Unknown.",
         inspect: {
           changesetUrl: "https://www.openstreetmap.org/changeset/77",
           elementUrl: "javascript:alert(1)",

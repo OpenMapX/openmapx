@@ -19,10 +19,12 @@ import type {
 } from "@openmapx/core";
 import {
   addressComponentsFromOsmTags,
-  fetchJson,
   resolvePoiIconPath,
   sanitizeAddressComponents,
 } from "@openmapx/core";
+import type { HttpClient, Logger } from "@openmapx/integration-framework";
+import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
+import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
 
@@ -35,23 +37,22 @@ const BASE_URL = "https://api.maptiler.com/geocoding";
 const SEARCH_TYPES =
   "poi,address,street,neighbourhood,municipality,municipal_district,locality,subregion,region,county,country,postal_code,place";
 
-// Populated by setup(ctx) from the resolved integration config cascade.
-let apiKey: string | undefined;
-export function setMaptilerApiKey(value: string | undefined): void {
-  apiKey = value && value.length > 0 ? value : undefined;
-}
-
 /**
  * The integration's own `apiKey`, or else the deployment-wide `MAPTILER_KEY`
  * the tile proxy uses, so one key set in `.env` serves both maps and search.
+ * `shared` tells whether it is the deployment's key: only that key spends the
+ * deployment's MapTiler daily budget. A map key saved in the admin settings is
+ * not visible here, so an own key equal to it is not charged to the budget the
+ * tile proxy spends for that key.
  */
 export function resolveMaptilerApiKey(
   configured: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
-): string | undefined {
+): { key: string; shared: boolean } | undefined {
   const own = configured?.trim();
-  if (own) return own;
-  return env.MAPTILER_KEY?.trim() || undefined;
+  const shared = env.MAPTILER_KEY?.trim() || undefined;
+  if (own) return { key: own, shared: own === shared };
+  return shared ? { key: shared, shared: true } : undefined;
 }
 
 interface MaptilerFeature {
@@ -259,127 +260,156 @@ function mapType(placeType: string[]): SearchResult["type"] {
   return "region";
 }
 
-async function fetchMaptiler(
-  query: string,
-  params: Record<string, string>,
-  lang?: string,
-): Promise<MaptilerResponse> {
-  const key = apiKey;
-  if (!key)
-    throw new Error("MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_KEY)");
-
-  const url = new URL(`${BASE_URL}/${encodeURIComponent(query)}.json`);
-  url.searchParams.set("key", key);
-  url.searchParams.set("language", lang ?? "en");
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-
-  return fetchJson<MaptilerResponse>(url.toString(), {
-    timeoutMs: 4_000,
-    userAgent: null,
-    errorMessage: ({ status }) => `MapTiler geocoding error ${status}`,
-  });
+/** A feature's display label: its full place name, else its own name. */
+function displayLabel(f: MaptilerFeature): string {
+  return f.place_name || f.text;
 }
 
-async function fetchMaptilerReverse(
-  lng: number,
-  lat: number,
-  lang?: string,
-): Promise<MaptilerResponse> {
-  const key = apiKey;
-  if (!key)
-    throw new Error("MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_KEY)");
-
-  const url = new URL(`${BASE_URL}/${lng},${lat}.json`);
-  url.searchParams.set("key", key);
-  url.searchParams.set("language", lang ?? "en");
-  url.searchParams.set("limit", "1");
-
-  return fetchJson<MaptilerResponse>(url.toString(), {
-    timeoutMs: 4_000,
-    userAgent: null,
-    errorMessage: ({ status }) => `MapTiler reverse geocoding error ${status}`,
-  });
+/** Features with coordinates in range and a display label. */
+function usable(features: readonly MaptilerFeature[]) {
+  return usableGeocoderRecords(
+    features,
+    (f) => ({
+      coordinates: lngLatOrNull(f.geometry?.coordinates?.[0], f.geometry?.coordinates?.[1]),
+      label: displayLabel(f),
+    }),
+    "MapTiler features",
+  );
 }
 
-export const maptilerGeocodingService: GeocodingProviderImpl = {
-  async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
-    const params: Record<string, string> = { limit: "10", types: SEARCH_TYPES };
-    if (proximity) params.proximity = `${proximity[0]},${proximity[1]}`;
-    const data = await fetchMaptiler(query, params, lang);
-    return data.features.map((f) => {
-      const localities = localitiesOf(f);
-      const addressEvidence = addressEvidenceOf(f);
-      return {
-        id: `maptiler:${f.id}`,
-        ...identityOf(f),
-        addressEvidence,
-        ...(addressEvidence.method === "osm-tags"
-          ? { address: formatOwnAddress(f, addressEvidence) }
-          : {}),
-        label: f.place_name,
-        name: f.text,
-        ...(f.matching_text ? { aliases: [f.matching_text] } : {}),
-        ...(localities.length ? { localities } : {}),
-        coordinates: f.geometry.coordinates,
-        type: mapType(f.place_type),
-        confidence: f.relevance,
-        rawCategory: f.properties?.categories?.[0],
-      };
+/** The MapTiler key's shared daily budget is spent; search degrades until it resets. */
+export class MaptilerBudgetSpentError extends Error {
+  readonly code = "quota_exhausted";
+  readonly status = 429;
+  constructor(readonly retryAfterSeconds: number) {
+    super("MapTiler has used its daily request budget");
+    this.name = "MaptilerBudgetSpentError";
+  }
+}
+
+export interface MaptilerGeocodingOptions {
+  http: HttpClient;
+  /** The key of the current generation, resolved when the integration activates. */
+  apiKey: () => string | undefined;
+  /**
+   * The daily budget the current key spends: the deployment's MapTiler budget,
+   * shared with the tile proxy, when geocoding uses the shared key; null for
+   * the integration's own key or when no budget is set.
+   */
+  budget: () => ProviderDailyBudget | null;
+  log: Logger;
+}
+
+export function createMaptilerGeocodingService(
+  options: MaptilerGeocodingOptions,
+): GeocodingProviderImpl {
+  const request = async (
+    path: string,
+    params: Record<string, string>,
+    lang: string | undefined,
+  ): Promise<MaptilerResponse> => {
+    const key = options.apiKey();
+    if (!key)
+      throw new Error("MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_KEY)");
+    const admission = await options.budget()?.admit();
+    if (admission && !admission.allowed) {
+      if (admission.firstRefusalInWindow) {
+        options.log.warn(
+          "MapTiler daily request budget is spent; geocoding is refused until it resets",
+        );
+      }
+      throw new MaptilerBudgetSpentError(admission.retryAfterSeconds);
+    }
+    return options.http.get<MaptilerResponse>(`${BASE_URL}/${path}.json`, {
+      params: { ...params, key, language: lang ?? "en" },
+      timeoutMs: 4_000,
     });
-  },
+  };
+  const fetchMaptiler = (query: string, params: Record<string, string>, lang?: string) =>
+    request(encodeURIComponent(query), params, lang);
+  const fetchMaptilerReverse = (lng: number, lat: number, lang?: string) =>
+    request(`${lng},${lat}`, { limit: "1" }, lang);
 
-  async reverseGeocode(
-    lat: number,
-    lng: number,
-    lang?: string,
-  ): Promise<ReverseGeocodingResult | null> {
-    const data = await fetchMaptilerReverse(lng, lat, lang);
-    const feature = data.features[0];
-    if (!feature) return null;
+  return {
+    async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
+      const params: Record<string, string> = { limit: "10", types: SEARCH_TYPES };
+      if (proximity) params.proximity = `${proximity[0]},${proximity[1]}`;
+      const data = await fetchMaptiler(query, params, lang);
+      return usable(data.features).map(({ record: f, coordinates }) => {
+        const localities = localitiesOf(f);
+        const addressEvidence = addressEvidenceOf(f);
+        return {
+          id: `maptiler:${f.id}`,
+          ...identityOf(f),
+          addressEvidence,
+          ...(addressEvidence.method === "osm-tags"
+            ? { address: formatOwnAddress(f, addressEvidence) }
+            : {}),
+          label: displayLabel(f),
+          name: f.text,
+          ...(f.matching_text ? { aliases: [f.matching_text] } : {}),
+          ...(localities.length ? { localities } : {}),
+          coordinates,
+          type: mapType(f.place_type),
+          confidence: f.relevance,
+          rawCategory: f.properties?.categories?.[0],
+        };
+      });
+    },
 
-    const ctx = feature.context ?? [];
-    const cityName =
-      ctx.find((c) => c.id.startsWith("municipality") || c.id.startsWith("place"))?.text ?? "";
-    const region =
-      ctx.find((c) => c.id.startsWith("region") || c.id.startsWith("state"))?.text ?? "";
-    return {
-      address: feature.place_name,
-      city: [cityName, region].filter(Boolean).join(", "),
-      addressEvidence: addressEvidenceOf(feature, true),
-    };
-  },
+    async reverseGeocode(
+      lat: number,
+      lng: number,
+      lang?: string,
+    ): Promise<ReverseGeocodingResult | null> {
+      const data = await fetchMaptilerReverse(lng, lat, lang);
+      const feature = data.features[0];
+      if (!feature) return null;
 
-  async autocomplete(
-    query: string,
-    lang?: string,
-    bias?: GeocodingBias,
-  ): Promise<AutocompleteResult[]> {
-    const params: Record<string, string> = {
-      limit: "6",
-      autocomplete: "true",
-      types: SEARCH_TYPES,
-    };
-    if (bias) params.proximity = `${bias.proximity[0]},${bias.proximity[1]}`;
-    const data = await fetchMaptiler(query, params, lang);
-    return data.features.map((f) => {
-      const category = f.properties?.categories?.[0];
-      const fame = fameOf(f);
-      const addressEvidence = addressEvidenceOf(f);
+      const ctx = feature.context ?? [];
+      const cityName =
+        ctx.find((c) => c.id.startsWith("municipality") || c.id.startsWith("place"))?.text ?? "";
+      const region =
+        ctx.find((c) => c.id.startsWith("region") || c.id.startsWith("state"))?.text ?? "";
       return {
-        id: `maptiler:${f.id}`,
-        ...identityOf(f),
-        addressEvidence,
-        ...(addressEvidence.method === "osm-tags"
-          ? { address: formatOwnAddress(f, addressEvidence) }
-          : {}),
-        label: autocompleteLabel(f),
-        sublabel: f.place_name,
-        coordinates: f.geometry.coordinates,
-        type: mapType(f.place_type),
-        iconPath: category ? resolvePoiIconPath(category) : undefined,
-        rawCategory: rawCategoryOf(f),
-        ...(fame !== undefined ? { fame } : {}),
+        address: feature.place_name,
+        city: [cityName, region].filter(Boolean).join(", "),
+        addressEvidence: addressEvidenceOf(feature, true),
       };
-    });
-  },
-};
+    },
+
+    async autocomplete(
+      query: string,
+      lang?: string,
+      bias?: GeocodingBias,
+    ): Promise<AutocompleteResult[]> {
+      const params: Record<string, string> = {
+        limit: "6",
+        autocomplete: "true",
+        types: SEARCH_TYPES,
+      };
+      if (bias) params.proximity = `${bias.proximity[0]},${bias.proximity[1]}`;
+      const data = await fetchMaptiler(query, params, lang);
+      return usable(data.features).map(({ record: f, coordinates }) => {
+        const category = f.properties?.categories?.[0];
+        const fame = fameOf(f);
+        const addressEvidence = addressEvidenceOf(f);
+        return {
+          id: `maptiler:${f.id}`,
+          ...identityOf(f),
+          addressEvidence,
+          ...(addressEvidence.method === "osm-tags"
+            ? { address: formatOwnAddress(f, addressEvidence) }
+            : {}),
+          label: autocompleteLabel(f) || displayLabel(f),
+          sublabel: f.place_name,
+          coordinates,
+          type: mapType(f.place_type),
+          iconPath: category ? resolvePoiIconPath(category) : undefined,
+          rawCategory: rawCategoryOf(f),
+          ...(fame !== undefined ? { fame } : {}),
+        };
+      });
+    },
+  };
+}

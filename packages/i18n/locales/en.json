@@ -1772,6 +1772,7 @@
     "stopDetailsLater": "Stop details will be available closer to departure.",
     "stopSequenceNotAvailable": "Stop sequence not available for this service.",
     "stopDataNotAvailable": "Stop data not available.",
+    "stopNotPlaced": "Not on the map",
     "viewDepartures": "View {mode} departures",
     "noDeparturesMode": "No {mode} {tab} found in the next 60 minutes.",
     "noDeparturesGeneric": "No {tab} found in the next 60 minutes.",

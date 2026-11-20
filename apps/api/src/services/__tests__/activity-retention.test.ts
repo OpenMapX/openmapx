@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { adminJob } from "../../db/schema";
 import { createDbMock, type DbMock } from "../../test/db.js";
 
+const { processLogger } = vi.hoisted(() => ({
+  processLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../process-logger", () => ({ processLogger }));
+
 const dbMock: DbMock = createDbMock();
 vi.mock("../../db", () => ({ db: dbMock.db }));
 vi.mock("drizzle-orm", async (importOriginal) => {
@@ -28,7 +33,7 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     vi.clearAllMocks();
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(processLogger, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -62,7 +67,7 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
       const result = await fn(days);
       expect(result).toBe(0);
       expect(dbMock.db.delete).not.toHaveBeenCalled();
-      expect(console.warn).toHaveBeenCalled();
+      expect(processLogger.warn).toHaveBeenCalled();
     });
 
     it("deletes rows and computes the cutoff for a positive day count", async () => {
@@ -109,7 +114,7 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
 describe("pruneDataManagerJobs retention guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(processLogger, "warn").mockImplementation(() => {});
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -118,7 +123,7 @@ describe("pruneDataManagerJobs retention guard", () => {
     async (days) => {
       expect(await pruneDataManagerJobs(days)).toBe(0);
       expect(dbMock.db.delete).not.toHaveBeenCalled();
-      expect(console.warn).toHaveBeenCalled();
+      expect(processLogger.warn).toHaveBeenCalled();
     },
   );
 });

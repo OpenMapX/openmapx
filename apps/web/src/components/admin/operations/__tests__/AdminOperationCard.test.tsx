@@ -106,7 +106,6 @@ describe("AdminOperationCard", () => {
   it("shows server validation issues on the offending field", async () => {
     responses.push(
       jsonResponse(400, {
-        ok: false,
         error: "region: Use lowercase path segments",
         issues: [{ path: "region", message: "Use lowercase path segments" }],
       }),

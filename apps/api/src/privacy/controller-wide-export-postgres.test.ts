@@ -354,7 +354,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           payload: {},
         });
         expect(response.statusCode).toBe(401);
-        expect(response.json()).toEqual({ code: "FRESH_SIGN_IN_REQUIRED" });
+        expect(response.json()).toEqual({ error: "Unauthorized", code: "FRESH_SIGN_IN_REQUIRED" });
         expect(await subjectRequest()).toBeUndefined();
       } finally {
         await app.close();

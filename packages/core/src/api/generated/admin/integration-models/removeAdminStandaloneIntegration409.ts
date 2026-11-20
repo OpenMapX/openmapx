@@ -4,7 +4,6 @@
 export type RemoveAdminStandaloneIntegration409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

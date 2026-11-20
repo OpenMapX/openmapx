@@ -4,7 +4,6 @@
 export type StartAdminCompose400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -19,6 +18,5 @@ export type StartAdminCompose400 =
       code?: string;
     }
   | {
-      ok: false;
       error: string;
     };

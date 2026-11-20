@@ -16,6 +16,7 @@ import {
   type TideStationResponse,
   withContributors,
 } from "@openmapx/integration-framework";
+import { loadIocStations } from "./catalog.js";
 
 /**
  * Global tide-gauge observation knowledge integration. Wraps the IOC Sea
@@ -98,17 +99,6 @@ function sensorRank(sensor: string): number {
   return rank === -1 ? SENSOR_PREFERENCE.length : rank;
 }
 
-interface IocStationRaw {
-  Code: string;
-  Location: string;
-  country?: string;
-  Lat: number;
-  Lon: number;
-  status?: number;
-  /** Originator's unit ("M", "F", "V"); `query=data` still serves metres. */
-  units?: string;
-}
-
 interface IocDataPoint {
   slevel: number;
   stime: string; // "2026-05-17 22:30:00"
@@ -148,25 +138,12 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
   const writer = await captureCacheWriter(ctx.cache);
 
-  const raw = await fetchJson<IocStationRaw[]>(`${BASE}?query=stationlist&format=json`);
-  if (!raw) {
+  let stations: CachedStation[];
+  try {
+    stations = await loadIocStations(ctx.http);
+  } catch {
     ctx.log.warn("IOC station list unavailable");
     return [];
-  }
-  const seen = new Set<string>();
-  const stations: CachedStation[] = [];
-  for (const s of raw) {
-    if (s.status !== 1) continue;
-    if (!Number.isFinite(s.Lat) || !Number.isFinite(s.Lon)) continue;
-    if (seen.has(s.Code)) continue;
-    seen.add(s.Code);
-    stations.push({
-      code: s.Code,
-      name: s.Location.trim() || s.Code,
-      lat: s.Lat,
-      lng: s.Lon,
-      country: s.country,
-    });
   }
   const acquired = stations.map((station) => withContributors(station, captured));
   await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);

@@ -11,6 +11,12 @@ import {
   PROXY_ENTRYPOINT_LABEL_VALUE,
   readExternalProxyNetwork,
 } from "./external-proxy";
+import {
+  buildProducerIndex,
+  type ProducerEntry,
+  type ProducerIndex,
+  selectProducer,
+} from "./producer-index";
 import { TRANSITOUS_TOOLS_IMAGE_ENV } from "./release-manifest";
 import { detectConsumesCycle } from "./resolver";
 import {
@@ -26,27 +32,8 @@ import type {
   ServiceBindMount,
   ServiceConsumes,
   ServiceManifest,
-  ServiceProduces,
 } from "./types";
 import { serviceContainerImageReference } from "./types";
-
-/**
- * Producer index keyed by `<type>` for default/single-instance producers and
- * `<type>/<instance>` for instanced ones. Built once per render so consumer
- * lookups are O(1). See {@link resolveProducer}.
- */
-type ProducerEntry = {
-  producerId: string;
-  produces: ServiceProduces;
-};
-type ProducerIndex = {
-  /** type → entry, only set when the producer has no `instance` (the "default"). */
-  default: Map<string, ProducerEntry>;
-  /** `${type}/${instance}` → entry. */
-  instanced: Map<string, ProducerEntry>;
-  /** type → all entries (default + instanced) for fall-back lookup. */
-  byType: Map<string, ProducerEntry[]>;
-};
 
 function communityNetworkName(serviceId: string): string {
   const normalized = serviceId
@@ -119,39 +106,6 @@ function assertUniqueCommunityNetworkNames(services: LoadedService[]): void {
   }
 }
 
-function buildProducerIndex(services: LoadedService[]): ProducerIndex {
-  const index: ProducerIndex = {
-    default: new Map(),
-    instanced: new Map(),
-    byType: new Map(),
-  };
-  for (const s of services) {
-    for (const p of s.manifest.produces ?? []) {
-      const entry: ProducerEntry = { producerId: s.manifest.id, produces: p };
-      if (p.instance === undefined) {
-        if (index.default.has(p.type)) {
-          throw new Error(
-            `Multiple default-instance producers for type "${p.type}": ${index.default.get(p.type)?.producerId} and ${s.manifest.id}. Disambiguate with distinct \`instance\` ids on the producers, then specify \`instance\` on consumers.`,
-          );
-        }
-        index.default.set(p.type, entry);
-      } else {
-        const key = `${p.type}/${p.instance}`;
-        if (index.instanced.has(key)) {
-          throw new Error(
-            `Multiple producers for (type "${p.type}", instance "${p.instance}"): ${index.instanced.get(key)?.producerId} and ${s.manifest.id}. Each (type, instance) pair must be unique across the registry.`,
-          );
-        }
-        index.instanced.set(key, entry);
-      }
-      const list = index.byType.get(p.type) ?? [];
-      list.push(entry);
-      index.byType.set(p.type, list);
-    }
-  }
-  return index;
-}
-
 function consumesKey(consumes: ServiceConsumes): string {
   return consumes.instance ? `${consumes.type}/${consumes.instance}` : consumes.type;
 }
@@ -166,34 +120,19 @@ function resolveProducer(
   consumerId: string,
   index: ProducerIndex,
 ): ProducerEntry | null {
-  if (consumes.instance !== undefined) {
-    const key = `${consumes.type}/${consumes.instance}`;
-    const found = index.instanced.get(key);
-    if (found) return found;
-    if (consumes.required === false) return null;
+  const selection = selectProducer(consumes, index);
+  if (selection.kind === "found") return selection.entry;
+  if (selection.kind === "ambiguous") {
+    // Multiple producer instances and the consumer didn't pick one.
     throw new Error(
-      `Service "${consumerId}" consumes (type "${consumes.type}", instance "${consumes.instance}") but no producer with that instance is installed.`,
+      `Service "${consumerId}" consumes type "${consumes.type}" without specifying an \`instance\`, but multiple producer instances are installed: ${selection.candidates.map((c) => c.produces.instance ?? "<default>").join(", ")}. Add \`instance\` to disambiguate.`,
     );
   }
-
-  const def = index.default.get(consumes.type);
-  if (def) return def;
-
-  // No default producer. If exactly one instanced producer exists for this
-  // type, use it as the implicit default — the common single-instance case.
-  const candidates = index.byType.get(consumes.type) ?? [];
-  if (candidates.length === 1) return candidates[0] ?? null;
-
-  if (candidates.length === 0) {
-    if (consumes.required === false) return null;
-    throw new Error(
-      `Service "${consumerId}" consumes required data type "${consumes.type}" but no producer is installed.`,
-    );
-  }
-
-  // Multiple producer instances and the consumer didn't pick one.
+  if (consumes.required === false) return null;
   throw new Error(
-    `Service "${consumerId}" consumes type "${consumes.type}" without specifying an \`instance\`, but multiple producer instances are installed: ${candidates.map((c) => c.produces.instance ?? "<default>").join(", ")}. Add \`instance\` to disambiguate.`,
+    consumes.instance !== undefined
+      ? `Service "${consumerId}" consumes (type "${consumes.type}", instance "${consumes.instance}") but no producer with that instance is installed.`
+      : `Service "${consumerId}" consumes required data type "${consumes.type}" but no producer is installed.`,
   );
 }
 
@@ -1150,7 +1089,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   // (type, instance) pairs, and we want that error to surface before any
   // other work. Topological order then runs against a registry we know is
   // structurally sound.
-  const producerIndex = buildProducerIndex(services);
+  const producerIndex = buildProducerIndex(services, { onDuplicate: "throw" });
   const sorted = topologicalOrder(services);
 
   // Hardlink plan: for each consumer entry, look up the matching producer

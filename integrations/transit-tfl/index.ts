@@ -3,7 +3,11 @@ import * as tfl from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
-  ctx.onActivate(() => tfl.setTflApiKey(ctx.config.apiKey as string | undefined));
+  const access: tfl.TflAccess = { http: ctx.http, apiKey: null };
+  ctx.onActivate(() => {
+    const configured = ctx.config.apiKey as string | undefined;
+    access.apiKey = configured && configured.length > 0 ? configured : null;
+  });
   ctx.registerTransitProvider({
     id: "transit-tfl",
     prefix: "tfl:",
@@ -31,23 +35,23 @@ export function setup(ctx: IntegrationContext): void {
       facilities: false,
     },
     async getStopsNearby(lat, lng, radiusMeters) {
-      return wrap(await tfl.getStops(lat, lng, radiusMeters));
+      return wrap(await tfl.getStops(access, lat, lng, radiusMeters));
     },
     async getStop(id) {
-      return wrap(await tfl.getStop(id));
+      return wrap(await tfl.getStop(access, id));
     },
     async getDepartures(id, min) {
-      const board = await tfl.getDepartures(id, min);
+      const board = await tfl.getDepartures(access, id, min);
       return wrapRT(board.departures, undefined, { dataAsOf: board.dataAsOf });
     },
     async searchStopsByName(q, limit, context) {
-      return wrap(await tfl.searchByName(q, limit ?? 10, context?.signal));
+      return wrap(await tfl.searchByName(access, q, limit ?? 10, context?.signal));
     },
     async getAlertsForStop(id) {
-      return wrapRT(await tfl.getStopAlerts(id));
+      return wrapRT(await tfl.getStopAlerts(access, id));
     },
     async getAlertsForRoute(id) {
-      return wrapRT(await tfl.getRouteAlerts(id));
+      return wrapRT(await tfl.getRouteAlerts(access, id));
     },
   });
 }

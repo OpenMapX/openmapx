@@ -39,6 +39,46 @@ policy suite. `apps/api/scripts/openapi/__tests__/openapi-freshness.test.ts`
 checks the committed document, authentication classification and admin-route
 classification.
 
+## Error responses
+
+Every API error reply OpenMapX owns, from a core route, an integration route or
+a data-manager route the API passes through, has one shape:
+
+```json
+{ "error": "Invalid coordinates", "code": "INVALID_QUERY" }
+```
+
+- `error` is a short description that is safe to show to a user. It never
+  carries an upstream body, a URL with a key or a stack trace. Clients read the
+  text from `error` only.
+- `code` is optional: a stable, machine-readable reason for clients that branch
+  on it. A family with closed codes documents them, as the air-quality,
+  OpenStreetMap contribution, saved-places and garage contracts do.
+- A family may add fields beside these, such as `retryAfter`, `details`, an
+  `errors` list of validation messages or a `hint`.
+- An error body carries no `ok` flag: the HTTP status says that the request
+  failed.
+
+A handler throws `httpError(status, text)` or sends
+`reply.status(status).send({ error, code })`. The host's error handler answers
+`{ error }` for a thrown error and a fixed `{ "error": "Internal Server Error" }`
+for any status of 500 or above. The schema is `apiErrorSchema` in
+`@openmapx/core/api-contracts`; contract families extend it.
+
+`apps/api/src/__tests__/error-envelope.test.ts` scans the API, the built-in
+integrations, the integration framework and data-manager and refuses an error
+reply whose literal body has no `error` or has an `ok` field, including a body
+wrapped in `satisfies` or `as`.
+Data-manager error replies that the API passes through use the same envelope:
+offline package preparation names its reason in `code` (with
+`retryAfterSeconds` when it limits the caller), and a refused transit source
+change names `in-flight` or `duplicate-idempotency-key` in `code` beside
+`existingJobId`.
+
+The only exception is Better Auth's handler under `/api/auth/*`. Its errors are
+`{ code, message }`, because that is the shape the Better Auth client library
+reads; OpenMapX does not own or rewrite them.
+
 ## What gets collected, and how
 
 The document has two halves, gathered two different ways.
@@ -358,7 +398,7 @@ browser-cache entries.
 | `GET /api/integrations/air-quality/stations` | `south`, `west`, `north`, `east` | `zoom`, `pollutant`, `limit`, `cursor`                 | viewport at most 20° latitude × 30° longitude; antimeridian supported; zoom 0 to 22; limit 1 to 500 |
 
 Every scalar key may occur once. Invalid/repeated values return HTTP 400 with
-`{ code: "INVALID_QUERY", message, details? }`. A valid request with no evidence
+`{ error, code: "INVALID_QUERY", details? }`. A valid request with no evidence
 is HTTP 200 with `status: "unavailable"`, never 204. `partial` means useful
 evidence was returned while a provider, comparison, freshness, policy, or size
 condition degraded the result.
@@ -499,50 +539,6 @@ without values. Health-history hours default to 24 and accept one integer from
 1 through 168. SQL timestamp-without-time-zone hour values are interpreted as UTC
 and emitted as ISO timestamps. Reload enqueue responses are HTTP 200 `{ok, jobId}`;
 they do not establish terminal job success.
-
-Configuration import validates the complete file against current manifests before
-writes. It replaces named non-secret overrides, preserves an omitted `enabled`,
-and leaves unnamed rows and the vault untouched. Declared top-level secret fields
-are omitted. Unknown/read-only/invalid fields and masked non-secret values reject
-the file. Exports omit secrets, obsolete/unknown DB fields and read-only fields;
-their optional `exportedAt` and `count` metadata is accepted by import. Empty imports
-are rejected, including an empty export with no saved overrides.
-
-Validation errors identify bounded entry numbers, known integration/field names
-and public rule categories. They never include supplied values, unknown keys,
-raw schema values or internal validator details.
-
-One DB transaction persists the batch. Before preparing the complete input, the
-API observes the current host revision through typed `configuration.inspect`;
-the initial `stack.render` must still own that revision at activation. A completed
-competing writer causes a conflict, with no automatic mutation retry. One normal
-reload follows a successful apply. A failed import returns HTTP 409 with
-`ok: false`, `phase`, `recovery`, `database`, optional `runtime`, and optional
-`apply`/`compensation` outcome evidence. `recovery: "restored"` is still a failed
-import, not success. `reconciliation_required` means an operator must inspect
-saved, applied and runtime state before another deliberate action; do not retry
-a mutation automatically. No secret-bearing snapshot enters this response.
-
-Recovery compares each named row's identity and PostgreSQL tuple version in an
-all-or-none transaction. It reverses only those integrations in the full payload
-actually submitted, preserving unrelated changes included during preparation.
-Before using previous DB rows as an inverse, recovery compares their named
-projections against fingerprints from that same authoritative host observation.
-Missing evidence or prior saved/applied divergence returns
-`reason: "previous_applied_not_proven"`, retains the imported DB rows, and requires
-reconciliation without replaying unproven values. The observation exposes no
-configuration values or secrets. An initial host conflict also requires
-reconciliation even if owned DB rows were restored: the competing generation may
-have included some of the imported settings.
-
-Host compensation authenticates `expectedCurrentRevisionId` using the committed
-import revision. A newer host generation conflicts rather than being overwritten.
-After a reload exception, a successful DB/host restoration also needs a recovery
-reload and a final DB ownership check. Unknown completion, lost ownership,
-compensation failure and incomplete cleanup remain explicit reconciliation.
-This is request-local compensation, not a crash-atomic DB/host/runtime transaction;
-process loss can require operator reconciliation. Live PostgreSQL and deployment
-acceptance are separate from provider-independent fixture qualification.
 
 Ordinary browser mutation completion effects capture the executing client and
 integration/credential owner. Replacement origins, identities and unmounted views

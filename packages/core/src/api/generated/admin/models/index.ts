@@ -487,6 +487,7 @@ export * from "./postApiDataManagerTransitSync409";
 export * from "./postApiDataManagerTransitSync413";
 export * from "./postApiDataManagerTransitSync415";
 export * from "./postApiDataManagerTransitSync422";
+export * from "./postApiDataManagerTransitSync422Code";
 export * from "./postApiDataManagerTransitSync429";
 export * from "./postApiDataManagerTransitSync500";
 export * from "./postApiDataManagerTransitSyncBody";

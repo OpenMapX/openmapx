@@ -52,6 +52,7 @@ import {
   stopIntegrationHealthRefresh,
 } from "./integration-host.js";
 import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
+import { processLogger } from "./process-logger";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { isSecretsConfigured } from "./services/secrets.js";
 import { resolveRequiresForIntegration } from "./services/service-registry.js";
@@ -455,7 +456,7 @@ describe("initIntegrations — loader", () => {
       domains: ["knowledge"],
       quality: "community",
     });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const warn = vi.spyOn(processLogger, "warn").mockImplementation(() => undefined);
     const app = makeApp();
 
     try {
@@ -467,8 +468,11 @@ describe("initIntegrations — loader", () => {
       const loaded = getIntegration("duplicate-community");
       expect(loaded).toMatchObject({ directory: firstDirectory, isBuiltIn: false });
       expect(loaded?.manifest.name).toBe("First community");
-      const warningText = warn.mock.calls.flat().join(" ");
-      expect(warningText).toContain('duplicate integration id "duplicate-community"');
+      const warningText = JSON.stringify(warn.mock.calls);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ integrationId: "duplicate-community" }),
+        expect.stringContaining("duplicate integration id"),
+      );
       expect(warningText).not.toContain(parent);
     } finally {
       warn.mockRestore();

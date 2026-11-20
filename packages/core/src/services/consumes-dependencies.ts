@@ -1,3 +1,4 @@
+import { buildProducerIndex, selectProducer } from "./producer-index";
 import type { LoadedService } from "./types";
 
 /**
@@ -10,35 +11,17 @@ import type { LoadedService } from "./types";
 export function resolveConsumesDependencies(
   services: readonly LoadedService[],
 ): ReadonlyMap<string, readonly string[]> {
-  const defaultProducers = new Map<string, string>();
-  const instancedProducers = new Map<string, string>();
-  const producersByType = new Map<string, string[]>();
-  for (const service of services) {
-    for (const produces of service.manifest.produces ?? []) {
-      if (produces.instance === undefined) {
-        defaultProducers.set(produces.type, service.manifest.id);
-      } else {
-        instancedProducers.set(`${produces.type}/${produces.instance}`, service.manifest.id);
-      }
-      const list = producersByType.get(produces.type) ?? [];
-      list.push(service.manifest.id);
-      producersByType.set(produces.type, list);
-    }
-  }
-
+  const index = buildProducerIndex(services, { onDuplicate: "first" });
   const dependencies = new Map<string, string[]>();
   for (const service of services) {
     const upstream: string[] = [];
     for (const consumes of service.manifest.consumes ?? []) {
-      const candidates = producersByType.get(consumes.type);
-      const producer =
-        consumes.instance !== undefined
-          ? instancedProducers.get(`${consumes.type}/${consumes.instance}`)
-          : (defaultProducers.get(consumes.type) ??
-            (candidates?.length === 1 ? candidates[0] : undefined));
+      const selection = selectProducer(consumes, index);
       // Self-produced data is mediated by the host's hardlink apply; it is
       // still mounted by the renderer but must not create a graph cycle.
-      if (producer && producer !== service.manifest.id) upstream.push(producer);
+      if (selection.kind === "found" && selection.entry.producerId !== service.manifest.id) {
+        upstream.push(selection.entry.producerId);
+      }
     }
     dependencies.set(service.manifest.id, upstream);
   }

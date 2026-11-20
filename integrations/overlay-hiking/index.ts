@@ -1,9 +1,4 @@
-import { bboxCacheKey, fetchJson, OverpassRateLimitError, USER_AGENT } from "@openmapx/core";
-import {
-  createBoundedBinaryProxyStream,
-  MAX_RASTER_TILE_BYTES,
-  RASTER_IMAGE_MEDIA_TYPES,
-} from "@openmapx/core/server";
+import { bboxCacheKey, fetchJson, OverpassRateLimitError } from "@openmapx/core";
 import {
   captureCacheWriter,
   dataSourceToAttribution,
@@ -11,6 +6,7 @@ import {
   scalarQueries,
   serializeContributors,
 } from "@openmapx/integration-framework";
+import { createTileProxyHandler } from "@openmapx/integration-framework/tile-proxy";
 import { fetchRouteGeometry } from "./overpass-geometry.js";
 import { searchTrails, trailDetail, trailsByArea } from "./waymarked-trails.js";
 
@@ -36,47 +32,20 @@ export function setup(ctx: IntegrationContext): void {
     (ctx.config.tileUrl as string | undefined) ??
     "https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png";
 
-  ctx.registerRoute("GET", "/tiles/:z/:x/:y.png", async (req, reply) => {
-    const z = Number(req.params.z);
-    const x = Number(req.params.x);
-    const y = Number(req.params.y);
-    if (![z, x, y].every((v) => Number.isFinite(v) && v >= 0)) {
-      reply.status(400).send({ message: "Invalid tile coordinates" });
-      return;
-    }
-
-    const baseUrl = tileUrl;
-    const url = baseUrl
-      .replace("{z}", String(z))
-      .replace("{x}", String(x))
-      .replace("{y}", String(y));
-
-    try {
-      const timeoutSignal = AbortSignal.timeout(15_000);
-      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-      const response = await fetch(url, {
-        headers: { "User-Agent": USER_AGENT },
-        signal,
-      });
-      if (!response.ok) {
-        reply.status(response.status).send({ message: "Upstream tile fetch failed" });
-        return;
-      }
-      const proxy = createBoundedBinaryProxyStream(response, {
-        maxBytes: MAX_RASTER_TILE_BYTES,
-        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
-        fallbackContentType: "image/png",
-        label: "Waymarked Trails tile",
-      });
-      reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
-      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.type(proxy.contentType);
-      reply.send(proxy.body);
-    } catch (err) {
-      ctx.log.warn("Hiking tile fetch failed", err);
-      reply.status(502).send({ message: "Hiking tile provider unavailable" });
-    }
-  });
+  ctx.registerRoute(
+    "GET",
+    "/tiles/:z/:x/:y.png",
+    createTileProxyHandler(ctx, {
+      kind: "raster",
+      label: "Waymarked Trails tile",
+      url: ({ z, x, y }) =>
+        tileUrl.replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y)),
+      maxZoom: 18,
+      fallbackContentType: "image/png",
+      cacheControl: "public, max-age=604800, s-maxage=604800",
+    }),
+    { rateLimitTier: "tile" },
+  );
 
   ctx.registerRoute("GET", "/hiking/search", async (req, reply) => {
     const query = scalarQueries(req.query).query ?? "";
@@ -98,7 +67,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(results);
     } catch (err) {
       ctx.log.warn("Hiking trail search failed", err);
-      reply.status(502).send({ message: "Trail search unavailable" });
+      reply.status(502).send({ error: "Trail search unavailable" });
     }
   });
 
@@ -110,11 +79,11 @@ export function setup(ctx: IntegrationContext): void {
     const limit = Math.min(Number(scalarQueries(req.query).limit ?? 50), 200);
 
     if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
-      reply.status(400).send({ message: "Invalid bbox coordinates" });
+      reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
     if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
-      reply.status(400).send({ message: "Bounding box too large" });
+      reply.status(400).send({ error: "Bounding box too large" });
       return;
     }
 
@@ -132,14 +101,14 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(results);
     } catch (err) {
       ctx.log.warn("Hiking area search failed", err);
-      reply.status(502).send({ message: "Trail area search unavailable" });
+      reply.status(502).send({ error: "Trail area search unavailable" });
     }
   });
 
   ctx.registerRoute("GET", "/hiking/details/:id", async (req, reply) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {
-      reply.status(400).send({ message: "Invalid trail ID" });
+      reply.status(400).send({ error: "Invalid trail ID" });
       return;
     }
     const cacheKey = `detail:${id}`;
@@ -155,14 +124,14 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(detail);
     } catch (err) {
       ctx.log.warn("Hiking trail detail failed", err);
-      reply.status(502).send({ message: "Trail detail unavailable" });
+      reply.status(502).send({ error: "Trail detail unavailable" });
     }
   });
 
   ctx.registerRoute("GET", "/hiking/geometry/:id", async (req, reply) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {
-      reply.status(400).send({ message: "Invalid trail ID" });
+      reply.status(400).send({ error: "Invalid trail ID" });
       return;
     }
     const cacheKey = `geom:${id}`;
@@ -179,10 +148,10 @@ export function setup(ctx: IntegrationContext): void {
     } catch (err) {
       ctx.log.warn("Hiking trail geometry failed", err);
       if (err instanceof OverpassRateLimitError) {
-        reply.status(429).send({ message: "Overpass rate limit exceeded" });
+        reply.status(429).send({ error: "Overpass rate limit exceeded" });
         return;
       }
-      reply.status(502).send({ message: "Trail geometry unavailable" });
+      reply.status(502).send({ error: "Trail geometry unavailable" });
     }
   });
 
@@ -194,11 +163,11 @@ export function setup(ctx: IntegrationContext): void {
     const typeFilter = scalarQueries(req.query).type ?? "";
 
     if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
-      reply.status(400).send({ message: "Invalid bbox coordinates" });
+      reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
     if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
-      reply.status(400).send({ message: "Bounding box too large" });
+      reply.status(400).send({ error: "Bounding box too large" });
       return;
     }
 
@@ -270,7 +239,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(result);
     } catch (err) {
       ctx.log.warn("Mountain shelter fetch failed", err);
-      reply.status(502).send({ message: "Shelter data unavailable" });
+      reply.status(502).send({ error: "Shelter data unavailable" });
     }
   });
 }

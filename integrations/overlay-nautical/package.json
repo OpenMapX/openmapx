@@ -7,6 +7,10 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/integration-knowledge-tides-canada": "workspace:^",
+    "@openmapx/integration-knowledge-tides-ioc": "workspace:^",
+    "@openmapx/integration-knowledge-tides-norway": "workspace:^",
+    "@openmapx/integration-knowledge-tides-pegelonline": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/noaa-coops-data": "workspace:^",
     "@openmapx/place-ids": "workspace:^"

@@ -9,6 +9,8 @@ const client = vi.hoisted(() => ({
   locations: vi.fn(),
   departures: vi.fn(),
   arrivals: vi.fn(),
+  journeys: vi.fn(),
+  trip: vi.fn(),
 }));
 const createClient = vi.hoisted(() => vi.fn(() => client));
 vi.mock("hafas-client", () => ({ createClient }));
@@ -36,6 +38,8 @@ beforeEach(() => {
   client.locations.mockReset();
   client.departures.mockReset();
   client.arrivals.mockReset();
+  client.journeys.mockReset();
+  client.trip.mockReset();
 });
 
 describe("HAFAS payload validation", () => {
@@ -221,5 +225,138 @@ describe("HAFAS client ownership", () => {
       ([profile]) => profile.endpoint,
     );
     expect(endpoints).toEqual(["https://hafas.test/mgate", "https://replacement.test/mgate"]);
+  });
+});
+
+describe("HAFAS journeys and trips without coordinates", () => {
+  const stop = (id: string, latitude?: number) => ({
+    id,
+    name: `Stop ${id}`,
+    ...(latitude === undefined ? {} : { location: { latitude, longitude: 13.4 } }),
+  });
+  const leg = (from: ReturnType<typeof stop>, to: ReturnType<typeof stop>) => ({
+    origin: from,
+    destination: to,
+    departure: "2026-03-10T10:00:00+01:00",
+    arrival: "2026-03-10T10:20:00+01:00",
+    line: { id: "u2", name: "U2", product: "subway" },
+    tripId: "trip-1",
+  });
+
+  it("leaves out a journey with a leg that cannot be placed", async () => {
+    client.journeys.mockResolvedValue({
+      journeys: [
+        { legs: [leg(stop("a", 52.5), stop("b"))] },
+        { legs: [leg(stop("a", 52.5), stop("c", 52.6))] },
+      ],
+    });
+
+    const plan = await hafasMgateAdapter.planJourney(
+      entry(),
+      52.5,
+      13.4,
+      52.6,
+      13.4,
+      "2026-03-10",
+      "09:00",
+      false,
+      2,
+    );
+
+    expect(plan?.itineraries).toHaveLength(1);
+    expect(plan?.itineraries[0]?.legs[0]?.to).toMatchObject({ lat: 52.6, lng: 13.4 });
+  });
+
+  it("places walking legs whose ends are addresses with top-level coordinates", async () => {
+    // hafas-client's shapes: a stop nests its coordinates under `location`, an
+    // address or POI is itself a `location` with top-level coordinates.
+    const origin = {
+      type: "location",
+      address: "Alexanderplatz 1",
+      latitude: 52.5219,
+      longitude: 13.4132,
+    };
+    const destination = {
+      type: "location",
+      id: "900980720",
+      poi: true,
+      name: "Fernsehturm",
+      latitude: 52.5208,
+      longitude: 13.4094,
+    };
+    const station = (id: string, latitude: number, longitude: number) => ({
+      type: "stop",
+      id,
+      name: `Stop ${id}`,
+      location: { type: "location", id, latitude, longitude },
+    });
+    const a = station("900100003", 52.5216, 13.4115);
+    const b = station("900100005", 52.5206, 13.4096);
+    client.journeys.mockResolvedValue({
+      journeys: [
+        {
+          legs: [
+            {
+              origin,
+              destination: a,
+              departure: "2026-03-10T09:58:00+01:00",
+              arrival: "2026-03-10T10:00:00+01:00",
+              walking: true,
+            },
+            leg(a as unknown as ReturnType<typeof stop>, b as unknown as ReturnType<typeof stop>),
+            {
+              origin: b,
+              destination,
+              departure: "2026-03-10T10:20:00+01:00",
+              arrival: "2026-03-10T10:23:00+01:00",
+              walking: true,
+            },
+          ],
+        },
+      ],
+    });
+
+    const plan = await hafasMgateAdapter.planJourney(
+      entry(),
+      52.5219,
+      13.4132,
+      52.5208,
+      13.4094,
+      "2026-03-10",
+      "09:00",
+    );
+
+    const legs = plan?.itineraries[0]?.legs ?? [];
+    expect(legs.map((l) => l.mode)).toEqual(["walking", "subway", "walking"]);
+    expect(legs[0]?.from).toMatchObject({ lat: 52.5219, lng: 13.4132 });
+    expect(legs[0]?.to).toMatchObject({ lat: 52.5216, lng: 13.4115, stopId: "vbb:900100003" });
+    expect(legs[2]?.to).toMatchObject({ name: "Fernsehturm", lat: 52.5208, lng: 13.4094 });
+    // A POI's id is not a stop id.
+    expect(legs[2]?.to?.stopId).toBeUndefined();
+  });
+
+  it("answers no plan when no journey can be placed", async () => {
+    client.journeys.mockResolvedValue({ journeys: [{ legs: [leg(stop("a"), stop("b"))] }] });
+
+    expect(
+      await hafasMgateAdapter.planJourney(entry(), 52.5, 13.4, 52.6, 13.4, "2026-03-10", "09:00"),
+    ).toBeNull();
+  });
+
+  it("keeps a stopover without coordinates in a trip, unplaced", async () => {
+    client.trip.mockResolvedValue({
+      trip: {
+        id: "trip-1",
+        stopovers: [{ stop: stop("a", 52.5) }, { stop: stop("b") }, { stop: stop("c", 52.6) }],
+      },
+    });
+
+    const trip = await hafasMgateAdapter.getTrip?.(entry(), "vbb:trip-1");
+
+    expect(trip?.stops.map((s) => [s.stopId, s.lat])).toEqual([
+      ["vbb:a", 52.5],
+      ["vbb:b", undefined],
+      ["vbb:c", 52.6],
+    ]);
   });
 });

@@ -10,6 +10,7 @@
  * body, header or URL is ever carried into an error.
  */
 import { contactDomain, type OsmElementRef, userAgent } from "@openmapx/core";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { OsmConfig } from "../../utils/osm-config.js";
 import {
   osmChangesetResponseSchema,
@@ -59,18 +60,6 @@ interface RequestOptions {
   maxBytes: number;
   /** True when losing the response leaves the upstream state unknown. */
   mutating?: boolean;
-}
-
-function parseRetryAfter(header: string | null, now: number): number | null {
-  if (!header) return null;
-  const trimmed = header.trim();
-  if (trimmed === "") return null;
-  if (/^\d+$/.test(trimmed)) return Math.min(Number(trimmed), MAX_RETRY_AFTER_SECONDS);
-  const at = Date.parse(trimmed);
-  if (Number.isNaN(at)) return null;
-  const seconds = Math.ceil((at - now) / 1000);
-  if (seconds <= 0) return 0;
-  return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
 }
 
 /** Read at most `maxBytes`, cancelling the rest. Returns null when exceeded. */
@@ -148,7 +137,11 @@ export function createOsmApiClient(deps: OsmClientDeps): OsmApiClient {
     }
 
     if (!response.ok) {
-      const retryAfterSeconds = parseRetryAfter(response.headers.get("retry-after"), now());
+      const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"), { now: now() });
+      const retryAfterSeconds =
+        retryAfterMs === null
+          ? null
+          : Math.min(Math.ceil(retryAfterMs / 1000), MAX_RETRY_AFTER_SECONDS);
       // Drain within a small bound; the body may name an account or a block.
       await readBounded(response, MAX_EMPTY_BYTES);
       throw new OsmUpstreamError({

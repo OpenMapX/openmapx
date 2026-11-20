@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as schema from "../../db/schema";
+import { processLogger } from "../../process-logger";
 import type { ApiJobChildAttempt } from "../admin-job-parent";
 import type { JobContext } from "../job-runner";
 import type { ApiOpsClient } from "../ops-client";
@@ -406,7 +407,7 @@ describe.skipIf(
       const stop = jobEventBus.subscribe(job.id, ({ event }) => {
         if (event.type === "status") outcomes.push(event.status);
       });
-      const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const errors = vi.spyOn(processLogger, "error").mockImplementation(() => undefined);
       await runner.launchJob(claimed);
       offline = false;
       expect((await row(job.id)).status).toBe("running");
@@ -447,7 +448,7 @@ describe.skipIf(
       failures = 2;
       return { completed: true };
     });
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(processLogger, "error").mockImplementation(() => undefined);
     await runner.launchJob(claimed);
     expect((await row(job.id)).status).toBe("running");
   });

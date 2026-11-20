@@ -38,7 +38,7 @@ const bind = () =>
       responses: {
         200: adminJson(z.strictObject({ jobId: z.string() })),
         409: adminJson(
-          z.strictObject({ ok: z.literal(false), reason: z.string(), existingJobId: z.string() }),
+          z.strictObject({ error: z.string(), code: z.string(), existingJobId: z.string() }),
         ),
       },
     },
@@ -103,7 +103,10 @@ describe("JSON acquisition", () => {
       .fn()
       .mockResolvedValueOnce(Response.json({ error: "absent" }, { status: 404 }))
       .mockResolvedValueOnce(
-        Response.json({ ok: false, reason: "in-flight", existingJobId: "job" }, { status: 409 }),
+        Response.json(
+          { error: "Another data job is running.", code: "in-flight", existingJobId: "job" },
+          { status: 409 },
+        ),
       );
     vi.stubGlobal("fetch", fetch);
     const absent = await bind()("state")<{

@@ -1,34 +1,37 @@
 import type { IntegrationContext, SearchResult } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
+  createNoopLogger,
   createPassthroughCache,
+  fakeHttpClient,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import snapshots from "../../geocoding-maptiler/__fixtures__/station-search.json";
-import { maptilerGeocodingService, setMaptilerApiKey } from "../../geocoding-maptiler/provider.js";
+import { createMaptilerGeocodingService } from "../../geocoding-maptiler/provider.js";
 import { setup } from "../index.js";
 
 const STATION = "maptiler:poi.14564580";
 const TAXI = "maptiler:poi.25722638";
 const captured: Record<string, { features: unknown[] }> = snapshots;
 
+function capturedAnswer(url: string): unknown {
+  const query = decodeURIComponent(new URL(url).pathname.split("/").at(-1) ?? "")
+    .replace(/\.json$/, "")
+    .toLowerCase();
+  return captured[query] ?? { features: [] };
+}
+
+let answer: (url: string) => unknown = capturedAnswer;
 beforeEach(() => {
-  setMaptilerApiKey("fixture-key");
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string) => {
-      const query = decodeURIComponent(new URL(url).pathname.split("/").at(-1) ?? "")
-        .replace(/\.json$/, "")
-        .toLowerCase();
-      return new Response(JSON.stringify(captured[query] ?? { features: [] }), { status: 200 });
-    }),
-  );
+  answer = capturedAnswer;
 });
 
-afterEach(() => {
-  setMaptilerApiKey(undefined);
-  vi.unstubAllGlobals();
+const maptilerGeocodingService = createMaptilerGeocodingService({
+  http: fakeHttpClient(({ url }) => answer(url)),
+  apiKey: () => "fixture-key",
+  budget: () => null,
+  log: createNoopLogger(),
 });
 
 function harness(cache = new Map<string, unknown>()) {
@@ -137,19 +140,16 @@ describe("forward geocoding station ranking", () => {
   it("retains an alias found only in a later duplicate without replacing the first provider metadata", async () => {
     const bus = snapshots["hauptbahnhof neuss"].features[1];
     const station = snapshots["hbf neuss"].features[2];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        const short = decodeURIComponent(new URL(url).pathname).includes("Hbf");
-        const rail = {
-          ...station,
-          text: "Neuss Central Station",
-          relevance: short ? 0.7 : 0.6,
-          ...(short ? { matching_text: "Neuss Hbf" } : {}),
-        };
-        return new Response(JSON.stringify({ features: [bus, rail] }), { status: 200 });
-      }),
-    );
+    answer = (url) => {
+      const short = decodeURIComponent(new URL(url).pathname).includes("Hbf");
+      const rail = {
+        ...station,
+        text: "Neuss Central Station",
+        relevance: short ? 0.7 : 0.6,
+        ...(short ? { matching_text: "Neuss Hbf" } : {}),
+      };
+      return { features: [bus, rail] };
+    };
     const result = await harness().call("Hbf Neuss");
     expect(result[0]).toMatchObject({
       id: STATION,
@@ -189,10 +189,7 @@ describe("forward geocoding station ranking", () => {
         snapshots["hauptbahnhof neuss"].features[0],
         snapshots["hbf neuss"].features[2],
       ];
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () => new Response(JSON.stringify({ features }), { status: 200 })),
-      );
+      answer = () => ({ features });
       const result = await harness().call(query);
       expect(result.map((r) => r.id)).toEqual([TAXI, STATION]);
     },

@@ -4,6 +4,8 @@ import {
   type DigitransitNearby,
   type DigitransitSearch,
   OtpError,
+  otpRouteColor,
+  otpTransportMode,
   type PeatusDepartures,
   type PeatusNearby,
   type PeatusSearch,
@@ -38,24 +40,8 @@ function text(value: string): string {
 function namespaced(entry: RegistryEntry, id: string): string {
   return entry.prefix + text(id);
 }
-const modes: Readonly<Record<string, TransportMode>> = {
-  BUS: "bus",
-  COACH: "bus",
-  TROLLEYBUS: "bus",
-  RAIL: "rail",
-  SUBWAY: "subway",
-  METRO: "subway",
-  TRAM: "tram",
-  FERRY: "ferry",
-  WATER: "ferry",
-  GONDOLA: "gondola",
-  CABLEWAY: "gondola",
-  FUNICULAR: "funicular",
-  CABLE_CAR: "cable_car",
-  MONORAIL: "monorail",
-};
 function mode(value: string | null | undefined): TransportMode | undefined {
-  return value ? modes[value.toUpperCase()] : undefined;
+  return otpTransportMode(value);
 }
 function position(lat: number | null, lng: number | null) {
   if (
@@ -70,9 +56,9 @@ function position(lat: number | null, lng: number | null) {
   return { lat, lng };
 }
 function color(value: string | null) {
-  if (value === null || value === "") return undefined;
-  if (!/^[0-9a-f]{6}$/i.test(value)) throw new OtpError("payload");
-  return "#" + value;
+  const hex = otpRouteColor(value);
+  if (hex === null) throw new OtpError("payload");
+  return hex;
 }
 function timestamp(seconds: number) {
   if (!Number.isSafeInteger(seconds) || !Number.isFinite(new Date(seconds * 1000).getTime()))

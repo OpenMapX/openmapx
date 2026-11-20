@@ -3,5 +3,6 @@
 import type { ProvisionAdminDawarich422Code } from "./provisionAdminDawarich422Code";
 
 export type ProvisionAdminDawarich422 = {
+  error: string;
   code: ProvisionAdminDawarich422Code;
 };

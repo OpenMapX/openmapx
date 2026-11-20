@@ -4,7 +4,6 @@
 export type BakePredictedTraffic501 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

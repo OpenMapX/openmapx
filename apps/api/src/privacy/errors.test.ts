@@ -67,7 +67,10 @@ describe("privacy error mapping", () => {
     try {
       const response = await app.inject({ method: "GET", url: "/fail" });
       expect(response.statusCode).toBe(503);
-      expect(response.json()).toEqual({ code: "PRIVACY_SERVICE_UNAVAILABLE" });
+      expect(response.json()).toEqual({
+        error: "Service Unavailable",
+        code: "PRIVACY_SERVICE_UNAVAILABLE",
+      });
     } finally {
       await app.close();
     }

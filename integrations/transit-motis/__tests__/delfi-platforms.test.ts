@@ -34,7 +34,7 @@ describe("DELFI passenger platforms", () => {
       track: code,
       scheduledTrack: code,
     };
-    expect(normalizeStop(instance, place).platformCode).toBeUndefined();
+    expect(normalizeStop(instance, place)?.platformCode).toBeUndefined();
     expect(motisPlaceToJourneyStop(instance, place)).toMatchObject({
       platform: undefined,
       scheduledPlatform: undefined,
@@ -43,9 +43,9 @@ describe("DELFI passenger platforms", () => {
       platform: "3",
       scheduledPlatform: undefined,
     });
-    expect(normalizeStop(instance, { ...place, stopId: `other_${id}` }).platformCode).toBe(code);
+    expect(normalizeStop(instance, { ...place, stopId: `other_${id}` })?.platformCode).toBe(code);
     expect(
-      normalizeStop(instance, { ...place, stopId: "de-DELFI_de:05334:1008" }).platformCode,
+      normalizeStop(instance, { ...place, stopId: "de-DELFI_de:05334:1008" })?.platformCode,
     ).toBe(code);
   });
   it("extracts only validated DELFI station roots", () => {
@@ -102,6 +102,6 @@ it("records a correction diagnostic when only the current bad track was withheld
     lon: 6,
     track: "37",
   });
-  expect(stop.platform).toBeUndefined();
-  expect(stop.platformQuarantined).toBe(true);
+  expect(stop?.platform).toBeUndefined();
+  expect(stop?.platformQuarantined).toBe(true);
 });

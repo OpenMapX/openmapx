@@ -14,7 +14,7 @@ export function setup(ctx: IntegrationContext): void {
     const lng = Number.parseFloat(scalarQueries(req.query).lng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 
@@ -35,7 +35,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "public, max-age=300");
       reply.send(result);
     } catch {
-      reply.status(502).send({ message: "Weather data unavailable" });
+      reply.status(502).send({ error: "Weather data unavailable" });
     }
   });
 
@@ -44,7 +44,7 @@ export function setup(ctx: IntegrationContext): void {
     const lng = Number.parseFloat(scalarQueries(req.query).lng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 
@@ -72,7 +72,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "public, max-age=600");
       reply.send(result);
     } catch {
-      reply.status(502).send({ message: "Forecast data unavailable" });
+      reply.status(502).send({ error: "Forecast data unavailable" });
     }
   });
 }

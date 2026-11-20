@@ -1,6 +1,7 @@
 import type { ResolvedPlatformEndpoint } from "@openmapx/core";
 import type { Disclosure } from "@openmapx/core/api-contracts";
 import type { PlatformEndpointId } from "@openmapx/extension-contracts";
+import type { CacheClient } from "@openmapx/mobility-core/cache";
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
 import type { BorderCrossingProvider } from "./contracts/border-crossing-provider.js";
 import type { CameraProvider } from "./contracts/camera-provider.js";
@@ -85,14 +86,26 @@ export interface ResponseOptions extends HttpClientOptions {
   fallbackContentType?: string;
   /** Response headers to expose. Names are matched case-insensitively and returned lowercase. */
   responseHeaders?: readonly string[];
-  /** Reject redirects, or follow only the explicitly allowlisted target hosts. */
+  /**
+   * Reject redirects, or follow only the explicitly allowlisted target hosts.
+   * Left unset, redirects are followed unless a caller header other than
+   * User-Agent and the representation headers may carry a credential.
+   */
   redirect?:
     | "error"
     | { allowedHosts: readonly string[]; follow203?: boolean; maxRedirects?: number };
 }
 
 export interface HttpClient {
+  /**
+   * GET bounded JSON. A non-2xx answer rejects with `FetchJsonHttpError` from
+   * `@openmapx/core`, carrying `status` and the `Retry-After` delay but never the
+   * URL. A caller header other than User-Agent and the representation headers
+   * (Accept, Accept-Language, Content-Type, conditional request headers) may
+   * carry a credential, so such a request refuses every redirect.
+   */
   get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
+  /** POST a JSON body with `params` in the query string. Errors and redirects as for `get`. */
   post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T>;
   getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>>;
   /** POST a JSON body and return any status with its bounded JSON body; `post` throws on non-2xx. */
@@ -110,39 +123,7 @@ export interface HttpClient {
   getStream(url: string, options: ResponseOptions): Promise<StreamHttpResponse>;
 }
 
-export interface CacheClient {
-  /**
-   * Host administration events; immediately reports current availability.
-   * Clear local copies on every event and bypass them while unavailable.
-   * Absent in clients without host administration (for example CLI fixtures).
-   */
-  onInvalidate?(listener: (event: { available: boolean }) => void): () => void;
-  /**
-   * Managed shared caches can capture an administrative write fence before
-   * acquisition. Use this writer for additional derived entries after awaits;
-   * late writes are rejected when the captured Redis invalidation epoch changes.
-   * Also guard local state/lifetime with onInvalidate and disposal; this writer
-   * is not a subscriber-availability or linearizable cross-worker read barrier.
-   * Hosts without shared cache administration omit this capability.
-   */
-  captureWriter?(): Promise<Pick<CacheClient, "set">>;
-  get<T = unknown>(key: string): Promise<T | null>;
-  set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
-  del(key: string): Promise<void>;
-  /**
-   * Coalesce equal cache misses. The loader receives the shared operation
-   * signal; `callerSignal` cancels only that caller, and shared work is aborted
-   * once no callers remain. `shouldCache` can keep a useful but degraded
-   * fulfilled value out of the shared cache.
-   */
-  withCache<T>(
-    key: string,
-    ttlSeconds: number,
-    fn: (operationSignal: AbortSignal) => Promise<T>,
-    callerSignal?: AbortSignal,
-    shouldCache?: (value: T) => boolean,
-  ): Promise<T>;
-}
+export type { CacheClient } from "@openmapx/mobility-core/cache";
 
 export interface Logger {
   info(message: string, ...args: unknown[]): void;

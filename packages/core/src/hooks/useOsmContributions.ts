@@ -53,7 +53,7 @@ export const osmContributionKeys = {
  * A failure the contribution UI can render. Always one of the closed codes;
  * the raw transport payload never reaches a component.
  */
-export class OsmContributionRequestError extends Error implements OsmContributionErrorBody {
+export class OsmContributionRequestError extends Error {
   readonly code: OsmContributionErrorBody["code"];
   readonly status: number;
   readonly retryAfterSeconds?: number;
@@ -61,7 +61,7 @@ export class OsmContributionRequestError extends Error implements OsmContributio
   readonly inspect?: { changesetUrl?: string; elementUrl?: string };
 
   constructor(status: number, body: OsmContributionErrorBody) {
-    super(body.message);
+    super(body.error);
     this.name = "OsmContributionRequestError";
     this.status = status;
     this.code = body.code;
@@ -73,7 +73,7 @@ export class OsmContributionRequestError extends Error implements OsmContributio
 
 const GENERIC_FAILURE: OsmContributionErrorBody = {
   code: "OSM_UNAVAILABLE",
-  message: "Something went wrong. Please try again.",
+  error: "Something went wrong. Please try again.",
 };
 
 /**
@@ -103,7 +103,7 @@ function toContributionError(error: unknown): OsmContributionRequestError {
 
 const INVALID_RESPONSE: OsmContributionErrorBody = {
   code: "UPSTREAM_INVALID",
-  message: "OpenMapX received an unexpected response.",
+  error: "OpenMapX received an unexpected response.",
 };
 
 function parseOrThrow<T>(

@@ -91,6 +91,7 @@ export type ListPrivacyAdminQueue200 = {
 
 export type ListPrivacyAdminQueue400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -103,6 +104,7 @@ export type ListPrivacyAdminQueue400 =
 
 export type ListPrivacyAdminQueue401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -115,6 +117,7 @@ export type ListPrivacyAdminQueue401 =
 
 export type ListPrivacyAdminQueue403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -127,6 +130,7 @@ export type ListPrivacyAdminQueue403 =
 
 export type ListPrivacyAdminQueue404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -139,6 +143,7 @@ export type ListPrivacyAdminQueue404 =
 
 export type ListPrivacyAdminQueue409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -151,6 +156,7 @@ export type ListPrivacyAdminQueue409 =
 
 export type ListPrivacyAdminQueue500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -163,6 +169,7 @@ export type ListPrivacyAdminQueue500 =
 
 export type ListPrivacyAdminQueue503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -321,6 +328,7 @@ export type CreatePrivacyAdminCase202 = {
 
 export type CreatePrivacyAdminCase400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -333,6 +341,7 @@ export type CreatePrivacyAdminCase400 =
 
 export type CreatePrivacyAdminCase401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -345,6 +354,7 @@ export type CreatePrivacyAdminCase401 =
 
 export type CreatePrivacyAdminCase403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -357,6 +367,7 @@ export type CreatePrivacyAdminCase403 =
 
 export type CreatePrivacyAdminCase404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -369,6 +380,7 @@ export type CreatePrivacyAdminCase404 =
 
 export type CreatePrivacyAdminCase409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -381,6 +393,7 @@ export type CreatePrivacyAdminCase409 =
 
 export type CreatePrivacyAdminCase500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -393,6 +406,7 @@ export type CreatePrivacyAdminCase500 =
 
 export type CreatePrivacyAdminCase503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -529,6 +543,7 @@ export type GetPrivacyAdminCase200 = {
 
 export type GetPrivacyAdminCase400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -541,6 +556,7 @@ export type GetPrivacyAdminCase400 =
 
 export type GetPrivacyAdminCase401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -553,6 +569,7 @@ export type GetPrivacyAdminCase401 =
 
 export type GetPrivacyAdminCase403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -565,6 +582,7 @@ export type GetPrivacyAdminCase403 =
 
 export type GetPrivacyAdminCase404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -577,6 +595,7 @@ export type GetPrivacyAdminCase404 =
 
 export type GetPrivacyAdminCase409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -589,6 +608,7 @@ export type GetPrivacyAdminCase409 =
 
 export type GetPrivacyAdminCase500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -601,6 +621,7 @@ export type GetPrivacyAdminCase500 =
 
 export type GetPrivacyAdminCase503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -721,6 +742,7 @@ export type DecidePrivacyAdminCase200 = {
 
 export type DecidePrivacyAdminCase400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -733,6 +755,7 @@ export type DecidePrivacyAdminCase400 =
 
 export type DecidePrivacyAdminCase401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -745,6 +768,7 @@ export type DecidePrivacyAdminCase401 =
 
 export type DecidePrivacyAdminCase403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -757,6 +781,7 @@ export type DecidePrivacyAdminCase403 =
 
 export type DecidePrivacyAdminCase404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -769,6 +794,7 @@ export type DecidePrivacyAdminCase404 =
 
 export type DecidePrivacyAdminCase409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -781,6 +807,7 @@ export type DecidePrivacyAdminCase409 =
 
 export type DecidePrivacyAdminCase500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -793,6 +820,7 @@ export type DecidePrivacyAdminCase500 =
 
 export type DecidePrivacyAdminCase503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -812,6 +840,7 @@ export type ExportPrivacyAdminCaseBody = { [key: string]: never };
 
 export type ExportPrivacyAdminCase400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -824,6 +853,7 @@ export type ExportPrivacyAdminCase400 =
 
 export type ExportPrivacyAdminCase401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -836,6 +866,7 @@ export type ExportPrivacyAdminCase401 =
 
 export type ExportPrivacyAdminCase403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -848,6 +879,7 @@ export type ExportPrivacyAdminCase403 =
 
 export type ExportPrivacyAdminCase404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -860,6 +892,7 @@ export type ExportPrivacyAdminCase404 =
 
 export type ExportPrivacyAdminCase409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -872,6 +905,7 @@ export type ExportPrivacyAdminCase409 =
 
 export type ExportPrivacyAdminCase500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -884,6 +918,7 @@ export type ExportPrivacyAdminCase500 =
 
 export type ExportPrivacyAdminCase503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -997,6 +1032,7 @@ export type ExtendPrivacyAdminCase200 = {
 
 export type ExtendPrivacyAdminCase400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1009,6 +1045,7 @@ export type ExtendPrivacyAdminCase400 =
 
 export type ExtendPrivacyAdminCase401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1021,6 +1058,7 @@ export type ExtendPrivacyAdminCase401 =
 
 export type ExtendPrivacyAdminCase403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1033,6 +1071,7 @@ export type ExtendPrivacyAdminCase403 =
 
 export type ExtendPrivacyAdminCase404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1045,6 +1084,7 @@ export type ExtendPrivacyAdminCase404 =
 
 export type ExtendPrivacyAdminCase409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1057,6 +1097,7 @@ export type ExtendPrivacyAdminCase409 =
 
 export type ExtendPrivacyAdminCase500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1069,6 +1110,7 @@ export type ExtendPrivacyAdminCase500 =
 
 export type ExtendPrivacyAdminCase503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1178,6 +1220,7 @@ export type VerifyPrivacyAdminIdentity200 = {
 
 export type VerifyPrivacyAdminIdentity400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1190,6 +1233,7 @@ export type VerifyPrivacyAdminIdentity400 =
 
 export type VerifyPrivacyAdminIdentity401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1202,6 +1246,7 @@ export type VerifyPrivacyAdminIdentity401 =
 
 export type VerifyPrivacyAdminIdentity403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1214,6 +1259,7 @@ export type VerifyPrivacyAdminIdentity403 =
 
 export type VerifyPrivacyAdminIdentity404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1226,6 +1272,7 @@ export type VerifyPrivacyAdminIdentity404 =
 
 export type VerifyPrivacyAdminIdentity409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1238,6 +1285,7 @@ export type VerifyPrivacyAdminIdentity409 =
 
 export type VerifyPrivacyAdminIdentity500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1250,6 +1298,7 @@ export type VerifyPrivacyAdminIdentity500 =
 
 export type VerifyPrivacyAdminIdentity503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1359,6 +1408,7 @@ export type ResolvePrivacyAdminTask200 = {
 
 export type ResolvePrivacyAdminTask400 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1371,6 +1421,7 @@ export type ResolvePrivacyAdminTask400 =
 
 export type ResolvePrivacyAdminTask401 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1383,6 +1434,7 @@ export type ResolvePrivacyAdminTask401 =
 
 export type ResolvePrivacyAdminTask403 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1395,6 +1447,7 @@ export type ResolvePrivacyAdminTask403 =
 
 export type ResolvePrivacyAdminTask404 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1407,6 +1460,7 @@ export type ResolvePrivacyAdminTask404 =
 
 export type ResolvePrivacyAdminTask409 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1419,6 +1473,7 @@ export type ResolvePrivacyAdminTask409 =
 
 export type ResolvePrivacyAdminTask500 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }
@@ -1431,6 +1486,7 @@ export type ResolvePrivacyAdminTask500 =
 
 export type ResolvePrivacyAdminTask503 =
   | {
+      error: string;
       /** @maxLength 128 */
       code: string;
     }

@@ -1,5 +1,4 @@
 import type { BBox } from "@openmapx/core";
-import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import {
   captureTransitContributors,
   createManifestAttribution,
@@ -7,20 +6,11 @@ import {
   type RealtimeProvider,
 } from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { withAttribution } from "@openmapx/mobility-core/result";
-import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
+import { createRisClient, type RisClient } from "@openmapx/mobility-core/ris-client";
 import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 
 const attribution = createManifestAttribution();
-let risClient = createRisClient({}, mobilityHttpTransport);
-
-export function setRisCredentials(
-  credentials: RisCredentials,
-  transport: MobilityHttpTransport = mobilityHttpTransport,
-): void {
-  risClient = createRisClient(credentials, transport);
-}
 
 interface RisTransportInfo {
   journeyName?: string;
@@ -111,6 +101,7 @@ function toLiveVehicle(
 }
 
 async function getDbLiveTransitVehicles(
+  risClient: RisClient,
   bbox: BBox,
   administrationIds: string[],
 ): Promise<LiveTransitVehicle[]> {
@@ -144,11 +135,14 @@ async function getDbLiveTransitVehicles(
 export function setup(ctx: IntegrationContext): void {
   ctx.onActivate(() => {
     attribution.set(ctx.manifest.dataSources ?? []);
-    setRisCredentials({
+  });
+  const risClient = createRisClient(
+    {
       clientId: ctx.config.clientId as string | undefined,
       apiKey: ctx.config.apiKey as string | undefined,
-    });
-  });
+    },
+    ctx.http,
+  );
 
   const administrationIds = parseAdministrationIds(ctx.config.administrationIds);
 
@@ -163,7 +157,7 @@ export function setup(ctx: IntegrationContext): void {
       tripUpdates: false,
     },
     async getVehiclePositions(bbox: BBox) {
-      const data = await getDbLiveTransitVehicles(bbox, administrationIds);
+      const data = await getDbLiveTransitVehicles(risClient, bbox, administrationIds);
       return withAttribution(
         captureTransitContributors(data, attribution.all()),
         attribution.all(),

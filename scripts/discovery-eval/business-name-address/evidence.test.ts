@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  maptilerGeocodingService,
-  setMaptilerApiKey,
-} from "../../../integrations/geocoding-maptiler/provider.js";
+import { createNoopLogger, fakeHttpClient } from "@openmapx/integration-framework/testing";
+import { describe, expect, it } from "vitest";
+import { createMaptilerGeocodingService } from "../../../integrations/geocoding-maptiler/provider.js";
 import { extractTerms } from "../../../services/data-manager/src/jobs/search-index/terms.js";
 
 function read(name: string) {
@@ -12,11 +10,6 @@ function read(name: string) {
 const queries = read("queries-v1.json");
 const responses = read("responses-v1.json");
 const sources = read("sources-v1.json");
-
-afterEach(() => {
-  setMaptilerApiKey(undefined);
-  vi.unstubAllGlobals();
-});
 
 describe("business name/address adapter regression corpus", () => {
   for (const entry of responses.cases) {
@@ -27,13 +20,15 @@ describe("business name/address adapter regression corpus", () => {
         if (!feature) throw new Error("Missing regression candidate");
         return feature;
       });
-      const fetch = vi
-        .fn()
-        .mockResolvedValue(
-          Response.json({ features: features.map((f: { raw: unknown }) => f.raw) }),
-        );
-      vi.stubGlobal("fetch", fetch);
-      setMaptilerApiKey("fixture-only");
+      const http = fakeHttpClient(() => ({
+        features: features.map((f: { raw: unknown }) => f.raw),
+      }));
+      const maptilerGeocodingService = createMaptilerGeocodingService({
+        http,
+        apiKey: () => "fixture-only",
+        budget: () => null,
+        log: createNoopLogger(),
+      });
       const adapted = await maptilerGeocodingService.autocomplete(query.query, queries.language, {
         proximity: queries.upstreamProximity,
         zoom: queries.zoom,
@@ -63,7 +58,7 @@ describe("business name/address adapter regression corpus", () => {
       expect(adapted.map(fields)).toEqual(
         features.map((f: { adapted: Parameters<typeof fields>[0] }) => fields(f.adapted)),
       );
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(http.calls).toHaveLength(1);
       for (const candidate of adapted) {
         expect(candidate.directOsmReference).toEqual({
           source: "geocoding-maptiler",

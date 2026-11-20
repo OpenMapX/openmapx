@@ -1,5 +1,3 @@
-import type { Attribution } from "@openmapx/mobility-core/attribution";
-import type { CacheClient } from "@openmapx/mobility-core/cache";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Cambio car-sharing API clients.
@@ -127,11 +125,7 @@ function createCambioClient(
       center: [r.lng, r.lat] as LngLat,
       radiusKm: r.radiusKm,
     })),
-    async search(
-      bbox: BoundingBox,
-      _cache?: CacheClient,
-      contributors?: readonly Attribution[],
-    ): Promise<SharedMobilityStation[]> {
+    async search(bbox, { contributors }) {
       const inView = regions.filter((region) => matches(region, bbox));
       if (inView.length === 0) return [];
 

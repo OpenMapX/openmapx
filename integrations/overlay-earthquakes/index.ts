@@ -174,10 +174,10 @@ export function setup(ctx: IntegrationContext): void {
     const lang = parseLang(query.lang);
 
     if (!Object.hasOwn(RANGE_MS, timeRange)) {
-      return reply.status(400).send({ message: "Invalid timeRange" });
+      return reply.status(400).send({ error: "Invalid timeRange" });
     }
     if (!Number.isFinite(minMagnitude) || minMagnitude < 0 || minMagnitude > 10) {
-      return reply.status(400).send({ message: "Invalid minMagnitude" });
+      return reply.status(400).send({ error: "Invalid minMagnitude" });
     }
 
     const ttl = CACHE_TTL[timeRange] ?? 300;
@@ -204,7 +204,7 @@ export function setup(ctx: IntegrationContext): void {
     } catch (err) {
       ctx.log.error("Failed to read earthquakes", err);
       reply.header("Cache-Control", "no-store");
-      return reply.status(503).send({ message: "Earthquake data temporarily unavailable" });
+      return reply.status(503).send({ error: "Earthquake data temporarily unavailable" });
     }
   });
 }

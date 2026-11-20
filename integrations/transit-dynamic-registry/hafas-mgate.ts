@@ -6,6 +6,7 @@ import {
   productToMode,
   USER_AGENT,
 } from "@openmapx/core";
+import { type LatLng, latLngOrNull } from "@openmapx/core/coordinates";
 import {
   ProviderInputError,
   ProviderTimeoutError,
@@ -257,17 +258,49 @@ function normalizeDeparture(d: any, entry: RegistryEntry): Departure {
   return normalizeFptfDeparture(d, entry.prefix);
 }
 
+/** An FPTF location's coordinates, or null when it has none in range. */
+function fptfPosition(
+  location: { latitude?: unknown; longitude?: unknown } | null | undefined,
+): LatLng | null {
+  return latLngOrNull(location?.latitude, location?.longitude);
+}
+
+/**
+ * The coordinates of a leg end. hafas-client nests a stop's or station's
+ * coordinates under `location`; an address or POI is itself a `location` with
+ * top-level coordinates.
+ */
+function fptfPlacePosition(
+  // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop, station or location
+  place: any,
+): LatLng | null {
+  return fptfPosition(place?.type === "location" ? place : place?.location);
+}
+
+/** The stop id of a leg end that is a stop or station; an address or POI has none. */
+function fptfStopId(
+  // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop, station or location
+  place: any,
+  prefix: string,
+): string | undefined {
+  return (place?.type === "stop" || place?.type === "station") && place.id
+    ? `${prefix}${place.id}`
+    : undefined;
+}
+
+/** A trip leg, or null when either end has no coordinates to place it by. */
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
-function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg {
+function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg | null {
   const line = leg.line ?? {};
   const isWalking = leg.walking === true || !line.id;
   // Walking legs must use the "walking" mode, not "bus"
   const mode: TransportMode = isWalking ? "walking" : productToMode(line.product);
 
-  const fromLat: number = leg.origin?.location?.latitude ?? 0;
-  const fromLng: number = leg.origin?.location?.longitude ?? 0;
-  const toLat: number = leg.destination?.location?.latitude ?? 0;
-  const toLng: number = leg.destination?.location?.longitude ?? 0;
+  const origin = fptfPlacePosition(leg.origin);
+  const destination = fptfPlacePosition(leg.destination);
+  if (!origin || !destination) return null;
+  const { lat: fromLat, lng: fromLng } = origin;
+  const { lat: toLat, lng: toLng } = destination;
 
   // Use the GeoJSON polyline returned by hafas-client (when polylines: true)
   let geometry: GeoJSONLineString = {
@@ -294,13 +327,13 @@ function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg {
       name: leg.origin?.name ?? "",
       lat: fromLat,
       lng: fromLng,
-      stopId: leg.origin?.id ? `${entry.prefix}${leg.origin.id}` : undefined,
+      stopId: fptfStopId(leg.origin, entry.prefix),
     },
     to: {
       name: leg.destination?.name ?? "",
       lat: toLat,
       lng: toLng,
-      stopId: leg.destination?.id ? `${entry.prefix}${leg.destination.id}` : undefined,
+      stopId: fptfStopId(leg.destination, entry.prefix),
     },
     route: isWalking
       ? undefined
@@ -503,28 +536,31 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
         if (!trip) return null;
         // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
         const stopovers: any[] = trip.stopovers ?? [];
+        // A stop without coordinates keeps its place in the list, unplaced.
         const stops: VehicleJourneyStop[] = stopovers.map(
           // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
-          (s: any): VehicleJourneyStop => ({
-            stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
-            name: s.stop?.name ?? "",
-            lat: s.stop?.location?.latitude ?? 0,
-            lng: s.stop?.location?.longitude ?? 0,
-            platform: s.platform ?? s.plannedPlatform ?? undefined,
-            scheduledPlatform: s.plannedPlatform ?? undefined,
-            scheduledArrival: s.plannedArrival ?? undefined,
-            scheduledDeparture: s.plannedDeparture ?? undefined,
-            expectedArrival: s.arrival ?? undefined,
-            expectedDeparture: s.departure ?? undefined,
-            delaySeconds:
-              typeof s.arrivalDelay === "number"
-                ? s.arrivalDelay
-                : typeof s.departureDelay === "number"
-                  ? s.departureDelay
-                  : undefined,
-            canceled: s.cancelled ?? false,
-            departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
-          }),
+          (s: any): VehicleJourneyStop => {
+            const at = fptfPlacePosition(s.stop);
+            return {
+              stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
+              name: s.stop?.name ?? "",
+              ...(at ? { lat: at.lat, lng: at.lng } : {}),
+              platform: s.platform ?? s.plannedPlatform ?? undefined,
+              scheduledPlatform: s.plannedPlatform ?? undefined,
+              scheduledArrival: s.plannedArrival ?? undefined,
+              scheduledDeparture: s.plannedDeparture ?? undefined,
+              expectedArrival: s.arrival ?? undefined,
+              expectedDeparture: s.departure ?? undefined,
+              delaySeconds:
+                typeof s.arrivalDelay === "number"
+                  ? s.arrivalDelay
+                  : typeof s.departureDelay === "number"
+                    ? s.departureDelay
+                    : undefined,
+              canceled: s.cancelled ?? false,
+              departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
+            };
+          },
         );
         const remarks: TripRemark[] | undefined =
           Array.isArray(trip.remarks) && trip.remarks.length > 0
@@ -611,12 +647,17 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
         const journeys = (result as any).journeys ?? [];
         if (!journeys.length) return null;
 
-        const itineraries: TripItinerary[] = journeys.map(
+        // A journey with a leg that cannot be placed is incomplete and left out.
+        const itineraries: TripItinerary[] = journeys.flatMap(
           // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF journey
-          (j: any): TripItinerary => {
+          (j: any): TripItinerary[] => {
             const rawLegs = j.legs ?? [];
             // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
-            const legs: TripLeg[] = rawLegs.map((l: any) => legToTripLeg(l, entry));
+            const mapped = rawLegs.map((l: any) => legToTripLeg(l, entry));
+            if (mapped.length === 0 || mapped.some((leg: TripLeg | null) => leg === null)) {
+              return [];
+            }
+            const legs = mapped as TripLeg[];
             const startTime = legs[0]?.startTime ?? "";
             const endTime = legs[legs.length - 1]?.endTime ?? "";
             const durationMs =
@@ -628,16 +669,19 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
             const walkDistance = (rawLegs as Array<{ walking?: boolean; distance?: number }>)
               .filter((l) => l.walking === true)
               .reduce((sum, l) => sum + (l.distance ?? 0), 0);
-            return {
-              duration: Math.round(durationMs / 1000),
-              startTime,
-              endTime,
-              transfers,
-              walkDistance: Math.round(walkDistance),
-              legs,
-            };
+            return [
+              {
+                duration: Math.round(durationMs / 1000),
+                startTime,
+                endTime,
+                transfers,
+                walkDistance: Math.round(walkDistance),
+                legs,
+              },
+            ];
           },
         );
+        if (itineraries.length === 0) return null;
 
         const firstLeg = itineraries[0]?.legs[0];
         const lastItinerary = itineraries[0];

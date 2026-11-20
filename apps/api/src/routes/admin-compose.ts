@@ -100,7 +100,7 @@ export async function registerAdminComposeRoutes(
         try {
           parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
         } catch (error) {
-          return reply.code(400).send({ ok: false, error: (error as Error).message });
+          return reply.code(400).send({ error: (error as Error).message });
         }
       },
     },
@@ -109,6 +109,6 @@ export async function registerAdminComposeRoutes(
   // POST /api/admin/compose/down — stop the whole stack
   registerServiceAdminRoute(app, "stopAdminCompose", async (_req, reply) => {
     reply.code(503);
-    return { ok: false, error: STACK_STOP_GUIDANCE };
+    return { error: STACK_STOP_GUIDANCE };
   });
 }

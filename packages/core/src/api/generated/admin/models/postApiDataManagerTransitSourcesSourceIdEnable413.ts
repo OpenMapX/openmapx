@@ -4,7 +4,6 @@
 export type PostApiDataManagerTransitSourcesSourceIdEnable413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

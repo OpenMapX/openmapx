@@ -431,8 +431,8 @@ export const airQualityApiErrorCodeSchema = z.enum([
 
 export const airQualityApiErrorSchema = z
   .object({
+    error: z.string().min(1).max(512),
     code: airQualityApiErrorCodeSchema,
-    message: z.string().min(1).max(512),
     details: z
       .record(z.string().min(1).max(128), z.union([z.string(), z.number().finite(), z.boolean()]))
       .optional(),

@@ -7,6 +7,7 @@ import { canonicalJson, hardlinkApplySummarySchema } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
+import { processLogger } from "../process-logger";
 import { dbActorId } from "../utils/actor";
 import { sanitizeExtensionOutputString, sanitizeLogMetadata } from "../utils/safe-log-fields";
 import {
@@ -1144,9 +1145,9 @@ class AdminJobRunner {
         PUMP_RETRY_BASE_MS * 2 ** (this.pumpFailures - 1),
         PUMP_RETRY_MAX_MS,
       );
-      console.error(
-        `[job-runner] Could not read or claim queued jobs; retrying in ${delayMs}ms:`,
-        error instanceof Error ? error.message : error,
+      processLogger.error(
+        { component: "job-runner", err: error, retryInMs: delayMs },
+        "Could not read or claim queued jobs; retrying",
       );
       this.schedulePump(delayMs);
     } finally {
@@ -1213,9 +1214,9 @@ class AdminJobRunner {
         this.schedulePump();
       })
       .catch((err) => {
-        console.error(
-          `[job-runner] Unexpected error finalizing job ${job.id}:`,
-          err instanceof Error ? err.message : err,
+        processLogger.error(
+          { component: "job-runner", err, jobId: job.id },
+          "Unexpected error finalizing a job",
         );
       });
   }

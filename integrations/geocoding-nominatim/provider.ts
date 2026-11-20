@@ -20,6 +20,7 @@ import {
   type SearchResult,
   sanitizeAddressComponents,
 } from "@openmapx/core";
+import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
 
 // Populated by setup(ctx); see setNominatimUrl.
 const DEFAULT_NOMINATIM_URL = "https://nominatim.openstreetmap.org";
@@ -110,6 +111,18 @@ const DEFAULT_BIAS_ZOOM = 12;
 const MIN_VIEWBOX_HALF_DEG = 0.01;
 const MAX_VIEWBOX_HALF_DEG = 45;
 
+/** Results with coordinates in range and a display name; Nominatim sends coordinates as strings. */
+function usable(records: readonly NominatimResult[]) {
+  return usableGeocoderRecords(
+    records,
+    (r) => ({
+      coordinates: lngLatOrNull(Number.parseFloat(r.lon), Number.parseFloat(r.lat)),
+      label: r.display_name,
+    }),
+    "Nominatim results",
+  );
+}
+
 /**
  * Viewbox (lon1,lat1,lon2,lat2) centred on the bias point, roughly one screen
  * wide at the given zoom and square on the ground. Sent without `bounded`, so
@@ -154,7 +167,7 @@ export const nominatimService: GeocodingProviderImpl = {
       params.viewbox = `${lng - d},${lat - d},${lng + d},${lat + d}`;
     }
     const data = await fetchNominatim(params, lang);
-    return data.map((r) => ({
+    return usable(data).map(({ record: r, coordinates }) => ({
       id: makeId(r),
       addressEvidence: {
         components: sanitizeAddressComponents(r.address),
@@ -163,7 +176,7 @@ export const nominatimService: GeocodingProviderImpl = {
         recordId: makeId(r),
       },
       label: r.display_name,
-      coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
+      coordinates,
       type: mapType(r.category, r.type),
       confidence: r.importance,
       rawCategory: rawCategoryOf(r),
@@ -215,7 +228,7 @@ export const nominatimService: GeocodingProviderImpl = {
     const params: Record<string, string> = { q: query, limit: "6", dedupe: "1" };
     if (bias) params.viewbox = biasViewbox(bias);
     const data = await fetchNominatim(params, lang);
-    return data.map((r) => {
+    return usable(data).map(({ record: r, coordinates }) => {
       // Unnamed address/building features lead display_name with the bare house
       // number in DE/AT/CH, so derive a proper street line ("Kinderhauser
       // Straße 40") instead of splitting off "40".
@@ -233,7 +246,7 @@ export const nominatimService: GeocodingProviderImpl = {
         },
         label: short,
         sublabel: r.display_name,
-        coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
+        coordinates,
         type: mapType(r.category, r.type),
         iconPath: resolvePoiIconPath(r.type),
         rawCategory: rawCategoryOf(r),

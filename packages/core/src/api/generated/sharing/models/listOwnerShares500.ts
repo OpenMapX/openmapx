@@ -4,7 +4,6 @@
 export type ListOwnerShares500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

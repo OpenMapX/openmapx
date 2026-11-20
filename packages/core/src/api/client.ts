@@ -3,6 +3,7 @@
  * All frontend data fetching goes through this client — never directly
  * to Pelias / OSRM / Valhalla.
  */
+import { parseRetryAfterMs } from "../http/retry-after";
 
 import { readBoundedResponseText } from "../utils/fetchJson";
 
@@ -98,18 +99,10 @@ function isJsonMediaType(contentType: string | null): boolean {
   return essence === "application/json" || essence.endsWith("+json");
 }
 
+/** Whole seconds a `Retry-After` header asks to wait, capped at a day; null when absent or invalid. */
 export function parseRetryAfter(header: string | null): number | null {
-  if (!header) return null;
-  const trimmed = header.trim();
-  if (trimmed === "") return null;
-  if (/^\d+$/.test(trimmed)) {
-    return Math.min(Number(trimmed), MAX_RETRY_AFTER_SECONDS);
-  }
-  const at = Date.parse(trimmed);
-  if (Number.isNaN(at)) return null;
-  const seconds = Math.ceil((at - Date.now()) / 1000);
-  if (seconds <= 0) return 0;
-  return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
+  const delay = parseRetryAfterMs(header);
+  return delay === null ? null : Math.min(Math.ceil(delay / 1000), MAX_RETRY_AFTER_SECONDS);
 }
 
 function discardBody(res: Response): void {

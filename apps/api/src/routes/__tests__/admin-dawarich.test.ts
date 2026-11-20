@@ -1,3 +1,4 @@
+import { STATUS_CODES } from "node:http";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
@@ -184,7 +185,7 @@ describe("admin Dawarich provisioning routes", () => {
       payload: {},
     });
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({ code: "DAWARICH_BUNDLE_NOT_INSTALLED" });
+    expect(response.json()).toEqual({ error: "Conflict", code: "DAWARICH_BUNDLE_NOT_INSTALLED" });
     expect(mockProvision).not.toHaveBeenCalled();
   });
 
@@ -233,7 +234,7 @@ describe("admin Dawarich provisioning routes", () => {
       payload: { publicHost: "timeline.example.test" },
     });
     expect(response.statusCode).toBe(status);
-    expect(response.json()).toEqual({ code });
+    expect(response.json()).toEqual({ error: STATUS_CODES[status], code });
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "dawarich.provision",
@@ -250,7 +251,10 @@ describe("admin Dawarich provisioning routes", () => {
       payload: {},
     });
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ code: "DAWARICH_PROVISIONING_FAILED" });
+    expect(response.json()).toEqual({
+      error: "Service Unavailable",
+      code: "DAWARICH_PROVISIONING_FAILED",
+    });
     expect(response.payload).not.toContain("sensitive-marker");
     expect(JSON.stringify(mockWriteAuditLog.mock.calls)).not.toContain("sensitive-marker");
   });
@@ -262,7 +266,10 @@ describe("admin Dawarich provisioning routes", () => {
       payload: { confirmation: "rotate" },
     });
     expect(denied.statusCode).toBe(400);
-    expect(denied.json()).toEqual({ code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED" });
+    expect(denied.json()).toEqual({
+      error: "Bad Request",
+      code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED",
+    });
     expect(mockRotate).not.toHaveBeenCalled();
 
     const accepted = await app.inject({

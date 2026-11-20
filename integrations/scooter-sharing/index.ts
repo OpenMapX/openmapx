@@ -16,6 +16,7 @@ export function setup(ctx: IntegrationContext): void {
     resolveContributors,
     cache: ctx.cache,
     transport: mobilityHttpTransport,
+    http: ctx.http,
     // The instances the deployment uses, as their health checks probe them.
     motisUrl: ctx.resolvePlatformEndpoint("motis")?.url,
     nominatimUrl: ctx.resolvePlatformEndpoint("nominatim")?.url,
@@ -38,6 +39,7 @@ export function setup(ctx: IntegrationContext): void {
     searchDeNwMobidromScooter: createDeNwMobidromScooterClient({
       clientId: ctx.config["de-nw-mobidrom-scooter-client-id"] as string | undefined,
       clientSecret: ctx.config["de-nw-mobidrom-scooter-client-secret"] as string | undefined,
+      http: ctx.http,
       transport: runtime.transport,
       contributors: resolveContributors(["de-nw-mobidrom-scooter"]),
     }),

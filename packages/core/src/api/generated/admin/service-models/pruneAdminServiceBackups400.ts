@@ -4,7 +4,6 @@
 export type PruneAdminServiceBackups400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

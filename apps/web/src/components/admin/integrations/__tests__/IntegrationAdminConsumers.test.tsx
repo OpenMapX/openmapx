@@ -177,7 +177,12 @@ describe("integration administration browser behavior", () => {
     );
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "new-input" } });
     await act(async () => {
-      finish(Response.json({ errors: ["old-owner-error"] }, { status: 400 }));
+      finish(
+        Response.json(
+          { error: "Invalid configuration", errors: ["old-owner-error"] },
+          { status: 400 },
+        ),
+      );
       await pending;
     });
     expect(saved).not.toHaveBeenCalled();
@@ -302,7 +307,12 @@ describe("integration administration browser behavior", () => {
             : { ok: true, message: "Saved", reloaded: 1, enabled: 1 };
     await act(async () => {
       finish(
-        Response.json(status === 200 ? response : { errors: ["old-owner-error"] }, { status }),
+        Response.json(
+          status === 200
+            ? response
+            : { error: "Invalid configuration", errors: ["old-owner-error"] },
+          { status },
+        ),
       );
       await pending;
     });
@@ -366,7 +376,12 @@ describe("integration administration browser behavior", () => {
         fireEvent.change(screen.getByLabelText("Token"), { target: { value: "replacement" } });
       }
       await act(async () => {
-        finish(Response.json({ errors: ["old-owner-error"] }, { status: 400 }));
+        finish(
+          Response.json(
+            { error: "Invalid configuration", errors: ["old-owner-error"] },
+            { status: 400 },
+          ),
+        );
         await pending;
       });
       await waitFor(() =>
@@ -780,7 +795,10 @@ describe("integration administration browser behavior", () => {
       expect(url.pathname).toBe("/api/admin/integrations/demo/config");
       expect(init.method).toBe("PATCH");
       return Response.json(
-        { errors: ["Endpoint must use HTTPS", "Unknown config field"] },
+        {
+          error: "Invalid configuration",
+          errors: ["Endpoint must use HTTPS", "Unknown config field"],
+        },
         { status: 400 },
       );
     });

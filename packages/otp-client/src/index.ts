@@ -37,4 +37,5 @@ export function createOtpClient(options: OtpTransportOptions) {
 export type OtpClient = ReturnType<typeof createOtpClient>;
 
 export * from "./dynamic";
+export { otpRouteColor, otpTransportMode } from "./mapping";
 export type { OtpTransportOptions } from "./transport";

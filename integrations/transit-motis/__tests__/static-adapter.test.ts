@@ -28,7 +28,9 @@ import {
   getRoutesInBbox,
   getStopPlatforms,
   getStopTimetable,
+  mapItinerary,
   mapMotisRoute,
+  motisPlaceToJourneyStop,
   normalizeStop,
   normalizeStoptime,
   routeProbeBox,
@@ -81,8 +83,8 @@ describe("MOTIS static route adapter", () => {
       modes: ["RAIL"],
     });
 
-    expect(normalized.codes).toEqual([{ value: "AACHN", namespace: "gtfs" }]);
-    expect(normalized.codes?.map(({ value }) => value)).not.toContain("ms:de:1");
+    expect(normalized?.codes).toEqual([{ value: "AACHN", namespace: "gtfs" }]);
+    expect(normalized?.codes?.map(({ value }) => value)).not.toContain("ms:de:1");
   });
 
   it("uses response route indexes, not internal routeIdx, and preserves segment order", () => {
@@ -194,6 +196,38 @@ describe("MOTIS static route adapter", () => {
       "ms:a",
       "ms:b",
       "ms:c",
+    ]);
+  });
+
+  it("numbers route stops contiguously from 1", async () => {
+    mocks.routeDetails.mockResolvedValue({
+      data: {
+        routes: [
+          route(7, [
+            { from: 0, to: 1, polyline: 0 },
+            { from: 1, to: 2, polyline: 0 },
+          ]),
+        ],
+        polylines: [
+          line(
+            [
+              [1, 1],
+              [3, 3],
+            ],
+            [0],
+          ),
+        ],
+        stops: [stop("a", 1, 1), stop("b", 2, 2), stop("c", 3, 3)],
+        zoomFiltered: false,
+      },
+    });
+    const id = encodeMotisRoutePatternId("epoch", 7, ["de_feed_route-7"]);
+    expect(
+      (await getRouteStops(instance, id, "epoch")).map(({ id, sequence }) => [id, sequence]),
+    ).toEqual([
+      ["ms:a", 1],
+      ["ms:b", 2],
+      ["ms:c", 3],
     ]);
   });
 
@@ -444,9 +478,10 @@ describe("MOTIS stops, platforms, and civil-day timetable", () => {
 
   it("maps current track before scheduled track", () => {
     expect(
-      normalizeStop(instance, { ...stop("p", 1, 2), track: "4", scheduledTrack: "3" }).platformCode,
+      normalizeStop(instance, { ...stop("p", 1, 2), track: "4", scheduledTrack: "3" })
+        ?.platformCode,
     ).toBe("4");
-    expect(normalizeStop(instance, { ...stop("p", 1, 2), scheduledTrack: "3" }).platformCode).toBe(
+    expect(normalizeStop(instance, { ...stop("p", 1, 2), scheduledTrack: "3" })?.platformCode).toBe(
       "3",
     );
   });
@@ -949,5 +984,37 @@ it("anchors a departure window to the requested time instead of now", async () =
   expect(mocks.stoptimes.mock.calls.at(-1)?.[0].query).toMatchObject({
     time: "2026-11-06T20:17:00.000Z",
     window: 300,
+  });
+});
+
+describe("MOTIS places without coordinates", () => {
+  const placed = { name: "A", stopId: "a", lat: 50.9, lon: 6.9 };
+  const unplaced = { name: "B", stopId: "b" } as unknown as typeof placed;
+
+  it("leaves a stop out instead of placing it at 0° N 0° E", () => {
+    expect(normalizeStop(instance, unplaced)).toBeNull();
+    expect(normalizeStop(instance, { ...placed, lat: 91 })).toBeNull();
+    expect(motisPlaceToJourneyStop(instance, unplaced)).toBeNull();
+    expect(normalizeStop(instance, placed)).toMatchObject({ id: "ms:a", lat: 50.9, lng: 6.9 });
+  });
+
+  it("refuses an itinerary with a leg end that cannot be placed", () => {
+    const leg = (to: typeof placed) => ({
+      mode: "BUS",
+      from: placed,
+      to,
+      startTime: "2026-03-10T10:00:00Z",
+      endTime: "2026-03-10T10:20:00Z",
+      duration: 1200,
+      realTime: false,
+      scheduled: true,
+    });
+    const itinerary = (to: typeof placed) =>
+      ({ duration: 1200, legs: [leg(to)], transfers: 0 }) as unknown as Parameters<
+        typeof mapItinerary
+      >[1];
+
+    expect(mapItinerary(instance, itinerary(unplaced))).toBeNull();
+    expect(mapItinerary(instance, itinerary({ ...placed, stopId: "c" }))?.legs).toHaveLength(1);
   });
 });

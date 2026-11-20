@@ -4,7 +4,6 @@
 export type DisableAdminIntegration401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -4,7 +4,6 @@
 export type SetAdminServiceCredential400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

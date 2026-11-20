@@ -1,32 +1,27 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { valhallaService } from "./provider.js";
+import { describe, expect, it, vi } from "vitest";
+import { valhallaHarness } from "./__tests__/valhalla-http.js";
 
-describe("valhallaService.getMatrix", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+const valhalla = valhallaHarness();
 
+describe("valhalla.service.getMatrix", () => {
   it("parses /sources_to_targets into rows[s][t] of {seconds,km}", async () => {
     let capturedUrl = "";
     let capturedBody: Record<string, unknown> = {};
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        capturedUrl = url;
-        capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
-        return Response.json({
-          sources_to_targets: [
-            [
-              { from_index: 0, to_index: 0, time: 0, distance: 0 },
-              { from_index: 0, to_index: 1, time: 120, distance: 2.0 },
-            ],
+    valhalla.answer = vi.fn(async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
+      return Response.json({
+        sources_to_targets: [
+          [
+            { from_index: 0, to_index: 0, time: 0, distance: 0 },
+            { from_index: 0, to_index: 1, time: 120, distance: 2.0 },
           ],
-          units: "kilometers",
-        });
-      }),
-    );
+        ],
+        units: "kilometers",
+      });
+    });
 
-    const rows = await valhallaService.getMatrix?.(
+    const rows = await valhalla.service.getMatrix?.(
       [[6.9, 50.9]],
       [
         [6.9, 50.9],
@@ -46,17 +41,42 @@ describe("valhallaService.getMatrix", () => {
   });
 
   it("maps a null time/distance cell to null", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        Response.json({
-          sources_to_targets: [[{ from_index: 0, to_index: 0, time: null, distance: null }]],
-          units: "kilometers",
-        }),
-      ),
+    valhalla.answer = vi.fn(async () =>
+      Response.json({
+        sources_to_targets: [[{ from_index: 0, to_index: 0, time: null, distance: null }]],
+        units: "kilometers",
+      }),
     );
 
-    const rows = await valhallaService.getMatrix?.([[6.9, 50.9]], [[6.9, 50.9]]);
+    const rows = await valhalla.service.getMatrix?.([[6.9, 50.9]], [[6.9, 50.9]]);
     expect(rows?.[0]?.[0]).toBeNull();
+  });
+});
+
+describe("Valhalla generations", () => {
+  it("sends each generation's own key and endpoint", async () => {
+    const first = valhallaHarness();
+    const second = valhallaHarness();
+    const urls: string[] = [];
+    const answer = async (url: string) => {
+      urls.push(url);
+      return Response.json({ sources_to_targets: [[]], units: "kilometers" });
+    };
+    first.answer = answer;
+    second.answer = answer;
+    first.settings = {
+      url: "https://api.stadiamaps.com",
+      apiKey: "first",
+      bidirectionalAlternates: true,
+    };
+    second.settings = { url: "http://valhalla:8002", bidirectionalAlternates: true };
+
+    await first.service.getMatrix?.([[6.9, 50.9]], [[6.9, 50.9]]);
+    await second.service.getMatrix?.([[6.9, 50.9]], [[6.9, 50.9]]);
+
+    expect(urls).toEqual([
+      "https://api.stadiamaps.com/sources_to_targets?api_key=first",
+      "http://valhalla:8002/sources_to_targets",
+    ]);
   });
 });

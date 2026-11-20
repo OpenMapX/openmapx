@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import {
   DEFAULT_FETCH_JSON_MAX_BYTES,
   DEFAULT_FETCH_TIMEOUT_MS,
+  FetchJsonHttpError,
   fetchWithRedirects,
+  hasPotentiallyCredentialBearingHeaders,
   readBoundedJsonResponse,
 } from "@openmapx/core";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type {
   BinaryHttpResponse,
   CacheClient,
@@ -55,6 +58,20 @@ function awaitHttpResponse(operation: Promise<Response>, signal: AbortSignal): P
   });
 }
 
+/**
+ * Caller headers outside the representation-header allowlist may carry a credential.
+ * Such requests refuse every redirect so the header never reaches another origin.
+ * A User-Agent identifies the client, as the core JSON helper sends it, and is no credential.
+ */
+function redirectPolicyFor(headers: Record<string, string> | undefined): "error" | undefined {
+  const callerHeaders = headers
+    ? Object.fromEntries(
+        Object.entries(headers).filter(([name]) => name.toLowerCase() !== "user-agent"),
+      )
+    : undefined;
+  return hasPotentiallyCredentialBearingHeaders(callerHeaders) ? "error" : undefined;
+}
+
 export function createHttpClient(_log: Logger): HttpClient {
   const signalFor = (options?: HttpClientOptions, operationSignal = options?.signal) => {
     const timeout = AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS);
@@ -86,6 +103,28 @@ export function createHttpClient(_log: Logger): HttpClient {
     }
     return selected;
   };
+  const jsonRequest = async <T>(
+    url: string,
+    init: RequestInit,
+    options: HttpClientOptions | undefined,
+    signal: AbortSignal,
+  ): Promise<T> => {
+    const response = await fetch(url, {
+      ...init,
+      signal,
+      redirect: redirectPolicyFor(options?.headers),
+    });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      // Provider keys often sit in the query string, so the message never names the URL.
+      throw new FetchJsonHttpError(
+        `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+        response.status,
+        parseRetryAfterMs(response.headers.get("retry-after")) ?? undefined,
+      );
+    }
+    return readJson<T>(response, options);
+  };
   const request = async (
     url: string,
     options: ResponseOptions,
@@ -93,7 +132,7 @@ export function createHttpClient(_log: Logger): HttpClient {
   ): Promise<{ response: Response; signal: AbortSignal }> => {
     const signal = signalFor(options);
     const initialUrl = urlFor(url, options).toString();
-    const redirect = options.redirect;
+    const redirect = options.redirect ?? redirectPolicyFor(options.headers);
     if (typeof redirect === "object") {
       if (!redirect.allowedHosts.length) {
         throw new Error("integration HTTP redirect allowlist must not be empty");
@@ -211,12 +250,12 @@ export function createHttpClient(_log: Logger): HttpClient {
         return integrationSingleFlight.run(
           flightKey,
           async (flightSignal) => {
-            const res = await fetch(u.toString(), {
-              headers: options?.headers,
-              signal: signalFor(options, flightSignal),
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-            const data = await readJson<T>(res, options);
+            const data = await jsonRequest<T>(
+              u.toString(),
+              { headers: options.headers },
+              options,
+              signalFor(options, flightSignal),
+            );
             if (redis && !flightSignal.aborted) {
               await cacheInvalidation
                 .writeIfCurrent(cacheKey, JSON.stringify(data), cacheTtlWithJitter(cacheTtl), epoch)
@@ -228,23 +267,25 @@ export function createHttpClient(_log: Logger): HttpClient {
         );
       }
 
-      const res = await fetch(u.toString(), {
-        headers: options?.headers,
-        signal: signalFor(options),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return readJson<T>(res, options);
+      return jsonRequest<T>(
+        u.toString(),
+        { headers: options?.headers },
+        options,
+        signalFor(options),
+      );
     },
 
     async post<T>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T> {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...options?.headers },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: signalFor(options),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return readJson<T>(res, options);
+      return jsonRequest<T>(
+        urlFor(url, options).toString(),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...options?.headers },
+          body: body ? JSON.stringify(body) : undefined,
+        },
+        options,
+        signalFor(options),
+      );
     },
 
     async getResponse<T>(url: string, options: ResponseOptions): Promise<HttpResponse<T>> {

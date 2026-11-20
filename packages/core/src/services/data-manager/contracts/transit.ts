@@ -136,13 +136,13 @@ export const transitSourceMutationResultSchema = z.strictObject({
   status: z.literal("started"),
 });
 export const transitSourceActionErrorSchema = z.strictObject({
-  ok: z.literal(false),
   error: z.string(),
   code: z.literal("source_action_not_allowed"),
 });
+/** A refused source change in the error envelope; `code` names why it was refused. */
 export const transitConflictSchema = z.strictObject({
-  ok: z.literal(false),
-  reason: z.enum(["in-flight", "duplicate-idempotency-key"]),
+  error: z.string(),
+  code: z.enum(["in-flight", "duplicate-idempotency-key"]),
   existingJobId: z.string().nullable(),
 });
 export const transitPreflightBindingSchema = z.strictObject({
@@ -160,6 +160,16 @@ export const transitPreflightSelectionSchema = z.strictObject({
 export const transitPreflightStaleSchema = z.strictObject({
   error: z.string(),
   code: z.literal("preflight_stale"),
+});
+/** A transit sync refused because it names a country outside the operations profile. */
+export const transitScopeRejectedSchema = z.strictObject({
+  error: z.string(),
+  code: z.literal("outside-operations-profile"),
+});
+/** A MOTIS restart refused because no durable receiver can admit the maintenance. */
+export const transitRestartUnavailableSchema = z.strictObject({
+  error: z.string(),
+  code: z.literal("ops-agent-unavailable"),
 });
 export const transitSyncRequestSchema = z
   .strictObject({
@@ -179,10 +189,6 @@ export const transitSyncAcceptedSchema = z.strictObject({
   ok: z.literal(true),
   jobId: z.string(),
   status: z.literal("started"),
-});
-export const transitScopeRejectedSchema = z.strictObject({
-  ok: z.literal(false),
-  reason: z.string(),
 });
 const capacityShape = {
   freeDiskBytes: countSchema,
@@ -269,11 +275,6 @@ export const transitBumpResultSchema = z.union([
 export const transitApproveRequestSchema = z
   .strictObject({ approveRef: z.string().optional(), approvedBy: z.string().optional() })
   .optional();
-export const transitApprovalMismatchSchema = z.strictObject({
-  ok: z.literal(false),
-  error: z.literal("typed-confirmation-mismatch"),
-  expected: z.string(),
-});
 export const transitApprovalSchema = z.strictObject({
   ok: z.literal(true),
   activated: z.literal(true),

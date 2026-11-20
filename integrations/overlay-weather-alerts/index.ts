@@ -124,7 +124,7 @@ export function setup(ctx: IntegrationContext): void {
     } catch (err) {
       ctx.log.error("Failed to read weather alerts", err);
       reply.header("Cache-Control", "no-store");
-      return reply.status(503).send({ message: "Weather alert data temporarily unavailable" });
+      return reply.status(503).send({ error: "Weather alert data temporarily unavailable" });
     }
   });
 }

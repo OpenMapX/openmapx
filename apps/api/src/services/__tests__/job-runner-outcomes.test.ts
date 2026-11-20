@@ -1,6 +1,7 @@
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { processLogger } from "../../process-logger";
 import { AdminJobFailure } from "../admin-job-failure";
 import { claimAdminJob, jobOwnership } from "../admin-job-state";
 import { coordinatorLifecycleOperationKey } from "../coordinator-lifecycle";
@@ -280,7 +281,7 @@ it.each([false, true])(
 
 it("a database error at pump time backs off and does not exit the process", async () => {
   vi.useFakeTimers();
-  const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const logged = vi.spyOn(processLogger, "error").mockImplementation(() => undefined);
   const unhandled = vi.fn();
   process.on("unhandledRejection", unhandled);
   const runner = jobRunner as unknown as {
@@ -322,7 +323,7 @@ it("a database error at pump time backs off and does not exit the process", asyn
 
 it("keeps one pump pending and drops it on shutdown", async () => {
   vi.useFakeTimers();
-  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.spyOn(processLogger, "error").mockImplementation(() => undefined);
   const runner = jobRunner as unknown as {
     pump(): Promise<void>;
     schedulePump(delayMs?: number): void;

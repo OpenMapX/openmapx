@@ -1,6 +1,6 @@
 import type { IntegrationDataSource } from "@openmapx/integration-framework";
 import { createSharedMobilityContributorResolver } from "@openmapx/integration-framework/shared-mobility-provider";
-import { createPassthroughCache } from "@openmapx/integration-framework/testing";
+import { createPassthroughCache, fakeHttpClient } from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import manifest from "../../manifest.json";
@@ -30,6 +30,10 @@ function stubCambioRegion(code: string, stations: unknown[]) {
   return fetchMock;
 }
 
+function searchContext() {
+  return { cache: createPassthroughCache(), http: fakeHttpClient() };
+}
+
 function bboxAround(lat: number, lng: number) {
   return { west: lng - 0.02, south: lat - 0.02, east: lng + 0.02, north: lat + 0.02 };
 }
@@ -49,7 +53,7 @@ describe("Cambio region coverage", () => {
       { id, name: town, geoposition: { latitude: lat, longitude: lng }, vehicleCount: 1 },
     ]);
 
-    const stations = await client.search(bboxAround(lat, lng), createPassthroughCache());
+    const stations = await client.search(bboxAround(lat, lng), searchContext());
 
     expect(fetchMock).toHaveBeenCalledWith(
       `https://cwapi.cambio-carsharing.com/pub/${code}/stations`,
@@ -70,6 +74,7 @@ describe("Cambio credits", () => {
   const search = createRegionalCarSharingRegistry({
     clients: [deCambioClient, beCambioClient],
     cache: createPassthroughCache(),
+    http: fakeHttpClient(),
     log: { warn: vi.fn(), error: vi.fn() } as never,
     resolveContributors: createSharedMobilityContributorResolver(
       manifest.dataSources as IntegrationDataSource[],
@@ -139,7 +144,7 @@ describe("Cambio stations", () => {
       },
     ]);
 
-    const [station] = await deCambioClient.search(BIELEFELD_BBOX, createPassthroughCache());
+    const [station] = await deCambioClient.search(BIELEFELD_BBOX, searchContext());
 
     expect(station).toMatchObject({
       id: "de-cambio/BIL/19-17",
@@ -163,7 +168,7 @@ describe("Cambio stations", () => {
       },
     ]);
 
-    const [station] = await deCambioClient.search(BIELEFELD_BBOX, createPassthroughCache());
+    const [station] = await deCambioClient.search(BIELEFELD_BBOX, searchContext());
 
     expect(station.capacity).toBe(0);
     expect(station.availableVehicles).toBeUndefined();
@@ -181,7 +186,7 @@ describe("Cambio stations", () => {
         vehicleCount: 2,
       },
     ]);
-    const cambio = await deCambioClient.search(BIELEFELD_BBOX, createPassthroughCache());
+    const cambio = await deCambioClient.search(BIELEFELD_BBOX, searchContext());
     const bielefeld = parseDeNwBielefeldCsv(
       [
         "WKT;gid;website;name;addr_street;addr_housenumber;level;capacity;description",

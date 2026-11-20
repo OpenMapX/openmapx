@@ -254,6 +254,7 @@ describe("runtime invalidation", () => {
     let cities = 0;
     const runtime = createSharedMobilityRuntime({
       cache: subscribedCache,
+      http: { getText: () => Promise.reject(new Error("no MOTIS rentals in this test")) },
       transport: transport(async (url) =>
         url.includes("/reverse") ? { address: { city: `city-${++cities}` } } : feeds(url),
       ),
@@ -292,6 +293,7 @@ describe("runtime invalidation", () => {
     let probeCalls = 0;
     const runtime = createSharedMobilityRuntime({
       cache: subscribedCache,
+      http: { getText: () => Promise.reject(new Error("no MOTIS rentals in this test")) },
       transport: transport(async (url) => {
         if (url.includes("/reverse"))
           return ++cityCalls === 1 ? oldCity.promise : { address: { city: "new" } };

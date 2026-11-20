@@ -17,6 +17,8 @@ import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
+import { createDataExecutionReceiver } from "../src/jobs/execution/receiver.js";
+import type { DataExecutionRuntime } from "../src/jobs/execution/runtime.js";
 import { DataConfigurationMaintenanceBusy } from "../src/jobs/execution/store.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
@@ -183,7 +185,7 @@ describe("data-manager API", () => {
     });
     const res = await app.inject({ method: "GET", url: "/search-index/status" });
     expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
+    expect(res.json()).toEqual({ error: "osm_search index not built" });
   });
 
   it("continues an observer through running unknown publication without canceling its worker", async () => {
@@ -213,6 +215,17 @@ describe("data-manager API", () => {
     expect(cancel).not.toHaveBeenCalled();
   });
 
+  it("refuses a MOTIS restart in the error envelope when no durable receiver is wired", async () => {
+    const app = createTestApp();
+    registerApi(app, { dataDir: createDataDir() });
+    const response = await app.inject({ method: "POST", url: "/transit/restart-motis" });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      error: "Durable data receiver is unavailable",
+      code: "ops-agent-unavailable",
+    });
+  });
+
   it("GET /notable-places/status returns 404 until a first snapshot is published", async () => {
     const app = createTestApp();
     const unsafe = vi.fn().mockResolvedValue([{ exists: false }]);
@@ -222,7 +235,7 @@ describe("data-manager API", () => {
     });
     const res = await app.inject({ method: "GET", url: "/notable-places/status" });
     expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ ok: false, error: "notable_places index not built" });
+    expect(res.json()).toEqual({ error: "notable_places index not built" });
   });
 
   it("POST /datasets/reload reloads state from disk", async () => {
@@ -289,8 +302,140 @@ describe("data-manager API", () => {
       },
     });
     expect(res.statusCode).toBe(409);
-    expect(res.json()).toEqual({ ok: false, reason: "in-flight", existingJobId: null });
+    expect(res.json()).toEqual({
+      error: "Another data job is running. Try again when it finishes.",
+      code: "in-flight",
+      existingJobId: null,
+    });
     expect(existsSync(overlayPath)).toBe(false);
+  });
+
+  describe("refused transit-source reads and changes", () => {
+    const revision = (dataDir: string) =>
+      transitSourceRevision({
+        catalogDir: join(dataDir, ".transitous-catalog"),
+        overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+      });
+    const operatorFeed = {
+      name: "operator-feed",
+      url: "https://operator.example/feed.zip",
+      license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
+    };
+
+    it.each([
+      {
+        label: "a stale source revision",
+        request: () => ({
+          method: "POST" as const,
+          url: "/transit/sources",
+          payload: { ...operatorFeed, region: "de", expectedSourceRevision: "a".repeat(64) },
+        }),
+        status: 409,
+        body: { error: "Desired transit sources changed. Refresh before applying." },
+      },
+      {
+        label: "a region outside the country scope",
+        request: (dataDir: string) => ({
+          method: "POST" as const,
+          url: "/transit/sources",
+          payload: { ...operatorFeed, region: "fr", expectedSourceRevision: revision(dataDir) },
+        }),
+        status: 400,
+        body: {
+          error:
+            "Region fr is outside the configured country scope (de); the pipeline would never import this source",
+        },
+      },
+      {
+        label: "removing an unknown operator source",
+        request: (dataDir: string) => ({
+          method: "DELETE" as const,
+          url: "/transit/sources/operator:de:missing",
+          payload: { expectedSourceRevision: revision(dataDir) },
+        }),
+        status: 404,
+        body: { error: "Operator source operator:de:missing not found" },
+      },
+      {
+        label: "disabling an unknown source",
+        request: (dataDir: string) => ({
+          method: "POST" as const,
+          url: "/transit/sources/missing/disable",
+          payload: { expectedSourceRevision: revision(dataDir) },
+        }),
+        status: 404,
+        body: { error: "Transit source missing not found" },
+      },
+    ])("refuses $label without admitting work", async ({ request, status, body }) => {
+      const dataDir = createDataDir();
+      sourceCatalog(dataDir);
+      const admitLocal = vi.fn();
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir,
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+        executionReceiver: receiverFixture({ admitLocal }),
+      });
+      const res = await app.inject(request(dataDir));
+      expect(res.statusCode, res.body).toBe(status);
+      expect(res.json()).toEqual(body);
+      expect(admitLocal).not.toHaveBeenCalled();
+    });
+
+    it("answers an unexpected admission failure with a fixed text and logs it", async () => {
+      const dataDir = createDataDir();
+      sourceCatalog(dataDir);
+      const logLines: string[] = [];
+      const app = Fastify({
+        logger: { level: "error", stream: { write: (line: string) => logLines.push(line) } },
+      });
+      apps.push(app);
+      registerApi(app, {
+        dataDir,
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+        executionReceiver: receiverFixture({
+          admitLocal: async () => {
+            throw new Error("Execution store unavailable");
+          },
+        }),
+      });
+      const res = await app.inject({
+        method: "POST",
+        url: "/transit/sources",
+        payload: { ...operatorFeed, region: "de", expectedSourceRevision: revision(dataDir) },
+      });
+      expect(res.statusCode).toBe(500);
+      expect(res.json()).toEqual({ error: "Transit source request failed" });
+      const logged = logLines
+        .map((line) => JSON.parse(line) as { msg?: string; err?: { message?: string } })
+        .find((entry) => entry.msg === "transit-sources: request failed");
+      expect(logged?.err?.message).toBe("Execution store unavailable");
+    });
+
+    it("refuses a source change without a durable receiver in the error envelope", async () => {
+      const dataDir = createDataDir();
+      sourceCatalog(dataDir);
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir,
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      });
+      const res = await app.inject({
+        method: "POST",
+        url: "/transit/sources",
+        payload: { ...operatorFeed, region: "de", expectedSourceRevision: revision(dataDir) },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toEqual({ error: "Durable data receiver is unavailable" });
+    });
+
+    it("answers 409 for the pinned catalog while it is unavailable", async () => {
+      const app = createTestApp();
+      registerApi(app, { dataDir: createDataDir() });
+      const res = await app.inject({ method: "GET", url: "/transit/catalog" });
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({ error: "Pinned Transitous catalog is unavailable" });
+    });
   });
 
   it("rejects oversized source metadata before admitting work", async () => {
@@ -447,6 +592,35 @@ describe("data-manager API", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("POST /transit/sync names an out-of-scope refusal in the error envelope", async () => {
+    const operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
+    const admit = vi.fn();
+    const app = createTestApp();
+    registerApi(app, {
+      dataDir: createDataDir(),
+      operationsPolicy,
+      // The real receiver applies the operations profile before admitting anything.
+      executionReceiver: createDataExecutionReceiver({
+        runtime: { admit } as unknown as DataExecutionRuntime,
+        installation: {} as never,
+        configurationFence: {} as never,
+        dispatcher: {} as never,
+        operationsPolicy,
+      }),
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/transit/sync",
+      payload: { countries: ["fr"] },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({
+      error: "Countries outside configured operations profile",
+      code: "outside-operations-profile",
+    });
+    expect(admit).not.toHaveBeenCalled();
   });
 
   it("POST /transit/sync starts an in-scope country", async () => {

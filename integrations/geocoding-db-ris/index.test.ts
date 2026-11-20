@@ -1,12 +1,11 @@
 import {
   createMockIntegrationContext,
-  type FakeMobilityHttpRequest,
-  type FakeMobilityHttpTransport,
-  fakeMobilityHttpTransport,
+  type FakeHttpClient,
+  type FakeHttpRequest,
+  fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "./index.js";
-import { setRisCredentials } from "./provider.js";
 import type { RisStopPlace } from "./stations-types.js";
 
 const CALL = { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY };
@@ -19,23 +18,23 @@ const KOELN_HBF: RisStopPlace = {
   availableTransports: [{ type: "HIGH_SPEED_TRAIN" }],
 };
 
-let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
-let transport: FakeMobilityHttpTransport;
+let mockFetch: Mock<(input: FakeHttpRequest) => unknown>;
+let transport: FakeHttpClient;
 
 beforeEach(() => {
-  mockFetch = vi.fn().mockResolvedValue({ stopPlaces: [KOELN_HBF] });
-  transport = fakeMobilityHttpTransport(mockFetch);
+  mockFetch = vi
+    .fn<(input: FakeHttpRequest) => unknown>()
+    .mockResolvedValue({ stopPlaces: [KOELN_HBF] });
+  transport = fakeHttpClient((request) => mockFetch(request));
 });
 
 afterEach(() => {
-  setRisCredentials({}, transport);
   vi.restoreAllMocks();
 });
 
-function activate() {
-  const ctx = createMockIntegrationContext({ id: "geocoding-db-ris" });
+function activate(config: Record<string, unknown> = { clientId: "cid", apiKey: "key" }) {
+  const ctx = createMockIntegrationContext({ id: "geocoding-db-ris", config, http: transport });
   setup(ctx);
-  setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
   return ctx;
 }
 
@@ -80,8 +79,7 @@ describe("geocoding-db-ris search suggestions", () => {
   });
 
   it("returns nothing when no credentials are configured", async () => {
-    const ctx = activate();
-    setRisCredentials({}, transport);
+    const ctx = activate({});
     const [provider] = ctx.registered.searchSuggestions;
 
     const result = await provider.searchSuggestions(

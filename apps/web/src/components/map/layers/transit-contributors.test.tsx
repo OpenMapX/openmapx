@@ -19,7 +19,13 @@ const state = vi.hoisted(() => {
         ],
       },
     },
-    stops: [{ id: "stop", name: "Stop", lat: 50, lng: 8, contributors: [a] }],
+    stops: [{ id: "stop", name: "Stop", lat: 50, lng: 8, contributors: [a] }] as Array<{
+      id: string;
+      name: string;
+      lat?: number;
+      lng?: number;
+      contributors: unknown[];
+    }>,
     live: { vehicles: [{ id: "vehicle", lat: 50, lng: 8, contributors: [b] }] },
     infrastructure: {
       stopId: "stop",
@@ -71,6 +77,7 @@ function Layers() {
 
 beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, zoom: 16 });
+  state.stops = [{ id: "stop", name: "Stop", lat: 50, lng: 8, contributors: [state.a] }];
   state.live = { vehicles: [{ id: "vehicle", lat: 50, lng: 8, contributors: [state.b] }] };
 });
 function features(source: string): Array<{
@@ -94,6 +101,36 @@ describe("core transit map acquisition receipts", () => {
         features("transit-route-detail-stops-source")[0].properties?._mapAttributions ?? "[]",
       ),
     ).toEqual([state.a]);
+  });
+
+  it("draws only the route stops that have coordinates", () => {
+    const route = state.route;
+    state.route = { contributors: [state.a] } as typeof state.route;
+    state.stops = [
+      { id: "first", name: "First", lat: 50, lng: 8, contributors: [state.a] },
+      { id: "unplaced", name: "Unplaced", contributors: [state.a] },
+      { id: "last", name: "Last", lat: 50.1, lng: 8.1, contributors: [state.a] },
+    ];
+    try {
+      render(<TransitRouteLayer />);
+      expect(
+        features("transit-route-detail-stops-source").map(
+          (feature) => feature.geometry?.coordinates,
+        ),
+      ).toEqual([
+        [8, 50],
+        [8.1, 50.1],
+      ]);
+      const line = fake.state.sources.get("transit-route-detail-source")?.data as {
+        geometry?: { coordinates?: unknown };
+      };
+      expect(line.geometry?.coordinates).toEqual([
+        [8, 50],
+        [8.1, 50.1],
+      ]);
+    } finally {
+      state.route = route;
+    }
   });
 
   it("moves a vehicle in place instead of re-adding its layer", () => {

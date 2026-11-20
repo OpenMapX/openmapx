@@ -3,6 +3,7 @@ export * from "./account-admin/index";
 export * from "./activity-admin";
 export * from "./configuration-ownership";
 export * from "./data-manager-admin/index";
+export * from "./error";
 export * from "./extension-admin/index";
 export * from "./garage";
 export * from "./host-maintenance";

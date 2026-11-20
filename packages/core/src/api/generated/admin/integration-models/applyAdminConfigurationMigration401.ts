@@ -4,7 +4,6 @@
 export type ApplyAdminConfigurationMigration401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

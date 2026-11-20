@@ -1,5 +1,9 @@
-import { type BBox, fetchJson } from "@openmapx/core";
-import { type CacheClient, captureCacheWriter } from "@openmapx/integration-framework";
+import type { BBox } from "@openmapx/core";
+import {
+  type CacheClient,
+  captureCacheWriter,
+  type HttpClient,
+} from "@openmapx/integration-framework";
 import { COUNTRY_BBOXES } from "./country-bboxes";
 import {
   TRANSPORT_APIS_COMMIT,
@@ -28,13 +32,6 @@ const SUPPORTED_PROTOCOLS: Record<string, ProtocolType> = {
 interface GitTreeEntry {
   path: string;
   type: string;
-}
-
-/** Injectable cache for persistence (set from setup). */
-let _cache: CacheClient | null = null;
-
-export function setCache(cache: CacheClient): void {
-  _cache = cache;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: GitHub API / external JSON
@@ -204,13 +201,7 @@ export function parseEntry(path: string, json: any): RegistryEntry | null {
   };
 }
 
-// Populated by setup(ctx) from the resolved integration config cascade.
-let githubToken: string | undefined;
-export function setGithubToken(value: string | undefined): void {
-  githubToken = value && value.length > 0 ? value : undefined;
-}
-
-function githubAuthHeaders(url: string, token = githubToken): Record<string, string> {
+function githubAuthHeaders(url: string, token: string | undefined): Record<string, string> {
   // Only attach the token to the real GitHub API host. A substring check
   // (url.includes("api.github.com")) would also match e.g.
   // https://api.github.com.evil.com and leak the credential, so compare the
@@ -252,29 +243,35 @@ function collectDataPaths(
   return [...new Set(paths)];
 }
 
+/**
+ * GET one registry document. The GitHub token header goes only to the GitHub
+ * API host, and with it the host client refuses redirects.
+ */
+function getJson<T>(http: HttpClient, url: string, timeoutMs: number, token?: string): Promise<T> {
+  return http.get<T>(url, { timeoutMs, headers: githubAuthHeaders(url, token) });
+}
+
 /** Fetch file listing via jsDelivr (no auth, no rate limits). */
-async function fetchPathsFromJsdelivr(token?: string): Promise<string[]> {
-  const json = await fetchJson<JsDelivrFile>(TRANSPORT_APIS_JSDELIVR_PKG_URL, {
-    timeoutMs: 15_000,
-    headers: githubAuthHeaders(TRANSPORT_APIS_JSDELIVR_PKG_URL, token),
-    errorMessage: ({ status }) => `JSDelivr listing: ${status}`,
-  });
+async function fetchPathsFromJsdelivr(http: HttpClient, token?: string): Promise<string[]> {
+  const json = await getJson<JsDelivrFile>(http, TRANSPORT_APIS_JSDELIVR_PKG_URL, 15_000, token);
   return collectDataPaths(json);
 }
 
 /** Fetch file listing via GitHub Tree API (requires GITHUB_TOKEN for reliable access). */
-async function fetchPathsFromGithub(token?: string): Promise<string[]> {
-  const tree = await fetchJson<{ tree: GitTreeEntry[] }>(TRANSPORT_APIS_GITHUB_TREE_URL, {
-    timeoutMs: 15_000,
-    headers: githubAuthHeaders(TRANSPORT_APIS_GITHUB_TREE_URL, token),
-    errorMessage: ({ status }) => `GitHub tree: ${status}`,
-  });
+async function fetchPathsFromGithub(http: HttpClient, token?: string): Promise<string[]> {
+  const tree = await getJson<{ tree: GitTreeEntry[] }>(
+    http,
+    TRANSPORT_APIS_GITHUB_TREE_URL,
+    15_000,
+    token,
+  );
   return tree.tree
     .filter((e) => e.type === "blob" && e.path.startsWith("data/") && e.path.endsWith(".json"))
     .map((e) => e.path);
 }
 
 async function fetchInBatchesFrom(
+  http: HttpClient,
   paths: string[],
   baseUrl: string,
   token?: string,
@@ -283,15 +280,9 @@ async function fetchInBatchesFrom(
   for (let i = 0; i < paths.length; i += MAX_CONCURRENT) {
     const batch = paths.slice(i, i + MAX_CONCURRENT);
     const results = await Promise.allSettled(
-      batch.map(async (path) => {
-        const url = `${baseUrl}/${path}`;
-        const json = await fetchJson(url, {
-          timeoutMs: 10_000,
-          headers: githubAuthHeaders(url, token),
-          nullOnError: true,
-        });
-        return json ? parseEntry(path, json) : null;
-      }),
+      batch.map(async (path) =>
+        parseEntry(path, await getJson(http, `${baseUrl}/${path}`, 10_000, token)),
+      ),
     );
     for (const result of results) {
       if (result.status === "fulfilled" && result.value) {
@@ -302,11 +293,15 @@ async function fetchInBatchesFrom(
   return entries;
 }
 
-export async function fetchRegistryEntries(
-  options: { cache?: CacheClient | null; githubToken?: string; preferCache?: boolean } = {},
-): Promise<RegistryEntry[]> {
-  const cache = options.cache === undefined ? _cache : options.cache;
-  const token = options.githubToken === undefined ? githubToken : options.githubToken;
+export async function fetchRegistryEntries(options: {
+  http: HttpClient;
+  cache?: CacheClient | null;
+  githubToken?: string;
+  preferCache?: boolean;
+}): Promise<RegistryEntry[]> {
+  const { http } = options;
+  const cache = options.cache ?? null;
+  const token = options.githubToken || undefined;
   let entries: RegistryEntry[] | null = null;
 
   // Integration reloads (every credential or config edit) rebuild this
@@ -320,8 +315,8 @@ export async function fetchRegistryEntries(
   const writer = cache ? await captureCacheWriter(cache) : null;
   // 1. Primary: jsDelivr CDN (no auth, no rate limits, no GitHub API calls)
   try {
-    const paths = await fetchPathsFromJsdelivr(token);
-    entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_JSDELIVR_CDN_BASE, token);
+    const paths = await fetchPathsFromJsdelivr(http, token);
+    entries = await fetchInBatchesFrom(http, paths, TRANSPORT_APIS_JSDELIVR_CDN_BASE, token);
     console.log(
       `[transit-registry] ${entries.length} entries loaded (JSDelivr @ ${TRANSPORT_APIS_COMMIT.slice(0, 12)})`,
     );
@@ -332,8 +327,8 @@ export async function fetchRegistryEntries(
   // 2. Fallback: GitHub Tree API + raw.githubusercontent.com
   if (!entries) {
     try {
-      const paths = await fetchPathsFromGithub(token);
-      entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_RAW_BASE, token);
+      const paths = await fetchPathsFromGithub(http, token);
+      entries = await fetchInBatchesFrom(http, paths, TRANSPORT_APIS_RAW_BASE, token);
       console.log(
         `[transit-registry] ${entries.length} entries loaded (GitHub API @ ${TRANSPORT_APIS_COMMIT.slice(0, 12)})`,
       );

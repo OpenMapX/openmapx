@@ -4,7 +4,6 @@
 export type GetAmbientPlacesStatus429 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

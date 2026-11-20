@@ -1,4 +1,5 @@
 import type { HotelOffer } from "@openmapx/core/server";
+import type { HttpClient } from "@openmapx/integration-framework";
 import { fetchLiteApiOffer, type RateOptions } from "./liteapi.js";
 import type { HotelQuery } from "./types.js";
 
@@ -17,9 +18,9 @@ export interface HotelRatesProvider {
 }
 
 /** LiteAPI-backed provider. The route holds one instance per configured key. */
-export function createLiteApiProvider(apiKey: string): HotelRatesProvider {
+export function createLiteApiProvider(http: HttpClient, apiKey: string): HotelRatesProvider {
   return {
     id: "liteapi",
-    searchOffer: (query, opts) => fetchLiteApiOffer(apiKey, opts, query),
+    searchOffer: (query, opts) => fetchLiteApiOffer(http, apiKey, opts, query),
   };
 }

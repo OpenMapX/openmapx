@@ -1,50 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MobilityHttpTransport } from "../src/json-transport.js";
-import { createRisClient } from "../src/server/ris-client.js";
+import { createRisClient, type RisHttp } from "../src/server/ris-client.js";
 
-function createTransport() {
-  const fetchJson = vi.fn();
-  const transport: MobilityHttpTransport = {
-    userAgent: "OpenMapX/test",
-    fetchJson: fetchJson as MobilityHttpTransport["fetchJson"],
-    fetchText: vi.fn(),
-    hostMatchesAllowlist: vi.fn(),
-    privateFeedHostAllowlist: vi.fn(() => []),
-  };
-  return { fetchJson, transport };
+function createHttp() {
+  const get = vi.fn();
+  const post = vi.fn();
+  const http: RisHttp = { get, post };
+  return { get, post, http };
 }
 
 describe("RIS client", () => {
   it("requires both non-blank credentials", () => {
-    const { transport } = createTransport();
+    const { http } = createHttp();
 
-    expect(createRisClient({}, transport).isConfigured()).toBe(false);
-    expect(createRisClient({ clientId: "client" }, transport).isConfigured()).toBe(false);
-    expect(createRisClient({ apiKey: "key" }, transport).isConfigured()).toBe(false);
-    expect(createRisClient({ clientId: "  ", apiKey: "key" }, transport).isConfigured()).toBe(
-      false,
-    );
-    expect(createRisClient({ clientId: "client", apiKey: "key" }, transport).isConfigured()).toBe(
-      true,
-    );
+    expect(createRisClient({}, http).isConfigured()).toBe(false);
+    expect(createRisClient({ clientId: "client" }, http).isConfigured()).toBe(false);
+    expect(createRisClient({ apiKey: "key" }, http).isConfigured()).toBe(false);
+    expect(createRisClient({ clientId: "  ", apiKey: "key" }, http).isConfigured()).toBe(false);
+    expect(createRisClient({ clientId: "client", apiKey: "key" }, http).isConfigured()).toBe(true);
   });
 
   it("keeps credentials isolated between client instances", async () => {
-    const { fetchJson, transport } = createTransport();
-    fetchJson.mockResolvedValue({ ok: true });
+    const { get, http } = createHttp();
+    get.mockResolvedValue({ ok: true });
     const stationClient = createRisClient(
       { clientId: "station-client", apiKey: "station-key" },
-      transport,
+      http,
     );
     const routingClient = createRisClient(
       { clientId: "routing-client", apiKey: "routing-key" },
-      transport,
+      http,
     );
 
     await stationClient.get("stations", "/stop-places/1");
     await routingClient.get("routing", "/location/2");
 
-    expect(fetchJson.mock.calls.map((call) => call[1]?.headers)).toEqual([
+    expect(get.mock.calls.map((call) => call[1]?.headers)).toEqual([
       {
         "DB-Client-ID": "station-client",
         "DB-Api-Key": "station-key",
@@ -59,78 +49,73 @@ describe("RIS client", () => {
   });
 
   it("constructs GET URLs and forwards the caller timeout", async () => {
-    const { fetchJson, transport } = createTransport();
-    fetchJson.mockResolvedValue({ stopPlaces: [] });
-    const client = createRisClient({ clientId: "client", apiKey: "key" }, transport);
+    const { get, http } = createHttp();
+    get.mockResolvedValue({ stopPlaces: [] });
+    const client = createRisClient({ clientId: "client", apiKey: "key" }, http);
 
     await client.get("stations", "/stop-places/by-position?latitude=50&longitude=6", 125);
 
-    expect(fetchJson).toHaveBeenCalledWith(
+    expect(get).toHaveBeenCalledWith(
       "https://apis.deutschebahn.com/db/apis/ris-stations/v1/stop-places/by-position?latitude=50&longitude=6",
-      expect.objectContaining({
-        method: "GET",
-        timeoutMs: 125,
-        allowedRedirectOrigin: "https://apis.deutschebahn.com",
-      }),
+      expect.objectContaining({ timeoutMs: 125 }),
     );
   });
 
-  it("posts a serialized body with RIS media headers", async () => {
-    const { fetchJson, transport } = createTransport();
-    fetchJson.mockResolvedValue({ trips: [] });
-    const client = createRisClient({ clientId: "client", apiKey: "key" }, transport);
+  it("posts the body with RIS media headers", async () => {
+    const { post, http } = createHttp();
+    post.mockResolvedValue({ trips: [] });
+    const client = createRisClient({ clientId: "client", apiKey: "key" }, http);
 
     await client.post("routing", "/multimodal", { origin: "A" }, 250);
 
-    expect(fetchJson).toHaveBeenCalledWith(
+    expect(post).toHaveBeenCalledWith(
       "https://apis.deutschebahn.com/db/apis/ris-routing/v2/multimodal",
+      { origin: "A" },
       {
-        method: "POST",
-        body: '{"origin":"A"}',
         timeoutMs: 250,
-        allowedRedirectOrigin: "https://apis.deutschebahn.com",
         headers: {
           "DB-Client-ID": "client",
           "DB-Api-Key": "key",
           Accept: "application/vnd.de.db.ris+json",
-          "Content-Type": "application/json",
         },
       },
     );
   });
 
-  it("reports the operation when the transport rejects malformed JSON", async () => {
-    const { fetchJson, transport } = createTransport();
-    fetchJson.mockRejectedValue(new SyntaxError("Unexpected token"));
-    const client = createRisClient({ clientId: "client", apiKey: "key" }, transport);
+  it("reports the operation and keeps the upstream status on the cause", async () => {
+    const { get, http } = createHttp();
+    const upstream = Object.assign(new Error("HTTP 503 Service Unavailable"), { status: 503 });
+    get.mockRejectedValue(upstream);
+    const client = createRisClient({ clientId: "client", apiKey: "key" }, http);
 
-    await expect(client.get("maps", "/journey-positions")).rejects.toThrow(
-      "RIS maps GET /journey-positions failed: Unexpected token",
+    const failure = client.get("stations", "/stop-places/1");
+    await expect(failure).rejects.toThrow(
+      "RIS stations GET /stop-places/1 failed: HTTP 503 Service Unavailable",
     );
+    await expect(failure).rejects.toMatchObject({ cause: upstream });
   });
 
-  it("reports the operation when the transport rejects a non-success response", async () => {
-    const { fetchJson, transport } = createTransport();
-    fetchJson.mockRejectedValue(
-      new Error(
-        "Request failed: HTTP 503 for https://apis.deutschebahn.com/db/apis/ris-stations/v1/stop-places/1",
-      ),
-    );
-    const client = createRisClient({ clientId: "client", apiKey: "key" }, transport);
+  it("reports the operation when the host client rejects malformed JSON", async () => {
+    const { get, http } = createHttp();
+    const malformed = new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+    get.mockRejectedValue(malformed);
+    const client = createRisClient({ clientId: "client", apiKey: "key" }, http);
 
-    await expect(client.get("stations", "/stop-places/1")).rejects.toThrow(
-      "RIS stations GET /stop-places/1 failed: Request failed: HTTP 503",
+    const failure = client.get("maps", "/journey-positions");
+    await expect(failure).rejects.toThrow(
+      "RIS maps GET /journey-positions failed: Unexpected token '<'",
     );
+    await expect(failure).rejects.toMatchObject({ cause: malformed });
   });
 
-  it("rejects requests before transport use when credentials are incomplete", async () => {
-    const { fetchJson, transport } = createTransport();
-    const client = createRisClient({ clientId: "client" }, transport);
+  it("rejects requests before any request when credentials are incomplete", async () => {
+    const { get, http } = createHttp();
+    const client = createRisClient({ clientId: "client" }, http);
 
     await expect(client.get("stations", "/stop-places/1")).rejects.toThrow(
       "DB RIS credentials not configured",
     );
-    expect(fetchJson).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
   });
 });
 
@@ -138,26 +123,26 @@ describe("RIS client cancellation", () => {
   it.each(["get", "post"] as const)(
     "preserves caller cancellation for %s with positional timeout",
     async (method) => {
-      const { fetchJson, transport } = createTransport();
+      const { get, post, http } = createHttp();
       const controller = new AbortController();
       const reason = new Error("provider cancelled");
-      fetchJson.mockImplementation(
-        (_url, options) =>
-          new Promise((_resolve, reject) => {
-            options?.signal?.addEventListener("abort", () => reject(options.signal.reason), {
-              once: true,
-            });
-          }),
-      );
-      const client = createRisClient({ clientId: "client", apiKey: "key" }, transport);
+      const pendingRequest = (options: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      get.mockImplementation((_url, options) => pendingRequest(options));
+      post.mockImplementation((_url, _body, options) => pendingRequest(options));
+      const client = createRisClient({ clientId: "client", apiKey: "key" }, http);
       const pending =
         method === "get"
           ? client.get("stations", "/stop-places/1", 125, controller.signal)
           : client.post("routing", "/multimodal", {}, 250, controller.signal);
       const assertion = expect(pending).rejects.toBe(reason);
       controller.abort(reason);
-      // Deadline remains alongside cancellation; existing timeout calls still work.
-      expect(fetchJson.mock.calls[0]?.[1]?.timeoutMs).toBe(method === "get" ? 125 : 250);
+      const options = method === "get" ? get.mock.calls[0]?.[1] : post.mock.calls[0]?.[2];
+      expect(options?.timeoutMs).toBe(method === "get" ? 125 : 250);
       await assertion;
     },
   );

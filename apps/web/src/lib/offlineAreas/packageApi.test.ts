@@ -254,17 +254,22 @@ describe("offline package API client", () => {
     },
   );
 
-  it("surfaces a bounded 429 retry delay", async () => {
+  it.each([
+    { label: "the body over the header", body: 599, header: "30", expected: 599 },
+    { label: "the header without a body delay", body: undefined, header: "30", expected: 30 },
+    { label: "the header over an out-of-range body", body: 900, header: "30", expected: 30 },
+    { label: "the body without a header", body: 45, header: undefined, expected: 45 },
+  ])("surfaces a bounded 429 retry delay from $label", async ({ body, header, expected }) => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         Response.json(
           {
-            errorCode: "prepare-rate-limit",
-            errorMessage: "Offline package preparation quota exceeded",
-            retryAfterSeconds: 599,
+            error: "Offline package preparation quota exceeded",
+            code: "prepare-rate-limit",
+            ...(body === undefined ? {} : { retryAfterSeconds: body }),
           },
-          { status: 429, headers: { "Retry-After": "599" } },
+          { status: 429, headers: header === undefined ? {} : { "Retry-After": header } },
         ),
       ),
     );
@@ -279,7 +284,8 @@ describe("offline package API client", () => {
     expect(error).toMatchObject({
       code: "prepare-rate-limit",
       status: 429,
-      retryAfterSeconds: 599,
+      message: "Offline package preparation quota exceeded",
+      retryAfterSeconds: expected,
     });
   });
 
@@ -301,12 +307,12 @@ describe("offline package API client", () => {
     });
   });
 
-  it("accepts a typed unavailable capability from a failed public proxy", async () => {
+  it("reads an unavailable capability from the public proxy's error envelope", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         Response.json(
-          { available: false, provider: "openmapx", reason: "source-unavailable" },
+          { error: "Offline package service unavailable", code: "source-unavailable" },
           { status: 502 },
         ),
       ),
@@ -316,6 +322,19 @@ describe("offline package API client", () => {
       available: false,
       provider: "openmapx",
       reason: "source-unavailable",
+    });
+  });
+
+  it("reports any other capability failure as an error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: "Too many requests" }, { status: 429 })),
+    );
+
+    await expect(defaultOfflinePackageApi.capability()).rejects.toMatchObject({
+      code: "http-429",
+      status: 429,
+      message: "Too many requests",
     });
   });
 });

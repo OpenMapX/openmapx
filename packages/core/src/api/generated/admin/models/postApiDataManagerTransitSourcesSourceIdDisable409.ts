@@ -4,7 +4,6 @@
 export type PostApiDataManagerTransitSourcesSourceIdDisable409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -19,13 +18,12 @@ export type PostApiDataManagerTransitSourcesSourceIdDisable409 =
       code?: string;
     }
   | {
-      ok: false;
-      reason: "in-flight" | "duplicate-idempotency-key";
+      error: string;
+      code: "in-flight" | "duplicate-idempotency-key";
       /** @nullable */
       existingJobId: string | null;
     }
   | {
-      ok: false;
       error: string;
       code: "source_action_not_allowed";
     };

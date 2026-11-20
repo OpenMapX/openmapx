@@ -136,7 +136,6 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const unavailable = await request();
         expect(unavailable.statusCode).toBe(503);
         expect(unavailable.json()).toEqual({
-          ok: false,
           error: "Overture prerequisite inspection is unavailable",
         });
       } finally {

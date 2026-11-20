@@ -2,6 +2,8 @@ import type { CacheClient } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   createPassthroughCache,
+  fakeHttpClient,
+  httpStatus,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
@@ -23,23 +25,23 @@ it("keeps the real shared NOAA catalog receipt through normalization on a differ
       stored.set(key, value);
     },
   };
-  const fetcher = vi.fn(async (input: string | URL | Request) =>
-    new URL(input instanceof Request ? input.url : input).hostname ===
-    "api.tidesandcurrents.noaa.gov"
-      ? new Response(
-          JSON.stringify({
-            stations: [{ id: "8443970", name: "Boston", lat: 42.35, lng: -71.05 }],
-          }),
-          { status: 200 },
-        )
-      : new Response("unavailable", { status: 503 }),
+  // The Kartverket station list still uses its own fetch; every other network is unavailable.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("unavailable", { status: 503 })),
   );
-  vi.stubGlobal("fetch", fetcher);
+  const http = fakeHttpClient((req) =>
+    new URL(req.url).hostname === "api.tidesandcurrents.noaa.gov"
+      ? { stations: [{ id: "8443970", name: "Boston", lat: 42.35, lng: -71.05 }] }
+      : httpStatus(503),
+  );
+  const noaaRequests = () =>
+    http.calls.filter((call) => new URL(call.url).hostname === "api.tidesandcurrents.noaa.gov");
   const metadata = manifest.dataSources.find((s) => s.sourceId === "noaa-co-ops");
   if (!metadata) throw new Error("missing NOAA metadata");
   const original = metadata.attribution;
   metadata.attribution = "ORIGINAL NOTICE";
-  const ctx = createMockIntegrationContext({ cache });
+  const ctx = createMockIntegrationContext({ cache, http });
   setup(ctx);
   const route = ctx.registered.routes.find((r) => r.path === "/stations");
   if (!route) throw new Error("missing station route");
@@ -61,25 +63,12 @@ it("keeps the real shared NOAA catalog receipt through normalization on a differ
   };
   try {
     expect(await request("-72")).toContain("ORIGINAL NOTICE");
-    expect(
-      fetcher.mock.calls.filter(
-        ([url]) =>
-          new URL(url instanceof Request ? url.url : url).hostname ===
-          "api.tidesandcurrents.noaa.gov",
-      ),
-    ).toHaveLength(3);
+    expect(noaaRequests()).toHaveLength(3);
     metadata.attribution = "REPLACEMENT NOTICE";
-    fetcher.mockClear();
     const second = await request("-73");
     expect(second).toContain("ORIGINAL NOTICE");
     expect(second).not.toContain("REPLACEMENT NOTICE");
-    expect(
-      fetcher.mock.calls.filter(
-        ([url]) =>
-          new URL(url instanceof Request ? url.url : url).hostname ===
-          "api.tidesandcurrents.noaa.gov",
-      ),
-    ).toHaveLength(0);
+    expect(noaaRequests()).toHaveLength(3);
   } finally {
     metadata.attribution = original;
   }

@@ -22,8 +22,6 @@ vi.mock("../hafas-mgate", async (importOriginal) => {
 
 vi.mock("../fetcher", () => ({
   fetchRegistryEntries: vi.fn(),
-  setCache: vi.fn(),
-  setGithubToken: vi.fn(),
 }));
 
 import { fetchRegistryEntries } from "../fetcher";

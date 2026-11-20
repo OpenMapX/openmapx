@@ -4,7 +4,6 @@
 export type PostApiAdminAmbientPlacesEnabled503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

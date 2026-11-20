@@ -1,6 +1,7 @@
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flickrPhotoProvider, setFlickrApiKey } from "./provider.js";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { createFlickrPhotoProvider } from "./provider.js";
 
 // Flickr's photos.search returns size-variant URLs (url_l/url_z/url_m/url_sq)
 // plus a numeric license id. These tests pin the size-preference fallback, the
@@ -8,7 +9,7 @@ import { flickrPhotoProvider, setFlickrApiKey } from "./provider.js";
 // `datetaken` → ISO conversion, and the no-key / empty-result short-circuits.
 
 function mockOk(data: unknown) {
-  return Response.json(data);
+  return data;
 }
 
 const QUERY = { lat: 48.8584, lng: 2.2945, limit: 6 };
@@ -31,18 +32,22 @@ function flickrPhoto(overrides: Record<string, unknown> = {}) {
   };
 }
 
-let mockFetch: ReturnType<typeof vi.fn>;
+/** Called with each request URL, query included; answers the response body. */
+let mockFetch: Mock<(input: unknown) => unknown>;
+let apiKey: string | undefined;
+let flickrPhotoProvider: ReturnType<typeof createFlickrPhotoProvider>;
 
 beforeEach(() => {
-  mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-  setFlickrApiKey("test-flickr-key");
-});
-
-afterEach(() => {
-  setFlickrApiKey(undefined);
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+  mockFetch = vi.fn<(input: unknown) => unknown>();
+  apiKey = "test-flickr-key";
+  const http = fakeHttpClient(({ url, options }) => {
+    const requestUrl = new URL(url);
+    for (const [name, value] of Object.entries(options?.params ?? {})) {
+      if (value !== undefined) requestUrl.searchParams.set(name, String(value));
+    }
+    return mockFetch(requestUrl.toString());
+  });
+  flickrPhotoProvider = createFlickrPhotoProvider({ http, apiKey: () => apiKey });
 });
 
 describe("Flickr photo provider", () => {
@@ -149,14 +154,14 @@ describe("Flickr photo provider", () => {
   });
 
   it("returns an empty array when no API key is configured", async () => {
-    setFlickrApiKey(undefined);
+    apiKey = undefined;
 
     expect(await flickrPhotoProvider.search(QUERY)).toEqual([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("returns an empty array when the upstream call fails", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
+    mockFetch.mockResolvedValueOnce(httpStatus(500));
     expect(await flickrPhotoProvider.search(QUERY)).toEqual([]);
   });
 });

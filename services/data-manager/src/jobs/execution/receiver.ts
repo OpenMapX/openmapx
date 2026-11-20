@@ -24,7 +24,7 @@ import {
   type MotisOperationsPolicy,
   transitAllowedCountries,
 } from "../transitous/operations-profile.js";
-import type { DataExecutionReceiver } from "./api.js";
+import { type DataExecutionReceiver, TransitScopeRejected } from "./api.js";
 import type { DataConfigurationMaintenance } from "./configuration-maintenance.js";
 import type { createDataExecutionDispatcher } from "./dispatch.js";
 import { transitChildCandidateId } from "./ops-children.js";
@@ -61,9 +61,7 @@ export function createDataExecutionReceiver(deps: {
           (country) => !transitAllowedCountries(deps.operationsPolicy).includes(country),
         ))
     )
-      throw Object.assign(Error("Countries outside configured operations profile"), {
-        statusCode: 422,
-      });
+      throw new TransitScopeRejected();
     return input;
   };
   const admitRoot = (

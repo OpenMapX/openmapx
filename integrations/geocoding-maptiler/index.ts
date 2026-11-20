@@ -1,9 +1,22 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { maptilerGeocodingService, resolveMaptilerApiKey, setMaptilerApiKey } from "./provider.js";
+import {
+  maptilerDailyBudget,
+  sharedAdmissionOf,
+} from "@openmapx/integration-framework/provider-daily-budget";
+import { createMaptilerGeocodingService, resolveMaptilerApiKey } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.onActivate(() =>
-    setMaptilerApiKey(resolveMaptilerApiKey(ctx.config.apiKey as string | undefined)),
+  let resolved: ReturnType<typeof resolveMaptilerApiKey>;
+  ctx.onActivate(() => {
+    resolved = resolveMaptilerApiKey(ctx.config.apiKey as string | undefined);
+  });
+  const sharedBudget = maptilerDailyBudget(sharedAdmissionOf(ctx.upstreamRuntime));
+  ctx.registerGeocodingProvider(
+    createMaptilerGeocodingService({
+      http: ctx.http,
+      apiKey: () => resolved?.key,
+      budget: () => (resolved?.shared ? sharedBudget : null),
+      log: ctx.log,
+    }),
   );
-  ctx.registerGeocodingProvider(maptilerGeocodingService);
 }

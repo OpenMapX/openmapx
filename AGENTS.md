@@ -7,8 +7,11 @@ provider and attribution contracts. Use the [built-in integration guide](docs/do
 for in-tree features and the [external extension guide](docs/docs/developer/building-an-external-extension.md)
 for installed community extensions; these have different execution and trust boundaries.
 
-- Access host services through `IntegrationContext`. Use its HTTP client for provider
-  requests and `upstreamRuntime` for quota-bound acquisition; preserve source-policy controls.
+- Access host services through `IntegrationContext`. Use its HTTP client (or an
+  `HttpClient` injected from it) for credentialed, quota-bound, binary or tile requests
+  and `upstreamRuntime` for quota-bound acquisition; preserve source-policy controls.
+  `fetchJson` is for public, unkeyed JSON from a fixed host, `safeFetch*` for URLs from
+  data or configuration, and raw `fetch` is refused by `pnpm check-provider-http`.
 - Keep integrations' web-host imports within the focused `@/integration-api/...` surface.
 - For statically declared upstreams, update manifest source/privacy metadata and
   source-ID-keyed localized disclosures together. Credit the sources that supplied the result.

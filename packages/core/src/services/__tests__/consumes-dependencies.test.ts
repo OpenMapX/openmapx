@@ -172,6 +172,11 @@ describe("dependency validation remains with the renderer", () => {
     expect(detectConsumesCycle(services)).toBeNull();
     expect(() => renderCompose(services, {})).toThrow(message);
   });
+
+  it("orders a consumer after the first of two default producers, as selection does", () => {
+    const second = service("second", [{ type: "osm-pbf", sourceDir: "data/second" }]);
+    expect(resolveConsumesDependencies([implicit, base, second]).get("router")).toEqual(["base"]);
+  });
 });
 
 describe("instance-aware cycles", () => {

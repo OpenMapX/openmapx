@@ -38,7 +38,6 @@ export {
   withBrandingContributors,
 } from "./brandFilter";
 export { isBuildingStyleLayer } from "./buildingStyle";
-export { withCache } from "./cache-helpers";
 export type { CategoryFacet, FacetPlacement, FacetType } from "./categoryFacets";
 export {
   applyFacetFilters,
@@ -102,8 +101,8 @@ export {
   FetchJsonHttpError,
   type FetchJsonOptions,
   fetchJson,
+  hasPotentiallyCredentialBearingHeaders,
   isJsonMediaType,
-  parseRetryAfterMs,
   readBoundedJsonResponse,
   readBoundedResponseText,
 } from "./fetchJson";
@@ -214,7 +213,6 @@ export {
   serializeOsmOpeningHours,
   serializeOsmOpeningHoursRule,
 } from "./osmOpeningHoursAst";
-export { otpMode } from "./otp";
 export {
   buildNodeMap,
   buildWayMap,

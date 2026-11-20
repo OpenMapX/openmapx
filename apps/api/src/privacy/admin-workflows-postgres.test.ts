@@ -175,7 +175,10 @@ suite("privacy case administration on PostgreSQL", () => {
         payload: { version: request.version + 1, reasonCode: "again" },
       });
       expect(second.statusCode).toBe(409);
-      expect(second.json()).toEqual({ code: "IDENTITY_VERIFICATION_NOT_ALLOWED" });
+      expect(second.json()).toEqual({
+        error: "Conflict",
+        code: "IDENTITY_VERIFICATION_NOT_ALLOWED",
+      });
     } finally {
       await server.close();
     }
@@ -198,13 +201,13 @@ suite("privacy case administration on PostgreSQL", () => {
       expect(invalid.statusCode).toBe(400);
       const stale = await decide({ version: 99, decision: "refused", reasonCode: "scope" });
       expect(stale.statusCode).toBe(409);
-      expect(stale.json()).toEqual({ code: "REQUEST_VERSION_CONFLICT" });
+      expect(stale.json()).toEqual({ error: "Conflict", code: "REQUEST_VERSION_CONFLICT" });
       const missing = await server.inject({
         method: "GET",
         url: `/api/privacy/admin/requests/${randomUUID()}`,
       });
       expect(missing.statusCode).toBe(404);
-      expect(missing.json()).toEqual({ code: "REQUEST_NOT_FOUND" });
+      expect(missing.json()).toEqual({ error: "Not Found", code: "REQUEST_NOT_FOUND" });
       const outage = await broken.inject({
         method: "POST",
         url: `/api/privacy/admin/requests/${request.id}/decision`,
@@ -212,7 +215,10 @@ suite("privacy case administration on PostgreSQL", () => {
         payload: { version: 1, decision: "refused", reasonCode: "scope" },
       });
       expect(outage.statusCode).toBe(503);
-      expect(outage.json()).toEqual({ code: "PRIVACY_SERVICE_UNAVAILABLE" });
+      expect(outage.json()).toEqual({
+        error: "Service Unavailable",
+        code: "PRIVACY_SERVICE_UNAVAILABLE",
+      });
       const completed = await caseIn("completed");
       const terminal = await server.inject({
         method: "POST",
@@ -221,7 +227,7 @@ suite("privacy case administration on PostgreSQL", () => {
         payload: { version: completed.version, decision: "refused", reasonCode: "late" },
       });
       expect(terminal.statusCode).toBe(409);
-      expect(terminal.json()).toEqual({ code: "CASE_DECISION_NOT_ALLOWED" });
+      expect(terminal.json()).toEqual({ error: "Conflict", code: "CASE_DECISION_NOT_ALLOWED" });
     } finally {
       await server.close();
       await broken.close();
@@ -313,7 +319,7 @@ suite("privacy case administration on PostgreSQL", () => {
         expect(first.statusCode, first.body).toBe(202);
         const changed = await post(server, key, body(locator, "post"));
         expect(changed.statusCode, changed.body).toBe(409);
-        expect(changed.json()).toEqual({ code: "IDEMPOTENCY_KEY_REUSED" });
+        expect(changed.json()).toEqual({ error: "Conflict", code: "IDEMPOTENCY_KEY_REUSED" });
         expect(await caseCount()).toBe(before + 1);
       } finally {
         await server.close();
@@ -486,7 +492,7 @@ suite("privacy case administration on PostgreSQL", () => {
       // No proof at all.
       const without = await exportCase({ "x-admin-reauth-proof": randomUUID() });
       expect(without.statusCode).toBe(409);
-      expect(without.json()).toEqual({ code: "REAUTHENTICATION_REQUIRED" });
+      expect(without.json()).toEqual({ error: "Conflict", code: "REAUTHENTICATION_REQUIRED" });
 
       // A completed ceremony: started in one session, finished by a new sign-in.
       const ceremony = await new AdminActionReauthentication(fixture.db).start({
@@ -619,7 +625,10 @@ suite("privacy case administration on PostgreSQL", () => {
         payload: {},
       });
       expect(response.statusCode).toBe(409);
-      expect(response.json()).toEqual({ code: "EXACT_SUBJECT_LOCATOR_REQUIRED" });
+      expect(response.json()).toEqual({
+        error: "Conflict",
+        code: "EXACT_SUBJECT_LOCATOR_REQUIRED",
+      });
       const events = await fixture.db
         .select({
           eventType: dataSubjectRequestEvent.eventType,
@@ -679,7 +688,10 @@ suite("privacy case administration on PostgreSQL", () => {
         payload: {},
       });
       expect(exported.statusCode).toBe(503);
-      expect(exported.json()).toEqual({ code: "SUBJECT_LOCATOR_UNREADABLE" });
+      expect(exported.json()).toEqual({
+        error: "Service Unavailable",
+        code: "SUBJECT_LOCATOR_UNREADABLE",
+      });
     } finally {
       await server.close();
     }

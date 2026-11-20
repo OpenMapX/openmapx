@@ -12,8 +12,6 @@ import type { RegistryEntry } from "../registry-types";
 // providers are actually contract-checked — one fixture per supported adapter.
 vi.mock("../fetcher", () => ({
   fetchRegistryEntries: vi.fn(),
-  setCache: vi.fn(),
-  setGithubToken: vi.fn(),
 }));
 
 import { fetchRegistryEntries } from "../fetcher";

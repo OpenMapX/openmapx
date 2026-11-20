@@ -77,7 +77,7 @@ export function setup(ctx: IntegrationContext): void {
   const liteApiCurrency =
     (typeof ctx.config.liteApiCurrency === "string" && ctx.config.liteApiCurrency.trim()) || "EUR";
   /** One provider instance per configured key; null ⇒ live rates off. */
-  const ratesProvider = liteApiKey ? createLiteApiProvider(liteApiKey) : null;
+  const ratesProvider = liteApiKey ? createLiteApiProvider(ctx.http, liteApiKey) : null;
   /** Live lowest-rate cache: prices are short-lived. */
   const OFFER_TTL = 15 * 60; // 15 minutes
   /** A "no rate / no availability" answer is cached only briefly, so a transient

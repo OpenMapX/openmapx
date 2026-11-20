@@ -46,9 +46,8 @@ const offlineErrors = {
 };
 const principalRequestError = {
   headers: {
-    ok: false,
-    errorCode: "invalid-principal",
-    errorMessage: "Exactly one valid offline package principal is required",
+    error: "Exactly one valid offline package principal is required",
+    code: "invalid-principal",
   },
 } as const;
 const packageArchive = {
@@ -342,7 +341,7 @@ export const dataManagerOperations = {
     responses: {
       ...dataMutationErrors,
       200: json(z.strictObject({ ok: z.literal(true), status: z.literal("restart-initiated") })),
-      503: json(httpErrorSchema),
+      503: json(z.union([httpErrorSchema, t.transitRestartUnavailableSchema])),
     },
   },
   inspectCatalogReview: {
@@ -373,7 +372,6 @@ export const dataManagerOperations = {
       ...dataMutationErrors,
       200: json(t.transitApprovalSchema),
       404: json(httpErrorSchema),
-      422: json(t.transitApprovalMismatchSchema),
       503: json(httpErrorSchema),
     },
   },
@@ -478,10 +476,7 @@ export const dataManagerOperations = {
       ...offlineErrors,
       200: json(f.offlinePackageReadySchema),
       202: json(f.offlinePackagePreparingSchema),
-      400: json(
-        z.union([httpErrorSchema, f.offlinePackageErrorSchema, f.offlinePackageUnsuccessfulSchema]),
-      ),
-      409: json(f.offlinePackageUnsuccessfulSchema),
+      409: json(f.offlinePackageErrorSchema),
       429: json(
         z.union([httpErrorSchema, f.offlinePackageErrorSchema]),
         h.authenticationRetryAfterHeadersSchema,

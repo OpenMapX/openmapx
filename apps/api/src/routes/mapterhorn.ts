@@ -40,11 +40,11 @@ export const mapterhornRoute: FastifyPluginAsync = async (fastify) => {
         !/^(?:0|[1-9]\d*)$/.test(x) ||
         !/^(?:0|[1-9]\d*)$/.test(y)
       ) {
-        return reply.status(400).send({ message: "Invalid terrain tile coordinate" });
+        return reply.status(400).send({ error: "Invalid terrain tile coordinate" });
       }
       const zoom = Number(z);
       if (zoom > 17 || Number(x) >= 2 ** zoom || Number(y) >= 2 ** zoom) {
-        return reply.status(400).send({ message: "Invalid terrain tile coordinate" });
+        return reply.status(400).send({ error: "Invalid terrain tile coordinate" });
       }
 
       let upstream: Response;
@@ -55,24 +55,24 @@ export const mapterhornRoute: FastifyPluginAsync = async (fastify) => {
           signal: AbortSignal.timeout(15_000),
         });
       } catch {
-        return reply.status(502).send({ message: "Terrain provider unavailable" });
+        return reply.status(502).send({ error: "Terrain provider unavailable" });
       }
       if (!upstream.ok) {
         await upstream.body?.cancel();
         return reply
           .status(upstream.status === 404 ? 404 : 502)
-          .send({ message: "Terrain tile unavailable" });
+          .send({ error: "Terrain tile unavailable" });
       }
       if (upstream.headers.get("content-type")?.split(";", 1)[0] !== "image/webp") {
         await upstream.body?.cancel();
-        return reply.status(502).send({ message: "Unexpected terrain tile format" });
+        return reply.status(502).send({ error: "Unexpected terrain tile format" });
       }
       const declaredLength = Number(upstream.headers.get("content-length"));
       if (declaredLength > MAX_TILE_BYTES) {
         await upstream.body?.cancel();
-        return reply.status(502).send({ message: "Terrain tile too large" });
+        return reply.status(502).send({ error: "Terrain tile too large" });
       }
-      if (!upstream.body) return reply.status(502).send({ message: "Empty terrain tile" });
+      if (!upstream.body) return reply.status(502).send({ error: "Empty terrain tile" });
 
       const reader = upstream.body.getReader();
       const chunks: Uint8Array[] = [];
@@ -84,15 +84,15 @@ export const mapterhornRoute: FastifyPluginAsync = async (fastify) => {
           size += value.byteLength;
           if (size > MAX_TILE_BYTES) {
             await reader.cancel();
-            return reply.status(502).send({ message: "Terrain tile too large" });
+            return reply.status(502).send({ error: "Terrain tile too large" });
           }
           chunks.push(value);
         }
       } catch {
         await reader.cancel().catch(() => {});
-        return reply.status(502).send({ message: "Terrain provider unavailable" });
+        return reply.status(502).send({ error: "Terrain provider unavailable" });
       }
-      if (size === 0) return reply.status(502).send({ message: "Empty terrain tile" });
+      if (size === 0) return reply.status(502).send({ error: "Empty terrain tile" });
       reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
       reply.header("Cross-Origin-Resource-Policy", "cross-origin");
       return reply.type("image/webp").send(Buffer.concat(chunks, size));

@@ -1,5 +1,6 @@
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
 
@@ -9,12 +10,25 @@ interface RouteRegistration {
   handler: RouteHandler;
 }
 
+/** Answers each Graph API request like fetch, given the URL with its query. */
+let activeFetch: (url: string) => Promise<Response> = async () => Response.json({});
+
+const http = fakeHttpClient(async ({ url, options }) => {
+  const requestUrl = new URL(url);
+  for (const [name, value] of Object.entries(options?.params ?? {})) {
+    if (value !== undefined) requestUrl.searchParams.set(name, String(value));
+  }
+  const response = await activeFetch(requestUrl.toString());
+  return response.ok ? response.json() : httpStatus(response.status);
+});
+
 function buildCtx(overrides: { accessToken?: string } = {}) {
   const routes: RouteRegistration[] = [];
   const registerStreetLevelProvider = vi.fn();
   const ctx = {
     manifest: structuredClone(manifest),
     config: { accessToken: overrides.accessToken ?? "TOKEN" },
+    http,
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     cache: {
       get: vi.fn(),
@@ -82,15 +96,11 @@ describe("street-level-imagery-mapillary setup", () => {
 });
 
 describe("street-level-imagery-mapillary /nearest", () => {
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: Mock<(url: string) => Promise<Response>>;
 
   beforeEach(() => {
-    fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
+    fetchMock = vi.fn<(url: string) => Promise<Response>>();
+    activeFetch = fetchMock;
   });
 
   // Mapillary rejects /images bbox queries wider than ~0.0002 deg per side
@@ -183,15 +193,11 @@ describe("street-level-imagery-mapillary /nearest", () => {
 });
 
 describe("street-level-imagery-mapillary /search", () => {
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: Mock<(url: string) => Promise<Response>>;
 
   beforeEach(() => {
-    fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
+    fetchMock = vi.fn<(url: string) => Promise<Response>>();
+    activeFetch = fetchMock;
   });
 
   it("rejects invalid input with 400", async () => {
@@ -303,5 +309,22 @@ describe("street-level-imagery-mapillary /search", () => {
       reply,
     );
     expect(reply.status).toHaveBeenCalledWith(502);
+  });
+});
+
+describe("street-level-imagery-mapillary /images/:id", () => {
+  it("answers 502 for a rate-limited lookup and keeps the token out of the log", async () => {
+    activeFetch = async () => new Response(null, { status: 429 });
+    const { ctx, routes } = buildCtx({ accessToken: "SECRET-TOKEN" });
+    setup(ctx);
+    const reply = makeReply();
+    await findRoute(routes, "/images/:id").handler(
+      { query: {}, params: { id: "123" }, body: undefined, clientKey: "c", headers: {} },
+      reply,
+    );
+    expect(reply.status).toHaveBeenCalledWith(502);
+    const logged = JSON.stringify(vi.mocked(ctx.log.warn).mock.calls);
+    expect(logged).toContain("429");
+    expect(logged).not.toContain("SECRET-TOKEN");
   });
 });

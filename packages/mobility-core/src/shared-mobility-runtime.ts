@@ -7,7 +7,11 @@ import {
 import { createGbfsCatalogClient, type GbfsSystemProbe } from "./gbfs-catalog.js";
 import { fetchGbfsData, fetchSwissSharedMobilityDataForBbox } from "./gbfs-provider-base.js";
 import type { MobilityHttpTransport } from "./json-transport.js";
-import { createMotisRentalsClient, type MotisRentalSourceIndexEntry } from "./motis-rentals.js";
+import {
+  createMotisRentalsClient,
+  type MotisRentalSourceIndexEntry,
+  type MotisRentalsHttp,
+} from "./motis-rentals.js";
 import { createNominatimClient } from "./nominatim.js";
 import {
   orchestrateSharedMobility,
@@ -29,6 +33,8 @@ import type {
 export interface SharedMobilityRuntimeOptions {
   cache: CacheClient;
   transport: MobilityHttpTransport;
+  /** Reaches the deployment's MOTIS and Transitous rental endpoints. */
+  http: MotisRentalsHttp;
   motisUrl?: string;
   transitousUrl?: string;
   nominatimUrl?: string;
@@ -105,6 +111,7 @@ export function createSharedMobilityRuntime(
     nominatim.clearCache();
   });
   const motis = createMotisRentalsClient({
+    http: options.http,
     motisUrl: options.motisUrl,
     transitousUrl: options.transitousUrl,
     rentalSourceIndex: options.rentalSourceIndex,

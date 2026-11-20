@@ -21,6 +21,7 @@ export function setup(ctx: IntegrationContext): void {
     resolveContributors,
     cache: ctx.cache,
     transport: mobilityHttpTransport,
+    http: ctx.http,
     // The instances the deployment uses, as their health checks probe them.
     motisUrl: ctx.resolvePlatformEndpoint("motis")?.url,
     nominatimUrl: ctx.resolvePlatformEndpoint("nominatim")?.url,
@@ -39,6 +40,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.onShutdown(async () => runtime.dispose());
   const searchRegionalClients = createRegionalCarSharingRegistry({
     cache: runtime.cache,
+    http: ctx.http,
     resolveContributors,
     log: ctx.log,
     clients: [

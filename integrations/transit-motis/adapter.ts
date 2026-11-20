@@ -27,6 +27,7 @@ import {
   stoptimes,
 } from "@motis-project/motis-client";
 import { type BBox, decodePolyline, timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import { type LineName, splitLineName } from "@openmapx/mobility-core/line-name";
 import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
@@ -67,15 +68,28 @@ export function rawId(instance: MotisInstance, stopId: string): string {
   return stopId.startsWith(instance.prefix) ? stopId.slice(instance.prefix.length) : stopId;
 }
 
-/** Convert a MOTIS Place to our TransitStop. */
-export function normalizeStop(instance: MotisInstance, place: Place): TransitStop {
+/** True when a MOTIS place has coordinates in range, so it can be placed on the map. */
+function isPlaceable(place: {
+  lat?: unknown;
+  lon?: unknown;
+}): place is { lat: number; lon: number } {
+  return latLngOrNull(place.lat, place.lon) !== null;
+}
+
+function legIsPlaceable(leg: Leg): boolean {
+  return isPlaceable(leg.from) && isPlaceable(leg.to);
+}
+
+/** Convert a MOTIS Place to our TransitStop, or null when it has no coordinates. */
+export function normalizeStop(instance: MotisInstance, place: Place): TransitStop | null {
+  if (!isPlaceable(place)) return null;
   const stopCode = place.stopCode?.trim();
   return {
     id: `${instance.prefix}${place.stopId ?? ""}`,
     ...(stopCode ? { codes: [{ value: stopCode, namespace: "gtfs" as const }] } : {}),
     name: place.name ?? "Unknown",
-    lat: place.lat ?? 0,
-    lng: place.lon ?? 0,
+    lat: place.lat,
+    lng: place.lon,
     modes: uniqueModes(place.modes ?? []),
     platformCode: motisPlatform(place).platform,
     parentStationId: place.parentId ? `${instance.prefix}${place.parentId}` : undefined,
@@ -122,7 +136,7 @@ export async function getStops(instance: MotisInstance, bbox: BBox): Promise<Tra
       },
     });
     if (!data || !Array.isArray(data)) return [];
-    return data.map((place) => normalizeStop(instance, place));
+    return data.flatMap((place) => normalizeStop(instance, place) ?? []);
   } catch {
     return [];
   }
@@ -256,10 +270,12 @@ export async function getStopPlatforms(
     const byId = new Map<string, TransitStop>();
     for (const place of data) {
       if (!place.stopId || place.parentId !== rootId) continue;
-      byId.set(place.stopId, normalizeStop(instance, place));
+      const stop = normalizeStop(instance, place);
+      if (stop) byId.set(place.stopId, stop);
     }
     if (requested.parentId === rootId && !byId.has(requested.stopId)) {
-      byId.set(requested.stopId, normalizeStop(instance, requested));
+      const stop = normalizeStop(instance, requested);
+      if (stop) byId.set(requested.stopId, stop);
     }
     return [...byId.values()];
   } catch {
@@ -281,14 +297,19 @@ export async function searchByName(
     });
     if (error || !Array.isArray(data)) throw new Error("MOTIS stop search unavailable");
     return data
-      .filter((match) => (match.type === "STOP" || match.type === "PLACE") && match.id != null)
+      .filter(
+        (match) =>
+          (match.type === "STOP" || match.type === "PLACE") &&
+          match.id != null &&
+          isPlaceable(match),
+      )
       .slice(0, limit)
       .map(
         (match): TransitStop => ({
           id: `${instance.prefix}${match.id}`,
           name: match.name ?? "Unknown",
-          lat: match.lat ?? 0,
-          lng: match.lon ?? 0,
+          lat: match.lat,
+          lng: match.lon,
           modes: [],
           provider: instance.provider,
         }),
@@ -710,13 +731,18 @@ function orderedRouteStops(
   instance: MotisInstance,
   route: RouteInfo,
   stops: Place[],
-): TransitStop[] {
+): Array<TransitStop & { sequence: number }> {
   const indexes: number[] = [];
   for (const segment of route.segments) {
     if (indexes[indexes.length - 1] !== segment.from) indexes.push(segment.from);
     if (indexes[indexes.length - 1] !== segment.to) indexes.push(segment.to);
   }
-  return indexes.flatMap((index) => (stops[index] ? [normalizeStop(instance, stops[index])] : []));
+  return indexes
+    .flatMap((index) => {
+      const place = stops[index];
+      return (place && normalizeStop(instance, place)) || [];
+    })
+    .map((stop, index) => ({ ...stop, sequence: index + 1 }));
 }
 
 export async function getRouteStops(
@@ -724,7 +750,7 @@ export async function getRouteStops(
   routeId: string,
   activeEpoch: string,
   hintStopId?: string,
-): Promise<TransitStop[]> {
+): Promise<Array<TransitStop & { sequence: number }>> {
   let pattern = validateMotisRoutePatternEpoch(routeId, activeEpoch);
   if (!pattern) {
     const line = validateMotisLineReferenceEpoch(routeId, activeEpoch);
@@ -865,7 +891,7 @@ function mapLegAlerts(
   return byId.size > 0 ? Array.from(byId.values()) : undefined;
 }
 
-/** Map a single MOTIS Leg to our TripLeg. */
+/** Map a single MOTIS Leg to our TripLeg. Callers check {@link legIsPlaceable} first. */
 function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripLeg {
   // Rental legs report mode `RENTAL`; motisLegMode refines car-like form factors
   // to driving so the UI shows a car (not bike) glyph.
@@ -876,8 +902,8 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
   let geometry: GeoJSONLineString = {
     type: "LineString",
     coordinates: [
-      [fromPlace.lon ?? 0, fromPlace.lat ?? 0],
-      [toPlace.lon ?? 0, toPlace.lat ?? 0],
+      [fromPlace.lon, fromPlace.lat],
+      [toPlace.lon, toPlace.lat],
     ],
   };
   if (leg.legGeometry?.points) {
@@ -911,8 +937,8 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
     scheduledEndTime: isTransit ? leg.scheduledEndTime || undefined : undefined,
     from: {
       name: fromPlace.name ?? "",
-      lat: fromPlace.lat ?? 0,
-      lng: fromPlace.lon ?? 0,
+      lat: fromPlace.lat,
+      lng: fromPlace.lon,
       stopId: fromPlace.stopId ? `${instance.prefix}${fromPlace.stopId}` : undefined,
       level: fromPlace.level,
       platformCode: motisPlatform(fromPlace).platform,
@@ -921,8 +947,8 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
     },
     to: {
       name: toPlace.name ?? "",
-      lat: toPlace.lat ?? 0,
-      lng: toPlace.lon ?? 0,
+      lat: toPlace.lat,
+      lng: toPlace.lon,
       stopId: toPlace.stopId ? `${instance.prefix}${toPlace.stopId}` : undefined,
       level: toPlace.level,
       platformCode: motisPlatform(toPlace).platform,
@@ -1001,14 +1027,16 @@ export function mapItinerary(
   datasetEpoch?: string,
   context?: AlternativeContext,
   supplemented = false,
-): TripItinerary {
+): TripItinerary | null {
+  // An itinerary with a leg end MOTIS did not place cannot be drawn or followed.
+  if (!it.legs.every(legIsPlaceable)) return null;
   const legs = it.legs.map((leg) => mapLeg(instance, leg, datasetEpoch));
   if (context) {
     for (const [index, raw] of it.legs.entries()) {
       if (!raw.alternatives?.length) continue;
       legs[index].alternatives = raw.alternatives.slice(0, 2).flatMap((chain) => {
         const compact = mapAlternatives(instance, [chain])[0];
-        if (!compact) return [];
+        if (!compact || !chain.every(legIsPlaceable)) return [];
         const replaces = alternativeReplacement(it, index, chain, context);
         if (replaces) {
           compact.replaces = replaces;
@@ -1107,6 +1135,7 @@ export async function refreshTrip(
     if (response?.status === 400 && error?.error === "no legs reconstructed") return null;
     if (error || !data || (response && !response.ok)) throw new Error("unavailable");
     const mapped = mapItinerary(instance, data, opts?.datasetEpoch);
+    if (!mapped) return null;
     mapped.datasetEpoch = opts?.datasetEpoch;
     mapped.refreshedAt = new Date().toISOString();
     return mapped;
@@ -1249,7 +1278,7 @@ export async function planTrip(
     // Transit itineraries first; append `direct` (door-to-door bike/car) options
     // only when the caller explicitly requested directModes — MOTIS otherwise
     // always computes a WALK direct trip we don't want cluttering transit results.
-    const normalizeItinerary = (it: Itinerary): TripItinerary => {
+    const normalizeItinerary = (it: Itinerary): TripItinerary[] => {
       const mapped = mapItinerary(
         instance,
         it,
@@ -1267,6 +1296,7 @@ export async function planTrip(
         },
         diversified?.supplemented,
       );
+      if (!mapped) return [];
       mapped.datasetEpoch = opts?.datasetEpoch;
       if (diversified?.supplemented && isRegional(it)) mapped.regionalOnly = true;
       const invalidRequirements: string[] = [];
@@ -1283,10 +1313,10 @@ export async function planTrip(
         invalidRequirements.push("maxTransfers");
       }
       if (invalidRequirements.length > 0) mapped.invalidRequirements = invalidRequirements;
-      return mapped;
+      return [mapped];
     };
-    const transitItins = (data?.itineraries ?? []).map(normalizeItinerary);
-    const directItins = directModes ? (data?.direct ?? []).map(normalizeItinerary) : [];
+    const transitItins = (data?.itineraries ?? []).flatMap(normalizeItinerary);
+    const directItins = directModes ? (data?.direct ?? []).flatMap(normalizeItinerary) : [];
     const itineraries = [...transitItins, ...directItins];
 
     const from = data.from;
@@ -1317,8 +1347,12 @@ export async function planTrip(
   }
 }
 
-/** Convert a MOTIS Place (from trip legs) to a VehicleJourneyStop. */
-export function motisPlaceToJourneyStop(instance: MotisInstance, place: Place): VehicleJourneyStop {
+/** Convert a MOTIS Place (from trip legs) to a VehicleJourneyStop, or null when it has no coordinates. */
+export function motisPlaceToJourneyStop(
+  instance: MotisInstance,
+  place: Place,
+): VehicleJourneyStop | null {
+  if (!isPlaceable(place)) return null;
   const scheduled = (place.scheduledArrival ?? place.scheduledDeparture) as string | undefined;
   const actual = (place.arrival ?? place.departure) as string | undefined;
   let delaySec: number | undefined;
@@ -1329,8 +1363,8 @@ export function motisPlaceToJourneyStop(instance: MotisInstance, place: Place): 
   return {
     stopId: `${instance.prefix}${place.stopId ?? ""}`,
     name: place.name ?? "",
-    lat: place.lat ?? 0,
-    lng: place.lon ?? 0,
+    lat: place.lat,
+    lng: place.lon,
     ...motisPlatform(place),
     ...((place.scheduledTrack && !motisPlatform(place).scheduledPlatform) ||
     (place.track && quarantinedDelfiTrack(place.stopId, place.track) === undefined)
@@ -1475,11 +1509,12 @@ export async function getTrip(
     const journeyStops: VehicleJourneyStop[] = [];
     for (let i = 0; i < legs.length; i++) {
       const leg = legs[i];
-      if (i === 0) journeyStops.push(motisPlaceToJourneyStop(instance, leg.from));
-      for (const place of leg.intermediateStops ?? []) {
-        journeyStops.push(motisPlaceToJourneyStop(instance, place));
+      // A stop without coordinates cannot be drawn on the journey; it is left out.
+      const places = [...(i === 0 ? [leg.from] : []), ...(leg.intermediateStops ?? []), leg.to];
+      for (const place of places) {
+        const stop = motisPlaceToJourneyStop(instance, place);
+        if (stop) journeyStops.push(stop);
       }
-      journeyStops.push(motisPlaceToJourneyStop(instance, leg.to));
     }
     const firstLeg = legs[0];
     return {

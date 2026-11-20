@@ -1,5 +1,11 @@
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
-import { buildOccupancies, normalizeRatesResponse, pickBestHotel } from "./liteapi.js";
+import {
+  buildOccupancies,
+  fetchLiteApiOffer,
+  normalizeRatesResponse,
+  pickBestHotel,
+} from "./liteapi.js";
 import type { HotelQuery } from "./types.js";
 
 const q: HotelQuery = {
@@ -96,5 +102,72 @@ describe("normalizeRatesResponse", () => {
 
   it("returns null for an empty response", () => {
     expect(normalizeRatesResponse({ data: [] }, 1)).toBeNull();
+  });
+});
+
+describe("fetchLiteApiOffer", () => {
+  const options = { currency: "EUR", guestNationality: "de" };
+  const nearby = {
+    data: [{ id: "lp1", name: "Motel One Berlin", latitude: 52.5, longitude: 13.33 }],
+  };
+
+  it("finds the hotel and prices it with the key in a header", async () => {
+    const http = fakeHttpClient((req) => (req.method === "get" ? nearby : sample));
+
+    const offer = await fetchLiteApiOffer(http, "secret", options, q);
+
+    expect(offer?.total).toBe(150);
+    const [lookup, rates] = http.calls;
+    expect(lookup?.url).toBe("https://api.liteapi.travel/v3.0/data/hotels");
+    expect(lookup?.options?.params).toMatchObject({ latitude: "52.5", longitude: "13.33" });
+    expect(lookup?.options?.headers?.["X-API-Key"]).toBe("secret");
+    expect(rates?.method).toBe("post");
+    expect(rates?.url).toBe("https://api.liteapi.travel/v3.0/hotels/rates");
+    expect(rates?.body).toMatchObject({ hotelIds: ["lp1"], guestNationality: "DE" });
+    expect(rates?.options?.headers?.["X-API-Key"]).toBe("secret");
+  });
+
+  it("answers no offer when LiteAPI refuses the key", async () => {
+    const http = fakeHttpClient(() => httpStatus(401));
+    expect(await fetchLiteApiOffer(http, "rejected", options, q)).toBeNull();
+    expect(http.calls).toHaveLength(1);
+  });
+});
+
+describe("LiteAPI payload validation", () => {
+  it("ignores rates without a positive amount in an ISO currency", () => {
+    const rate = (amount: unknown, currency: unknown) => ({
+      retailRate: { total: [{ amount, currency }] },
+    });
+    const response = {
+      data: [
+        {
+          hotelId: "lp1",
+          roomTypes: [
+            {
+              rates: [rate(0, "EUR"), rate(Number.NaN, "EUR"), rate(80, "euro"), rate(120, "EUR")],
+            },
+          ],
+        },
+      ],
+    } as Parameters<typeof normalizeRatesResponse>[0];
+    expect(normalizeRatesResponse(response, 1)).toMatchObject({ total: 120, currency: "EUR" });
+  });
+
+  it("never matches a candidate without a usable id or coordinates", async () => {
+    const http = fakeHttpClient((req) =>
+      req.method === "get"
+        ? {
+            data: [
+              { id: "", name: "Motel One Berlin", latitude: 52.5, longitude: 13.33 },
+              { id: "lp2", name: "Motel One Berlin", latitude: 152.5, longitude: 13.33 },
+            ],
+          }
+        : sample,
+    );
+    expect(
+      await fetchLiteApiOffer(http, "secret", { currency: "EUR", guestNationality: "de" }, q),
+    ).toBeNull();
+    expect(http.calls).toHaveLength(1);
   });
 });
