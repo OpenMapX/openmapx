@@ -38,7 +38,7 @@ const bind = () =>
       responses: {
         200: adminJson(z.strictObject({ jobId: z.string() })),
         409: adminJson(
-          z.strictObject({ ok: z.literal(false), reason: z.string(), existingJobId: z.string() }),
+          z.strictObject({ error: z.string(), code: z.string(), existingJobId: z.string() }),
         ),
       },
     },
