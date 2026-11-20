@@ -1,20 +1,20 @@
 import type { RoutingOptions } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { valhallaHarness } from "./__tests__/valhalla-http.js";
 import {
   buildCostingOptions,
   buildExclusions,
   buildLocations,
   buildTrafficRequestExtras,
-  setValhallaBidirectionalAlternates,
-  setValhallaUrl,
   TRACE_ATTRIBUTE_FILTER,
   transformTraceEdge,
   transformTrip,
   valhallaLanes,
   valhallaManeuverType,
-  valhallaService,
   valhallaSign,
 } from "./provider.js";
+
+const valhalla = valhallaHarness();
 
 describe("valhallaManeuverType", () => {
   // Every documented Valhalla maneuver.type (0-43) → normalized { type, modifier }.
@@ -443,27 +443,22 @@ const MINIMAL_VALHALLA_RESPONSE = {
   },
 };
 
-describe("valhallaService.getRoute exclusion body params", () => {
+describe("valhalla.service.getRoute exclusion body params", () => {
   let capturedBody: Record<string, unknown>;
 
   beforeEach(() => {
     capturedBody = {};
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        // Walking routes follow up with edge and street-name lookups; these
-        // tests inspect the route request itself.
-        if (/\/(route|optimized_route)(\?|$)/.test(url)) {
-          capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
-        }
-        return Response.json(MINIMAL_VALHALLA_RESPONSE);
-      }),
-    );
+    valhalla.answer = vi.fn(async (url: string, init?: RequestInit) => {
+      // Walking routes follow up with edge and street-name lookups; these
+      // tests inspect the route request itself.
+      if (/\/(route|optimized_route)(\?|$)/.test(url)) {
+        capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
+      }
+      return Response.json(MINIMAL_VALHALLA_RESPONSE);
+    });
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  afterEach(() => {});
 
   const WPS: [number, number][] = [
     [5.1, 52.1],
@@ -471,7 +466,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
   ];
 
   it("posts exclude_locations when excludeLocations is provided", async () => {
-    await valhallaService.getRoute(WPS, "driving", {
+    await valhalla.service.getRoute(WPS, "driving", {
       excludeLocations: [[5.1, 52.1]],
     });
     expect(capturedBody.exclude_locations).toEqual([{ lon: 5.1, lat: 52.1 }]);
@@ -484,36 +479,36 @@ describe("valhallaService.getRoute exclusion body params", () => {
       [5.1, 52.1],
       [5, 52],
     ];
-    await valhallaService.getRoute(WPS, "driving", { excludePolygons: [ring] });
+    await valhalla.service.getRoute(WPS, "driving", { excludePolygons: [ring] });
     expect(capturedBody.exclude_polygons).toEqual([ring]);
   });
 
   it("omits both keys when no exclusion options are passed", async () => {
-    await valhallaService.getRoute(WPS, "driving", {});
+    await valhalla.service.getRoute(WPS, "driving", {});
     expect(capturedBody).not.toHaveProperty("exclude_locations");
     expect(capturedBody).not.toHaveProperty("exclude_polygons");
     expect(capturedBody.turn_lanes).toBe(true);
   });
 
   it("credits the self-hosted source unless Stadia Maps served the route", async () => {
-    setValhallaUrl("http://valhalla:8002");
-    const selfHosted = await valhallaService.getRoute(WPS, "driving", {});
+    valhalla.settings = { ...valhalla.settings, url: "http://valhalla:8002" };
+    const selfHosted = await valhalla.service.getRoute(WPS, "driving", {});
     expect(selfHosted.routes[0]?.sourceIds).toEqual(["valhalla"]);
 
-    setValhallaUrl("https://api.stadiamaps.com");
-    const stadia = await valhallaService.getRoute(WPS, "driving", {});
+    valhalla.settings = { ...valhalla.settings, url: "https://api.stadiamaps.com" };
+    const stadia = await valhalla.service.getRoute(WPS, "driving", {});
     expect(stadia.routes[0]?.sourceIds).toEqual(["stadia-maps"]);
   });
 
   it("preserves maneuver road names for incident matching", async () => {
-    const result = await valhallaService.getRoute(WPS, "driving", {});
+    const result = await valhalla.service.getRoute(WPS, "driving", {});
     expect(result.routes[0]?.steps[0]?.roadNames).toEqual(["A 57", "E 31"]);
   });
 
   it.each(["driving", "motorcycle"] as const)(
     "uses current closures only for depart-now %s routes",
     async (mode) => {
-      await valhallaService.getRoute(WPS, mode, { useLiveTraffic: true });
+      await valhalla.service.getRoute(WPS, mode, { useLiveTraffic: true });
       const costing = mode === "driving" ? "auto" : mode;
       expect(capturedBody.date_time).toEqual({ type: 0 });
       expect(capturedBody.costing_options).toMatchObject({
@@ -532,7 +527,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
   it.each(["walking", "cycling"] as const)(
     "explicitly ignores binary closures for unsupported %s routes",
     async (mode) => {
-      await valhallaService.getRoute(WPS, mode, { useLiveTraffic: true });
+      await valhalla.service.getRoute(WPS, mode, { useLiveTraffic: true });
       const costing = mode === "cycling" ? "bicycle" : "pedestrian";
       expect(capturedBody.costing_options).toMatchObject({
         [costing]: {
@@ -544,7 +539,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
   );
 
   it("keeps today's binary closures out of future traffic-aware routes", async () => {
-    await valhallaService.getRoute(WPS, "driving", {
+    await valhalla.service.getRoute(WPS, "driving", {
       useLiveTraffic: true,
       departAt: "2026-09-12T10:00",
     });
@@ -558,7 +553,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
   });
 
   it("explicitly ignores binary closures when live traffic is disabled", async () => {
-    await valhallaService.optimizeRoute?.(WPS, "driving", { useLiveTraffic: false });
+    await valhalla.service.optimizeRoute?.(WPS, "driving", { useLiveTraffic: false });
     expect(capturedBody.costing_options).toMatchObject({
       auto: {
         speed_types: ["freeflow", "constrained", "predicted"],
@@ -574,7 +569,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
       [5.1, 52.1],
       [5, 52],
     ];
-    await valhallaService.optimizeRoute?.(WPS, "driving", {
+    await valhalla.service.optimizeRoute?.(WPS, "driving", {
       excludeLocations: [[5.1, 52.1]],
       excludePolygons: [ring],
     });
@@ -716,7 +711,7 @@ describe("getRoute request body", () => {
           headers: { "content-type": "application/json" },
         }),
     );
-    vi.stubGlobal("fetch", spy);
+    valhalla.answer = spy;
     return spy;
   };
 
@@ -724,13 +719,12 @@ describe("getRoute request body", () => {
     JSON.parse(String(spy.mock.calls[0]?.[1]?.body));
 
   afterEach(() => {
-    vi.unstubAllGlobals();
-    setValhallaBidirectionalAlternates(true);
+    valhalla.settings = { ...valhalla.settings, bidirectionalAlternates: true };
   });
 
   it("includes the traffic extras for a depart-now driving route", async () => {
     const spy = capture();
-    await valhallaService.getRoute(
+    await valhalla.service.getRoute(
       [
         [6.08, 50.77],
         [6.68, 51.51],
@@ -749,15 +743,12 @@ describe("getRoute request body", () => {
   });
 
   it("preserves Valhalla's diagnostic response body on an upstream error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () => new Response('{"error":"Exceeded max avoid locations: 50"}', { status: 400 }),
-      ),
+    valhalla.answer = vi.fn(
+      async () => new Response('{"error":"Exceeded max avoid locations: 50"}', { status: 400 }),
     );
 
     await expect(
-      valhallaService.getRoute(
+      valhalla.service.getRoute(
         [
           [6.08, 50.77],
           [6.68, 51.51],
@@ -769,9 +760,9 @@ describe("getRoute request body", () => {
   });
 
   it("sends a body without any of the new keys when the flag is off", async () => {
-    setValhallaBidirectionalAlternates(false);
+    valhalla.settings = { ...valhalla.settings, bidirectionalAlternates: false };
     const spy = capture();
-    await valhallaService.getRoute(
+    await valhalla.service.getRoute(
       [
         [6.08, 50.77],
         [6.68, 51.51],
@@ -787,7 +778,7 @@ describe("getRoute request body", () => {
 
   it("does not add the new keys for walking", async () => {
     const spy = capture();
-    await valhallaService.getRoute(
+    await valhalla.service.getRoute(
       [
         [6.08, 50.77],
         [6.09, 50.78],
@@ -820,21 +811,16 @@ describe("getRoute near a road closed to all but local access", () => {
   const run = async (responses: Array<() => Response>, options: Record<string, unknown>) => {
     const bodies: Record<string, unknown>[] = [];
     let i = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
-        const respond = responses[Math.min(i++, responses.length - 1)]!;
-        return respond();
-      }),
-    );
-    const result = await valhallaService.getRoute(WPS, "driving", options);
+    valhalla.answer = vi.fn(async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
+      const respond = responses[Math.min(i++, responses.length - 1)]!;
+      return respond();
+    });
+    const result = await valhalla.service.getRoute(WPS, "driving", options);
     return { bodies, result };
   };
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  afterEach(() => {});
 
   it("lets the destination snap onto the road and reach a street behind it", async () => {
     const { bodies } = await run([ok], { useLiveTraffic: true, localAccess });
@@ -862,14 +848,11 @@ describe("getRoute near a road closed to all but local access", () => {
     ["a planned trip", "driving", { useLiveTraffic: true, departAt: "2026-10-04T10:00" }],
   ] as const)("relaxes nothing for %s, which ignores closures", async (_name, mode, options) => {
     const bodies: Record<string, unknown>[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
-        return ok();
-      }),
-    );
-    await valhallaService.getRoute(WPS, mode, { ...options, localAccess });
+    valhalla.answer = vi.fn(async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
+      return ok();
+    });
+    await valhalla.service.getRoute(WPS, mode, { ...options, localAccess });
     const locations = bodies[0]!["locations"] as Record<string, unknown>[];
     expect(locations[1]).toEqual({ lon: 13.486, lat: 52.4373, type: "break" });
   });
@@ -907,16 +890,14 @@ describe("getRoute near a road closed to all but local access", () => {
   });
 
   it("passes on any other engine error at once", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () => new Response('{"error_code":171,"error":"No suitable edges"}', { status: 400 }),
-      ),
+    const answer = vi.fn(
+      async () => new Response('{"error_code":171,"error":"No suitable edges"}', { status: 400 }),
     );
+    valhalla.answer = answer;
     await expect(
-      valhallaService.getRoute(WPS, "driving", { useLiveTraffic: true, localAccess }),
+      valhalla.service.getRoute(WPS, "driving", { useLiveTraffic: true, localAccess }),
     ).rejects.toThrow("No suitable edges");
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(answer).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -948,9 +929,9 @@ describe("buildLocations", () => {
   });
 });
 
-describe("valhallaService.temporal", () => {
+describe("valhalla.service.temporal", () => {
   it("declares dwell as native and the waypoint windows as emulated", () => {
-    expect(valhallaService.temporal).toEqual({
+    expect(valhalla.service.temporal).toEqual({
       tripDepartAt: "native",
       tripArriveBy: "native",
       dwell: "native",
@@ -963,35 +944,31 @@ describe("valhallaService.temporal", () => {
 
 describe("Valhalla proof propagation", () => {
   afterEach(() => {
-    vi.unstubAllGlobals();
-    setValhallaUrl("https://api.stadiamaps.com");
+    valhalla.settings = { ...valhalla.settings, url: "https://api.stadiamaps.com" };
   });
   it.each(["getRoute", "optimizeRoute"] as const)(
     "binds %s to its fresh engine proof",
     async (method) => {
-      setValhallaUrl("http://localhost:8002");
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (_url: string, init?: RequestInit) => {
-          const request = JSON.parse(init?.body as string);
-          expect(request.openmapx_request_id).toMatch(/^[0-9a-f-]{36}$/);
-          return Response.json({
-            ...MINIMAL_VALHALLA_RESPONSE,
-            openmapx_traffic_proof: {
-              schemaVersion: 1,
-              requestId: request.openmapx_request_id,
-              writeId: "write",
-              graphGeneration: "graph",
-              engineBootId: "boot",
-              validUntil: new Date(Date.now() + 60000).toISOString(),
-              evaluatedAt: new Date().toISOString(),
-              endpoint: method === "getRoute" ? "route" : "optimized_route",
-              costing: "auto",
-            },
-          });
-        }),
-      );
-      const call = valhallaService[method];
+      valhalla.settings = { ...valhalla.settings, url: "http://localhost:8002" };
+      valhalla.answer = vi.fn(async (_url: string, init?: RequestInit) => {
+        const request = JSON.parse(init?.body as string);
+        expect(request.openmapx_request_id).toMatch(/^[0-9a-f-]{36}$/);
+        return Response.json({
+          ...MINIMAL_VALHALLA_RESPONSE,
+          openmapx_traffic_proof: {
+            schemaVersion: 1,
+            requestId: request.openmapx_request_id,
+            writeId: "write",
+            graphGeneration: "graph",
+            engineBootId: "boot",
+            validUntil: new Date(Date.now() + 60000).toISOString(),
+            evaluatedAt: new Date().toISOString(),
+            endpoint: method === "getRoute" ? "route" : "optimized_route",
+            costing: "auto",
+          },
+        });
+      });
+      const call = valhalla.service[method];
       if (!call) throw new Error("missing provider method");
       const result = await call(
         [
@@ -1005,7 +982,7 @@ describe("Valhalla proof propagation", () => {
     },
   );
   it("attaches coverage when a trace of the route's shape is proven against the same write", async () => {
-    setValhallaUrl("http://localhost:8002");
+    valhalla.settings = { ...valhalla.settings, url: "http://localhost:8002" };
     const proofFor = (requestId: string, endpoint: string) => ({
       schemaVersion: 1,
       requestId,
@@ -1018,26 +995,23 @@ describe("Valhalla proof propagation", () => {
       costing: "auto",
     });
     const urls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        urls.push(new URL(url).pathname);
-        const request = JSON.parse(init?.body as string);
-        if (new URL(url).pathname === "/trace_attributes") {
-          expect(request.shape_match).toBe("edge_walk");
-          return Response.json({
-            units: "kilometers",
-            edges: [{ length: 1, speeds_non_faded: { current_flow: 80 } }],
-            openmapx_traffic_proof: proofFor(request.openmapx_request_id, "trace_attributes"),
-          });
-        }
+    valhalla.answer = vi.fn(async (url: string, init?: RequestInit) => {
+      urls.push(new URL(url).pathname);
+      const request = JSON.parse(init?.body as string);
+      if (new URL(url).pathname === "/trace_attributes") {
+        expect(request.shape_match).toBe("edge_walk");
         return Response.json({
-          ...MINIMAL_VALHALLA_RESPONSE,
-          openmapx_traffic_proof: proofFor(request.openmapx_request_id, "route"),
+          units: "kilometers",
+          edges: [{ length: 1, speeds_non_faded: { current_flow: 80 } }],
+          openmapx_traffic_proof: proofFor(request.openmapx_request_id, "trace_attributes"),
         });
-      }),
-    );
-    const result = await valhallaService.getRoute(
+      }
+      return Response.json({
+        ...MINIMAL_VALHALLA_RESPONSE,
+        openmapx_traffic_proof: proofFor(request.openmapx_request_id, "route"),
+      });
+    });
+    const result = await valhalla.service.getRoute(
       [
         [7, 50],
         [7.1, 50.1],
@@ -1053,28 +1027,25 @@ describe("Valhalla proof propagation", () => {
     });
   });
   it("does not accept Stadia proof even when its nonce matches", async () => {
-    setValhallaUrl("https://api.stadiamaps.com");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const request = JSON.parse(init?.body as string);
-        return Response.json({
-          ...MINIMAL_VALHALLA_RESPONSE,
-          openmapx_traffic_proof: {
-            schemaVersion: 1,
-            requestId: request.openmapx_request_id,
-            writeId: "write",
-            graphGeneration: "graph",
-            engineBootId: "boot",
-            validUntil: new Date(Date.now() + 60000).toISOString(),
-            evaluatedAt: new Date().toISOString(),
-            endpoint: "route",
-            costing: "auto",
-          },
-        });
-      }),
-    );
-    const result = await valhallaService.getRoute(
+    valhalla.settings = { ...valhalla.settings, url: "https://api.stadiamaps.com" };
+    valhalla.answer = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(init?.body as string);
+      return Response.json({
+        ...MINIMAL_VALHALLA_RESPONSE,
+        openmapx_traffic_proof: {
+          schemaVersion: 1,
+          requestId: request.openmapx_request_id,
+          writeId: "write",
+          graphGeneration: "graph",
+          engineBootId: "boot",
+          validUntil: new Date(Date.now() + 60000).toISOString(),
+          evaluatedAt: new Date().toISOString(),
+          endpoint: "route",
+          costing: "auto",
+        },
+      });
+    });
+    const result = await valhalla.service.getRoute(
       [
         [7, 50],
         [7.1, 50.1],

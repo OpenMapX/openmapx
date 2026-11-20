@@ -17,7 +17,8 @@ import type {
   RoutingTrafficProof,
   TravelMode,
 } from "@openmapx/core";
-import { decodePolyline, FetchJsonHttpError, fetchJson } from "@openmapx/core";
+import { decodePolyline } from "@openmapx/core";
+import type { HttpClient } from "@openmapx/integration-framework";
 import type {
   ManeuverLane,
   ManeuverSign,
@@ -45,36 +46,26 @@ import {
   type WalkEdge,
 } from "./walking-guidance.js";
 
-// Populated by setup(ctx) from ctx.resolvePlatformEndpoint("valhalla").
 const DEFAULT_VALHALLA_URL = "https://api.stadiamaps.com";
-let VALHALLA_URL = DEFAULT_VALHALLA_URL;
-let VALHALLA_API_KEY: string | undefined;
 
-/** The instance to query; undefined restores the default. */
-export function setValhallaUrl(url: string | undefined): void {
-  VALHALLA_URL = url ?? DEFAULT_VALHALLA_URL;
+/** One generation's Valhalla configuration, resolved when the integration activates. */
+export interface ValhallaSettings {
+  /** The instance to query; undefined means Stadia Maps' hosted Valhalla. */
+  url?: string;
+  /** Key appended to requests (e.g. Stadia Maps); undefined for key-less instances. */
+  apiKey?: string;
+  /**
+   * Master switch for the traffic-aware request additions. The operator can
+   * turn it off if bidirectional route choice regresses somewhere.
+   */
+  bidirectionalAlternates: boolean;
 }
 
-/** Set the API key appended to requests (e.g. Stadia Maps); undefined for key-less instances. */
-export function setValhallaApiKey(key: string | undefined): void {
-  VALHALLA_API_KEY = key;
-}
-
-/**
- * Master switch for the traffic-aware request additions. Defaults on; the
- * operator can turn it off from the admin panel if bidirectional route choice
- * regresses somewhere, without needing a deploy.
- */
-let VALHALLA_BIDIRECTIONAL_ALTERNATES = true;
-
-/** Enable or disable the traffic-aware request additions (called from setup()). */
-export function setValhallaBidirectionalAlternates(enabled: boolean): void {
-  VALHALLA_BIDIRECTIONAL_ALTERNATES = enabled;
-}
-
-function hostedByStadia(): boolean {
+function hostedByStadia(url: string | undefined): boolean {
   try {
-    return /(^|\.)stadiamaps\.com$/.test(new URL(VALHALLA_URL).hostname.toLowerCase());
+    return /(^|\.)stadiamaps\.com$/.test(
+      new URL(url ?? DEFAULT_VALHALLA_URL).hostname.toLowerCase(),
+    );
   } catch {
     return false;
   }
@@ -84,15 +75,74 @@ function hostedByStadia(): boolean {
  * Manifest sourceId of the endpoint that answers requests, so a route credits
  * Stadia Maps only when Stadia actually computed it.
  */
-export function valhallaSourceIds(): string[] {
-  return [hostedByStadia() ? "stadia-maps" : "valhalla"];
+export function valhallaSourceIds(url: string | undefined): string[] {
+  return [hostedByStadia(url) ? "stadia-maps" : "valhalla"];
 }
 
-/** Build a Valhalla endpoint URL, appending `api_key` when configured. */
-function endpoint(path: string): string {
-  const url = `${VALHALLA_URL}${path}`;
-  if (!VALHALLA_API_KEY) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(VALHALLA_API_KEY)}`;
+/** A non-2xx Valhalla answer, with the engine's own error code when its body names one. */
+export class ValhallaHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly errorCode: number | undefined,
+    label: string,
+    detail: string | undefined,
+  ) {
+    super(`${label} ${status}${detail ? `: ${detail}` : ""}`);
+    this.name = "ValhallaHttpError";
+  }
+}
+
+/** Valhalla answers a few MiB for long routes with elevation and alternates. */
+const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+
+/** POSTs JSON to one generation's Valhalla instance through the host client. */
+interface ValhallaClient {
+  post<T>(
+    path: string,
+    body: Record<string, unknown>,
+    timeoutMs: number,
+    label: string,
+  ): Promise<T>;
+  readonly hostedByStadia: boolean;
+  readonly bidirectionalAlternates: boolean;
+}
+
+/** Valhalla's error code and a bounded copy of its diagnostic body. */
+function errorDetail(body: string): { code?: number; detail?: string } {
+  const detail = body.replace(/\s+/g, " ").trim().slice(0, 512) || undefined;
+  try {
+    const parsed = JSON.parse(body) as { error_code?: unknown };
+    return {
+      ...(typeof parsed.error_code === "number" ? { code: parsed.error_code } : {}),
+      detail,
+    };
+  } catch {
+    return { detail };
+  }
+}
+
+function valhallaClient(http: HttpClient, settings: ValhallaSettings): ValhallaClient {
+  const base = settings.url ?? DEFAULT_VALHALLA_URL;
+  return {
+    hostedByStadia: hostedByStadia(settings.url),
+    bidirectionalAlternates: settings.bidirectionalAlternates,
+    async post<T>(path: string, body: Record<string, unknown>, timeoutMs: number, label: string) {
+      // Error bodies come back as bounded text, so Valhalla's error code survives.
+      const response = await http.postText(`${base}${path}`, JSON.stringify(body), {
+        ...(settings.apiKey ? { params: { api_key: settings.apiKey } } : {}),
+        headers: { "Content-Type": "application/json" },
+        contentTypes: ["application/json"],
+        fallbackContentType: "application/json",
+        maxBytes: MAX_RESPONSE_BYTES,
+        timeoutMs,
+      });
+      if (response.status < 200 || response.status >= 300) {
+        const { code, detail } = errorDetail(response.body);
+        throw new ValhallaHttpError(response.status, code, label, detail);
+      }
+      return JSON.parse(response.body) as T;
+    },
+  };
 }
 
 const COSTING_MAP: Record<string, string> = {
@@ -112,11 +162,6 @@ const ELEVATION_INTERVAL = 30; // metres between elevation samples
 /** Valhalla's production service limit is two alternates (three routes total). */
 const REQUESTED_ALTERNATES = 2;
 
-function valhallaErrorMessage(prefix: string) {
-  return ({ status, body }: { status: number; body?: string }) =>
-    `${prefix} ${status}${body ? `: ${body.replace(/\s+/g, " ").slice(0, 512)}` : ""}`;
-}
-
 /** A coverage trace is a cheap walk of a known path; a slow one leaves coverage unknown. */
 const COVERAGE_TRACE_TIMEOUT_MS = 3_000;
 
@@ -126,18 +171,18 @@ const COVERAGE_TRACE_TIMEOUT_MS = 3_000;
  * absent and never fails the route.
  */
 async function attachTrafficCoverage(
+  client: ValhallaClient,
   routes: Route[],
   proof: RoutingTrafficProof,
   costingOptions: Record<string, unknown>,
 ): Promise<void> {
   const post = (body: Record<string, unknown>) =>
-    fetchJson<CoverageTraceResponse>(endpoint("/trace_attributes"), {
-      timeoutMs: COVERAGE_TRACE_TIMEOUT_MS,
-      userAgent: null,
-      headers: { "Content-Type": "application/json" },
-      errorMessage: valhallaErrorMessage("Valhalla coverage trace error"),
-      init: { method: "POST", body: JSON.stringify(body) },
-    });
+    client.post<CoverageTraceResponse>(
+      "/trace_attributes",
+      body,
+      COVERAGE_TRACE_TIMEOUT_MS,
+      "Valhalla coverage trace error",
+    );
   const coverage = await Promise.all(
     routes.map((route) =>
       traceRouteCoverage(route, proof, costingOptions, post).catch(() => undefined),
@@ -154,47 +199,48 @@ const WALKING_LOOKUP_TIMEOUT_MS = 4_000;
 /** Street-name lookups per request; stretches past this keep no name. */
 const MAX_NAME_LOOKUPS = 60;
 
-const postJson = <T>(path: string, body: Record<string, unknown>, label: string) =>
-  fetchJson<T>(endpoint(path), {
-    timeoutMs: WALKING_LOOKUP_TIMEOUT_MS,
-    userAgent: null,
-    headers: { "Content-Type": "application/json" },
-    errorMessage: valhallaErrorMessage(label),
-    init: { method: "POST", body: JSON.stringify(body) },
-  });
-
 /** Each edge's use along a leg's own shape, for finding its crosswalks. */
-async function walkingEdges(shape: string): Promise<WalkEdge[] | undefined> {
-  const data = await postJson<{ edges?: WalkEdge[] }>(
-    "/trace_attributes",
-    {
-      encoded_polyline: shape,
-      shape_match: "walk_or_snap",
-      costing: "pedestrian",
-      filters: {
-        attributes: ["edge.use", "edge.begin_shape_index", "edge.end_shape_index"],
-        action: "include",
+async function walkingEdges(
+  client: ValhallaClient,
+  shape: string,
+): Promise<WalkEdge[] | undefined> {
+  const data = await client
+    .post<{ edges?: WalkEdge[] }>(
+      "/trace_attributes",
+      {
+        encoded_polyline: shape,
+        shape_match: "walk_or_snap",
+        costing: "pedestrian",
+        filters: {
+          attributes: ["edge.use", "edge.begin_shape_index", "edge.end_shape_index"],
+          action: "include",
+        },
       },
-    },
-    "Valhalla walking trace error",
-  ).catch(() => undefined);
+      WALKING_LOOKUP_TIMEOUT_MS,
+      "Valhalla walking trace error",
+    )
+    .catch(() => undefined);
   return Array.isArray(data?.edges) ? data.edges : undefined;
 }
 
 /** The street nearest each lookup's point, in one `/locate` request. */
 async function streetNamesNear(
+  client: ValhallaClient,
   lookups: ReadonlyArray<Pick<NameLookup, "field" | "point" | "radius">>,
 ): Promise<Array<string | undefined>> {
   if (lookups.length === 0) return [];
-  const data = await postJson<Array<{ edges?: LocatedEdge[] | null }>>(
-    "/locate",
-    {
-      locations: lookups.map(({ point: [lon, lat], radius }) => ({ lon, lat, radius })),
-      costing: "pedestrian",
-      verbose: true,
-    },
-    "Valhalla locate error",
-  ).catch(() => undefined);
+  const data = await client
+    .post<Array<{ edges?: LocatedEdge[] | null }>>(
+      "/locate",
+      {
+        locations: lookups.map(({ point: [lon, lat], radius }) => ({ lon, lat, radius })),
+        costing: "pedestrian",
+        verbose: true,
+      },
+      WALKING_LOOKUP_TIMEOUT_MS,
+      "Valhalla locate error",
+    )
+    .catch(() => undefined);
   return lookups.map((lookup, i) =>
     Array.isArray(data) ? nearestStreetName(data[i]?.edges, lookup) : undefined,
   );
@@ -205,6 +251,7 @@ async function streetNamesNear(
  * walkway" (see walking-guidance.ts). `routes[i]` came from `trips[i]`.
  */
 async function refineWalkingRoutes(
+  client: ValhallaClient,
   routes: Route[],
   trips: ValhallaTrip[],
   lang: string | undefined,
@@ -221,14 +268,14 @@ async function refineWalkingRoutes(
         leg.maneuvers,
         routeLeg.steps,
         routeLeg.geometry,
-        await walkingEdges(leg.shape),
+        await walkingEdges(client, leg.shape),
       ),
     ),
   );
   const lookups = plans
     .flatMap((plan, p) => nameLookups(plan).map((lookup) => ({ p, ...lookup })))
     .slice(0, MAX_NAME_LOOKUPS);
-  const names = await streetNamesNear(lookups);
+  const names = await streetNamesNear(client, lookups);
   plans.forEach((plan, p) => {
     nameStretches(
       plan,
@@ -911,11 +958,7 @@ export function buildLocations(
 
 /** Valhalla found no path between the locations (error 442). */
 function isNoPath(error: unknown): boolean {
-  return (
-    error instanceof FetchJsonHttpError &&
-    error.status === 400 &&
-    /"error_code"\s*:\s*442\b/.test(error.message)
-  );
+  return error instanceof ValhallaHttpError && error.status === 400 && error.errorCode === 442;
 }
 
 /** Extra requests at most when an end is reachable only through a local-access road. */
@@ -953,269 +996,274 @@ export function localAccessAttempts(
   return attempts.slice(0, MAX_ACCESS_ATTEMPTS);
 }
 
-export const valhallaService: RoutingProvider = {
-  id: "valhalla",
-  priority: 10,
-  supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
-  supportsTimeAware: true,
-  supportsExclusions: true,
-  supportsDirectedExclusions: true,
-  temporal: {
-    tripDepartAt: "native",
-    tripArriveBy: "native",
-    dwell: "native",
-    waypointDepartAfter: "emulated",
-    waypointArriveBy: "emulated",
-    timeDependentTravel: "native",
-  },
+/**
+ * The Valhalla routing provider of one generation. `settings` returns the
+ * configuration resolved at activation, so a reload never keeps an older
+ * endpoint or key.
+ */
+export function createValhallaService(
+  http: HttpClient,
+  settings: () => ValhallaSettings,
+): RoutingProvider {
+  return {
+    id: "valhalla",
+    priority: 10,
+    supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
+    supportsTimeAware: true,
+    supportsExclusions: true,
+    supportsDirectedExclusions: true,
+    temporal: {
+      tripDepartAt: "native",
+      tripArriveBy: "native",
+      dwell: "native",
+      waypointDepartAfter: "emulated",
+      waypointArriveBy: "emulated",
+      timeDependentTravel: "native",
+    },
 
-  async getRoute(
-    waypoints: [number, number][],
-    mode: TravelMode,
-    options: RoutingOptions = {},
-  ): Promise<DirectionsResult> {
-    const sourceIds = valhallaSourceIds();
-    const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
-    const effectiveTrafficOptions = { ...options, useLiveTraffic: usesCurrentClosures };
+    async getRoute(
+      waypoints: [number, number][],
+      mode: TravelMode,
+      options: RoutingOptions = {},
+    ): Promise<DirectionsResult> {
+      const current = settings();
+      const client = valhallaClient(http, current);
+      const sourceIds = valhallaSourceIds(current.url);
+      const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
+      const effectiveTrafficOptions = { ...options, useLiveTraffic: usesCurrentClosures };
 
-    // Only a request that honours closures may relax its ends: a location's
-    // `exclude_closures` beside `ignore_closures` is an engine error.
-    const localAccess = usesCurrentClosures ? options.localAccess : undefined;
-    const locations = buildLocations(waypoints, options, localAccess);
+      // Only a request that honours closures may relax its ends: a location's
+      // `exclude_closures` beside `ignore_closures` is an engine error.
+      const localAccess = usesCurrentClosures ? options.localAccess : undefined;
+      const locations = buildLocations(waypoints, options, localAccess);
 
-    const body: Record<string, unknown> = {
-      locations,
-      costing: COSTING_MAP[mode],
-      costing_options: { [COSTING_MAP[mode]]: costingOptions },
-      directions_options: {
-        units: options.units === "imperial" ? "miles" : "km",
-        language: options.lang ?? "en",
-      },
-      turn_lanes: true,
-      date_time: buildDateTime(options),
-      elevation_interval: ELEVATION_INTERVAL,
-      ...buildExclusions(options),
-      ...buildTrafficRequestExtras(
-        effectiveTrafficOptions,
-        COSTING_MAP[mode],
-        costingOptions,
-        waypoints.length,
-        VALHALLA_BIDIRECTIONAL_ALTERNATES,
-      ),
-    };
+      const body: Record<string, unknown> = {
+        locations,
+        costing: COSTING_MAP[mode],
+        costing_options: { [COSTING_MAP[mode]]: costingOptions },
+        directions_options: {
+          units: options.units === "imperial" ? "miles" : "km",
+          language: options.lang ?? "en",
+        },
+        turn_lanes: true,
+        date_time: buildDateTime(options),
+        elevation_interval: ELEVATION_INTERVAL,
+        ...buildExclusions(options),
+        ...buildTrafficRequestExtras(
+          effectiveTrafficOptions,
+          COSTING_MAP[mode],
+          costingOptions,
+          waypoints.length,
+          client.bidirectionalAlternates,
+        ),
+      };
 
-    // Valhalla only supports alternates with exactly 2 waypoints
-    if (waypoints.length === 2) {
-      body.alternates = REQUESTED_ALTERNATES;
-    }
-    // A destination on a closed road is reachable only by the bidirectional
-    // search; the time-dependent forward search finds no path to it.
-    if (localAccess) body.prioritize_bidirectional = true;
+      // Valhalla only supports alternates with exactly 2 waypoints
+      if (waypoints.length === 2) {
+        body.alternates = REQUESTED_ALTERNATES;
+      }
+      // A destination on a closed road is reachable only by the bidirectional
+      // search; the time-dependent forward search finds no path to it.
+      if (localAccess) body.prioritize_bidirectional = true;
 
-    const requestId = randomUUID();
-    const startedAt = Date.now();
-    if (usesCurrentClosures) body.openmapx_request_id = requestId;
-    const post = (request: Record<string, unknown>) =>
-      fetchJson<ValhallaResponse>(endpoint("/route"), {
-        timeoutMs: 15_000,
-        userAgent: null,
-        headers: { "Content-Type": "application/json" },
-        errorMessage: valhallaErrorMessage("Valhalla error"),
-        init: { method: "POST", body: JSON.stringify(request) },
-      });
-    const data = await post(body).catch(async (error: unknown) => {
-      if (!localAccess || !isNoPath(error)) throw error;
-      // No alternates beside a location on the road: they need exactly two.
-      const { alternates: _alternates, ...single } = body;
-      for (const attempt of localAccessAttempts(locations, localAccess)) {
-        try {
-          return await post({ ...single, locations: attempt });
-        } catch (retryError) {
-          if (!isNoPath(retryError)) throw retryError;
+      const requestId = randomUUID();
+      const startedAt = Date.now();
+      if (usesCurrentClosures) body.openmapx_request_id = requestId;
+      const post = (request: Record<string, unknown>) =>
+        client.post<ValhallaResponse>("/route", request, 15_000, "Valhalla error");
+      const data = await post(body).catch(async (error: unknown) => {
+        if (!localAccess || !isNoPath(error)) throw error;
+        // No alternates beside a location on the road: they need exactly two.
+        const { alternates: _alternates, ...single } = body;
+        for (const attempt of localAccessAttempts(locations, localAccess)) {
+          try {
+            return await post({ ...single, locations: attempt });
+          } catch (retryError) {
+            if (!isNoPath(retryError)) throw retryError;
+          }
         }
+        return post({ ...body, locations: buildLocations(waypoints, options) });
+      });
+      const travelMode = mode as TravelMode;
+      const trafficProof =
+        usesCurrentClosures && !client.hostedByStadia
+          ? readTrafficProof(
+              data.openmapx_traffic_proof,
+              requestId,
+              "route",
+              COSTING_MAP[mode],
+              startedAt,
+            )
+          : undefined;
+
+      const trips = [data.trip, ...(data.alternates ?? []).map((alt) => alt.trip)];
+      const routes: Route[] = trips.map((trip) => transformTrip(trip, travelMode, options.units));
+      if (mode === "walking") await refineWalkingRoutes(client, routes, trips, options.lang);
+
+      for (const route of routes) {
+        route.sourceIds = sourceIds;
+        if (trafficProof) route.trafficProof = trafficProof;
       }
-      return post({ ...body, locations: buildLocations(waypoints, options) });
-    });
-    const travelMode = mode as TravelMode;
-    const trafficProof =
-      usesCurrentClosures && !hostedByStadia()
-        ? readTrafficProof(
-            data.openmapx_traffic_proof,
-            requestId,
-            "route",
-            COSTING_MAP[mode],
-            startedAt,
-          )
-        : undefined;
+      if (trafficProof) await attachTrafficCoverage(client, routes, trafficProof, costingOptions);
 
-    const trips = [data.trip, ...(data.alternates ?? []).map((alt) => alt.trip)];
-    const routes: Route[] = trips.map((trip) => transformTrip(trip, travelMode, options.units));
-    if (mode === "walking") await refineWalkingRoutes(routes, trips, options.lang);
+      return {
+        waypoints,
+        routes,
+        activeRouteIndex: 0,
+      };
+    },
 
-    for (const route of routes) {
-      route.sourceIds = sourceIds;
-      if (trafficProof) route.trafficProof = trafficProof;
-    }
-    if (trafficProof) await attachTrafficCoverage(routes, trafficProof, costingOptions);
+    async optimizeRoute(
+      waypoints: [number, number][],
+      mode: TravelMode,
+      options: RoutingOptions = {},
+    ): Promise<DirectionsResult> {
+      const current = settings();
+      const client = valhallaClient(http, current);
+      const sourceIds = valhallaSourceIds(current.url);
+      const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
 
-    return {
-      waypoints,
-      routes,
-      activeRouteIndex: 0,
-    };
-  },
+      const locations = waypoints.map((wp) => ({
+        lon: wp[0],
+        lat: wp[1],
+        type: "break" as const,
+      }));
 
-  async optimizeRoute(
-    waypoints: [number, number][],
-    mode: TravelMode,
-    options: RoutingOptions = {},
-  ): Promise<DirectionsResult> {
-    const sourceIds = valhallaSourceIds();
-    const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
+      const body: Record<string, unknown> = {
+        locations,
+        costing: COSTING_MAP[mode],
+        costing_options: { [COSTING_MAP[mode]]: costingOptions },
+        directions_options: {
+          units: options.units === "imperial" ? "miles" : "km",
+          language: options.lang ?? "en",
+        },
+        turn_lanes: true,
+        date_time: buildDateTime(options),
+        elevation_interval: ELEVATION_INTERVAL,
+        ...buildExclusions(options),
+      };
 
-    const locations = waypoints.map((wp) => ({
-      lon: wp[0],
-      lat: wp[1],
-      type: "break" as const,
-    }));
+      const requestId = randomUUID();
+      const startedAt = Date.now();
+      if (usesCurrentClosures) body.openmapx_request_id = requestId;
+      const data = await client.post<ValhallaResponse>(
+        "/optimized_route",
+        body,
+        15_000,
+        "Valhalla optimized_route error",
+      );
+      const travelMode = mode as TravelMode;
+      const trafficProof =
+        usesCurrentClosures && !client.hostedByStadia
+          ? readTrafficProof(
+              data.openmapx_traffic_proof,
+              requestId,
+              "optimized_route",
+              COSTING_MAP[mode],
+              startedAt,
+            )
+          : undefined;
 
-    const body: Record<string, unknown> = {
-      locations,
-      costing: COSTING_MAP[mode],
-      costing_options: { [COSTING_MAP[mode]]: costingOptions },
-      directions_options: {
-        units: options.units === "imperial" ? "miles" : "km",
-        language: options.lang ?? "en",
-      },
-      turn_lanes: true,
-      date_time: buildDateTime(options),
-      elevation_interval: ELEVATION_INTERVAL,
-      ...buildExclusions(options),
-    };
+      const routes: Route[] = [transformTrip(data.trip, travelMode, options.units)];
+      if (mode === "walking") await refineWalkingRoutes(client, routes, [data.trip], options.lang);
 
-    const requestId = randomUUID();
-    const startedAt = Date.now();
-    if (usesCurrentClosures) body.openmapx_request_id = requestId;
-    const data = await fetchJson<ValhallaResponse>(endpoint("/optimized_route"), {
-      timeoutMs: 15_000,
-      userAgent: null,
-      headers: { "Content-Type": "application/json" },
-      errorMessage: valhallaErrorMessage("Valhalla optimized_route error"),
-      init: { method: "POST", body: JSON.stringify(body) },
-    });
-    const travelMode = mode as TravelMode;
-    const trafficProof =
-      usesCurrentClosures && !hostedByStadia()
-        ? readTrafficProof(
-            data.openmapx_traffic_proof,
-            requestId,
-            "optimized_route",
-            COSTING_MAP[mode],
-            startedAt,
-          )
-        : undefined;
+      // Extract optimized order from trip.locations[].original_index
+      const optimizedOrder =
+        data.trip.locations?.map((loc) => loc.original_index ?? 0) ?? waypoints.map((_, i) => i);
 
-    const routes: Route[] = [transformTrip(data.trip, travelMode, options.units)];
-    if (mode === "walking") await refineWalkingRoutes(routes, [data.trip], options.lang);
-
-    // Extract optimized order from trip.locations[].original_index
-    const optimizedOrder =
-      data.trip.locations?.map((loc) => loc.original_index ?? 0) ?? waypoints.map((_, i) => i);
-
-    for (const route of routes) {
-      route.sourceIds = sourceIds;
-      if (trafficProof) route.trafficProof = trafficProof;
-    }
-    if (trafficProof) await attachTrafficCoverage(routes, trafficProof, costingOptions);
-
-    return {
-      waypoints,
-      routes,
-      activeRouteIndex: 0,
-      optimizedOrder,
-    };
-  },
-
-  /**
-   * Snap a recorded GPS trace to the road network via Valhalla's `trace_attributes`
-   * endpoint. Backed by Meili (HMM map matcher) which handles noisy GPS far better
-   * than OSRM's `match` service and returns per-edge OSM way ids and surface tags.
-   */
-  async getMatch(
-    trace: MatchTracePoint[],
-    mode: TravelMode,
-    options: MatchOptions = {},
-  ): Promise<MatchResult> {
-    if (trace.length < 2) {
-      throw new Error("trace requires at least 2 points");
-    }
-
-    const shape = trace.map((p) => {
-      const point: { lat: number; lon: number; time?: number } = { lat: p.lat, lon: p.lng };
-      if (p.time) {
-        // Valhalla expects unix epoch seconds; ISO inputs get converted here.
-        const ms = Date.parse(p.time);
-        if (!Number.isNaN(ms)) point.time = Math.round(ms / 1000);
+      for (const route of routes) {
+        route.sourceIds = sourceIds;
+        if (trafficProof) route.trafficProof = trafficProof;
       }
-      return point;
-    });
+      if (trafficProof) await attachTrafficCoverage(client, routes, trafficProof, costingOptions);
 
-    const body = {
-      shape,
-      shape_match: options.shapeMatch ?? "walk_or_snap",
-      costing: COSTING_MAP[mode],
-      filters: { attributes: TRACE_ATTRIBUTE_FILTER, action: "include" },
-    };
+      return {
+        waypoints,
+        routes,
+        activeRouteIndex: 0,
+        optimizedOrder,
+      };
+    },
 
-    const data = await fetchJson<ValhallaTraceAttributesResponse>(endpoint("/trace_attributes"), {
-      timeoutMs: 15_000,
-      userAgent: null,
-      headers: { "Content-Type": "application/json" },
-      errorMessage: valhallaErrorMessage("Valhalla trace_attributes error"),
-      init: { method: "POST", body: JSON.stringify(body) },
-    });
+    /**
+     * Snap a recorded GPS trace to the road network via Valhalla's `trace_attributes`
+     * endpoint. Backed by Meili (HMM map matcher) which handles noisy GPS far better
+     * than OSRM's `match` service and returns per-edge OSM way ids and surface tags.
+     */
+    async getMatch(
+      trace: MatchTracePoint[],
+      mode: TravelMode,
+      options: MatchOptions = {},
+    ): Promise<MatchResult> {
+      if (trace.length < 2) {
+        throw new Error("trace requires at least 2 points");
+      }
 
-    return {
-      geometry: data.shape ? decodePolyline(data.shape, 6) : [],
-      edges: (data.edges ?? []).map((edge) => transformTraceEdge(edge, data.admins)),
-      points: (data.matched_points ?? []).map(transformMatchedPoint),
-      mode,
-    };
-  },
+      const shape = trace.map((p) => {
+        const point: { lat: number; lon: number; time?: number } = { lat: p.lat, lon: p.lng };
+        if (p.time) {
+          // Valhalla expects unix epoch seconds; ISO inputs get converted here.
+          const ms = Date.parse(p.time);
+          if (!Number.isNaN(ms)) point.time = Math.round(ms / 1000);
+        }
+        return point;
+      });
 
-  /**
-   * Many-to-many time/distance matrix via Valhalla's `sources_to_targets`
-   * endpoint. Used by EV charge-planning to score charger detours without
-   * requesting a full route per candidate.
-   */
-  async getMatrix(
-    sources: [number, number][],
-    targets: [number, number][],
-    opts: { mode?: TravelMode } = {},
-  ): Promise<({ seconds: number; km: number } | null)[][]> {
-    const costing = COSTING_MAP[opts.mode ?? "driving"] ?? "auto";
+      const body = {
+        shape,
+        shape_match: options.shapeMatch ?? "walk_or_snap",
+        costing: COSTING_MAP[mode],
+        filters: { attributes: TRACE_ATTRIBUTE_FILTER, action: "include" },
+      };
 
-    const body = {
-      sources: sources.map(([lon, lat]) => ({ lat, lon })),
-      targets: targets.map(([lon, lat]) => ({ lat, lon })),
-      costing,
-      units: "kilometers",
-    };
+      const data = await valhallaClient(http, settings()).post<ValhallaTraceAttributesResponse>(
+        "/trace_attributes",
+        body,
+        15_000,
+        "Valhalla trace_attributes error",
+      );
 
-    const data = await fetchJson<ValhallaMatrixResponse>(endpoint("/sources_to_targets"), {
-      timeoutMs: 15_000,
-      userAgent: null,
-      headers: { "Content-Type": "application/json" },
-      errorMessage: valhallaErrorMessage("Valhalla sources_to_targets error"),
-      init: { method: "POST", body: JSON.stringify(body) },
-    });
+      return {
+        geometry: data.shape ? decodePolyline(data.shape, 6) : [],
+        edges: (data.edges ?? []).map((edge) => transformTraceEdge(edge, data.admins)),
+        points: (data.matched_points ?? []).map(transformMatchedPoint),
+        mode,
+      };
+    },
 
-    return data.sources_to_targets.map((row) =>
-      row.map((cell) =>
-        cell.time == null || cell.distance == null
-          ? null
-          : { seconds: cell.time, km: cell.distance },
-      ),
-    );
-  },
-};
+    /**
+     * Many-to-many time/distance matrix via Valhalla's `sources_to_targets`
+     * endpoint. Used by EV charge-planning to score charger detours without
+     * requesting a full route per candidate.
+     */
+    async getMatrix(
+      sources: [number, number][],
+      targets: [number, number][],
+      opts: { mode?: TravelMode } = {},
+    ): Promise<({ seconds: number; km: number } | null)[][]> {
+      const costing = COSTING_MAP[opts.mode ?? "driving"] ?? "auto";
+
+      const body = {
+        sources: sources.map(([lon, lat]) => ({ lat, lon })),
+        targets: targets.map(([lon, lat]) => ({ lat, lon })),
+        costing,
+        units: "kilometers",
+      };
+
+      const data = await valhallaClient(http, settings()).post<ValhallaMatrixResponse>(
+        "/sources_to_targets",
+        body,
+        15_000,
+        "Valhalla sources_to_targets error",
+      );
+
+      return data.sources_to_targets.map((row) =>
+        row.map((cell) =>
+          cell.time == null || cell.distance == null
+            ? null
+            : { seconds: cell.time, km: cell.distance },
+        ),
+      );
+    },
+  };
+}
