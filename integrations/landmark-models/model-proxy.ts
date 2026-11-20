@@ -86,7 +86,8 @@ export function createModelProxy(
   const maxBytesPerMinute = options.maxBytesPerMinute ?? 64 * MIB;
   const negativeTtlMs = options.negativeTtlMs ?? MINUTE;
 
-  const cache = new Map<string, Uint8Array>();
+  // In-process LRU of verified bodies, separate from the shared integration cache.
+  const models = new Map<string, Uint8Array>();
   let cachedBytes = 0;
   const firstSeen = new Map<string, number>();
   const failedUntil = new Map<string, number>();
@@ -99,15 +100,15 @@ export function createModelProxy(
 
   const statsTimer = setInterval(() => {
     if (stats.hits + stats.misses + stats.rejected === 0) return;
-    ctx.log.info("Landmark model proxy", { ...stats, cachedBytes, entries: cache.size });
+    ctx.log.info("Landmark model proxy", { ...stats, cachedBytes, entries: models.size });
   }, STATS_INTERVAL_MS);
   (statsTimer as { unref?: () => void }).unref?.();
 
   function readCache(key: string): Uint8Array | undefined {
-    const hit = cache.get(key);
+    const hit = models.get(key);
     if (!hit) return undefined;
-    cache.delete(key);
-    cache.set(key, hit);
+    models.delete(key);
+    models.set(key, hit);
     return hit;
   }
 
@@ -120,11 +121,11 @@ export function createModelProxy(
       return;
     }
     firstSeen.delete(key);
-    cache.set(key, gzip);
+    models.set(key, gzip);
     cachedBytes += gzip.byteLength;
-    for (const [oldest, bytes] of cache) {
+    for (const [oldest, bytes] of models) {
       if (cachedBytes <= cacheBytes) break;
-      cache.delete(oldest);
+      models.delete(oldest);
       cachedBytes -= bytes.byteLength;
     }
   }
