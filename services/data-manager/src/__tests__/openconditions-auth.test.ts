@@ -104,7 +104,7 @@ describe("OpenConditions operator token", () => {
     const seen = recordProbeRequests();
     const handles = cron(TOKEN);
     try {
-      await handles.runTrafficLiveNow();
+      await handles.trafficLive.run();
     } finally {
       handles.stop();
     }
@@ -119,7 +119,7 @@ describe("OpenConditions operator token", () => {
     const seen = recordProbeRequests();
     const handles = cron(undefined);
     try {
-      await handles.runTrafficLiveNow();
+      await handles.trafficLive.run();
     } finally {
       handles.stop();
     }

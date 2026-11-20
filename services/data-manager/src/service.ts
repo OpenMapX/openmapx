@@ -163,9 +163,10 @@ registerApi(app, {
     // Routes are registered before the cron handles exist, so read them
     // lazily. Until the first successful live cycle the handles are absent
     // and the empty set is the truthful answer: nothing is baked in yet.
-    getPlannedClosures: (bbox, travelAt) => cronHandles?.getPlannedClosures(bbox, travelAt) ?? null,
+    getPlannedClosures: (bbox, travelAt) =>
+      cronHandles?.trafficLive.plannedClosures(bbox, travelAt) ?? null,
     getTrafficConditionsApplied: () =>
-      cronHandles?.getTrafficConditionsApplied() ?? {
+      cronHandles?.trafficLive.conditionsApplied() ?? {
         schemaVersion: 1,
         mode: "shadow",
         providerId: "routing-valhalla",
@@ -325,7 +326,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   await stopControlPrune?.();
   await offlinePackages.close();
   await executionRuntime.close();
-  await cronHandles?.closeTrafficWriter();
+  await cronHandles?.trafficLive.closeWriter();
   const result = await awaitInflightSync(singleFlight, 30_000);
   if (result === "timeout") {
     app.log.warn("data-manager: in-flight Transitous sync did not finish within 30s; forcing exit");
