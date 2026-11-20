@@ -913,22 +913,20 @@ function normalizeTripPlan(trip: PlanTripQuery["trip"] | null | undefined): Trip
       legs,
     });
   }
-  if (itineraries.length === 0) return null;
+  // The plan's ends come from Entur's places, else from the first itinerary's legs.
+  const firstLeg = itineraries[0]?.legs[0];
+  const lastLeg = itineraries[0]?.legs.at(-1);
+  if (!firstLeg || !lastLeg) return null;
   return {
     from: {
-      name: trip?.fromPlace?.name ?? itineraries[0].legs[0]?.from.name ?? "",
-      lat: trip?.fromPlace?.latitude ?? itineraries[0].legs[0]?.from.lat ?? 0,
-      lng: trip?.fromPlace?.longitude ?? itineraries[0].legs[0]?.from.lng ?? 0,
+      name: trip?.fromPlace?.name ?? firstLeg.from.name ?? "",
+      lat: trip?.fromPlace?.latitude ?? firstLeg.from.lat,
+      lng: trip?.fromPlace?.longitude ?? firstLeg.from.lng,
     },
     to: {
-      name:
-        trip?.toPlace?.name ?? itineraries[0].legs[itineraries[0].legs.length - 1]?.to.name ?? "",
-      lat:
-        trip?.toPlace?.latitude ?? itineraries[0].legs[itineraries[0].legs.length - 1]?.to.lat ?? 0,
-      lng:
-        trip?.toPlace?.longitude ??
-        itineraries[0].legs[itineraries[0].legs.length - 1]?.to.lng ??
-        0,
+      name: trip?.toPlace?.name ?? lastLeg.to.name ?? "",
+      lat: trip?.toPlace?.latitude ?? lastLeg.to.lat,
+      lng: trip?.toPlace?.longitude ?? lastLeg.to.lng,
     },
     itineraries,
     provider: "entur",
