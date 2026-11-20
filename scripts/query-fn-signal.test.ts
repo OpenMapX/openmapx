@@ -76,39 +76,54 @@ function forwardsSignal(reference: ts.Identifier): boolean {
   return true;
 }
 
-/** The function a query-function identifier names in the same file, if any. */
-function localFunction(sf: ts.SourceFile, name: string): ts.Expression | undefined {
-  let found: ts.Expression | undefined;
-  const visit = (node: ts.Node): void => {
-    if (found) return;
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === name &&
-      node.initializer
-    ) {
-      found = node.initializer;
-    } else if (ts.isFunctionDeclaration(node) && node.name?.text === name && node.body) {
-      found = ts.factory.createFunctionExpression(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        node.parameters,
-        undefined,
-        node.body,
-      );
-    } else ts.forEachChild(node, visit);
-  };
-  visit(sf);
-  return found;
+/** Whether a binding, possibly destructured, introduces `name`. */
+function bindsName(binding: ts.BindingName, name: string): boolean {
+  if (ts.isIdentifier(binding)) return binding.text === name;
+  return binding.elements.some(
+    (element) => !ts.isOmittedExpression(element) && bindsName(element.name, name),
+  );
+}
+
+/**
+ * What `name` refers to in the nearest scope around `from` that declares it:
+ * the initializer of a `const`/`let`, or a function declaration's body. A
+ * parameter, an import or a destructured binding resolves to nothing.
+ */
+function resolveLocal(from: ts.Node, name: string): ts.Expression | undefined {
+  for (let scope = from.parent; scope; scope = scope.parent) {
+    if (ts.isFunctionLike(scope) && scope.parameters.some((p) => bindsName(p.name, name))) {
+      return undefined;
+    }
+    if (!ts.isBlock(scope) && !ts.isSourceFile(scope) && !ts.isModuleBlock(scope)) continue;
+    for (const statement of scope.statements) {
+      if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          if (!bindsName(declaration.name, name)) continue;
+          return ts.isIdentifier(declaration.name) ? declaration.initializer : undefined;
+        }
+      } else if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) {
+        return statement.body
+          ? ts.factory.createFunctionExpression(
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              statement.parameters,
+              undefined,
+              statement.body,
+            )
+          : undefined;
+      }
+    }
+  }
+  return undefined;
 }
 
 /** Whether a query function takes the signal, or forwards the context that carries it. */
-function takesSignal(fn: ts.Expression, sf: ts.SourceFile): boolean {
+function takesSignal(fn: ts.Expression): boolean {
   if (ts.isIdentifier(fn)) {
-    const target = localFunction(sf, fn.text);
-    return target !== undefined && !ts.isIdentifier(target) && takesSignal(target, sf);
+    const target = resolveLocal(fn, fn.text);
+    return target !== undefined && !ts.isIdentifier(target) && takesSignal(target);
   }
   if (!ts.isArrowFunction(fn) && !ts.isFunctionExpression(fn)) return false;
   const [first] = fn.parameters;
@@ -141,7 +156,7 @@ function offendersIn(file: string, source = readFileSync(file, "utf8")): string[
         : ts.isShorthandPropertyAssignment(node) && node.name.text === "queryFn"
           ? node.name
           : undefined;
-    if (fn && !takesSignal(fn, sf)) {
+    if (fn && !takesSignal(fn)) {
       const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
       hits.push(`${relative(ROOT, file)}:${line + 1}`);
     }
@@ -177,6 +192,11 @@ describe("the query-function check", () => {
       "a shorthand function declaration",
       "function queryFn({ signal }) { return get(url, { signal }); } useQuery({ queryFn });",
     ],
+    [
+      "a shorthand whose own scope passes the signal while another scope drops it",
+      "function a() { const queryFn = () => get(url); return queryFn; }" +
+        " function b() { const queryFn = ({ signal }) => get(url, { signal }); return useQuery({ queryFn }); }",
+    ],
   ])("accepts %s", (_, body) => {
     expect(check(body)).toBe(true);
   });
@@ -196,6 +216,16 @@ describe("the query-function check", () => {
     [
       "a shorthand name declared elsewhere",
       "import { queryFn } from './x'; useQuery({ queryFn });",
+    ],
+    [
+      "a shorthand whose own scope drops the signal while another scope passes it",
+      "function a() { const queryFn = ({ signal }) => get(url, { signal }); return useQuery({ queryFn }); }" +
+        " function b() { const queryFn = () => get(url); return useQuery({ queryFn }); }",
+    ],
+    [
+      "a shorthand naming a parameter that shadows a passing function",
+      "const queryFn = ({ signal }) => get(url, { signal });" +
+        " function useLookup(queryFn) { return useQuery({ queryFn }); }",
     ],
   ])("rejects %s", (_, body) => {
     expect(check(body)).toBe(false);
