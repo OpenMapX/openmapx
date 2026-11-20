@@ -1,5 +1,6 @@
 import { classifyProviderFailure, ProviderPayloadError } from "@openmapx/integration-framework";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import arrivalsFixture from "./__fixtures__/arrivals.json";
 import stopPointsFixture from "./__fixtures__/stop-points.json";
 import {
@@ -11,10 +12,12 @@ import {
   getStopAlerts,
   getStops,
   searchByName,
-  setTflApiKey,
+  type TflAccess,
 } from "./provider.js";
 
+/** Called with each request URL; answers like fetch. */
 let mockFetch: ReturnType<typeof vi.fn>;
+let access: TflAccess;
 
 function mockOk(data: unknown) {
   return Response.json(data);
@@ -22,21 +25,18 @@ function mockOk(data: unknown) {
 
 beforeEach(() => {
   mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-  setTflApiKey("test-tfl-key");
-});
-
-afterEach(() => {
-  setTflApiKey(undefined);
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+  const http = fakeHttpClient(async ({ url }) => {
+    const response = (await mockFetch(url)) as Response;
+    return response.ok ? response.json() : httpStatus(response.status);
+  });
+  access = { http, apiKey: "test-tfl-key" };
 });
 
 describe("TfL payload validation", () => {
   it("maps the documented prediction shape and requests the stop's arrivals", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(arrivalsFixture));
 
-    const board = await getDepartures("tfl:940GZZLUOXC", 30);
+    const board = await getDepartures(access, "tfl:940GZZLUOXC", 30);
 
     expect(board.departures.map((d) => [d.route.id, d.expectedAt, d.platform])).toEqual([
       ["tfl:central", "2026-11-10T09:00:42Z", "Westbound - Platform 1"],
@@ -52,7 +52,7 @@ describe("TfL payload validation", () => {
     const [first, second] = arrivalsFixture;
     mockFetch.mockResolvedValueOnce(mockOk([{ ...first, expectedArrival: null }, second]));
 
-    const board = await getDepartures("tfl:940GZZLUOXC", 30);
+    const board = await getDepartures(access, "tfl:940GZZLUOXC", 30);
 
     expect(board.departures.map((d) => d.tripId)).toEqual(["214"]);
   });
@@ -63,7 +63,9 @@ describe("TfL payload validation", () => {
   ])("reports %s as an invalid payload", async (_case, body) => {
     mockFetch.mockResolvedValueOnce(mockOk(body));
 
-    const failure = await getDepartures("tfl:940GZZLUOXC", 30).catch((error: unknown) => error);
+    const failure = await getDepartures(access, "tfl:940GZZLUOXC", 30).catch(
+      (error: unknown) => error,
+    );
 
     expect(failure).toBeInstanceOf(ProviderPayloadError);
     expect(classifyProviderFailure(failure)).toBe("invalid_payload");
@@ -75,7 +77,7 @@ describe("TfL payload validation", () => {
       mockOk({ stopPoints: [stop, { ...stop, naptanId: "940GZZLUXXX", lat: null, lon: null }] }),
     );
 
-    const stops = await getStops(51.515, -0.142, 400);
+    const stops = await getStops(access, 51.515, -0.142, 400);
 
     expect(stops.map((s) => [s.id, s.lat, s.lng])).toEqual([
       ["tfl:940GZZLUOXC", 51.515224, -0.141903],
@@ -89,9 +91,9 @@ describe("TfL payload validation", () => {
     mockFetch.mockImplementation(async () => new Response("busy", { status: 503 }));
 
     for (const call of [
-      () => getStops(51.5, -0.1, 300),
-      () => getAlerts(),
-      () => getRouteStopSequence("tfl:victoria"),
+      () => getStops(access, 51.5, -0.1, 300),
+      () => getAlerts(access),
+      () => getRouteStopSequence(access, "tfl:victoria"),
     ]) {
       const failure = await call().catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
@@ -101,7 +103,8 @@ describe("TfL payload validation", () => {
   });
 
   it("answers no stops for search text that would collapse into another TfL path", async () => {
-    for (const query of ["", ".", ".."]) await expect(searchByName(query, 5)).resolves.toEqual([]);
+    for (const query of ["", ".", ".."])
+      await expect(searchByName(access, query, 5)).resolves.toEqual([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -109,10 +112,10 @@ describe("TfL payload validation", () => {
     mockFetch.mockImplementation(async () => new Response("not found", { status: 404 }));
 
     for (const call of [
-      () => getDepartures("tfl:940GZZLUBOGUS", 30),
-      () => getStopAlerts("tfl:940GZZLUBOGUS"),
-      () => getRouteAlerts("tfl:bogus-line"),
-      () => getRouteStopSequence("tfl:bogus-line"),
+      () => getDepartures(access, "tfl:940GZZLUBOGUS", 30),
+      () => getStopAlerts(access, "tfl:940GZZLUBOGUS"),
+      () => getRouteAlerts(access, "tfl:bogus-line"),
+      () => getRouteStopSequence(access, "tfl:bogus-line"),
     ]) {
       const failure = await call().catch((error: unknown) => error);
       expect(classifyProviderFailure(failure)).toBe("input");
@@ -124,9 +127,9 @@ describe("TfL payload validation", () => {
     mockFetch.mockImplementation(async () => new Response("not found", { status: 404 }));
 
     for (const call of [
-      () => getAlerts(),
-      () => getStops(51.5, -0.1, 300),
-      () => searchByName("no such place", 5),
+      () => getAlerts(access),
+      () => getStops(access, 51.5, -0.1, 300),
+      () => searchByName(access, "no such place", 5),
     ]) {
       const failure = await call().catch((error: unknown) => error);
       expect(classifyProviderFailure(failure)).toBe("connection");
@@ -135,10 +138,10 @@ describe("TfL payload validation", () => {
 
   it("answers no stop for an unknown NaPTAN id and rejects a stop without coordinates", async () => {
     mockFetch.mockResolvedValueOnce(new Response("missing", { status: 404 }));
-    await expect(getStop("tfl:940GZZLUNOPE")).resolves.toBeNull();
+    await expect(getStop(access, "tfl:940GZZLUNOPE")).resolves.toBeNull();
 
     mockFetch.mockResolvedValueOnce(mockOk({ naptanId: "940GZZLUOXC", commonName: "Oxford" }));
-    await expect(getStop("tfl:940GZZLUOXC")).rejects.toBeInstanceOf(ProviderPayloadError);
+    await expect(getStop(access, "tfl:940GZZLUOXC")).rejects.toBeInstanceOf(ProviderPayloadError);
   });
 });
 
@@ -165,7 +168,7 @@ describe("TfL transit provider", () => {
       }),
     );
 
-    const stops = await getStops(51.51, -0.14, 5000);
+    const stops = await getStops(access, 51.51, -0.14, 5000);
 
     expect(stops[0]).toMatchObject({
       id: "tfl:940GZZLUOXC",
@@ -212,7 +215,7 @@ describe("TfL transit provider", () => {
       ]),
     );
 
-    const { departures } = await getDepartures("tfl:940GZZLUOXC", 10);
+    const { departures } = await getDepartures(access, "tfl:940GZZLUOXC", 10);
 
     expect(departures).toHaveLength(2);
     expect(departures[0]).toMatchObject({
@@ -244,7 +247,7 @@ describe("TfL transit provider", () => {
       ]),
     );
 
-    const alerts = await getAlerts();
+    const alerts = await getAlerts(access);
 
     expect(alerts).toEqual([
       {
@@ -283,7 +286,7 @@ describe("TfL transit provider", () => {
       ]),
     );
 
-    const alerts = await getAlerts();
+    const alerts = await getAlerts(access);
 
     expect(alerts).toHaveLength(2);
     expect(alerts[0]).toMatchObject({
@@ -318,7 +321,7 @@ describe("TfL transit provider", () => {
       ),
     );
 
-    const alerts = await getAlerts();
+    const alerts = await getAlerts(access);
 
     expect(alerts.map((alert) => alert.severity)).toEqual([
       "warning",
@@ -352,7 +355,7 @@ describe("TfL transit provider", () => {
       ]),
     );
 
-    expect(await getAlerts()).toEqual([]);
+    expect(await getAlerts(access)).toEqual([]);
   });
 
   it("represents every simultaneous status on a line", async () => {
@@ -383,7 +386,7 @@ describe("TfL transit provider", () => {
       ]),
     );
 
-    const alerts = await getAlerts();
+    const alerts = await getAlerts(access);
 
     expect(alerts).toHaveLength(2);
     expect(alerts[0]).toMatchObject({
@@ -414,7 +417,7 @@ describe("TfL transit provider", () => {
       ]),
     );
 
-    const alerts = await getAlerts();
+    const alerts = await getAlerts(access);
 
     expect(alerts.map((alert) => alert.severity)).toEqual(["warning", "severe"]);
   });
@@ -433,7 +436,7 @@ describe("TfL transit provider", () => {
       }),
     );
 
-    const stops = await getRouteStopSequence("tfl:central");
+    const stops = await getRouteStopSequence(access, "tfl:central");
 
     expect(stops).toEqual([
       { id: "tfl:s1", name: "Stop 1", lat: 51.5, lng: -0.1, sequence: 0 },
@@ -445,7 +448,7 @@ describe("TfL transit provider", () => {
   it("reports a failed stop search without exposing the keyed request URL", async () => {
     mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
 
-    const failure = await searchByName("Oxford Circus", 5).catch((error: unknown) => error);
+    const failure = await searchByName(access, "Oxford Circus", 5).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toBe("TfL stop search unavailable");
@@ -455,12 +458,12 @@ describe("TfL transit provider", () => {
   it("returns no stops when the search succeeds without matches", async () => {
     mockFetch.mockResolvedValueOnce(mockOk({ matches: [] }));
 
-    expect(await searchByName("Nowhere", 5)).toEqual([]);
+    expect(await searchByName(access, "Nowhere", 5)).toEqual([]);
   });
 
   it.each([
-    ["stop alerts", () => getStopAlerts("tfl:940GZZLUOXC")],
-    ["timetable", () => getDepartures("tfl:940GZZLUOXC", 10)],
+    ["stop alerts", () => getStopAlerts(access, "tfl:940GZZLUOXC")],
+    ["timetable", () => getDepartures(access, "tfl:940GZZLUOXC", 10)],
   ])("reports failed %s without exposing the keyed request URL", async (what, lookup) => {
     mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
 
@@ -486,11 +489,13 @@ describe("TfL departure board age", () => {
     mockFetch.mockResolvedValueOnce(
       mockOk([arrival("v1", "2026-03-10T10:00:40Z"), arrival("v2", "2026-03-10T10:00:10Z")]),
     );
-    expect((await getDepartures("tfl:940GZZLUOXC", 10)).dataAsOf).toBe("2026-03-10T10:00:10.000Z");
+    expect((await getDepartures(access, "tfl:940GZZLUOXC", 10)).dataAsOf).toBe(
+      "2026-03-10T10:00:10.000Z",
+    );
   });
 
   it("is unknown when a prediction states no time", async () => {
     mockFetch.mockResolvedValueOnce(mockOk([arrival("v1", "2026-03-10T10:00:40Z"), arrival("v2")]));
-    expect((await getDepartures("tfl:940GZZLUOXC", 10)).dataAsOf).toBeUndefined();
+    expect((await getDepartures(access, "tfl:940GZZLUOXC", 10)).dataAsOf).toBeUndefined();
   });
 });
