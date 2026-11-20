@@ -73,7 +73,11 @@ describe("personal timeline hooks", () => {
     expect(query).toBeDefined();
     expect(query?.observers[0]?.options.staleTime).toBe(30_000);
     expect(query?.gcTime).toBe(300_000);
-    expect(get).toHaveBeenCalledWith(`${API_ENDPOINTS.timelineDay}/2026-08-09`);
+    expect(get).toHaveBeenCalledWith(
+      `${API_ENDPOINTS.timelineDay}/2026-08-09`,
+      undefined,
+      expect.objectContaining({ maxBytes: expect.any(Number) }),
+    );
   });
 
   it.each([

@@ -33,3 +33,25 @@ export function downloadMediaTypes(
   if (typeof key !== "string" || !Object.hasOwn(selector.values, key)) return [];
   return [selector.values[key]];
 }
+
+/** Reject malformed first-party descriptors before registration or SDK acquisition. */
+export function assertOperationContract(operation: ApiOperation): void {
+  if (
+    operation.requestBody &&
+    (operation.request?.body ||
+      operation.requestBody.kind !== "bytes" ||
+      operation.requestBody.mediaType !== "application/octet-stream")
+  )
+    throw Error("Ambiguous binary request");
+  for (const [status, contract] of Object.entries(operation.responses)) {
+    if (
+      "nativeDownload" in contract &&
+      (contract.nativeDownload !== true ||
+        contract.kind !== "bytes" ||
+        operation.method !== "GET" ||
+        Number(status) < 200 ||
+        Number(status) >= 300)
+    )
+      throw Error("Native downloads require a successful GET byte response");
+  }
+}

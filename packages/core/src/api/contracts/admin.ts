@@ -1,5 +1,6 @@
 import z from "zod/v4";
 import { httpErrorSchema } from "../../services/data-manager/contracts/common";
+import type { ApiOperation, ApiResponseContract } from "./operation";
 
 export { httpErrorSchema };
 export const adminTimestampSchema = z.iso.datetime({ offset: true });
@@ -63,39 +64,9 @@ export const adminCommonResponses = {
   429: adminJson(adminRateLimitSchema, z.object({ "retry-after": z.string().regex(/^\d+$/) })),
   500: adminJson(httpErrorSchema),
 } as const;
-export type AdminResponseContract =
-  | { kind: "json"; schema: z.ZodType; headers?: z.ZodType }
-  | { kind: "text"; schema: z.ZodType<string>; mediaType: string; headers?: z.ZodType }
-  | { kind: "empty"; headers?: z.ZodType }
-  | { kind: "bytes"; mediaType: string; headers?: z.ZodType; nativeDownload?: true }
-  | { kind: "stream"; mediaType: string; headers?: z.ZodType };
-export interface AdminOperation {
-  method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
-  path: `/api/${string}`;
+/** Administration operations use every portable response kind except session text downloads. */
+export type AdminResponseContract = Exclude<ApiResponseContract, { kind: "text-download" }>;
+export interface AdminOperation extends ApiOperation {
   auth: "service" | "admin";
-  request?: { body?: z.ZodType; query?: z.ZodType; params?: z.ZodType; headers?: z.ZodType };
-  requestBody?: { kind: "bytes"; mediaType: "application/octet-stream" };
   responses: Record<number, AdminResponseContract>;
-}
-
-/** Reject malformed first-party descriptors before registration or SDK acquisition. */
-export function assertAdminOperationContract(operation: AdminOperation): void {
-  if (
-    operation.requestBody &&
-    (operation.request?.body ||
-      operation.requestBody.kind !== "bytes" ||
-      operation.requestBody.mediaType !== "application/octet-stream")
-  )
-    throw Error("Ambiguous administration binary request");
-  for (const [status, contract] of Object.entries(operation.responses)) {
-    if (
-      "nativeDownload" in contract &&
-      (contract.nativeDownload !== true ||
-        contract.kind !== "bytes" ||
-        operation.method !== "GET" ||
-        Number(status) < 200 ||
-        Number(status) >= 300)
-    )
-      throw Error("Native downloads require a successful GET byte response");
-  }
 }

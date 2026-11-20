@@ -1,5 +1,9 @@
 import type { ZodType } from "zod";
+import { readBoundedJsonResponse } from "../utils/fetchJson";
 import { type ApiClient, type ApiRequestOptions, apiClient } from "./client";
+
+/** Success bodies share the binders' ordinary JSON ceiling. */
+const MAX_SDK_JSON_BYTES = 8 * 1024 * 1024;
 
 export class ApiContractError extends Error {
   constructor(readonly status: number) {
@@ -41,7 +45,7 @@ export async function sdkRequest<T extends SdkResponse = SdkResponse>(
   const response = await client.request(
     url,
     init,
-    async (res): Promise<SdkResponse> => {
+    async (res, effectiveSignal): Promise<SdkResponse> => {
       if (!declaredStatuses.includes(res.status)) throw new ApiContractError(res.status);
       if (res.status === 304) return { status: 304, data: undefined, headers: res.headers };
       // The current generated family declares 200 JSON and a bodyless 304.
@@ -52,8 +56,12 @@ export async function sdkRequest<T extends SdkResponse = SdkResponse>(
       }
       let body: unknown;
       try {
-        body = await res.json();
-      } catch {
+        body = await readBoundedJsonResponse(res, {
+          maxBytes: MAX_SDK_JSON_BYTES,
+          signal: effectiveSignal,
+        });
+      } catch (error) {
+        if (effectiveSignal.aborted) throw error;
         throw new ApiContractError(res.status);
       }
       const parsed = schema.safeParse(body);

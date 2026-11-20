@@ -1,12 +1,18 @@
 import { readBoundedJsonResponse, readBoundedResponseText } from "../utils/fetchJson";
+import { consumeAdminBytes } from "./admin-byte-reader";
 import {
   type ApiClient,
   ApiClientError,
+  ApiRequestAbortedError,
   type ApiRequestOptions,
   apiClient,
   parseRetryAfter,
 } from "./client";
-import { type ApiOperation, downloadMediaTypes } from "./contracts/operation";
+import {
+  type ApiOperation,
+  assertOperationContract,
+  downloadMediaTypes,
+} from "./contracts/operation";
 import { ApiContractError } from "./sdk-transport";
 
 export type OperationRequestOptions = Omit<RequestInit, "signal" | "credentials"> &
@@ -17,13 +23,21 @@ export type OperationRequestOptions = Omit<RequestInit, "signal" | "credentials"
     maxErrorBytes?: number;
     /** UTF-8 saved-document downloads, consumed before acquisition releases its lifetime. */
     maxDownloadBytes?: number;
+    /** Called within ApiClient's abort/deadline lifetime; never receives a raw Response. */
     onTextChunk?: (chunk: string) => void | Promise<void>;
+    onByteChunk?: (chunk: Uint8Array, signal: AbortSignal) => void | Promise<void>;
+    onByteHeaders?: (headers: Headers, signal: AbortSignal) => void | Promise<void>;
   };
 interface OperationResponse {
   status: number;
   headers: Headers;
   data: unknown;
 }
+const KIB = 1024;
+const MIB = 1024 * KIB;
+/** Byte transfers default to three days and may never ask for more than a week. */
+const DEFAULT_BYTE_DEADLINE_MS = 72 * 3600_000;
+const MAX_BYTE_DEADLINE_MS = 7 * 24 * 3600_000;
 function positive(value: number | undefined, fallback: number): number {
   const result = value ?? fallback;
   if (!Number.isFinite(result) || result <= 0)
@@ -42,6 +56,11 @@ export function matchesBoundRequest(url: string, method: string, operation: ApiO
     expected.every((segment, index) =>
       segment.startsWith(":") ? Boolean(actual[index]) : segment === actual[index],
     )
+  );
+}
+export function isEventStreamOperation(operation: ApiOperation): boolean {
+  return Object.values(operation.responses).some(
+    (contract) => contract.kind === "stream" && contract.mediaType === "text/event-stream",
   );
 }
 function headerValues(headers: Headers): Record<string, string> {
@@ -111,6 +130,7 @@ export function createOperationBinder<const Operations extends Record<string, Ap
 ) {
   return (operationId: keyof Operations) => {
     const operation: ApiOperation = registry[operationId];
+    assertOperationContract(operation);
     return async <T = OperationResponse>(
       url: string,
       options: OperationRequestOptions = {},
@@ -126,6 +146,8 @@ export function createOperationBinder<const Operations extends Record<string, Ap
         maxErrorBytes,
         maxDownloadBytes,
         onTextChunk,
+        onByteChunk,
+        onByteHeaders,
         method = "GET",
         body,
         integrity,
@@ -136,29 +158,58 @@ export function createOperationBinder<const Operations extends Record<string, Ap
       } = options;
       if (!matchesBoundRequest(url, method, operation))
         throw new Error("API request does not match its bound operation");
-      // SSE is deliberately browser-owned and cannot enter the finite/JSON reader.
+      const byteResponse = Object.values(operation.responses).some(
+          (contract) => contract.kind === "bytes",
+        ),
+        byteRequest = operation.requestBody?.kind === "bytes",
+        binary = byteRequest || byteResponse;
+      if (byteResponse && (!onByteChunk || body !== undefined || onTextChunk || keepalive))
+        throw new Error("Byte response requires an owned byte consumer");
+      if (byteRequest && (!(body instanceof Blob) || onTextChunk || keepalive))
+        throw new Error("Binary upload requires the original Blob body");
+      const effectiveTimeout = binary ? (timeoutMs ?? DEFAULT_BYTE_DEADLINE_MS) : timeoutMs;
       if (
-        Object.values(operation.responses).some(
-          (c) => c.kind === "stream" && c.mediaType === "text/event-stream",
-        )
+        binary &&
+        (!Number.isFinite(effectiveTimeout) ||
+          !effectiveTimeout ||
+          effectiveTimeout < 0 ||
+          effectiveTimeout > MAX_BYTE_DEADLINE_MS)
       )
+        throw new Error("Invalid byte transfer deadline");
+      // SSE is deliberately browser-owned and cannot enter the finite/JSON reader.
+      if (isEventStreamOperation(operation))
         throw new Error("Use the EventSource stream connection target");
       // Orval emits application/json even when an optional body is omitted.
       // An empty JSON entity is invalid to Fastify; absence must stay absence.
       const requestHeaders = new Headers(headers);
+      if (byteRequest) requestHeaders.set("content-type", "application/octet-stream");
       if (body === undefined && operation.request?.body?.isOptional())
         requestHeaders.delete("content-type");
       validateRequestHeaders(operation, requestHeaders);
-      const jsonBudget = positive(maxJsonBytes, 8 * 1024 * 1024);
-      const textBudget = positive(maxTextBytes, 8 * 1024 * 1024);
-      const errorBudget = positive(maxErrorBytes, 64 * 1024);
-      const downloadBudget = positive(maxDownloadBytes, 40 * 1024 * 1024);
+      // A byte transfer's JSON envelope is metadata, so its budget stays small.
+      const jsonBudget = binary
+        ? Math.min(positive(maxJsonBytes, 64 * KIB), 64 * KIB)
+        : positive(maxJsonBytes, 8 * MIB);
+      const textBudget = positive(maxTextBytes, 8 * MIB);
+      const errorBudget = binary
+        ? Math.min(positive(maxErrorBytes, 64 * KIB), 64 * KIB)
+        : positive(maxErrorBytes, 64 * KIB);
+      const downloadBudget = positive(maxDownloadBytes, 40 * MIB);
+      // A byte stream that is not consumed is cancelled before the call
+      // settles, so the caller never outlives its upstream connection.
+      const releaseBinary = async (response: Response) => {
+        if (binary && response.body && !response.body.locked)
+          await response.body.cancel().catch(() => {});
+      };
       const result = await client.request(
         url,
         { method, body, integrity, keepalive, mode, referrer, referrerPolicy },
         async (response, effectiveSignal): Promise<OperationResponse> => {
           const contract = operation.responses[response.status];
-          if (!contract) throw new ApiContractError(response.status);
+          if (!contract) {
+            await releaseBinary(response);
+            throw new ApiContractError(response.status);
+          }
           try {
             if (
               contract.headers &&
@@ -196,15 +247,14 @@ export function createOperationBinder<const Operations extends Record<string, Ap
                   ? mediaType === "application/json" || mediaType?.endsWith("+json")
                   : mediaType === contract.mediaType;
               if (!correctMedia) throw new ApiContractError(response.status);
-              if (contract.kind === "stream") {
+              if (contract.kind === "bytes") {
+                if (!onByteChunk) throw new ApiContractError(response.status);
+                await consumeAdminBytes(response, effectiveSignal, { onByteChunk, onByteHeaders });
+                data = undefined;
+              } else if (contract.kind === "stream") {
                 if (!onTextChunk) throw new ApiContractError(response.status);
                 await consumeTextStream(response, effectiveSignal, onTextChunk);
                 data = undefined;
-              } else if (contract.kind === "bytes") {
-                // Binary administration routes use the focused owned byte
-                // consumer; this generic JSON/text transport cannot buffer them.
-                await response.body?.cancel().catch(() => {});
-                throw new ApiContractError(response.status);
               } else {
                 const raw =
                   contract.kind === "json"
@@ -224,11 +274,19 @@ export function createOperationBinder<const Operations extends Record<string, Ap
             }
             return { status: response.status, headers: response.headers, data };
           } catch (error) {
-            if (effectiveSignal.aborted) throw error;
+            await releaseBinary(response);
+            if (effectiveSignal.aborted || error instanceof ApiRequestAbortedError) throw error;
             throw new ApiContractError(response.status);
           }
         },
-        { signal, timeoutMs, cache, headers: requestHeaders, acceptedStatuses: "all" },
+        {
+          signal,
+          timeoutMs: effectiveTimeout,
+          cache,
+          headers: requestHeaders,
+          acceptedStatuses: "all",
+          ...(byteRequest ? { expectedRequestMediaType: "application/octet-stream" as const } : {}),
+        },
       );
       return result as T;
     };

@@ -340,6 +340,27 @@ describe("requests", () => {
     expect(calls[0].init.body).toBe('{"a":1}');
   });
 
+  it.each([
+    ["get", (client: ApiClient) => client.get("/large")],
+    ["post", (client: ApiClient) => client.post("/large", {})],
+    ["delete", (client: ApiClient) => client.delete("/large")],
+  ])("refuses a %s success body above the 8 MiB ceiling and releases it", async (_m, request) => {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`{"value":"${"x".repeat(8 * 1024 * 1024)}"}`));
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+    mockFetch(() => new Response(body, { headers: { "content-type": "application/json" } }));
+    const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
+    await expect(request(client)).rejects.toThrow(/too large/);
+    expect(canceled).toBe(true);
+    expect(body.locked).toBe(false);
+  });
+
   it("accepts a bare client that falls back to the global configuration", async () => {
     mockFetch(() => jsonResponse({ ok: true }));
     await new ApiClient().get("/fallback");
@@ -382,6 +403,73 @@ describe("SDK response-consumer cancellation", () => {
       expect(vi.getTimerCount()).toBe(0);
     },
   );
+});
+
+describe("browser-owned targets and byte requests", () => {
+  const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
+  const downloadPath = "/api/admin/artifact-transfers/fixture/content";
+  it("never returns configured URL credentials or accepts non-HTTP and authority-replacing targets", () => {
+    for (const baseUrl of [
+      "https://username:secret@app.example",
+      "file:///tmp/app",
+      "data:text/plain,secret",
+    ]) {
+      const scoped = createApiClient({ baseUrl, credentials: "include" });
+      let error: unknown;
+      try {
+        scoped.connectionTarget("/api/admin/jobs/a/events");
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain("secret");
+    }
+    for (const path of [
+      "https://evil.test/api/jobs",
+      "//evil.test/api/jobs",
+      "/\\evil.test/api/jobs",
+    ])
+      expect(() => client.connectionTarget(path)).toThrow();
+  });
+  it("refuses an interceptor's changed byte request media type before fetch", async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetch);
+    const intercepted = createApiClient({
+      baseUrl: "https://api.example",
+      headerInterceptor: () => ({ "content-type": "application/json" }),
+    });
+    await expect(
+      intercepted.request(
+        downloadPath,
+        { method: "PUT", body: new Blob([new Uint8Array([0, 255])]) },
+        async (response) => response.status,
+        {
+          headers: { "content-type": "application/octet-stream" },
+          expectedRequestMediaType: "application/octet-stream",
+        },
+      ),
+    ).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("constructs only a same-origin browser-owned native target", () => {
+    vi.stubGlobal("window", { location: { origin: "https://app.example" } });
+    expect(client.downloadTarget(downloadPath)).toEqual({
+      url: `https://app.example${downloadPath}`,
+      ownership: "browser",
+    });
+    for (const cfg of [
+      { baseUrl: "https://other.example", credentials: "include" as const },
+      { baseUrl: "https://app.example", credentials: "omit" as const },
+      {
+        baseUrl: "https://app.example",
+        credentials: "include" as const,
+        headerInterceptor: () => ({}),
+      },
+    ])
+      expect(() => createApiClient(cfg).downloadTarget(downloadPath)).toThrow();
+    expect(() => client.downloadTarget("//foreign.example/file")).toThrow();
+    expect(() => client.downloadTarget(`${downloadPath}#fragment`)).toThrow();
+  });
 });
 
 describe("proxyImageUrl", () => {

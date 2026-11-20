@@ -793,8 +793,9 @@ before data enters timeline query/UI state. Invalid successful replies raise a
 payload-free `PersonalTimelineApiError` with `TIMELINE_RESPONSE_INVALID`. No raw
 response, schema issues or private history are attached to errors or persisted.
 Existing HTTP failure sanitization, owner isolation and partial-track warnings
-are preserved. Valid track positions can include elevation dimensions; no
-8 MiB generated-client limit is imposed on these larger normalized day replies.
+are preserved. Valid track positions can include elevation dimensions. Day
+replies may exceed the client's 8 MiB success-body default, so they declare a
+128 MiB ceiling derived from the 20 upstream track pages of 5 MiB each.
 
 ## Retrying service and backup mutations
 

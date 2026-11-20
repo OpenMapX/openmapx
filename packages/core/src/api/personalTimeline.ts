@@ -59,6 +59,12 @@ async function timelineRequest<T>(
   }
 }
 
+/**
+ * A normalized day carries at most 20 upstream track pages of 5 MiB each, so it
+ * may legitimately exceed the client's ordinary 8 MiB success ceiling.
+ */
+const MAX_TIMELINE_DAY_BYTES = 128 * 1024 * 1024;
+
 export async function getTimelineConnection(): Promise<TimelineConnectionView> {
   return timelineRequest(
     () => apiClient.get<unknown>(API_ENDPOINTS.timelineConnection),
@@ -91,7 +97,14 @@ export async function disconnectTimeline(): Promise<{ ok: true }> {
 
 export async function getPersonalTimelineDay(date: string): Promise<PersonalTimelineDayV1> {
   return timelineRequest(
-    () => apiClient.get<unknown>(`${API_ENDPOINTS.timelineDay}/${encodeURIComponent(date)}`),
+    () =>
+      apiClient.get<unknown>(
+        `${API_ENDPOINTS.timelineDay}/${encodeURIComponent(date)}`,
+        undefined,
+        {
+          maxBytes: MAX_TIMELINE_DAY_BYTES,
+        },
+      ),
     personalTimelineDayV1Schema,
   );
 }

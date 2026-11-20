@@ -1,216 +1,169 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { adminErrorMessage, bindAdminOperation, unwrapAdminResponse } from "./admin-sdk-transport";
-import { ApiClientError, createApiClient } from "./client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { bindAdminOperation, bindAdminStreamOperation } from "./admin-sdk-transport";
+import { createApiClient } from "./client";
 import { ApiContractError } from "./sdk-transport";
 
 const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
+beforeEach(() =>
+  vi.stubGlobal("fetch", () => {
+    throw new Error("Unexpected network");
+  }),
+);
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-describe("canonical administration SDK acquisition", () => {
-  it("rejects malformed successes through the operation closure despite forged validator/status options", async () => {
-    const fetch = vi.fn().mockResolvedValue(Response.json({ ok: true }));
-    vi.stubGlobal("fetch", fetch);
+describe("administration registry binding", () => {
+  it("binds extension acceptance to 202 and preserves absent optional update bodies", async () => {
+    const acquire = vi.fn(async (_url: string, init: RequestInit) => {
+      expect(init.body).toBeUndefined();
+      expect(new Headers(init.headers).has("content-type")).toBe(false);
+      return Response.json({ jobId: "extension-job" }, { status: 202 });
+    });
+    vi.stubGlobal("fetch", acquire);
+    const update = bindAdminOperation("updateAdminExtension");
     await expect(
-      bindAdminOperation("getApiDataManagerTransitState")("/api/data-manager/transit/state", {
+      update("/api/admin/extensions/update/a%2Fb", {
         client,
-        operationId: "postApiAdminAmbientPlacesRollback",
-        schema: { safeParse: () => ({ success: true, data: {} }) },
-        declaredStatuses: [200],
-        acceptedStatuses: [200],
-      } as never),
-    ).rejects.toBeInstanceOf(ApiContractError);
-    expect(fetch.mock.calls[0]?.[1]).not.toHaveProperty("operationId");
-    expect(fetch.mock.calls[0]?.[1]).not.toHaveProperty("schema");
-  });
-  it("preserves declared conflict and absence states, cookies and client scope", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ error: "absent" }, { status: 404 }))
-      .mockResolvedValueOnce(
-        Response.json({ ok: false, reason: "in-flight", existingJobId: "job" }, { status: 409 }),
-      );
-    vi.stubGlobal("fetch", fetch);
-    const absent = await bindAdminOperation("getApiDataManagerSearchIndexStatus")<{
-      status: 404;
-      headers: Headers;
-      data: { error: string };
-    }>("/api/data-manager/search-index/status", { client });
-    expect(absent.status).toBe(404);
-    expect(fetch.mock.calls[0]?.[0]).toBe(
-      "https://app.example/api/data-manager/search-index/status",
-    );
-    expect(fetch.mock.calls[0]?.[1].credentials).toBe("include");
-    const conflict = await bindAdminOperation("postApiDataManagerTransitSync")<{
-      status: 409;
-      headers: Headers;
-      data: unknown;
-    }>("/api/data-manager/transit/sync", { client, method: "POST", body: "{}" });
-    expect(conflict.status).toBe(409);
-    expect(() => unwrapAdminResponse(conflict)).toThrow(ApiClientError);
-  });
-  it.each([
-    Response.json({ secret: "never-log" }, { status: 409 }),
-    new Response("never-log", { headers: { "content-type": "text/html" } }),
-    Response.json({ ok: true }, { status: 201 }),
-  ])(
-    "rejects malformed errors, wrong media and undeclared success without leaking bodies",
-    async (response) => {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      }),
+    ).resolves.toMatchObject({ status: 202, data: { jobId: "extension-job" } });
+    for (const response of [
+      Response.json({ jobId: "extension-job" }),
+      Response.json({ jobId: "" }, { status: 202 }),
+      Response.json({ jobId: "extension-job", ok: true }, { status: 202 }),
+    ]) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
-      const error = await bindAdminOperation("postApiDataManagerTransitSync")(
-        "/api/data-manager/transit/sync",
-        { client, method: "POST" },
-      ).catch((error) => error);
-      expect(error).toBeInstanceOf(ApiContractError);
-      expect(String(error)).not.toContain("never-log");
-      expect(JSON.stringify(error)).not.toContain("never-log");
-    },
-  );
-  it("bounds declared error and success bodies and releases their readers", async () => {
-    for (const status of [200, 404]) {
-      let canceled = false;
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('{"error":"too large"}'));
-        },
-        cancel() {
-          canceled = true;
-        },
-      });
-      vi.stubGlobal(
-        "fetch",
-        vi
-          .fn()
-          .mockResolvedValue(
-            new Response(body, { status, headers: { "content-type": "application/json" } }),
-          ),
-      );
       await expect(
-        bindAdminOperation("getApiDataManagerSearchIndexStatus")(
-          "/api/data-manager/search-index/status",
-          { client, maxJsonBytes: 4, maxErrorBytes: 4 },
-        ),
+        update("/api/admin/extensions/update/a%2Fb", { client, method: "POST" }),
       ).rejects.toBeInstanceOf(ApiContractError);
-      expect(canceled).toBe(true);
-      expect(body.locked).toBe(false);
+    }
+    expect(acquire).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("administration EventSource targets", () => {
+  it("builds a typed SSE target from the exact generated path without fetching or JSON parsing", async () => {
+    const path = "/api/admin/jobs/a%2Fb/events?source=application&cursor=2";
+    await expect(
+      bindAdminStreamOperation("streamAdminActivityJobEvents")(path, { client }),
+    ).resolves.toEqual({
+      url: "https://app.example/api/admin/jobs/a%2Fb/events?source=application&cursor=2",
+      withCredentials: true,
+    });
+    await expect(
+      bindAdminOperation("streamAdminActivityJobEvents")(path, { client }),
+    ).rejects.toThrow(/stream/);
+    for (const wrong of [
+      "https://evil.test/api/admin/jobs/a/events",
+      "//evil.test/api/admin/jobs/a/events",
+      "/api/admin/jobs/a/cancel",
+      "/api/admin/jobs/a/events?source=data-manager",
+    ])
+      await expect(
+        bindAdminStreamOperation("streamAdminActivityJobEvents")(wrong, { client }),
+      ).rejects.toThrow();
+  });
+  it("rejects finite request options instead of ignoring controls on an EventSource target", async () => {
+    const operation = bindAdminStreamOperation("streamAdminActivityJobEvents");
+    for (const unsupported of [
+      { timeoutMs: 100 },
+      { body: "secret payload" },
+      { cache: "no-store" },
+      { mode: "same-origin" },
+      { credentials: "include" },
+      { maxJsonBytes: 10 },
+      { maxTextBytes: 10 },
+      { maxErrorBytes: 10 },
+      { onTextChunk: () => {} },
+      { integrity: "secret integrity" },
+      { keepalive: true },
+      { referrer: "secret referrer" },
+      { referrerPolicy: "no-referrer" },
+      { redirect: "error" },
+      { unknown: "secret option" },
+    ]) {
+      const error = await operation("/api/admin/jobs/a/events", {
+        client,
+        ...unsupported,
+      } as never).catch((caught) => caught);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toMatch(/unsupported/i);
+      expect(String(error)).not.toContain("secret");
+      expect(JSON.stringify(error)).not.toContain("secret");
     }
   });
-  it("returns safe structured HTTP errors and exposes messages only by deliberate display helper", () => {
-    const response = {
-      status: 429 as const,
-      headers: new Headers({ "retry-after": "30" }),
-      data: { error: "wait", retryAfter: 30 },
-    };
-    let failure: unknown;
-    try {
-      unwrapAdminResponse(response);
-    } catch (error) {
-      failure = error;
-    }
-    expect(failure).toMatchObject({ status: 429, retryAfterSeconds: 30 });
-    expect(JSON.stringify(failure)).not.toContain('"wait"');
-    expect(adminErrorMessage(failure, "fallback")).toBe("wait");
-    expect(adminErrorMessage(new Error("private detail"), "fallback")).toBe("fallback");
+  it("uses the signal only to guard target construction and leaves browser lifetime ownership explicit", async () => {
+    const operation = bindAdminStreamOperation("streamAdminActivityJobEvents");
+    const abort = new AbortController();
+    const target = await operation("/api/admin/jobs/a/events", {
+      client,
+      signal: abort.signal,
+      method: "GET",
+      headers: {},
+    });
+    abort.abort();
+    expect(target).toEqual({
+      url: "https://app.example/api/admin/jobs/a/events",
+      withCredentials: true,
+    });
+    await expect(
+      operation("/api/admin/jobs/a/events", { client, signal: abort.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" });
   });
-  it.each(["timeout", "aborted"] as const)(
-    "keeps %s active through actual SDK bounded body consumption",
-    async (mode) => {
-      vi.useFakeTimers();
-      let canceled = false;
-      const body = new ReadableStream<Uint8Array>({
-        cancel() {
-          canceled = true;
-        },
-      });
-      vi.stubGlobal(
-        "fetch",
-        vi
-          .fn()
-          .mockResolvedValue(
-            new Response(body, { headers: { "content-type": "application/json" } }),
-          ),
+  it("rejects EventSource credential/header modes that native EventSource cannot honor", async () => {
+    const operation = bindAdminStreamOperation("streamAdminActivityJobEvents");
+    for (const unsupported of [
+      createApiClient({ baseUrl: "https://app.example", credentials: "omit" }),
+      createApiClient({
+        baseUrl: "https://app.example",
+        credentials: "include",
+        headerInterceptor: () => ({ Authorization: "secret" }),
+      }),
+    ]) {
+      const error = await operation("/api/admin/jobs/a/events", { client: unsupported }).catch(
+        (e) => e,
       );
-      const observer = new AbortController();
-      const outcome = bindAdminOperation("getApiDataManagerTransitState")(
-        "/api/data-manager/transit/state",
-        { client, signal: observer.signal, ...(mode === "timeout" ? { timeoutMs: 10 } : {}) },
-      ).catch((error) => error);
-      await vi.advanceTimersByTimeAsync(0);
-      if (mode === "timeout") await vi.advanceTimersByTimeAsync(11);
-      else observer.abort();
-      expect(await outcome).toMatchObject({ name: "ApiRequestAbortedError", code: mode });
-      expect(canceled).toBe(true);
-      expect(body.locked).toBe(false);
-      expect(vi.getTimerCount()).toBe(0);
-    },
-  );
-  it("rejects operation URL substitution and non-finite budgets before acquisition", async () => {
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain("secret");
+    }
+    await expect(
+      operation("/api/admin/jobs/a/events", {
+        client,
+        headers: { Authorization: "secret" },
+      } as never),
+    ).rejects.toThrow(/headers/);
+    await expect(
+      operation("/api/admin/jobs/a/events", { client, method: "POST" } as never),
+    ).rejects.toThrow(/bound operation/);
+  });
+});
+
+describe("administration native download targets", () => {
+  it("generated native targets validate UUID params and refuse unsupported headers without fetch", async () => {
+    const { getDownloadAdminArtifactTransferContentTarget } = await import(
+      "./generated/admin/service-admin.generated"
+    );
+    vi.stubGlobal("window", { location: { origin: "https://app.example" } });
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    await expect(
-      bindAdminOperation("getApiDataManagerTransitState")("/api/data-manager/transit/jobs", {
-        client,
-      }),
-    ).rejects.toThrow(/bound operation/);
-    await expect(
-      bindAdminOperation("getApiDataManagerTransitState")("/api/data-manager/transit/state", {
-        client,
-        maxJsonBytes: Number.POSITIVE_INFINITY,
-      }),
-    ).rejects.toThrow(/limits/);
-    expect(fetch).not.toHaveBeenCalled();
-  });
-  it("rejects unexpected error statuses without exposing an unvalidated display payload", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(Response.json({ error: "private upstream details" }, { status: 418 })),
-    );
-    const error = await bindAdminOperation("getApiDataManagerTransitState")(
-      "/api/data-manager/transit/state",
-      { client },
-    ).catch((error) => error);
-    expect(error).toBeInstanceOf(ApiContractError);
-    expect(adminErrorMessage(error, "fallback")).toBe("fallback");
-    expect(JSON.stringify(error)).not.toContain("private upstream");
-  });
-  it("rejects an undeclared status without waiting for its untrusted body", async () => {
-    vi.useFakeTimers();
-    let canceled = false;
-    let close = () => {};
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        close = () => controller.close();
-      },
-      cancel() {
-        canceled = true;
-      },
+    const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
+    const stageId = "91a78b3e-208b-4ba4-9ddf-870fbdf1da22";
+    expect(await getDownloadAdminArtifactTransferContentTarget(stageId, { client })).toEqual({
+      url: `https://app.example/api/admin/artifact-transfers/${stageId}/content`,
+      ownership: "browser",
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(body, {
-          status: 418,
-          headers: { "content-type": "application/json" },
-        }),
-      ),
-    );
-    const outcome = bindAdminOperation("getApiDataManagerTransitState")(
-      "/api/data-manager/transit/state",
-      { client, timeoutMs: 10 },
-    ).catch((error) => error);
-    try {
-      await vi.advanceTimersByTimeAsync(0);
-      expect(canceled).toBe(true);
-      expect(body.locked).toBe(false);
-      expect(await outcome).toBeInstanceOf(ApiContractError);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      if (!canceled) close();
-      await outcome;
-    }
+    await expect(
+      getDownloadAdminArtifactTransferContentTarget("invalid", { client }),
+    ).rejects.toThrow();
+    await expect(
+      getDownloadAdminArtifactTransferContentTarget(stageId, {
+        client,
+        headers: { Authorization: "not-supported" } as never,
+      }),
+    ).rejects.toMatchObject({ reason: "headers" });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 
