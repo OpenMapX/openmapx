@@ -22,7 +22,7 @@ import {
   enrichEnturMobilityItems,
   isEnturGbfsUrl,
 } from "../src/entur-mobility.js";
-import { filterCatalogByBbox } from "../src/gbfs-catalog.js";
+import { filterCatalogByBbox, type GbfsCatalogClient } from "../src/gbfs-catalog.js";
 import type { MobilityHttpTransport } from "../src/json-transport.js";
 import type { SharedMobilityStation } from "../src/types/shared-mobility.js";
 
@@ -37,7 +37,7 @@ const transport: MobilityHttpTransport = {
 };
 const cache = {} as CacheClient;
 const loadCatalog = vi.fn();
-const catalog = { loadCatalog, probeSystem: vi.fn() };
+const catalog: GbfsCatalogClient = { clearCache: vi.fn(), loadCatalog, probeSystem: vi.fn() };
 
 function dependencies() {
   return { cache, catalog, transport };

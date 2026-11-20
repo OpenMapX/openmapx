@@ -10,7 +10,7 @@ interface RawLeg {
 
 function leg(id: string, startTime: string, endTime: string, route = true): TripLeg {
   return {
-    mode: route ? "RAIL" : "WALK",
+    mode: route ? "rail" : "walking",
     startTime,
     endTime,
     from: { name: `${id}-from`, lat: 1, lng: 2 },

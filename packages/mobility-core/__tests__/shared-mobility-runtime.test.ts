@@ -1,7 +1,7 @@
 import type { RentalsResponse } from "@motis-project/motis-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CacheClient } from "../src/cache.js";
-import type { MobilityHttpTransport } from "../src/json-transport.js";
+import type { MobilityHttpRequestOptions, MobilityHttpTransport } from "../src/json-transport.js";
 import { createSharedMobilityRuntime } from "../src/shared-mobility-runtime.js";
 
 const bbox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
@@ -39,7 +39,7 @@ function transport(name: string, requests: Array<{ url: string; userAgent?: stri
         `DE,${name},Berlin,${name},https://${name}.example,https://${name}.example/gbfs.json`,
       ].join("\n");
     },
-    async fetchJson<T>(url, options) {
+    async fetchJson<T>(url: string, options?: MobilityHttpRequestOptions) {
       requests.push({ url, userAgent: options?.headers?.["User-Agent"] });
       if (url.includes("manifest.json")) {
         return { data: { datasets: [] } } as T;
