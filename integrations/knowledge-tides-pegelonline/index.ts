@@ -16,6 +16,7 @@ import {
   type TideStationResponse,
   withContributors,
 } from "@openmapx/integration-framework";
+import { loadPegelonlineStations } from "./catalog.js";
 
 /**
  * German coastal water-level observations from WSV Pegelonline. Wraps:
@@ -47,15 +48,6 @@ const CATALOG_TTL = 7 * 24 * 60 * 60;
 const TIDES_TTL = 15 * 60; // observations refresh frequently
 const MAX_STATION_DISTANCE_KM = 25;
 const CM_TO_FT = 0.0328084;
-
-interface PegelStationRaw {
-  uuid: string;
-  shortname: string;
-  longname: string;
-  longitude: number;
-  latitude: number;
-  water?: { shortname: string };
-}
 
 interface PegelMeasurement {
   timestamp: string; // "2026-05-18T06:15:00+02:00"
@@ -94,19 +86,13 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const captured = resolveIntegrationContributors(ctx, ["wsv-pegelonline"]);
   const writer = await captureCacheWriter(ctx.cache);
 
-  const raw = await fetchJson<PegelStationRaw[]>(`${BASE}/stations.json?waters=NORDSEE,OSTSEE`);
-  if (!raw) {
+  let stations: CachedStation[];
+  try {
+    stations = await loadPegelonlineStations(ctx.http);
+  } catch {
     ctx.log.warn("Pegelonline station list unavailable");
     return [];
   }
-  const stations: CachedStation[] = raw
-    .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
-    .map((s) => ({
-      uuid: s.uuid,
-      name: s.shortname.replace(/\s+/g, " ").trim(),
-      lat: s.latitude,
-      lng: s.longitude,
-    }));
   const acquired = stations.map((station) => withContributors(station, captured));
   await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);
   return acquired;

@@ -265,22 +265,23 @@ describe("nautical routes", () => {
 
     it("serves but does not cache a merge while a network is unavailable, then caches the recovered one", async () => {
       const cache = createFencedMemoryCache();
-      ctx = createMockIntegrationContext({ cache });
+      let iwls: unknown = httpStatus(503);
+      const http = fakeHttpClient(({ method, url }) => {
+        if (method === "getText") {
+          return {
+            status: 200,
+            headers: {},
+            body: '<?xml version="1.0"?><stationlist></stationlist>',
+          };
+        }
+        return url.includes("api-iwls.dfo") ? iwls : [];
+      });
+      ctx = createMockIntegrationContext({ cache, http });
       setup(ctx);
       loadStations.mockResolvedValue([
         { id: "8443970", name: "Boston", lat: 42.3539, lng: -71.0503, types: ["water-level"] },
       ]);
-      fetchJson.mockImplementation(async (url: string) =>
-        url.includes("api-iwls.dfo")
-          ? null
-          : url.includes("emodnet-physics")
-            ? { features: [] }
-            : [],
-      );
-      mockFetch.mockImplementation(
-        async () =>
-          new Response('<?xml version="1.0"?><stationlist></stationlist>', { status: 200 }),
-      );
+      fetchJson.mockImplementation(async () => ({ features: [] }));
       const query = { west: "-72", south: "41", east: "-70", north: "43" };
       const request = async () => {
         const { reply, result } = makeReply();
@@ -298,23 +299,17 @@ describe("nautical routes", () => {
       expect(first.body.features.map((f) => f.properties.id)).toContain("8443970");
       expect(stationKeys()).toEqual([]);
 
-      fetchJson.mockImplementation(async (url: string) =>
-        url.includes("api-iwls.dfo")
-          ? [
-              {
-                id: "ca-1",
-                code: "00001",
-                officialName: "Recovered",
-                latitude: 42.5,
-                longitude: -71.5,
-                operating: true,
-                timeSeries: [{ code: "wlo" }],
-              },
-            ]
-          : url.includes("emodnet-physics")
-            ? { features: [] }
-            : [],
-      );
+      iwls = [
+        {
+          id: "ca-1",
+          code: "00001",
+          officialName: "Recovered",
+          latitude: 42.5,
+          longitude: -71.5,
+          operating: true,
+          timeSeries: [{ code: "wlo" }],
+        },
+      ];
 
       const second = await request();
 

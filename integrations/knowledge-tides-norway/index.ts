@@ -12,6 +12,7 @@ import {
   type TideStationResponse,
   withContributors,
 } from "@openmapx/integration-framework";
+import { loadKartverketStations } from "./catalog.js";
 
 /**
  * Norwegian tide-prediction knowledge integration. Wraps Kartverket
@@ -82,19 +83,12 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
   const writer = await captureCacheWriter(ctx.cache);
 
-  const xml = await fetchText(ctx.http, `${BASE}?tide_request=stationlist&type=perm&lang=en`);
-  if (!xml) {
+  let stations: CachedStation[];
+  try {
+    stations = await loadKartverketStations(ctx.http);
+  } catch {
     ctx.log.warn("Kartverket station list unavailable");
     return [];
-  }
-  const stations: CachedStation[] = [];
-  const re =
-    /<location\s+name="([^"]+)"\s+code="([^"]+)"\s+latitude="([\d.-]+)"\s+longitude="([\d.-]+)"\s+type="PERM"\s*\/>/g;
-  for (const m of xml.matchAll(re)) {
-    const lat = Number.parseFloat(m[3]);
-    const lng = Number.parseFloat(m[4]);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    stations.push({ code: m[2], name: m[1], lat, lng });
   }
   const acquired = stations.map((station) => withContributors(station, captured));
   await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);

@@ -27,10 +27,15 @@ import {
   type ContributingRecord,
   captureCacheWriter,
   dataSourceToAttribution,
+  type HttpClient,
   type Logger,
   snapshotContributors,
   withContributors,
 } from "@openmapx/integration-framework";
+import { loadIwlsStations } from "@openmapx/integration-knowledge-tides-canada/catalog";
+import { loadIocStations } from "@openmapx/integration-knowledge-tides-ioc/catalog";
+import { loadKartverketStations } from "@openmapx/integration-knowledge-tides-norway/catalog";
+import { loadPegelonlineStations } from "@openmapx/integration-knowledge-tides-pegelonline/catalog";
 import manifest from "./manifest.json";
 
 export function stationContributors(network: TideNetwork) {
@@ -88,55 +93,34 @@ async function fetchJsonWithTimeout<T>(url: string, ua: string): Promise<T | nul
   });
 }
 
-// -------- IOC Sea Level Station Monitoring (UNESCO) ----------------------
-interface IocStationRaw {
-  Code: string;
-  Location: string;
-  country?: string; // 3-letter (DMK, GBR, …)
-  countryname?: string;
-  Lat: number;
-  Lon: number;
-  sensor?: string; // "rad", "bub", "prs", …
-  status?: number; // 1 = active
-}
+type CatalogStation = Omit<MergedTideStation, "network" | "contributors">;
 
-const IOC_URL = "https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json";
-
-async function loadIocStations(
+/**
+ * One network's catalog, cached for a week with its contributors. A failed
+ * load is logged and rejects, so the merged answer names the network as
+ * unavailable instead of caching an empty list.
+ */
+async function loadNetwork(
+  network: TideNetwork,
+  label: string,
   cache: CacheClient,
   log: Logger,
-  ua: string,
+  load: () => Promise<CatalogStation[]>,
 ): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:contributors-v1:ioc";
+  const cacheKey = `catalog:contributors-v1:${network}`;
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
   const writer = await captureCacheWriter(cache);
-
-  const raw = await fetchJsonWithTimeout<IocStationRaw[]>(IOC_URL, ua);
-  if (!raw) {
-    log.warn("IOC station list unavailable");
-    throw new Error("IOC station list unavailable");
+  let stations: CatalogStation[];
+  try {
+    stations = await load();
+  } catch (error) {
+    log.warn(`${label} station list unavailable`);
+    throw error;
   }
-  // Active stations only; the catalog includes historic gauges.
-  const seenByCode = new Map<string, MergedTideStation>();
-  for (const s of raw) {
-    if (s.status !== 1) continue;
-    if (!Number.isFinite(s.Lat) || !Number.isFinite(s.Lon)) continue;
-    const existing = seenByCode.get(s.Code);
-    if (existing) continue;
-    seenByCode.set(s.Code, {
-      network: "ioc",
-      id: s.Code,
-      name: s.Location?.trim() || s.Code,
-      lat: s.Lat,
-      lng: s.Lon,
-      // IOC publishes observations only (no harmonic predictions in the API).
-      types: ["water-level"],
-      country: iso3to2(s.country),
-    });
-  }
-  const stations = Array.from(seenByCode.values());
-  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
+  const captured = stations.map((station) =>
+    withContributors({ ...station, network }, stationContributors(network)),
+  );
   await writer.set(cacheKey, captured, CATALOG_TTL);
   return captured;
 }
@@ -213,200 +197,35 @@ async function loadEmodnetStations(
   log: Logger,
   ua: string,
 ): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:contributors-v1:emodnet";
-  const cached = await cache.get<MergedTideStation[]>(cacheKey);
-  if (cached) return cached;
-  const writer = await captureCacheWriter(cache);
-
-  const raw = await fetchJsonWithTimeout<{ features: EmodnetFeature[] }>(EMODNET_WFS_URL, ua);
-  if (!raw?.features) {
-    log.warn("EMODnet station list unavailable");
-    throw new Error("EMODnet station list unavailable");
-  }
-  const stations: MergedTideStation[] = [];
-  const now = Date.now();
-  const HORIZON_DAYS = 365;
-  for (const f of raw.features) {
-    const [lng, lat] = f.geometry?.coordinates ?? [];
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    const code = f.properties.platformcode;
-    if (!code) continue;
-    // Filter to gauges with observations in the last year — the layer contains
-    // some legacy entries with `last_date_observation` decades in the past.
-    const lastObs = f.properties.last_date_observation
-      ? Date.parse(f.properties.last_date_observation)
-      : 0;
-    if (!Number.isFinite(lastObs)) continue;
-    const ageDays = (now - lastObs) / (1000 * 60 * 60 * 24);
-    if (ageDays < 0 || ageDays > HORIZON_DAYS) continue;
-    stations.push({
-      network: "emodnet",
-      id: code,
-      name: code, // EMODnet doesn't ship a friendly name on this layer
-      lat,
-      lng,
-      types: ["water-level"],
-    });
-  }
-  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-  await writer.set(cacheKey, captured, CATALOG_TTL);
-  return captured;
-}
-
-// -------- DFO IWLS (Canada) ---------------------------------------------
-interface IwlsTimeSeries {
-  code: string; // "wlo" | "wlp" | "wlp-hilo" | "wcs1" | …
-}
-interface IwlsStationRaw {
-  id: string;
-  code: string;
-  officialName: string;
-  alternativeName?: string;
-  latitude: number;
-  longitude: number;
-  operating: boolean;
-  timeSeries: IwlsTimeSeries[];
-}
-
-const IWLS_URL = "https://api-iwls.dfo-mpo.gc.ca/api/v1/stations?time-series-code=wlp&max=2000";
-
-async function loadCanadaStations(
-  cache: CacheClient,
-  log: Logger,
-  ua: string,
-): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:contributors-v1:ca-iwls";
-  const cached = await cache.get<MergedTideStation[]>(cacheKey);
-  if (cached) return cached;
-  const writer = await captureCacheWriter(cache);
-
-  const raw = await fetchJsonWithTimeout<IwlsStationRaw[]>(IWLS_URL, ua);
-  if (!raw) {
-    log.warn("IWLS station list unavailable");
-    throw new Error("IWLS station list unavailable");
-  }
-  const stations: MergedTideStation[] = raw
-    .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
-    .map((s) => {
-      const tsCodes = new Set(s.timeSeries.map((t) => t.code));
-      const types: TideStationCapability[] = [];
-      if (tsCodes.has("wlp") || tsCodes.has("wlp-hilo")) types.push("tide-predictions");
-      if (tsCodes.has("wlo")) types.push("water-level");
-      if (tsCodes.has("wcs1") || tsCodes.has("wcd1")) types.push("currents");
-      return {
-        network: "ca-iwls" as const,
-        // Mongo ObjectId is the stable handle; the 5-digit `code` is also valid
-        // but `id` round-trips through the data endpoint without translation.
-        id: s.id,
-        name: s.officialName.trim() || s.code,
-        lat: s.latitude,
-        lng: s.longitude,
-        types: types.length ? types : ["water-level"],
-        country: "CA",
-      };
-    });
-  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-  await writer.set(cacheKey, captured, CATALOG_TTL);
-  return captured;
-}
-
-// -------- Kartverket Sehavnivå (Norway) ---------------------------------
-const KARTVERKET_STATIONLIST_URL =
-  "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlist&type=perm&lang=en";
-
-async function loadNorwayStations(
-  cache: CacheClient,
-  log: Logger,
-  ua: string,
-): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:contributors-v1:kartverket";
-  const cached = await cache.get<MergedTideStation[]>(cacheKey);
-  if (cached) return cached;
-  const writer = await captureCacheWriter(cache);
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(KARTVERKET_STATIONLIST_URL, {
-      headers: { "User-Agent": ua, Accept: "application/xml" },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`Kartverket station list HTTP ${res.status}`);
-    const xml = await res.text();
-    // The XML is small + well-formed; a regex parse keeps us off an XML
-    // dependency tree (the document is a flat `<location ... />` list).
-    const stations: MergedTideStation[] = [];
-    const re =
-      /<location\s+name="([^"]+)"\s+code="([^"]+)"\s+latitude="([\d.-]+)"\s+longitude="([\d.-]+)"\s+type="PERM"\s*\/>/g;
-    for (const m of xml.matchAll(re)) {
-      const lat = Number.parseFloat(m[3]);
-      const lng = Number.parseFloat(m[4]);
+  return loadNetwork("emodnet", "EMODnet", cache, log, async () => {
+    const raw = await fetchJsonWithTimeout<{ features: EmodnetFeature[] }>(EMODNET_WFS_URL, ua);
+    if (!raw?.features) throw new Error("EMODnet station list unavailable");
+    const stations: CatalogStation[] = [];
+    const now = Date.now();
+    const HORIZON_DAYS = 365;
+    for (const f of raw.features) {
+      const [lng, lat] = f.geometry?.coordinates ?? [];
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const code = f.properties.platformcode;
+      if (!code) continue;
+      // Filter to gauges with observations in the last year — the layer contains
+      // some legacy entries with `last_date_observation` decades in the past.
+      const lastObs = f.properties.last_date_observation
+        ? Date.parse(f.properties.last_date_observation)
+        : 0;
+      if (!Number.isFinite(lastObs)) continue;
+      const ageDays = (now - lastObs) / (1000 * 60 * 60 * 24);
+      if (ageDays < 0 || ageDays > HORIZON_DAYS) continue;
       stations.push({
-        network: "kartverket",
-        id: m[2],
-        name: m[1],
-        lat,
-        lng,
-        // Kartverket publishes predictions (PRE) + observations (OBS) for every PERM station.
-        types: ["tide-predictions", "water-level"],
-        country: "NO",
+        id: code,
+        name: code, // EMODnet doesn't ship a friendly name on this layer
+        lat: lat as number,
+        lng: lng as number,
+        types: ["water-level"],
       });
     }
-    const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-    await writer.set(cacheKey, captured, CATALOG_TTL);
-    return captured;
-  } catch (error) {
-    log.warn("Kartverket station list unavailable");
-    throw error;
-  }
-}
-
-// -------- WSV Pegelonline (Germany — coastal gauges only) ---------------
-interface PegelStationRaw {
-  uuid: string;
-  shortname: string;
-  longname: string;
-  longitude: number;
-  latitude: number;
-  water?: { shortname: string };
-}
-
-const PEGELONLINE_URL =
-  "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=NORDSEE,OSTSEE";
-
-async function loadPegelonlineStations(
-  cache: CacheClient,
-  log: Logger,
-  ua: string,
-): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:contributors-v1:pegel";
-  const cached = await cache.get<MergedTideStation[]>(cacheKey);
-  if (cached) return cached;
-  const writer = await captureCacheWriter(cache);
-
-  const raw = await fetchJsonWithTimeout<PegelStationRaw[]>(PEGELONLINE_URL, ua);
-  if (!raw) {
-    log.warn("Pegelonline station list unavailable");
-    throw new Error("Pegelonline station list unavailable");
-  }
-  // Pre-filter to coastal/estuarine sea-level gauges. The `waters=NORDSEE,OSTSEE`
-  // filter on the API already excludes the ~1000 inland river gauges.
-  const stations: MergedTideStation[] = raw
-    .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
-    .map((s) => ({
-      network: "pegel" as const,
-      id: s.uuid,
-      name: s.shortname.replace(/\s+/g, " ").trim(),
-      lat: s.latitude,
-      lng: s.longitude,
-      types: ["water-level"] as TideStationCapability[],
-      country: "DE",
-    }));
-  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-  await writer.set(cacheKey, captured, CATALOG_TTL);
-  return captured;
+    return stations;
+  });
 }
 
 // -------- Top-level: load everything in parallel + dedup -----------------
@@ -417,16 +236,79 @@ export interface TideStationCatalogs {
 }
 
 export async function loadAllTideStations(
+  http: HttpClient,
   cache: CacheClient,
   log: Logger,
   ua: string,
 ): Promise<TideStationCatalogs> {
   const loaders: Array<[TideNetwork, () => Promise<MergedTideStation[]>]> = [
-    ["ioc", () => loadIocStations(cache, log, ua)],
+    [
+      "ioc",
+      () =>
+        loadNetwork("ioc", "IOC", cache, log, async () =>
+          (await loadIocStations(http)).map((station) => ({
+            id: station.code,
+            name: station.name,
+            lat: station.lat,
+            lng: station.lng,
+            // IOC publishes observations only (no harmonic predictions in the API).
+            types: ["water-level"],
+            country: iso3to2(station.country),
+          })),
+        ),
+    ],
     ["emodnet", () => loadEmodnetStations(cache, log, ua)],
-    ["ca-iwls", () => loadCanadaStations(cache, log, ua)],
-    ["kartverket", () => loadNorwayStations(cache, log, ua)],
-    ["pegel", () => loadPegelonlineStations(cache, log, ua)],
+    [
+      "ca-iwls",
+      () =>
+        loadNetwork("ca-iwls", "IWLS", cache, log, async () =>
+          (await loadIwlsStations(http)).map((station) => {
+            const codes = new Set(station.timeSeries);
+            const types: TideStationCapability[] = [];
+            if (codes.has("wlp") || codes.has("wlp-hilo")) types.push("tide-predictions");
+            if (codes.has("wlo")) types.push("water-level");
+            if (codes.has("wcs1") || codes.has("wcd1")) types.push("currents");
+            return {
+              // The stable IWLS id round-trips through the data endpoint.
+              id: station.id,
+              name: station.name,
+              lat: station.lat,
+              lng: station.lng,
+              types: types.length ? types : ["water-level"],
+              country: "CA",
+            };
+          }),
+        ),
+    ],
+    [
+      "kartverket",
+      () =>
+        loadNetwork("kartverket", "Kartverket", cache, log, async () =>
+          (await loadKartverketStations(http)).map((station) => ({
+            id: station.code,
+            name: station.name,
+            lat: station.lat,
+            lng: station.lng,
+            // Kartverket publishes predictions and observations for every permanent station.
+            types: ["tide-predictions", "water-level"],
+            country: "NO",
+          })),
+        ),
+    ],
+    [
+      "pegel",
+      () =>
+        loadNetwork("pegel", "Pegelonline", cache, log, async () =>
+          (await loadPegelonlineStations(http)).map((station) => ({
+            id: station.uuid,
+            name: station.name,
+            lat: station.lat,
+            lng: station.lng,
+            types: ["water-level"],
+            country: "DE",
+          })),
+        ),
+    ],
   ];
   const settled = await Promise.allSettled(loaders.map(([, load]) => load()));
   const stations: MergedTideStation[] = [];

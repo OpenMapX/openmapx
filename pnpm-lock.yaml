@@ -1651,6 +1651,18 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/integration-knowledge-tides-canada':
+        specifier: workspace:^
+        version: link:../knowledge-tides-canada
+      '@openmapx/integration-knowledge-tides-ioc':
+        specifier: workspace:^
+        version: link:../knowledge-tides-ioc
+      '@openmapx/integration-knowledge-tides-norway':
+        specifier: workspace:^
+        version: link:../knowledge-tides-norway
+      '@openmapx/integration-knowledge-tides-pegelonline':
+        specifier: workspace:^
+        version: link:../knowledge-tides-pegelonline
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core

@@ -73,11 +73,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
       reason:
         "Asks the local Ollama service to pull a model; the pull deliberately has no duration bound.",
     },
-    "integrations/overlay-nautical/stations.ts": {
-      count: 1,
-      reason:
-        "The Kartverket station list moves into the shared tide catalogs, read through ctx.http.",
-    },
   },
   "credentialed-fetch-json": {},
   "null-island": {

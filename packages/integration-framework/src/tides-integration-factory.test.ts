@@ -5,16 +5,25 @@ import { setup as canada } from "../../../integrations/knowledge-tides-canada/in
 import { setup as ioc } from "../../../integrations/knowledge-tides-ioc/index";
 import { setup as norway } from "../../../integrations/knowledge-tides-norway/index";
 import { setup as pegel } from "../../../integrations/knowledge-tides-pegelonline/index";
-import { createFencedMemoryCache, createMockIntegrationContext, fakeHttpClient } from "./testing";
+import {
+  createFencedMemoryCache,
+  createMockIntegrationContext,
+  fakeHttpClient,
+  httpStatus,
+} from "./testing";
 import { createTidesIntegration } from "./tides-integration-factory";
 
 /**
- * The adapters share one stubbed global fetch. Kartverket reads its XML through
- * the host client, so text requests answer from that same stub.
+ * The adapters share one stubbed global fetch. Station catalogs come through
+ * the host client, so its JSON and text requests answer from that same stub.
  */
 const textFromStubbedFetch = fakeHttpClient(async (request) => {
-  if (request.method !== "getText") throw new Error(`unexpected ${request.method} request`);
   const response = await fetch(request.url);
+  if (request.method === "get") {
+    if (!response.ok) return httpStatus(response.status);
+    return response.json();
+  }
+  if (request.method !== "getText") throw new Error(`unexpected ${request.method} request`);
   return { status: response.status, headers: {}, body: await response.text() };
 });
 

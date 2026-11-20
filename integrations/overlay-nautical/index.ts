@@ -629,7 +629,7 @@ export function setup(ctx: IntegrationContext): void {
           available: false,
         }),
       ),
-      loadAllTideStations(ctx.cache, ctx.log, USER_AGENT).catch(
+      loadAllTideStations(ctx.http, ctx.cache, ctx.log, USER_AGENT).catch(
         (): { stations: MergedTideStation[]; unavailable: TideNetwork[] } => ({
           stations: [],
           unavailable: ["ioc", "emodnet", "ca-iwls", "kartverket", "pegel"],
