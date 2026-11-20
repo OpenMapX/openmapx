@@ -28,13 +28,9 @@ const paddedRouteAheadBoundsSpy = vi.fn();
 // synthetic — but still deterministic — box for a given window.
 const paddedRouteAheadBoundsOverride: { impl: PaddedRouteAheadBounds | null } = { impl: null };
 let countryValue: string | null | undefined;
-// `vi.fn`'s implementation type in this repo's minimal vitest.d.ts stub is
-// `(...args: unknown[]) => unknown`, so the real (origin, enabled) signature
-// is recovered inside the body rather than declared on the parameter list.
-const useCountryFromCoordinatesSpy = vi.fn((...args: unknown[]) => {
-  const enabled = args[1] as boolean;
-  return { data: enabled ? countryValue : undefined };
-});
+const useCountryFromCoordinatesSpy = vi.fn((_coordinates: LngLat | null, enabled: boolean) => ({
+  data: enabled ? countryValue : undefined,
+}));
 
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();

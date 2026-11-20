@@ -2,6 +2,8 @@ import type {
   OsmContributionCapabilities,
   OsmContributionContext,
   OsmContributionPreview,
+  OsmContributionPreviewRequest,
+  OsmContributionPublishRequest,
 } from "@openmapx/core";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -92,10 +94,10 @@ const state = {
     isPending: false,
     error: null as unknown,
   },
-  previewMutate: vi.fn(async () => PREVIEW),
+  previewMutate: vi.fn(async (_request: OsmContributionPreviewRequest) => PREVIEW),
   /** Set to make the next publish attempt fail with a specific error. */
   nextPublishError: null as unknown,
-  publishMutate: vi.fn(async () => {
+  publishMutate: vi.fn(async (_request: OsmContributionPublishRequest) => {
     const failure = state.nextPublishError;
     if (failure) {
       state.nextPublishError = null;
@@ -267,12 +269,12 @@ describe("review and publish", () => {
     await locked.click(publish);
 
     await waitFor(() => expect(state.publishMutate).toHaveBeenCalledTimes(1));
-    const previewId = state.previewMutate.mock.calls[0]?.[0] as { idempotencyKey: string };
-    const publishId = state.publishMutate.mock.calls[0]?.[0] as { idempotencyKey: string };
-    expect(previewId.idempotencyKey).toMatch(
+    const previewId = state.previewMutate.mock.calls[0]?.[0];
+    const publishId = state.publishMutate.mock.calls[0]?.[0];
+    expect(previewId?.idempotencyKey).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
-    expect(publishId.idempotencyKey).toBe(previewId.idempotencyKey);
+    expect(publishId?.idempotencyKey).toBe(previewId?.idempotencyKey);
     await act(async () => completePublish());
     await screen.findByText("osmContributions.successEditTitle");
   });
@@ -330,10 +332,10 @@ describe("retry after a failed publish", () => {
     await userEvent.click(button);
     await waitFor(() => expect(state.publishMutate).toHaveBeenCalledTimes(2));
 
-    const first = state.publishMutate.mock.calls[0]?.[0] as { idempotencyKey: string };
-    const second = state.publishMutate.mock.calls[1]?.[0] as { idempotencyKey: string };
+    const first = state.publishMutate.mock.calls[0]?.[0];
+    const second = state.publishMutate.mock.calls[1]?.[0];
     // Reusing the failed id would make the server replay it instead of publishing.
-    expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
+    expect(second?.idempotencyKey).not.toBe(first?.idempotencyKey);
     expect(await screen.findByText("osmContributions.successEditTitle")).not.toBeNull();
     expect(screen.queryByText("osmContributions.errorOsmUnavailable")).toBeNull();
   });
@@ -369,15 +371,11 @@ describe("conflict", () => {
 
     await userEvent.click(screen.getByText("osmContributions.conflictAdopt"));
     await waitFor(() => expect(state.previewMutate).toHaveBeenCalledTimes(2));
-    const second = state.previewMutate.mock.calls[1]?.[0] as {
-      baseVersion: number;
-      idempotencyKey: string;
-      changes: unknown[];
-    };
-    expect(second.baseVersion).toBe(6);
-    expect(second.changes).toEqual([{ field: "name", action: "set", value: "Café Zentral" }]);
-    const first = state.previewMutate.mock.calls[0]?.[0] as { idempotencyKey: string };
-    expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
+    const second = state.previewMutate.mock.calls[1]?.[0];
+    expect(second?.baseVersion).toBe(6);
+    expect(second?.changes).toEqual([{ field: "name", action: "set", value: "Café Zentral" }]);
+    const first = state.previewMutate.mock.calls[0]?.[0];
+    expect(second?.idempotencyKey).not.toBe(first?.idempotencyKey);
   });
 });
 

@@ -9,7 +9,7 @@ vi.mock("../activity/activityQueries", () => ({
 }));
 afterEach(cleanup);
 it("clears a saved resource through explicit reset while leaving unrelated values untouched", async () => {
-  const save = vi.fn(async () => {});
+  const save = vi.fn(async (_values: Record<string, unknown>) => {});
   render(
     <ServiceConfigForm
       serviceId="redis"

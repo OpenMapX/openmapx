@@ -31,7 +31,7 @@ function mount(role = "admin") {
   );
 }
 it("loads metadata only on open and navigates by keyboard without executing an operation", async () => {
-  const fetch = vi.fn(async (input: unknown) =>
+  const fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
     String(input).endsWith("/settings")
       ? Response.json({
           groups: [
@@ -71,11 +71,7 @@ it("loads metadata only on open and navigates by keyboard without executing an o
   await waitFor(() =>
     expect(navigate).toHaveBeenCalledWith("/admin/settings/email?field=smtpHost"),
   );
-  expect(
-    fetch.mock.calls.every(
-      (call) => call.length === 1 || !call[1] || (call[1] as RequestInit).method !== "POST",
-    ),
-  ).toBe(true);
+  expect(fetch.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
   expect(screen.queryByText("private-host")).toBeNull();
 });
 it("offers no search or metadata requests for a non-administrator", () => {

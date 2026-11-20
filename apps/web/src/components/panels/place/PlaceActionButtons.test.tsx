@@ -3,6 +3,7 @@ import { useDirectionsStore, useSidebarStore } from "@openmapx/core";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { shareCurrentUrl } from "@/lib/deepLink";
 import { createQueryWrapper } from "@/test/query";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -20,8 +21,10 @@ vi.mock("@/components/auth/AuthDialog", () => ({
 vi.mock("@/components/panels/saved/SavePlaceDialog", () => ({
   SavePlaceDialog: () => null,
 }));
-const share = vi.fn(async () => "copied");
-vi.mock("@/lib/deepLink", () => ({ shareCurrentUrl: (...args: unknown[]) => share(...args) }));
+const share = vi.fn<typeof shareCurrentUrl>(async () => "copied");
+vi.mock("@/lib/deepLink", () => ({
+  shareCurrentUrl: (...args: Parameters<typeof shareCurrentUrl>) => share(...args),
+}));
 
 import { PlaceActionButtons } from "./PlaceActionButtons";
 

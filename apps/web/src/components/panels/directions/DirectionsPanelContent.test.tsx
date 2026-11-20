@@ -171,11 +171,9 @@ import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { useStopSearchStore } from "@/stores/stopSearchStore";
 import { DirectionsPanelContent } from "./DirectionsPanelContent";
 
-const timerCount = () => (vi as typeof vi & { getTimerCount(): number }).getTimerCount();
+const timerCount = () => vi.getTimerCount();
 
-/** Last positional call arg of a mocked hook, typed for the fields under test.
- * A stand-in for `toHaveBeenLastCalledWith`/`toMatchObject` partial matching,
- * neither of which this repo's local `vitest.d.ts` type shim declares. */
+/** Last positional call arg of a mocked hook, read as the fields under test. */
 function lastArg<T>(mockFn: { mock: { calls: unknown[][] } }): T {
   return mockFn.mock.calls.at(-1)?.[0] as T;
 }

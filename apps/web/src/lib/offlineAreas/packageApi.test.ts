@@ -174,7 +174,7 @@ describe("offline package API client", () => {
   it("retains archive response ownership and cancellation signals", async () => {
     const controller = new AbortController();
     const response = new Response(new Uint8Array([1, 2, 3]), { status: 206 });
-    const fetchMock = vi.fn(async () => response);
+    const fetchMock = vi.fn<typeof fetch>(async () => response);
     vi.stubGlobal("fetch", fetchMock);
     const returned = await createOfflinePackageApi().openArchive(
       packageId,
@@ -193,7 +193,7 @@ describe("offline package API client", () => {
       const controller = new AbortController();
       controller.abort();
       const aborted = new DOMException("Aborted", "AbortError");
-      const fetchMock = vi.fn(async () => {
+      const fetchMock = vi.fn<typeof fetch>(async () => {
         throw aborted;
       });
       vi.stubGlobal("fetch", fetchMock);

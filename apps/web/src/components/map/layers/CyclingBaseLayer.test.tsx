@@ -61,7 +61,11 @@ it("credits response suppliers with their texture commits, never HEAD or a newes
     }),
     new Response(new Uint8Array([3])),
   ];
-  const fetchMock = vi.fn(async () => responses.shift());
+  const fetchMock = vi.fn<typeof fetch>(async () => {
+    const response = responses.shift();
+    if (!response) throw new Error("Unexpected fetch");
+    return response;
+  });
   vi.stubGlobal("fetch", fetchMock);
   const add = fake.map.addSource;
   fake.map.addSource = (id, spec) => {

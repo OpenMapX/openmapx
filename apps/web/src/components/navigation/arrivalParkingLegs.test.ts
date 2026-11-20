@@ -32,15 +32,9 @@ function routed(duration: number, distance: number): DirectionsResult {
 
 type Plan = (waypoints: LngLat[], signal: AbortSignal) => Promise<DirectionsResult>;
 
-/** A mock as the planner a measurement takes. */
-function planner(mock: ReturnType<typeof vi.fn>): Plan {
-  return (waypoints, signal) => mock(waypoints, signal) as Promise<DirectionsResult>;
-}
-
 /** Answers by the car park a leg starts or ends at, from per-id tables. */
 function router(table: Record<string, DirectionsResult | Error>, end: "first" | "last") {
-  return vi.fn(async (...args: unknown[]) => {
-    const waypoints = args[0] as LngLat[];
+  return vi.fn<Plan>(async (waypoints) => {
     const point = end === "first" ? waypoints[0] : waypoints.at(-1);
     const id = `p${Math.round(((point?.[0] ?? 0) - 10) * 1000)}`;
     const answer = table[id];
@@ -58,8 +52,8 @@ describe("measureParkingLegs", () => {
       destination: DESTINATION,
       candidates: [lot("p1", 1), lot("p2", 2)],
       signal: new AbortController().signal,
-      drive: planner(drive),
-      walk: planner(walk),
+      drive,
+      walk,
     });
 
     expect(legs).toEqual([
@@ -86,11 +80,13 @@ describe("measureParkingLegs", () => {
       destination: DESTINATION,
       candidates: [lot("p1", 1), lot("p2", 2), lot("p3", 3), lot("p4", 4)],
       signal: new AbortController().signal,
-      drive: planner(
-        router({ p1: { routes: [] } as unknown as DirectionsResult, p2: routed(30, 200) }, "last"),
+      drive: router(
+        { p1: { routes: [] } as unknown as DirectionsResult, p2: routed(30, 200) },
+        "last",
       ),
-      walk: planner(
-        router({ p2: { routes: [] } as unknown as DirectionsResult, p3: routed(60, 80) }, "first"),
+      walk: router(
+        { p2: { routes: [] } as unknown as DirectionsResult, p3: routed(60, 80) },
+        "first",
       ),
     });
     expect(legs.map((leg) => [leg.id, leg.kind])).toEqual([
@@ -105,7 +101,7 @@ describe("measureParkingLegs", () => {
   it("measures a bounded shortlist with at most two requests in flight", async () => {
     let inFlight = 0;
     let peak = 0;
-    const slow = vi.fn(async () => {
+    const slow = vi.fn<Plan>(async () => {
       inFlight++;
       peak = Math.max(peak, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 1));
@@ -118,8 +114,8 @@ describe("measureParkingLegs", () => {
       destination: DESTINATION,
       candidates,
       signal: new AbortController().signal,
-      drive: planner(slow),
-      walk: planner(slow),
+      drive: slow,
+      walk: slow,
     });
     expect(legs).toHaveLength(MEASURED_PARKING);
     expect(slow).toHaveBeenCalledTimes(MEASURED_PARKING * 2);
@@ -128,7 +124,7 @@ describe("measureParkingLegs", () => {
 
   it("rejects when cancelled rather than reporting partial measurements", async () => {
     const controller = new AbortController();
-    const drive = vi.fn(async () => {
+    const drive = vi.fn<Plan>(async () => {
       controller.abort();
       return routed(10, 10);
     });
@@ -138,8 +134,8 @@ describe("measureParkingLegs", () => {
         destination: DESTINATION,
         candidates: [lot("p1", 1)],
         signal: controller.signal,
-        drive: planner(drive),
-        walk: planner(vi.fn(async () => routed(10, 10))),
+        drive,
+        walk: async () => routed(10, 10),
       }),
     ).rejects.toMatchObject({ name: "AbortError" });
   });

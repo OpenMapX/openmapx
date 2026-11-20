@@ -1,4 +1,9 @@
-import type { DirectionsResult, Waypoint } from "@openmapx/core";
+import type {
+  DirectionsResult,
+  useDirections as directionsHook,
+  useScheduledDirections as scheduledDirectionsHook,
+  Waypoint,
+} from "@openmapx/core";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,16 +14,21 @@ import { createQueryWrapper } from "@/test";
 // forwards — the only way to isolate the transit/flying/EV/navigating gate
 // from the "waypoints aren't filled yet" case, which produces the same empty
 // `routes` output for an unrelated reason.
-const useDirectionsMock = vi.fn(() => ({ data: undefined as DirectionsResult | undefined }));
-const useScheduledDirectionsMock = vi.fn(() => ({
+const useDirectionsMock = vi.fn((..._args: Parameters<typeof directionsHook>) => ({
   data: undefined as DirectionsResult | undefined,
 }));
+const useScheduledDirectionsMock = vi.fn(
+  (..._args: Parameters<typeof scheduledDirectionsHook>) => ({
+    data: undefined as DirectionsResult | undefined,
+  }),
+);
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
     ...actual,
-    useDirections: (...args: unknown[]) => useDirectionsMock(...args),
-    useScheduledDirections: (...args: unknown[]) => useScheduledDirectionsMock(...args),
+    useDirections: (...args: Parameters<typeof directionsHook>) => useDirectionsMock(...args),
+    useScheduledDirections: (...args: Parameters<typeof scheduledDirectionsHook>) =>
+      useScheduledDirectionsMock(...args),
   };
 });
 

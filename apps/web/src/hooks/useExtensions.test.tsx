@@ -141,7 +141,9 @@ describe("extension browser acquisition through the real generated SDK", () => {
     expect(result.current.isError).toBe(true);
   });
   it("does not retry ambiguous destructive acknowledgements under retrying defaults", async () => {
-    const fetch = vi.fn(() => Promise.reject(new Error("private transport detail")));
+    const fetch = vi.fn<typeof globalThis.fetch>(() =>
+      Promise.reject(new Error("private transport detail")),
+    );
     vi.stubGlobal("fetch", fetch);
     const { result } = mount(useRemoveExtension);
     await act(async () => {
@@ -151,7 +153,7 @@ describe("extension browser acquisition through the real generated SDK", () => {
       });
     });
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch.mock.calls[0][0]).toBe("http://admin.test/api/admin/extensions/x%2Fy");
+    expect(fetch.mock.calls[0]?.[0]).toBe("http://admin.test/api/admin/extensions/x%2Fy");
   });
   it("refreshes installed badges and inactive catalog data on synchronous refresh, only at the executing origin", async () => {
     vi.stubGlobal("fetch", () => Response.json({ entries: 0 }));
