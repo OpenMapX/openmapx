@@ -66,13 +66,18 @@ export interface CancellableSql {
   /** Ends the connections once their queries settle. */
   close(): Promise<void>;
 }
+/** How often a cancelled worker's connections are swept until the handle has ended. */
+const CANCEL_SWEEP_MS = 250;
 /**
  * Opens a worker's database handle: a pool of its own whose connections carry
  * one application name, so the control pool can find them. When the signal
- * aborts, the handle refuses new queries and every statement running on its
- * connections is cancelled. A transaction keeps its connection to roll back,
- * for at most the settlement time; then the connection closes, which rolls it
- * back too.
+ * aborts, the handle refuses new queries and the statements on its connections
+ * are cancelled, again every 250 ms until the handle has ended: a statement
+ * that was queued for a connection starts once one frees and is cancelled by
+ * the next sweep, so it runs for at most that interval and only one that
+ * finishes within it can still complete. A transaction keeps its connection to
+ * roll back, for at most the settlement time; then the connection closes,
+ * which rolls it back too.
  */
 export function openCancellableSql(
   connect: (applicationName: string) => postgres.Sql,
@@ -82,10 +87,17 @@ export function openCancellableSql(
   const applicationName = `openmapx-data-worker-${randomUUID()}`,
     sql = connect(applicationName);
   const cancel = () => {
-    sql.end({ timeout: SETTLEMENT_SECONDS }).catch(() => {});
-    control`SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name=${applicationName}`.catch(
-      () => {},
-    );
+    const sweep = () =>
+      control`SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name=${applicationName}`.catch(
+        () => {},
+      );
+    const sweeping = setInterval(sweep, CANCEL_SWEEP_MS);
+    sweeping.unref?.();
+    sql
+      .end({ timeout: SETTLEMENT_SECONDS })
+      .catch(() => {})
+      .finally(() => clearInterval(sweeping));
+    void sweep();
   };
   if (signal.aborted) cancel();
   else signal.addEventListener("abort", cancel, { once: true });

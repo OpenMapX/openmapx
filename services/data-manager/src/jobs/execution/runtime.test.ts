@@ -781,6 +781,49 @@ describe.skipIf(
       await fixture.close();
     }
   }, 60000);
+  it("cancels the statements a worker queued beyond its connections once they start", async () => {
+    const fixture = await workerFixture("omx-worker-queued-");
+    const marker = `omx_queued_${randomUUID().replaceAll("-", "")}`;
+    let statements: string[] = [];
+    const runtime = createDataExecutionRuntime({
+      store: fixture.store,
+      openSql: fixture.openSql,
+      dispatch: async (_input, context) => {
+        // Six statements on a handle of four connections: two wait for a connection.
+        statements = await Promise.all(
+          Array.from({ length: 6 }, (_, n) =>
+            outcome(context.sql.unsafe(`SELECT pg_sleep(30), '${marker}', ${n}`)),
+          ),
+        );
+        context.signal.throwIfAborted();
+        return { kind: "download-fonts", completed: true };
+      },
+    });
+    const sleeping = async () =>
+      Number(
+        (
+          await fixture.sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${`%${marker}%`} AND state='active' AND pid<>pg_backend_pid()`
+        )[0]?.count,
+      );
+    let id: string | undefined;
+    try {
+      const identity = await admitFonts(runtime);
+      id = identity.id;
+      await expect.poll(sleeping, { timeout: 10000 }).toBe(4);
+      await runtime.requestCancel(identity);
+      await expect
+        .poll(async () => (await fixture.store.inspect(identity.id))?.status.status, {
+          timeout: 15000,
+        })
+        .toBe("canceled");
+      expect(statements).toEqual(Array(6).fill("57014"));
+      expect(await sleeping()).toBe(0);
+    } finally {
+      await runtime.close();
+      if (id) await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      await fixture.close();
+    }
+  }, 60000);
   it("cancels a Drizzle query on the worker's handle while it waits for a lock", async () => {
     const fixture = await workerFixture("omx-worker-drizzle-");
     const suffix = randomUUID().replaceAll("-", ""),

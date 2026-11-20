@@ -555,8 +555,12 @@ fenced. Data-manager's advisory locks are named in one registry,
 
 Each job's worker gets its own database handle, a pool whose connections carry
 the job's application name, passed to the worker explicitly. Cancelling the job,
-or reaching its deadline, makes the handle refuse new queries and cancels every
-statement running on it. Worker transactions go through one helper,
+or reaching its deadline, makes the handle refuse new queries and cancels the
+statements running on it, again every 250 ms until the handle has ended. A
+statement the worker queued for a busy connection starts once a connection frees
+and is cancelled by the next sweep, so only one that completes within that
+interval can still run to its end; inside `publishDataChange` such a write leaves
+the publication `unknown`, never `not_started`. Worker transactions go through one helper,
 `cancellableTransaction`: it never commits once the job was cancelled or its
 deadline passed, a transaction that ended before its `COMMIT` was sent restores the
 job's earlier publication state, and a `COMMIT` that failed or was cancelled leaves
