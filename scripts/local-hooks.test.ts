@@ -170,6 +170,30 @@ describe("ordinary hooks", () => {
     expect(readFileSync(join(f.dir, "format.ts"), "utf8")).toBe("export const value=1\n");
   });
 
+  it("lints a workspace file under the rules its workspace's dependencies turn on", () => {
+    const f = fixture();
+    f.write("apps/web/package.json", '{ "name": "web", "dependencies": { "react": "19.0.0" } }\n');
+    f.stage(
+      "apps/web/src/list.tsx",
+      [
+        "export function List({ items }: { items: string[] }) {",
+        "  return (",
+        "    <ul>",
+        "      {items.map((item, i) => (",
+        "        // biome-ignore lint/suspicious/noArrayIndexKey: items repeat",
+        "        <li key={i}>{item}</li>",
+        "      ))}",
+        "    </ul>",
+        "  );",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const result = f.run();
+    expect(result.status, result.stderr).toBe(0);
+    expect(`${result.stdout}${result.stderr}`).not.toContain("suppressions/unused");
+  });
+
   it("respects Biome exclusions for generated and frozen source", () => {
     const f = fixture();
     f.stage("docs/generated.json", "{unformatted\n");

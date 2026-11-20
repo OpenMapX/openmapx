@@ -63,6 +63,14 @@ if (code.length) {
       mkdirSync(dirname(destination), { recursive: true });
       copyFileSync(plugin, destination);
     }
+    // Biome turns on domain rules, such as React's, from the dependencies of the
+    // manifests above each file, so a staged file's workspace manifests come too.
+    // Staged manifests are written over these below.
+    for (const manifest of workspaceManifests(code.map(({ path }) => path))) {
+      const destination = join(snapshot, manifest);
+      mkdirSync(dirname(destination), { recursive: true });
+      copyFileSync(manifest, destination);
+    }
     for (const { path, content } of code) {
       const destination = join(snapshot, path);
       mkdirSync(dirname(destination), { recursive: true });
@@ -88,6 +96,18 @@ if (code.length) {
   }
 }
 if (failed) process.exitCode = 1;
+
+/** The package.json files between each path and the repository root, root excluded. */
+function workspaceManifests(paths) {
+  const manifests = new Set();
+  for (const path of paths) {
+    for (let dir = dirname(path); dir !== "." && dir !== "/"; dir = dirname(dir)) {
+      const manifest = join(dir, "package.json");
+      if (existsSync(manifest)) manifests.add(manifest);
+    }
+  }
+  return manifests;
+}
 
 /** Plugin files referenced by the root Biome configuration and its overrides. */
 function biomePlugins() {
