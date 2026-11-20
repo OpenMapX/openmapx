@@ -130,7 +130,9 @@ export function getRegisteredOverlayIds(): string[] {
 
 export function createOverlayStore<
   TExtra extends Record<string, unknown>,
-  TActions extends Record<string, (...args: never[]) => void> = Record<string, never>,
+  // No actions by default. `Record<never, never>` adds no keys, where
+  // `Record<string, never>` would type every state key as `never`.
+  TActions extends Record<string, (...args: never[]) => void> = Record<never, never>,
 >(
   config: OverlayStoreConfig<TExtra, TActions>,
 ): UseBoundStore<StoreApi<OverlayStoreBase & TExtra & TActions>> {
