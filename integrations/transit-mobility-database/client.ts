@@ -21,6 +21,13 @@ export type MdbJsonRequest = <T>(url: string, options: SafeFetchJsonOptions) => 
 
 type FeedKind = "gtfs" | "gtfs_rt" | "gbfs";
 
+/** Drops trailing slashes in linear time, whatever the configured base URL holds. */
+function withoutTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  return value.slice(0, end);
+}
+
 interface FetchPageResult {
   feeds: MdbFeed[];
   /** True when MDB returned fewer than the requested page size (end of list). */
@@ -60,7 +67,7 @@ export class MdbClient {
 
   constructor(config: MdbClientConfig) {
     this.refreshToken = config.refreshToken;
-    this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+    this.baseUrl = withoutTrailingSlashes(config.baseUrl ?? DEFAULT_BASE_URL);
     this.cache = config.cache;
     this.request = config.request ?? safeFetchJson;
     this.origin = new URL(this.baseUrl).origin;

@@ -95,6 +95,25 @@ describe("MdbClient", () => {
     }
   });
 
+  it("trims trailing slashes from a configured base URL in linear time", async () => {
+    const { request, client: transport } = requestMock((url) =>
+      url.endsWith("/v1/tokens") ? { access_token: "AT", expires_in: 3600 } : [],
+    );
+    const slashes = "/".repeat(50_000);
+    const started = performance.now();
+    const client = new MdbClient({
+      refreshToken: "RT",
+      baseUrl: `https://mirror.example/mdb${slashes}x${slashes}`,
+      request: transport,
+      now: () => nowMs,
+    });
+    expect(performance.now() - started).toBeLessThan(1_000);
+
+    await client.listGtfsFeeds();
+
+    expect(request.mock.calls[0]?.[0]).toBe(`https://mirror.example/mdb${slashes}x/v1/tokens`);
+  });
+
   it("paginates until MDB returns a short page", async () => {
     const page = (offset: number, count: number) => ({
       results: Array.from({ length: count }, (_, i) => ({
