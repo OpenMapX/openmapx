@@ -1,0 +1,16 @@
+{
+  "name": "Open Landmarks",
+  "description": "Openly licensed 3D landmark models from Open Landmarks, drawn in the 3D view in place of the buildings they represent. Only models whose rights review has passed are shown.",
+  "dataSources": {
+    "open-landmarks": {
+      "purpose": "Show 3D models of landmarks in the 3D view.",
+      "dataSent": "Nothing about you. The OpenMapX server requests public catalogue and model files.",
+      "dataReceived": "Landmark positions, metadata, licences and 3D model files."
+    },
+    "openstreetmap": {
+      "purpose": "Place each landmark model on the map and identify the buildings it replaces.",
+      "dataSent": "Nothing about you. The placements come with the landmark catalogue.",
+      "dataReceived": "Positions, outlines and OpenStreetMap identifiers of the buildings each model replaces."
+    }
+  }
+}
