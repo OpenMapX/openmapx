@@ -283,7 +283,7 @@ describe("HAFAS journeys and trips without coordinates", () => {
       },
     });
 
-    const trip = await hafasMgateAdapter.getTrip!(entry(), "vbb:trip-1");
+    const trip = await hafasMgateAdapter.getTrip?.(entry(), "vbb:trip-1");
 
     expect(trip?.stops.map((s) => [s.stopId, s.lat])).toEqual([
       ["vbb:a", 52.5],
