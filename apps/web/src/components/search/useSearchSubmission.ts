@@ -124,6 +124,10 @@ export function useSearchSubmission({
     cancelNlpSubmission,
     cancelPendingSubmit,
   ]);
+  // A place still being enriched belongs to the search that opened it.
+  useEffect(() => {
+    if (directionsOpen) cancelEnrichment();
+  }, [directionsOpen, cancelEnrichment]);
   // A superseding store transition must stay cancelled even if it changes back
   // before React renders (for example Settings off/on while Enter is settling).
   useEffect(() => {
