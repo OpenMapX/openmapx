@@ -6,14 +6,16 @@ import {
   readCapturedContributors,
   withFeatureContributors,
 } from "@openmapx/mobility-core/contributors";
-import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import {
+  useMapOverlayInteraction,
+  useMapOverlayPopup,
+} from "@/integration-api/map/useMapOverlayInteraction";
 import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
 import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
@@ -160,7 +162,7 @@ export function WinterSportsLayer() {
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
   useOverlayExclusion("winter-sports", layerVisible);
   const fetchedRef = useRef(false);
-  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const { show: showPopup } = useMapOverlayPopup(layerVisible);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -269,7 +271,6 @@ export function WinterSportsLayer() {
     const syncLayers = () => {
       if (!layerVisible) {
         removeSlottedLayers(map, OWNED_LAYERS, OWNED_SOURCES);
-        popupRef.current?.remove();
         fetchedRef.current = false;
         return;
       }
@@ -449,77 +450,41 @@ export function WinterSportsLayer() {
     };
   }, [mapReady, styleVersion, mapRef, layerVisible, debouncedFetch]);
 
-  // Click + hover handlers
-  useEffect(() => {
-    void styleVersion;
+  // Hovering a piste or lift outlines it; clicking opens its card.
+  const highlight = (featureId: string) => {
     const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+    if (!map) return;
+    for (const layerId of [PISTE_HIGHLIGHT_LAYER_ID, LIFT_HIGHLIGHT_LAYER_ID]) {
+      if (map.getLayer(layerId)) map.setFilter(layerId, ["==", ["get", "id"], featureId]);
+    }
+  };
+  useMapOverlayInteraction({
+    id: "overlay-winter-sports",
+    layerIds: [...INTERACTIVE_LAYERS],
+    priority: 20,
+    enabled: layerVisible,
+    onClick: ({ event, features }) => {
+      const f = features[0];
       if (!f) return;
       const props = f.properties as Record<string, string | number | boolean>;
-      const fid = String(props.id ?? "");
-      selectFeature(fid);
+      selectFeature(String(props.id ?? ""));
 
       const kind = String(props.featureKind ?? "");
       const html = kind === "lift" ? liftPopupHtml(props) : pistePopupHtml(props);
-
-      popupRef.current?.remove();
-      setPopupCredits(readCapturedContributors(f.properties?._mapAttributions) ?? []);
-      popupRef.current = new maplibregl.Popup({
+      const popup = new maplibregl.Popup({
         closeButton: true,
         maxWidth: "300px",
         className: "omx-popup",
       })
-        .setLngLat(e.lngLat)
-        .setHTML(html)
-        .addTo(map);
-      popupRef.current.on("close", () => setPopupCredits([]));
-    };
-
-    const onMouseMove = (e: MapMouseEvent) => {
-      const activeLayers = INTERACTIVE_LAYERS.filter((id) => !!map.getLayer(id));
-      if (activeLayers.length === 0) {
-        map.getCanvasContainer().style.cursor = "";
-        return;
-      }
-      const features = map.queryRenderedFeatures(e.point, { layers: [...activeLayers] });
-      if (features.length > 0) {
-        map.getCanvasContainer().style.cursor = "pointer";
-        const fid = String(features[0].properties?.id ?? "");
-        if (map.getLayer(PISTE_HIGHLIGHT_LAYER_ID)) {
-          map.setFilter(PISTE_HIGHLIGHT_LAYER_ID, ["==", ["get", "id"], fid]);
-        }
-        if (map.getLayer(LIFT_HIGHLIGHT_LAYER_ID)) {
-          map.setFilter(LIFT_HIGHLIGHT_LAYER_ID, ["==", ["get", "id"], fid]);
-        }
-      } else {
-        map.getCanvasContainer().style.cursor = "";
-        if (map.getLayer(PISTE_HIGHLIGHT_LAYER_ID)) {
-          map.setFilter(PISTE_HIGHLIGHT_LAYER_ID, ["==", ["get", "id"], ""]);
-        }
-        if (map.getLayer(LIFT_HIGHLIGHT_LAYER_ID)) {
-          map.setFilter(LIFT_HIGHLIGHT_LAYER_ID, ["==", ["get", "id"], ""]);
-        }
-      }
-    };
-
-    for (const layerId of INTERACTIVE_LAYERS) {
-      map.on("click", layerId, onClick);
-    }
-    map.on("mousemove", onMouseMove);
-
-    return () => {
-      for (const layerId of INTERACTIVE_LAYERS) {
-        map.off("click", layerId, onClick);
-      }
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
-    };
-  }, [mapReady, styleVersion, mapRef, layerVisible, selectFeature]);
+        .setLngLat(event.lngLat)
+        .setHTML(html);
+      popup.on("close", () => setPopupCredits([]));
+      // Showing replaces the previous card, whose close clears its credits first.
+      showPopup(popup);
+      setPopupCredits(readCapturedContributors(f.properties?._mapAttributions) ?? []);
+    },
+    onHover: (features) => highlight(String(features?.[0]?.properties?.id ?? "")),
+  });
 
   return null;
 }

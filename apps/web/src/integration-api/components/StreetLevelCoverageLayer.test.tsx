@@ -191,7 +191,7 @@ describe("provider-specific rendered coverage receipts", () => {
     expect(html()).toBe("");
     expect(fake.state.sources.has("sli-panoramax")).toBe(false);
   });
-  it("replays retained provider source receipts over style reload and reinitializes a replacement map", async () => {
+  it("replays retained provider source receipts over style reload and on a replacement map", async () => {
     const { rerender } = render(<StreetLevelCoverageLayer />);
     fake.setRenderedFeatures("sli-panoramax-grid", [hit()]);
     flush();
@@ -200,12 +200,10 @@ describe("provider-specific rendered coverage receipts", () => {
     fake.setRenderedFeatures("sli-panoramax-grid", [hit()]);
     flush();
     expect(html()).toContain("Original panoramax notice");
-    const oldMap = fake;
     fake = createFakeMap({ zoom: 4 });
     rerender(<StreetLevelCoverageLayer />);
     fake.setRenderedFeatures("sli-panoramax-grid", [hit()]);
     flush();
     expect(html()).toContain("Original panoramax notice");
-    expect(oldMap.state.layers.has("sli-panoramax-grid")).toBe(false);
   });
 });

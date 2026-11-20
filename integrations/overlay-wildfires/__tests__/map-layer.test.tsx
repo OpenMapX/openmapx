@@ -163,12 +163,18 @@ function successfulResponse(url: string): Response {
   return { ok: true, status: 200, json: async () => data } as Response;
 }
 
-function handler(event: string, layerId: string) {
-  const call = fake.state.listenerCalls.find(
-    (entry) => entry.method === "on" && entry.event === event && entry.layerId === layerId,
-  );
-  if (!call) throw new Error(`Missing ${event} handler for ${layerId}`);
-  return call.handler;
+/** Returns a click on the map with the given features under the pointer on `layerId`. */
+function clickOn(layerId: string) {
+  return (event: { features: unknown[]; lngLat?: { lng: number; lat: number } }) => {
+    fake.setRenderedFeatures(
+      layerId,
+      event.features.map(
+        (feature) => ({ ...(feature as object), layer: { id: layerId } }) as MapGeoJSONFeature,
+      ),
+    );
+    fake.emit("click", { point: { x: 0, y: 0 }, lngLat: event.lngLat ?? { lng: 8, lat: 50 } });
+    fake.setRenderedFeatures(layerId, []);
+  };
 }
 
 let fake: FakeMap;
@@ -385,14 +391,11 @@ describe("WildfireLayer source orchestration", () => {
     await waitFor(() => expect(fake.state.layers.has("openmapx-wildfires-nifc-fill")).toBe(true));
 
     act(() => {
-      handler("click", "openmapx-wildfires-circles")({ features: [HOTSPOT_FEATURE] });
+      clickOn("openmapx-wildfires-circles")({ features: [HOTSPOT_FEATURE] });
     });
     expect(popupState.instances).toHaveLength(1);
     act(() => {
-      handler(
-        "click",
-        "openmapx-wildfires-nifc-fill",
-      )({
+      clickOn("openmapx-wildfires-nifc-fill")({
         features: [providerCollection("nifc").features[0]],
         lngLat: { lng: 8, lat: 50 },
       });
@@ -419,10 +422,7 @@ describe("WildfireLayer source orchestration", () => {
     );
 
     act(() => {
-      handler(
-        "click",
-        "openmapx-wildfires-nifc-fill",
-      )({
+      clickOn("openmapx-wildfires-nifc-fill")({
         features: [providerCollection("nifc").features[0]],
         lngLat: { lng: 8, lat: 50 },
       });
@@ -452,17 +452,11 @@ describe("WildfireLayer source orchestration", () => {
     );
 
     act(() => {
-      handler(
-        "click",
-        "openmapx-wildfires-nifc-fill",
-      )({
+      clickOn("openmapx-wildfires-nifc-fill")({
         features: [providerCollection("nifc").features[0]],
         lngLat: { lng: 8, lat: 50 },
       });
-      handler(
-        "click",
-        "openmapx-wildfires-noaa-smoke-fill",
-      )({
+      clickOn("openmapx-wildfires-noaa-smoke-fill")({
         features: [providerCollection("noaa-hms").features[0]],
         lngLat: { lng: 8, lat: 50 },
       });
@@ -520,8 +514,8 @@ describe("WildfireLayer source orchestration", () => {
     await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
 
     act(() => {
-      handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
-      handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
+      clickOn(CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
+      clickOn(CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
     });
     expect(popupState.instances).toHaveLength(2);
     expect(popupState.instances[0]?.removeCalls).toBe(1);
@@ -537,7 +531,7 @@ describe("WildfireLayer source orchestration", () => {
     });
     await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
     act(() => {
-      handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
+      clickOn(CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
     });
 
     expect(popupState.instances).toHaveLength(3);
@@ -558,7 +552,7 @@ describe("WildfireLayer source orchestration", () => {
     const { unmount } = render(<WildfireLayer />);
     await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
 
-    act(() => handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] }));
+    act(() => clickOn(CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] }));
     expect(popupState.instances).toHaveLength(1);
 
     unmount();

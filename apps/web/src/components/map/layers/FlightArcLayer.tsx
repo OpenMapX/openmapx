@@ -31,7 +31,7 @@ function withSlot(
  * `useFlightStore` (populated by `FlightPanel`).
  */
 export function FlightArcLayer() {
-  const { mapRef, fitBounds } = useMap();
+  const { fitBounds } = useMap();
   const mode = useDirectionsStore((s) => s.mode);
   const from = useFlightStore((s) => s.from);
   const to = useFlightStore((s) => s.to);
@@ -126,8 +126,7 @@ export function FlightArcLayer() {
   );
   useMapLayerGroup(group);
 
-  // Keep the camera effect's existing dependency contract independent of drawing.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: preserve the camera effect's existing dependency contract
+  // Frame the flight once its endpoints are known; drawing has its own lifecycle.
   useEffect(() => {
     if (mode !== "flying" || !from || !to) return;
 
@@ -149,7 +148,7 @@ export function FlightArcLayer() {
       ],
       80,
     );
-  }, [mode, from, to, mapRef, fitBounds]);
+  }, [mode, from, to, fitBounds]);
 
   return null;
 }

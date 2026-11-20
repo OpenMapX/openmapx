@@ -9,18 +9,16 @@ import {
 } from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   brandImageId,
   loadBrandMarkerImage,
   loadedBrandMarkerContributors,
 } from "@/components/map/CategoryResultMarkers";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
-import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { BRAND_HEX } from "@/integration-api/runtime/theme";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -29,6 +27,8 @@ import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 const SOURCE = "route-search-source";
 const LAYER = "route-search-layer";
 const LABEL_LAYER = "route-search-labels";
+/** Results the user asked for win over ambient overlays drawn beneath them. */
+const HOST_RESULT_PRIORITY = 200;
 
 function ensurePinImage(
   map: maplibregl.Map,
@@ -64,7 +64,7 @@ export function RouteSearchResultsLayer({
   brandQid?: string;
   onSelect: (poi: AlongRoutePoi<CategoryPlace>) => void;
 }) {
-  const { mapRef, mapReady, styleVersion } = useMap();
+  const { mapRef, styleVersion } = useMap();
   const t = useTranslations("navigation");
   useRenderedMapAttributions("route-search", [LAYER, LABEL_LAYER], true, {
     resolveFeatureContributors: (feature) => {
@@ -89,149 +89,120 @@ export function RouteSearchResultsLayer({
     loadedBrand?.qid === brandQid && loadedBrand?.styleVersion === styleVersion
       ? brandImageId(loadedBrand.qid)
       : fallbackImageId;
-  const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
-    mapRef,
-    mapReady,
-    styleVersion,
-    visible: true,
-  });
+  const data = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: results.map((poi) => {
+        const copy = routeStopCopy(poi, true);
+        const coordinateReceipts = contributorsForField(poi.place, "coordinates");
+        const durationReceipts =
+          poi.detour?.kind === "network" ? contributorsForField(poi.detour, "seconds") : [];
+        return {
+          type: "Feature" as const,
+          properties: {
+            id: poi.place.id,
+            imageId,
+            label: t(copy.key, copy.values),
+            _mapBrandQid: imageId === fallbackImageId ? "" : (brandQid ?? ""),
+            _mapMarkerAttributions: serializeContributors(coordinateReceipts),
+            _mapLabelAttributions: serializeContributors(
+              snapshotContributors(coordinateReceipts, durationReceipts),
+            ),
+          },
+          geometry: { type: "Point" as const, coordinates: poi.place.coordinates },
+        };
+      }),
+    }),
+    [brandQid, fallbackImageId, imageId, results, t],
+  );
 
+  // A brand logo that finishes loading after the layer unmounted, or for a
+  // brand the search no longer shows, must not switch the pins over to it.
+  const mounted = useRef(true);
   useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || map.getSource(SOURCE)) return;
-    map.addSource(SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    // Appended with no `beforeId` before this migration, so it already sat
-    // above everything (including base labels) — `route-markers` keeps that
-    // depth: these are the user's active "along the route" search results,
-    // the same "current task on the map" reasoning as the route's own
-    // waypoint pins.
-    addLayerInSlot(
-      map,
-      {
-        id: LAYER,
-        type: "symbol",
-        source: SOURCE,
-        layout: {
-          "icon-image": ["get", "imageId"],
-          "icon-size": 0.55,
-          "icon-allow-overlap": true,
-          "icon-anchor": "bottom",
-        },
-      },
-      "route-markers",
-      23,
-    );
-    addLayerInSlot(
-      map,
-      {
-        id: LABEL_LAYER,
-        type: "symbol",
-        source: SOURCE,
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": 11,
-          "text-offset": [0, 0.5],
-          "text-anchor": "top",
-          "text-optional": true,
-        },
-        paint: { "text-color": "#202124", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
-      },
-      "route-markers",
-      24,
-    );
-  }, [mapRef, mapReady, styleVersion]);
-
-  useEffect(() => {
-    void styleVersion; // re-register the image after a style swap clears it
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    let active = true;
-    const source = map.getSource(SOURCE);
-    const isCurrent = () => active && mapRef.current === map && map.getSource(SOURCE) === source;
-    ensurePinImage(map, fallbackImageId, iconPath, isCurrent);
-    if (brandQid) {
-      void loadBrandMarkerImage(map, brandQid, isCurrent).then((loaded) => {
-        if (loaded && isCurrent()) setLoadedBrand({ qid: brandQid, styleVersion });
-      });
-    }
+    mounted.current = true;
     return () => {
-      active = false;
-    };
-  }, [mapRef, mapReady, styleVersion, fallbackImageId, iconPath, brandQid]);
-
-  useEffect(() => {
-    void styleVersion; // re-populate after the source is recreated on a style swap
-    publishGeoJson([
-      {
-        sourceId: SOURCE,
-        data: {
-          type: "FeatureCollection",
-          features: results.map((poi) => {
-            const copy = routeStopCopy(poi, true);
-            const coordinateReceipts = contributorsForField(poi.place, "coordinates");
-            const durationReceipts =
-              poi.detour?.kind === "network" ? contributorsForField(poi.detour, "seconds") : [];
-
-            return {
-              type: "Feature" as const,
-              properties: {
-                id: poi.place.id,
-                imageId,
-                label: t(copy.key, copy.values),
-                _mapBrandQid: imageId === fallbackImageId ? "" : (brandQid ?? ""),
-                _mapMarkerAttributions: serializeContributors(coordinateReceipts),
-                _mapLabelAttributions: serializeContributors(
-                  snapshotContributors(coordinateReceipts, durationReceipts),
-                ),
-              },
-              geometry: { type: "Point" as const, coordinates: poi.place.coordinates },
-            };
-          }),
-        },
-      },
-    ]);
-  }, [brandQid, fallbackImageId, imageId, publishGeoJson, results, styleVersion, t]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const onClick = (e: maplibregl.MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const id = e.features?.[0]?.properties?.id;
-      const hit = results.find((r) => r.place.id === id);
-      if (hit) onSelect(hit);
-    };
-    const onEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const onLeave = () => {
-      map.getCanvas().style.cursor = "";
-    };
-    const layers = [LAYER, LABEL_LAYER];
-    map.on("click", layers, onClick);
-    map.on("mouseenter", layers, onEnter);
-    map.on("mouseleave", layers, onLeave);
-    return () => {
-      map.off("click", layers, onClick);
-      map.off("mouseenter", layers, onEnter);
-      map.off("mouseleave", layers, onLeave);
-    };
-  }, [mapRef, results, onSelect]);
-
-  // Taps on a pin belong to it: the plain-map click handler, base-map POI
-  // taps and the directions route line all skip interactive layers.
-  useEffect(() => {
-    INTERACTIVE_LAYER_IDS.add(LAYER);
-    INTERACTIVE_LAYER_IDS.add(LABEL_LAYER);
-    return () => {
-      INTERACTIVE_LAYER_IDS.delete(LAYER);
-      INTERACTIVE_LAYER_IDS.delete(LABEL_LAYER);
+      mounted.current = false;
     };
   }, []);
 
-  // Closing the search unmounts the layer; take its pins off the map.
-  useSlottedLayersCleanup(mapRef, () => ({ layerIds: [LABEL_LAYER, LAYER], sourceIds: [SOURCE] }));
+  const group = useMemo<MapLayerGroup>(
+    () => ({
+      sources: { [SOURCE]: { type: "geojson", data } },
+      images: {
+        [fallbackImageId]: (map) =>
+          ensurePinImage(
+            map,
+            fallbackImageId,
+            iconPath,
+            () => mounted.current && mapRef.current === map,
+          ),
+        ...(brandQid
+          ? {
+              [brandImageId(brandQid)]: (map: maplibregl.Map) => {
+                const loadedFor = styleVersion;
+                void loadBrandMarkerImage(
+                  map,
+                  brandQid,
+                  () => mounted.current && mapRef.current === map,
+                ).then((loaded) => {
+                  if (loaded && mounted.current && mapRef.current === map) {
+                    setLoadedBrand({ qid: brandQid, styleVersion: loadedFor });
+                  }
+                });
+              },
+            }
+          : {}),
+      },
+      // These are the user's active "along the route" results, so they sit with
+      // the route's own waypoint pins, above everything else.
+      layers: [
+        {
+          id: LAYER,
+          type: "symbol",
+          source: SOURCE,
+          layout: {
+            "icon-image": ["get", "imageId"],
+            "icon-size": 0.55,
+            "icon-allow-overlap": true,
+            "icon-anchor": "bottom",
+          },
+          slot: "route-markers",
+          order: 23,
+        },
+        {
+          id: LABEL_LAYER,
+          type: "symbol",
+          source: SOURCE,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 11,
+            "text-offset": [0, 0.5],
+            "text-anchor": "top",
+            "text-optional": true,
+          },
+          paint: { "text-color": "#202124", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
+          slot: "route-markers",
+          order: 24,
+        },
+      ],
+    }),
+    [data, fallbackImageId, iconPath, brandQid, mapRef, styleVersion],
+  );
+  useMapLayerGroup(group);
+
+  // Taps on a pin belong to it: the plain-map click handler, base-map POI taps
+  // and the directions route line all skip the layers registered here.
+  useMapOverlayInteraction({
+    id: "route-search-results",
+    layerIds: [LAYER, LABEL_LAYER],
+    priority: HOST_RESULT_PRIORITY,
+    onClick: ({ features }) => {
+      const id = features[0]?.properties?.id;
+      const hit = results.find((r) => r.place.id === id);
+      if (hit) onSelect(hit);
+    },
+  });
 
   return null;
 }

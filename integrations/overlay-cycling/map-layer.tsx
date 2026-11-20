@@ -15,6 +15,7 @@ import { setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import type { SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
 import { useCyclingStore } from "./store";
 
@@ -321,31 +322,13 @@ export function CyclingLayer() {
     });
   }, [mapReady, mapRef, layerVisible]);
 
-  // Cursor interactivity for POI layers
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const hoverLayers = [CYCLING_LAYER_IDS.parking, CYCLING_LAYER_IDS.shops];
-
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      const activeLayers = hoverLayers.filter((id) => !!map.getLayer(id));
-      if (activeLayers.length === 0) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: activeLayers });
-      if (features.length > 0) {
-        map.getCanvasContainer().style.cursor = "pointer";
-      } else {
-        map.getCanvasContainer().style.cursor = "";
-      }
-    };
-
-    map.on("mousemove", onMouseMove);
-
-    return () => {
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-    };
-  }, [mapReady, mapRef, layerVisible]);
+  // The POIs open through the basemap POI click handling; this only shows they can be clicked.
+  useMapOverlayInteraction({
+    id: "overlay-cycling-pois",
+    layerIds: [CYCLING_LAYER_IDS.parking, CYCLING_LAYER_IDS.shops],
+    priority: 50,
+    enabled: layerVisible,
+  });
 
   return null;
 }

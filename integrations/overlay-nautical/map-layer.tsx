@@ -8,14 +8,12 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
 import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
@@ -742,14 +740,13 @@ export function NauticalLayer() {
   }, [tideStationFilter, layerVisible, showTideStations, fetchStations]);
 
   // Click handling — open place panel for clicked harbor
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible || !showHarbors) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+  useMapOverlayInteraction({
+    id: "overlay-nautical-harbours",
+    layerIds: [HARBOR_ICON_LAYER],
+    priority: 50,
+    enabled: layerVisible && showHarbors,
+    onClick: ({ features }) => {
+      const f = features[0];
       if (!f) return;
       const props = f.properties as Record<string, string | number | undefined>;
       const id = String(props.id ?? "").trim();
@@ -771,36 +768,19 @@ export function NauticalLayer() {
       });
       usePlaceStore.getState().setSelectedPlace(place);
       useSidebarStore.getState().openSidebar(PANEL.PLACE);
-    };
-
-    const onMouseMove = (ev: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(HARBOR_ICON_LAYER)) return;
-      const features = map.queryRenderedFeatures(ev.point, { layers: [HARBOR_ICON_LAYER] });
-      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
-    };
-
-    map.on("click", HARBOR_ICON_LAYER, onClick);
-    map.on("mousemove", onMouseMove);
-    INTERACTIVE_LAYER_IDS.add(HARBOR_ICON_LAYER);
-    return () => {
-      map.off("click", HARBOR_ICON_LAYER, onClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      INTERACTIVE_LAYER_IDS.delete(HARBOR_ICON_LAYER);
-    };
-  }, [mapRef, mapReady, styleVersion, layerVisible, showHarbors]);
+    },
+  });
 
   // Click handling — open place panel for clicked NOAA tide station.
   // Each station carries a `network` property; we route to the matching
   // place-resolver scheme (registered by the per-network knowledge integration).
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible || !showTideStations) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+  useMapOverlayInteraction({
+    id: "overlay-nautical-tide-stations",
+    layerIds: [STATION_CIRCLE_LAYER],
+    priority: 50,
+    enabled: layerVisible && showTideStations,
+    onClick: ({ features }) => {
+      const f = features[0];
       if (!f) return;
       const p = f.properties as Record<string, string | number | undefined>;
       const id = String(p.id ?? "").trim();
@@ -846,25 +826,8 @@ export function NauticalLayer() {
       });
       usePlaceStore.getState().setSelectedPlace(place);
       useSidebarStore.getState().openSidebar(PANEL.PLACE);
-    };
-
-    const onMouseMove = (ev: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(STATION_CIRCLE_LAYER)) return;
-      const features = map.queryRenderedFeatures(ev.point, {
-        layers: [STATION_CIRCLE_LAYER],
-      });
-      if (features.length > 0) map.getCanvasContainer().style.cursor = "pointer";
-    };
-
-    map.on("click", STATION_CIRCLE_LAYER, onClick);
-    map.on("mousemove", onMouseMove);
-    INTERACTIVE_LAYER_IDS.add(STATION_CIRCLE_LAYER);
-    return () => {
-      map.off("click", STATION_CIRCLE_LAYER, onClick);
-      map.off("mousemove", onMouseMove);
-      INTERACTIVE_LAYER_IDS.delete(STATION_CIRCLE_LAYER);
-    };
-  }, [mapRef, mapReady, styleVersion, layerVisible, showTideStations]);
+    },
+  });
 
   return null;
 }

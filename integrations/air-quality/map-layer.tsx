@@ -1,15 +1,16 @@
 "use client";
 
 import { escapeHtml, useOverlayExclusion } from "@openmapx/core";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { useEffect, useEffectEvent, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import {
+  useMapOverlayInteraction,
+  useMapOverlayPopup,
+} from "@/integration-api/map/useMapOverlayInteraction";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 import { useAirQualityStore } from "./store";
@@ -222,15 +223,18 @@ function popupLabels(t: ReturnType<typeof useTranslations>): MonitorPopupLabels 
   };
 }
 
+/** Monitors are points, so they win over area overlays beneath them. */
+const MONITOR_INTERACTION_PRIORITY = 50;
+
 export function AirQualityLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
+  const { mapRef, mapReady } = useMap();
   const t = useTranslations("airQualityMap");
   const locale = useLocale();
   const layerVisible = useAirQualityStore((state) => state.layerVisible);
   const mode = useAirQualityStore((state) => state.mode);
   const monitorsActive = layerVisible && mode.kind === "monitors";
   const labels = useMemo(() => popupLabels(t), [t]);
-  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const popup = useMapOverlayPopup(monitorsActive);
 
   useMonitorStations();
   useOverlayExclusion("air-quality", layerVisible);
@@ -299,62 +303,45 @@ export function AirQualityLayer() {
   );
   useMapLayerGroup(group);
 
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !monitorsActive || !map.getLayer(MONITOR_LAYER_ID)) return;
-    const canvas = map.getCanvasContainer();
-
-    const openFeature = (feature: maplibregl.MapGeoJSONFeature) => {
-      if (feature.geometry.type !== "Point") return;
-      const coordinates = feature.geometry.coordinates as [number, number];
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        maxWidth: "300px",
-        className: "omx-popup",
-      })
-        .setLngLat(coordinates)
+  const openFeature = (feature: maplibregl.MapGeoJSONFeature) => {
+    if (feature.geometry.type !== "Point") return;
+    popup.show(
+      new maplibregl.Popup({ closeButton: true, maxWidth: "300px", className: "omx-popup" })
+        .setLngLat(feature.geometry.coordinates as [number, number])
         .setHTML(
           buildMonitorPopupHtml(feature.properties as Record<string, unknown>, labels, locale),
-        )
-        .addTo(map);
-    };
-    const onClick = (event: MapLayerMouseEvent) => {
-      if (getMapClickOwner(event)) return;
-      const feature = event.features?.[0];
-      if (feature) openFeature(feature);
-    };
-    const onMouseMove = (event: maplibregl.MapMouseEvent) => {
-      const features = map.queryRenderedFeatures(event.point, { layers: [MONITOR_LAYER_ID] });
-      canvas.style.cursor = features.length > 0 ? "pointer" : "";
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      const features = map.queryRenderedFeatures(map.project(map.getCenter()), {
-        layers: [MONITOR_LAYER_ID],
-      });
+        ),
+    );
+  };
+  useMapOverlayInteraction({
+    id: "air-quality",
+    layerIds: [MONITOR_LAYER_ID],
+    priority: MONITOR_INTERACTION_PRIORITY,
+    enabled: monitorsActive,
+    onClick: ({ features }) => {
       const feature = features[0];
-      if (!feature) return;
-      event.preventDefault();
-      openFeature(feature);
-    };
+      if (feature) openFeature(feature);
+    },
+  });
 
-    map.on("click", MONITOR_LAYER_ID, onClick);
-    map.on("mousemove", onMouseMove);
-    canvas.addEventListener("keydown", onKeyDown);
-    INTERACTIVE_LAYER_IDS.add(MONITOR_LAYER_ID);
-
-    return () => {
-      map.off("click", MONITOR_LAYER_ID, onClick);
-      map.off("mousemove", onMouseMove);
-      canvas.removeEventListener("keydown", onKeyDown);
-      canvas.style.cursor = "";
-      popupRef.current?.remove();
-      popupRef.current = null;
-      INTERACTIVE_LAYER_IDS.delete(MONITOR_LAYER_ID);
-    };
-  }, [labels, locale, mapReady, mapRef, monitorsActive, styleVersion]);
+  // Keyboard users open the monitor under the map centre.
+  const openCentredMonitor = useEffectEvent((event: KeyboardEvent) => {
+    const map = mapRef.current;
+    if (!map || (event.key !== "Enter" && event.key !== " ")) return;
+    const feature = map.queryRenderedFeatures(map.project(map.getCenter()), {
+      layers: [MONITOR_LAYER_ID],
+    })[0];
+    if (!feature) return;
+    event.preventDefault();
+    openFeature(feature);
+  });
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !monitorsActive) return;
+    const canvas = map.getCanvasContainer();
+    canvas.addEventListener("keydown", openCentredMonitor);
+    return () => canvas.removeEventListener("keydown", openCentredMonitor);
+  }, [mapReady, mapRef, monitorsActive]);
 
   return null;
 }

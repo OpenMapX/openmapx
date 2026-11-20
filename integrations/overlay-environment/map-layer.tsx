@@ -6,16 +6,17 @@ import {
   readCapturedContributors,
   withFeatureContributors,
 } from "@openmapx/integration-framework";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { buildPopupCreditsHtml } from "@/integration-api/map/popupCredits";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import {
+  useMapOverlayInteraction,
+  useMapOverlayPopup,
+} from "@/integration-api/map/useMapOverlayInteraction";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -211,7 +212,7 @@ export function EnvironmentLayer() {
 
   useOverlayExclusion("environment", layerVisible);
 
-  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const popup = useMapOverlayPopup(layerVisible);
   const creditOptions = usePopupCreditOptions();
   const creditOptionsRef = useRef(creditOptions);
   useEffect(() => {
@@ -292,14 +293,13 @@ export function EnvironmentLayer() {
   }, [mapReady, styleVersion, mapRef, layerVisible, debouncedFetch]);
 
   // Click popup
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+  useMapOverlayInteraction({
+    id: "overlay-environment",
+    layerIds: [ENV_LAYER_ID],
+    priority: 50,
+    enabled: layerVisible,
+    onClick: ({ features }) => {
+      const f = features[0];
       if (!f) return;
       const p = f.properties as Record<string, string | number>;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
@@ -347,35 +347,17 @@ export function EnvironmentLayer() {
           </div>
         </div>`;
 
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        maxWidth: "260px",
-        className: "omx-popup",
-      })
-        .setLngLat(coords)
-        .setHTML(html)
-        .addTo(map);
-    };
-
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(ENV_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [ENV_LAYER_ID] });
-      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
-    };
-
-    map.on("click", ENV_LAYER_ID, onClick);
-    map.on("mousemove", onMouseMove);
-    INTERACTIVE_LAYER_IDS.add(ENV_LAYER_ID);
-
-    return () => {
-      map.off("click", ENV_LAYER_ID, onClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
-      INTERACTIVE_LAYER_IDS.delete(ENV_LAYER_ID);
-    };
-  }, [mapReady, styleVersion, mapRef, layerVisible]);
+      popup.show(
+        new maplibregl.Popup({
+          closeButton: true,
+          maxWidth: "260px",
+          className: "omx-popup",
+        })
+          .setLngLat(coords)
+          .setHTML(html),
+      );
+    },
+  });
 
   return null;
 }

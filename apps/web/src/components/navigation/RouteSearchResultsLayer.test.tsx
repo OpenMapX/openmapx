@@ -11,26 +11,14 @@ vi.mock("next-intl", async () => {
 });
 
 const fixtures = vi.hoisted(() => ({
-  publish: vi.fn(),
   loadBrand: vi.fn(),
   rendered: vi.fn(),
   assetReceipts: [{ sourceId: "commons-file", name: "Logo author" }],
-  map: {
-    getSource: vi.fn(),
-    hasImage: vi.fn(() => false),
-    addImage: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    isStyleLoaded: vi.fn(() => true),
-  },
+  mapRef: { current: null as unknown },
   styleVersion: 1,
 }));
-vi.mock("@/integration-api/map/MapContext", () => {
-  const mapRef = { current: fixtures.map };
-  return { useMap: () => ({ mapRef, mapReady: true, styleVersion: fixtures.styleVersion }) };
-});
-vi.mock("@/integration-api/map/useGeoJsonSourceDataBridge", () => ({
-  useGeoJsonSourceDataBridge: () => ({ publish: fixtures.publish }),
+vi.mock("@/integration-api/map/MapContext", () => ({
+  useMap: () => ({ mapRef: fixtures.mapRef, mapReady: true, styleVersion: fixtures.styleVersion }),
 }));
 vi.mock("@/components/map/CategoryResultMarkers", () => ({
   brandImageId: (qid: string) => `brand-marker-${qid}`,
@@ -42,17 +30,26 @@ vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
   useRenderedMapAttributions: fixtures.rendered,
 }));
 
+import type { MapGeoJSONFeature } from "maplibre-gl";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { createFakeMap, type FakeMap } from "@/test";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
+
+let fake: FakeMap;
 
 const results = [
   { place: { id: "lidl", coordinates: [13, 52] }, detourSeconds: 120 },
 ] as AlongRoutePoi<CategoryPlace>[];
 const props = { results, iconPath: "M0 0", categoryKey: "brand:Q151954", onSelect: vi.fn() };
-type PublishedBatch = { data: { features: { properties: Record<string, string> }[] } }[];
+function drawnFeatures() {
+  const data = fake.state.sources.get("route-search-source")?.data as
+    | { features: { properties: Record<string, string> }[] }
+    | undefined;
+  return data?.features ?? [];
+}
 function lastProperties() {
-  const batch = fixtures.publish.mock.calls.at(-1)?.[0] as PublishedBatch | undefined;
-  const properties = batch?.[0].data.features[0]?.properties;
+  const properties = drawnFeatures()[0]?.properties;
   if (!properties) throw new Error("Expected published route-search feature");
   return properties;
 }
@@ -69,17 +66,25 @@ function lastOptions() {
   return options;
 }
 function lastImage() {
-  const batch = fixtures.publish.mock.calls.at(-1)?.[0] as
-    | { data: { features: { properties: { imageId: string } }[] } }[]
-    | undefined;
-  return batch?.[0].data.features[0]?.properties.imageId;
+  return drawnFeatures()[0]?.properties.imageId;
+}
+/** Clicks the map with the result's pin, its label, or both under the pointer. */
+function clickResult(layers: string[]) {
+  for (const layer of layers) {
+    fake.setRenderedFeatures(layer, [
+      { properties: { id: "lidl" }, layer: { id: layer } } as unknown as MapGeoJSONFeature,
+    ]);
+  }
+  act(() => fake.emit("click", { point: { x: 0, y: 0 } }));
 }
 beforeEach(() => {
   vi.clearAllMocks();
   fixtures.styleVersion = 1;
   fixtures.assetReceipts = [{ sourceId: "commons-file", name: "Logo author" }];
-  fixtures.map.getSource.mockReturnValue({});
-  fixtures.map.isStyleLoaded.mockReturnValue(true);
+  fake = createFakeMap({ styleLoaded: true });
+  fixtures.mapRef.current = fake.map;
+  unregisterLayerSlot("route-search-layer");
+  unregisterLayerSlot("route-search-labels");
 });
 describe("RouteSearchResultsLayer brand pins", () => {
   it("separates rendered pin coordinate/logo receipts from detour text receipts", async () => {
@@ -156,21 +161,13 @@ describe("RouteSearchResultsLayer brand pins", () => {
   it("selects once when the pin and label are both hit", () => {
     const onSelect = vi.fn();
     render(<RouteSearchResultsLayer {...props} onSelect={onSelect} />);
-    for (const [event, , handler] of fixtures.map.on.mock.calls) {
-      if (event === "click" && typeof handler === "function")
-        handler({ features: [{ properties: { id: "lidl" } }] });
-    }
+    clickResult(["route-search-layer", "route-search-labels"]);
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
   it("keeps text labels selectable after separating painted channels", () => {
     const onSelect = vi.fn();
     render(<RouteSearchResultsLayer {...props} onSelect={onSelect} />);
-    const handler = fixtures.map.on.mock.calls.find(
-      (call) =>
-        call[0] === "click" && Array.isArray(call[1]) && call[1].includes("route-search-labels"),
-    )?.[2];
-    if (typeof handler !== "function") throw new Error("Expected selectable route-search labels");
-    handler({ features: [{ properties: { id: "lidl" } }] });
+    clickResult(["route-search-labels"]);
     expect(onSelect).toHaveBeenCalledWith(results[0]);
   });
   it("labels unknown and unreachable detours without short geometric minutes", () => {
@@ -184,12 +181,7 @@ describe("RouteSearchResultsLayer brand pins", () => {
       },
     } as AlongRoutePoi<CategoryPlace>;
     const { rerender } = render(<RouteSearchResultsLayer {...props} results={[unknown]} />);
-    const label = () =>
-      (
-        fixtures.publish.mock.calls.at(-1)?.[0] as
-          | { data: { features: { properties: { label: string } }[] } }[]
-          | undefined
-      )?.[0].data.features[0].properties.label;
+    const label = () => drawnFeatures()[0]?.properties.label;
     expect(label()).toBe("Unknown detour");
     rerender(
       <RouteSearchResultsLayer
@@ -202,7 +194,7 @@ describe("RouteSearchResultsLayer brand pins", () => {
     expect(label()).toBe("~+2 min");
   });
   it("publishes a loaded logo while the current style is still loading tiles", async () => {
-    fixtures.map.isStyleLoaded.mockReturnValue(false);
+    fake.state.styleLoaded = false;
     fixtures.loadBrand.mockResolvedValue(true);
     render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
     await waitFor(() => expect(lastImage()).toBe("brand-marker-Q151954"));

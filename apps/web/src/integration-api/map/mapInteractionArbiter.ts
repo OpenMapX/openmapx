@@ -14,7 +14,18 @@ export interface MapOverlayInteractionRegistration {
   layerIds: readonly string[];
   /** Larger values win when several registered overlays have a rendered hit. */
   priority: number;
-  onClick: (event: MapOverlayInteractionEvent) => void;
+  /**
+   * Opens what was clicked. Without it the overlay only shows the pointer
+   * cursor over its layers, for features another handler opens (basemap-style
+   * POIs, for example), and its layers stay out of the interactive registry.
+   */
+  onClick?: (event: MapOverlayInteractionEvent) => void;
+  /**
+   * The features under the pointer while this overlay owns the hover, and
+   * `null` once it stops owning it: the pointer left its layers, a
+   * higher-priority overlay took over, or the pointer left the map.
+   */
+  onHover?: (features: MapGeoJSONFeature[] | null) => void;
 }
 
 interface RegistrationRecord extends MapOverlayInteractionRegistration {
@@ -26,6 +37,8 @@ interface MapInteractionState {
   layerOwners: Map<string, number>;
   arbiterOwnedLayerIds: Set<string>;
   nextOrder: number;
+  /** The registration that last received hover features, until it is told it lost them. */
+  hovered: RegistrationRecord | null;
   onClick: (event: MapMouseEvent) => void;
   onMouseMove: (event: MapMouseEvent) => void;
   onMouseLeave: () => void;
@@ -65,15 +78,26 @@ function winningHit(
   map: MaplibreMap,
   state: MapInteractionState,
   event: MapMouseEvent,
+  clicksOnly = false,
 ): { registration: RegistrationRecord; features: MapGeoJSONFeature[] } | null {
-  const registrations = [...state.registrations.values()].sort(
-    (a, b) => b.priority - a.priority || a.order - b.order,
-  );
+  const registrations = [...state.registrations.values()]
+    .filter((registration) => !clicksOnly || registration.onClick)
+    .sort((a, b) => b.priority - a.priority || a.order - b.order);
   for (const registration of registrations) {
     const features = hitForRegistration(map, registration, event);
     if (features.length > 0) return { registration, features };
   }
   return null;
+}
+
+function moveHover(
+  state: MapInteractionState,
+  hit: { registration: RegistrationRecord; features: MapGeoJSONFeature[] } | null,
+): void {
+  const previous = state.hovered;
+  state.hovered = hit?.registration ?? null;
+  if (previous && previous !== state.hovered) previous.onHover?.(null);
+  if (hit) hit.registration.onHover?.(hit.features);
 }
 
 function setCursor(map: MaplibreMap, cursor: string): void {
@@ -110,16 +134,21 @@ function createMapState(map: MaplibreMap): MapInteractionState {
   state.layerOwners = new Map();
   state.arbiterOwnedLayerIds = new Set();
   state.nextOrder = 0;
+  state.hovered = null;
   state.onClick = (event) => {
     if (getMapClickOwner(event)) return;
-    const hit = winningHit(map, state, event);
-    if (!hit) return;
-    hit.registration.onClick({ event, features: hit.features });
+    const hit = winningHit(map, state, event, true);
+    hit?.registration.onClick?.({ event, features: hit.features });
   };
   state.onMouseMove = (event) => {
-    setCursor(map, winningHit(map, state, event) ? "pointer" : "");
+    const hit = winningHit(map, state, event);
+    setCursor(map, hit ? "pointer" : "");
+    moveHover(state, hit);
   };
-  state.onMouseLeave = () => setCursor(map, "");
+  state.onMouseLeave = () => {
+    setCursor(map, "");
+    moveHover(state, null);
+  };
 
   map.on("click", state.onClick);
   map.on("mousemove", state.onMouseMove);
@@ -140,7 +169,7 @@ export function registerMapOverlayInteraction(
   const state = mapStates.get(map) ?? createMapState(map);
   const record: RegistrationRecord = { ...registration, order: state.nextOrder++ };
   state.registrations.set(registration.id, record);
-  addRegistrationLayers(state, registration.layerIds);
+  if (registration.onClick) addRegistrationLayers(state, registration.layerIds);
 
   let active = true;
   return () => {
@@ -148,7 +177,8 @@ export function registerMapOverlayInteraction(
     active = false;
     if (state.registrations.get(registration.id) !== record) return;
     state.registrations.delete(registration.id);
-    removeRegistrationLayers(state, registration.layerIds);
+    if (state.hovered === record) state.hovered = null;
+    if (registration.onClick) removeRegistrationLayers(state, registration.layerIds);
     if (state.registrations.size > 0) return;
 
     map.off("click", state.onClick);

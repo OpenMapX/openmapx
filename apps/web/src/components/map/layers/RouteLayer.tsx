@@ -418,7 +418,6 @@ export function RouteLayer() {
 
   // Fit the camera to a newly drawn route. This is camera behaviour, so a style
   // change must not re-fit and yank the map away from the user's position.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: preserve the camera effect's existing dependency contract
   useEffect(() => {
     if (navigating || mode === "transit" || mode === "flying" || routes.length === 0) return;
 
@@ -454,7 +453,7 @@ export function RouteLayer() {
       ],
       80,
     );
-  }, [routes, activeRouteIndex, mode, isEvMode, evStops, mapRef, fitBounds, navigating]);
+  }, [routes, activeRouteIndex, mode, isEvMode, evStops, fitBounds, navigating]);
 
   const evStopsData = useMemo(
     () => ({
