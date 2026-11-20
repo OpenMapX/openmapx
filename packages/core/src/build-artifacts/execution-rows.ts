@@ -380,11 +380,14 @@ export function journalFileRows(infraDir: string): OwningExecutionRows {
       for (const job of file.jobs) {
         const execution = (job as { execution?: unknown } | null)?.execution;
         if (execution === undefined) continue;
-        const row = journalExecutionRow({
+        const composed = journalExecutionRow({
           ...(job as JournalOperation),
           execution: journalExecutionSchema.parse(execution),
         });
-        if (row) found.set(row.admission.execution.operationKey, row);
+        if (!composed) continue;
+        // The job's own fields are composed into the row unchecked; the row is checked whole.
+        const row = executionRowSchema.parse(composed) as ExecutionRow;
+        found.set(row.admission.execution.operationKey, row);
       }
       return found;
     } catch (error) {

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -325,4 +325,16 @@ it("lets another process read the agent's rows from its journal, never write the
   expect(rows.owns(job.operationKey)).toBe(true);
   expect((await rows.read(job.operationKey))?.admission.execution).toEqual(executionFor(job));
   await expect(rows.update(job.operationKey, () => undefined)).rejects.toThrow(/Only the agent/);
+});
+
+it("refuses a journal row another process reads when its operation fields are damaged", async () => {
+  const { job } = await admit();
+  const file = JSON.parse(readFileSync(journalPath, "utf8")) as {
+    jobs: { operationKey: string; parent?: unknown }[];
+  };
+  const row = file.jobs.find((entry) => entry.operationKey === job.operationKey);
+  if (!row) throw Error("Row missing");
+  row.parent = { executionId: 7 };
+  writeFileSync(journalPath, JSON.stringify(file));
+  await expect(journalFileRows(root).read(job.operationKey)).rejects.toThrow();
 });
