@@ -33,6 +33,7 @@ vi.mock("../health-history", () => ({
   recordHealthResult: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { processLogger } from "../../process-logger";
 import { recordHealthResult } from "../health-history";
 import {
   executeAllIntegrationHealthChecks,
@@ -400,8 +401,10 @@ describe("configured health-header redirect boundaries", () => {
   ])(
     "blocks %s before a second transport request to %s without exposing the header in status outputs",
     async (header, target) => {
-      const logs = ["error", "warn", "info", "log"] as const;
-      const logSpies = logs.map((level) => vi.spyOn(console, level).mockImplementation(() => {}));
+      const logs = ["error", "warn", "info"] as const;
+      const logSpies = logs.map((level) =>
+        vi.spyOn(processLogger, level).mockImplementation(() => {}),
+      );
       transport.mockImplementation(async (input) =>
         String(input) === "https://status.example.com/health"
           ? new Response(null, { status: 302, headers: { location: target } })

@@ -11,6 +11,7 @@ import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import type { GtfsCatalogProvider } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { getIntegrationsByDomain } from "../../integration-host.js";
+import { processLogger } from "../../process-logger";
 import type { TransitCatalogFeed } from "./types.js";
 
 const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";
@@ -75,7 +76,10 @@ async function discoveryCatalog(): Promise<TransitCatalogFeed[]> {
             feeds.push(parsed.data);
         }
       } catch (error) {
-        console.warn(`[transit-catalog] provider "${provider.id}" failed:`, error);
+        processLogger.warn(
+          { component: "transit-catalog", err: error, providerId: provider.id },
+          "A transit catalog provider failed",
+        );
       }
     }
   }
@@ -89,7 +93,10 @@ export async function getTransitCatalog(): Promise<TransitCatalogFeed[]> {
   const [installed, discovered] = await Promise.all([
     installedCatalog(),
     discoveryCatalog().catch((error) => {
-      console.warn("[transit-catalog] discovery failed:", error);
+      processLogger.warn(
+        { component: "transit-catalog", err: error },
+        "Transit feed discovery failed",
+      );
       return [];
     }),
   ]);

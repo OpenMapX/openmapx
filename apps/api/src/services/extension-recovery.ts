@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { findRepoRoot } from "@openmapx/core/server";
 import { isIntegrationHostInitialized, reloadIntegrations } from "../integration-host";
+import { processLogger } from "../process-logger";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { renderAndPersistCompose } from "./admin-ops";
 import { recoverAgentIntegrations } from "./agent-integrations";
@@ -51,8 +52,9 @@ export async function recoverInterruptedExtensionChanges(
     isIntegrationHostInitialized()
   ) {
     await reloadIntegrations().catch((error) => {
-      console.warn(
-        `[extension-recovery] Integrations could not be reloaded after recovery: ${(error as Error).message}`,
+      processLogger.warn(
+        { component: "extension-recovery", err: error },
+        "Integrations could not be reloaded after recovery",
       );
     });
   }

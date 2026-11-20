@@ -3,6 +3,7 @@ import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { installedExtension, installedIntegration } from "../db/schema";
+import { processLogger } from "../process-logger";
 import { JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
 import { readProjection } from "./admin-job-projection";
@@ -138,16 +139,18 @@ async function fetchLoadableIntegrations(): Promise<LoadableIntegration[]> {
   const loadable: LoadableIntegration[] = [];
   for (const entry of snapshot.integrations) {
     if (entry.status !== "ok") {
-      console.warn(
-        `[integrations] Installed integration "${entry.integrationId}" is not loaded: ${entry.reason ?? "it needs to be reinstalled"}`,
+      processLogger.warn(
+        { component: "integrations", integrationId: entry.integrationId },
+        `An installed integration is not loaded: ${entry.reason ?? "it needs to be reinstalled"}`,
       );
       continue;
     }
     loadable.push({ integrationId: entry.integrationId, files: entry.files });
   }
   for (const integrationId of snapshot.unrecorded) {
-    console.warn(
-      `[integrations] custom_integrations/${integrationId} is not loaded: the operations agent did not install it`,
+    processLogger.warn(
+      { component: "integrations", integrationId },
+      "A custom integration is not loaded: the operations agent did not install it",
     );
   }
   loadable.sort((left, right) => (left.integrationId < right.integrationId ? -1 : 1));
@@ -183,10 +186,11 @@ export async function readLoadableIntegrations(
   try {
     await fetchLoadableIntegrations();
   } catch (error) {
-    console.warn(
+    processLogger.warn(
+      { component: "integrations", err: error },
       lastLoadable
-        ? `[integrations] The operations agent is unreachable; installed integrations are loaded as last reported: ${(error as Error).message}`
-        : `[integrations] The operations agent is unreachable; installed integrations are not loaded yet: ${(error as Error).message}`,
+        ? "The operations agent is unreachable; installed integrations are loaded as last reported"
+        : "The operations agent is unreachable; installed integrations are not loaded yet",
     );
     scheduleLoadableRetry(options.onChange);
   }
@@ -232,8 +236,8 @@ export async function recoverAgentIntegrations(
   } = {},
 ): Promise<IntegrationRecoveryOutcome> {
   const log = options.log ?? {
-    info: (message: string) => console.info(`[extension-recovery] ${message}`),
-    warn: (message: string) => console.warn(`[extension-recovery] ${message}`),
+    info: (message: string) => processLogger.info({ component: "extension-recovery" }, message),
+    warn: (message: string) => processLogger.warn({ component: "extension-recovery" }, message),
   };
   const outcome: IntegrationRecoveryOutcome = { committed: [], rolledBack: [] };
 

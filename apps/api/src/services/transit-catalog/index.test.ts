@@ -1,5 +1,6 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { processLogger } from "../../process-logger";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 const discovery = vi.hoisted(() => ({ integrations: [] as unknown[] }));
@@ -156,7 +157,7 @@ it("retains installed rows when optional discovery is unavailable", async () => 
       ]),
     },
   ];
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(processLogger, "warn").mockImplementation(() => {});
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>

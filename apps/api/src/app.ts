@@ -40,6 +40,7 @@ import { schedulePrivacyDeadlineReminders } from "./privacy/deadline-reminders.j
 import { janitorEncryptedSourceSpools } from "./privacy/encrypted-source-spool.js";
 import { createPrivacyNotificationWorker } from "./privacy/notifications.js";
 import { createPrivacyOperationsMonitor } from "./privacy/operations-monitor.js";
+import { processLogger } from "./process-logger";
 import {
   cameraMediaSourcesOf,
   setCameraMediaSources,
@@ -75,7 +76,6 @@ import {
 import { validateAdminOperationCatalog } from "./services/admin-operation-catalog";
 import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
 import { readLoadableIntegrations } from "./services/agent-integrations";
-import { appLogger } from "./services/app-logger";
 import { cacheInvalidation } from "./services/cache-invalidation";
 import {
   startMigrationStagePruning,
@@ -123,7 +123,6 @@ import {
   unmatchedRouteLimit,
 } from "./utils/rate-limit";
 import { registerResponseCompression } from "./utils/response-compression";
-import { createSafePinoOptions } from "./utils/safe-log-fields";
 
 /** How the process entry point reaches a migration that is still running. */
 export interface AppStartupControl {
@@ -151,14 +150,6 @@ export interface App {
   stop(): Promise<void>;
 }
 
-export async function createApiLogger(): Promise<FastifyBaseLogger> {
-  const { default: pino } = await import("pino");
-  return pino(
-    createSafePinoOptions(envString("LOG_LEVEL", "info")),
-    pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),
-  );
-}
-
 /**
  * Builds the complete application: schema, security hooks, routes, integrations
  * and job handlers. Listening, workers and timers belong to `start()`, with these
@@ -170,7 +161,7 @@ export async function createApiLogger(): Promise<FastifyBaseLogger> {
  * too; `stop()` releases those timers through their shutdown handlers.
  */
 export async function createApp(options: CreateAppOptions = {}): Promise<App> {
-  const loggerInstance = options.logger ?? (await createApiLogger());
+  const loggerInstance = options.logger ?? processLogger;
   const server = Fastify({
     ...controlledRequestLoggingOptions(loggerInstance),
     trustProxy: trustProxyConfig(),

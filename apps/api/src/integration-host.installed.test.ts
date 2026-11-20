@@ -19,6 +19,7 @@ import {
   setInstalledIntegrationResolver,
   shutdownIntegrations,
 } from "./integration-host.js";
+import { processLogger } from "./process-logger";
 
 const MANIFEST = {
   id: "delta",
@@ -118,7 +119,7 @@ describe("installed integrations without an operations agent", () => {
 
 describe("installed integrations with an operations agent", () => {
   beforeEach(() => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(processLogger, "warn").mockImplementation(() => {});
   });
 
   it("loads an integration the agent reports intact and reads its recorded files", async () => {
@@ -173,8 +174,14 @@ describe("installed integrations with an operations agent", () => {
     expect(delta?.config.greeting).toBe("from-default");
     const preview = await app.inject({ method: "GET", url: "/api/integrations/delta/preview" });
     expect(preview.statusCode).toBe(404);
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("strings/de.json in"));
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("strings/fr.json in"));
+    expect(processLogger.warn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("strings/de.json in"),
+    );
+    expect(processLogger.warn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("strings/fr.json in"),
+    );
   });
 
   it("asks the agent again on every reload", async () => {

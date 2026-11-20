@@ -11,6 +11,7 @@ import {
   MeterProvider,
   MetricReader,
 } from "@opentelemetry/sdk-metrics";
+import { processLogger } from "../../process-logger";
 
 /**
  * OpenTelemetry metrics for the transit and routing provider chains.
@@ -273,8 +274,10 @@ export function initMetrics(): MetricsHandle {
     const collected = await reader.snapshot();
     if (collected.errors.length > 0) {
       // Surface but do not throw — partial collection is fine for scraping.
-      // eslint-disable-next-line no-console
-      console.warn("metrics: collection errors", collected.errors);
+      processLogger.warn(
+        { component: "metrics", errors: collected.errors },
+        "Some metrics could not be collected",
+      );
     }
     return serializer.serialize(collected.resourceMetrics);
   }

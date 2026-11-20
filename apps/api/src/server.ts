@@ -1,10 +1,11 @@
 import { createFatalProcessHandler } from "@openmapx/core/server";
-import { createApiLogger, createApp } from "./app";
+import { createApp } from "./app";
 import { sql } from "./db/index";
 import type { MigrationRun } from "./db/migration-runner";
+import { processLogger } from "./process-logger";
 import { redis } from "./redis";
 
-const logger = await createApiLogger();
+const logger = processLogger;
 
 // No exception shape proves a process is safe to keep serving after control
 // reaches a fatal channel. The pinned standalone Undici contains the historical

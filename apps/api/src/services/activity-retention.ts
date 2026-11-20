@@ -12,6 +12,7 @@ import {
   preservationAllowsDeletion,
   withPreservationRetentionLock,
 } from "../privacy/preservation.js";
+import { processLogger } from "../process-logger";
 import { noUnsettledManagedOperation } from "./admin-job-state";
 import { prunePlatformConfigurationPreviews } from "./platform-preview-store";
 import { pruneTransitCredentialPreviews } from "./transit-credential-retention";
@@ -38,8 +39,9 @@ export function parseRequiredRetentionDays(
  */
 export async function pruneAuditLog(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) {
-    console.warn(
-      `Skipping audit log prune: retention days must be a positive finite number, got ${days}`,
+    processLogger.warn(
+      { days },
+      "Skipping audit log prune: retention days must be a positive finite number",
     );
     return 0;
   }
@@ -69,8 +71,9 @@ export async function pruneAuditLog(days: number): Promise<number> {
  */
 export async function pruneCompletedJobs(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) {
-    console.warn(
-      `Skipping admin job prune: retention days must be a positive finite number, got ${days}`,
+    processLogger.warn(
+      { days },
+      "Skipping admin job prune: retention days must be a positive finite number",
     );
     return 0;
   }
@@ -113,8 +116,9 @@ const dataManagerJobSubject = sql`substring(${dataManagerJobs.triggeredBy} from 
  */
 export async function pruneDataManagerJobs(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) {
-    console.warn(
-      `Skipping data-manager job prune: retention days must be a positive finite number, got ${days}`,
+    processLogger.warn(
+      { days },
+      "Skipping data-manager job prune: retention days must be a positive finite number",
     );
     return 0;
   }
@@ -152,8 +156,9 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
 /** Delete persisted operational log records after the disclosed retention period. */
 export async function pruneAppLogs(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) {
-    console.warn(
-      `Skipping application log prune: retention days must be a positive finite number, got ${days}`,
+    processLogger.warn(
+      { days },
+      "Skipping application log prune: retention days must be a positive finite number",
     );
     return 0;
   }

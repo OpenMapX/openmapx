@@ -28,6 +28,11 @@ vi.mock("../admin-job-projection", () => ({
 
 import { executeAdminJobOperation } from "../admin-job-ops";
 
+const { processLogger } = vi.hoisted(() => ({
+  processLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../process-logger", () => ({ processLogger }));
+
 function jobContext(): JobContext {
   const operations = Object.fromEntries(
     ["intg-one", "intg-two"].map((id) => [
@@ -383,7 +388,7 @@ describe("readLoadableIntegrations", () => {
 
   it("offers only the integrations the agent reports intact", async () => {
     process.env.OPS_AGENT_URL = "http://ops-agent:8080";
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(processLogger, "warn").mockImplementation(() => {});
     const files = [{ path: "manifest.json", sha256: SHA }];
     agentAnswers([
       snapshot(
@@ -398,15 +403,21 @@ describe("readLoadableIntegrations", () => {
     await expect(integrations.readLoadableIntegrations()).resolves.toEqual([
       { integrationId: "intg-one", files },
     ]);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"intg-two" is not loaded'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("custom_integrations/stray"));
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ integrationId: "intg-two" }),
+      expect.stringContaining("manifest changed"),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ integrationId: "stray" }),
+      expect.stringContaining("did not install it"),
+    );
     warn.mockRestore();
   });
 
   it("keeps the last reported list while the agent is unreachable and retries after a minute", async () => {
     process.env.OPS_AGENT_URL = "http://ops-agent:8080";
     vi.useFakeTimers();
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(processLogger, "warn").mockImplementation(() => {});
     const files = [{ path: "manifest.json", sha256: SHA }];
     agentAnswers([snapshot([{ integrationId: "intg-one", files }])]);
     await integrations.readLoadableIntegrations();
@@ -416,7 +427,10 @@ describe("readLoadableIntegrations", () => {
     await expect(integrations.readLoadableIntegrations({ onChange })).resolves.toEqual([
       { integrationId: "intg-one", files: [{ path: "manifest.json", sha256: SHA }] },
     ]);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("loaded as last reported"));
+    expect(warn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("loaded as last reported"),
+    );
 
     agentAnswers([snapshot([{ integrationId: "intg-three" }])]);
     await vi.advanceTimersByTimeAsync(59_000);

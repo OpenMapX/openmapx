@@ -54,6 +54,7 @@ import {
   resetIntegrationRoutes,
   rollbackIntegrationRouteStaging,
 } from "./integration-routes";
+import { processLogger } from "./process-logger";
 import { redis } from "./redis";
 import {
   type AdministrativeConfigurationReadContext,
@@ -319,8 +320,9 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
 
     if (!existing.isBuiltIn && entry.isBuiltIn) {
       byId.set(id, entry);
-      console.warn(
-        `[integration-host] Ignoring duplicate integration id "${id}": community integration was replaced by the built-in integration`,
+      processLogger.warn(
+        { component: "integration-host", integrationId: id },
+        "Ignoring a duplicate integration id: the community integration was replaced by the built-in integration",
       );
       continue;
     }
@@ -329,7 +331,10 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
       existing.isBuiltIn && !entry.isBuiltIn
         ? "community integration was ignored in favor of the built-in integration"
         : "the later integration was ignored";
-    console.warn(`[integration-host] Ignoring duplicate integration id "${id}": ${reason}`);
+    processLogger.warn(
+      { component: "integration-host", integrationId: id },
+      `Ignoring a duplicate integration id: ${reason}`,
+    );
   }
 
   const visited = new Set<string>();
@@ -340,7 +345,10 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
   function visit(id: string) {
     if (visited.has(id) || skipped.has(id)) return;
     if (inStack.has(id)) {
-      console.warn(`[integration-host] Dependency cycle involving "${id}" — skipping`);
+      processLogger.warn(
+        { component: "integration-host", integrationId: id },
+        "Skipping an integration in a dependency cycle",
+      );
       skipped.add(id);
       return;
     }
@@ -353,8 +361,9 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
     const deps = (entry.manifest.dependencies ?? []) as string[];
     for (const dep of deps) {
       if (!byId.has(dep)) {
-        console.warn(
-          `[integration-host] Integration "${id}" requires "${dep}" which is not installed — skipping`,
+        processLogger.warn(
+          { component: "integration-host", integrationId: id, dependency: dep },
+          "Skipping an integration whose required integration is not installed",
         );
         skipped.add(id);
         inStack.delete(id);
@@ -362,8 +371,9 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
       }
       visit(dep);
       if (skipped.has(dep)) {
-        console.warn(
-          `[integration-host] Integration "${id}" skipped because dependency "${dep}" was skipped`,
+        processLogger.warn(
+          { component: "integration-host", integrationId: id, dependency: dep },
+          "Skipping an integration because its dependency was skipped",
         );
         skipped.add(id);
         inStack.delete(id);

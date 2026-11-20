@@ -83,6 +83,16 @@
       }
     },
     {
+      "includes": ["apps/api/src/**", "!**/*.test.ts", "!**/__tests__/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "error"
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "services/data-manager/src/jobs/**",
         "!services/data-manager/src/jobs/overture/eval/**",
