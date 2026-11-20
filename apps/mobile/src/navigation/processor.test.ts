@@ -1,6 +1,6 @@
 import { groundSessionFixture } from "../storage/testing/sessionFixture";
 import { GroundNavigationProcessor } from "./ground/GroundNavigationProcessor";
-import { ProcessorRegistry } from "./processor";
+import { type ProcessorKind, ProcessorRegistry } from "./processor";
 import { TransitNavigationProcessor } from "./transit/TransitNavigationProcessor";
 import { transitSessionFixture } from "./transit/testing/transitFixture";
 
@@ -14,6 +14,15 @@ describe("ProcessorRegistry", () => {
     expect(registry.supports("transit")).toBe(false);
     expect(registry.get("ground")).toBe(ground);
     expect(registry.get("transit")).toBeNull();
+  });
+
+  it("looks up one mode at a time", () => {
+    const registry = new ProcessorRegistry();
+    const kind: ProcessorKind = "ground";
+    // A processor for either mode would accept either kind of session, so a
+    // lookup by a kind that is not one literal mode does not type-check.
+    // @ts-expect-error
+    expect(registry.get(kind as ProcessorKind)).toBeNull();
   });
 
   it("hands each session to the processor of its own mode", () => {

@@ -124,7 +124,13 @@ export class ProcessorRegistry {
     else this.processors.transit = processor;
   }
 
-  get<K extends ProcessorKind>(kind: K): NavigationProcessor<K> | null {
+  /**
+   * The processor for one mode. There is deliberately no signature for a kind
+   * that could be either mode: its processor would accept either session.
+   */
+  get(kind: "ground"): NavigationProcessor<"ground"> | null;
+  get(kind: "transit"): NavigationProcessor<"transit"> | null;
+  get(kind: ProcessorKind): AnyNavigationProcessor | null {
     return this.processors[kind] ?? null;
   }
 
