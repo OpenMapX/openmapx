@@ -1,6 +1,7 @@
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
-import { planInstant, setup } from "../index";
+import { setup } from "../index";
+import { planInstant } from "../plan-request";
 
 const orchestrator = vi.hoisted(() => ({ planTrip: vi.fn() }));
 vi.mock("../orchestrator", async (original) => ({
