@@ -90,6 +90,8 @@ const hasNoRoutes = (result: { routes: readonly unknown[] }) => result.routes.le
  * Only one of the three plans runs: the scheduled plan takes over once a stop
  * carries a time window, and EV mode plans charge stops instead.
  */
+export type GroundDirectionsPlan = ReturnType<typeof useGroundDirectionsPlan>;
+
 export function useGroundDirectionsPlan() {
   const locale = useLocale();
   const registry = useIntegrationRegistry();

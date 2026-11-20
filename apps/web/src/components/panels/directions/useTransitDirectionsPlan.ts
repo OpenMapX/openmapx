@@ -54,6 +54,8 @@ function rawTimeIdentity(value: "now" | Date | null): string | number | null {
   return value instanceof Date ? value.getTime() : value;
 }
 
+export type TransitDirectionsPlan = ReturnType<typeof useTransitDirectionsPlan>;
+
 /** Composes existing transit acquisition, page publication and captured navigation policy. */
 export function useTransitDirectionsPlan({
   enabled,

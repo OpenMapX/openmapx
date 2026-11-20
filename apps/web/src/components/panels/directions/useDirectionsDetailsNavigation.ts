@@ -43,6 +43,8 @@ export function detailsNavigationReducer(
   }
 }
 
+export type DirectionsDetailsNavigation = ReturnType<typeof useDirectionsDetailsNavigation>;
+
 /** The directions panel's details navigation: a ground route or a transit itinerary. */
 export function useDirectionsDetailsNavigation() {
   const [state, dispatch] = useReducer(detailsNavigationReducer, CLOSED_DETAILS);
