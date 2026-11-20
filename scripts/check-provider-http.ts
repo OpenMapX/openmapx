@@ -59,9 +59,6 @@ export type ProviderHttpExceptions = Readonly<
   Record<ProviderHttpRule, Readonly<Record<string, ProviderHttpException>>>
 >;
 
-/** Reason shared by the sites the credentialed-provider migration removes next. */
-const MOVES_TO_HOST_CLIENT =
-  "Credentialed provider still on its own request path; it moves to ctx.http with the credentialed-provider migration.";
 const NULL_ISLAND_PENDING =
   "Payload validation for this provider replaces the zero fallback with a rejected or omitted record.";
 
@@ -80,10 +77,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
       count: 1,
       reason:
         "The Kartverket station list moves into the shared tide catalogs, read through ctx.http.",
-    },
-    "integrations/transit-mobility-database/client.ts": {
-      count: 1,
-      reason: MOVES_TO_HOST_CLIENT,
     },
   },
   "credentialed-fetch-json": {},

@@ -1,13 +1,7 @@
+import { SafeFetchHttpError } from "@openmapx/core/server";
 import type { CacheClient } from "@openmapx/integration-framework";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MdbClient } from "../client.js";
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MdbClient, type MdbJsonRequest } from "../client.js";
 
 let nowMs: number;
 const advance = (ms: number) => {
@@ -18,26 +12,21 @@ beforeEach(() => {
   nowMs = 1_700_000_000_000;
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+function requestMock(answer: (url: string) => unknown) {
+  const request = vi.fn(async (url: string) => {
+    const value = answer(url);
+    if (value instanceof Error) throw value;
+    return value;
+  });
+  return { request, client: request as unknown as MdbJsonRequest };
+}
 
 describe("MdbClient", () => {
   it("exchanges the refresh token and caches the access token until expiry", async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-      const url = String(input);
-      if (url.endsWith("/v1/tokens")) {
-        return jsonResponse({ access_token: "AT-1", expires_in: 3600 });
-      }
-      return jsonResponse({ results: [] });
-    });
-
-    const client = new MdbClient({
-      refreshToken: "RT",
-      cache: undefined,
-      fetchImpl,
-      now: () => nowMs,
-    });
+    const { request, client: transport } = requestMock((url) =>
+      url.endsWith("/v1/tokens") ? { access_token: "AT-1", expires_in: 3600 } : { results: [] },
+    );
+    const client = new MdbClient({ refreshToken: "RT", request: transport, now: () => nowMs });
 
     await client.listGtfsFeeds();
     // Two more calls within token TTL should NOT re-hit /v1/tokens
@@ -46,40 +35,64 @@ describe("MdbClient", () => {
     advance(60_000);
     await client.listGbfsFeeds();
 
-    const tokenCalls = fetchImpl.mock.calls.filter((c) => String(c[0]).endsWith("/v1/tokens"));
+    const tokenCalls = request.mock.calls.filter(([url]) => url.endsWith("/v1/tokens"));
     expect(tokenCalls).toHaveLength(1);
-
-    const authHeader = fetchImpl.mock.calls[1]?.[1]?.headers as Record<string, string>;
-    expect(authHeader.Authorization).toBe("Bearer AT-1");
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ refresh_token: "RT" }),
+      allowedRedirectOrigin: "https://api.mobilitydatabase.org",
+    });
+    expect(request.mock.calls[1]?.[1]).toMatchObject({
+      headers: { Authorization: "Bearer AT-1" },
+      allowedRedirectOrigin: "https://api.mobilitydatabase.org",
+    });
   });
 
   it("refreshes the access token on 401 and retries the failing call", async () => {
-    const responses: Array<() => Response> = [
-      // 1) initial token exchange
-      () => jsonResponse({ access_token: "AT-1", expires_in: 3600 }),
-      // 2) authed call → 401
-      () => jsonResponse({ error: "expired" }, 401),
-      // 3) re-exchange
-      () => jsonResponse({ access_token: "AT-2", expires_in: 3600 }),
-      // 4) authed call → 200
-      () => jsonResponse({ results: [] }),
+    const answers: unknown[] = [
+      { access_token: "AT-1", expires_in: 3600 },
+      new SafeFetchHttpError(401, "https://api.mobilitydatabase.org/v1/gtfs_feeds", null),
+      { access_token: "AT-2", expires_in: 3600 },
+      { results: [] },
     ];
-    const fetchImpl = vi.fn<typeof fetch>(
-      async () => responses.shift()?.() ?? jsonResponse({}, 500),
-    );
+    const { request, client: transport } = requestMock(() => answers.shift());
+    const client = new MdbClient({ refreshToken: "RT", request: transport, now: () => nowMs });
 
+    expect(await client.listGtfsFeeds()).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(request.mock.calls[3]?.[1]).toMatchObject({ headers: { Authorization: "Bearer AT-2" } });
+  });
+
+  it("does not retry a refused token exchange", async () => {
+    const { request, client: transport } = requestMock(
+      () => new SafeFetchHttpError(401, "https://api.mobilitydatabase.org/v1/tokens", null),
+    );
+    const client = new MdbClient({ refreshToken: "RT", request: transport, now: () => nowMs });
+
+    await expect(client.listGtfsFeeds()).rejects.toMatchObject({ status: 401 });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps credentials on an operator-configured origin", async () => {
+    const { request, client: transport } = requestMock((url) =>
+      url.endsWith("/v1/tokens") ? { access_token: "AT", expires_in: 3600 } : [],
+    );
     const client = new MdbClient({
       refreshToken: "RT",
-      fetchImpl,
+      baseUrl: "https://mirror.example/mdb/",
+      request: transport,
       now: () => nowMs,
     });
 
-    const feeds = await client.listGtfsFeeds();
-    expect(feeds).toEqual([]);
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    await client.listGtfsFeeds();
 
-    const retryAuthHeader = fetchImpl.mock.calls[3]?.[1]?.headers as Record<string, string>;
-    expect(retryAuthHeader.Authorization).toBe("Bearer AT-2");
+    expect(request.mock.calls.map(([url]) => url)).toEqual([
+      "https://mirror.example/mdb/v1/tokens",
+      "https://mirror.example/mdb/v1/gtfs_feeds?limit=100&offset=0",
+    ]);
+    for (const [, options] of request.mock.calls) {
+      expect(options?.allowedRedirectOrigin).toBe("https://mirror.example");
+    }
   });
 
   it("paginates until MDB returns a short page", async () => {
@@ -89,23 +102,15 @@ describe("MdbClient", () => {
         data_type: "gtfs",
       })),
     });
-
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-      const url = new URL(String(input));
-      if (url.pathname === "/v1/tokens") {
-        return jsonResponse({ access_token: "AT", expires_in: 3600 });
-      }
+    const { client: transport } = requestMock((input) => {
+      const url = new URL(input);
+      if (url.pathname === "/v1/tokens") return { access_token: "AT", expires_in: 3600 };
       const offset = Number(url.searchParams.get("offset") ?? "0");
-      if (offset === 0) return jsonResponse(page(0, 100));
-      if (offset === 100) return jsonResponse(page(100, 100));
-      return jsonResponse(page(200, 17)); // short page → done
+      if (offset === 0) return page(0, 100);
+      if (offset === 100) return page(100, 100);
+      return page(200, 17); // short page → done
     });
-
-    const client = new MdbClient({
-      refreshToken: "RT",
-      fetchImpl,
-      now: () => nowMs,
-    });
+    const client = new MdbClient({ refreshToken: "RT", request: transport, now: () => nowMs });
 
     const feeds = await client.listGtfsFeeds();
     expect(feeds).toHaveLength(217);
@@ -116,20 +121,20 @@ describe("MdbClient", () => {
   it("returns the cached feed list when ctx.cache has a hit", async () => {
     const cached = [{ id: "mdb-cached", data_type: "gtfs" }];
     const cache: CacheClient = {
-      get: async <T>() => cached as T,
+      get: vi.fn(async () => cached),
       set: vi.fn(async () => {}),
       del: vi.fn(async () => {}),
       withCache: vi.fn(),
     };
-    const fetchImpl = vi.fn<typeof fetch>();
+    const { request, client: transport } = requestMock(() => ({}));
     const client = new MdbClient({
       refreshToken: "RT",
       cache,
-      fetchImpl,
+      request: transport,
       now: () => nowMs,
     });
     const feeds = await client.listGtfsFeeds();
     expect(feeds).toEqual(cached);
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
   });
 });

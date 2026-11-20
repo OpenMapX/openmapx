@@ -1,3 +1,8 @@
+import {
+  SafeFetchHttpError,
+  type SafeFetchJsonOptions,
+  safeFetchJson,
+} from "@openmapx/core/server";
 import { type CacheClient, captureCacheWriter } from "@openmapx/integration-framework";
 import type { MdbFeed, MdbTokenResponse } from "./types.js";
 
@@ -8,6 +13,11 @@ const MAX_FEEDS = 10_000;
 const FEED_LIST_TTL = 48 * 60 * 60; // 48 h, matches the dynamic-registry cadence
 
 const ACCESS_TOKEN_SAFETY_SECONDS = 60;
+/** A page of 100 feed records with their locations stays well under this. */
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+/** The SSRF-bounded JSON request the client makes; `safeFetchJson` by default. */
+export type MdbJsonRequest = <T>(url: string, options: SafeFetchJsonOptions) => Promise<T>;
 
 type FeedKind = "gtfs" | "gtfs_rt" | "gbfs";
 
@@ -21,8 +31,8 @@ export interface MdbClientConfig {
   refreshToken: string;
   baseUrl?: string;
   cache?: CacheClient;
-  /** Override `fetch` for tests. */
-  fetchImpl?: typeof fetch;
+  /** Override the request for tests. */
+  request?: MdbJsonRequest;
   /** Override `Date.now` for tests. */
   now?: () => number;
 }
@@ -30,6 +40,8 @@ export interface MdbClientConfig {
 /**
  * Client for api.mobilitydatabase.org with refresh-token → access-token
  * exchange, transparent retry on 401, and Redis-backed feed-list caching.
+ * The operator can point it at another base URL, so requests go through the
+ * SSRF boundary, and the credentials never follow a redirect off that origin.
  *
  * The client is intentionally narrow: it only fetches feed metadata. We
  * never proxy feed bytes (GTFS zips or GTFS-RT protobufs) — the existing
@@ -39,7 +51,8 @@ export class MdbClient {
   private readonly refreshToken: string;
   private readonly baseUrl: string;
   private readonly cache?: CacheClient;
-  private readonly fetchImpl: typeof fetch;
+  private readonly request: MdbJsonRequest;
+  private readonly origin: string;
   private readonly now: () => number;
 
   private accessToken: string | null = null;
@@ -49,7 +62,8 @@ export class MdbClient {
     this.refreshToken = config.refreshToken;
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.cache = config.cache;
-    this.fetchImpl = config.fetchImpl ?? fetch;
+    this.request = config.request ?? safeFetchJson;
+    this.origin = new URL(this.baseUrl).origin;
     this.now = config.now ?? Date.now;
   }
 
@@ -123,30 +137,21 @@ export class MdbClient {
    * with cache fallback.
    */
   private async authedJsonGet<T>(url: string): Promise<T> {
-    let token = await this.getAccessToken();
-    let response = await this.timedFetch(url, token);
-    if (response.status === 401) {
-      this.accessToken = null;
-      this.accessTokenExpiresAt = 0;
-      token = await this.getAccessToken();
-      response = await this.timedFetch(url, token);
-    }
-    if (!response.ok) {
-      throw new Error(`MDB ${response.status} ${response.statusText} for ${url}`);
-    }
-    return (await response.json()) as T;
-  }
-
-  private async timedFetch(url: string, accessToken: string): Promise<Response> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      return await this.fetchImpl(url, {
-        signal: controller.signal,
+    const get = async (accessToken: string) =>
+      this.request<T>(url, {
+        timeoutMs: TIMEOUT_MS,
+        maxBytes: MAX_RESPONSE_BYTES,
+        allowedRedirectOrigin: this.origin,
         headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
       });
-    } finally {
-      clearTimeout(timer);
+    const accessToken = await this.getAccessToken();
+    try {
+      return await get(accessToken);
+    } catch (error) {
+      if (!(error instanceof SafeFetchHttpError) || error.status !== 401) throw error;
+      this.accessToken = null;
+      this.accessTokenExpiresAt = 0;
+      return get(await this.getAccessToken());
     }
   }
 
@@ -155,25 +160,14 @@ export class MdbClient {
       return this.accessToken;
     }
 
-    const url = `${this.baseUrl}/v1/tokens`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await this.fetchImpl(url, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ refresh_token: this.refreshToken }),
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (!res.ok) {
-      throw new Error(`MDB token exchange ${res.status} ${res.statusText}`);
-    }
-    const body = (await res.json()) as MdbTokenResponse;
+    const body = await this.request<MdbTokenResponse>(`${this.baseUrl}/v1/tokens`, {
+      method: "POST",
+      timeoutMs: TIMEOUT_MS,
+      maxBytes: 1024 * 1024,
+      allowedRedirectOrigin: this.origin,
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ refresh_token: this.refreshToken }),
+    });
     const expiresInSec = body.expires_in ?? body.expiration ?? 3600;
     this.accessToken = body.access_token;
     this.accessTokenExpiresAt = this.now() + (expiresInSec - ACCESS_TOKEN_SAFETY_SECONDS) * 1000;
