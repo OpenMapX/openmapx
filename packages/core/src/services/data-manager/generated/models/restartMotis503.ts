@@ -17,4 +17,8 @@ export type RestartMotis503 =
       error: string;
       message: string;
       code?: string;
+    }
+  | {
+      error: string;
+      code: "ops-agent-unavailable";
     };

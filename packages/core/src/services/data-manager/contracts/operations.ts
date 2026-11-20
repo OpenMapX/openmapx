@@ -341,7 +341,7 @@ export const dataManagerOperations = {
     responses: {
       ...dataMutationErrors,
       200: json(z.strictObject({ ok: z.literal(true), status: z.literal("restart-initiated") })),
-      503: json(httpErrorSchema),
+      503: json(z.union([httpErrorSchema, t.transitRestartUnavailableSchema])),
     },
   },
   inspectCatalogReview: {

@@ -213,6 +213,17 @@ describe("data-manager API", () => {
     expect(cancel).not.toHaveBeenCalled();
   });
 
+  it("refuses a MOTIS restart in the error envelope when no durable receiver is wired", async () => {
+    const app = createTestApp();
+    registerApi(app, { dataDir: createDataDir() });
+    const response = await app.inject({ method: "POST", url: "/transit/restart-motis" });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      error: "Durable data receiver is unavailable",
+      code: "ops-agent-unavailable",
+    });
+  });
+
   it("GET /notable-places/status returns 404 until a first snapshot is published", async () => {
     const app = createTestApp();
     const unsafe = vi.fn().mockResolvedValue([{ exists: false }]);

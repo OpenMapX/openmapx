@@ -20,7 +20,10 @@ Offline package preparation errors replace `ok`, `errorCode` and `errorMessage`
 with `error` and `code`, and keep `retryAfterSeconds`. The offline capability's
 HTTP 502 answers `{ error, code: "source-unavailable" }` instead of an
 unavailable capability. A refused transit source change or sync replaces `ok`
-and `reason` with `error` and `code` and keeps `existingJobId`. Better Auth
+and `reason` with `error` and `code` and keeps `existingJobId`. A MOTIS restart
+refused for lack of a durable receiver answers
+`{ error, code: "ops-agent-unavailable" }` instead of carrying that code in
+`error`. Better Auth
 replies under `/api/auth/*` keep their own `{ code, message }` shape.
 
 ## Who is affected

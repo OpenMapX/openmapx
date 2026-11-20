@@ -120092,51 +120092,74 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                      ]
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
                         "error": {
                           "type": "string"
                         },
-                        "message": {
-                          "type": "string"
-                        },
                         "code": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "ops-agent-unavailable"
+                          ]
                         }
                       },
                       "required": [
-                        "statusCode",
                         "error",
-                        "message"
+                        "code"
                       ],
                       "additionalProperties": false
                     }

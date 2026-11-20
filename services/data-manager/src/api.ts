@@ -1009,9 +1009,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   registerDataManagerRoute(app, "restartMotis", async (_req, reply) => {
     if (!opts.executionReceiver)
       return reply.code(503).send({
-        ok: false,
-        error: "ops-agent-unavailable",
-        message: "Durable data receiver is unavailable",
+        error: "Durable data receiver is unavailable",
+        code: "ops-agent-unavailable",
       });
     const admitted = await opts.executionReceiver.admitMaintenance("restart-primary");
     await observeData(admitted, reply);

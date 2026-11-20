@@ -162,6 +162,11 @@ export const transitPreflightStaleSchema = z.strictObject({
   error: z.string(),
   code: z.literal("preflight_stale"),
 });
+/** A MOTIS restart refused because no durable receiver can admit the maintenance. */
+export const transitRestartUnavailableSchema = z.strictObject({
+  error: z.string(),
+  code: z.literal("ops-agent-unavailable"),
+});
 export const transitSyncRequestSchema = z
   .strictObject({
     ...mutationShape,
