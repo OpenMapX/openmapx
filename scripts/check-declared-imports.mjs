@@ -396,6 +396,51 @@ export function declaredImportViolations({
   return violations;
 }
 
+const dependencyFields = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+];
+
+/**
+ * Every reference from a workspace's code to another workspace package, tests
+ * and type-only imports included, must be declared in the importing
+ * workspace's own manifest. Without the declaration pnpm links nothing, and
+ * the import resolves only through a tool-specific alias or not at all.
+ * Files outside every workspace package belong to the root, which declares no
+ * workspace package, and reach packages by path.
+ */
+export function undeclaredWorkspaceImports({ cwd = process.cwd() } = {}) {
+  const state = worktreeState(cwd);
+  const workspaces = [...workspacePackages(state).values()].sort(
+    (a, b) => b.directory.length - a.directory.length,
+  );
+  const names = new Set(workspaces.map(({ manifest }) => manifest.name));
+  const escaped = [...names].map((name) => name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"));
+  const mention = new RegExp(`["'](?:${escaped.join("|")})(?:["'/])`);
+  const violations = [];
+  for (const path of [...state.entries.keys()].sort()) {
+    if (!codeFile.test(path) || path.split("/").includes("node_modules")) continue;
+    const owner = workspaces.find(({ directory }) => path.startsWith(`${directory}/`));
+    if (!owner) continue;
+    const text = state.read(path).toString();
+    if (!mention.test(text)) continue;
+    const { manifest } = owner;
+    // The import scanner reads static, dynamic and require specifiers without a full parse.
+    for (const { fileName: specifier, pos } of ts.preProcessFile(text, true, true).importedFiles) {
+      const name = packageName(specifier);
+      if (!names.has(name) || name === manifest.name) continue;
+      if (dependencyFields.some((field) => Object.hasOwn(manifest[field] ?? {}, name))) continue;
+      const line = text.slice(0, pos).split("\n").length;
+      violations.push(
+        `${path}:${line}: "${name}" is not declared in ${owner.directory}/package.json`,
+      );
+    }
+  }
+  return violations;
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
   const violations = declaredImportViolations();
   if (violations.length) {
@@ -404,4 +449,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename
     );
     process.exitCode = 1;
   } else console.log("Public package sources import only declared packages.");
+  const workspaceViolations = undeclaredWorkspaceImports();
+  if (workspaceViolations.length) {
+    console.error(
+      `Workspace sources import undeclared workspace packages:\n${workspaceViolations.join("\n")}\nDeclare each workspace package in the importing workspace's package.json.`,
+    );
+    process.exitCode = 1;
+  } else console.log("Workspace sources import only declared workspace packages.");
 }
