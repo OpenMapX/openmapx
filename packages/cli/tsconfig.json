@@ -1,21 +1,12 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "esModuleInterop": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "resolveJsonModule": true,
     "isolatedModules": true,
-    "lib": ["ES2023", "DOM"],
-    "types": ["node"],
-    "paths": {
-      "@integrations/*": ["../../integrations/*"],
-      "@openmapx/integration-framework": ["../integration-framework/src/index.ts"],
-      "@openmapx/mobility-core/*": ["../mobility-core/src/*.ts", "../mobility-core/src/types/*.ts"]
-    }
+    "noEmit": true
   },
   "include": ["src/**/*", "__tests__/**/*", "../../integrations/*/types.ts"]
 }
