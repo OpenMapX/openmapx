@@ -66,6 +66,10 @@
       "types": "./src/http/retry-after.ts",
       "default": "./src/http/retry-after.ts"
     },
+    "./coordinates": {
+      "types": "./src/utils/coordinates.ts",
+      "default": "./src/utils/coordinates.ts"
+    },
     "./server-env": {
       "types": "./src/server-env.ts",
       "default": "./src/server-env.ts"

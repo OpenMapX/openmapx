@@ -27,6 +27,7 @@ import {
   stoptimes,
 } from "@motis-project/motis-client";
 import { type BBox, decodePolyline, timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import { type LineName, splitLineName } from "@openmapx/mobility-core/line-name";
 import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
@@ -72,14 +73,7 @@ function isPlaceable(place: {
   lat?: unknown;
   lon?: unknown;
 }): place is { lat: number; lon: number } {
-  return (
-    typeof place.lat === "number" &&
-    typeof place.lon === "number" &&
-    Number.isFinite(place.lat) &&
-    Number.isFinite(place.lon) &&
-    Math.abs(place.lat) <= 90 &&
-    Math.abs(place.lon) <= 180
-  );
+  return latLngOrNull(place.lat, place.lon) !== null;
 }
 
 function legIsPlaceable(leg: Leg): boolean {

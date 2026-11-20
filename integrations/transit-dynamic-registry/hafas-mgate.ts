@@ -6,6 +6,7 @@ import {
   productToMode,
   USER_AGENT,
 } from "@openmapx/core";
+import { type LatLng, latLngOrNull } from "@openmapx/core/coordinates";
 import {
   ProviderInputError,
   ProviderTimeoutError,
@@ -260,17 +261,8 @@ function normalizeDeparture(d: any, entry: RegistryEntry): Departure {
 /** An FPTF location's coordinates, or null when it has none in range. */
 function fptfPosition(
   location: { latitude?: unknown; longitude?: unknown } | null | undefined,
-): { lat: number; lng: number } | null {
-  const lat = location?.latitude;
-  const lng = location?.longitude;
-  return typeof lat === "number" &&
-    typeof lng === "number" &&
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    Math.abs(lat) <= 90 &&
-    Math.abs(lng) <= 180
-    ? { lat, lng }
-    : null;
+): LatLng | null {
+  return latLngOrNull(location?.latitude, location?.longitude);
 }
 
 /** A trip leg, or null when either end has no coordinates to place it by. */

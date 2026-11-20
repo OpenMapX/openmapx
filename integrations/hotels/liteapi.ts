@@ -11,6 +11,7 @@
  * price), which is common in the sparse sandbox but rare in production.
  */
 import { USER_AGENT } from "@openmapx/core";
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import { type HotelOffer, haversineKm } from "@openmapx/core/server";
 import type { HttpClient } from "@openmapx/integration-framework";
 import { nameMatches, normalizeName } from "./match.js";
@@ -181,20 +182,12 @@ async function fetchNearbyHotels(
     timeoutMs: TIMEOUT_MS,
     headers: liteApiHeaders(apiKey),
   });
-  return (json.data ?? [])
-    .filter(
-      (h): h is { id: string; name: string; latitude: number; longitude: number } =>
-        typeof h.id === "string" &&
-        h.id.length > 0 &&
-        typeof h.name === "string" &&
-        typeof h.latitude === "number" &&
-        typeof h.longitude === "number" &&
-        Number.isFinite(h.latitude) &&
-        Number.isFinite(h.longitude) &&
-        Math.abs(h.latitude) <= 90 &&
-        Math.abs(h.longitude) <= 180,
-    )
-    .map((h) => ({ id: h.id, name: h.name, lat: h.latitude, lng: h.longitude }));
+  return (json.data ?? []).flatMap((h) => {
+    const at = latLngOrNull(h.latitude, h.longitude);
+    return typeof h.id === "string" && h.id.length > 0 && typeof h.name === "string" && at
+      ? [{ id: h.id, name: h.name, lat: at.lat, lng: at.lng }]
+      : [];
+  });
 }
 
 /** Currency + guest nationality for a rate request (user-chosen in the UI). */

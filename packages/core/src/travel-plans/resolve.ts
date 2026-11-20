@@ -11,7 +11,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import type { TransitPlanParams, TransitPlanQuery, TransitReferenceParams } from "../api/transit";
 import { preferredModesToMotis } from "../constants/transit";
-import { haversineDistance } from "../utils/coordinates";
+import { haversineDistance, latLngOrNull } from "../utils/coordinates";
 import { timeZoneAt, tzOffsetMinutes, zonedWallClockToInstant } from "../utils/timezone";
 import { transitItineraryKey } from "../utils/transitItineraryKey";
 import { itineraryMatchesTransitReference } from "../utils/transitTripReference";
@@ -47,11 +47,7 @@ const fail = (code: TravelPlanResolutionError["code"]): never => {
   throw new TravelPlanResolutionError(code);
 };
 const coords = (p: { lat: number; lng: number }): [number, number] => [p.lng, p.lat];
-const validPoint = (p: { lat: number; lng: number }) =>
-  Number.isFinite(p.lat) &&
-  Number.isFinite(p.lng) &&
-  Math.abs(p.lat) <= 90 &&
-  Math.abs(p.lng) <= 180;
+const validPoint = (p: { lat: number; lng: number }) => latLngOrNull(p.lat, p.lng) !== null;
 /** Never confuse the public line number (RE9) with the operational number (10935). */
 function trainNumber(value: string | undefined): string | undefined {
   const m = /^(?:[A-Za-z]+\s+)?(\d{1,8})$/.exec(value?.trim() ?? "");

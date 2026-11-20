@@ -7,6 +7,7 @@
  */
 
 import { decodePolyline, isoWithOffsetInZone } from "@openmapx/core";
+import { type LatLng, latLngOrNull } from "@openmapx/core/coordinates";
 import { isTransitModeRestriction } from "@openmapx/integration-framework";
 import { parseElapsedDurationSeconds } from "@openmapx/mobility-core/duration";
 import type { RisClient } from "@openmapx/mobility-core/ris-client";
@@ -123,17 +124,8 @@ export function mapLang(lang?: string): string {
 // Leg mapping
 
 /** An event's position, or null when RIS gave none in range. */
-function eventPosition(event?: RisStopEvent): { lat: number; lng: number } | null {
-  const lat = event?.position?.latitude;
-  const lng = event?.position?.longitude;
-  return typeof lat === "number" &&
-    typeof lng === "number" &&
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    Math.abs(lat) <= 90 &&
-    Math.abs(lng) <= 180
-    ? { lat, lng }
-    : null;
+function eventPosition(event?: RisStopEvent): LatLng | null {
+  return latLngOrNull(event?.position?.latitude, event?.position?.longitude);
 }
 
 function makeGeometry(

@@ -1,15 +1,10 @@
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import { ProviderPayloadError } from "@openmapx/integration-framework";
 
 /** A WGS84 `[lng, lat]` pair in range, or null. */
 export function lngLatOrNull(lng: unknown, lat: unknown): [number, number] | null {
-  return typeof lng === "number" &&
-    typeof lat === "number" &&
-    Number.isFinite(lng) &&
-    Number.isFinite(lat) &&
-    Math.abs(lng) <= 180 &&
-    Math.abs(lat) <= 90
-    ? [lng, lat]
-    : null;
+  const position = latLngOrNull(lat, lng);
+  return position ? [position.lng, position.lat] : null;
 }
 
 /**

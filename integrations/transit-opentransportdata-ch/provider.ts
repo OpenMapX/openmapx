@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { BBox } from "@openmapx/core";
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import {
   type CacheClient,
   captureCacheWriter,
@@ -1999,16 +2000,8 @@ function callPosition(
     ...fallbacks,
   ];
   for (const candidate of candidates) {
-    const lat = candidate?.lat;
-    const lng = candidate?.lng;
-    if (
-      typeof lat === "number" &&
-      typeof lng === "number" &&
-      Number.isFinite(lat) &&
-      Number.isFinite(lng)
-    ) {
-      return { lat, lng };
-    }
+    const position = latLngOrNull(candidate?.lat, candidate?.lng);
+    if (position) return position;
   }
   return null;
 }

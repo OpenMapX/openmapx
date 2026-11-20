@@ -1,3 +1,4 @@
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import type { OpenAQLocation } from "./schemas.js";
 
 function freshness(location: OpenAQLocation): number {
@@ -5,15 +6,13 @@ function freshness(location: OpenAQLocation): number {
   return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
-/** A location's coordinates, or null when OpenAQ gave none: such a station cannot be placed. */
+/**
+ * A location's coordinates, or null when OpenAQ gave none or gave them out of
+ * range: such a station cannot be placed.
+ */
 function position(location: OpenAQLocation): { latitude: number; longitude: number } | null {
-  const { latitude, longitude } = location.coordinates;
-  return typeof latitude === "number" &&
-    typeof longitude === "number" &&
-    Number.isFinite(latitude) &&
-    Number.isFinite(longitude)
-    ? { latitude, longitude }
-    : null;
+  const at = latLngOrNull(location.coordinates.latitude, location.coordinates.longitude);
+  return at ? { latitude: at.lat, longitude: at.lng } : null;
 }
 
 function cell(

@@ -4,6 +4,7 @@ import {
   refreshItineraryPost,
   trip,
 } from "@motis-project/motis-client";
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import {
   type HttpClient,
   TransitTripResolutionUnsupportedError,
@@ -26,11 +27,7 @@ const sameTime = (value: string | undefined, expected: string) =>
   value !== undefined &&
   Number.isFinite(Date.parse(value)) &&
   Date.parse(value) === Date.parse(expected);
-const validPoint = (p: { lat: number; lon: number }) =>
-  Number.isFinite(p.lat) &&
-  Number.isFinite(p.lon) &&
-  Math.abs(p.lat) <= 90 &&
-  Math.abs(p.lon) <= 180;
+const validPoint = (p: { lat: number; lon: number }) => latLngOrNull(p.lat, p.lon) !== null;
 
 /** Keep SDK serialization while applying the host's bounded HTTP transport. */
 function hostFetch(http: HttpClient): typeof fetch {

@@ -6,6 +6,7 @@ import type {
 } from "@openmapx/air-quality";
 import { deriveCoherenceKey } from "@openmapx/air-quality";
 import { observationId } from "@openmapx/air-quality/ids";
+import { latLngOrNull } from "@openmapx/core/coordinates";
 import type {
   AirQualityProvider,
   IntegrationContext,
@@ -94,18 +95,8 @@ function knownContributor(value: string | null | undefined): string | null {
 }
 
 function coordinateTuple(location: OpenAQLocation): [number, number] | null {
-  const latitude = location.coordinates.latitude;
-  const longitude = location.coordinates.longitude;
-  return typeof latitude === "number" &&
-    Number.isFinite(latitude) &&
-    latitude >= -90 &&
-    latitude <= 90 &&
-    typeof longitude === "number" &&
-    Number.isFinite(longitude) &&
-    longitude >= -180 &&
-    longitude <= 180
-    ? [longitude, latitude]
-    : null;
+  const at = latLngOrNull(location.coordinates.latitude, location.coordinates.longitude);
+  return at ? [at.lng, at.lat] : null;
 }
 
 function interval(hour: OpenAQHour): { startAt: string; endAt: string } | null {
