@@ -48153,6 +48153,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "error": {
+                      "type": "string"
+                    },
                     "code": {
                       "type": "string",
                       "enum": [
@@ -48163,6 +48166,7 @@
                     }
                   },
                   "required": [
+                    "error",
                     "code"
                   ],
                   "additionalProperties": false
@@ -48297,6 +48301,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "error": {
+                      "type": "string"
+                    },
                     "code": {
                       "type": "string",
                       "enum": [
@@ -48305,6 +48312,7 @@
                     }
                   },
                   "required": [
+                    "error",
                     "code"
                   ],
                   "additionalProperties": false
@@ -48467,6 +48475,9 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "enum": [
@@ -48476,6 +48487,7 @@
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -48817,6 +48829,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "error": {
+                      "type": "string"
+                    },
                     "code": {
                       "type": "string",
                       "enum": [
@@ -48828,6 +48843,7 @@
                     }
                   },
                   "required": [
+                    "error",
                     "code"
                   ],
                   "additionalProperties": false
@@ -48962,6 +48978,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "error": {
+                      "type": "string"
+                    },
                     "code": {
                       "type": "string",
                       "enum": [
@@ -48970,6 +48989,7 @@
                     }
                   },
                   "required": [
+                    "error",
                     "code"
                   ],
                   "additionalProperties": false
@@ -49132,6 +49152,9 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "enum": [
@@ -49141,6 +49164,7 @@
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -49363,6 +49387,9 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "enum": [
@@ -49371,6 +49398,7 @@
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -49507,6 +49535,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "error": {
+                      "type": "string"
+                    },
                     "code": {
                       "type": "string",
                       "enum": [
@@ -49518,6 +49549,7 @@
                     }
                   },
                   "required": [
+                    "error",
                     "code"
                   ],
                   "additionalProperties": false
@@ -49652,6 +49684,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "error": {
+                      "type": "string"
+                    },
                     "code": {
                       "type": "string",
                       "enum": [
@@ -49660,6 +49695,7 @@
                     }
                   },
                   "required": [
+                    "error",
                     "code"
                   ],
                   "additionalProperties": false
@@ -49822,6 +49858,9 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "enum": [
@@ -49831,6 +49870,7 @@
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -60451,6 +60491,9 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "errors": {
                           "type": "array",
                           "items": {
@@ -60459,6 +60502,7 @@
                         }
                       },
                       "required": [
+                        "error",
                         "errors"
                       ],
                       "additionalProperties": false
@@ -89498,6 +89542,9 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "errors": {
                           "type": "array",
                           "items": {
@@ -89506,6 +89553,7 @@
                         }
                       },
                       "required": [
+                        "error",
                         "errors"
                       ],
                       "additionalProperties": false
@@ -132836,12 +132884,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -132881,12 +132933,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -132926,12 +132982,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -132971,12 +133031,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133016,12 +133080,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133061,12 +133129,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133106,12 +133178,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133466,12 +133542,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133511,12 +133591,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133556,12 +133640,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133601,12 +133689,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133646,12 +133738,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133691,12 +133787,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -133736,12 +133836,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134146,12 +134250,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134191,12 +134299,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134236,12 +134348,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134281,12 +134397,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134326,12 +134446,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134371,12 +134495,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134416,12 +134544,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134741,12 +134873,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134786,12 +134922,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134831,12 +134971,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134876,12 +135020,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134921,12 +135069,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -134966,12 +135118,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135011,12 +135167,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135139,12 +135299,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135184,12 +135348,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135229,12 +135397,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135274,12 +135446,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135319,12 +135495,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135364,12 +135544,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135409,12 +135593,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135736,12 +135924,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135781,12 +135973,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135826,12 +136022,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135871,12 +136071,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135916,12 +136120,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -135961,12 +136169,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136006,12 +136218,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136321,12 +136537,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136366,12 +136586,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136411,12 +136635,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136456,12 +136684,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136501,12 +136733,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136546,12 +136782,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136591,12 +136831,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136916,12 +137160,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -136961,12 +137209,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -137006,12 +137258,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -137051,12 +137307,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -137096,12 +137356,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -137141,12 +137405,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false
@@ -137186,12 +137454,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string",
                           "maxLength": 128
                         }
                       },
                       "required": [
+                        "error",
                         "code"
                       ],
                       "additionalProperties": false

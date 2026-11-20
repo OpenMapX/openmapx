@@ -3,5 +3,6 @@
 import type { RotateAdminDawarichOidcSecret422Code } from "./rotateAdminDawarichOidcSecret422Code";
 
 export type RotateAdminDawarichOidcSecret422 = {
+  error: string;
   code: RotateAdminDawarichOidcSecret422Code;
 };

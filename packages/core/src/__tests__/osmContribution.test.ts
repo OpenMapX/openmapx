@@ -470,21 +470,21 @@ describe("response schemas", () => {
     expect(
       osmContributionErrorBodySchema.safeParse({
         code: "RATE_LIMITED",
-        message: "Too many requests.",
+        error: "Too many requests.",
         retryAfterSeconds: 30,
       }).success,
     ).toBe(true);
     expect(
       osmContributionErrorBodySchema.safeParse({
         code: "VERSION_CONFLICT",
-        message: "The element changed.",
+        error: "The element changed.",
         context,
       }).success,
     ).toBe(true);
     expect(
       osmContributionErrorBodySchema.safeParse({
         code: "OSM_UNAVAILABLE",
-        message: "Unavailable.",
+        error: "Unavailable.",
         upstreamBody: "<html/>",
       }).success,
     ).toBe(false);

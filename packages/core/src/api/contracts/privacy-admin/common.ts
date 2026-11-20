@@ -58,7 +58,7 @@ export const privacyAdminDetailSchema = z.strictObject({
   capabilities: privacyCaseCapabilitiesSchema,
 });
 export const privacyErrorSchema = z.union([
-  z.strictObject({ code: z.string().max(128) }),
+  z.strictObject({ error: z.string(), code: z.string().max(128) }),
   z.object({
     error: z.string(),
     statusCode: z.number().optional(),

@@ -192,14 +192,14 @@ export function setup(ctx: IntegrationContext): void {
       const stations = await loadStations(ctx.http, ctx.cache, ctx.log);
       resolvedStation = findStationById(stations, stationParam);
       if (!resolvedStation) {
-        reply.status(404).send({ message: "Unknown station" });
+        reply.status(404).send({ error: "Unknown station" });
         return;
       }
     } else {
       const latNum = Number.parseFloat(lat ?? "");
       const lngNum = Number.parseFloat(lng ?? "");
       if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
-        reply.status(400).send({ message: "Invalid coordinates" });
+        reply.status(400).send({ error: "Invalid coordinates" });
         return;
       }
 
@@ -225,7 +225,7 @@ export function setup(ctx: IntegrationContext): void {
       const writer = await captureCacheWriter(ctx.cache);
       const stations = await loadStations(ctx.http, ctx.cache, ctx.log);
       if (stations.length === 0) {
-        reply.status(502).send({ message: "Tide station catalog unavailable" });
+        reply.status(502).send({ error: "Tide station catalog unavailable" });
         return;
       }
       const nearest = findNearestStation(
@@ -247,7 +247,7 @@ export function setup(ctx: IntegrationContext): void {
 
     const result = await buildTidesResponse(ctx, resolvedStation, distanceKm);
     if (!result) {
-      reply.status(502).send({ message: "Tide predictions unavailable" });
+      reply.status(502).send({ error: "Tide predictions unavailable" });
       return;
     }
 

@@ -572,7 +572,7 @@ describe("integration administration canonical producer contracts", () => {
   it("preserves errors-array400, vault-hint503 and Retry-After429 distinctions", () => {
     const ops = contracts.integrationAdminOperations;
     for (const payload of [
-      { errors: ["Invalid field"] },
+      { error: "Invalid configuration", errors: ["Invalid field"] },
       { error: "No fields" },
       { statusCode: 400, error: "Bad Request", message: "Invalid JSON" },
     ])

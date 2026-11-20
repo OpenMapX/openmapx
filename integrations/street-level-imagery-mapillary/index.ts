@@ -26,7 +26,7 @@ async function upstream<T>(
     return { ok: true, value: await run() };
   } catch (error) {
     ctx.log.warn(`${what} failed: ${error instanceof Error ? error.message : String(error)}`);
-    reply.status(502).send({ message: `${what} is unavailable` });
+    reply.status(502).send({ error: `${what} is unavailable` });
     return { ok: false };
   }
 }
@@ -66,7 +66,7 @@ export function setup(ctx: IntegrationContext): void {
     "/tiles/:z/:x/:y",
     async (req, reply) => {
       if (!token) {
-        reply.status(503).send({ message: "Mapillary token not configured" });
+        reply.status(503).send({ error: "Mapillary token not configured" });
         return;
       }
       await tile(req, reply);
@@ -76,14 +76,14 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/nearest", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
 
     const lat = Number((scalarQueries(req.query) as { lat?: string }).lat);
     const lng = Number((scalarQueries(req.query) as { lng?: string }).lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 
@@ -93,7 +93,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "No imagery found near this location" });
+      reply.status(404).send({ error: "No imagery found near this location" });
       return;
     }
     reply.send(image);
@@ -101,7 +101,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/images/:id", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
 
@@ -110,7 +110,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "Image not found" });
+      reply.status(404).send({ error: "Image not found" });
       return;
     }
     reply.send(image);
@@ -118,7 +118,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/images/:id/links", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
 
@@ -134,12 +134,12 @@ export function setup(ctx: IntegrationContext): void {
   // has no heading parameter, so the route applies the heading filter itself.
   ctx.registerRoute("GET", "/search", async (req, reply) => {
     if (!token) {
-      reply.status(503).send({ message: "Mapillary token not configured" });
+      reply.status(503).send({ error: "Mapillary token not configured" });
       return;
     }
     const parsed = parseStreetLevelSearchQuery(scalarQueries(req.query));
     if (!parsed) {
-      reply.status(400).send({ message: "Invalid search query" });
+      reply.status(400).send({ error: "Invalid search query" });
       return;
     }
     const found = await upstream(ctx, reply, "Mapillary imagery search", () =>

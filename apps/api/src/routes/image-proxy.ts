@@ -99,7 +99,7 @@ function sendBudgetExceeded(reply: FastifyReply, retryAfterSeconds = 1): Fastify
   reply.header("Cache-Control", "private, no-store");
   reply.header("Pragma", "no-cache");
   reply.header("Retry-After", String(retryAfterSeconds));
-  return reply.status(429).send({ message: "Image proxy capacity exceeded" });
+  return reply.status(429).send({ error: "Image proxy capacity exceeded" });
 }
 
 export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
@@ -140,7 +140,7 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         }
       }
       if (!refererOrigin || !origins.includes(refererOrigin)) {
-        return reply.status(403).send({ message: "Forbidden" });
+        return reply.status(403).send({ error: "Forbidden" });
       }
 
       const { url } = req.query;
@@ -149,15 +149,15 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
       try {
         parsed = new URL(url);
       } catch {
-        return reply.status(400).send({ message: "Invalid URL" });
+        return reply.status(400).send({ error: "Invalid URL" });
       }
 
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-        return reply.status(400).send({ message: "Only HTTP(S) URLs allowed" });
+        return reply.status(400).send({ error: "Only HTTP(S) URLs allowed" });
       }
 
       if (!isAllowedHost(parsed)) {
-        return reply.status(403).send({ message: "Domain not allowed" });
+        return reply.status(403).send({ error: "Domain not allowed" });
       }
 
       const lease = budget.tryAcquire(requestNetworkKey(req));
@@ -188,14 +188,14 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         if (parsed.hostname === "photos.app.goo.gl" || parsed.hostname === "photos.google.com") {
           const resolved = await resolveGooglePhotosLink(url);
           if (resolved.length === 0) {
-            return reply.status(404).send({ message: "Could not resolve Google Photos link" });
+            return reply.status(404).send({ error: "Could not resolve Google Photos link" });
           }
           imageUrl = resolved[0];
           resolvedGooglePhotos = true;
           // The resolver is a dependency, not an allowlist bypass. Validate its
           // initial output independently before the first socket is opened.
           if (!isGooglePhotosImageUrl(imageUrl)) {
-            return reply.status(403).send({ message: "Domain not allowed" });
+            return reply.status(403).send({ error: "Domain not allowed" });
           }
         }
 
@@ -227,24 +227,24 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
 
           if (!upstream.ok) {
             await cancelResponseBody(upstream);
-            return reply.status(upstream.status).send({ message: "Upstream error" });
+            return reply.status(upstream.status).send({ error: "Upstream error" });
           }
 
           const contentType = servableImageType(upstream.headers.get("content-type"));
           if (!contentType) {
             await cancelResponseBody(upstream);
-            return reply.status(415).send({ message: "Not an image" });
+            return reply.status(415).send({ error: "Not an image" });
           }
 
           const contentLength = upstream.headers.get("content-length");
           const declaredBytes = parseContentLength(contentLength);
           if (declaredBytes !== null && declaredBytes > MAX_SIZE) {
             await cancelResponseBody(upstream);
-            return reply.status(413).send({ message: "Image too large" });
+            return reply.status(413).send({ error: "Image too large" });
           }
 
           if (!upstream.body) {
-            return reply.status(502).send({ message: "Empty upstream body" });
+            return reply.status(502).send({ error: "Empty upstream body" });
           }
 
           let chargedBytes = 0;
@@ -347,7 +347,7 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
             reply.raw.destroy(err instanceof Error ? err : new Error("Image proxy stream failed"));
             return reply;
           }
-          return reply.status(502).send({ message: "Failed to fetch image" });
+          return reply.status(502).send({ error: "Failed to fetch image" });
         }
       } finally {
         req.raw.removeListener("aborted", abortClientRequest);

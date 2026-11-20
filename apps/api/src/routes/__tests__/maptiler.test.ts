@@ -321,7 +321,7 @@ describe("GET /maptiler/*", () => {
 
     expect(res.statusCode).toBe(502);
     expect(res.headers["cache-control"]).toBe("no-store");
-    expect(res.json()).toEqual({ message: "MapTiler provider returned an invalid response" });
+    expect(res.json()).toEqual({ error: "MapTiler provider returned an invalid response" });
   });
 
   it("cancels a rejected upstream error body", async () => {
@@ -586,7 +586,7 @@ describe("MapTiler key never reaches the client", () => {
 
     expect(res.statusCode).toBe(502);
     expect(res.headers["cache-control"]).toBe("no-store");
-    expect(res.json()).toEqual({ message: "MapTiler provider returned an invalid response" });
+    expect(res.json()).toEqual({ error: "MapTiler provider returned an invalid response" });
     expect(res.body).not.toContain(FAKE_KEY);
     const logs = chunks.join("");
     expect(logs).not.toContain(FAKE_KEY);

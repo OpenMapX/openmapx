@@ -90,7 +90,7 @@ export interface TidesIntegrationConfig<S extends TideStationBase> {
   /** `Cache-Control: public, max-age=<this>` value for successful responses. */
   readonly cacheControlMaxAge: number;
 
-  /** 502 body `{ message }` when a station resolves but has no data. */
+  /** 502 body `{ error }` when a station resolves but has no data. */
   readonly unavailableMessage: string;
 
   /**
@@ -159,7 +159,7 @@ export function createTidesIntegration<S extends TideStationBase>(
       const stations = await config.loadStations(ctx);
       const found = findByParam(stations, stationParam);
       if (!found) {
-        reply.status(404).send({ message: "Unknown station" });
+        reply.status(404).send({ error: "Unknown station" });
         return;
       }
       resolvedStation = found;
@@ -167,7 +167,7 @@ export function createTidesIntegration<S extends TideStationBase>(
       const lat = Number.parseFloat(scalarQuery(req.query, "lat") ?? "");
       const lng = Number.parseFloat(scalarQuery(req.query, "lng") ?? "");
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        reply.status(400).send({ message: "Invalid coordinates" });
+        reply.status(400).send({ error: "Invalid coordinates" });
         return;
       }
 
@@ -218,7 +218,7 @@ export function createTidesIntegration<S extends TideStationBase>(
 
     const result = await config.buildTidesResponse(ctx, resolvedStation);
     if (!result) {
-      reply.status(502).send({ message: config.unavailableMessage });
+      reply.status(502).send({ error: config.unavailableMessage });
       return;
     }
     reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);

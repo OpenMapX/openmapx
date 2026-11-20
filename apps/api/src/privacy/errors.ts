@@ -1,3 +1,4 @@
+import { STATUS_CODES } from "node:http";
 import { ZodError } from "zod/v4";
 import { AdminReauthenticationError } from "../account/admin-reauthentication.js";
 
@@ -34,5 +35,6 @@ export function privacyErrorReply(
   error: unknown,
 ): unknown {
   const { statusCode, code } = privacyErrorResponse(error);
-  return reply.status(statusCode).send({ code });
+  // The status text is the only description: domain details stay out of the reply.
+  return reply.status(statusCode).send({ error: STATUS_CODES[statusCode] ?? "Error", code });
 }

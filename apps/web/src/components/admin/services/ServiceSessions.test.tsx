@@ -405,7 +405,10 @@ describe("managed Dawarich view ownership", () => {
         if (readsA <= 2) return Response.json(readsA === 1 ? ready : current);
         return refresh === "stalled"
           ? stalled.promise
-          : Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 });
+          : Response.json(
+              { error: "Service Unavailable", code: "DAWARICH_PROVISIONING_FAILED" },
+              { status: 503 },
+            );
       });
       const view = mount(<ManagedDawarichSetup />);
       await screen.findByText(/OIDC recovery is incomplete/);
@@ -489,7 +492,10 @@ describe("managed Dawarich view ownership", () => {
         if (reads <= 2) return Response.json(reads === 1 ? ready : current);
         return refresh === "stalled"
           ? stalled.promise
-          : Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 });
+          : Response.json(
+              { error: "Service Unavailable", code: "DAWARICH_PROVISIONING_FAILED" },
+              { status: 503 },
+            );
       });
       const view = mount(<ManagedDawarichSetup />);
       await screen.findByText(/OIDC recovery is incomplete/);
@@ -562,9 +568,12 @@ describe("managed Dawarich view ownership", () => {
       fireEvent.change(input, { target: { value: "replacement input" } });
       await act(async () => {
         old.resolve(
-          Response.json(ok ? ready : { code: "DAWARICH_DATABASE_SECRET_CONFLICT" }, {
-            status: ok ? 200 : 409,
-          }),
+          Response.json(
+            ok ? ready : { error: "Conflict", code: "DAWARICH_DATABASE_SECRET_CONFLICT" },
+            {
+              status: ok ? 200 : 409,
+            },
+          ),
         );
       });
       expect(screen.getByRole("textbox", { name: "Type confirmation" })).toHaveValue(
@@ -582,7 +591,10 @@ describe("additional ownership and safe feedback", () => {
   it("shows active managed conflicts and preserves independent readiness rows", async () => {
     vi.stubGlobal("fetch", async (_url: string, init: RequestInit) =>
       init.method === "POST"
-        ? Response.json({ code: "DAWARICH_DATABASE_SECRET_CONFLICT" }, { status: 409 })
+        ? Response.json(
+            { error: "Conflict", code: "DAWARICH_DATABASE_SECRET_CONFLICT" },
+            { status: 409 },
+          )
         : Response.json(ready),
     );
     mount(<ManagedDawarichSetup />);
@@ -627,7 +639,9 @@ describe("additional ownership and safe feedback", () => {
       await act(async () => {
         old.resolve(
           Response.json(
-            ok ? { ...ready, readyToStart: true } : { code: "DAWARICH_DATABASE_SECRET_CONFLICT" },
+            ok
+              ? { ...ready, readyToStart: true }
+              : { error: "Conflict", code: "DAWARICH_DATABASE_SECRET_CONFLICT" },
             { status: ok ? 200 : 409 },
           ),
         );
@@ -729,12 +743,17 @@ it("retains newer rotation feedback when an older provision settles with unchang
   fireEvent.click(screen.getByRole("button", { name: "Provision/reconcile" }));
   fireEvent.click(screen.getByRole("button", { name: "Rotate OIDC secret" }));
   await act(async () => {
-    rotate.resolve(Response.json({ code: "DAWARICH_OAUTH_CLIENT_CONFLICT" }, { status: 409 }));
+    rotate.resolve(
+      Response.json({ error: "Conflict", code: "DAWARICH_OAUTH_CLIENT_CONFLICT" }, { status: 409 }),
+    );
   });
   expect(screen.getByText(/persisted managed OAuth client is duplicated/)).toBeInTheDocument();
   await act(async () => {
     provision.resolve(
-      Response.json({ code: "DAWARICH_DATABASE_SECRET_CONFLICT" }, { status: 409 }),
+      Response.json(
+        { error: "Conflict", code: "DAWARICH_DATABASE_SECRET_CONFLICT" },
+        { status: 409 },
+      ),
     );
   });
   expect(screen.getByText(/persisted managed OAuth client is duplicated/)).toBeInTheDocument();

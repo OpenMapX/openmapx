@@ -27,7 +27,7 @@ async function upstream<T>(
     return { ok: true, value: await run() };
   } catch (error) {
     ctx.log.warn(`${what} failed: ${error instanceof Error ? error.message : String(error)}`);
-    reply.status(502).send({ message: `${what} is unavailable` });
+    reply.status(502).send({ error: `${what} is unavailable` });
     return { ok: false };
   }
 }
@@ -67,7 +67,7 @@ export function setup(ctx: IntegrationContext): void {
     const lat = Number((scalarQueries(req.query) as { lat?: string }).lat);
     const lng = Number((scalarQueries(req.query) as { lng?: string }).lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 
@@ -77,7 +77,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "No imagery found near this location" });
+      reply.status(404).send({ error: "No imagery found near this location" });
       return;
     }
     reply.send(image);
@@ -89,7 +89,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!found.ok) return;
     const image = found.value;
     if (!image) {
-      reply.status(404).send({ message: "Image not found" });
+      reply.status(404).send({ error: "Image not found" });
       return;
     }
     reply.send(image);
@@ -111,7 +111,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/search", async (req, reply) => {
     const parsed = parseStreetLevelSearchQuery(scalarQueries(req.query));
     if (!parsed) {
-      reply.status(400).send({ message: "Invalid search query" });
+      reply.status(400).send({ error: "Invalid search query" });
       return;
     }
     const found = await upstream(ctx, reply, "Panoramax imagery search", () =>

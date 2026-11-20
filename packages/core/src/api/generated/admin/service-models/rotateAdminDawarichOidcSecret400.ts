@@ -19,5 +19,6 @@ export type RotateAdminDawarichOidcSecret400 =
       code?: string;
     }
   | {
+      error: string;
       code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED";
     };

@@ -372,7 +372,13 @@ describe("service administration visible behavior with the generated SDK", () =>
   it("shows config errors arrays, keeps env locks and prevents start after failed save", async () => {
     const requests = setup((url, init) =>
       url.pathname.endsWith("/config") && init.method === "POST"
-        ? Response.json({ errors: ["Count is invalid", "Choose another value"] }, { status: 400 })
+        ? Response.json(
+            {
+              error: "Invalid configuration",
+              errors: ["Count is invalid", "Choose another value"],
+            },
+            { status: 400 },
+          )
         : undefined,
     );
     mount(<ServiceDetail id="demo" />);
@@ -431,7 +437,10 @@ describe("service administration visible behavior with the generated SDK", () =>
         deferred.resolve(
           outcome === "success"
             ? Response.json({ ok: true })
-            : Response.json({ errors: ["Old config error"] }, { status: 400 }),
+            : Response.json(
+                { error: "Invalid configuration", errors: ["Old config error"] },
+                { status: 400 },
+              ),
         ),
       );
       expect(requests.filter((r) => r.url.pathname.endsWith("/action"))).toHaveLength(
@@ -605,7 +614,10 @@ describe("service administration visible behavior with the generated SDK", () =>
       await act(async () =>
         deferred.resolve(
           outcome === "error"
-            ? Response.json({ errors: ["Old form error"] }, { status: 400 })
+            ? Response.json(
+                { error: "Invalid configuration", errors: ["Old form error"] },
+                { status: 400 },
+              )
             : Response.json({ ok: true }),
         ),
       );

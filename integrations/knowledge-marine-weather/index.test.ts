@@ -285,7 +285,7 @@ describe("GET /marine route", () => {
     const reply = await invoke({ lat: "200", lng: "8.0" });
 
     expect(reply.statusCode).toBe(400);
-    expect(reply.payload).toEqual({ message: "Out-of-range coordinates" });
+    expect(reply.payload).toEqual({ error: "Out-of-range coordinates" });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

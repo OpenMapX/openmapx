@@ -44,7 +44,7 @@ export const trafficRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget }> 
         TOMTOM_TRAFFIC_MAX_ZOOM,
       );
       if (!coords) {
-        return reply.status(400).send({ message: "Invalid tile coordinates" });
+        return reply.status(400).send({ error: "Invalid tile coordinates" });
       }
       const { z, x, y } = coords;
       reply.header("Cache-Control", "no-store");
@@ -73,16 +73,16 @@ export const trafficRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget }> 
         if (message.includes("TOMTOM_TRAFFIC_KEY")) {
           return reply
             .status(503)
-            .send({ message: "Traffic tiles are not configured on the API server" });
+            .send({ error: "Traffic tiles are not configured on the API server" });
         }
 
         if (error instanceof TrafficProviderHttpError) {
           const statusCode =
             error.statusCode >= 400 && error.statusCode < 600 ? error.statusCode : 502;
-          return reply.status(statusCode).send({ message: error.message });
+          return reply.status(statusCode).send({ error: error.message });
         }
 
-        return reply.status(502).send({ message: "Traffic tile provider unavailable" });
+        return reply.status(502).send({ error: "Traffic tile provider unavailable" });
       }
     },
   });

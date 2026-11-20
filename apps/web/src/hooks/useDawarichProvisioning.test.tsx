@@ -71,7 +71,10 @@ describe("managed Dawarich canonical acquisition", () => {
           signals.push(init.signal);
           if (++reads > 1)
             return delay === "failed refresh"
-              ? Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 })
+              ? Response.json(
+                  { error: "Refused", code: "DAWARICH_PROVISIONING_FAILED" },
+                  { status: 503 },
+                )
               : Response.json(current);
           if (delay === "body") {
             const bytes = new TextEncoder().encode(JSON.stringify(status));
@@ -146,7 +149,10 @@ describe("managed Dawarich canonical acquisition", () => {
       vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
         if (init.method === "POST") return Response.json(status);
         reads++;
-        return Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 });
+        return Response.json(
+          { error: "Refused", code: "DAWARICH_PROVISIONING_FAILED" },
+          { status: 503 },
+        );
       });
       const { result, qc } = mount();
       await waitFor(() => expect(result.current.statusQuery.isError).toBe(true));
@@ -197,7 +203,10 @@ describe("managed Dawarich canonical acquisition", () => {
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
       if (init.method === "POST") {
         writes.push({ path: new URL(url).pathname, init });
-        return Response.json({ code: "DAWARICH_DATABASE_SECRET_CONFLICT" }, { status: 409 });
+        return Response.json(
+          { error: "Refused", code: "DAWARICH_DATABASE_SECRET_CONFLICT" },
+          { status: 409 },
+        );
       }
       return Response.json(status);
     });
@@ -225,10 +234,20 @@ describe("managed Dawarich canonical acquisition", () => {
     [500, "DAWARICH_DATABASE_SECRET_CONFLICT", "DAWARICH_PROVISIONING_FAILED"],
     [409, "secret-unrecognized", "DAWARICH_PROVISIONING_FAILED"],
   ] as const)("maps only declared status/code %s/%s", async (code, value, expected) => {
-    vi.stubGlobal("fetch", async () => Response.json({ code: value }, { status: code }));
+    vi.stubGlobal("fetch", async () =>
+      Response.json({ error: "Refused", code: value }, { status: code }),
+    );
     const { result } = mount();
     await waitFor(() => expect(result.current.statusQuery.isError).toBe(true));
     expect(result.current.statusQuery.error?.message).toBe(expected);
+  });
+  it("refuses an error body without the error envelope", async () => {
+    vi.stubGlobal("fetch", async () =>
+      Response.json({ code: "DAWARICH_DATABASE_SECRET_CONFLICT" }, { status: 409 }),
+    );
+    const { result } = mount();
+    await waitFor(() => expect(result.current.statusQuery.isError).toBe(true));
+    expect(result.current.statusQuery.error?.message).toBe("DAWARICH_PROVISIONING_FAILED");
   });
   it.each([{}, { ...status, secrets: { ...status.secrets, oidcClientSecret: "secret-value" } }])(
     "rejects malformed status safely",
@@ -282,7 +301,7 @@ it.each([
   async (action, code, value, expected) => {
     vi.stubGlobal("fetch", async (_url: string, init: RequestInit) =>
       init.method === "POST"
-        ? Response.json({ code: value }, { status: code })
+        ? Response.json({ error: "Refused", code: value }, { status: code })
         : Response.json(status),
     );
     const { result } = mount();

@@ -90,7 +90,7 @@ describe("RainViewer metadata host", () => {
   it("rejects metadata with an untrusted host before caching", async () => {
     const { cacheSet, sent } = await callRadarMeta("https://rainviewer.com.attacker.example");
 
-    expect(sent).toEqual({ status: 502, body: { message: "RainViewer unavailable" } });
+    expect(sent).toEqual({ status: 502, body: { error: "RainViewer unavailable" } });
     expect(cacheSet).not.toHaveBeenCalled();
   });
 
@@ -108,7 +108,7 @@ describe("RainViewer metadata host", () => {
       reply,
     );
 
-    expect(result).toMatchObject({ status: 502, body: { message: "RainViewer unavailable" } });
+    expect(result).toMatchObject({ status: 502, body: { error: "RainViewer unavailable" } });
     expect(cacheSet).not.toHaveBeenCalled();
   });
 

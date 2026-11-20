@@ -1,3 +1,4 @@
+import { STATUS_CODES } from "node:http";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
@@ -94,6 +95,11 @@ function statusForError(error: ManagedDawarichProvisioningError): 409 | 422 | 50
   }
 }
 
+/** The error envelope: the code carries the reason, the status text describes it. */
+function dawarichError<C extends string>(status: number, code: C): { error: string; code: C } {
+  return { error: STATUS_CODES[status] ?? "Error", code };
+}
+
 async function auditFailure(request: FastifyRequest, action: string, code: string): Promise<void> {
   await writeAuditLog({
     actorId: getAdminSession(request).user.id,
@@ -121,8 +127,10 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
         error instanceof ManagedDawarichProvisioningError
           ? error.code
           : "DAWARICH_PROVISIONING_FAILED";
-      reply.status(error instanceof ManagedDawarichProvisioningError ? statusForError(error) : 503);
-      return { code };
+      const status =
+        error instanceof ManagedDawarichProvisioningError ? statusForError(error) : 503;
+      reply.status(status);
+      return dawarichError(status, code);
     }
   });
 
@@ -148,8 +156,9 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
             ? error
             : new ManagedDawarichProvisioningError("DAWARICH_PROVISIONING_FAILED");
         await auditFailure(request, "dawarich.provision", safeError.code);
-        reply.status(statusForError(safeError));
-        return { code: safeError.code };
+        const status = statusForError(safeError);
+        reply.status(status);
+        return dawarichError(status, safeError.code);
       }
     },
     {
@@ -157,10 +166,10 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
         await actionLimit(request, reply);
         if (reply.sent) return;
         if (!hasExactManagedBundle())
-          return reply.code(409).send({ code: "DAWARICH_BUNDLE_NOT_INSTALLED" });
+          return reply.code(409).send(dawarichError(409, "DAWARICH_BUNDLE_NOT_INSTALLED"));
         const publicHost = (request.body as { publicHost?: unknown } | undefined)?.publicHost;
         if (publicHost !== undefined && typeof publicHost !== "string")
-          return reply.code(422).send({ code: "DAWARICH_INVALID_PUBLIC_HOST" });
+          return reply.code(422).send(dawarichError(422, "DAWARICH_INVALID_PUBLIC_HOST"));
       },
     },
   );
@@ -186,8 +195,9 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
             ? error
             : new ManagedDawarichProvisioningError("DAWARICH_PROVISIONING_FAILED");
         await auditFailure(request, "dawarich.rotate_oidc_secret", safeError.code);
-        reply.status(statusForError(safeError));
-        return { code: safeError.code };
+        const status = statusForError(safeError);
+        reply.status(status);
+        return dawarichError(status, safeError.code);
       }
     },
     {
@@ -195,12 +205,14 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
         await actionLimit(request, reply);
         if (reply.sent) return;
         if (!hasExactManagedBundle())
-          return reply.code(409).send({ code: "DAWARICH_BUNDLE_NOT_INSTALLED" });
+          return reply.code(409).send(dawarichError(409, "DAWARICH_BUNDLE_NOT_INSTALLED"));
         if (
           (request.body as { confirmation?: unknown } | undefined)?.confirmation !==
           ROTATION_CONFIRMATION
         )
-          return reply.code(400).send({ code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED" });
+          return reply
+            .code(400)
+            .send(dawarichError(400, "DAWARICH_ROTATION_CONFIRMATION_REQUIRED"));
       },
     },
   );

@@ -173,13 +173,13 @@ export function setup(ctx: IntegrationContext): void {
     const e = Number.parseFloat(east);
 
     if ([s, w, n, e].some(Number.isNaN)) {
-      reply.status(400).send({ message: "Invalid bbox coordinates" });
+      reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
 
     const sensorType = (sensor ?? "temperature") as SensorType;
     if (!VALID_SENSOR_TYPES.has(sensorType)) {
-      reply.status(400).send({ message: "Invalid sensor type" });
+      reply.status(400).send({ error: "Invalid sensor type" });
       return;
     }
 
@@ -227,7 +227,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(inBbox(stations, s, w, n, e));
     } catch (err) {
       ctx.log.error("[overlay-environment] Error fetching stations:", err);
-      reply.status(502).send({ message: "Sensor data sources unavailable" });
+      reply.status(502).send({ error: "Sensor data sources unavailable" });
     }
   });
 }

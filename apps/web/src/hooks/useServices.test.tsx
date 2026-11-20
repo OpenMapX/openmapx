@@ -70,7 +70,10 @@ describe("service feature hooks use the generated SDK", () => {
       const fetch = vi.fn(() =>
         Response.json(
           kind === "config"
-            ? { errors: ["Invalid field", "Configuration rejected"] }
+            ? {
+                error: "Invalid configuration",
+                errors: ["Invalid field", "Configuration rejected"],
+              }
             : { error: "Request rejected" },
           { status: 400 },
         ),

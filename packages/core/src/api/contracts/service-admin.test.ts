@@ -380,9 +380,8 @@ describe("canonical complete service administration contracts", () => {
       ...config,
       schema: null,
     });
-    expect(response("updateAdminServiceConfig", 400, { errors: ["Invalid field"] })).toEqual({
-      errors: ["Invalid field"],
-    });
+    const invalid = { error: "Invalid configuration", errors: ["Invalid field"] };
+    expect(response("updateAdminServiceConfig", 400, invalid)).toEqual(invalid);
   });
   it("derives complete data inventory from actual ops schemas and keeps public backup count names", () => {
     expect(OPS_RESULT_SCHEMAS["data.inspect"].parse(data)).toEqual(data);
@@ -566,17 +565,21 @@ describe("canonical complete service administration contracts", () => {
         [503, "DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED"],
         [503, "DAWARICH_PROVISIONING_FAILED"],
       ] as const)
-        expect(response(id, status, { code })).toEqual({ code });
-      expect(ops[id].responses[503].schema.safeParse({ code: "unexpected" }).success).toBe(false);
+        expect(response(id, status, { error: "Refused", code })).toEqual({
+          error: "Refused",
+          code,
+        });
+      expect(
+        ops[id].responses[503].schema.safeParse({ error: "Refused", code: "unexpected" }).success,
+      ).toBe(false);
+      expect(
+        ops[id].responses[503].schema.safeParse({ code: "DAWARICH_PROVISIONING_FAILED" }).success,
+      ).toBe(false);
     }
-    expect(
-      response("provisionAdminDawarich", 409, { code: "DAWARICH_BUNDLE_NOT_INSTALLED" }),
-    ).toEqual({ code: "DAWARICH_BUNDLE_NOT_INSTALLED" });
-    expect(
-      response("rotateAdminDawarichOidcSecret", 400, {
-        code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED",
-      }),
-    ).toEqual({ code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED" });
+    const notInstalled = { error: "Conflict", code: "DAWARICH_BUNDLE_NOT_INSTALLED" };
+    expect(response("provisionAdminDawarich", 409, notInstalled)).toEqual(notInstalled);
+    const unconfirmed = { error: "Bad Request", code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED" };
+    expect(response("rotateAdminDawarichOidcSecret", 400, unconfirmed)).toEqual(unconfirmed);
     expect(
       ops.rotateAdminDawarichOidcSecret.request.body.parse({
         confirmation: "ROTATE DAWARICH OIDC SECRET",

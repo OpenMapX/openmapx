@@ -247,7 +247,7 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
       integration.manifest.configSchema as Record<string, unknown> | undefined,
     );
     if (errors.length > 0) {
-      return reply.status(400).send({ errors });
+      return reply.status(400).send({ error: "Invalid configuration", errors });
     }
     if (Object.keys(updates).length === 0) {
       return reply.status(400).send({ error: "No valid fields to update" });

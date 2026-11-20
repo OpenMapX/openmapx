@@ -86,7 +86,7 @@ export function setup(ctx: IntegrationContext): void {
   // guards with a single `if (await denyIfRadarGated(reply)) return;` (one message).
   const denyIfRadarGated = async (reply: Parameters<RouteHandler>[1]): Promise<boolean> => {
     if (!(await radarGated())) return false;
-    reply.status(451).send({ message: "RainViewer radar disabled by data-use policy" });
+    reply.status(451).send({ error: "RainViewer radar disabled by data-use policy" });
     return true;
   };
 
@@ -113,7 +113,7 @@ export function setup(ctx: IntegrationContext): void {
       });
       const host = canonicalizeRainViewerHost(data.host);
       if (!host) {
-        reply.status(502).send({ message: "RainViewer unavailable" });
+        reply.status(502).send({ error: "RainViewer unavailable" });
         return;
       }
       const meta: RadarMeta = {
@@ -124,7 +124,7 @@ export function setup(ctx: IntegrationContext): void {
       await writer.set("weather:radar:meta", meta, 300);
       reply.send(meta);
     } catch {
-      reply.status(502).send({ message: "RainViewer unavailable" });
+      reply.status(502).send({ error: "RainViewer unavailable" });
     }
   });
 
@@ -148,20 +148,20 @@ export function setup(ctx: IntegrationContext): void {
       if (await denyIfRadarGated(reply)) return;
       const framePath = scalarQueries(req.query).path;
       if (!framePath) {
-        reply.status(400).send({ message: "Missing path query parameter" });
+        reply.status(400).send({ error: "Missing path query parameter" });
         return;
       }
 
       const cached = await ctx.cache.get<RadarMeta>("weather:radar:meta");
       const radarHost = cached ? canonicalizeRainViewerHost(cached.host) : null;
       if (!cached || !radarHost) {
-        reply.status(503).send({ message: "Radar metadata not available" });
+        reply.status(503).send({ error: "Radar metadata not available" });
         return;
       }
 
       const allowedPaths = [...cached.past, ...cached.nowcast].map((f) => f.path);
       if (!allowedPaths.includes(framePath)) {
-        reply.status(400).send({ message: "Invalid radar frame path" });
+        reply.status(400).send({ error: "Invalid radar frame path" });
         return;
       }
 
@@ -190,11 +190,11 @@ export function setup(ctx: IntegrationContext): void {
     "/tiles/:layer/:z/:x/:y.png",
     async (req, reply) => {
       if (!owmApiKey) {
-        reply.status(503).send({ message: "OWM not configured" });
+        reply.status(503).send({ error: "OWM not configured" });
         return;
       }
       if (!ALLOWED_OWM_LAYERS.includes(req.params.layer ?? "")) {
-        reply.status(400).send({ message: "Invalid layer" });
+        reply.status(400).send({ error: "Invalid layer" });
         return;
       }
       await owmTile(req, reply);

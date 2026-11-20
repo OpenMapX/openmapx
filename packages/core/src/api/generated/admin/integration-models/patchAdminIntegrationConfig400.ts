@@ -19,5 +19,6 @@ export type PatchAdminIntegrationConfig400 =
       code?: string;
     }
   | {
+      error: string;
       errors: string[];
     };

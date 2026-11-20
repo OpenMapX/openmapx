@@ -218,11 +218,11 @@ export function setup(ctx: IntegrationContext): void {
     const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
     const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      reply.status(400).send({ message: "Out-of-range coordinates" });
+      reply.status(400).send({ error: "Out-of-range coordinates" });
       return;
     }
 

@@ -67,7 +67,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(results);
     } catch (err) {
       ctx.log.warn("Hiking trail search failed", err);
-      reply.status(502).send({ message: "Trail search unavailable" });
+      reply.status(502).send({ error: "Trail search unavailable" });
     }
   });
 
@@ -79,11 +79,11 @@ export function setup(ctx: IntegrationContext): void {
     const limit = Math.min(Number(scalarQueries(req.query).limit ?? 50), 200);
 
     if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
-      reply.status(400).send({ message: "Invalid bbox coordinates" });
+      reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
     if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
-      reply.status(400).send({ message: "Bounding box too large" });
+      reply.status(400).send({ error: "Bounding box too large" });
       return;
     }
 
@@ -101,14 +101,14 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(results);
     } catch (err) {
       ctx.log.warn("Hiking area search failed", err);
-      reply.status(502).send({ message: "Trail area search unavailable" });
+      reply.status(502).send({ error: "Trail area search unavailable" });
     }
   });
 
   ctx.registerRoute("GET", "/hiking/details/:id", async (req, reply) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {
-      reply.status(400).send({ message: "Invalid trail ID" });
+      reply.status(400).send({ error: "Invalid trail ID" });
       return;
     }
     const cacheKey = `detail:${id}`;
@@ -124,14 +124,14 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(detail);
     } catch (err) {
       ctx.log.warn("Hiking trail detail failed", err);
-      reply.status(502).send({ message: "Trail detail unavailable" });
+      reply.status(502).send({ error: "Trail detail unavailable" });
     }
   });
 
   ctx.registerRoute("GET", "/hiking/geometry/:id", async (req, reply) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {
-      reply.status(400).send({ message: "Invalid trail ID" });
+      reply.status(400).send({ error: "Invalid trail ID" });
       return;
     }
     const cacheKey = `geom:${id}`;
@@ -148,10 +148,10 @@ export function setup(ctx: IntegrationContext): void {
     } catch (err) {
       ctx.log.warn("Hiking trail geometry failed", err);
       if (err instanceof OverpassRateLimitError) {
-        reply.status(429).send({ message: "Overpass rate limit exceeded" });
+        reply.status(429).send({ error: "Overpass rate limit exceeded" });
         return;
       }
-      reply.status(502).send({ message: "Trail geometry unavailable" });
+      reply.status(502).send({ error: "Trail geometry unavailable" });
     }
   });
 
@@ -163,11 +163,11 @@ export function setup(ctx: IntegrationContext): void {
     const typeFilter = scalarQueries(req.query).type ?? "";
 
     if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
-      reply.status(400).send({ message: "Invalid bbox coordinates" });
+      reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
     if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
-      reply.status(400).send({ message: "Bounding box too large" });
+      reply.status(400).send({ error: "Bounding box too large" });
       return;
     }
 
@@ -239,7 +239,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(result);
     } catch (err) {
       ctx.log.warn("Mountain shelter fetch failed", err);
-      reply.status(502).send({ message: "Shelter data unavailable" });
+      reply.status(502).send({ error: "Shelter data unavailable" });
     }
   });
 }

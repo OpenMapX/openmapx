@@ -342,17 +342,17 @@ export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | 
   fastify.get("/maptiler/*", async (req, reply) => {
     const path = getRequestedMaptilerPath(req);
     if (!path || !isAllowedMaptilerPath(path)) {
-      return reply.status(400).send({ message: "Unsupported MapTiler asset path" });
+      return reply.status(400).send({ error: "Unsupported MapTiler asset path" });
     }
     const tile = maptilerTileMatch(path);
     if (tile && !parseWebMercatorTileCoordinates(tile.z, tile.x, tile.y, MAPTILER_MAX_ZOOM)) {
-      return reply.status(400).send({ message: "Invalid tile coordinates" });
+      return reply.status(400).send({ error: "Invalid tile coordinates" });
     }
     reply.header("Cache-Control", "no-store");
 
     const key = maptilerKey() || (await loadMapSettings()).maptilerApiKey;
     if (!key) {
-      return reply.status(503).send({ message: "MapTiler API key is not configured" });
+      return reply.status(503).send({ error: "MapTiler API key is not configured" });
     }
 
     // MapTiler serves high-density sprites at a literal @2x path and returns
@@ -380,12 +380,12 @@ export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | 
         { upstream: summarizeExternalUrl(upstreamUrl.href), errorClass: safeErrorClass(error) },
         "MapTiler proxy fetch failed",
       );
-      return reply.status(502).send({ message: "MapTiler provider unavailable" });
+      return reply.status(502).send({ error: "MapTiler provider unavailable" });
     }
 
     if (!upstream.ok) {
       discardUpstreamResponse(upstream);
-      return reply.status(upstream.status).send({ message: "MapTiler upstream error" });
+      return reply.status(upstream.status).send({ error: "MapTiler upstream error" });
     }
 
     if (upstream.status === 204) {
@@ -455,7 +455,7 @@ export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | 
       return reply
         .header("Cache-Control", "no-store")
         .status(502)
-        .send({ message: "MapTiler provider returned an invalid response" });
+        .send({ error: "MapTiler provider returned an invalid response" });
     }
   });
 };

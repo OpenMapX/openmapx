@@ -10,6 +10,7 @@
  * boundaries mean an unexpected property is a rejection, not silently dropped.
  */
 import { z } from "zod";
+import { apiErrorSchema } from "../api/contracts/error";
 
 /** OSM limits tag keys and values to 255 Unicode characters. */
 export const OSM_MAX_TAG_CODE_POINTS = 255;
@@ -516,11 +517,11 @@ export const osmContributionErrorCodeSchema = z.enum([
 ]);
 export type OsmContributionErrorCode = z.infer<typeof osmContributionErrorCodeSchema>;
 
-export const osmContributionErrorBodySchema = z
-  .object({
+export const osmContributionErrorBodySchema = apiErrorSchema
+  .extend({
     code: osmContributionErrorCodeSchema,
     /** Already user-safe: never an upstream body. */
-    message: z.string().min(1).max(500),
+    error: z.string().min(1).max(500),
     retryAfterSeconds: z.number().int().min(0).max(86_400).optional(),
     /** Fresh live context, supplied on `VERSION_CONFLICT`. */
     context: osmContributionContextSchema.optional(),

@@ -3,5 +3,6 @@
 import type { GetAdminDawarich422Code } from "./getAdminDawarich422Code";
 
 export type GetAdminDawarich422 = {
+  error: string;
   code: GetAdminDawarich422Code;
 };

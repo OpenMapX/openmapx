@@ -183,7 +183,7 @@ describe("POST /api/privacy/export admission", () => {
 
     const second = await inject("alice");
     expect(second.statusCode).toBe(409);
-    expect(second.json()).toEqual({ code: "EXPORT_IN_PROGRESS" });
+    expect(second.json()).toEqual({ error: "Conflict", code: "EXPORT_IN_PROGRESS" });
     expect(service.beginSelfServiceExport).toHaveBeenCalledTimes(1);
     expect(service.recordExportFailure).not.toHaveBeenCalled();
 
@@ -213,7 +213,10 @@ describe("POST /api/privacy/export admission", () => {
     const alice = await startStreaming(port, "alice").firstBytes;
     const bob = await inject("bob");
     expect(bob.statusCode).toBe(503);
-    expect(bob.json()).toEqual({ code: "PRIVACY_SERVICE_UNAVAILABLE" });
+    expect(bob.json()).toEqual({
+      error: "Service Unavailable",
+      code: "PRIVACY_SERVICE_UNAVAILABLE",
+    });
     expect(service.beginSelfServiceExport).toHaveBeenCalledTimes(1);
     held.finish();
     await alice.rest;

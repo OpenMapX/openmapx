@@ -189,7 +189,7 @@ describe("canonical air-quality API schemas", () => {
   });
 
   it("keeps the non-2xx error object exact and its codes closed", () => {
-    const error = { code: "INVALID_QUERY", message: "Invalid query", details: { field: "lat" } };
+    const error = { error: "Invalid query", code: "INVALID_QUERY", details: { field: "lat" } };
     expect(airQualityApiErrorSchema.parse(error)).toEqual(error);
     expect(() => airQualityApiErrorSchema.parse({ ...error, code: "NO_DATA" })).toThrow();
     expect(() => airQualityApiErrorSchema.parse({ ...error, stack: "secret" })).toThrow();

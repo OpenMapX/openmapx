@@ -102,7 +102,8 @@ describe("transit source administration workflow", () => {
     const client = view();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(await screen.findByRole("button", { name: "Disable" }));
-    expect(await screen.findByText("in-flight")).toBeInTheDocument();
+    // The conflict carries a machine reason, not an error text, so the generic message is shown.
+    expect(await screen.findByText("API request failed with status 409")).toBeInTheDocument();
     expect(screen.queryByText(/Source change queued as/)).not.toBeInTheDocument();
     expect(invalidate).not.toHaveBeenCalled();
   });

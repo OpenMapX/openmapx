@@ -126,7 +126,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(capabilities);
     } catch {
-      reply.status(502).send({ message: "GetCapabilities unavailable" });
+      reply.status(502).send({ error: "GetCapabilities unavailable" });
     }
   });
 

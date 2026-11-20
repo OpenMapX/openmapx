@@ -68,7 +68,7 @@ export function sendProviderBudgetRefusal(
   reply.header("Cache-Control", "no-store");
   reply.header("Retry-After", String(decision.retryAfterSeconds));
   return reply.status(decision.status).send({
-    message:
+    error:
       decision.status === 429
         ? `${provider} has used its daily request budget`
         : `${provider} is temporarily unavailable`,

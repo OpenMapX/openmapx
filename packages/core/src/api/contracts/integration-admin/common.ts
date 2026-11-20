@@ -137,6 +137,7 @@ export const adminIntegrationIdempotencyHeadersSchema = z.object({
   "idempotency-key": z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/),
 });
 export const adminIntegrationValidationErrorSchema = z.strictObject({
+  error: z.string(),
   errors: z.array(z.string()),
 });
 export const adminIntegrationVaultUnavailableSchema = z.strictObject({

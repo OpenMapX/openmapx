@@ -37,7 +37,7 @@ export const neighborhoodsRoute: FastifyPluginAsync = async (fastify) => {
       const lang = req.query.lang;
 
       if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
-        return reply.status(400).send({ message: "Invalid bbox coordinates" });
+        return reply.status(400).send({ error: "Invalid bbox coordinates" });
       }
       if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
         // Too coarse to be a city — return nothing so the section self-hides.

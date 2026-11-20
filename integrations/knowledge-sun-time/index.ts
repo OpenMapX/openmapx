@@ -82,7 +82,7 @@ export function setup(ctx: IntegrationContext): void {
       lngNum < -180 ||
       lngNum > 180
     ) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 
@@ -116,13 +116,13 @@ export function setup(ctx: IntegrationContext): void {
 
       if (!body) {
         ctx.log.warn("Sunrise-Sunset API request failed");
-        reply.status(502).send({ message: "Sunrise-Sunset data unavailable" });
+        reply.status(502).send({ error: "Sunrise-Sunset data unavailable" });
         return;
       }
 
       if (body.status !== "OK") {
         ctx.log.warn(`Sunrise-Sunset API status: ${body.status}`);
-        reply.status(502).send({ message: `Sunrise-Sunset API error: ${body.status}` });
+        reply.status(502).send({ error: `Sunrise-Sunset API error: ${body.status}` });
         return;
       }
 
@@ -147,7 +147,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(result);
     } catch (err) {
       ctx.log.error("Sunrise-Sunset fetch failed", err);
-      reply.status(502).send({ message: "Sunrise-Sunset data unavailable" });
+      reply.status(502).send({ error: "Sunrise-Sunset data unavailable" });
     }
   });
 
@@ -168,7 +168,7 @@ export function setup(ctx: IntegrationContext): void {
       lngNum < -180 ||
       lngNum > 180
     ) {
-      reply.status(400).send({ message: "Invalid coordinates" });
+      reply.status(400).send({ error: "Invalid coordinates" });
       return;
     }
 

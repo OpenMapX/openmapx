@@ -454,7 +454,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       });
       if (errors.length > 0) {
         reply.status(400);
-        return { errors };
+        return { error: "Invalid configuration", errors };
       }
       const adminSession = getAdminSession(req);
       await applyTrustedConfiguration({

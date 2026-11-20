@@ -105,7 +105,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
         CYCLOSM_MAX_ZOOM,
       );
       if (!coords) {
-        return reply.status(400).send({ message: "Invalid tile coordinates" });
+        return reply.status(400).send({ error: "Invalid tile coordinates" });
       }
       const { z, x, y } = coords;
       reply.header("Cache-Control", "no-store");
@@ -175,7 +175,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
 
           if (!response.ok) {
             discardUpstreamResponse(response);
-            return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
+            return reply.status(response.status).send({ error: "Upstream tile fetch failed" });
           }
 
           const { data } = await readBoundedBinaryResponse(response, {
@@ -197,7 +197,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
           return reply.send(data);
         } catch (error) {
           req.log.warn({ err: error, z, x, y }, "CyclOSM fallback tile fetch failed");
-          return reply.status(502).send({ message: "All cycling tile providers unavailable" });
+          return reply.status(502).send({ error: "All cycling tile providers unavailable" });
         }
       } finally {
         requestAbort.dispose();
@@ -218,7 +218,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
         WAYMARKED_MAX_ZOOM,
       );
       if (!coords) {
-        return reply.status(400).send({ message: "Invalid tile coordinates" });
+        return reply.status(400).send({ error: "Invalid tile coordinates" });
       }
       const { z, x, y } = coords;
       reply.header("Cache-Control", "no-store");
@@ -244,7 +244,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
 
         if (!response.ok) {
           discardUpstreamResponse(response);
-          return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
+          return reply.status(response.status).send({ error: "Upstream tile fetch failed" });
         }
 
         const proxy = createBoundedBinaryProxyStream(response, {
@@ -263,7 +263,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
         );
       } catch (error) {
         req.log.warn({ err: error, z, x, y }, "Waymarked Trails tile fetch failed");
-        return reply.status(502).send({ message: "Waymarked Trails tile provider unavailable" });
+        return reply.status(502).send({ error: "Waymarked Trails tile provider unavailable" });
       }
     },
   });

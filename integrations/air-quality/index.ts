@@ -16,10 +16,10 @@ function sendError(
   reply: Parameters<RouteHandler>[1],
   status: number,
   code: AirQualityApiError["code"],
-  message: string,
+  error: string,
   details?: AirQualityApiError["details"],
 ): void {
-  reply.status(status).send({ code, message, ...(details ? { details } : {}) });
+  reply.status(status).send({ error, code, ...(details ? { details } : {}) });
 }
 
 function disabled(ctx: IntegrationContext, reply: Parameters<RouteHandler>[1]): boolean {

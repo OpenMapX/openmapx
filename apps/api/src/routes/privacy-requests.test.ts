@@ -49,7 +49,7 @@ describe("privacy request ids", () => {
     const app = await appWith({ getForUser });
     const response = await app.inject({ method: "GET", url: `/api/privacy/data-requests/${id}` });
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toEqual({ code: "REQUEST_NOT_FOUND" });
+    expect(response.json()).toEqual({ error: "Not Found", code: "REQUEST_NOT_FOUND" });
     expect(getForUser).not.toHaveBeenCalled();
     await app.close();
   });
@@ -67,7 +67,7 @@ describe("privacy request ids", () => {
       payload: { version: 1 },
     });
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toEqual({ code: "REQUEST_NOT_FOUND" });
+    expect(response.json()).toEqual({ error: "Not Found", code: "REQUEST_NOT_FOUND" });
     expect(withdraw).not.toHaveBeenCalled();
     await app.close();
   });
@@ -107,7 +107,7 @@ describe("self-service export time zone", () => {
       payload: { kind: "access_and_portability", locale: "en", timeZone: "Not/AZone" },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ code: "INVALID_REQUEST" });
+    expect(response.json()).toEqual({ error: "Bad Request", code: "INVALID_REQUEST" });
     expect(beginSelfServiceExport).not.toHaveBeenCalled();
     await app.close();
   });

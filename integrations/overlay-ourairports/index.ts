@@ -111,7 +111,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/airports", async (req, reply) => {
     const bbox = parseBbox(scalarQueries(req.query));
     if ("error" in bbox) {
-      reply.status(400).send({ message: bbox.error });
+      reply.status(400).send({ error: bbox.error });
       return;
     }
 

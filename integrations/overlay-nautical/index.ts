@@ -459,7 +459,7 @@ export function setup(ctx: IntegrationContext): void {
       !Number.isFinite(east) ||
       south > north
     ) {
-      reply.status(400).send({ message: "Invalid bbox" });
+      reply.status(400).send({ error: "Invalid bbox" });
       return;
     }
     const k4 = (n: number) => Math.round(n * 1000) / 1000;
@@ -493,7 +493,7 @@ export function setup(ctx: IntegrationContext): void {
       if (res.status !== 200) throw new Error(`OpenSeaMap harbour list HTTP ${res.status}`);
       text = res.body;
     } catch {
-      reply.status(502).send({ message: "Harbour list fetch failed" });
+      reply.status(502).send({ error: "Harbour list fetch failed" });
       return;
     }
     const receipts = snapshotContributors(
@@ -517,7 +517,7 @@ export function setup(ctx: IntegrationContext): void {
     const nameParam = (scalarQueries(req.query).name ?? "").trim();
     const categoryParam = Number.parseInt(scalarQueries(req.query).category ?? "", 10);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ message: "Missing or invalid lat/lng" });
+      reply.status(400).send({ error: "Missing or invalid lat/lng" });
       return;
     }
 
@@ -588,11 +588,11 @@ export function setup(ctx: IntegrationContext): void {
       !Number.isFinite(east) ||
       !Number.isFinite(north)
     ) {
-      reply.status(400).send({ message: "west/south/east/north must be valid numbers" });
+      reply.status(400).send({ error: "west/south/east/north must be valid numbers" });
       return;
     }
     if (south < -90 || north > 90 || south > north) {
-      reply.status(400).send({ message: "Invalid south/north range" });
+      reply.status(400).send({ error: "Invalid south/north range" });
       return;
     }
 
