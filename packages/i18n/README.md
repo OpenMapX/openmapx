@@ -47,8 +47,10 @@ The admin area has one namespace per section: `adminActivity`, `adminExtensions`
 `adminUsers`, the shell and shared controls in `adminShared`, page titles and
 headers in `adminPages`, plus the earlier `adminCoverage`, `adminNavigation`,
 `adminSearchIndex`, `privacyAdmin` and `privacySetup`. The root layout leaves
-these namespaces out of every public page's payload; the admin layout provides
-the full catalogue to admin pages. The list lives in
+these namespaces out of every public page's payload; the admin layout sends
+only these namespaces, and `AdminMessagesProvider` adds them to the public
+catalogue already on the page, because a nested provider replaces its parent's
+messages instead of merging them. The list lives in
 `apps/web/src/i18n/adminMessages.ts`, and a test fails when code a public page
 can load reads one of them. Admin code that renders on public pages, such as
 the impersonation banner (`impersonation`) and the unsaved-draft guard

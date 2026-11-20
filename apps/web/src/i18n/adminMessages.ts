@@ -29,3 +29,10 @@ export function withoutAdminMessages(messages: AbstractIntlMessages): AbstractIn
     Object.entries(messages).filter(([namespace]) => !ADMIN_NAMESPACES.has(namespace)),
   );
 }
+
+/** The admin namespaces alone, which admin pages add to the public catalogue. */
+export function onlyAdminMessages(messages: AbstractIntlMessages): AbstractIntlMessages {
+  return Object.fromEntries(
+    Object.entries(messages).filter(([namespace]) => ADMIN_NAMESPACES.has(namespace)),
+  );
+}

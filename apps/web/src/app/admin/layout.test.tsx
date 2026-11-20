@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminRootLayout from "./layout";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
-vi.mock("next-intl/server", () => ({ getMessages: async () => ({ adminShared: {} }) }));
+vi.mock("next-intl/server", () => ({
+  getMessages: async () => ({ adminShared: {}, common: {} }),
+}));
 
 const request = new AsyncLocalStorage<string>();
 vi.mock("next/headers", () => ({
@@ -33,7 +35,7 @@ describe("admin layout deployment boundary", () => {
     const rendered = await request.run("session=admin", () =>
       AdminRootLayout({ children: "child" }),
     );
-    // The admin layout provides the full catalogue around the admin shell.
+    // The admin layout sends only admin copy; the public catalogue is already on the page.
     expect(rendered.props.messages).toEqual({ adminShared: {} });
     expect(rendered.props.children.props.selfHosted).toBeNull();
   });
