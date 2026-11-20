@@ -138,6 +138,22 @@ describe("mergeProviders", () => {
     expect(one).toMatch(/^[0-9a-f]{16}$/);
   });
 
+  it("skips assets whose bounds would span more than 16 cells", () => {
+    const huge = asset({ bounds: [-180, -85, 180, 85] });
+    const inverted = asset({ bounds: [3, 49, 2, 48] });
+    const index = mergeProviders([snap(BARRELMAN, [huge, inverted, asset()])], none, none);
+    expect(ids(index)).toHaveLength(1);
+    expect(index.cells.size).toBe(1);
+  });
+
+  it("an asset without cells does not suppress another provider's asset", () => {
+    const ref = "way/99" as OsmElementRef;
+    const broken = asset({ replaces: [ref], reviewTier: "approved", bounds: [3, 49, 2, 48] });
+    const valid = asset({ replaces: [ref], reviewTier: "unreviewed" });
+    const index = mergeProviders([snap(OPEN, [broken]), snap(BARRELMAN, [valid])], none, none);
+    expect(ids(index)).toEqual([`${BARRELMAN}:${valid.providerAssetId}`]);
+  });
+
   it("complete is false while a provider has no snapshot", () => {
     const index = mergeProviders(
       [snap(BARRELMAN, [asset()]), { providerId: OPEN, snapshot: null }],

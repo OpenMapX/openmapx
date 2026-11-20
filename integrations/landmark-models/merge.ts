@@ -63,13 +63,21 @@ function tileY(lat: number, n: number): number {
   );
 }
 
-/** The z12 cells (`x/y`) a west/south/east/north box touches. */
+/** No landmark spans more cells than this; larger extents are rejected as bad data. */
+const MAX_CELLS_PER_ASSET = 16;
+
+/**
+ * The z12 cells (`x/y`) a west/south/east/north box touches, or none when the
+ * box is not finite, inverted or larger than any landmark.
+ */
 export function cellsForBounds(bounds: readonly [number, number, number, number]): string[] {
   const n = 2 ** CELL_ZOOM;
   const [west, south, east, north] = bounds;
+  if (![west, south, east, north].every(Number.isFinite) || west > east || south > north) return [];
+  const [x0, x1, y0, y1] = [tileX(west, n), tileX(east, n), tileY(north, n), tileY(south, n)];
+  if ((x1 - x0 + 1) * (y1 - y0 + 1) > MAX_CELLS_PER_ASSET) return [];
   const cells: string[] = [];
-  for (let x = tileX(west, n); x <= tileX(east, n); x += 1)
-    for (let y = tileY(north, n); y <= tileY(south, n); y += 1) cells.push(`${x}/${y}`);
+  for (let x = x0; x <= x1; x += 1) for (let y = y0; y <= y1; y += 1) cells.push(`${x}/${y}`);
   return cells;
 }
 
@@ -129,8 +137,10 @@ export function mergeProviders(
       return owner !== undefined && owner !== providerId;
     });
     if (taken) continue;
+    const assetCells = cellsForBounds(asset.bounds);
+    if (assetCells.length === 0) continue;
     for (const ref of asset.replaces) if (!refOwner.has(ref)) refOwner.set(ref, providerId);
-    for (const cell of cellsForBounds(asset.bounds)) {
+    for (const cell of assetCells) {
       const list = cells.get(cell);
       if (list) list.push(candidate);
       else cells.set(cell, [candidate]);

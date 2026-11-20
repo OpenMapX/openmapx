@@ -47,6 +47,25 @@ function osmRefs(record: OpenLandmarksAssetRecord): OsmElementRef[] {
   return refs;
 }
 
+/**
+ * A landmark covers at most a few kilometres; the longest published bridge
+ * spans about 0.03°. Larger, inverted or non-finite extents are data errors
+ * that would make cell indexing expensive.
+ */
+const MAX_BOUNDS_SPAN_DEGREES = 0.1;
+
+function validBounds([west, south, east, north]: readonly number[]): boolean {
+  if (![west, south, east, north].every((value) => Number.isFinite(value))) return false;
+  const width = (east as number) - (west as number);
+  const height = (north as number) - (south as number);
+  return (
+    width >= 0 &&
+    height >= 0 &&
+    width <= MAX_BOUNDS_SPAN_DEGREES &&
+    height <= MAX_BOUNDS_SPAN_DEGREES
+  );
+}
+
 function clampZoom(value: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
 }
@@ -59,6 +78,7 @@ export function commonAssetFields(record: OpenLandmarksAssetRecord): CommonAsset
   if (record.axes !== FRAME_AXES || record.units !== FRAME_UNITS || record.heading !== 0)
     return null;
   if (record.lods.low.bytes > MAX_LOW_BYTES) return null;
+  if (!validBounds(record.bounds)) return null;
   const detail =
     record.lods.detail && record.lods.detail.bytes <= MAX_DETAIL_BYTES
       ? modelFile(record.lods.detail)

@@ -52,6 +52,20 @@ describe("commonAssetFields", () => {
     ).toBeNull();
   });
 
+  it("drops records with inverted, non-finite or oversized bounds", () => {
+    const withBounds = (bounds: number[]) =>
+      commonAssetFields(
+        record("barrelman-assets.json", "30-rockefeller-plaza", (raw) => {
+          raw.bounds = bounds;
+        }),
+      );
+    expect(withBounds([-73.98, 40.76, -73.99, 40.77])).toBeNull();
+    expect(withBounds([-73.98, 40.77, -73.97, 40.76])).toBeNull();
+    expect(withBounds([-180, -85, 180, 85])).toBeNull();
+    expect(withBounds([-73.98, 40.75, -73.78, 40.77])).toBeNull();
+    expect(withBounds([-73.981, 40.758, -73.978, 40.761])).not.toBeNull();
+  });
+
   it("drops a low LOD over 2 MiB", () => {
     expect(
       commonAssetFields(
