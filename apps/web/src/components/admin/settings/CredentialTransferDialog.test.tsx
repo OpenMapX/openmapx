@@ -7,6 +7,7 @@ import {
   retainCredentialPreview,
 } from "./credential-preview-storage";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 vi.mock("@/lib/admin/accountAdmin", () => ({
   useAccountAdmin: () => ({ actorId: "synthetic-admin" }),
 }));

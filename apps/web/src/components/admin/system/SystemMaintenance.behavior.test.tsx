@@ -98,7 +98,7 @@ it("continues maintenance polling through cancel_pending until terminal completi
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
-    expect(screen.getByText("cancel_pending")).toBeInTheDocument();
+    expect(screen.getByText("cancel pending")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_000);
@@ -563,7 +563,7 @@ it("shows a rejected check without tracking a job and re-enables only that actio
     expect(screen.getByRole("alert")).toHaveTextContent("12 seconds");
     expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Run diagnostics" })).not.toBeDisabled();
-    expect(screen.queryByText("cancel_pending")).not.toBeInTheDocument();
+    expect(screen.queryByText("cancel pending")).not.toBeInTheDocument();
     await settle(12_500);
     expect(screen.getByRole("button", { name: "Check for updates" })).not.toBeDisabled();
     expect(checkPosts).toBe(1);

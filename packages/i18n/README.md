@@ -43,8 +43,9 @@ language does not require new privacy-specific branches or locale enums.
 ## Admin copy
 
 The admin area has one namespace per section: `adminActivity`, `adminExtensions`,
-`adminIntegrations`, `adminOverview`, `adminServices`, `adminTransit`,
-`adminUsers`, the shell and shared controls in `adminShared`, page titles and
+`adminIntegrations`, `adminOverview`, `adminServices`, `adminSettings`,
+`adminSystem` (cache and system maintenance), `adminTransit`, `adminUsers`,
+the shell and shared controls in `adminShared`, page titles and
 headers in `adminPages`, plus the earlier `adminCoverage`, `adminNavigation`,
 `adminSearchIndex`, `privacyAdmin` and `privacySetup`. The root layout leaves
 these namespaces out of every public page's payload; the admin layout sends
@@ -105,9 +106,8 @@ them explicitly. Write them as expression children (`<code>{"…"}</code>`) so
 rejects a code field, such as `job.status` or `stage.state`, rendered straight
 into a child, a text prop or a template; a field that holds written text
 rather than a code takes a `biome-ignore lint/plugin/noRawCodeCopy` comment
-that says so. The override in `biome.json` lists the
-sections not yet localized: cache, settings, system maintenance, the
-application log and the audit log; `lib/admin` is checked by the plugin only.
+that says so. The rules cover the whole admin tree with no excluded section;
+`lib/admin` is checked by the plugins only.
 
 The plugins read syntax, not data flow, so some shapes stay out of their
 reach and are left to review: copy held in a variable before it is shown

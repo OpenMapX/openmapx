@@ -3,6 +3,7 @@ import { cleanup, createQueryWrapper, fireEvent, render, screen, waitFor } from 
 import { savedEmailProvider } from "./EmailSettingsSection";
 import { SystemSettings } from "./SystemSettings";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://api.test" }),
 }));

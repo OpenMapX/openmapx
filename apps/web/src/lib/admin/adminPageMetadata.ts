@@ -21,7 +21,9 @@ export type AdminPageTitle =
   | "transit"
   | "operations"
   | "search"
-  | "overture";
+  | "overture"
+  | "cache"
+  | "coverage";
 
 /** The browser title of an admin page, in the reader's language. */
 export async function adminPageMetadata(

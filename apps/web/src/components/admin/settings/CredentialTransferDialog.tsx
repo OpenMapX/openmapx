@@ -25,6 +25,7 @@ import {
   credentialImportPreviewSchema,
   credentialTransferEnvelopeSchema,
 } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
@@ -39,6 +40,10 @@ import {
 import { downloadMigrationJson } from "./migration-json-download";
 
 type Field = { scope: "integration" | "service"; id: string; key: string };
+type MigrationOperationResult = {
+  outcome: string;
+  steps: Array<{ scope: string; id: string; status: string }>;
+};
 const identity = (field: Field) => `${field.scope}/${field.id}/${field.key}`;
 export function CredentialTransferDialog({
   onClose,
@@ -47,17 +52,21 @@ export function CredentialTransferDialog({
   onClose: () => void;
   inventory?: Field[];
 }) {
+  const t = useTranslations("adminSettings.credentialTransfer");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient(),
     { actorId } = useAccountAdmin(),
     [passphrase, setPassphrase] = useState(""),
     [envelope, setEnvelope] = useState<CredentialTransferEnvelope | null>(null),
     [selected, setSelected] = useState<string[]>([]),
     [preview, setPreview] = useState<CredentialImportPreview | null>(null),
-    [error, setError] = useState(""),
+    [failure, setFailure] = useState<
+      "sessionUnavailable" | "notSettled" | "fileTooLarge" | "fileInvalid" | null
+    >(null),
     [busy, setBusy] = useState(false),
     [choicesDirty, setChoicesDirty] = useState(false),
     [ceremony, setCeremony] = useState<"export" | "preview" | "apply" | null>(null),
-    [outcome, setOutcome] = useState(""),
+    [outcome, setOutcome] = useState<MigrationOperationResult | null>(null),
     [catalog, setCatalog] = useState<{
       catalogRevisionId: string;
       credentialsRevision: string;
@@ -83,7 +92,7 @@ export function CredentialTransferDialog({
   }, []);
   useEffect(() => {
     clear();
-    if (!apiUrl || !actorId) setError("Administrator session unavailable");
+    if (!apiUrl || !actorId) setFailure("sessionUnavailable");
     const restored = readCredentialPreview(storageKey);
     setPreview(restored);
     setSelected(restored?.entries.filter((e) => e.status === "selected").map(identity) ?? []);
@@ -116,14 +125,11 @@ export function CredentialTransferDialog({
       owner = epoch.current;
     controller.current = next;
     setBusy(true);
-    setError("");
+    setFailure(null);
     try {
       await action(next.signal);
     } catch {
-      if (epoch.current === owner && !next.signal.aborted)
-        setError(
-          "Credential transfer did not settle. Inspect Activity and use fresh confirmation before another mutation.",
-        );
+      if (epoch.current === owner && !next.signal.aborted) setFailure("notSettled");
     } finally {
       if (epoch.current === owner) {
         setPassphrase("");
@@ -219,9 +225,7 @@ export function CredentialTransferDialog({
           ),
         );
         if (!signal.aborted) {
-          setOutcome(
-            `${value.outcome}: ${value.steps.map((s) => `${s.scope}/${s.id} ${s.status}`).join("; ")}`,
-          );
+          setOutcome(value);
           setPreview(null);
           discardStoredPreview(storageKey);
         }
@@ -234,18 +238,19 @@ export function CredentialTransferDialog({
   return (
     <>
       <Dialog open onClose={close} fullWidth maxWidth="sm">
-        <DialogTitle>Protected credential transfer</DialogTitle>
+        <DialogTitle>{t("title")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2}>
-            <Typography>
-              Only declared effective vault credentials can be transferred. File, environment,
-              authentication and bootstrap secrets require manual setup. Passphrases stay in this
-              dialog and are cleared after each request.
-            </Typography>
-            {error && <Alert severity="error">{error}</Alert>}
+            <Typography>{t("intro")}</Typography>
+            {failure && <Alert severity="error">{t(failure)}</Alert>}
             {outcome && (
-              <Alert severity={outcome.startsWith("applied") ? "success" : "warning"}>
-                {outcome}
+              <Alert severity={outcome.outcome === "applied" ? "success" : "warning"}>
+                {t("outcome", {
+                  outcome: outcome.outcome,
+                  steps: outcome.steps
+                    .map((s) => t("step", { target: `${s.scope}/${s.id}`, status: s.status }))
+                    .join("; "),
+                })}
               </Alert>
             )}
             {!preview && (
@@ -272,21 +277,21 @@ export function CredentialTransferDialog({
                   />
                 ))}
                 <TextField
-                  label="Transfer passphrase"
+                  label={t("passphrase")}
                   type="password"
                   autoComplete="new-password"
                   value={passphrase}
                   onChange={(e) => setPassphrase(e.target.value)}
-                  helperText="12–1024 UTF-8 bytes. Enter again after returning from sign-in."
+                  helperText={t("passphraseHelp", { min: 12, max: 1024 })}
                 />
                 <Button
                   disabled={busy || !validPass || !selected.length}
                   onClick={() => setCeremony("export")}
                 >
-                  Confirm encrypted export
+                  {t("confirmExport")}
                 </Button>
                 <Button component="label" disabled={busy}>
-                  Choose encrypted credential file
+                  {t("chooseFile")}
                   <input
                     hidden
                     type="file"
@@ -297,7 +302,7 @@ export function CredentialTransferDialog({
                       setEnvelope(null);
                       if (!file) return;
                       if (file.size > 1048576) {
-                        setError("Encrypted file must be at most 1 MiB.");
+                        setFailure("fileTooLarge");
                         return;
                       }
                       const owner = epoch.current;
@@ -307,7 +312,7 @@ export function CredentialTransferDialog({
                           if (new TextEncoder().encode(text).length > 1048576) throw Error();
                           setEnvelope(credentialTransferEnvelopeSchema.parse(JSON.parse(text)));
                         } catch {
-                          setError("Encrypted file format is invalid.");
+                          setFailure("fileInvalid");
                         }
                       });
                     }}
@@ -317,21 +322,22 @@ export function CredentialTransferDialog({
                   disabled={busy || !validPass || !envelope}
                   onClick={() => setCeremony("preview")}
                 >
-                  Confirm decrypt and review
+                  {t("confirmPreview")}
                 </Button>
               </>
             )}
             {preview && (
               <>
-                <Typography>
-                  Choose each field explicitly. Existing ordinary credentials are overwritten only
-                  when selected.
-                </Typography>
+                <Typography>{t("chooseFields")}</Typography>
                 {preview.entries.map((field) => (
                   <FormControlLabel
                     sx={{ minWidth: 0, overflowWrap: "anywhere" }}
                     key={identity(field)}
-                    label={`${identity(field)}${field.reason ? `: ${field.reason}` : ""}`}
+                    label={
+                      field.reason
+                        ? t("fieldWithReason", { field: identity(field), reason: field.reason })
+                        : identity(field)
+                    }
                     control={
                       <Checkbox
                         disabled={
@@ -370,18 +376,20 @@ export function CredentialTransferDialog({
                         })
                       }
                     >
-                      Load current feed credential revision
+                      {t("loadFeedRevision")}
                     </Button>
                     {catalog && (
                       <Typography>
-                        {catalog.entries.length} current feed credential IDs; catalog{" "}
-                        {catalog.catalogRevisionId}.
+                        {t("feedRevision", {
+                          count: catalog.entries.length,
+                          catalog: catalog.catalogRevisionId,
+                        })}
                       </Typography>
                     )}
                     <TextField
                       multiline
                       minRows={2}
-                      label="Imported feed IDs to set (one per line)"
+                      label={t("feedIdsToSet")}
                       value={setKeys}
                       onChange={(e) => {
                         setChoicesDirty(true);
@@ -392,7 +400,7 @@ export function CredentialTransferDialog({
                     <TextField
                       multiline
                       minRows={2}
-                      label="Current feed IDs to delete (one per line)"
+                      label={t("feedIdsToDelete")}
                       value={deleteKeys}
                       onChange={(e) => {
                         setChoicesDirty(true);
@@ -424,12 +432,14 @@ export function CredentialTransferDialog({
                     })
                   }
                 >
-                  Review selected fields
+                  {t("reviewFields")}
                 </Button>
                 <Typography>
-                  {preview.entries.filter((e) => e.status === "selected").length} selected;{" "}
-                  {preview.entries.filter((e) => e.status === "skipped").length} skipped;{" "}
-                  {preview.entries.filter((e) => e.status === "denied").length} denied.
+                  {t("fieldCounts", {
+                    selected: preview.entries.filter((e) => e.status === "selected").length,
+                    skipped: preview.entries.filter((e) => e.status === "skipped").length,
+                    denied: preview.entries.filter((e) => e.status === "denied").length,
+                  })}
                 </Typography>
                 <Button
                   disabled={
@@ -440,7 +450,7 @@ export function CredentialTransferDialog({
                   }
                   onClick={() => setCeremony("apply")}
                 >
-                  Confirm selected credential import
+                  {t("confirmImport")}
                 </Button>
               </>
             )}
@@ -448,7 +458,7 @@ export function CredentialTransferDialog({
         </DialogContent>
         <DialogActions>
           <Button disabled={busy} onClick={close}>
-            Close
+            {tCommon("close")}
           </Button>
         </DialogActions>
       </Dialog>

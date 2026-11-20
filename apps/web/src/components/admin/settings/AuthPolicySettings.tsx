@@ -9,12 +9,23 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { authPolicySettingsSchema, type authPolicyViewSchema } from "@openmapx/core/api-contracts";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminFieldFocus } from "@/lib/admin/useAdminFieldFocus";
+import { useConfigSourceLabel } from "../shared/configSourceLabel";
+
+const POLICY_KEYS = [
+  "emailVerificationRequired",
+  "sessionDurationHours",
+  "twoFaEnabled",
+  "passwordMinLength",
+] as const;
+
 export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
+  const t = useTranslations("adminSettings.auth");
   const scope = useAccountAdmin(),
     query = useQuery({
       queryKey: scope.keys.policy,
@@ -25,13 +36,13 @@ export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
   useAdminFieldFocus(focusKey, !!query.data);
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Typography variant="h6">Authentication policy</Typography>
+      <Typography variant="h6">{t("title")}</Typography>
       {query.isError && (
         <Alert
           severity="error"
-          action={<Button onClick={() => void query.refetch()}>Reload</Button>}
+          action={<Button onClick={() => void query.refetch()}>{t("reload")}</Button>}
         >
-          Authentication policy could not be refreshed.
+          {t("refreshFailed")}
         </Alert>
       )}
       {query.data ? (
@@ -40,12 +51,14 @@ export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
           view={query.data}
         />
       ) : (
-        !query.isError && <Typography>Loading authentication policy…</Typography>
+        !query.isError && <Typography>{t("loading")}</Typography>
       )}
     </Paper>
   );
 }
 function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.parse> }) {
+  const t = useTranslations("adminSettings.auth");
+  const sourceLabel = useConfigSourceLabel();
   const errorText = useAccountErrorText();
   const { active, pending, ownership } = view;
   const draft = useAdminDraft({
@@ -105,52 +118,53 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
       twoFaEnabled: active.twoFaEnabled,
       passwordMinLength: active.passwordMinLength,
       ...Object.fromEntries(
-        Object.entries(pending).filter(([key]) =>
-          [
-            "emailVerificationRequired",
-            "sessionDurationHours",
-            "twoFaEnabled",
-            "passwordMinLength",
-          ].includes(key),
-        ),
+        Object.entries(pending).filter(([key]) => (POLICY_KEYS as readonly string[]).includes(key)),
       ),
     });
+  /** One line of the legacy draft: a known setting and its value, worded. */
+  const legacyLine = (name: string, value: unknown) => {
+    const kind =
+      typeof value === "boolean" ? String(value) : typeof value === "number" ? "number" : "invalid";
+    const setting = (POLICY_KEYS as readonly string[]).includes(name) ? name : "other";
+    return t("legacyLine", {
+      setting,
+      name,
+      kind,
+      value: typeof value === "number" ? value : 0,
+    });
+  };
   return (
     <Stack sx={{ gap: 2, pt: 1 }}>
       <Alert severity="info">
-        {active.activationVersion === 0
-          ? "Not activated; safe defaults are active. Legacy stored values are drafts until you explicitly activate this policy."
-          : "Version 1 authentication policy is active."}
+        {active.activationVersion === 0 ? t("notActivated") : t("activeVersion")}
       </Alert>
       <Typography variant="body2">
-        Active: email verification {active.emailVerificationRequired ? "required" : "optional"}; new
-        sessions {active.sessionDurationHours} hours; new 2FA enrollment{" "}
-        {active.twoFaEnabled ? "allowed" : "disabled"}; minimum password {active.passwordMinLength}{" "}
-        characters.
+        {t("activeSummary", {
+          email: String(active.emailVerificationRequired),
+          hours: active.sessionDurationHours,
+          twoFa: String(active.twoFaEnabled),
+          length: active.passwordMinLength,
+        })}
       </Typography>
       <Typography variant="caption">
-        Revision {active.revision.slice(0, 12)} · Email verification source:{" "}
-        {ownership.emailVerificationRequired} · Session, 2FA and password sources:{" "}
-        {ownership.sessionDurationHours}, {ownership.twoFaEnabled}, {ownership.passwordMinLength}
+        {t("revisionSources", {
+          revision: active.revision.slice(0, 12),
+          emailSource: sourceLabel(ownership.emailVerificationRequired),
+          sessionSource: sourceLabel(ownership.sessionDurationHours),
+          twoFaSource: sourceLabel(ownership.twoFaEnabled),
+          passwordSource: sourceLabel(ownership.passwordMinLength),
+        })}
       </Typography>
       {Object.keys(pending).length > 0 && (
         <Stack sx={{ gap: 1 }}>
-          <Typography variant="subtitle2">Legacy stored draft (not the active policy)</Typography>
+          <Typography variant="subtitle2">{t("legacyDraft")}</Typography>
           <Typography
             component="pre"
             variant="body2"
             sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
           >
             {Object.entries(pending)
-              .map(([key, value]) => {
-                const names: Record<string, string> = {
-                  emailVerificationRequired: "Email verification",
-                  sessionDurationHours: "Session lifetime (hours)",
-                  twoFaEnabled: "New 2FA enrollment",
-                  passwordMinLength: "Minimum password length",
-                };
-                return `${names[key] ?? key}: ${typeof value === "boolean" ? (value ? "Enabled" : "Disabled") : typeof value === "number" ? value : "Invalid legacy value"}`;
-              })
+              .map(([name, value]) => legacyLine(name, value))
               .join("\n")}
           </Typography>
           <Button
@@ -170,7 +184,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
               });
             }}
           >
-            Load legacy draft
+            {t("loadLegacyDraft")}
           </Button>
         </Stack>
       )}
@@ -183,21 +197,23 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
             disabled={mutation.isPending || ownership.emailVerificationRequired === "env"}
           />
         }
-        label="Require email verification"
+        label={t("requireEmailVerification")}
       />
       {ownership.emailVerificationRequired === "env" && (
-        <Typography variant="caption">Owned by AUTH_EMAIL_VERIFICATION on the host.</Typography>
+        <Typography variant="caption">
+          {t("ownedByHost", { variable: "AUTH_EMAIL_VERIFICATION" })}
+        </Typography>
       )}
       <TextField
         sx={{ maxWidth: 480 }}
         id="setting-sessionDurationHours"
-        label="New session lifetime (hours)"
+        label={t("sessionLifetime")}
         type="number"
         value={hours}
         disabled={mutation.isPending}
         onChange={(e) => edit(() => setHours(e.target.value))}
         slotProps={{ htmlInput: { min: 1, max: 8760, step: 1 } }}
-        helperText="1–8760 whole hours. Existing sessions keep their original expiry."
+        helperText={t("sessionLifetimeHelp", { min: 1, max: 8760 })}
       />
       <FormControlLabel
         id="setting-twoFaEnabled"
@@ -208,21 +224,19 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
             onChange={(e) => edit(() => setTwoFa(e.target.checked))}
           />
         }
-        label="Allow new 2FA enrollment"
+        label={t("allowTwoFa")}
       />
-      <Typography variant="caption">
-        Turning enrollment off does not remove existing second factors or their sign-in challenges.
-      </Typography>
+      <Typography variant="caption">{t("twoFaHelp")}</Typography>
       <TextField
         sx={{ maxWidth: 480 }}
         id="setting-passwordMinLength"
-        label="Minimum password length"
+        label={t("passwordMinLength")}
         type="number"
         value={length}
         disabled={mutation.isPending}
         onChange={(e) => edit(() => setLength(e.target.value))}
         slotProps={{ htmlInput: { min: 8, max: 128, step: 1 } }}
-        helperText="8–128 whole characters. Passwords are limited to 128 characters."
+        helperText={t("passwordMinLengthHelp", { min: 8, max: 128 })}
       />
       <FormControlLabel
         control={
@@ -232,14 +246,14 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
             onChange={(e) => setConfirmed(e.target.checked)}
           />
         }
-        label="I have reviewed all four policy settings"
+        label={t("reviewed")}
       />
       {!!draft.conflicts.length && (
         <Alert
           severity="warning"
-          action={<Button onClick={() => edit(() => draft.keepEdits())}>Keep my edits</Button>}
+          action={<Button onClick={() => edit(() => draft.keepEdits())}>{t("keepEdits")}</Button>}
         >
-          The active policy changed. Review or discard your draft before applying.
+          {t("policyChanged")}
         </Alert>
       )}
       {draft.dirty && (
@@ -248,15 +262,11 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
           disabled={mutation.isPending}
           onClick={() => edit(() => draft.discard())}
         >
-          Discard policy edits
+          {t("discardEdits")}
         </Button>
       )}
       {mutation.error && <Alert severity="error">{errorText(mutation.error)}</Alert>}
-      {saved && (
-        <Alert severity="success">
-          Authentication policy applied to new authentication operations.
-        </Alert>
-      )}
+      {saved && <Alert severity="success">{t("applied")}</Alert>}
       <Button
         sx={{ alignSelf: "start" }}
         variant="contained"
@@ -269,9 +279,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
           mutation.mutate((client) => client.applyPolicy(parsed.data, active.revision, requestKey));
         }}
       >
-        {active.activationVersion === 0
-          ? "Activate authentication policy"
-          : "Apply authentication policy"}
+        {t("apply", { activated: String(active.activationVersion !== 0) })}
       </Button>
     </Stack>
   );

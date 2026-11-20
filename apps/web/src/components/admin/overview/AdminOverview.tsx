@@ -36,6 +36,7 @@ import { useAuditActionLabel } from "../shared/auditActionLabel";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CompactAlertList } from "../shared/CompactAlertList";
 import { jobStatusColor } from "../shared/jobStatus";
+import { useJobTypeLabel } from "../shared/jobTypeLabel";
 
 type AttentionItem = import("@openmapx/core/api-contracts").AdminOverview["attention"][number];
 
@@ -106,6 +107,8 @@ function HealthBadge({ status }: { status: "pass" | "degraded" | "down" }) {
   );
 }
 
+const ATTENTION_TYPES = new Set(["health_check_failed", "job_failed", "service_unhealthy"]);
+
 function attentionHref(item: AttentionItem): string {
   if (item.type === "missing_credentials" || item.type === "health_check_failed") {
     return `/admin/integrations/${item.target}`;
@@ -121,6 +124,7 @@ export function AdminOverview() {
   const t = useTranslations("adminOverview");
   const tShared = useTranslations("adminShared");
   const auditActionLabel = useAuditActionLabel();
+  const jobTypeLabel = useJobTypeLabel();
   const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client);
@@ -183,6 +187,15 @@ export function AdminOverview() {
     0,
   );
   const generalAttention = data.attention.filter((item) => item.type !== "missing_credentials");
+  const integrationNames = new Map(credentials.map((entry) => [entry.integrationId, entry.name]));
+  /** Known attention codes are worded here; the server's English stays for codes added later. */
+  const attentionMessage = (item: AttentionItem) =>
+    ATTENTION_TYPES.has(item.type)
+      ? t("attention", {
+          type: item.type,
+          target: integrationNames.get(item.target ?? "") ?? item.target ?? "",
+        })
+      : item.message;
 
   return (
     <Stack
@@ -242,7 +255,7 @@ export function AdminOverview() {
             items={generalAttention.map((item) => ({
               id: `${item.type}-${item.message}`,
               severity: item.severity,
-              message: item.message,
+              message: attentionMessage(item),
               href: attentionHref(item),
               actionLabel: t("view"),
             }))}
@@ -427,7 +440,7 @@ export function AdminOverview() {
                     noWrap
                     sx={{ flex: 1 }}
                   >
-                    {job.type}
+                    {jobTypeLabel(job.type)}
                   </Typography>
                   {job.status === "running" && job.progress != null && (
                     <Tooltip title={format.percent(job.progress / 100)}>

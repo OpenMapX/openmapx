@@ -24,10 +24,12 @@ import {
 } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { useOptionalAdminJobRegistration } from "@/lib/admin/adminJobEffects";
+import { AdminDisplayError } from "@/lib/admin/adminRequestError";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import {
@@ -50,36 +52,14 @@ import {
 type View = Awaited<ReturnType<typeof getAdminPlatformConfiguration>> & { status: 200 };
 type Configuration = AdminPlatformPreview["configuration"];
 type Field = keyof AdminPlatformPreview["values"];
-const FIELD_DEFINITIONS: { key: Field; label: string; help: string }[] = [
-  {
-    key: "domain",
-    label: "Domain",
-    help: "Hostname only. Requires DNS/TLS, login and passkey recovery review.",
-  },
-  { key: "acmeEmail", label: "ACME contact email", help: "Certificate renewal contact." },
-  {
-    key: "releaseSelector",
-    label: "Release selector",
-    help: "Channel, exact version or local. Existing images stay pinned until an explicit checked update.",
-  },
-  {
-    key: "defaultRegion",
-    label: "Default region",
-    help: "Optional resource region. The deployment allowlist still applies.",
-  },
-  {
-    key: "backupRetentionDays",
-    label: "Backup retention (days)",
-    help: "1–36500 days. Existing backup expiry can shorten but never extend; longer retention applies to new backups.",
-  },
+/** Field order on the page; each field's label and help live in `adminSettings.platform.fields`. */
+const FIELDS: Field[] = [
+  "domain",
+  "acmeEmail",
+  "releaseSelector",
+  "defaultRegion",
+  "backupRetentionDays",
 ];
-const confirmationLabels = {
-  domain: "I have reviewed the new public origin",
-  dnsTls: "DNS and TLS are ready for the new domain",
-  oauth: "OAuth provider callback URLs are ready",
-  passkeys: "I understand that existing passkeys may require recovery",
-  alternateLogin: "I have proved an alternate supported password login and second factor",
-};
 const emptyConfirmations = {
   domain: false,
   dnsTls: false,
@@ -89,13 +69,9 @@ const emptyConfirmations = {
 };
 
 /** Effective ownership and retained job links stay available after a browser reconnect. */
-class PlatformScopeError extends Error {}
-const TITLES = {
-  deployment: "Deployment configuration",
-  release: "Release selection",
-  retention: "Backup retention",
-};
+class PlatformScopeError extends AdminDisplayError {}
 export function PlatformConfiguration({ scope = "deployment" }: { scope?: PlatformScope } = {}) {
+  const t = useTranslations("adminSettings.platform");
   const { actorId } = useAccountAdmin(),
     { client, apiUrl } = useActivityClient();
   const query = useQuery({
@@ -109,15 +85,14 @@ export function PlatformConfiguration({ scope = "deployment" }: { scope?: Platfo
   return (
     <Paper variant="outlined" sx={{ p: 2, maxWidth: 800 }}>
       <Typography component="h2" variant="subtitle1" sx={{ fontWeight: 650 }}>
-        {TITLES[scope]}
+        {t("title", { scope })}
       </Typography>
       {query.isError && (
         <Alert
           severity="error"
-          action={<Button onClick={() => void query.refetch()}>Reload</Button>}
+          action={<Button onClick={() => void query.refetch()}>{t("reload")}</Button>}
         >
-          Platform state is unavailable. Inspect Activity and host recovery guidance before changing
-          configuration.
+          {t("unavailable")}
         </Alert>
       )}
       {query.data ? (
@@ -129,7 +104,7 @@ export function PlatformConfiguration({ scope = "deployment" }: { scope?: Platfo
           onReload={() => void query.refetch()}
         />
       ) : (
-        !query.isError && <Typography>Loading platform configuration…</Typography>
+        !query.isError && <Typography>{t("loading")}</Typography>
       )}
     </Paper>
   );
@@ -145,6 +120,8 @@ function PlatformForm({
   scope: PlatformScope;
   onReload: () => void;
 }) {
+  const t = useTranslations("adminSettings.platform");
+  const tShared = useTranslations("adminShared");
   const register = useOptionalAdminJobRegistration();
   const queryClient = useQueryClient();
   const { client, apiUrl } = useActivityClient(),
@@ -254,20 +231,12 @@ function PlatformForm({
     try {
       fresh = unwrapAdminResponse(await getAdminPlatformConfiguration({ client }));
     } catch {
-      throw new PlatformScopeError(
-        "Platform state could not be refreshed. Reload before reviewing changes.",
-      );
+      throw new PlatformScopeError(t("refreshFailed"));
     }
-    if (!owner.active)
-      throw new PlatformScopeError("The configuration view changed. Reopen it before continuing.");
+    if (!owner.active) throw new PlatformScopeError(t("viewChanged"));
     if (fresh.expectedCurrentRevisionId !== view.expectedCurrentRevisionId)
-      throw new PlatformScopeError(
-        "Saved platform configuration changed. Reload and review your draft.",
-      );
-    if (fresh.pending.length)
-      throw new PlatformScopeError(
-        "An original platform operation is still pending. Inspect its outcome first.",
-      );
+      throw new PlatformScopeError(t("revisionChanged"));
+    if (fresh.pending.length) throw new PlatformScopeError(t("operationPending"));
     return fresh;
   };
   const previewMutation = useMutation({
@@ -275,8 +244,7 @@ function PlatformForm({
     mutationFn: async () => {
       const epoch = previewEpoch.current;
       const fresh = await freshView();
-      if (epoch !== previewEpoch.current)
-        throw new PlatformScopeError("Draft changed before the preview started.");
+      if (epoch !== previewEpoch.current) throw new PlatformScopeError(t("draftChanged"));
       const edits = Object.fromEntries(
         ordinaryDraft.dirtyKeys.map((key) => [key, ordinaryDraft.values[key]]),
       ) as PlatformDraft;
@@ -285,10 +253,7 @@ function PlatformForm({
         expectedCurrentRevisionId: fresh.expectedCurrentRevisionId,
         changes: candidate,
       });
-      if (!parsed.success)
-        throw new PlatformScopeError(
-          "Complete the visible fields with valid values before previewing.",
-        );
+      if (!parsed.success) throw new PlatformScopeError(t("invalidFields"));
       previewKey.current ??= crypto.randomUUID();
       const value = unwrapAdminResponse(
         await previewAdminPlatformConfiguration(
@@ -298,9 +263,7 @@ function PlatformForm({
         ),
       );
       if (!platformPreviewWithinScope(value.preview, fresh, candidate, scope))
-        throw new PlatformScopeError(
-          "The preview changes a field owned by another topic. Reload before continuing.",
-        );
+        throw new PlatformScopeError(t("previewOutOfScope"));
       return { value, fresh, epoch };
     },
     onError: () => {
@@ -317,7 +280,8 @@ function PlatformForm({
   const applyMutation = useMutation({
     retry: false,
     mutationFn: async () => {
-      if (!retained || Date.parse(retained.expiresAt) <= Date.now()) throw Error("Preview expired");
+      if (!retained || Date.parse(retained.expiresAt) <= Date.now())
+        throw new PlatformScopeError(t("previewExpired"));
       const fresh = await freshView();
       const candidate = buildPlatformCandidate(
         fresh.configuration,
@@ -325,9 +289,7 @@ function PlatformForm({
         scope,
       );
       if (!platformPreviewWithinScope(retained.preview, fresh, candidate, scope))
-        throw new PlatformScopeError(
-          "The preview no longer preserves another topic's configuration. Reload and review again.",
-        );
+        throw new PlatformScopeError(t("previewNoLongerInScope"));
       applyKey.current ??= crypto.randomUUID();
       const accepted = await unwrapAdminResponse(
         await applyAdminPlatformConfiguration(
@@ -345,7 +307,7 @@ function PlatformForm({
         client,
         apiUrl,
         jobId: accepted.jobId,
-        label: "Platform configuration",
+        label: t("jobLabel"),
         kind: "platform",
         returnTo: PLATFORM_SCOPE_HREF[scope],
         onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin", "platform", apiUrl] }),
@@ -396,101 +358,100 @@ function PlatformForm({
     <Stack sx={{ gap: 2, pt: 1 }}>
       {scope === "deployment" && (
         <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-          <Typography variant="body2">Release selector: {view.values.releaseSelector}</Typography>
+          <Typography variant="body2">
+            {t("releaseSelector", { selector: view.values.releaseSelector ?? "" })}
+          </Typography>
           <Button component={Link} href="/admin/system/updates#release-selector">
-            Manage release selection
+            {t("manageReleaseSelection")}
           </Button>
         </Stack>
       )}
-      <Typography variant="body2">
-        Host-owned values are locked until you explicitly adopt them. Returning a field to the host
-        uses its current environment value. Previewing does not save or restart services.
-      </Typography>
-      {FIELD_DEFINITIONS.filter(({ key }) => scopeFields.includes(key)).map(
-        ({ key, label, help }) => {
-          const field = draft[key],
-            managed = field?.source === "database";
-          const value = managed ? field.value : view.values[key];
-          return (
-            <Stack
-              key={key}
-              tabIndex={-1}
-              id={
-                key === "backupRetentionDays"
-                  ? "backup-retention"
-                  : key === "releaseSelector"
-                    ? "release-selector"
-                    : undefined
+      <Typography variant="body2">{t("hostOwnedHelp")}</Typography>
+      {FIELDS.filter((key) => scopeFields.includes(key)).map((key) => {
+        const label = t(`fields.${key}.label`);
+        const field = draft[key],
+          managed = field?.source === "database";
+        const value = managed ? field.value : view.values[key];
+        return (
+          <Stack
+            key={key}
+            tabIndex={-1}
+            id={
+              key === "backupRetentionDays"
+                ? "backup-retention"
+                : key === "releaseSelector"
+                  ? "release-selector"
+                  : undefined
+            }
+            sx={{ gap: 0.75, maxWidth: 560, scrollMarginTop: 80 }}
+          >
+            <TextField
+              label={label}
+              value={value ?? ""}
+              disabled={!managed || working || busy}
+              type={key === "backupRetentionDays" ? "number" : "text"}
+              helperText={t("fieldHelp", {
+                help: t(`fields.${key}.help`),
+                source: view.sources[key],
+              })}
+              onChange={(e) =>
+                edit(key, {
+                  source: "database",
+                  value: key === "backupRetentionDays" ? Number(e.target.value) : e.target.value,
+                } as Configuration[Field])
               }
-              sx={{ gap: 0.75, maxWidth: 560, scrollMarginTop: 80 }}
+            />
+            <Button
+              sx={{ alignSelf: "start" }}
+              disabled={working || busy}
+              onClick={() =>
+                edit(
+                  key,
+                  managed
+                    ? { source: "host" }
+                    : ({
+                        source: "database",
+                        value: view.values[key] ?? "",
+                      } as Configuration[Field]),
+                )
+              }
             >
-              <TextField
-                label={label}
-                value={value ?? ""}
-                disabled={!managed || working || busy}
-                type={key === "backupRetentionDays" ? "number" : "text"}
-                helperText={`${help} Current source: ${view.sources[key]}.`}
-                onChange={(e) =>
-                  edit(key, {
-                    source: "database",
-                    value: key === "backupRetentionDays" ? Number(e.target.value) : e.target.value,
-                  } as Configuration[Field])
-                }
-              />
-              <Button
-                sx={{ alignSelf: "start" }}
-                disabled={working || busy}
-                onClick={() =>
-                  edit(
-                    key,
-                    managed
-                      ? { source: "host" }
-                      : ({
-                          source: "database",
-                          value: view.values[key] ?? "",
-                        } as Configuration[Field]),
-                  )
-                }
-              >
-                {managed ? `Return ${label} to host` : `Manage ${label} in UI`}
-              </Button>
-            </Stack>
-          );
-        },
-      )}
+              {managed ? t("returnToHost", { label }) : t("manageInUi", { label })}
+            </Button>
+          </Stack>
+        );
+      })}
       {ordinaryDraft.conflicts.length > 0 && (
         <Alert
           severity="warning"
-          action={<Button onClick={() => ordinaryDraft.keepEdits()}>Keep my edits</Button>}
+          action={
+            <Button onClick={() => ordinaryDraft.keepEdits()}>{tShared("keepMyEdits")}</Button>
+          }
         >
-          Saved ownership changed for {ordinaryDraft.conflicts.join(", ")}. Review or discard your
-          edits before previewing.
+          {t("ownershipChanged", { fields: ordinaryDraft.conflicts.join(", ") })}
         </Alert>
       )}
-      {!validInput && (
-        <Alert severity="info">
-          Complete the managed fields before previewing. A default region must name a valid,
-          nonempty region.
-        </Alert>
-      )}
+      {!validInput && <Alert severity="info">{t("completeFields")}</Alert>}
       {!previewInScope && (
-        <Alert severity="error" action={<Button onClick={onReload}>Reload platform state</Button>}>
-          This preview no longer preserves configuration owned by another topic. Reload before
-          applying.
+        <Alert severity="error" action={<Button onClick={onReload}>{t("reloadState")}</Button>}>
+          {t("previewNotPreserved")}
         </Alert>
       )}
       {previewMutation.isError && (
-        <Alert severity="error" action={<Button onClick={onReload}>Reload platform state</Button>}>
-          Preview unavailable. The revision, input or source may have changed. Reload before
-          retrying; your draft is retained.{" "}
-          {previewMutation.error instanceof PlatformScopeError ? previewMutation.error.message : ""}
+        <Alert severity="error" action={<Button onClick={onReload}>{t("reloadState")}</Button>}>
+          {t("previewUnavailable", {
+            detail:
+              previewMutation.error instanceof PlatformScopeError
+                ? previewMutation.error.message
+                : "",
+          })}
         </Alert>
       )}
       {applyMutation.isError && (
-        <Alert severity="error" action={<Button onClick={onReload}>Reload platform state</Button>}>
+        <Alert severity="error" action={<Button onClick={onReload}>{t("reloadState")}</Button>}>
           {applyMutation.error instanceof PlatformScopeError
-            ? `Apply was not started. ${applyMutation.error.message}`
-            : "Apply was not confirmed. Inspect Activity before retrying with the same request. If the preview or policy changed, reload and review a new preview."}
+            ? t("applyNotStarted", { detail: applyMutation.error.message })
+            : t("applyNotConfirmed")}
         </Alert>
       )}
       <Stack direction="row" sx={{ gap: 1 }}>
@@ -499,7 +460,7 @@ function PlatformForm({
           disabled={working || busy || !validInput || ordinaryDraft.conflicts.length > 0}
           onClick={() => previewMutation.mutate()}
         >
-          Preview changes
+          {t("preview")}
         </Button>
         {ordinaryDraft.dirty && (
           <Button
@@ -511,25 +472,26 @@ function PlatformForm({
               applyMutation.reset();
             }}
           >
-            Discard
+            {tShared("discard")}
           </Button>
         )}
       </Stack>
       {preview && (
         <Stack sx={{ gap: 1 }}>
-          <Typography variant="h6">Review platform changes</Typography>
+          <Typography variant="h6">{t("reviewTitle")}</Typography>
           <Typography>
-            Public origin: {preview.oldOrigin} → {preview.newOrigin}
+            {t("publicOrigin", { oldOrigin: preview.oldOrigin, newOrigin: preview.newOrigin })}
           </Typography>
           <Typography>
-            Affected services: {preview.affectedServiceIds.join(", ") || "None"}
+            {preview.affectedServiceIds.length
+              ? t("affectedServices", { services: preview.affectedServiceIds.join(", ") })
+              : t("noAffectedServices")}
           </Typography>
           <Typography variant="body2">
-            Reconnect at {preview.newOrigin}/admin after a domain change. Keep host access available
-            if DNS, TLS, login or the control plane cannot recover.
+            {t("reconnectAt", { publicOrigin: preview.newOrigin })}
           </Typography>
           <Button href={`${preview.newOrigin}/admin`} target="_blank" rel="noopener noreferrer">
-            Open reviewed admin address
+            {t("openReviewedAddress")}
           </Button>
           {preview.warnings.map((warning) => (
             <Alert key={warning} severity="warning">
@@ -549,22 +511,18 @@ function PlatformForm({
                     }
                   />
                 }
-                label={confirmationLabels[key as keyof typeof confirmationLabels]}
+                label={t("confirmation", { key })}
               />
             ))}
           {preview.requiredConfirmation.alternateLogin && (
             <>
-              <Alert severity="warning">
-                A fresh supported password login and effective second factor are required.
-                Passkey-only or OAuth sessions cannot authorize a domain change. Establish a
-                supported alternate login first.
-              </Alert>
+              <Alert severity="warning">{t("alternateLoginRequired")}</Alert>
               <Button disabled={working || expired} onClick={() => setReauth(true)}>
-                {proof ? "Verify sign-in again" : "Verify alternate login"}
+                {proof ? t("verifyAgain") : t("verifyAlternateLogin")}
               </Button>
             </>
           )}
-          {expired && <Alert severity="warning">This preview expired. Create a new preview.</Alert>}
+          {expired && <Alert severity="warning">{t("previewExpiredCreate")}</Alert>}
           <Button
             variant="contained"
             disabled={
@@ -579,7 +537,7 @@ function PlatformForm({
             }
             onClick={() => applyMutation.mutate()}
           >
-            Apply reviewed changes
+            {t("applyReviewed")}
           </Button>
         </Stack>
       )}
@@ -595,12 +553,7 @@ function PlatformForm({
           }}
         />
       )}
-      {busy && (
-        <Alert severity="info">
-          An original platform operation is retained. Follow its outcome in Activity; disconnecting
-          does not cancel it. Unknown outcomes require recovery before another apply.
-        </Alert>
-      )}
+      {busy && <Alert severity="info">{t("operationRetained")}</Alert>}
       {[...new Set([...pending.map((job) => job.jobId), ...(accepted ? [accepted] : [])])].map(
         (jobId) => (
           <div key={jobId}>
@@ -610,22 +563,18 @@ function PlatformForm({
         ),
       )}
       <Accordion variant="outlined" disableGutters>
-        <AccordionSummary>Host recovery commands</AccordionSummary>
+        <AccordionSummary>{t("recoveryCommands")}</AccordionSummary>
         <AccordionDetails>
           <TextField
-            label="Host status commands"
+            label={t("statusCommands")}
             multiline
             value={
               "pnpm openmapx services status\npnpm openmapx services logs ops-agent --tail 200"
             }
             slotProps={{ input: { readOnly: true } }}
-            helperText="Copy and run on the deployment host. Diagnose the original operation before changing state."
+            helperText={t("statusCommandsHelp")}
           />
-          <Typography variant="caption">
-            Host recovery: inspect the retained operation in Activity and the host ops-agent
-            journal. Do not delete locks or replay an uncertain update. Bootstrap secrets, Docker
-            installation and offline agent recovery require host access.
-          </Typography>
+          <Typography variant="caption">{t("recoveryHelp")}</Typography>
         </AccordionDetails>
       </Accordion>
     </Stack>

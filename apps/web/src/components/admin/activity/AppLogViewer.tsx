@@ -19,6 +19,7 @@ import Typography from "@mui/material/Typography";
 import { listAdminLogs, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
 import type { AdminLogEntry } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -40,10 +41,10 @@ const LEVEL_COLORS: Record<string, string> = {
 const LEVEL_OPTIONS = ["all", "debug", "info", "warn", "error"];
 
 const TIME_RANGES: Record<string, number | undefined> = {
-  "last 15m": 15 * 60 * 1000,
-  "last 1h": 60 * 60 * 1000,
-  "last 6h": 6 * 60 * 60 * 1000,
-  "last 24h": 24 * 60 * 60 * 1000,
+  last15m: 15 * 60 * 1000,
+  last1h: 60 * 60 * 1000,
+  last6h: 6 * 60 * 60 * 1000,
+  last24h: 24 * 60 * 60 * 1000,
   all: undefined,
 };
 
@@ -90,6 +91,7 @@ function LogLine({ entry }: { entry: AppLogEntry }) {
           whiteSpace: "nowrap",
         }}
       >
+        {/* biome-ignore lint/plugin/noRawCodeCopy: a log source is the name of the component that wrote the line */}
         {entry.source}
       </Typography>
       <Typography
@@ -108,11 +110,12 @@ function LogLine({ entry }: { entry: AppLogEntry }) {
 }
 
 export function AppLogViewer() {
+  const t = useTranslations("adminActivity.logs");
   const { client } = useActivityClient();
   const qc = useQueryClient();
   const [levelFilter, setLevelFilter] = useState("info");
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [timeRange, setTimeRange] = useState("last 1h");
+  const [timeRange, setTimeRange] = useState("last1h");
   const [search, setSearch] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(100);
@@ -160,10 +163,10 @@ export function AppLogViewer() {
           }}
         >
           <FormControl size="small" sx={{ minWidth: 100 }}>
-            <InputLabel>Level</InputLabel>
+            <InputLabel>{t("level")}</InputLabel>
             <Select
               value={levelFilter}
-              label="Level"
+              label={t("level")}
               onChange={(e) => {
                 setLevelFilter(e.target.value);
                 setPage(0);
@@ -171,23 +174,23 @@ export function AppLogViewer() {
             >
               {LEVEL_OPTIONS.map((l) => (
                 <MenuItem key={l} value={l}>
-                  {l === "all" ? "All" : l.toUpperCase()}
+                  {t("levelOption", { level: l })}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>Source</InputLabel>
+            <InputLabel>{t("source")}</InputLabel>
             <Select
               value={sourceFilter}
-              label="Source"
+              label={t("source")}
               onChange={(e) => {
                 setSourceFilter(e.target.value);
                 setPage(0);
               }}
             >
-              <MenuItem value="all">All sources</MenuItem>
+              <MenuItem value="all">{t("allSources")}</MenuItem>
               {sources.map((s) => (
                 <MenuItem key={s} value={s}>
                   {s}
@@ -197,10 +200,10 @@ export function AppLogViewer() {
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Time range</InputLabel>
+            <InputLabel>{t("timeRange")}</InputLabel>
             <Select
               value={timeRange}
-              label="Time range"
+              label={t("timeRange")}
               onChange={(e) => {
                 setTimeRange(e.target.value);
                 setPage(0);
@@ -208,7 +211,7 @@ export function AppLogViewer() {
             >
               {Object.keys(TIME_RANGES).map((r) => (
                 <MenuItem key={r} value={r}>
-                  {r}
+                  {t("timeRangeOption", { range: r })}
                 </MenuItem>
               ))}
             </Select>
@@ -216,7 +219,7 @@ export function AppLogViewer() {
 
           <TextField
             size="small"
-            placeholder="Search…"
+            placeholder={t("search")}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -227,15 +230,15 @@ export function AppLogViewer() {
 
           <Box sx={{ flexGrow: 1 }} />
 
-          <Chip label={`${data?.total ?? 0} entries`} size="small" variant="outlined" />
+          <Chip label={t("entries", { count: data?.total ?? 0 })} size="small" variant="outlined" />
 
-          <Tooltip title={autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh"}>
+          <Tooltip title={autoRefresh ? t("pauseAutoRefresh") : t("resumeAutoRefresh")}>
             <IconButton size="small" onClick={handleAutoRefreshToggle}>
               {autoRefresh ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Refresh">
+          <Tooltip title={t("refresh")}>
             <span>
               <IconButton
                 size="small"
@@ -285,7 +288,7 @@ export function AppLogViewer() {
                 fontFamily: "monospace",
               }}
             >
-              No log entries match the current filters
+              {t("empty")}
             </Typography>
           </Box>
         ) : (

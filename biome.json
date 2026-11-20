@@ -170,15 +170,7 @@
         "!**/*.test.tsx",
         "!**/__tests__/**",
         "!**/*.test-support.ts",
-        "!**/*.test-support.tsx",
-        "!apps/web/src/components/admin/cache/**",
-        "!apps/web/src/components/admin/settings/**",
-        "!apps/web/src/components/admin/system/**",
-        "!apps/web/src/components/admin/activity/AppLogViewer.tsx",
-        "!apps/web/src/components/admin/activity/AuditLog.tsx",
-        "!apps/web/src/app/admin/(full-admin)/system/cache/**",
-        "!apps/web/src/app/admin/(full-admin)/data/coverage/**",
-        "!apps/web/src/app/admin/(full-admin)/settings/**"
+        "!**/*.test-support.tsx"
       ],
       "linter": {
         "rules": {

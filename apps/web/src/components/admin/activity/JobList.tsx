@@ -28,16 +28,13 @@ import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { JobStatusChip } from "../shared/JobStatusChip";
+import { useJobTypeLabel } from "../shared/jobTypeLabel";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { ActorCell } from "./ActorCell";
 import { ACTIVITY_READ_TIMEOUT_MS, useActivityClient } from "./activityQueries";
 import { JobDetail } from "./JobDetail";
 
 type StatusFilter = "all" | "active" | "completed" | "failed";
-
-function formatJobType(type: string): string {
-  return type.replace(/[.:]/g, " › ").replace(/[_-]/g, " ");
-}
 
 function formatPayload(payload: unknown): string | null {
   if (payload == null) return null;
@@ -50,6 +47,7 @@ function formatPayload(payload: unknown): string | null {
 
 function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void }) {
   const t = useTranslations("adminActivity");
+  const jobTypeLabel = useJobTypeLabel();
   const dtf = useDateTimeFormat();
   const payload = formatPayload(job.payload);
 
@@ -75,7 +73,7 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
               fontWeight: 500,
             }}
           >
-            {formatJobType(job.type)}
+            {jobTypeLabel(job.type)}
           </Typography>
           {payload && (
             <Tooltip title={payload} placement="bottom-start">

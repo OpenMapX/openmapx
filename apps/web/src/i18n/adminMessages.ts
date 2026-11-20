@@ -19,6 +19,7 @@ export const ADMIN_NAMESPACES: ReadonlySet<string> = new Set([
   "adminServices",
   "adminSettings",
   "adminShared",
+  "adminSystem",
   "adminTransit",
   "adminUsers",
   "privacyAdmin",

@@ -42,13 +42,18 @@ import {
 } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import Dialog from "@/components/ui/Dialog";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
 import { useAdminObservedJobs, useOptionalAdminJobRegistration } from "@/lib/admin/adminJobEffects";
-import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
+import {
+  AdminDisplayError,
+  AdminRequestError,
+  adminErrorText,
+} from "@/lib/admin/adminRequestError";
 import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import {
   activityJobQueryOptions,
@@ -61,6 +66,8 @@ import { useAdminToast } from "../shared/AdminToast";
 import { ErrorState } from "../shared/ErrorState";
 
 const CONFIRMATION = ADMIN_SYSTEM_UPDATE_CONFIRMATION;
+/** Typed in English on purpose: a fixed phrase, like a command, in every language. */
+const CLEAR_PIN_CONFIRMATION = "CLEAR RELEASE PIN";
 const HOST_UPDATE_COMMANDS = [
   "pnpm openmapx compose release --check",
   "pnpm openmapx system update --release-id RELEASE_ID --digest MANIFEST_SHA256 --session-file SESSION_FILE --receipt RECEIPT_FILE",
@@ -95,14 +102,14 @@ interface SubmissionRejection {
 
 const MAX_RETRY_SECONDS = 3_600;
 
-class SubmissionError extends AdminDisplayError {
+class SubmissionError extends AdminRequestError {
   constructor(
-    message: string,
+    detail: string | null,
     readonly status: number | null,
     readonly retrySeconds: number | null,
     readonly busy: boolean,
   ) {
-    super(message);
+    super(detail);
   }
 }
 
@@ -110,6 +117,16 @@ function boundedSeconds(seconds: number): number | null {
   return Number.isFinite(seconds) && seconds >= 0 && seconds <= MAX_RETRY_SECONDS
     ? Math.ceil(seconds)
     : null;
+}
+
+/** What the reader can do about a refused submission, as the `rejection` message's select code. */
+function rejectionHint(
+  rejection: SubmissionRejection,
+  waiting: boolean,
+): "wait" | "retry" | "busy" | "host" {
+  if (waiting && rejection.retrySeconds) return "wait";
+  if (rejection.status !== 409) return "retry";
+  return rejection.busy ? "busy" : "host";
 }
 
 type SystemUpdateInput = Parameters<typeof applyAdminSystemUpdate>[0];
@@ -120,18 +137,14 @@ function requiredUpdateInput(body: SystemUpdateInput | undefined): SystemUpdateI
 }
 
 /** A refused admission keeps the server's reason, its declared wait and whether a job is active. */
-function submissionError(error: unknown, label: string): unknown {
+function submissionError(error: unknown): unknown {
   if (!isApiClientError(error) && !(error instanceof ApiContractError)) return error;
   const payload = isApiClientError(error)
     ? (error.payload as { error?: unknown; jobId?: unknown } | null)
     : null;
   const retryAfter = isApiClientError(error) ? error.retryAfterSeconds : null;
   return new SubmissionError(
-    typeof payload?.error === "string"
-      ? payload.error
-      : error.status === 429
-        ? "Too many requests"
-        : `Failed to queue ${label}`,
+    typeof payload?.error === "string" ? payload.error : null,
     error.status,
     error.status === 429 && retryAfter !== null ? boundedSeconds(retryAfter) : null,
     error.status === 409 && typeof payload?.jobId === "string",
@@ -143,13 +156,14 @@ function digest(value: string | null): string {
   return value.replace(/^sha256:/, "").slice(0, 12);
 }
 
-function imageStatusChip(image: ImageStatus) {
-  if (image.status === "update-available") return <Chip color="warning" label="Update available" />;
-  if (image.status === "up-to-date") {
-    return <Chip color="success" variant="outlined" label="Up to date" />;
-  }
-  if (image.status === "not-running") return <Chip label="Not running" />;
-  return <Chip color="warning" variant="outlined" label="Unknown" />;
+function ImageStatusChip({ image }: { image: ImageStatus }) {
+  const t = useTranslations("adminSystem.maintenance");
+  const label = t("imageStatus", { status: image.status.replaceAll("-", "_") });
+  if (image.status === "update-available") return <Chip color="warning" label={label} />;
+  if (image.status === "up-to-date")
+    return <Chip color="success" variant="outlined" label={label} />;
+  if (image.status === "not-running") return <Chip label={label} />;
+  return <Chip color="warning" variant="outlined" label={label} />;
 }
 
 function useMaintenanceState() {
@@ -189,10 +203,16 @@ export function SystemMaintenance({
   section?: "updates" | "diagnostics";
   showHeader?: boolean;
 } = {}) {
+  const t = useTranslations("adminSystem.maintenance");
+  const tShared = useTranslations("adminShared");
+  const tCommon = useTranslations("common");
   const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const register = useOptionalAdminJobRegistration();
   const showToast = useAdminToast();
+  /** ICU select keys cannot hold slashes, so `updates/check` is selected as `updates_check`. */
+  const jobLabel = (path: SubmissionPath | "release/clear") =>
+    t("jobLabel", { path: path.replace("/", "_") });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [candidateToApply, setCandidateToApply] = useState<{
     releaseId: string;
@@ -281,8 +301,16 @@ export function SystemMaintenance({
     }
     if (job.status === "success") {
       if (trackedJob.path === "updates/check") setBlockedCandidate(null);
-      showToast(`${trackedJob.label} completed`);
-    } else showToast(job.error || `${trackedJob.label} ${job.status}`, "error");
+      showToast(t("jobCompleted", { label: trackedJob.label }));
+    } else
+      showToast(
+        job.error ||
+          t("jobEnded", {
+            label: trackedJob.label,
+            statusLabel: tShared("jobStatusLabel", { status: job.status }),
+          }),
+        "error",
+      );
     void queryClient.invalidateQueries({ queryKey: ["admin", "system"] });
     void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
     setTrackedJob(null);
@@ -291,6 +319,8 @@ export function SystemMaintenance({
     jobQuery.data,
     queryClient,
     showToast,
+    t,
+    tShared,
     trackedJob,
     setBlockedCandidate,
     setTrackedJob,
@@ -318,7 +348,7 @@ export function SystemMaintenance({
               : await applyAdminSystemUpdate(requiredUpdateInput(body), { client }),
         );
       } catch (error) {
-        throw submissionError(error, label);
+        throw submissionError(error);
       }
       register?.({
         client,
@@ -347,11 +377,14 @@ export function SystemMaintenance({
         setDialogOpen(false);
         setConfirmation("");
       }
-      showToast(`${job.label} queued`);
+      showToast(t("jobQueued", { label: job.label }));
     },
     onError: (error, { path, label }) => {
-      const message = adminErrorText(error, "Request failed");
       const submission = error instanceof SubmissionError ? error : null;
+      const message = adminErrorText(
+        error,
+        submission?.status === 429 ? t("tooManyRequests") : t("queueFailed", { label }),
+      );
       const retrySeconds = submission?.retrySeconds ?? null;
       setRejections((current) => ({
         ...current,
@@ -373,11 +406,10 @@ export function SystemMaintenance({
     onMutate: () => setPending((count) => count + 1),
     onSettled: () => setPending((count) => Math.max(0, count - 1)),
     mutationFn: async (fixed: NonNullable<typeof pinToClear>) => {
-      if (fixed.origin !== apiUrl)
-        throw Error("API origin changed; inspect the release selection again");
+      if (fixed.origin !== apiUrl) throw new AdminDisplayError(t("originChanged"));
       const result = await serviceOrThrow(
         clearAdminReleaseSelection(
-          { expectedReleaseId: fixed.releaseId, confirmation: "CLEAR RELEASE PIN" },
+          { expectedReleaseId: fixed.releaseId, confirmation: CLEAR_PIN_CONFIRMATION },
           { "idempotency-key": fixed.key },
           { client },
         ),
@@ -386,12 +418,12 @@ export function SystemMaintenance({
         client,
         apiUrl,
         jobId: result.jobId,
-        label: "Release pin clear",
+        label: jobLabel("release/clear"),
         kind: "maintenance:release/clear",
         returnTo: "/admin/system/updates",
         onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin", "system", apiUrl] }),
       });
-      const job = { id: result.jobId, label: "Release pin clear", path: "release/clear" };
+      const job = { id: result.jobId, label: jobLabel("release/clear"), path: "release/clear" };
       setTrackedJob(job);
       return job;
     },
@@ -399,24 +431,21 @@ export function SystemMaintenance({
       setTrackedJob(job);
       setPinToClear(null);
       setClearConfirmation("");
-      showToast("Release pin clear queued");
+      showToast(t("jobQueued", { label: job.label }));
     },
-    onError: (error) => showToast(adminErrorText(error, "Unable to clear release pin"), "error"),
+    onError: (error) => showToast(adminErrorText(error, t("clearPinFailed")), "error"),
   });
   const status = statusQuery.data;
   const active = Boolean(trackedJob || pending || queueJob.isPending || clearPin.isPending);
   const waiting = (path: SubmissionPath) => Boolean(rejections[path]?.until);
   const rejectionAlert = (rejection: SubmissionRejection) => (
     <Alert key={rejection.path} severity="warning" sx={{ minWidth: 0 }}>
-      <AlertTitle>{rejection.label} was not queued</AlertTitle>
-      {rejection.message.replace(/[.\s]+$/, "")}.{" "}
-      {waiting(rejection.path) && rejection.retrySeconds
-        ? `Try again in about ${rejection.retrySeconds} ${rejection.retrySeconds === 1 ? "second" : "seconds"}.`
-        : rejection.status !== 409
-          ? "You can try again."
-          : rejection.busy
-            ? "Try again once the active operation has finished."
-            : "Check the host-control readiness below, then try again."}
+      <AlertTitle>{t("notQueued", { label: rejection.label })}</AlertTitle>
+      {t("rejection", {
+        message: rejection.message.replace(/[.\s]+$/, ""),
+        hint: rejectionHint(rejection, waiting(rejection.path)),
+        seconds: rejection.retrySeconds ?? 0,
+      })}
     </Alert>
   );
   const rejectionInDialog = dialogOpen && Boolean(rejections["updates/apply"]);
@@ -425,6 +454,7 @@ export function SystemMaintenance({
     return rejection && !(path === "updates/apply" && rejectionInDialog) ? [rejection] : [];
   });
   const progress = jobQuery.data?.progress ?? 0;
+  const trackedStatus = jobQuery.data?.status ?? "queued";
   const updateCount = status?.images.filter((image) => image.updateAvailable).length ?? 0;
   const checkedCandidate =
     status?.release?.availableReleaseId && status.release.availableDigest
@@ -456,29 +486,18 @@ export function SystemMaintenance({
   );
 
   if (statusQuery.isError) {
-    return (
-      <ErrorState
-        message="System maintenance status could not be loaded."
-        onRetry={() => statusQuery.refetch()}
-      />
-    );
+    return <ErrorState message={t("loadFailed")} onRetry={() => statusQuery.refetch()} />;
   }
 
   return (
     <Stack sx={{ gap: 2 }}>
       {showHeader && (
         <AdminPageHeader
-          title={
-            section === "updates"
-              ? "Updates"
-              : section === "diagnostics"
-                ? "Diagnostics"
-                : "System maintenance"
-          }
-          subtitle="Update the OpenMapX application and run host-level diagnostics"
+          title={section ? t("sectionTitle", { section }) : t("title")}
+          subtitle={t("subtitle")}
           actions={
             <Button component={Link} href="/admin/activity" variant="outlined">
-              View activity
+              {t("viewActivity")}
             </Button>
           }
         />
@@ -486,19 +505,11 @@ export function SystemMaintenance({
 
       {status && !status.deployment.maintenanceReady && (
         <Alert severity="warning" sx={{ minWidth: 0 }}>
-          <AlertTitle>Host maintenance is unavailable</AlertTitle>
-          <Typography variant="body2">
-            Inspect Docker access, the applied configuration and operations-agent readiness.
-            Read-only admin features remain available.
-          </Typography>
+          <AlertTitle>{t("hostUnavailableTitle")}</AlertTitle>
+          <Typography variant="body2">{t("hostUnavailable")}</Typography>
           {!hostUpdateRequired && section !== "diagnostics" && (
             <>
-              <Typography variant="body2">
-                If only the panel is unavailable, a current host CLI can drive the coordinated
-                update with a real administrator session. It creates a backup. Replace the
-                placeholders with the checked ID and digest, your private session file and a new
-                private receipt path.
-              </Typography>
+              <Typography variant="body2">{t("hostCliHint")}</Typography>
               <Box
                 component="pre"
                 sx={{
@@ -517,16 +528,13 @@ export function SystemMaintenance({
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(HOST_UPDATE_COMMANDS);
-                    showToast("Host update commands copied");
+                    showToast(t("commandsCopied"));
                   } catch {
-                    showToast(
-                      "Could not copy commands. Select and copy the commands above.",
-                      "error",
-                    );
+                    showToast(t("commandsCopyFailed"), "error");
                   }
                 }}
               >
-                Copy commands
+                {t("copyCommands")}
               </Button>
             </>
           )}
@@ -536,34 +544,34 @@ export function SystemMaintenance({
       {section !== "diagnostics" && (
         <>
           <Paper variant="outlined" sx={{ p: 2, overflowWrap: "anywhere" }}>
-            <Typography variant="subtitle1">Release selection</Typography>
+            <Typography variant="subtitle1">{t("releaseSelection")}</Typography>
             <Typography variant="body2">
-              Configured channel: {status?.release?.configuredSelector ?? "unknown"}
+              {status?.release?.configuredSelector === undefined
+                ? t("configuredChannelUnknown")
+                : t("configuredChannel", { channel: status.release.configuredSelector })}
             </Typography>
             {/* Only an answered inspection names the channel; without one, a missing pin is unknown. */}
             <Typography variant="body2">
-              Current release (pinned):{" "}
               {status?.release?.configuredSelector === undefined
-                ? "unknown"
-                : (status.release.currentReleaseId ?? "none")}
+                ? t("currentReleaseUnknown")
+                : status.release.currentReleaseId
+                  ? t("currentRelease", { release: status.release.currentReleaseId })
+                  : t("currentReleaseNone")}
             </Typography>
             <Typography variant="body2">
-              Checked release:{" "}
               {status?.release?.configuredSelector === undefined
-                ? "unknown"
-                : (status.release.availableReleaseId ?? "not checked")}
+                ? t("checkedReleaseUnknown")
+                : status.release.availableReleaseId
+                  ? t("checkedRelease", { release: status.release.availableReleaseId })
+                  : t("checkedReleaseNone")}
             </Typography>
             {status?.release?.availableDigest && (
               <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
-                Manifest: {status.release.availableDigest}
+                {t("manifest", { digest: status.release.availableDigest })}
               </Typography>
             )}
             <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
-              Check reads the configured release manifest without downloading images or restarting
-              services. Update downloads that exact checked release before replacing any container.
-              Change the configured channel in the release selection above. Clearing the pin
-              preserves that channel and all running containers; the next configuration action may
-              resolve the configured channel again.
+              {t("releaseSelectionHelp")}
             </Typography>
             <Button
               disabled={active || !status?.release?.currentReleaseId}
@@ -575,44 +583,35 @@ export function SystemMaintenance({
                 }
               }}
             >
-              Clear the release pin
+              {t("clearPin")}
             </Button>
           </Paper>
 
           {hostUpdateRequired && (
             <Alert severity="warning" sx={{ minWidth: 0 }}>
-              <AlertTitle>Host update required</AlertTitle>
+              <AlertTitle>{t("hostUpdateRequiredTitle")}</AlertTitle>
               <Typography variant="body2">
-                {agentReplacementFailed
-                  ? "The operations agent could not be updated from the admin panel. The previous agent keeps running."
-                  : "The operations agent or its backup helper could not be verified for this release. Updating from the admin panel is blocked."}{" "}
-                Inspect Activity and host diagnostics, then follow the host recovery guide. Resolve
-                the failed prerequisite before applying this candidate again; retrying it through
-                the CLI does not repair the host.
+                {t("hostUpdateRequired", {
+                  cause: String(agentReplacementFailed),
+                })}
               </Typography>
               <Button component={Link} href="/admin/activity" size="small">
-                Inspect Activity
+                {t("inspectActivity")}
               </Button>
               <Button component={Link} href="/admin/system/diagnostics" size="small">
-                Host diagnostics
+                {t("hostDiagnostics")}
               </Button>
               <Button
                 component="a"
                 href="https://docs.openmapx.org/install/upgrading/"
                 size="small"
               >
-                Host recovery guide
+                {t("hostRecoveryGuide")}
               </Button>
             </Alert>
           )}
 
-          {replacesAgent && (
-            <Alert severity="info">
-              This release also updates the operations agent. The update replaces it first and
-              checks that the new agent starts. If it does not, the previous agent is restored and
-              the update stops before any other service changes.
-            </Alert>
-          )}
+          {replacesAgent && <Alert severity="info">{t("replacesAgent")}</Alert>}
         </>
       )}
 
@@ -625,7 +624,11 @@ export function SystemMaintenance({
               {trackedJob.label}
               <AdminJobLink id={trackedJob.id} source="application" />
             </Typography>
-            <Chip label={jobQuery.data?.status ?? "queued"} color="primary" variant="outlined" />
+            <Chip
+              label={tShared("jobStatusLabel", { status: trackedStatus })}
+              color="primary"
+              variant="outlined"
+            />
           </Stack>
           <LinearProgress
             variant={progress > 0 ? "determinate" : "indeterminate"}
@@ -636,18 +639,15 @@ export function SystemMaintenance({
 
       {section !== "diagnostics" && (
         <AdminTableSurface
-          title="OpenMapX application"
-          description="Checking compares running images with the release. Only Update downloads images."
+          title={t("applicationTitle")}
+          description={t("applicationDescription")}
           toolbar={
             <Stack
               direction={{ xs: "column", sm: "row" }}
               sx={{ gap: 1, alignItems: { sm: "center" } }}
             >
               {updateCount > 0 && (
-                <Chip
-                  color="warning"
-                  label={`${updateCount} ${updateCount === 1 ? "update" : "updates"} available`}
-                />
+                <Chip color="warning" label={t("updatesAvailable", { count: updateCount })} />
               )}
               <Button
                 variant="outlined"
@@ -655,9 +655,11 @@ export function SystemMaintenance({
                 disabled={
                   active || !status?.deployment.maintenanceReady || waiting("updates/check")
                 }
-                onClick={() => queueJob.mutate({ path: "updates/check", label: "Update check" })}
+                onClick={() =>
+                  queueJob.mutate({ path: "updates/check", label: jobLabel("updates/check") })
+                }
               >
-                Check for updates
+                {t("checkForUpdates")}
               </Button>
               <Button
                 variant="contained"
@@ -665,9 +667,9 @@ export function SystemMaintenance({
                 disabled={active || !status?.deployment.maintenanceReady || !canUpdate}
                 title={
                   hostUpdateRequired
-                    ? "This release requires an update on the host"
+                    ? t("requiresHostUpdate")
                     : !canUpdate
-                      ? "Check for a release with changes before updating"
+                      ? t("checkBeforeUpdating")
                       : undefined
                 }
                 onClick={() => {
@@ -679,7 +681,7 @@ export function SystemMaintenance({
                   setDialogOpen(true);
                 }}
               >
-                Update OpenMapX
+                {t("updateOpenMapX")}
               </Button>
             </Stack>
           }
@@ -688,11 +690,11 @@ export function SystemMaintenance({
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Component</TableCell>
-                  <TableCell>Image</TableCell>
-                  <TableCell>Running</TableCell>
-                  <TableCell>Downloaded</TableCell>
-                  <TableCell>Status</TableCell>
+                  <TableCell>{t("component")}</TableCell>
+                  <TableCell>{t("image")}</TableCell>
+                  <TableCell>{t("running")}</TableCell>
+                  <TableCell>{t("downloaded")}</TableCell>
+                  <TableCell>{t("status")}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -703,7 +705,7 @@ export function SystemMaintenance({
                         {image.name}
                       </Typography>
                       <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                        {image.id} · {image.containerState}
+                        {t("imageIdentity", { id: image.id, state: image.containerState })}
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ fontFamily: "monospace" }}>{image.image ?? "—"}</TableCell>
@@ -713,7 +715,9 @@ export function SystemMaintenance({
                     <TableCell sx={{ fontFamily: "monospace" }}>
                       {digest(image.localImageId)}
                     </TableCell>
-                    <TableCell>{imageStatusChip(image)}</TableCell>
+                    <TableCell>
+                      <ImageStatusChip image={image} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -732,40 +736,43 @@ export function SystemMaintenance({
               <DiagnosticsIcon color="primary" />
               <Box sx={{ flexGrow: 1 }}>
                 <Typography component="h2" variant="subtitle1">
-                  Deep diagnostics
+                  {t("diagnosticsTitle")}
                 </Typography>
                 <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                  Runs the CLI-equivalent container health checks and in-network HTTP probes.
-                  Detailed output is retained in Activity.
+                  {t("diagnosticsDescription")}
                 </Typography>
               </Box>
               <Button
                 variant="outlined"
                 startIcon={<DiagnosticsIcon />}
                 disabled={active || !status?.deployment.maintenanceReady || waiting("diagnostics")}
-                onClick={() => queueJob.mutate({ path: "diagnostics", label: "Deep diagnostics" })}
+                onClick={() =>
+                  queueJob.mutate({ path: "diagnostics", label: jobLabel("diagnostics") })
+                }
               >
-                Run diagnostics
+                {t("runDiagnostics")}
               </Button>
             </Stack>
           </Paper>
 
           <Paper component="section" variant="outlined" sx={{ p: 2 }}>
             <Typography component="h2" variant="subtitle1" sx={{ mb: 1.5 }}>
-              Host-control readiness
+              {t("readiness")}
             </Typography>
             <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
-              {[
-                ["Docker", status?.deployment.dockerAvailable],
-                ["Compose rendered", status?.deployment.composeRendered],
-                ["Host checkout mounted", status?.deployment.hostControlConfigured],
-              ].map(([label, ok]) => (
+              {(
+                [
+                  ["docker", status?.deployment.dockerAvailable],
+                  ["compose", status?.deployment.composeRendered],
+                  ["hostControl", status?.deployment.hostControlConfigured],
+                ] as const
+              ).map(([check, ok]) => (
                 <Chip
-                  key={String(label)}
+                  key={check}
                   icon={ok ? <CheckCircleIcon /> : undefined}
                   color={ok ? "success" : "warning"}
                   variant="outlined"
-                  label={label}
+                  label={t("readinessCheck", { check })}
                 />
               ))}
             </Stack>
@@ -779,43 +786,36 @@ export function SystemMaintenance({
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Clear release selection</DialogTitle>
+        <DialogTitle>{t("clearPinTitle")}</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 1, overflowWrap: "anywhere" }}>
-            <Typography>
-              Clear selected pin {pinToClear?.releaseId}. Images, running containers, release
-              evidence and the configured channel remain unchanged. Clearing does not select local
-              images.
-            </Typography>
-            <Typography>
-              Finish any pending data-manager update before clearing a release pin. If the selected
-              pin changes, check it again.
-            </Typography>
+            <Typography>{t("clearPinBody", { release: pinToClear?.releaseId ?? "" })}</Typography>
+            <Typography>{t("clearPinPending")}</Typography>
             <TextField
-              label="Clear confirmation"
+              label={t("clearConfirmation")}
               value={clearConfirmation}
               onChange={(event) => setClearConfirmation(event.target.value)}
-              helperText="Type CLEAR RELEASE PIN"
+              helperText={t("typePhrase", { phrase: CLEAR_PIN_CONFIRMATION })}
               autoComplete="off"
             />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button disabled={clearPin.isPending} onClick={() => setPinToClear(null)}>
-            Cancel
+            {tCommon("cancel")}
           </Button>
           <Button
             color="error"
             disabled={
               clearPin.isPending ||
-              clearConfirmation !== "CLEAR RELEASE PIN" ||
+              clearConfirmation !== CLEAR_PIN_CONFIRMATION ||
               pinToClear?.origin !== apiUrl
             }
             onClick={() => {
               if (pinToClear) clearPin.mutate(pinToClear);
             }}
           >
-            Clear release pin
+            {t("clearPinConfirm")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -825,18 +825,16 @@ export function SystemMaintenance({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Update OpenMapX</DialogTitle>
+        <DialogTitle>{t("updateOpenMapX")}</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 0.5 }}>
             <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-              Apply checked release {candidateToApply?.releaseId}. Manifest:{" "}
-              {candidateToApply?.expectedDigest}
+              {t("applyRelease", {
+                release: candidateToApply?.releaseId ?? "",
+                digest: candidateToApply?.expectedDigest ?? "",
+              })}
             </Typography>
-            <Alert severity="info">
-              Images are downloaded before containers are replaced. Services update in dependency
-              order, with the operations agent last. API or proxy updates may briefly interrupt this
-              page; reconnect to follow the original job.
-            </Alert>
+            <Alert severity="info">{t("applyOrder")}</Alert>
             {rejections["updates/apply"] && rejectionAlert(rejections["updates/apply"])}
             <FormControlLabel
               control={
@@ -845,17 +843,12 @@ export function SystemMaintenance({
                   onChange={(event) => setCreateBackup(event.target.checked)}
                 />
               }
-              label="Create a pre-update backup (recommended)"
+              label={t("createBackup")}
             />
-            {!createBackup && (
-              <Alert severity="warning">
-                Database migrations are forward-only. Updating without a backup reduces recovery
-                options.
-              </Alert>
-            )}
+            {!createBackup && <Alert severity="warning">{t("noBackupWarning")}</Alert>}
             <TextField
               autoFocus
-              label={`Type ${CONFIRMATION} to continue`}
+              label={t("typeToContinue", { phrase: CONFIRMATION })}
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
               autoComplete="off"
@@ -865,7 +858,7 @@ export function SystemMaintenance({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)} disabled={queueJob.isPending}>
-            Cancel
+            {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"
@@ -885,11 +878,11 @@ export function SystemMaintenance({
                 body: candidateToApply
                   ? { confirmation: CONFIRMATION, createBackup, ...candidateToApply }
                   : undefined,
-                label: "OpenMapX update",
+                label: jobLabel("updates/apply"),
               })
             }
           >
-            Update application
+            {t("updateApplication")}
           </Button>
         </DialogActions>
       </Dialog>
