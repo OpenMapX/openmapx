@@ -1,5 +1,8 @@
 import type { AirQualityProvider, IntegrationContext } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,7 +36,7 @@ async function invoke(ctx: ReturnType<typeof context>, query: Record<string, str
   const handler = ctx.registered.routes.find(({ path }) => path === "/stations")?.handler;
   if (!handler) throw new Error("stations route missing");
   const output = fakeReply();
-  await handler({ query, params: {}, body: undefined, headers: {} }, output.reply);
+  await handler(routeRequest({ query }), output.reply);
   return output.state;
 }
 

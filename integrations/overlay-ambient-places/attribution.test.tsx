@@ -2,7 +2,7 @@ import { act, cleanup, render, waitFor } from "@testing-library/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap } from "@/test";
+import { createFakeMap, renderedFeature } from "@/test";
 import { AMBIENT_LABEL_LAYER, AmbientPlacesLayer } from "./map-layer";
 
 const fake = createFakeMap({ zoom: 16, styleLoaded: true });
@@ -49,7 +49,7 @@ const publication = {
   },
 };
 function feature(): MapGeoJSONFeature {
-  return {
+  return renderedFeature({
     type: "Feature",
     source: "ambient-places-source",
     sourceLayer: "ambient_places",
@@ -79,7 +79,7 @@ function feature(): MapGeoJSONFeature {
       layout: { "text-field": "Kaffee", "text-size": 12 },
       paint: { "text-opacity": 1 },
     },
-  } as MapGeoJSONFeature;
+  });
 }
 function start() {
   vi.stubGlobal(
@@ -175,7 +175,7 @@ it("credits a suppressed duplicate only through the actual rendered matched base
   });
   const source = feature();
   vi.spyOn(fake.map, "querySourceFeatures").mockReturnValue([source]);
-  const base = {
+  const base = renderedFeature({
     ...source,
     source: "basemap",
     sourceLayer: "poi",
@@ -187,7 +187,7 @@ it("credits a suppressed duplicate only through the actual rendered matched base
       layout: { "text-field": "Kaffee" },
       paint: { "text-opacity": 1 },
     },
-  } as MapGeoJSONFeature;
+  });
   fake.setRenderedFeatures("base-poi", [base]);
   start();
   act(() => fake.emit("idle"));

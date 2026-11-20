@@ -1,4 +1,3 @@
-import type { BinaryLike } from "node:crypto";
 import { createPassthroughCache, fakeHttpClient } from "@openmapx/integration-framework/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSwissTransitClient } from "../client.js";
@@ -12,12 +11,16 @@ vi.mock("node:crypto", async (load) => {
     createHash: (...args: Parameters<typeof crypto.createHash>) => {
       const hash = crypto.createHash(...args);
       const update = hash.update.bind(hash);
-      vi.spyOn(hash, "update").mockImplementation((data: BinaryLike, encoding?: BufferEncoding) => {
-        unkeyedInputs.push(
-          typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"),
-        );
-        return typeof data === "string" && encoding ? update(data, encoding) : update(data);
-      });
+      vi.spyOn(hash, "update").mockImplementation(
+        (data: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding) => {
+          unkeyedInputs.push(
+            typeof data === "string"
+              ? data
+              : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("utf8"),
+          );
+          return update(data, encoding);
+        },
+      );
       return hash;
     },
   };

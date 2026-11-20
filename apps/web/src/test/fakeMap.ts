@@ -575,3 +575,20 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
   };
   return api;
 }
+
+/** The public fields of a rendered map feature that layer code reads. */
+export type RenderedFeatureFields = Partial<
+  Pick<
+    MapGeoJSONFeature,
+    "type" | "id" | "geometry" | "properties" | "source" | "sourceLayer" | "state"
+  >
+> & { layer?: Partial<MapGeoJSONFeature["layer"]> };
+
+/**
+ * A rendered map feature carrying only the fields a test sets. MapLibre's tile
+ * internals (`_vectorTileFeature`, `_x`, `toJSON` and so on) stay absent, which
+ * code that reads a feature through its public fields never notices.
+ */
+export function renderedFeature(fields: RenderedFeatureFields): MapGeoJSONFeature {
+  return fields as MapGeoJSONFeature;
+}

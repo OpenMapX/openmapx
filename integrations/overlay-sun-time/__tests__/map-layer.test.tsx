@@ -556,7 +556,7 @@ describe("SunTimeLayer sub-toggle transitions", () => {
   });
 });
 
-import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { IntegrationRegistry, integrationManifestSchema } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import type { ReactNode } from "react";
@@ -570,7 +570,7 @@ const attributionRegistry = new IntegrationRegistry([
     enabled: true,
     isBuiltIn: true,
     domains: ["map-overlay"],
-    dataSources: manifest.dataSources,
+    dataSources: integrationManifestSchema.parse(manifest).dataSources,
   },
 ]);
 const attributionWrapper = ({ children }: { children: ReactNode }) => (

@@ -74,7 +74,10 @@ function bridge() {
       getLayer: (id: string) => {
         const l = fake.state.layers.get(id);
         return l
-          ? { type: l.type, paint: { get: (name: string) => l.paint?.[name] ?? 1 } }
+          ? {
+              type: l.type,
+              paint: { get: (name: string) => Reflect.get(l.paint ?? {}, name) ?? 1 },
+            }
           : undefined;
       },
       tileManagers: new Proxy(

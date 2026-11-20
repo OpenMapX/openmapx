@@ -2,6 +2,7 @@ import type { UpstreamRuntime } from "@openmapx/integration-framework";
 import {
   fakeHttpClient as baseFakeHttpClient,
   createMockIntegrationContext,
+  installHostCapabilities,
 } from "@openmapx/integration-framework/testing";
 import * as freshness from "@openmapx/mobility-core/freshness";
 import { describe, expect, it, vi } from "vitest";
@@ -74,7 +75,7 @@ describe("real dynamic OTP setup acquisition", () => {
     vi.mocked(fetchRegistryEntries).mockResolvedValue([structuredClone(entry)]);
     const http = fakeHttpClient(() => ({ data: { stops: [stop] } }));
     const ctx = createMockIntegrationContext({ id: "transit-dynamic-registry", http });
-    ctx.upstreamRuntime = shared();
+    installHostCapabilities(ctx, { upstreamRuntime: shared() });
     await setup(ctx);
     try {
       const result = await ctx.registered.transit[0].searchStopsByName!("Public", 10);
@@ -118,7 +119,7 @@ describe("final setup publication fence", () => {
     vi.mocked(fetchRegistryEntries).mockResolvedValue([structuredClone(entry)]);
     const http = fakeHttpClient(() => ({ data: { stops: [stop] } }));
     const ctx = createMockIntegrationContext({ id: "transit-dynamic-registry", http });
-    ctx.upstreamRuntime = shared();
+    installHostCapabilities(ctx, { upstreamRuntime: shared() });
     let checks = 0;
     ctx.getDisallowedSourceIds = async () => new Set(++checks >= 5 ? ["peatus"] : []);
     await setup(ctx);
@@ -162,7 +163,7 @@ describe("captured registry generation", () => {
     vi.mocked(fetchRegistryEntries).mockResolvedValue([original]);
     const http = fakeHttpClient(() => ({ data: { stops: [stop] } }));
     const ctx = createMockIntegrationContext({ id: "transit-dynamic-registry", http });
-    ctx.upstreamRuntime = shared();
+    installHostCapabilities(ctx, { upstreamRuntime: shared() });
     await setup(ctx);
     original.options.endpoint = "https://changed.test";
     original.attribution = { name: "Changed" };
@@ -183,7 +184,7 @@ describe("captured registry generation", () => {
     vi.mocked(fetchRegistryEntries).mockResolvedValue([structuredClone(entry)]);
     const http = fakeHttpClient(() => ({ data: { stops: [stop] } }));
     const ctx = createMockIntegrationContext({ id: "transit-dynamic-registry", http });
-    ctx.upstreamRuntime = shared();
+    installHostCapabilities(ctx, { upstreamRuntime: shared() });
     let checks = 0,
       finish!: () => void;
     const shutdown: Array<() => Promise<void>> = [];
@@ -232,7 +233,7 @@ describe("retirement in the publishing continuation", () => {
                 : { data: { stops: [stop] } };
           });
           const ctx = createMockIntegrationContext({ id: "transit-dynamic-registry", http });
-          ctx.upstreamRuntime = shared();
+          installHostCapabilities(ctx, { upstreamRuntime: shared() });
           ctx.onShutdown = (fn) => shutdown.push(fn);
           ctx.getDisallowedSourceIds = async () => {
             if (++checks === 5) {

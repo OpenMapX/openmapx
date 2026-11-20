@@ -17,7 +17,8 @@ function memoryCache() {
     get: async (k: string) => (store.get(k) ?? null) as never,
     set: async (k: string, v: unknown) => void store.set(k, v),
     del: async (k: string) => void store.delete(k),
-    withCache: async <T>(_k: string, _t: number, fn: () => Promise<T>) => fn(),
+    withCache: async <T>(_k: string, _t: number, fn: (signal: AbortSignal) => Promise<T>) =>
+      fn(new AbortController().signal),
   };
 }
 

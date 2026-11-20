@@ -50,8 +50,11 @@ function provider(id: string, search: TransitProvider["searchStopsByName"]): Tra
       routes: { lookup: false, forStop: false, stops: false, geometry: false },
       planning: false,
       vehicleJourney: false,
+      vehiclePositions: false,
+      alerts: { byStop: false, byRoute: false, byBbox: false },
+      facilities: false,
     },
-    healthCheck: async () => ({ healthy: true }),
+    healthCheck: async () => ({ status: "up" }),
     searchStopsByName: search,
   };
 }

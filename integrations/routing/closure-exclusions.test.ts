@@ -26,7 +26,7 @@ describe("applyClosureExclusions", () => {
 });
 
 describe("applyClosureExclusions near a road closed to all but local access", () => {
-  const street = {
+  const street: GeoJSON.LineString = {
     type: "LineString",
     coordinates: [
       [13.485, 52.437],

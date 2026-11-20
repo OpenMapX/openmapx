@@ -73,7 +73,7 @@ function providerEvidence(update: Partial<ProviderEvidence> = {}): ProviderEvide
         owner: "Fixture owner",
         licensing: licensingFromDeclaration(
           "CC BY 4.0",
-          "https://creativecommons.org/licenses/by/4.0/" ?? undefined,
+          "https://creativecommons.org/licenses/by/4.0/",
         ),
         methodologyUrl: "https://example.test/method",
         attribution: "Fixture owner",

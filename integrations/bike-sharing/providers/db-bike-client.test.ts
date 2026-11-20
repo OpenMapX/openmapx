@@ -1,4 +1,7 @@
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
+import type {
+  MobilityHttpRequestOptions,
+  MobilityHttpTransport,
+} from "@openmapx/mobility-core/json-transport";
 import { describe, expect, it } from "vitest";
 import { createDbBikeClient } from "./db-bike-client.js";
 
@@ -7,7 +10,7 @@ const bbox = { west: 9, south: 48, east: 14, north: 54 };
 function transport(requests: Array<Record<string, string> | undefined>): MobilityHttpTransport {
   return {
     userAgent: "OpenMapX/test",
-    async fetchJson<T>(_url, options) {
+    async fetchJson<T>(_url: string, options?: MobilityHttpRequestOptions) {
       requests.push(options?.headers);
       return { data: { stations: [], bikes: [], vehicle_types: [] } } as T;
     },

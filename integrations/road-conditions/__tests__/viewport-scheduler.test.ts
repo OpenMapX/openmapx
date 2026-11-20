@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   createViewportFetchScheduler,
   isViewportContained,
@@ -26,7 +26,7 @@ describe("isViewportContained", () => {
 });
 
 describe("createViewportFetchScheduler", () => {
-  let onDue: ReturnType<typeof vi.fn>;
+  let onDue: Mock<() => void>;
   let viewport: ViewportBox;
   let getViewportCalls: number;
   let timerCreations: number;
@@ -56,7 +56,6 @@ describe("createViewportFetchScheduler", () => {
         timerCreations += 1;
         return setTimeout(handler, delay);
       },
-      clearTimeout: (handle) => clearTimeout(handle),
       ...overrides,
     });
   }

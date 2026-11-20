@@ -3,14 +3,15 @@ import {
   runWithProviderDeadline,
 } from "@openmapx/integration-framework";
 import {
+  type FakeMobilityHttpRequest,
   type FakeMobilityHttpTransport,
   fakeMobilityHttpTransport,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { dbRisGeocodingService, lookupDbStation, setRisCredentials } from "./provider.js";
 import type { RisStopPlace } from "./stations-types.js";
 
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
 let transport: FakeMobilityHttpTransport;
 
 function mockOk(data: unknown) {
@@ -194,13 +195,16 @@ describe("autocomplete cancellation through the suggestion adapter", () => {
           provider.searchSuggestions({ query: "station", lang: "en", limit: 8 }, context),
         { signal: controller.signal, timeoutMs: mode === "deadline" ? 30 : 1_000 },
       );
-      const outcome = pending.catch((error: Error) => error);
+      const outcome = pending.then(
+        () => undefined,
+        (error: Error) => error,
+      );
       try {
         // I/O starts synchronously once the provider's microtask is dispatched.
         await Promise.resolve();
         await Promise.resolve();
         if (mode === "caller") controller.abort(new Error("caller left"));
-        expect((await outcome).name).toBe(
+        expect((await outcome)?.name).toBe(
           mode === "deadline" ? "ProviderTimeoutError" : "ProviderCancelledError",
         );
         expect(downstreamSignal?.aborted).toBe(true);

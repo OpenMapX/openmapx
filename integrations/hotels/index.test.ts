@@ -2,6 +2,9 @@ import type { HotelOffer, HotelOffersResponse } from "@openmapx/core/server";
 import {
   createFencedMemoryCache,
   createMockIntegrationContext,
+  fakeAttributionIndex,
+  installHostCapabilities,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { setup } from "./index.js";
@@ -25,10 +28,10 @@ it("retains acquisition-time hotel receipts across metadata changes and cache hi
     values.set(key, structuredClone(value));
   };
   let name = "Acquired terms";
-  Object.defineProperty(ctx, "attributionIndex", {
-    value: {
-      getById: () => ({ sourceId: "liteapi", name, url: "https://rates.example/terms" }),
-    } as typeof ctx.attributionIndex,
+  installHostCapabilities(ctx, {
+    attributionIndex: fakeAttributionIndex(() => [
+      { sourceId: "liteapi", name, url: "https://rates.example/terms" },
+    ]),
   });
   searchOffer.mockImplementation(async () => {
     name = "Changed during acquisition";
@@ -48,9 +51,7 @@ it("retains acquisition-time hotel receipts across metadata changes and cache hi
       type: () => {},
     };
     await route.handler(
-      {
-        params: {},
-        headers: {},
+      routeRequest({
         body: null,
         query: {
           name: "Hotel",
@@ -59,7 +60,7 @@ it("retains acquisition-time hotel receipts across metadata changes and cache hi
           checkIn: "2026-10-20",
           checkOut: "2026-10-22",
         },
-      },
+      }),
       reply,
     );
     return body as HotelOffersResponse;
@@ -91,9 +92,7 @@ it.each([
   const route = ctx.registered.routes.find((r) => r.path === "/offers");
   if (!route) throw new Error("missing offers route");
   await route.handler(
-    {
-      params: {},
-      headers: {},
+    routeRequest({
       body: null,
       query: {
         name: "Hotel",
@@ -102,7 +101,7 @@ it.each([
         checkIn: "2026-10-20",
         checkOut: "2026-10-22",
       },
-    },
+    }),
     reply,
   );
   expect((body as HotelOffersResponse).best?.contributors).toEqual(contributors);

@@ -40,7 +40,7 @@ describe("cycling preference boundaries", () => {
       });
     },
   );
-  it.each([
+  it.each<Record<string, string>>([
     { bikeProfile: "car" },
     { bikeHillPreference: "flat" },
     { bikePreferQuietRoads: "yes" },

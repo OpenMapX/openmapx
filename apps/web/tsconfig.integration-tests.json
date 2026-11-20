@@ -7,7 +7,11 @@
     // themselves (see apps/api/tsconfig.integrations.json); the frontend tests
     // in this project need the DOM declarations.
     "lib": ["dom", "dom.iterable", "ES2024"],
-    "allowArbitraryExtensions": true
+    "allowArbitraryExtensions": true,
+    // The web test setup registers jest-dom's matchers on Vitest's `expect`.
+    // Name the matcher types here rather than including the setup file, which
+    // brings in the app's global environment declarations.
+    "types": ["node", "@testing-library/jest-dom/vitest"]
   },
   // The test files the two integration projects leave out: backend `.test.ts`,
   // component `.test.tsx` and everything under `__tests__`. One project covers

@@ -102,6 +102,9 @@ function fixture(healthy = true, cacheResolution = false) {
       routes: { lookup: true, forStop: true, stops: true, geometry: true },
       planning: true,
       vehicleJourney: true,
+      vehiclePositions: false,
+      alerts: { byStop: false, byRoute: false, byBbox: false },
+      facilities: false,
     },
     planningMetadata: {
       source: "transit-motis-local",
@@ -109,7 +112,7 @@ function fixture(healthy = true, cacheResolution = false) {
       datasetEpoch: "E",
       rentalFormFactors: [],
     },
-    healthCheck: async () => ({ healthy: true }),
+    healthCheck: async () => ({ status: "up" }),
     resolveTrip: resolved,
     planTrip: planned,
   };

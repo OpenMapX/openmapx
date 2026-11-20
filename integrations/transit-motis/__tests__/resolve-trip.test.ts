@@ -264,7 +264,7 @@ describe("provider-native exact trip reconstruction", () => {
 
   it("remembers an unsupported hosted endpoint without repeatedly fetching trips", async () => {
     const f = fixture();
-    const fetch = vi.fn(async (input: Request) =>
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) =>
       new Request(input).method === "POST"
         ? Response.json({ error: "not supported" }, { status: 405 })
         : Response.json(f.original),

@@ -18,7 +18,7 @@ describe("overpassProvider", () => {
     const filter = {
       selectors: [{ tags: [{ key: "amenity", value: "cafe" }] }],
     };
-    const bbox = { minLng: 13.0, minLat: 52.0, maxLng: 14.0, maxLat: 53.0 };
+    const bbox = { west: 13.0, south: 52.0, east: 14.0, north: 53.0 };
 
     const result = await overpassProvider.searchByFilter?.(filter as never, bbox);
     expect(coreMod.searchByFilter).toHaveBeenCalledWith(filter, bbox);

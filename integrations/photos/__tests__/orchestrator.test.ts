@@ -1,4 +1,4 @@
-import type { LoadedIntegration } from "@openmapx/core";
+import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {

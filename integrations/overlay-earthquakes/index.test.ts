@@ -356,9 +356,9 @@ describe("GET /earthquakes", () => {
     const keys: string[] = [];
     const cache = {
       ...createMockIntegrationContext().cache,
-      withCache: async <T>(key: string, _ttl: number, fn: () => Promise<T>) => {
+      withCache: async <T>(key: string, _ttl: number, fn: (signal: AbortSignal) => Promise<T>) => {
         keys.push(key);
-        return fn();
+        return fn(new AbortController().signal);
       },
     };
     const getNaturalHazards = async () => ({

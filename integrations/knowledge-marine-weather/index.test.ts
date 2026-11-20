@@ -2,6 +2,7 @@ import type { CacheClient, RouteHandler } from "@openmapx/integration-framework"
 import {
   createFencedMemoryCache,
   createMockIntegrationContext,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -188,7 +189,7 @@ function getHandler(cache?: CacheClient): RouteHandler {
 
 async function invoke(query: Record<string, string>, cache?: CacheClient): Promise<FakeReply> {
   const reply = makeReply();
-  await getHandler(cache)({ query, params: {}, body: undefined, headers: {} }, reply);
+  await getHandler(cache)(routeRequest({ query }), reply);
   return reply;
 }
 

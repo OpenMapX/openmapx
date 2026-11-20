@@ -31,7 +31,19 @@ describe("dedupeRoadConditionEvents", () => {
       id: "oc:1",
       provider: "road-conditions-openconditions",
       source: "nl-ndw",
-      attribution: { provider: "NDW", license: "CC0-1.0" },
+      attribution: {
+        provider: "NDW",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Incidents",
+              license: { kind: "spdx", expression: "CC0-1.0" },
+            },
+          ],
+        },
+      },
       updatedAt: "2026-06-01T00:00:00Z",
       headline: text("Accident on the A1 northbound"),
     });

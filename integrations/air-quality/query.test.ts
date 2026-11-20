@@ -1,9 +1,10 @@
+import type { RouteQuery } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
 
 import { parsePointQuery, parseStationQuery } from "./query.js";
 
 describe("canonical air-quality query parsing", () => {
-  it.each([
+  it.each<[RouteQuery, string]>([
     [{ lat: ["1", "2"], lng: "1" }, "lat"],
     [{ lat: "NaN", lng: "1" }, "lat"],
     [{ lat: "Infinity", lng: "1" }, "lat"],
@@ -15,7 +16,7 @@ describe("canonical air-quality query parsing", () => {
     [{ lat: "1", lng: "1", hours: "0" }, "hours"],
     [{ lat: "1", lng: "1", hours: "121" }, "hours"],
     [{ lat: "1", lng: "1", hours: "1.5" }, "hours"],
-  ] as const)("rejects invalid point query %#", (query, field) => {
+  ])("rejects invalid point query %#", (query, field) => {
     expect(() => parsePointQuery(query, { forecast: true, now: () => 0 })).toThrow(field);
   });
 
@@ -44,7 +45,7 @@ describe("canonical air-quality query parsing", () => {
     expect(parsed.queryHash).not.toContain("52.52");
   });
 
-  it.each([
+  it.each<[RouteQuery, string]>([
     [{ south: ["1", "2"] }, "south"],
     [{ south: "0", west: "0", north: "21", east: "1", zoom: "5" }, "bbox"],
     [{ south: "0", west: "0", north: "1", east: "31", zoom: "5" }, "bbox"],
@@ -55,7 +56,7 @@ describe("canonical air-quality query parsing", () => {
     [{ south: "0", west: "0", north: "1", east: "1", zoom: "5", limit: "501" }, "limit"],
     [{ south: "0", west: "0", north: "1", east: "1", zoom: "5", pollutant: "lead" }, "pollutant"],
     [{ south: "0", west: "0", north: "1", east: "1", zoom: "5", cursor: ["a", "b"] }, "cursor"],
-  ] as const)("rejects invalid station query %#", (query, field) => {
+  ])("rejects invalid station query %#", (query, field) => {
     expect(() => parseStationQuery(query)).toThrow(field);
   });
 

@@ -125,11 +125,12 @@ describe("RainViewer metadata host", () => {
     const framePath = ".attacker.example";
     const cache = {
       ...createPassthroughCache(),
-      get: vi.fn(async () => ({
-        host: "https://tilecache.rainviewer.com",
-        past: [{ time: 1, path: framePath }],
-        nowcast: [],
-      })),
+      get: async <T>() =>
+        ({
+          host: "https://tilecache.rainviewer.com",
+          past: [{ time: 1, path: framePath }],
+          nowcast: [],
+        }) as T,
     };
     const ctx = createMockIntegrationContext({ cache });
     setup(ctx);

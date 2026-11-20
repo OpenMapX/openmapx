@@ -1,4 +1,5 @@
 import type { SearchIntent } from "@openmapx/core";
+import type { SemanticCategoryDocument } from "@openmapx/presets";
 import { describe, expect, it, vi } from "vitest";
 import type { SemanticCategoryIndex } from "../semantic-category-index.js";
 import {
@@ -12,22 +13,22 @@ import {
   type SemanticScoreResult,
 } from "../semantic-taxonomy-types.js";
 
-const catalog = [
+const catalog: SemanticCategoryDocument[] = [
   {
     categoryId: "libraries",
     labels: { en: "Libraries", de: "Bibliotheken" },
     document:
       "Place category: Libraries. German label: Bibliotheken. English terms: library. German terms: bibliothek.",
-    filter: { selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "library" }] }] },
+    filter: { selectors: [{ tags: [{ key: "amenity", op: "=", value: "library" }] }] },
   },
   {
     categoryId: "pharmacies",
     labels: { en: "Pharmacies", de: "Apotheken" },
     document:
       "Place category: Pharmacies. German label: Apotheken. English terms: pharmacy. German terms: apotheke.",
-    filter: { selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "pharmacy" }] }] },
+    filter: { selectors: [{ tags: [{ key: "amenity", op: "=", value: "pharmacy" }] }] },
   },
-] as const;
+];
 
 const calibration: SemanticCalibration = {
   version: 1,

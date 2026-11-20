@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import type { RoutingProvider } from "../types.js";
 import {
   closureRoutingContract,
   createDirectionsResult,
@@ -14,13 +15,13 @@ vi.mock("../closures.js", async (importOriginal) => {
 const WAYPOINTS_QUERY = "0.1,51.1;0.2,51.2;0.3,51.3";
 
 it("returns 503 when closure avoidance is requested but no optimizer supports exclusions", async () => {
-  const optimizeSpy = vi.fn(async () => createDirectionsResult());
+  const optimizeSpy = vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult());
   const environment = createRoutingHandlerEnvironment({
     routingProviders: [
       {
         integrationId: "routing-fallback",
         providerId: "engine-a",
-        getRoute: vi.fn(async () => createDirectionsResult()),
+        getRoute: vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult()),
         optimizeRoute: optimizeSpy,
       },
     ],
@@ -41,7 +42,7 @@ it("re-evaluates the protected request through the next capable optimizer after 
   const failing = vi.fn(async () => {
     throw new Error("first optimizer unavailable");
   });
-  const succeeding = vi.fn(async () => createDirectionsResult());
+  const succeeding = vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult());
   const environment = createRoutingHandlerEnvironment({
     routingProviders: [
       {
@@ -49,7 +50,7 @@ it("re-evaluates the protected request through the next capable optimizer after 
         providerId: "engine-a",
         priority: 10,
         supportsExclusions: true,
-        getRoute: vi.fn(async () => createDirectionsResult()),
+        getRoute: vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult()),
         optimizeRoute: failing,
       },
       {
@@ -57,7 +58,7 @@ it("re-evaluates the protected request through the next capable optimizer after 
         providerId: "engine-b",
         priority: 20,
         supportsExclusions: true,
-        getRoute: vi.fn(async () => createDirectionsResult()),
+        getRoute: vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult()),
         optimizeRoute: succeeding,
       },
     ],

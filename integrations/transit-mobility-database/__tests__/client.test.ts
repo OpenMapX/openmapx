@@ -1,4 +1,4 @@
-import type { CacheClient } from "@openmapx/core";
+import type { CacheClient } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MdbClient } from "../client.js";
 
@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("MdbClient", () => {
   it("exchanges the refresh token and caches the access token until expiry", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
       if (url.endsWith("/v1/tokens")) {
         return jsonResponse({ access_token: "AT-1", expires_in: 3600 });
@@ -35,7 +35,7 @@ describe("MdbClient", () => {
     const client = new MdbClient({
       refreshToken: "RT",
       cache: undefined,
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      fetchImpl,
       now: () => nowMs,
     });
 
@@ -49,10 +49,7 @@ describe("MdbClient", () => {
     const tokenCalls = fetchImpl.mock.calls.filter((c) => String(c[0]).endsWith("/v1/tokens"));
     expect(tokenCalls).toHaveLength(1);
 
-    const authHeader = (fetchImpl.mock.calls[1]?.[1] as RequestInit)?.headers as Record<
-      string,
-      string
-    >;
+    const authHeader = fetchImpl.mock.calls[1]?.[1]?.headers as Record<string, string>;
     expect(authHeader.Authorization).toBe("Bearer AT-1");
   });
 
@@ -67,11 +64,13 @@ describe("MdbClient", () => {
       // 4) authed call → 200
       () => jsonResponse({ results: [] }),
     ];
-    const fetchImpl = vi.fn(async () => responses.shift()?.() ?? jsonResponse({}, 500));
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => responses.shift()?.() ?? jsonResponse({}, 500),
+    );
 
     const client = new MdbClient({
       refreshToken: "RT",
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      fetchImpl,
       now: () => nowMs,
     });
 
@@ -79,10 +78,7 @@ describe("MdbClient", () => {
     expect(feeds).toEqual([]);
     expect(fetchImpl).toHaveBeenCalledTimes(4);
 
-    const retryAuthHeader = (fetchImpl.mock.calls[3]?.[1] as RequestInit).headers as Record<
-      string,
-      string
-    >;
+    const retryAuthHeader = fetchImpl.mock.calls[3]?.[1]?.headers as Record<string, string>;
     expect(retryAuthHeader.Authorization).toBe("Bearer AT-2");
   });
 
@@ -94,7 +90,7 @@ describe("MdbClient", () => {
       })),
     });
 
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/v1/tokens") {
         return jsonResponse({ access_token: "AT", expires_in: 3600 });
@@ -107,7 +103,7 @@ describe("MdbClient", () => {
 
     const client = new MdbClient({
       refreshToken: "RT",
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      fetchImpl,
       now: () => nowMs,
     });
 
@@ -120,16 +116,16 @@ describe("MdbClient", () => {
   it("returns the cached feed list when ctx.cache has a hit", async () => {
     const cached = [{ id: "mdb-cached", data_type: "gtfs" }];
     const cache: CacheClient = {
-      get: vi.fn(async () => cached),
+      get: async <T>() => cached as T,
       set: vi.fn(async () => {}),
       del: vi.fn(async () => {}),
       withCache: vi.fn(),
     };
-    const fetchImpl = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>();
     const client = new MdbClient({
       refreshToken: "RT",
       cache,
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      fetchImpl,
       now: () => nowMs,
     });
     const feeds = await client.listGtfsFeeds();

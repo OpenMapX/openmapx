@@ -540,7 +540,16 @@ describe("mapParkingSiteToDetail", () => {
           sourceId: "de-bw-mobidata-parking",
           name: "MobiData BW",
           url: "data:text/html,<script>alert(1)</script>",
-          licenseUrl: "javascript:alert(1)",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Parking sites",
+                license: { kind: "spdx", expression: "CC-BY-4.0", url: "javascript:alert(1)" },
+              },
+            ],
+          },
         },
       ],
     });

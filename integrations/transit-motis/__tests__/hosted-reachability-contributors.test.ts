@@ -1,6 +1,7 @@
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
+import type { TransitReachabilityQuery } from "@openmapx/mobility-core/transit-reachability";
 import { beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ oneToAll: vi.fn(), stops: vi.fn() }));
@@ -19,17 +20,20 @@ import { setupCloud } from "../cloud";
 import { setupLocal } from "../local";
 
 const hosted = { client: {}, prefix: "mo:", provider: "mo" } as MotisInstance;
-const request = {
+const local = { client: {}, prefix: "ms:", provider: "ms" } as MotisInstance;
+const request: TransitReachabilityQuery = {
   origin: { lat: 59.9, lng: 10.7 },
   queryTime: "2026-10-13T10:00:00Z",
-  direction: "depart-at" as const,
+  direction: "depart-at",
   thresholdsMinutes: [10],
-  walkProfileId: "standard",
+  walkProfileId: "foot-1.2-cap-900-v1",
 };
 const supplier = {
   sourceId: "transitous",
   name: "Original Transitous",
   url: "https://transitous.org",
+  providerCountry: "DE",
+  providerPrivacyUrl: "https://transitous.org/privacy",
   licensing: licensingFromDeclaration("Mixed feeds", undefined),
   attribution: "Original data notice",
 };
@@ -68,14 +72,15 @@ for (const path of ["primary", "local fallback"] as const) {
     if (path === "primary") setupCloud(ctx, hosted, "primary");
     else
       setupLocal(ctx, {
-        motisLocalInstance: { client: {}, prefix: "ms:", provider: "ms" } as MotisInstance,
+        motisLocalInstance: local,
+        motisLocalReachabilityInstance: local,
         transitousInstance: hosted,
       });
     const result = await provider?.getReachabilitySurface?.(request);
     const seed = result?.data.seeds[0];
     expect(seed?.arrivalSeconds).toBe(240);
     expect(seed?.contributors?.map((r) => r.sourceId)).toEqual(["transitous"]);
-    expect(seed?.stop.contributors?.map((r) => r.sourceId)).toEqual(["transitous"]);
+    expect(seed?.stop?.contributors?.map((r) => r.sourceId)).toEqual(["transitous"]);
     expect(seed?.fieldContributors?.lat?.map((r) => r.sourceId)).toEqual(["transitous"]);
     expect(seed?.fieldContributors?.arrivalSeconds).toEqual([]);
     expect(seed?.lineageComplete).toBe(false);

@@ -854,11 +854,17 @@ it("keeps planned model and total receipts from the base acquisition after rerou
     .mockReset()
     .mockResolvedValueOnce({
       ...resultRoute,
-      routes: resultRoute.routes.map((r) => ({ ...r, contributors: [base] })),
+      routes: resultRoute.routes.map((r: Record<string, unknown>) => ({
+        ...r,
+        contributors: [base],
+      })),
     })
     .mockResolvedValue({
       ...resultRoute,
-      routes: resultRoute.routes.map((r) => ({ ...r, contributors: [final] })),
+      routes: resultRoute.routes.map((r: Record<string, unknown>) => ({
+        ...r,
+        contributors: [final],
+      })),
     });
   ctx._valhalla.getMatrix.mockImplementation(async (s: unknown[], t: unknown[]) =>
     s.map(() => t.map(() => ({ seconds: 120, km: 2, contributors: [matrix] }))),
@@ -941,7 +947,7 @@ it("keeps only selected approach matrix receipts in modeled values and exact ene
   const routeResult = await ctx._valhalla.getRoute();
   ctx._valhalla.getRoute.mockResolvedValue({
     ...routeResult,
-    routes: routeResult.routes.map((r) => ({
+    routes: routeResult.routes.map((r: Record<string, unknown>) => ({
       ...r,
       fieldContributors: { geometry: [geometry], distance: [distance] },
       contributors: [geometry, distance],

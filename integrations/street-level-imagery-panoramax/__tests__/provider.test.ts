@@ -288,7 +288,9 @@ describe("author mapping", () => {
 describe("searchImages", () => {
   it("requests the place_position band when a lookingAt point is given", async () => {
     const { createPanoramaxProvider } = await import("../provider");
-    const fetchMock = vi.fn(async () => Response.json({ type: "FeatureCollection", features: [] }));
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ type: "FeatureCollection", features: [] }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const provider = createPanoramaxProvider({
       instanceUrl: "https://example.test/api",
@@ -316,7 +318,9 @@ describe("searchImages", () => {
 
   it("uses a bbox from the radius without a lookingAt point", async () => {
     const { createPanoramaxProvider } = await import("../provider");
-    const fetchMock = vi.fn(async () => Response.json({ type: "FeatureCollection", features: [] }));
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ type: "FeatureCollection", features: [] }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const provider = createPanoramaxProvider({
       instanceUrl: "https://example.test/api",

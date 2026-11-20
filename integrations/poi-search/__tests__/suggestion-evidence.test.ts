@@ -1,6 +1,7 @@
-import type { BrandSuggestResponse, PresetMatch } from "@openmapx/core";
+import type { BrandSuggestResponse } from "@openmapx/core";
 import { brandSuggestionRows, presetSuggestionRows, rankAutocompleteRows } from "@openmapx/core";
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
+import type { PresetMatch } from "@openmapx/presets";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";

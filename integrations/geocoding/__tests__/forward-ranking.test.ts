@@ -1,5 +1,9 @@
 import type { IntegrationContext, SearchResult } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  createPassthroughCache,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import snapshots from "../../geocoding-maptiler/__fixtures__/station-search.json";
 import { maptilerGeocodingService, setMaptilerApiKey } from "../../geocoding-maptiler/provider.js";
@@ -31,6 +35,7 @@ function harness(cache = new Map<string, unknown>()) {
   const loads: string[] = [];
   const ctx = createMockIntegrationContext({
     cache: {
+      ...createPassthroughCache(),
       withCache: async <T>(
         key: string,
         _ttl: number,
@@ -56,15 +61,12 @@ function harness(cache = new Map<string, unknown>()) {
   if (!route) throw new Error("geocode route missing");
   const call = async (q: string, options: Record<string, string> = {}) => {
     const send = vi.fn();
-    await route.handler(
-      { query: { q, ...options }, params: {}, body: undefined, headers: {} },
-      {
-        send,
-        status: vi.fn(() => ({ send })),
-        header: vi.fn(),
-        type: vi.fn(),
-      },
-    );
+    await route.handler(routeRequest({ query: { q, ...options } }), {
+      send,
+      status: vi.fn(() => ({ send })),
+      header: vi.fn(),
+      type: vi.fn(),
+    });
     return send.mock.calls[0][0] as SearchResult[];
   };
   return { call, cache, loads };

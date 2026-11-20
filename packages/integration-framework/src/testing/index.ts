@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
   MobilityHttpRequestOptions,
   MobilityHttpTransport,
 } from "@openmapx/mobility-core/json-transport";
 import { runImmediateActivation } from "../activation-transaction";
 import type {
+  AttributionIndexHandle,
   BinaryHttpResponse,
   CacheClient,
   CustomHealthCheckFn,
@@ -542,6 +544,56 @@ export function createMockIntegrationContext(
       ),
   };
   return ctx;
+}
+
+/** Host capabilities a test installs on a context; integrations only read them. */
+export type HostCapabilities = Partial<
+  Pick<
+    IntegrationContext,
+    "manifest" | "attributionIndex" | "providerHealth" | "metricsRecorder" | "upstreamRuntime"
+  >
+>;
+
+/** Install host capability doubles on an existing context, typed against the context. */
+export function installHostCapabilities<T extends IntegrationContext>(
+  ctx: T,
+  capabilities: HostCapabilities,
+): T {
+  return Object.assign(ctx, capabilities);
+}
+
+/**
+ * An attribution index that resolves the sources `current` returns at the
+ * moment of each lookup, so a test can change them between calls.
+ */
+export function fakeAttributionIndex(
+  current: () => readonly Attribution[],
+): AttributionIndexHandle {
+  return {
+    list: () => [...current()],
+    getById: (sourceId) => current().find((source) => source.sourceId === sourceId),
+    getForMotisFile: () => undefined,
+    dedupAndOrder: (attributions) => attributions,
+    listMotisFeedTags: () => [],
+  };
+}
+
+/** The request the host passes to a route handler. */
+export type RouteRequest = Parameters<RouteHandler>[0];
+
+/**
+ * A route request as the host builds it: no query, params, body or headers
+ * and a fixed client key, unless the test passes its own.
+ */
+export function routeRequest(fields: Partial<RouteRequest> = {}): RouteRequest {
+  return {
+    query: {},
+    params: {},
+    body: undefined,
+    headers: {},
+    clientKey: "test-client",
+    ...fields,
+  };
 }
 
 /** Read a fixture file as UTF-8 text, resolved relative to `baseDir`. */

@@ -2,7 +2,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorsForField } from "@openmapx/mobility-core/contributors";
 import { encodeGtfsRtFeed } from "@openmapx/mobility-formats";
 import { strToU8, zipSync } from "fflate";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { allowQuota, memoryCache, testHttp } from "./helpers.js";
 
 const SERVICE_POINTS_PAGE =
@@ -546,7 +546,7 @@ const OCCUPANCY_FORECAST_JSON = {
   ],
 };
 
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: Mock<(input: string | URL, init?: RequestInit) => Promise<Response>>;
 
 /** Bodies of the requests sent to `endpoint` whose OJP request element is `requestElement`. */
 function ojpBodies(requestElement: string, endpoint = OJP_ENDPOINT): string[] {
@@ -661,7 +661,7 @@ beforeEach(() => {
           },
         ],
       });
-      return new Response(bytes, { status: 200 });
+      return new Response(new Uint8Array(bytes), { status: 200 });
     }
     if (url === GTFS_RT_ENDPOINT) {
       const bytes = encodeGtfsRtFeed({
@@ -678,7 +678,7 @@ beforeEach(() => {
               },
               stopTimeUpdate: [
                 {
-                  departure: { delay: 120, scheduleRelationship: 1 },
+                  departure: { delay: 120 },
                   stopId: "ch:1:sloid:7000:5:10",
                   stopSequence: 1,
                   scheduleRelationship: 1,
@@ -689,7 +689,7 @@ beforeEach(() => {
           },
         ],
       });
-      return new Response(bytes, { status: 200 });
+      return new Response(new Uint8Array(bytes), { status: 200 });
     }
     if (url === SIRI_SX_ENDPOINT || url === SIRI_SX_UNPLANNED_ENDPOINT) {
       return new Response(SIRI_SX_XML, { status: 200 });
@@ -1260,20 +1260,22 @@ it("credits retained GTFS-RT missing times but excludes a no-op update", async (
   fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
     if (String(input) === GTFS_RT_ENDPOINT)
       return new Response(
-        encodeGtfsRtFeed({
-          header: { gtfsRealtimeVersion: "2.0" },
-          entity: [
-            {
-              id: "noop",
-              tripUpdate: {
-                trip: { routeId: "IC6", startDate: "20250203", tripId: "gtfs-trip-1" },
-                stopTimeUpdate: [
-                  { departure: { delay: 120 }, stopId: "ch:1:sloid:7000:5:10", stopSequence: 1 },
-                ],
+        new Uint8Array(
+          encodeGtfsRtFeed({
+            header: { gtfsRealtimeVersion: "2.0" },
+            entity: [
+              {
+                id: "noop",
+                tripUpdate: {
+                  trip: { routeId: "IC6", startDate: "20250203", tripId: "gtfs-trip-1" },
+                  stopTimeUpdate: [
+                    { departure: { delay: 120 }, stopId: "ch:1:sloid:7000:5:10", stopSequence: 1 },
+                  ],
+                },
               },
-            },
-          ],
-        }),
+            ],
+          }),
+        ),
       );
     if (!defaultImpl) throw new Error("missing fixture");
     return defaultImpl(input, init);

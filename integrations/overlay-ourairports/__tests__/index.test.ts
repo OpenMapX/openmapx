@@ -1,4 +1,7 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
@@ -28,9 +31,13 @@ describe("airport acquisition before bbox caching", () => {
     };
     const cached = new Map<string, unknown>();
     const ctx = createMockIntegrationContext({ manifest: declared as never });
-    ctx.cache.withCache = async <T>(key: string, _ttl: number, load: () => Promise<T>) => {
+    ctx.cache.withCache = async <T>(
+      key: string,
+      _ttl: number,
+      load: (signal: AbortSignal) => Promise<T>,
+    ) => {
       if (cached.has(key)) return cached.get(key) as T;
-      const data = await load();
+      const data = await load(new AbortController().signal);
       cached.set(key, data);
       return data;
     };
@@ -47,12 +54,7 @@ describe("airport acquisition before bbox caching", () => {
         return this;
       },
     };
-    const req = {
-      query: { west: "-1", south: "-1", east: "1", north: "1" },
-      params: {},
-      headers: {},
-      body: undefined,
-    };
+    const req = routeRequest({ query: { west: "-1", south: "-1", east: "1", north: "1" } });
     await handler(req, reply as never);
     const source = declared.dataSources[0];
     if (!source) throw new Error("Missing fixture source");

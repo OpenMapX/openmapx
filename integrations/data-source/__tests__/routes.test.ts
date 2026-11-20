@@ -4,7 +4,10 @@ import type {
   IntegrationContext,
   MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
@@ -78,10 +81,7 @@ function route(ctx: ReturnType<typeof ctxWith>, path: string) {
 
 async function search(ctx: ReturnType<typeof ctxWith>) {
   const res = reply();
-  await route(ctx, "/:id/search")(
-    { query: QUERY, params: { id: "fuel" }, body: undefined, headers: {} },
-    res,
-  );
+  await route(ctx, "/:id/search")(routeRequest({ query: QUERY, params: { id: "fuel" } }), res);
   return res;
 }
 
@@ -135,7 +135,7 @@ describe("data-source list route", () => {
     const ctx = ctxWith(provider({ isAvailable: () => available }));
     const list = async () => {
       const res = reply();
-      await route(ctx, "/")({ query: {}, params: {}, body: undefined, headers: {} }, res);
+      await route(ctx, "/")(routeRequest({ query: {} }), res);
       return (res.send.mock.calls[0]![0] as { sources: { id: string }[] }).sources;
     };
 
@@ -151,7 +151,7 @@ describe("data-source list route", () => {
     const ctx = ctxWith(provider({ getFilters: async () => filters }));
     const list = async () => {
       const res = reply();
-      await route(ctx, "/")({ query: {}, params: {}, body: undefined, headers: {} }, res);
+      await route(ctx, "/")(routeRequest({ query: {} }), res);
       return (res.send.mock.calls[0]![0] as { sources: { filters: { id: string }[] }[] })
         .sources[0]!.filters;
     };
@@ -164,7 +164,7 @@ describe("data-source list route", () => {
   it("lists a data source that does not say whether it is available", async () => {
     const ctx = ctxWith(provider());
     const res = reply();
-    await route(ctx, "/")({ query: {}, params: {}, body: undefined, headers: {} }, res);
+    await route(ctx, "/")(routeRequest({ query: {} }), res);
     expect(res.send.mock.calls[0]![0]).toMatchObject({ sources: [{ id: "fuel" }] });
   });
 });
@@ -182,7 +182,7 @@ describe("data-source detail route", () => {
   async function detail(ctx: ReturnType<typeof ctxWith>) {
     const res = reply();
     await route(ctx, "/:id/detail/*")(
-      { query: {}, params: { id: "fuel", "*": "s1" }, body: undefined, headers: {} },
+      routeRequest({ query: {}, params: { id: "fuel", "*": "s1" } }),
       res,
     );
     return res;

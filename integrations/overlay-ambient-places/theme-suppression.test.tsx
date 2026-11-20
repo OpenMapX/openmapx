@@ -1,9 +1,8 @@
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { categoryPlaceToPlace, usePlaceStore } from "@openmapx/core";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, renderedFeature } from "@/test";
 
 const fake = createFakeMap({ styleLoaded: true, zoom: 16 });
 const mapRef = { current: fake.map };
@@ -53,11 +52,11 @@ describe("ambient suppression with the real group hook", () => {
       coordinates: [6.6932, 51.199] as [number, number],
       category: "place_of_worship",
     };
-    const feature = {
+    const feature = renderedFeature({
       type: "Feature",
       geometry: { type: "Point", coordinates: place.coordinates },
       properties: { ...place, rank: 2500, min_zoom: 14, tenant: false, sources: "osm" },
-    } as MapGeoJSONFeature;
+    });
     vi.spyOn(fake.map, "querySourceFeatures").mockReturnValue([feature]);
     vi.stubGlobal(
       "fetch",

@@ -57,8 +57,13 @@ function registerProvider(config: Record<string, unknown> = {}) {
   });
   setup(ctx);
   const provider = ctx.registered.realtime[0];
-  if (!provider?.getAlertsForBbox) throw new Error("no bbox alert provider registered");
-  return { ...provider, getAlertsForBbox: provider.getAlertsForBbox.bind(provider) };
+  if (!provider?.getAlertsForBbox || !provider.getVehiclePositions)
+    throw new Error("no bbox alert and vehicle position provider registered");
+  return {
+    ...provider,
+    getAlertsForBbox: provider.getAlertsForBbox.bind(provider),
+    getVehiclePositions: provider.getVehiclePositions.bind(provider),
+  };
 }
 
 let mockFetch: ReturnType<typeof vi.fn>;

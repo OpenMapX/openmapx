@@ -256,7 +256,7 @@ describe("generated dynamic OTP acquisition", () => {
   });
   it("retires an uncooperative request and rejects its late success", async () => {
     const f = fixture();
-    let finish!: (value: HttpResponse<unknown>) => void;
+    let finish!: (value: HttpResponse<string>) => void;
     vi.spyOn(f.http, "postText").mockImplementation(
       () =>
         new Promise((resolve) => {

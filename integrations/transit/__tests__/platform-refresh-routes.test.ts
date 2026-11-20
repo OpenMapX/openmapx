@@ -17,7 +17,7 @@ function fixture() {
   const values = new Map<string, unknown>();
   const ctx = createMockIntegrationContext({
     cache: {
-      get: async (key) => values.get(key) ?? null,
+      get: async <T>(key: string) => (values.get(key) as T | undefined) ?? null,
       set: async (key, value) => {
         values.set(key, value);
       },

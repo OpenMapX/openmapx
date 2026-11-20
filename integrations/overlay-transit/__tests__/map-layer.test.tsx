@@ -1,5 +1,5 @@
 import { useDirectionsStore } from "@openmapx/core";
-import type { TransitItinerary } from "@openmapx/mobility-core/transit";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { useTransitStore } from "../store";
@@ -29,7 +29,7 @@ const SOURCE_ID = "openmapx-transit-motis-source";
 const MOTIS_LINE_ID = "openmapx-transit-motis-line";
 const ITINERARY = {
   legs: [{ mode: "tram" }],
-} as unknown as TransitItinerary;
+} as unknown as TripItinerary;
 const STALE_DATA: GeoJSON.FeatureCollection = {
   type: "FeatureCollection",
   features: [
@@ -91,7 +91,7 @@ describe("TransitLayer", () => {
     expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.25);
 
     act(() => {
-      fake.map.setStyle({});
+      fake.map.setStyle({ version: 8, sources: {}, layers: [] });
     });
     expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.25);
   });

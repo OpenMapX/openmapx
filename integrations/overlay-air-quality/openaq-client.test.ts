@@ -172,8 +172,12 @@ describe("OpenAQ v3 client", () => {
       contentTypes: ["application/json"],
       redirect: "error",
     });
-    expect(http.calls[0].options?.responseHeaders).toEqual(
-      expect.arrayContaining(["retry-after", "x-ratelimit-reset", "x-ratelimit-remaining"]),
-    );
+    expect(http.calls[0].options).toMatchObject({
+      responseHeaders: expect.arrayContaining([
+        "retry-after",
+        "x-ratelimit-reset",
+        "x-ratelimit-remaining",
+      ]),
+    });
   });
 });

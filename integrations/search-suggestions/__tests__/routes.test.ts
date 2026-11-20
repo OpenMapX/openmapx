@@ -1,4 +1,8 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type { CacheClient } from "@openmapx/integration-framework";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
@@ -8,6 +12,7 @@ function reply() {
     send,
     status: vi.fn(() => ({ send })),
     header: vi.fn(),
+    type: vi.fn(),
   };
 }
 
@@ -16,10 +21,7 @@ describe("search suggestions route", () => {
     const ctx = createMockIntegrationContext();
     setup(ctx);
     const res = reply();
-    await ctx.registered.routes[0].handler(
-      { query: { q: "F" }, params: {}, body: undefined, headers: {} },
-      res,
-    );
+    await ctx.registered.routes[0].handler(routeRequest({ query: { q: "F" } }), res);
     expect(res.send).toHaveBeenCalledWith({
       suggestions: [],
       attributions: [],
@@ -31,19 +33,35 @@ describe("search suggestions route", () => {
     const ctx = createMockIntegrationContext();
     setup(ctx);
     const res = reply();
-    await ctx.registered.routes[0].handler(
-      { query: { q: "FRA", lat: "50" }, params: {}, body: undefined, headers: {} },
-      res,
-    );
+    await ctx.registered.routes[0].handler(routeRequest({ query: { q: "FRA", lat: "50" } }), res);
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
   it("marks degraded aggregate responses as non-cacheable", async () => {
-    const withCache = vi.fn(async () => ({
+    const degraded = {
       suggestions: [{ id: "available", name: "Available" }],
       attributions: [],
       partial: true,
-    }));
+    };
+    const calls: Array<{ key: string; ttlSeconds: number; callerSignal?: AbortSignal }> = [];
+    const cacheVerdicts: Array<{ degraded?: boolean; complete?: boolean }> = [];
+    const withCache: CacheClient["withCache"] = async <T>(
+      key: string,
+      ttlSeconds: number,
+      _load: (operationSignal: AbortSignal) => Promise<T>,
+      callerSignal?: AbortSignal,
+      shouldCache?: (value: T) => boolean,
+    ) => {
+      calls.push({ key, ttlSeconds, callerSignal });
+      // The cache answers with a canned aggregate in place of the route's own load,
+      // and records how the route's cache predicate judges it and its complete twin.
+      const answer = degraded as T;
+      cacheVerdicts.push({
+        degraded: shouldCache?.(answer),
+        complete: shouldCache?.({ ...degraded, partial: false } as T),
+      });
+      return answer;
+    };
     const ctx = createMockIntegrationContext({
       cache: {
         get: async () => null,
@@ -55,23 +73,10 @@ describe("search suggestions route", () => {
     setup(ctx);
     const res = reply();
 
-    await ctx.registered.routes[0].handler(
-      { query: { q: "Berlin" }, params: {}, body: undefined, headers: {} },
-      res,
-    );
+    await ctx.registered.routes[0].handler(routeRequest({ query: { q: "Berlin" } }), res);
 
     expect(res.header).toHaveBeenCalledWith("Cache-Control", "no-store");
-    expect(withCache).toHaveBeenCalledWith(
-      expect.any(String),
-      300,
-      expect.any(Function),
-      undefined,
-      expect.any(Function),
-    );
-    const shouldCache = withCache.mock.calls[0]?.[4] as
-      | ((value: { partial: boolean }) => boolean)
-      | undefined;
-    expect(shouldCache?.({ partial: true })).toBe(false);
-    expect(shouldCache?.({ partial: false })).toBe(true);
+    expect(calls).toEqual([{ key: expect.any(String), ttlSeconds: 300, callerSignal: undefined }]);
+    expect(cacheVerdicts).toEqual([{ degraded: false, complete: true }]);
   });
 });

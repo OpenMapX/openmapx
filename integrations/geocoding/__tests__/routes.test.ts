@@ -1,5 +1,8 @@
 import type { AutocompleteResult, IntegrationContext } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 import type { GeocodingProvider } from "../types.js";
@@ -45,7 +48,7 @@ function harness() {
   if (!route) throw new Error("autocomplete route not registered");
   const call = async (query: Record<string, string>) => {
     const res = reply();
-    await route.handler({ query, params: {}, body: undefined, headers: {} }, res);
+    await route.handler(routeRequest({ query }), res);
     return res;
   };
   return { autocomplete, cacheKeys, call };

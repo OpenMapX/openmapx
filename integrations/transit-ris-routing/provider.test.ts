@@ -1,8 +1,9 @@
 import {
+  type FakeMobilityHttpRequest,
   type FakeMobilityHttpTransport,
   fakeMobilityHttpTransport,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   germanWallClock,
   isConfigured,
@@ -191,7 +192,7 @@ describe("mapTrip", () => {
 });
 
 describe("planJourney", () => {
-  let mockFetch: ReturnType<typeof vi.fn>;
+  let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
   let transport: FakeMobilityHttpTransport;
 
   beforeEach(() => {

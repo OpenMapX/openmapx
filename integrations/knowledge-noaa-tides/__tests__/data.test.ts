@@ -2,10 +2,22 @@ import { findNearestStation, type NoaaStation as TideStation } from "@openmapx/n
 import { describe, expect, it } from "vitest";
 
 const STATIONS: TideStation[] = [
-  { id: "9414290", name: "San Francisco", lat: 37.8067, lng: -122.4659 },
-  { id: "9410230", name: "La Jolla", lat: 32.866, lng: -117.2573 },
-  { id: "9447130", name: "Seattle", lat: 47.6026, lng: -122.3393 },
-  { id: "8518750", name: "The Battery, NY", lat: 40.7006, lng: -74.0142 },
+  {
+    id: "9414290",
+    name: "San Francisco",
+    lat: 37.8067,
+    lng: -122.4659,
+    types: ["tide-predictions"],
+  },
+  { id: "9410230", name: "La Jolla", lat: 32.866, lng: -117.2573, types: ["tide-predictions"] },
+  { id: "9447130", name: "Seattle", lat: 47.6026, lng: -122.3393, types: ["tide-predictions"] },
+  {
+    id: "8518750",
+    name: "The Battery, NY",
+    lat: 40.7006,
+    lng: -74.0142,
+    types: ["tide-predictions"],
+  },
 ];
 
 describe("findNearestStation", () => {

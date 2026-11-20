@@ -47,7 +47,7 @@ const stop = (stopId: string, lon: number, lat: number, parentId?: string) => ({
 });
 
 const line = (coordinates: [number, number][], routeIndexes: number[]) => ({
-  polyline: { points: encodePolyline(coordinates, 6), precision: 6 },
+  polyline: { points: encodePolyline(coordinates, 6), precision: 6, length: coordinates.length },
   colors: [],
   routeIndexes,
 });
@@ -934,7 +934,8 @@ it.each([false, undefined])(
           lon: 13.37,
           scheduledDeparture: "2026-10-07T08:05:00Z",
         },
-      },
+        // A partial stop time: the absent realTime flag is what this case is about.
+      } as never,
       "departure",
       { realtimeEnabled },
     );
@@ -945,7 +946,7 @@ it.each([false, undefined])(
 it("anchors a departure window to the requested time instead of now", async () => {
   mocks.stoptimes.mockResolvedValue({ data: { stopTimes: [] } });
   await getDepartures(instance, "ms:root", 5, undefined, "2026-11-06T20:17:00.000Z");
-  expect(mocks.stoptimes.mock.calls.at(-1)[0].query).toMatchObject({
+  expect(mocks.stoptimes.mock.calls.at(-1)?.[0].query).toMatchObject({
     time: "2026-11-06T20:17:00.000Z",
     window: 300,
   });

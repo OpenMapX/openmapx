@@ -2,6 +2,7 @@ import type { CacheClient } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   createPassthroughCache,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { setup } from "./index";
@@ -53,11 +54,7 @@ it("keeps the real shared NOAA catalog receipt through normalization on a differ
       type: () => {},
     };
     await route.handler(
-      {
-        query: { west, south: "41", east: "-70", north: "43", networks: "noaa" },
-        params: {},
-        body: undefined,
-      },
+      routeRequest({ query: { west, south: "41", east: "-70", north: "43", networks: "noaa" } }),
       reply,
     );
     return JSON.stringify(body);

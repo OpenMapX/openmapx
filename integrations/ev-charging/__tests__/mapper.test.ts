@@ -522,7 +522,16 @@ describe("mapChargingSiteToDetail", () => {
           sourceId: "de-bw-mobidata-charging",
           name: "MobiData BW",
           url: "javascript:alert(1)",
-          licenseUrl: "data:text/html,x",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Charging sites",
+                license: { kind: "spdx", expression: "CC-BY-4.0", url: "data:text/html,x" },
+              },
+            ],
+          },
         },
       ],
     });

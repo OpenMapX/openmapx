@@ -302,9 +302,10 @@ describe("route handler proof orchestration", () => {
             mode: "driving",
             distance: 1000,
             duration: 100,
+            legs: [],
             steps: [],
           },
-        ] as Route[],
+        ] satisfies Route[],
       }));
       const cached = vi.fn();
       const environment = createRoutingHandlerEnvironment({

@@ -21,27 +21,31 @@ beforeEach(() => {
     }
     if (url === GTFS_SA_ENDPOINT) {
       return new Response(
-        encodeGtfsRtFeed({
-          header: { gtfsRealtimeVersion: "2.0", timestamp: 1_739_846_400 },
-          entity: [{ id: "alert-1", alert: {} }],
-        }),
+        new Uint8Array(
+          encodeGtfsRtFeed({
+            header: { gtfsRealtimeVersion: "2.0", timestamp: 1_739_846_400 },
+            entity: [{ id: "alert-1", alert: {} }],
+          }),
+        ),
         { status: 200 },
       );
     }
     if (url === GTFS_RT_ENDPOINT) {
       return new Response(
-        encodeGtfsRtFeed({
-          header: { gtfsRealtimeVersion: "2.0", timestamp: 1_739_846_400 },
-          entity: [
-            {
-              id: "trip-update-1",
-              tripUpdate: {
-                trip: { tripId: "gtfs-trip-1" },
-                stopTimeUpdate: [],
+        new Uint8Array(
+          encodeGtfsRtFeed({
+            header: { gtfsRealtimeVersion: "2.0", timestamp: 1_739_846_400 },
+            entity: [
+              {
+                id: "trip-update-1",
+                tripUpdate: {
+                  trip: { tripId: "gtfs-trip-1" },
+                  stopTimeUpdate: [],
+                },
               },
-            },
-          ],
-        }),
+            ],
+          }),
+        ),
         { status: 200 },
       );
     }

@@ -22,7 +22,6 @@ function fresh(extra?: Partial<Freshness>): Freshness {
 
 function dep(partial: Partial<Departure> & { tripId: string }): Departure {
   return {
-    tripId: partial.tripId,
     route: {
       id: "ms:route-1",
       shortName: "S1",
@@ -406,11 +405,13 @@ it.each(["batch empty", "batch no-op", "single null", "single no-op"])(
   async (mode) => {
     const base = { data: [dep({ tripId: "ms:trip-1" })], attributions: [], freshness: fresh() };
     const metadata = fresh({ hasRealtimeData: true, isPartial: true });
+    const batchUpdates: Record<string, TripUpdate | null> =
+      mode === "batch empty" ? {} : { "ms:trip-1": { tripId: "ms:trip-1" } };
     const provider = makeProvider(
       mode.startsWith("batch")
         ? {
             getTripUpdates: async () => ({
-              data: mode === "batch empty" ? {} : { "ms:trip-1": { tripId: "ms:trip-1" } },
+              data: batchUpdates,
               attributions: [],
               freshness: metadata,
             }),

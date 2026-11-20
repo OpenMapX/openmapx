@@ -1,5 +1,8 @@
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { TransitReachabilitySurface } from "@openmapx/mobility-core/transit-reachability";
@@ -29,6 +32,8 @@ describe("transit reachability server helpers", () => {
         estimatedSurface: true,
         exactPointChecks: false,
         exactPointCheckReason: "operator-disabled",
+        exportableIsochrones: false,
+        exportableIsochroneReason: "operator-disabled",
         maxDestinationsPerBatch: 128,
         maxTravelTimeMinutes: 90,
         datasetEpoch: "e1",
@@ -52,6 +57,8 @@ describe("transit reachability server helpers", () => {
         estimatedSurface: true,
         exactPointChecks: false,
         exactPointCheckReason: "hosted-source",
+        exportableIsochrones: false,
+        exportableIsochroneReason: "hosted-source",
         maxDestinationsPerBatch: null,
         maxTravelTimeMinutes: 90,
         datasetEpoch: null,
@@ -89,6 +96,10 @@ describe("transit reachability server helpers", () => {
       exactPointChecks,
       exactPointCheckReason: exactPointChecks
         ? ("available" as const)
+        : ("operator-disabled" as const),
+      exportableIsochrones: false,
+      exportableIsochroneReason: exactPointChecks
+        ? ("polygons-disabled" as const)
         : ("operator-disabled" as const),
       maxDestinationsPerBatch: exactPointChecks ? 128 : null,
       maxTravelTimeMinutes: 90,
@@ -195,7 +206,7 @@ describe("transit reachability server helpers", () => {
     const route = reachabilityRoute(true, "/reachability/surface");
     const { capture, reply } = replyCapture();
     await route.handler(
-      { query: {}, params: {}, body: request, headers: {}, signal: new AbortController().signal },
+      routeRequest({ query: {}, body: request, signal: new AbortController().signal }),
       reply,
     );
     expect(capture.status).toBe(200);
@@ -213,13 +224,11 @@ describe("transit reachability server helpers", () => {
     const route = reachabilityRoute(false, "/reachability/check");
     const { capture, reply } = replyCapture();
     await route.handler(
-      {
+      routeRequest({
         query: {},
-        params: {},
         body: { ...request, destinations: [{ id: "a", lng: 13.4, lat: 52.5 }] },
-        headers: {},
         signal: new AbortController().signal,
-      },
+      }),
       reply,
     );
     expect(capture.status).toBe(409);

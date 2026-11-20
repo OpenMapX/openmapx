@@ -1,9 +1,10 @@
 import {
   createMockIntegrationContext,
+  type FakeMobilityHttpRequest,
   type FakeMobilityHttpTransport,
   fakeMobilityHttpTransport,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "./index.js";
 import { setRisCredentials } from "./provider.js";
 import type { RisStopPlace } from "./stations-types.js";
@@ -18,7 +19,7 @@ const KOELN_HBF: RisStopPlace = {
   availableTransports: [{ type: "HIGH_SPEED_TRAIN" }],
 };
 
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
 let transport: FakeMobilityHttpTransport;
 
 beforeEach(() => {

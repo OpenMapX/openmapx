@@ -1,6 +1,6 @@
 import { haversineDistance, type LngLat } from "@openmapx/core";
+import { loadJsonFixture } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
-import kaarst from "../__fixtures__/kaarst-maubisstrasse-alerts.json";
 import {
   type AlertOverpassElement,
   buildNavigationAlertsQuery,
@@ -8,6 +8,12 @@ import {
   type RawRoadAlert,
   ROAD_CONTEXT_REACH_M,
 } from "../navigation-alerts.js";
+
+/** The recorded Overpass answer around the Kaarst junction. */
+const kaarst = loadJsonFixture<{ elements: AlertOverpassElement[] }>(
+  import.meta.dirname,
+  "../__fixtures__/kaarst-maubisstrasse-alerts.json",
+);
 
 const BASE_LAT = 51.23;
 const BASE_LNG = 6.62;
@@ -53,7 +59,7 @@ function flags(alert: RawRoadAlert | undefined) {
 }
 
 describe("mapAlertElements — Kaarst, Maubisstraße × Grünstraße / Matthias-Claudius-Straße", () => {
-  const alerts = mapAlertElements(kaarst.elements as AlertOverpassElement[]);
+  const alerts = mapAlertElements(kaarst.elements);
 
   it("keeps each side-street stop sign on its own street, for its own approach only", () => {
     // Grünstraße is digitised away from Maubisstraße; `direction=backward`

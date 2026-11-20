@@ -8,6 +8,7 @@ vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 const receipt = (name: string) => ({ sourceId: name, name, url: `https://example.com/${name}` });
 const vehicle = {
   id: "bus",
+  provider: "feed",
   sourceId: "feed",
   mode: "bus" as const,
   displayLabel: "42",
@@ -22,6 +23,8 @@ const vehicle = {
     id: title,
     title,
     severity: "warning" as const,
+    providers: ["feed"],
+    activePeriods: [],
     affectedRouteIds: [],
     affectedStopIds: [],
     contributors: [receipt(title)],

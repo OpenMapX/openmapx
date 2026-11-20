@@ -10,6 +10,7 @@ vi.mock("@openmapx/core", async (importActual) => {
 import {
   createMockIntegrationContext,
   type MockIntegrationContext,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { bboxToMercator, latToMercatorY, lngToMercatorX } from "./coord-transform.js";
 import { classifyShelterType, setup } from "./index.js";
@@ -245,11 +246,7 @@ describe("/hiking/shelters route", () => {
     const handler = getRoute("/hiking/shelters");
     const { reply, result } = makeReply();
     await handler(
-      {
-        query: { south: "45.8", west: "6.8", north: "45.95", east: "6.95" },
-        params: {},
-        body: undefined,
-      },
+      routeRequest({ query: { south: "45.8", west: "6.8", north: "45.95", east: "6.95" } }),
       reply,
     );
 
@@ -284,7 +281,7 @@ describe("/hiking/shelters route", () => {
     const handler = getRoute("/hiking/shelters");
     const { reply, result } = makeReply();
     await handler(
-      { query: { south: "40", west: "0", north: "45", east: "10" }, params: {}, body: undefined },
+      routeRequest({ query: { south: "40", west: "0", north: "45", east: "10" } }),
       reply,
     );
     expect(result.status).toBe(400);

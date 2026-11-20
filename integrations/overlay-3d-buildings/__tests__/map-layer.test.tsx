@@ -150,7 +150,7 @@ describe("BuildingExtrusionLayer", () => {
     fake.state.pitch = 0;
     render(<BuildingExtrusionLayer />);
 
-    expect(fake.state.layers.get(LAYER_ID)?.layout?.visibility).toBe("none");
+    expect(fake.state.layers.get(LAYER_ID)?.layout).toHaveProperty("visibility", "none");
     expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).not.toBe("none");
 
     fake.state.pitch = 30;
@@ -166,7 +166,7 @@ describe("BuildingExtrusionLayer", () => {
 
     fake.state.layers.delete(LAYER_ID);
     act(() => fake.emit("styledata"));
-    expect(fake.state.layers.get(LAYER_ID)?.layout?.visibility).toBe("none");
+    expect(fake.state.layers.get(LAYER_ID)?.layout).toHaveProperty("visibility", "none");
   });
 
   it("enables the selector for an initially tilted camera", () => {

@@ -1,9 +1,10 @@
 import {
   createMockIntegrationContext,
+  type FakeMobilityHttpRequest,
   type FakeMobilityHttpTransport,
   fakeMobilityHttpTransport,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setRisCredentials, setup } from "./index.js";
 
 const GERMANY_CENTER = { lat: 52.52, lng: 13.405 };
@@ -23,8 +24,8 @@ function registerProvider() {
   setup(ctx);
   setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
   const provider = ctx.registered.realtime[0];
-  if (!provider) throw new Error("no realtime provider registered");
-  return provider;
+  if (!provider?.getVehiclePositions) throw new Error("no vehicle position provider registered");
+  return { ...provider, getVehiclePositions: provider.getVehiclePositions.bind(provider) };
 }
 
 function liveEntry(overrides: Record<string, unknown> = {}) {
@@ -44,7 +45,7 @@ function liveEntry(overrides: Record<string, unknown> = {}) {
   };
 }
 
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
 let transport: FakeMobilityHttpTransport;
 
 beforeEach(() => {
@@ -131,7 +132,7 @@ describe("getVehiclePositions", () => {
       manifest: { dataSources: [] } as never,
     });
     setup(ctx);
-    const result = await ctx.registered.realtime[0]?.getVehiclePositions([
+    const result = await ctx.registered.realtime[0]?.getVehiclePositions?.([
       5.87, 47.27, 15.04, 55.06,
     ]);
     expect(result?.data).toEqual([]);

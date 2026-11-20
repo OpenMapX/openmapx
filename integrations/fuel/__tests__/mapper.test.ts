@@ -326,7 +326,16 @@ describe("mapFuelStationToResult", () => {
           sourceId: "de-tankerkoenig-fuel",
           name: "Tankerkönig",
           url: "javascript:alert(1)",
-          licenseUrl: "data:text/html,x",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Fuel prices",
+                license: { kind: "spdx", expression: "CC-BY-4.0", url: "data:text/html,x" },
+              },
+            ],
+          },
         },
       ],
     });
@@ -407,7 +416,7 @@ describe("mapFuelStationToDetail", () => {
     });
 
     expect(mapFuelStationToResult(station).sortValues).toEqual({ diesel: 1.659 });
-    const rows = mapFuelStationToDetail(station).sections[0].rows;
+    const rows = mapFuelStationToDetail(station).sections[0].rows ?? [];
     expect(rows.map(([label]) => label)).toEqual([
       { $t: "fuel.diesel" },
       { $t: "fuelHgv", values: { grade: { $t: "fuel.diesel" } } },
@@ -418,8 +427,9 @@ describe("mapFuelStationToDetail", () => {
 
   it("names every grade of the vocabulary in the price table, and an unknown one by its code", () => {
     for (const grade of OC_FUEL_GRADES) {
-      const [label] = mapFuelStationToDetail(makeStation({ products: [product({ grade })] }))
-        .sections[0].rows[0];
+      const [label] =
+        mapFuelStationToDetail(makeStation({ products: [product({ grade })] })).sections[0]
+          .rows?.[0] ?? [];
       for (const locale of ["en", "de"]) {
         const shown = text(label, locale);
         expect(shown, `${grade} ${locale}`).toBe(
@@ -428,14 +438,15 @@ describe("mapFuelStationToDetail", () => {
         expect(shown, `${grade} ${locale}`).not.toContain("fuel.");
       }
     }
-    const rows = mapFuelStationToDetail(
-      makeStation({
-        products: [
-          product({ grade: "new_fuel" }),
-          product({ key: "new_fuel:hgv", grade: "new_fuel", vehicleScope: "hgv" }),
-        ],
-      }),
-    ).sections[0].rows;
+    const rows =
+      mapFuelStationToDetail(
+        makeStation({
+          products: [
+            product({ grade: "new_fuel" }),
+            product({ key: "new_fuel:hgv", grade: "new_fuel", vehicleScope: "hgv" }),
+          ],
+        }),
+      ).sections[0].rows ?? [];
     expect(text(rows[0][0], "de")).toBe("NEW FUEL");
     expect(text(rows[1][0], "en")).toBe("NEW FUEL (HGV)");
   });

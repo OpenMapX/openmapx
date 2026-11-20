@@ -77,7 +77,7 @@ function officialCommunity(): AirQualityEvidence {
         owner: "Environment and Climate Change Canada",
         licensing: licensingFromDeclaration(
           "Open Government Licence – Canada",
-          "https://open.canada.ca/en/open-government-licence-canada" ?? undefined,
+          "https://open.canada.ca/en/open-government-licence-canada",
         ),
         methodologyUrl: "https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/",
         attribution: "Environment and Climate Change Canada",
