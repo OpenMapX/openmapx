@@ -20,7 +20,13 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
+import type {
+  AutocompleteResult,
+  DirectionsResult,
+  LngLat,
+  TravelMode,
+  Waypoint,
+} from "@openmapx/core";
 import {
   CALLER_SHOWS_ERRORS,
   directionsQueryKey,
@@ -108,6 +114,19 @@ import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
 
 const GROUND_FALLBACK_MODES = ["walking", "cycling", "driving", "motorcycle"] as const;
 type GroundFallbackMode = (typeof GROUND_FALLBACK_MODES)[number];
+
+/** Whether two itineraries hold the same stops, at the same places, in the same order. */
+function sameStops(a: readonly Waypoint[], b: readonly Waypoint[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (wp, i) =>
+        wp.id === b[i]?.id &&
+        wp.coords?.[0] === b[i]?.coords?.[0] &&
+        wp.coords?.[1] === b[i]?.coords?.[1],
+    )
+  );
+}
 
 function RouteRecovery({
   failed,
@@ -863,6 +882,7 @@ export function DirectionsPanelContent() {
 
   const handleOptimize = useCallback(() => {
     if (routeWaypoints.length < 3) return;
+    const requestedStops = waypoints;
     optimizeMutation.mutate(
       {
         waypoints: routeWaypoints,
@@ -880,6 +900,9 @@ export function DirectionsPanelContent() {
       {
         onSuccess: (result) => {
           if (!result.optimizedOrder) return;
+          // The order answers the stops as they were when asked. If the user
+          // moved, replaced or reordered a stop since, it no longer applies.
+          if (!sameStops(requestedStops, useDirectionsStore.getState().waypoints)) return;
           // Moves each waypoint whole, so a stop's dwell travels with it.
           setSnackbar(
             applyWaypointOrder(result.optimizedOrder)
@@ -893,6 +916,7 @@ export function DirectionsPanelContent() {
       },
     );
   }, [
+    waypoints,
     routeWaypoints,
     mode,
     avoidHighways,

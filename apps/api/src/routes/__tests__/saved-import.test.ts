@@ -120,6 +120,94 @@ describe("saved list imports", () => {
     expect(response.json()).toMatchObject({ name: `${"a".repeat(196)} (2)`, imported: 1 });
     expect(state.inserted).toHaveLength(3);
   });
+  it.each([
+    ["the same point", { lat: 52, lng: 13 }, { lat: 52, lng: 13 }, 0],
+    [
+      "a point in the neighbouring grid cell",
+      { lat: 52.0000099, lng: 13 },
+      { lat: 52.0000101, lng: 13 },
+      0,
+    ],
+    ["a point two grid cells away", { lat: 52.0000099, lng: 13 }, { lat: 52.0000201, lng: 13 }, 1],
+    ["a point exactly 1e-5 degrees away", { lat: 0.00001, lng: 13 }, { lat: 0, lng: 13 }, 0],
+    // 52.00001 - 52 is a little more than 1e-5 in floating point.
+    ["a point one fifth decimal away from 52", { lat: 52, lng: 13 }, { lat: 52.00001, lng: 13 }, 1],
+    [
+      "a point across the prime meridian",
+      { lat: 52, lng: -0.000001 },
+      { lat: 52, lng: 0.000001 },
+      0,
+    ],
+    ["a point slightly more than 1e-5 east", { lat: 52, lng: 13 }, { lat: 52, lng: 13.000011 }, 1],
+  ])("against a saved place, imports %s %d times", async (_case, saved, incoming, imported) => {
+    state.queue.push(
+      LOCK,
+      [{ id: "list-1", name: "Trip" }],
+      [{ name: "Cafe", ...saved, sortOrder: 4 }],
+      [{ count: 1 }],
+      [],
+      [],
+    );
+    const response = await request({ listId: "list-1" }, [{ ...point, ...incoming }]);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      listId: "list-1",
+      name: "Trip",
+      imported,
+      skippedDuplicates: 1 - imported,
+    });
+  });
+  it("keeps a place with another name at the same point", async () => {
+    state.queue.push(
+      LOCK,
+      [{ id: "list-1", name: "Trip" }],
+      [{ name: "Cafe", lat: 52, lng: 13, sortOrder: 4 }],
+      [{ count: 1 }],
+      [],
+      [],
+    );
+    const response = await request({ listId: "list-1" }, [{ ...point, name: "Bakery" }]);
+    expect(response.json()).toMatchObject({ imported: 1, skippedDuplicates: 0 });
+    expect(state.inserted[0].rows).toEqual([
+      expect.objectContaining({ name: "Bakery", sortOrder: 5 }),
+    ]);
+  });
+  it.each([
+    ["a free name", "Trip", 0, "Trip"],
+    ["surrounding spaces", "  Trip  ", 0, "Trip"],
+    ["a name taken once", "Trip", 1, "Trip (2)"],
+    ["a name taken twice", "Trip", 2, "Trip (3)"],
+    ["a 200-character name", "a".repeat(200), 1, `${"a".repeat(196)} (2)`],
+    // Shortening for the suffix would split the emoji; its lone first half is dropped.
+    [
+      "a name whose shortening splits an emoji",
+      `${"a".repeat(195)}\u{1F600}`,
+      1,
+      `${"a".repeat(195)} (2)`,
+    ],
+  ])("names a new list from %s", async (_case, name, taken, expected) => {
+    state.queue.push(
+      LOCK,
+      [{ count: 3 }],
+      ...Array.from({ length: taken }, () => []),
+      [{ id: "new-list" }],
+      [],
+      [{ count: 0 }],
+      [],
+      [],
+    );
+    const response = await request({ name });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      listId: expect.any(String),
+      name: expected,
+      imported: 1,
+      skippedDuplicates: 0,
+    });
+    const lists = state.inserted.filter((insert) => insert.table !== "places");
+    expect(lists).toHaveLength(taken + 1);
+    expect(lists.at(-1)?.rows).toMatchObject({ name: expected });
+  });
   it("returns 404 for a missing or other user's list", async () => {
     expect((await request({ listId: "not-mine" })).statusCode).toBe(404);
     expect(state.inserted).toHaveLength(0);
