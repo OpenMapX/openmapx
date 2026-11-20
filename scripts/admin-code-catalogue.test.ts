@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { ADMIN_OPERATIONS } from "../apps/api/src/services/admin-operation-catalog";
 import {
@@ -102,60 +103,298 @@ function applicationJobTypes(): string[] {
 
 const dataManagerKinds = () => [...new Set(zodLiterals(dataExecutionInputSchema, "kind"))].sort();
 
-/** An audit entry object: the `{…}` handed to an audit writer. */
-function auditEntries(text: string): string[] {
-  const starts = matchAll(
-    text,
-    /(?:writeAuditLog\(|\.insert\(adminAuditLog\)\s*\.values\(|this\.audit\()\s*\{/g,
-  );
-  return starts.map((match) => {
-    const open = (match.index ?? 0) + match[0].length - 1;
-    let depth = 0;
-    for (let index = open; index < text.length; index++) {
-      const char = text[index];
-      if (char === '"') index = text.indexOf('"', index + 1);
-      else if (char === "{") depth++;
-      else if (char === "}" && --depth === 0) return text.slice(open, index + 1);
-    }
-    throw new Error("unbalanced audit entry");
-  });
+interface SourceFile {
+  path: string;
+  text: string;
 }
 
-/** The expression of a top-level property in an object literal's source. */
-function propertyExpression(entry: string, name: string): string | undefined {
-  let depth = 0;
-  for (let index = 0; index < entry.length; index++) {
-    const char = entry[index];
-    if (char === '"') index = entry.indexOf('"', index + 1);
-    else if (char === "`") index = entry.indexOf("`", index + 1);
-    else if ("{([".includes(char)) depth++;
-    else if ("})]".includes(char)) depth--;
-    else if (depth === 1 && entry.startsWith(name, index) && /[\s{,]/.test(entry[index - 1])) {
-      const rest = entry.slice(index + name.length);
-      const colon = rest.match(/^\s*:/);
-      if (!colon) return /^\s*[,}]/.test(rest) ? name : undefined;
-      let end = colon[0].length;
-      let inner = 0;
-      for (; end < rest.length; end++) {
-        const next = rest[end];
-        if (next === '"') end = rest.indexOf('"', end + 1);
-        else if (next === "`") end = rest.indexOf("`", end + 1);
-        else if ("{([".includes(next)) inner++;
-        else if ("})]".includes(next)) {
-          if (inner === 0) break;
-          inner--;
-        } else if (next === "," && inner === 0) break;
+/**
+ * Collects the codes the API writes into one audit property (`action` or
+ * `targetType`) by reading every audit writer in the sources:
+ * `writeAuditLog({…})`, `.insert(adminAuditLog).values({…})` and a method the
+ * file assigns `writeAuditLog` to.
+ *
+ * A value is read when it is a string literal, a conditional between readable
+ * values, a `const` with a readable initializer, or a parameter of a function
+ * in the same file, read at every call of that function. Anything else must
+ * be explained in `derived`, keyed by file and expression. A writer the
+ * collector cannot read (an entry that is not an object literal, a spread
+ * that may set the property, `writeAuditLog` passed as a value, an
+ * unexplained expression) is reported in `unreadable` rather than skipped.
+ */
+function collectAuditCodes(
+  files: readonly SourceFile[],
+  property: "action" | "targetType",
+  derived: Record<string, (file: string) => string[]>,
+): { codes: string[]; unreadable: string[]; unusedDerivations: string[] } {
+  const codes = new Set<string>();
+  const unreadable: string[] = [];
+  const usedDerivations = new Set<string>();
+  for (const { path, text } of files) {
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+    const where = (node: ts.Node) =>
+      `${path}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
+    const flat = (node: ts.Node) => node.getText().replace(/\s+/g, " ");
+    const writerMethods = new Set<string>();
+    const entries: ts.Expression[] = [];
+
+    const visit = (node: ts.Node) => {
+      if (ts.isIdentifier(node) && node.text === "writeAuditLog") {
+        const parent = node.parent;
+        const assigned = assignedThisProperty(node);
+        if (ts.isCallExpression(parent) && parent.expression === node) {
+          entries.push(parent.arguments[0] ?? parent);
+        } else if (assigned) writerMethods.add(assigned);
+        else if (
+          !ts.isImportSpecifier(parent) &&
+          !(ts.isFunctionDeclaration(parent) && parent.name === node) &&
+          !ts.isTypeQueryNode(parent) &&
+          !ts.isQualifiedName(parent)
+        )
+          unreadable.push(`${where(node)} writeAuditLog used as a value: ${flat(parent)}`);
       }
-      return rest.slice(colon[0].length, end).trim();
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "insert" &&
+        node.arguments.some(
+          (argument) => ts.isIdentifier(argument) && argument.text === "adminAuditLog",
+        )
+      ) {
+        const values = node.parent;
+        const call = values.parent;
+        if (
+          ts.isPropertyAccessExpression(values) &&
+          values.name.text === "values" &&
+          ts.isCallExpression(call) &&
+          call.expression === values
+        )
+          entries.push(call.arguments[0] ?? call);
+        else unreadable.push(`${where(node)} audit insert without .values(…): ${flat(node)}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    const methodCalls = (node: ts.Node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+        writerMethods.has(node.expression.name.text)
+      )
+        entries.push(node.arguments[0] ?? node);
+      ts.forEachChild(node, methodCalls);
+    };
+    methodCalls(source);
+
+    const read = (expression: ts.Expression, seen: ReadonlySet<ts.Node>): void => {
+      const key = `${path} ${flat(expression)}`;
+      const expand = derived[key];
+      if (expand) {
+        usedDerivations.add(key);
+        for (const code of expand(text)) codes.add(code);
+        return;
+      }
+      const inner = unwrap(expression);
+      if (ts.isStringLiteral(inner) || ts.isNoSubstitutionTemplateLiteral(inner)) {
+        codes.add(inner.text);
+        return;
+      }
+      if (ts.isConditionalExpression(inner)) {
+        read(inner.whenTrue, seen);
+        read(inner.whenFalse, seen);
+        return;
+      }
+      if (ts.isIdentifier(inner) && !seen.has(inner)) {
+        const next = new Set([...seen, inner]);
+        const binding = resolveBinding(inner);
+        if (binding?.kind === "const") {
+          read(binding.initializer, next);
+          return;
+        }
+        if (binding?.kind === "parameter") {
+          const calls = callsOf(source, binding.fn);
+          if (calls) {
+            for (const call of calls) {
+              const argument = call.arguments[binding.index];
+              if (argument) read(argument, next);
+              else unreadable.push(`${where(call)} call without the ${property} argument`);
+            }
+            return;
+          }
+        }
+      }
+      unreadable.push(`${where(expression)} ${path} ${flat(expression)}`);
+    };
+
+    for (const entry of entries) {
+      const object = unwrap(entry);
+      if (ts.isArrayLiteralExpression(object)) {
+        for (const element of object.elements) readEntry(element);
+      } else readEntry(object);
     }
+
+    function readEntry(entry: ts.Expression) {
+      const object = unwrap(entry);
+      if (!ts.isObjectLiteralExpression(object)) {
+        unreadable.push(`${where(entry)} audit entry is not an object literal: ${flat(entry)}`);
+        return;
+      }
+      let value: ts.Expression | undefined;
+      let spreadAfter = false;
+      for (const member of object.properties) {
+        if (ts.isSpreadAssignment(member)) spreadAfter = true;
+        else if (member.name && ts.isIdentifier(member.name) && member.name.text === property) {
+          spreadAfter = false;
+          if (ts.isPropertyAssignment(member)) value = member.initializer;
+          else if (ts.isShorthandPropertyAssignment(member)) value = member.name;
+          else value = undefined;
+        }
+      }
+      if (spreadAfter) {
+        unreadable.push(`${where(object)} a spread may set ${property}: ${flat(object)}`);
+        return;
+      }
+      if (value) read(value, new Set());
+      else if (property === "action")
+        unreadable.push(`${where(object)} audit entry without an action: ${flat(object)}`);
+    }
+  }
+  return {
+    codes: [...codes].sort(),
+    unreadable,
+    unusedDerivations: Object.keys(derived).filter((key) => !usedDerivations.has(key)),
+  };
+}
+
+function unwrap(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  )
+    current = current.expression;
+  return current;
+}
+
+/** `this.<name> = … writeAuditLog …`: the method name the file calls the writer by. */
+function assignedThisProperty(node: ts.Node): string | undefined {
+  for (let current = node.parent; current; current = current.parent) {
+    if (ts.isBlock(current) || ts.isFunctionLike(current) || ts.isSourceFile(current))
+      return undefined;
+    if (
+      ts.isBinaryExpression(current) &&
+      current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isPropertyAccessExpression(current.left) &&
+      current.left.expression.kind === ts.SyntaxKind.ThisKeyword
+    )
+      return current.left.name.text;
   }
   return undefined;
 }
 
+type Binding =
+  | { kind: "const"; initializer: ts.Expression }
+  | { kind: "parameter"; fn: ts.FunctionLikeDeclaration; index: number };
+
 /**
- * Audit actions built from a template or a variable, expanded from the code
- * that bounds their values. A new template or variable writer fails the test
- * until it is described here.
+ * The `const` or parameter an identifier refers to, by lexical scope. Any
+ * other nearest declaration (`let`, a loop variable, a destructured name)
+ * resolves to nothing, so the value counts as unreadable.
+ */
+function resolveBinding(identifier: ts.Identifier): Binding | undefined {
+  const declares = (list: ts.VariableDeclarationList) =>
+    list.declarations.find((declaration) =>
+      declarationNames(declaration.name).has(identifier.text),
+    );
+  for (let scope = identifier.parent; scope; scope = scope.parent) {
+    if (ts.isFunctionLike(scope) && "body" in scope) {
+      const index = scope.parameters.findIndex((parameter) =>
+        declarationNames(parameter.name).has(identifier.text),
+      );
+      if (index >= 0)
+        return ts.isIdentifier(scope.parameters[index].name)
+          ? { kind: "parameter", fn: scope, index }
+          : undefined;
+    }
+    if (
+      (ts.isForOfStatement(scope) || ts.isForInStatement(scope) || ts.isForStatement(scope)) &&
+      scope.initializer &&
+      ts.isVariableDeclarationList(scope.initializer) &&
+      declares(scope.initializer)
+    )
+      return undefined;
+    if (ts.isBlock(scope) || ts.isSourceFile(scope))
+      for (const statement of scope.statements) {
+        if (statement.pos > identifier.pos || !ts.isVariableStatement(statement)) continue;
+        const declaration = declares(statement.declarationList);
+        if (!declaration) continue;
+        return statement.declarationList.flags & ts.NodeFlags.Const &&
+          ts.isIdentifier(declaration.name) &&
+          declaration.initializer
+          ? { kind: "const", initializer: declaration.initializer }
+          : undefined;
+      }
+  }
+  return undefined;
+}
+
+function declarationNames(name: ts.BindingName): Set<string> {
+  if (ts.isIdentifier(name)) return new Set([name.text]);
+  const names = new Set<string>();
+  for (const element of name.elements)
+    if (!ts.isOmittedExpression(element))
+      for (const inner of declarationNames(element.name)) names.add(inner);
+  return names;
+}
+
+/**
+ * Every call of a function or method declared in this file, or `undefined`
+ * when it is exported or referenced other than by a direct call, so its
+ * callers cannot all be seen here.
+ */
+function callsOf(
+  source: ts.SourceFile,
+  fn: ts.FunctionLikeDeclaration,
+): ts.CallExpression[] | undefined {
+  let name: string | undefined;
+  if ((ts.isFunctionDeclaration(fn) || ts.isMethodDeclaration(fn)) && fn.name)
+    name = fn.name.getText();
+  else if (ts.isVariableDeclaration(fn.parent) && ts.isIdentifier(fn.parent.name))
+    name = fn.parent.name.text;
+  if (!name) return undefined;
+  const exported = (node: ts.Node) =>
+    ts.canHaveModifiers(node) &&
+    ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+  if (exported(fn) || (ts.isVariableDeclaration(fn.parent) && exported(fn.parent.parent.parent)))
+    return undefined;
+  const calls: ts.CallExpression[] = [];
+  let escaped = false;
+  const visit = (node: ts.Node) => {
+    if (ts.isIdentifier(node) && node.text === name && node !== fn.name) {
+      const callee =
+        ts.isPropertyAccessExpression(node.parent) &&
+        node.parent.name === node &&
+        node.parent.expression.kind === ts.SyntaxKind.ThisKeyword
+          ? node.parent
+          : node;
+      const call = callee.parent;
+      if (ts.isCallExpression(call) && call.expression === callee) calls.push(call);
+      else if (!(ts.isVariableDeclaration(node.parent) && node.parent.name === node))
+        escaped = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return escaped ? undefined : calls;
+}
+
+/**
+ * Audit actions built from a template or a variable the collector cannot
+ * follow, expanded from the code that bounds their values. A new writer of
+ * that kind fails the test until it is described here.
  */
 const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
   "apps/api/src/routes/admin-operations.ts `data.${definition.id}`": () =>
@@ -176,16 +415,8 @@ const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
       .map((match) => match[1])
       .filter((action) => action !== "status")
       .map((action) => `ambient-places.${action}`),
-  "apps/api/src/services/dawarich/connection-service.ts action": (file) => [
-    ...matchAll(file, /writeLifecycleAudit\(\s*\w+,\s*"([^"]+)"/g).map((match) => match[1]),
-    ...literals(required(file, /const action = ([^;]+);/, "timeline action")[1]),
-  ],
   "apps/api/src/utils/auth-audit-hook.ts route.action": (file) =>
     matchAll(file, /\baction: "([^"]+)"/g).map((match) => match[1]),
-  "apps/api/src/routes/admin-dawarich.ts action": (file) =>
-    matchAll(file, /auditFailure\(\s*\w+,\s*"([^"]+)"/g).map((match) => match[1]),
-  "apps/api/src/routes/admin-standalone-integrations.ts type": (file) =>
-    literals(required(file, /const type =[^?]+\?([^;]+);/, "standalone job type")[1]),
   'apps/api/src/account/account-provisioning.ts input.action === "password" ? "user.password.set" : `user.${input.action}`':
     (file) =>
       literals(
@@ -209,25 +440,10 @@ function auditCodes(
   property: "action" | "targetType",
   derived: Record<string, (file: string) => string[]>,
 ): string[] {
-  const codes = new Set<string>();
-  const unexplained: string[] = [];
-  for (const { path, text } of apiSources)
-    for (const entry of auditEntries(text)) {
-      const expression = propertyExpression(entry, property);
-      if (expression === undefined) continue;
-      // Operands of a comparison choose a branch; they are not written.
-      const found = literals(expression.replace(/[!=]==?\s*"[^"]*"|"[^"]*"\s*[!=]==?/g, ""));
-      if (found.length > 0 && !expression.includes("`")) {
-        for (const code of found) codes.add(code);
-        continue;
-      }
-      const key = `${path} ${expression}`;
-      const expand = derived[key];
-      if (!expand) unexplained.push(key);
-      else for (const code of expand(text)) codes.add(code);
-    }
-  expect(unexplained, "audit writers whose codes this test cannot collect").toEqual([]);
-  return [...codes].sort();
+  const { codes, unreadable, unusedDerivations } = collectAuditCodes(apiSources, property, derived);
+  expect(unreadable, "audit writers this test cannot read").toEqual([]);
+  expect(unusedDerivations, "derivations no audit writer uses").toEqual([]);
+  return codes;
 }
 
 const auditActions = () => auditCodes("action", DERIVED_ACTIONS);
@@ -289,6 +505,101 @@ describe("admin job type catalogue", () => {
     const keys = sorted(JOB_ACTOR_LABELS.map(jobActorKey));
     for (const messages of [en, de])
       expect(sorted(selectBranches(messages.adminActivity.actorLabel))).toEqual(keys);
+  });
+});
+
+describe("audit code collector", () => {
+  const collect = (text: string, derived: Record<string, (file: string) => string[]> = {}) =>
+    collectAuditCodes([{ path: "writer.ts", text }], "action", derived);
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: source text handed to the collector.
+  const dataTemplate = "`data.${id}`";
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: source text handed to the collector.
+  const stepTemplate = "`dawarich.${step}`";
+
+  it("reads literals, conditionals, consts and same-file wrapper parameters", () => {
+    expect(
+      collect(`
+        async function fail(request: unknown, action: string) {
+          await writeAuditLog({ action, request });
+        }
+        export async function route(previous: boolean) {
+          const action = previous ? "timeline.switch" : "timeline.connect";
+          await writeAuditLog({ action: "settings.update" });
+          await db.insert(adminAuditLog).values([{ action: "user.ban" }]);
+          await fail(null, action);
+          await fail(null, "dawarich.provision");
+        }
+      `),
+    ).toEqual({
+      codes: [
+        "dawarich.provision",
+        "settings.update",
+        "timeline.connect",
+        "timeline.switch",
+        "user.ban",
+      ],
+      unreadable: [],
+      unusedDerivations: [],
+    });
+  });
+
+  it("reads a method the file assigns the writer to", () => {
+    const { codes, unreadable } = collect(`
+      class Service {
+        constructor(options: { audit?: typeof writeAuditLog }) {
+          this.audit = options.audit ?? writeAuditLog;
+        }
+        run() {
+          return this.audit({ action: "timeline.test" });
+        }
+      }
+    `);
+    expect(unreadable).toEqual([]);
+    expect(codes).toEqual(["timeline.test"]);
+  });
+
+  it("expands a derived expression and reports a derivation nothing uses", () => {
+    const expand = () => ["data.a", "data.b"];
+    expect(
+      collect(`writeAuditLog({ action: ${dataTemplate} });`, {
+        [`writer.ts ${dataTemplate}`]: expand,
+        "writer.ts gone": expand,
+      }),
+    ).toEqual({
+      codes: ["data.a", "data.b"],
+      unreadable: [],
+      unusedDerivations: ["writer.ts gone"],
+    });
+  });
+
+  it.each([
+    ["a variable argument", "const entry = { action: 'a.b' };\nwriteAuditLog(entry);"],
+    ["an array element that is not an object", "tx.insert(adminAuditLog).values([row]);"],
+    ["a variable insert", "tx.insert(adminAuditLog).values(rows);"],
+    ["an insert without values", "const pending = tx.insert(adminAuditLog);"],
+    ["a spread without an action", "writeAuditLog({ ...base, details });"],
+    ["a spread after the action", "writeAuditLog({ action: 'a.b', ...base });"],
+    ["an entry without an action", "writeAuditLog({ details });"],
+    ["a template", `writeAuditLog({ action: ${dataTemplate} });`],
+    ["a conditional with a variable branch", "writeAuditLog({ action: ok ? 'a.b' : other });"],
+    ["a nullish fallback", "writeAuditLog({ action: other ?? 'a.b' });"],
+    ["a let", "let action = 'a.b';\nwriteAuditLog({ action });"],
+    ["a loop variable", "for (const action of list) writeAuditLog({ action });"],
+    [
+      "a wrapper called with a template",
+      `function fail(action: string) { return writeAuditLog({ action }); }\nfail(${stepTemplate});`,
+    ],
+    [
+      "an exported wrapper",
+      "export function fail(action: string) { return writeAuditLog({ action }); }\nfail('a.b');",
+    ],
+    [
+      "a wrapper passed as a value",
+      "function fail(action: string) { return writeAuditLog({ action }); }\nhandlers.push(fail);",
+    ],
+    ["the writer passed as a value", "handlers.push(writeAuditLog);"],
+  ])("fails on %s", (_shape, text) => {
+    expect(collect(text).unreadable).toHaveLength(1);
   });
 });
 
