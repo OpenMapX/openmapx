@@ -29,10 +29,11 @@ const fields = [
   envOverride: false,
 }));
 function mount(focusKey?: string) {
+  const groups = [{ id: "email", label: "Email", settings: fields }];
   const fetch = vi.fn(async (_input: unknown, init: unknown) =>
     (init as RequestInit | undefined)?.method === "PATCH"
-      ? Response.json({ ok: true })
-      : Response.json({ groups: [{ id: "email", label: "Email", settings: fields }] }),
+      ? Response.json({ ok: true, groups })
+      : Response.json({ groups }),
   );
   vi.stubGlobal("fetch", fetch);
   render(

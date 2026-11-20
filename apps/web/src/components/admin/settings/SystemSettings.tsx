@@ -25,9 +25,15 @@ import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import {
+  getAdminSettings,
+  sendAdminTestEmail,
+  unwrapAdminResponse,
+  updateAdminSettings,
+} from "@openmapx/core/api-admin-sdk";
+import type { AdminSetting, AdminSettingsGroup } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { AdminDraftContext } from "@/lib/admin/AdminDraftProvider";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -42,34 +48,19 @@ import {
   savedEmailProvider,
 } from "./EmailSettingsSection";
 
-export interface ResolvedSetting {
-  group: string;
-  subgroup?: string;
-  key: string;
-  label: string;
-  description?: string;
-  type: string;
-  options?: string[];
-  secret: boolean;
-  value: unknown;
-  source: "default" | "database" | "env";
-  envVar?: string;
-  envOverride: boolean;
-  showWhen?: { key: string; equals: unknown | unknown[] };
-}
+export type ResolvedSetting = AdminSetting;
 
 function isVisible(setting: ResolvedSetting, values: Record<string, unknown>): boolean {
   const cond = setting.showWhen;
   if (!cond) return true;
   const current = values[cond.key];
-  return Array.isArray(cond.equals) ? cond.equals.includes(current) : current === cond.equals;
+  return Array.isArray(cond.equals)
+    ? cond.equals.some((value) => value === current)
+    : current === cond.equals;
 }
 
-interface SettingsGroup {
-  id: string;
-  label: string;
-  settings: ResolvedSetting[];
-}
+type SettingsGroup = AdminSettingsGroup;
+type SettingsUpdate = Parameters<typeof updateAdminSettings>[0];
 
 interface SettingsSection {
   subgroup?: string;
@@ -426,8 +417,7 @@ function SettingsGroupPanel({
   subgroupMeta?: Record<string, { label: string; description?: string }>;
   text: SettingsEditorText;
 }) {
-  const env = useEnv();
-  const { client } = useActivityClient();
+  const { apiUrl, client } = useActivityClient();
   const owner = useAdminMutationOwner(client, group.id);
   const qc = useQueryClient();
   const serverValues = Object.fromEntries(
@@ -466,8 +456,8 @@ function SettingsGroupPanel({
     mutationFn: async () => {
       const acknowledge = draft.acknowledge;
       const execution = owner;
-      const executingApiUrl = env.apiUrl;
-      const body: Record<string, unknown> = {};
+      const executingApiUrl = apiUrl;
+      const body: SettingsUpdate = {};
       for (const s of group.settings) {
         if (s.envOverride || !dirtyKeys.includes(s.key)) continue;
         // Keep configured credentials unless the operator replaces or explicitly clears them.
@@ -476,16 +466,10 @@ function SettingsGroupPanel({
         // a field is hidden would clobber the stored value of the option that
         // isn't currently active.
         if (!isVisible(s, renderedValues)) continue;
-        body[s.key] = renderedValues[s.key];
+        // Form values are JSON scalars or the server's own JSON; the API validates each type.
+        body[s.key] = renderedValues[s.key] as SettingsUpdate[string];
       }
-      const res = await fetch(`${env.apiUrl}/api/admin/settings`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error("Failed to save settings");
-      await res.json();
+      unwrapAdminResponse(await updateAdminSettings(body, { client }));
       acknowledge(
         Object.fromEntries(
           Object.entries(body).filter(([key]) =>
@@ -765,19 +749,9 @@ function TestEmailSection({
   onMsg: (msg: string, sev?: "success" | "error") => void;
   text: SettingsEditorText;
 }) {
-  const env = useEnv();
+  const { client } = useActivityClient();
   const send = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${env.apiUrl}/api/admin/settings/test-email`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error: string };
-        throw new Error(err.error ?? "Test failed");
-      }
-      return res.json();
-    },
+    mutationFn: async () => unwrapAdminResponse(await sendAdminTestEmail({ client })),
     onSuccess: () => onMsg(text.testEmailSent),
     onError: () => onMsg(text.testEmailFailed, "error"),
   });
@@ -816,18 +790,14 @@ export function SystemSettings({
   focusKey?: string;
   flatSections?: boolean;
 } = {}) {
-  const env = useEnv();
+  const { apiUrl, client } = useActivityClient();
   const draftStore = useContext(AdminDraftContext);
   const [toast, setToast] = useState<{ msg: string; sev: "success" | "error" } | null>(null);
 
-  const { data, isLoading } = useQuery<{ groups: SettingsGroup[] }>({
-    queryKey: ["admin", "settings", env.apiUrl, draftStore?.scopeKey ?? "isolated"],
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "settings", apiUrl, draftStore?.scopeKey ?? "isolated"],
     enabled: !draftStore || draftStore.scopeKey !== null,
-    queryFn: async () => {
-      const res = await fetch(`${env.apiUrl}/api/admin/settings`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load settings");
-      return res.json();
-    },
+    queryFn: async ({ signal }) => unwrapAdminResponse(await getAdminSettings({ client, signal })),
   });
 
   const ordinarySettings = (data?.groups ?? [])

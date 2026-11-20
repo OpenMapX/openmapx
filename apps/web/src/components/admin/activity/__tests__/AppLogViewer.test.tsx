@@ -30,10 +30,9 @@ function lastFetchUrl(): URL {
 
 beforeEach(() => {
   // Default: a full first page plus more total so a next page exists.
-  fetchMock.mockResolvedValue({
-    ok: true,
-    json: async () => ({ entries: makeEntries(100), total: 250, sources: ["api"] }),
-  });
+  fetchMock.mockImplementation(async () =>
+    Response.json({ entries: makeEntries(100), total: 250, sources: ["api"] }),
+  );
 });
 
 afterEach(() => {

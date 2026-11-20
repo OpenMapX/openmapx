@@ -36,8 +36,19 @@ it("loads metadata only on open and navigates by keyboard without executing an o
       ? Response.json({
           groups: [
             {
+              id: "email",
+              label: "Email",
               settings: [
-                { group: "email", key: "smtpHost", label: "SMTP host", value: "private-host" },
+                {
+                  group: "email",
+                  key: "smtpHost",
+                  label: "SMTP host",
+                  type: "string",
+                  secret: false,
+                  value: "private-host",
+                  source: "database",
+                  envOverride: false,
+                },
               ],
             },
           ],

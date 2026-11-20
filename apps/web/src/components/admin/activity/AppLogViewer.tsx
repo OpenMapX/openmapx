@@ -16,21 +16,16 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { listAdminLogs, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
+import type { AdminLogEntry } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useServerPagination } from "../shared/tableHooks";
+import { useActivityClient } from "./activityQueries";
 
-interface AppLogEntry {
-  id: number;
-  level: string;
-  source: string;
-  msg: string;
-  time: number;
-  metadata?: Record<string, unknown>;
-}
+type AppLogEntry = AdminLogEntry;
 
 const LEVEL_COLORS: Record<string, string> = {
   trace: "#9e9e9e",
@@ -112,7 +107,7 @@ function LogLine({ entry }: { entry: AppLogEntry }) {
 }
 
 export function AppLogViewer() {
-  const env = useEnv();
+  const { client } = useActivityClient();
   const qc = useQueryClient();
   const [levelFilter, setLevelFilter] = useState("info");
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -125,25 +120,22 @@ export function AppLogViewer() {
   const sinceMs = TIME_RANGES[timeRange];
   const since = sinceMs ? Date.now() - sinceMs : undefined;
 
-  const { data, isLoading, isFetching } = useQuery<{
-    entries: AppLogEntry[];
-    total: number;
-    sources: string[];
-  }>({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ["admin", "logs", levelFilter, sourceFilter, timeRange, search, page, rowsPerPage],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        limit: String(rowsPerPage),
-        offset: String(offset),
-      });
-      if (levelFilter && levelFilter !== "all") params.set("level", levelFilter);
-      if (sourceFilter && sourceFilter !== "all") params.set("source", sourceFilter);
-      if (since) params.set("since", String(since));
-      if (search.trim()) params.set("search", search.trim());
-      const res = await fetch(`${env.apiUrl}/api/admin/logs?${params}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load logs");
-      return res.json();
-    },
+    queryFn: async ({ signal }) =>
+      unwrapAdminResponse(
+        await listAdminLogs(
+          {
+            limit: String(rowsPerPage),
+            offset: String(offset),
+            ...(levelFilter && levelFilter !== "all" ? { level: levelFilter } : {}),
+            ...(sourceFilter && sourceFilter !== "all" ? { source: sourceFilter } : {}),
+            ...(since ? { since: String(since) } : {}),
+            ...(search.trim() ? { search: search.trim() } : {}),
+          },
+          { client, signal },
+        ),
+      ),
     refetchInterval: autoRefresh ? 5000 : false,
   });
 

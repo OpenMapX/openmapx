@@ -46,10 +46,12 @@ interface TestSetting {
 // The panel renders expanded only for the "general" group, so every fixture
 // uses that id to make its fields (not just the summary badge) queryable.
 function mockGroup(label: string, settings: TestSetting[]) {
-  fetchMock.mockResolvedValue({
-    ok: true,
-    json: async () => ({ groups: [{ id: "general", label, settings }] }),
-  });
+  const groups = [{ id: "general", label, settings }];
+  fetchMock.mockImplementation(async (_url: unknown, init?: unknown) =>
+    Response.json(
+      (init as RequestInit | undefined)?.method === "PATCH" ? { ok: true, groups } : { groups },
+    ),
+  );
 }
 
 afterEach(() => {
@@ -213,30 +215,27 @@ describe("SystemSettings focused sections", () => {
       requestCount += 1;
       return Promise.resolve(
         requestCount === 1
-          ? {
-              ok: true,
-              json: async () => ({
-                groups: [
-                  {
-                    id: "general",
-                    label: "Legal",
-                    settings: [
-                      {
-                        group: "legal",
-                        key: "legalControllerName",
-                        label: "Controller name",
-                        type: "string",
-                        secret: false,
-                        value: "",
-                        source: "default",
-                        envOverride: false,
-                      },
-                    ],
-                  },
-                ],
-              }),
-            }
-          : { ok: false, json: async () => ({ error: "invalid" }) },
+          ? Response.json({
+              groups: [
+                {
+                  id: "general",
+                  label: "Legal",
+                  settings: [
+                    {
+                      group: "legal",
+                      key: "legalControllerName",
+                      label: "Controller name",
+                      type: "string",
+                      secret: false,
+                      value: "",
+                      source: "default",
+                      envOverride: false,
+                    },
+                  ],
+                },
+              ],
+            })
+          : Response.json({ error: "invalid" }, { status: 400 }),
       );
     });
 

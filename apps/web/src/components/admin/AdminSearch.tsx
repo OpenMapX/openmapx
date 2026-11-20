@@ -10,6 +10,7 @@ import ListItemText from "@mui/material/ListItemText";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
+  getAdminSettings,
   listAdminIntegrations,
   listAdminOperations,
   listAdminServices,
@@ -22,11 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
 import type { AdminNavigationAccess } from "@/lib/admin/adminNavigation";
-import {
-  type AdminSearchMetadata,
-  buildAdminSearchEntries,
-  searchAdminEntries,
-} from "@/lib/admin/adminSearch";
+import { buildAdminSearchEntries, searchAdminEntries } from "@/lib/admin/adminSearch";
 import { useActivityClient } from "./activity/activityQueries";
 
 export function AdminSearch({
@@ -81,25 +78,19 @@ export function AdminSearch({
     retry: false,
     queryFn: async ({ signal }) => {
       const results = await Promise.allSettled([
-        (async () => {
-          const response = await fetch(`${apiUrl}/api/admin/settings`, {
-            credentials: "include",
-            signal,
-          });
-          if (!response.ok) throw Error("Settings metadata unavailable");
-          const data = (await response.json()) as {
-            groups: { settings: NonNullable<AdminSearchMetadata["settings"]> }[];
-          };
-          return data.groups.flatMap((group) =>
-            group.settings.map(({ key, group: groupId, subgroup, label, description }) => ({
-              key,
-              group: groupId,
-              subgroup,
-              label,
-              description,
-            })),
-          );
-        })(),
+        getAdminSettings({ client, signal })
+          .then(unwrapAdminResponse)
+          .then((data) =>
+            data.groups.flatMap((group) =>
+              group.settings.map(({ key, group: groupId, subgroup, label, description }) => ({
+                key,
+                group: groupId,
+                subgroup,
+                label,
+                description,
+              })),
+            ),
+          ),
         selfHosted === false
           ? Promise.resolve([])
           : listAdminServices({ client, signal })

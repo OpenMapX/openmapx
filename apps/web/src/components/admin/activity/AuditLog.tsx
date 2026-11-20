@@ -21,28 +21,22 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import {
+  getExportAdminAuditLogUrl,
+  listAdminAuditLog,
+  unwrapAdminResponse,
+} from "@openmapx/core/api-admin-sdk";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import Menu from "@/components/ui/Menu";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
-
-interface AuditEntry {
-  id: string;
-  actorId: string | null;
-  actor: { id: string; name: string; email: string } | null;
-  targetId: string | null;
-  targetType: string | null;
-  action: string;
-  details: Record<string, unknown> | null;
-  ipAddress: string | null;
-  createdAt: string;
-}
+import { useActivityClient } from "./activityQueries";
 
 // Grouped catalogue of every action emitted by `writeAuditLog` across the
 // admin API. Keep this in sync with the call sites under
@@ -205,7 +199,7 @@ function ActionChip({ action }: { action: string }) {
 }
 
 export function AuditLog() {
-  const env = useEnv();
+  const { apiUrl, client } = useActivityClient();
   const dtf = useDateTimeFormat();
   const queryClient = useQueryClient();
   const [actionFilter, setActionFilter] = useState("");
@@ -213,22 +207,20 @@ export function AuditLog() {
   const [targetSearch, setTargetSearch] = useState("");
   const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(50);
 
-  const { data, isLoading, isFetching } = useQuery<{ entries: AuditEntry[]; total: number }>({
+  const filters = {
+    ...(actionFilter ? { action: actionFilter } : {}),
+    ...(targetTypeFilter ? { targetType: targetTypeFilter } : {}),
+    ...(targetSearch.trim() ? { targetId: targetSearch.trim() } : {}),
+  };
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ["admin", "audit", actionFilter, targetTypeFilter, targetSearch, page],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        limit: String(rowsPerPage),
-        offset: String(offset),
-      });
-      if (actionFilter) params.set("action", actionFilter);
-      if (targetTypeFilter) params.set("targetType", targetTypeFilter);
-      if (targetSearch.trim()) params.set("targetId", targetSearch.trim());
-      const res = await fetch(`${env.apiUrl}/api/admin/audit?${params}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to load audit log");
-      return res.json();
-    },
+    queryFn: async ({ signal }) =>
+      unwrapAdminResponse(
+        await listAdminAuditLog(
+          { limit: String(rowsPerPage), offset: String(offset), ...filters },
+          { client, signal },
+        ),
+      ),
   });
 
   function resetFilters() {
@@ -243,11 +235,8 @@ export function AuditLog() {
   const [exportAnchor, setExportAnchor] = useState<null | HTMLElement>(null);
 
   function exportUrl(format: "csv" | "json"): string {
-    const params = new URLSearchParams({ format });
-    if (actionFilter) params.set("action", actionFilter);
-    if (targetTypeFilter) params.set("targetType", targetTypeFilter);
-    if (targetSearch.trim()) params.set("targetId", targetSearch.trim());
-    return `${env.apiUrl}/api/admin/audit/export?${params}`;
+    return new URL(getExportAdminAuditLogUrl({ format, ...filters }), browserAdminApiBase(apiUrl))
+      .href;
   }
 
   function handleExport(format: "csv" | "json") {

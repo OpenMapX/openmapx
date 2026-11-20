@@ -33,7 +33,7 @@ it("retains the rejected release digest when Activity disposes the System route"
   adminTestHistory.reset("/admin/system/updates");
   let failed = false;
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (init?.method === "POST") return Response.json({ jobId: "apply-job" });
+    if (init?.method === "POST") return Response.json({ ok: true, jobId: "apply-job" });
     if (String(input).includes("/jobs/"))
       return Response.json(
         job({
@@ -43,7 +43,12 @@ it("retains the rejected release digest when Activity disposes the System route"
         }),
       );
     return Response.json({
-      deployment: { maintenanceReady: true },
+      deployment: {
+        dockerAvailable: true,
+        composeRendered: true,
+        hostControlConfigured: true,
+        maintenanceReady: true,
+      },
       release: {
         currentReleaseId: "old",
         availableReleaseId: "release",
@@ -58,6 +63,7 @@ it("retains the rejected release digest when Activity disposes the System route"
           runningImageId: "a",
           localImageId: "a",
           updateAvailable: false,
+          releaseMember: true,
           status: "up-to-date",
         },
       ],

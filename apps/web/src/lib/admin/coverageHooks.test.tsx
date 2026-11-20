@@ -1,10 +1,42 @@
+import type { CoverageReport } from "@openmapx/core/coverage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createQueryWrapper, renderHook, waitFor } from "@/test";
-import { fetchCoverageJson, useCoverageReport } from "./coverageHooks";
+import { useCoverageReport } from "./coverageHooks";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.example.test" }),
 }));
+
+function report(regionKey: string): CoverageReport {
+  return {
+    schemaVersion: 1,
+    snapshotId: "snapshot-1",
+    generatedAt: "2026-09-10T12:00:00.000Z",
+    evaluatedAt: "2026-09-10T12:00:00.000Z",
+    collectionStatus: "complete",
+    collectionAgeSeconds: 0,
+    warnings: [],
+    authorities: [],
+    region: { key: regionKey, label: regionKey, kind: "extract" },
+    summary: [],
+    capabilities: [],
+    operations: [],
+    sources: [],
+    sourcePagination: { offset: 0, limit: 50, total: 0, hasMore: false, snapshotId: "snapshot-1" },
+    totalSourceCount: 0,
+    unassignedSourceCount: 0,
+    assessment: "operational",
+    nextDeadlineAt: null,
+    policy: { effectiveSourcePolicy: "permissive", gatedSourceCount: 0, gatedIntegrationCount: 0 },
+  };
+}
+
+function reply(body: unknown, status = 200) {
+  return Response.json(body, {
+    status,
+    headers: status === 200 ? { "cache-control": "private, no-store" } : {},
+  });
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -24,34 +56,28 @@ describe("coverage query hooks", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
 
-  it("uses credentialed requests and preserves structured HTTP errors", async () => {
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ value: "ok" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    const controller = new AbortController();
-    await expect(
-      fetchCoverageJson<{ value: string }>("/coverage", controller.signal),
-    ).resolves.toEqual({
-      value: "ok",
+  it("uses credentialed, cancellable requests and preserves structured HTTP errors", async () => {
+    fetchMock.mockResolvedValue(reply({ error: "snapshot_expired" }, 409));
+    const query = renderHook(() => useCoverageReport({ regionId: "extract:first", limit: 50 }), {
+      wrapper: createQueryWrapper(),
     });
-    expect(fetchMock).toHaveBeenCalledWith("/coverage", {
-      credentials: "include",
-      signal: controller.signal,
-    });
+    await waitFor(() => expect(query.result.current.isError).toBe(true));
+    expect(query.result.current.error).toMatchObject({ status: 409, code: "snapshot_expired" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).pathname).toBe("/api/admin/coverage");
+    expect(new URL(url).searchParams.get("regionId")).toBe("extract:first");
+    expect(init.credentials).toBe("include");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
 
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ error: "snapshot_expired" }), {
-        status: 409,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    await expect(fetchCoverageJson("/coverage", controller.signal)).rejects.toMatchObject({
-      status: 409,
-      code: "snapshot_expired",
+  it("refuses a malformed report instead of rendering it", async () => {
+    fetchMock.mockResolvedValue(reply({ region: "extract:first" }));
+    const query = renderHook(() => useCoverageReport({ regionId: "extract:first", limit: 50 }), {
+      wrapper: createQueryWrapper(),
     });
+    await waitFor(() => expect(query.result.current.isError).toBe(true));
+    expect(query.result.current.error).toMatchObject({ status: 200 });
+    expect(query.result.current.data).toBeUndefined();
   });
 
   it("keys reports by region so a late response cannot populate a new region", async () => {
@@ -75,23 +101,13 @@ describe("coverage query hooks", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     await act(async () => {
-      second.resolve(
-        new Response(JSON.stringify({ region: "extract:second" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+      second.resolve(reply(report("extract:second")));
     });
-    await waitFor(() => expect(query.result.current.data).toEqual({ region: "extract:second" }));
+    await waitFor(() => expect(query.result.current.data?.region.key).toBe("extract:second"));
 
     await act(async () => {
-      first.resolve(
-        new Response(JSON.stringify({ region: "extract:first" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+      first.resolve(reply(report("extract:first")));
     });
-    await waitFor(() => expect(query.result.current.data).toEqual({ region: "extract:second" }));
+    await waitFor(() => expect(query.result.current.data?.region.key).toBe("extract:second"));
   });
 });

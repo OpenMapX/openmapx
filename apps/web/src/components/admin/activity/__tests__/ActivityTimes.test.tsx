@@ -73,6 +73,7 @@ describe("activity timestamps", () => {
             action: "settings.update",
             details: null,
             ipAddress: null,
+            userAgent: null,
             createdAt: hoursAgo(23),
           },
           {
@@ -84,6 +85,7 @@ describe("activity timestamps", () => {
             action: "settings.update",
             details: null,
             ipAddress: null,
+            userAgent: null,
             createdAt: hoursAgo(25),
           },
         ],
@@ -110,6 +112,7 @@ describe("activity timestamps", () => {
             action: "settings.update",
             details: null,
             ipAddress: null,
+            userAgent: null,
             createdAt: hoursAgo(48),
           },
         ],
