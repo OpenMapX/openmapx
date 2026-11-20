@@ -247,7 +247,6 @@ lint, formatting, and Vitest run through their own root scripts.
 ```bash
 pnpm build         # build every app and package
 pnpm check-types   # type-check with tsc, no emit
-pnpm check-types:unenforced  # count type errors in code check-types skips
 pnpm lint          # Biome, Markdown/YAML formatting, and translations
 pnpm format        # Biome + Markdown/YAML formatting (writes in place)
 pnpm test          # run the Vitest suite once
@@ -283,21 +282,15 @@ Tooling notes:
   Scope Vitest with a path/name filter from the repository root. The native
   mobile app has a separate Jest and native test workflow, described below.
 
-- **Type-checking** is per-package via `pnpm check-types`. The API and web both
-  type-check their integration and service-worker configs in addition to the
-  main project.
-
-  Three TypeScript projects are not part of that run yet because they still
-  have errors: the repository scripts (`scripts/tsconfig.json`), the
-  integration test files (`apps/web/tsconfig.integration-tests.json`) and
-  `packages/mobility-core` (`packages/mobility-core/tsconfig.json`).
-  `pnpm check-types:unenforced` type-checks them and prints the error count for
-  each project and a total. It exits 0 however many errors there are, and fails
-  only when a project cannot be checked at all, such as a missing configuration
-  or a type library that cannot be resolved. A CI job named "types (not yet
-  enforced)" runs it and writes the counts to the job summary; it is not a
-  required check. List a project's errors with
-  `pnpm exec tsc --noEmit -p <configuration>`.
+- **Type-checking** is per-package via `pnpm check-types`, and every
+  TypeScript file in the repository belongs to a checked project. The API type-checks
+  its integration backends; the web app type-checks its service worker, the
+  integration frontends and the integration tests
+  (`apps/web/tsconfig.integration-tests.json`). The repository scripts
+  (`scripts/`) are a workspace package whose check also covers the root Vitest
+  configuration, the service tests under `services/` and the discovery
+  evaluation. The required CI job `types` runs `pnpm check-types`. List one
+  project's errors with `pnpm exec tsc --noEmit -p <configuration>`.
 
 ## Native mobile development
 

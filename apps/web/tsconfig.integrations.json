@@ -20,11 +20,6 @@
       // `@/integration-api/<group>/<module>` paths.
       "@/*": ["./src/*"],
       "@integrations/*": ["../../integrations/*"],
-      "@openmapx/integration-framework": ["../../packages/integration-framework/src/index.ts"],
-      "@openmapx/mobility-core/*": [
-        "../../packages/mobility-core/src/*.ts",
-        "../../packages/mobility-core/src/types/*.ts"
-      ],
       // An integration package declares no react dependency of its own — Next
       // compiles these files as part of apps/web, through the `@integrations/*`
       // alias. TS instead walks up from integrations/<id>/ looking for

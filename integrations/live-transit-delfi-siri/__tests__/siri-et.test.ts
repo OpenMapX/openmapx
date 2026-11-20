@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
+import { loadJsonFixture } from "@openmapx/integration-framework/testing";
 import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
 import { describe, expect, it } from "vitest";
-import fixture from "../../transit-motis/__tests__/fixtures/re1-26839-transitous-trip.json";
 import { motisPlaceToJourneyStop } from "../../transit-motis/adapter";
 import { matchJourneyPlatforms } from "../match";
 import { parseSiriEt } from "../siri-et-stream";
@@ -17,6 +17,20 @@ function stream(text: string) {
     },
   });
 }
+type MotisPlace = Parameters<typeof motisPlaceToJourneyStop>[1];
+/** The recorded MOTIS trip response, read as the adapter's input type. */
+interface RecordedTrip {
+  legs: Array<{
+    routeId: string;
+    from: MotisPlace;
+    intermediateStops: MotisPlace[];
+    to: MotisPlace;
+  }>;
+}
+const fixture = loadJsonFixture<RecordedTrip>(
+  import.meta.dirname,
+  "../../transit-motis/__tests__/fixtures/re1-26839-transitous-trip.json",
+);
 const leg = fixture.legs[0];
 const instance = createMotisInstance({
   baseUrl: "http://motis.test",

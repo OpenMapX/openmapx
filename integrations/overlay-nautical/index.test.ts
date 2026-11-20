@@ -20,6 +20,7 @@ import {
   createFencedMemoryCache,
   createMockIntegrationContext,
   type MockIntegrationContext,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { parseHarbourJsonp, setup } from "./index.js";
 
@@ -117,11 +118,7 @@ describe("nautical routes", () => {
 
       const { reply, result } = makeReply();
       await getRoute("/harbors")(
-        {
-          query: { south: "53", north: "54", west: "9", east: "10", zoom: "10" },
-          params: {},
-          body: undefined,
-        },
+        routeRequest({ query: { south: "53", north: "54", west: "9", east: "10", zoom: "10" } }),
         reply,
       );
 
@@ -136,7 +133,7 @@ describe("nautical routes", () => {
     it("rejects an inverted bbox (south > north) with 400", async () => {
       const { reply, result } = makeReply();
       await getRoute("/harbors")(
-        { query: { south: "60", north: "50", west: "9", east: "10" }, params: {}, body: undefined },
+        routeRequest({ query: { south: "60", north: "50", west: "9", east: "10" } }),
         reply,
       );
       expect(result.status).toBe(400);
@@ -159,11 +156,7 @@ describe("nautical routes", () => {
       mockFetch.mockResolvedValue({ ok: false, status: 503 } as Response);
       const { reply, result } = makeReply();
       await getRoute("/stations")(
-        {
-          query: { west: "-72", south: "41", east: "-70", north: "43" },
-          params: {},
-          body: undefined,
-        },
+        routeRequest({ query: { west: "-72", south: "41", east: "-70", north: "43" } }),
         reply,
       );
       const body = result.body as { features: { properties: { _mapAttributions: string } }[] };
@@ -195,11 +188,7 @@ describe("nautical routes", () => {
 
       const { reply, result } = makeReply();
       await getRoute("/stations")(
-        {
-          query: { west: "-72", south: "41", east: "-70", north: "43" },
-          params: {},
-          body: undefined,
-        },
+        routeRequest({ query: { west: "-72", south: "41", east: "-70", north: "43" } }),
         reply,
       );
 
@@ -243,11 +232,7 @@ describe("nautical routes", () => {
     it("rejects an out-of-range latitude with 400", async () => {
       const { reply, result } = makeReply();
       await getRoute("/stations")(
-        {
-          query: { west: "-72", south: "-100", east: "-70", north: "43" },
-          params: {},
-          body: undefined,
-        },
+        routeRequest({ query: { west: "-72", south: "-100", east: "-70", north: "43" } }),
         reply,
       );
       expect(result.status).toBe(400);
@@ -263,11 +248,9 @@ describe("nautical routes", () => {
 
       const { reply, result } = makeReply();
       await getRoute("/stations")(
-        {
+        routeRequest({
           query: { west: "-72", south: "41", east: "-70", north: "43", types: "tide-predictions" },
-          params: {},
-          body: undefined,
-        },
+        }),
         reply,
       );
 

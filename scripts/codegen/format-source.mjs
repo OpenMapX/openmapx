@@ -8,7 +8,12 @@ import { fileURLToPath } from "node:url";
 const biome = createRequire(import.meta.url).resolve("@biomejs/biome/bin/biome");
 const cwd = fileURLToPath(new URL("../../", import.meta.url));
 
-/** Apply the same formatter and import organization as repository checks. */
+/**
+ * Apply the same formatter and import organization as repository checks.
+ * @param {string} filename
+ * @param {string} content
+ * @returns {string}
+ */
 export function formatSource(filename, content) {
   return execFileSync(
     process.execPath,

@@ -5,7 +5,7 @@
 //
 // Quick-start references:
 //   docs/docs/developer/writing-an-integration.md
-//   packages/integration-framework/src/types.ts  (IntegrationContext API)
+//   packages/integration-framework/src/context.ts  (IntegrationContext API)
 //
 // Once you have real data sources, add them to manifest.json > dataSources[]
 // (one entry per upstream API you call). The legal-tables gate requires every

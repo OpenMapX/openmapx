@@ -68,7 +68,7 @@ it("captures the exact requested service supplier on the production geometry ada
     "ms:feed_b_interchange",
     "ms:feed_b_other",
   );
-  expect(out?.data.contributors).toEqual([a]);
+  expect(out?.data).toMatchObject({ contributors: [a] });
   expect(out?.attributions).toEqual([a]);
   const adapter = await import("../adapter.js");
   vi.mocked(adapter.getLegGeometry).mockResolvedValueOnce(null);

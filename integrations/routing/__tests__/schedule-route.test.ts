@@ -1,10 +1,27 @@
+import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type { LngLat } from "@openmapx/mobility-core/geometry";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 import type { DirectionsResult, RoutingProvider } from "../types.js";
 
-const COLOGNE = [6.96, 50.94];
-const BONN = [7.1, 50.73];
+const COLOGNE: LngLat = [6.96, 50.94];
+const BONN: LngLat = [7.1, 50.73];
+
+/** A loaded routing integration that registered exactly `provider`. */
+function routingIntegration(id: string, provider: RoutingProvider): LoadedIntegration {
+  return {
+    id,
+    manifest: { id, domains: ["routing"] },
+    config: {},
+    directory: `/integrations/${id}`,
+    isBuiltIn: true,
+    enabled: true,
+    providers: new Map([["routing", [provider]]]),
+    strings: {},
+    shutdownHandlers: [],
+  };
+}
 
 type MockContext = ReturnType<typeof createMockIntegrationContext>;
 
@@ -94,11 +111,9 @@ describe("POST /directions/schedule", () => {
       const ctx = createMockIntegrationContext();
       ctx.getIntegrationsByDomain = (domain) =>
         domain === "routing"
-          ? [primary, backup].map((provider) => ({
-              id: `routing-${provider.id}`,
-              providers: new Map([["routing", [provider]]]),
-              manifest: {} as never,
-            }))
+          ? [primary, backup].map((provider) =>
+              routingIntegration(`routing-${provider.id}`, provider),
+            )
           : [];
       setup(ctx);
       const sent = await post(ctx, { waypoints: [COLOGNE, BONN], departAt: "2026-09-01T09:00" });
@@ -159,15 +174,7 @@ describe("POST /directions/schedule", () => {
     };
     const ctx = createMockIntegrationContext();
     ctx.getIntegrationsByDomain = (domain) =>
-      domain === "routing"
-        ? [
-            {
-              id: "routing-valhalla",
-              providers: new Map([["routing", [provider]]]),
-              manifest: {} as never,
-            },
-          ]
-        : [];
+      domain === "routing" ? [routingIntegration("routing-valhalla", provider)] : [];
     setup(ctx);
 
     const sent = await post(ctx, { waypoints: [COLOGNE, BONN] });

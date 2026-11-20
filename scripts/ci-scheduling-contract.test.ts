@@ -122,20 +122,14 @@ describe("CI scheduling and context preservation", () => {
     expect(ci.jobs.ci.if.startsWith("always() &&")).toBe(true);
     expect(ci.jobs.ci.needs).toContain("lint");
   });
-  it("keeps the unenforced type report out of the required aggregate", () => {
-    const job = ci.jobs["types-unenforced"];
-    expect(ci.jobs.ci.needs).not.toContain("types-unenforced");
-    expect(validationJobs).not.toContain("types-unenforced");
-    expect(job.needs).toBe("select");
-    expect(job.if).toContain("needs.select.outputs.code == 'true'");
-    expect(job["timeout-minutes"]).toBeGreaterThan(0);
-    expect(job["continue-on-error"]).toBeUndefined();
-    const run = job.steps.map((step: { run?: string }) => step.run ?? "").join("\n");
-    expect(run).toContain('pnpm check-types:unenforced --summary "$GITHUB_STEP_SUMMARY"');
-    // The required type check must never run the projects that still fail.
-    expect(
-      ci.jobs.types.steps.some((step: { run?: string }) => step.run?.includes("unenforced")),
-    ).toBe(false);
+  it("type-checks every project in the required types job", () => {
+    expect(validationJobs).toContain("types");
+    expect(ci.jobs.ci.needs).toContain("types");
+    expect(ci.jobs.types["continue-on-error"]).toBeUndefined();
+    const run = ci.jobs.types.steps.map((step: { run?: string }) => step.run ?? "").join("\n");
+    expect(run).toContain("pnpm check-types");
+    // No separate report-only type check remains beside the required one.
+    expect(Object.keys(ci.jobs)).not.toContain("types-unenforced");
   });
   it("lets a main push reuse merge-queue validation only through a verifying gate", () => {
     type Step = {

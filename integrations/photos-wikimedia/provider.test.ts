@@ -9,6 +9,12 @@ import { wikimediaProvider } from "./provider.js";
 // filters, and the requested generators. The mock routes by URL so a single
 // `search()` call (tags then geo) can be driven from one responder.
 
+/** The provider implements the optional tag search, which these tests exercise. */
+function searchByTags(...args: Parameters<NonNullable<typeof wikimediaProvider.searchByTags>>) {
+  if (!wikimediaProvider.searchByTags) throw new Error("The Wikimedia provider searches by tags");
+  return wikimediaProvider.searchByTags(...args);
+}
+
 function commonsPage(overrides: Record<string, unknown> = {}) {
   return {
     title: "File:Eiffel Tower.jpg",
@@ -65,7 +71,7 @@ afterEach(() => {
 
 describe("Wikimedia photo provider — File: tag", () => {
   it("returns no tag photos without contacting Commons when the tag is absent", async () => {
-    expect(await wikimediaProvider.searchByTags({ name: "Test" })).toEqual([]);
+    expect(await searchByTags({ name: "Test" })).toEqual([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
   it("surfaces a metadata rate limit in strict card lookup", async () => {
@@ -74,7 +80,7 @@ describe("Wikimedia photo provider — File: tag", () => {
       vi.fn(async () => new Response("busy", { status: 429, headers: { "Retry-After": "4" } })),
     );
     await expect(
-      wikimediaProvider.searchByTags({ wikimedia_commons: "File:Photo.jpg" }, undefined, {
+      searchByTags({ wikimedia_commons: "File:Photo.jpg" }, undefined, {
         strict: true,
       }),
     ).rejects.toMatchObject({ status: 429, retryAfterMs: 4000 });
@@ -89,7 +95,7 @@ describe("Wikimedia photo provider — File: tag", () => {
       },
     };
 
-    const photos = await wikimediaProvider.searchByTags({
+    const photos = await searchByTags({
       wikimedia_commons: "  File:eiffel_Tower.jpg  ",
     });
     expect(photos).toHaveLength(1);
@@ -111,7 +117,7 @@ describe("Wikimedia photo provider — File: tag", () => {
       },
     };
 
-    const photos = await wikimediaProvider.searchByTags({
+    const photos = await searchByTags({
       wikimedia_commons: "File:old_photo.jpg",
     });
     expect(photos[0]).toMatchObject({
@@ -136,9 +142,7 @@ describe("Wikimedia photo provider — File: tag", () => {
         },
       },
     };
-    expect(
-      await wikimediaProvider.searchByTags({ wikimedia_commons: "File:Misleading.jpg" }),
-    ).toEqual([]);
+    expect(await searchByTags({ wikimedia_commons: "File:Misleading.jpg" })).toEqual([]);
   });
   it.each(["Misleading.jpg", "misleading.jpg"])(
     "does not fall back when image-named File %s has explicit audio MIME",
@@ -165,9 +169,7 @@ describe("Wikimedia photo provider — File: tag", () => {
         },
       };
 
-      expect(
-        await wikimediaProvider.searchByTags({ wikimedia_commons: `File:${filename}` }),
-      ).toEqual([]);
+      expect(await searchByTags({ wikimedia_commons: `File:${filename}` })).toEqual([]);
     },
   );
   it("does not turn an audio file's PNG icon into a photo", async () => {
@@ -194,9 +196,7 @@ describe("Wikimedia photo provider — File: tag", () => {
       "generator=geosearch": { query: { pages: {} } },
     };
 
-    expect(
-      await wikimediaProvider.searchByTags({ wikimedia_commons: "File:De-Aachen.ogg" }),
-    ).toEqual([]);
+    expect(await searchByTags({ wikimedia_commons: "File:De-Aachen.ogg" })).toEqual([]);
   });
   it("returns the rich PlacePhoto parsed from Commons extmetadata", async () => {
     // `titles=` is unique to the fetchCommonsMetadata call.
@@ -273,7 +273,7 @@ describe("Wikimedia photo provider — Category tag", () => {
       },
     };
 
-    const photos = await wikimediaProvider.searchByTags({ wikimedia_commons: "Category:Aachen" });
+    const photos = await searchByTags({ wikimedia_commons: "Category:Aachen" });
 
     expect(photos).toHaveLength(1);
     expect(photos[0]).toMatchObject({
@@ -294,7 +294,7 @@ describe("Wikimedia photo provider — Category tag", () => {
         "generator=geosearch": { query: { pages: {} } },
       };
 
-      const photos = await wikimediaProvider.searchByTags({ wikimedia_commons: tag });
+      const photos = await searchByTags({ wikimedia_commons: tag });
 
       expect(photos).toHaveLength(2);
       expect(photos.map((photo) => photo.pageUrl)).toEqual([
@@ -330,10 +330,7 @@ describe("Wikimedia category request bounds and failures", () => {
         },
       },
     };
-    const photos = await wikimediaProvider.searchByTags(
-      { wikimedia_commons: "Category:Paris" },
-      limit,
-    );
+    const photos = await searchByTags({ wikimedia_commons: "Category:Paris" }, limit);
     expect(photos).toHaveLength(expected);
     expect(photos.map((photo) => photo.pageUrl)).toEqual(
       Array.from(
@@ -357,9 +354,7 @@ describe("Wikimedia category request bounds and failures", () => {
         mockFetch.mockResolvedValueOnce(new Response(null, { status: 503 }));
       if (failure === "abort failure")
         mockFetch.mockRejectedValueOnce(new DOMException("Aborted", "AbortError"));
-      expect(await wikimediaProvider.searchByTags({ wikimedia_commons: "Category:Paris" })).toEqual(
-        [],
-      );
+      expect(await searchByTags({ wikimedia_commons: "Category:Paris" })).toEqual([]);
     },
   );
 });

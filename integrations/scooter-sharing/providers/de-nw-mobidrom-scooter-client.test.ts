@@ -1,4 +1,7 @@
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
+import type {
+  MobilityHttpRequestOptions,
+  MobilityHttpTransport,
+} from "@openmapx/mobility-core/json-transport";
 import { describe, expect, it } from "vitest";
 import { createDeNwMobidromScooterClient } from "./de-nw-mobidrom-scooter-client.js";
 
@@ -7,7 +10,7 @@ const bbox = { west: 6.5, south: 50.7, east: 8, north: 51.8 };
 function transport(tokenBodies: string[]): MobilityHttpTransport {
   return {
     userAgent: "OpenMapX/test",
-    async fetchJson<T>(url, options) {
+    async fetchJson<T>(url: string, options?: MobilityHttpRequestOptions) {
       if (url.includes("openid-connect/token")) {
         tokenBodies.push(options?.body ?? "");
         return { access_token: "token", expires_in: 300 } as T;

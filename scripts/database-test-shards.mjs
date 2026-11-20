@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
+/**
+ * @typedef {{ group: string, part: number, total: number }} DatabaseShard
+ * @typedef {DatabaseShard & { source: string, all: string[], selected: string[] }} ShardReceipt
+ */
+
+/** @type {DatabaseShard[]} */
 export const databaseMatrix = JSON.parse(
   readFileSync(new URL("./database-test-shards.json", import.meta.url)),
 );
@@ -14,7 +20,13 @@ const unique = (items) =>
   items.every((item) => typeof item === "string" && item.length > 0) &&
   new Set(items).size === items.length;
 
-/** Longest-first packing affects placement only, never which tests are required. */
+/**
+ * Longest-first packing affects placement only, never which tests are required.
+ * @param {string[]} names
+ * @param {number} total
+ * @param {Record<string, number>} [weights] Seconds per scenario name.
+ * @returns {string[][]}
+ */
 export function partitionScenarios(names, total, weights = timings) {
   if (!unique(names) || !Number.isInteger(total) || total < 1 || total > names.length)
     throw new Error("Invalid or duplicate recovery scenario inventory");
@@ -39,6 +51,11 @@ export function scenarioPattern(names) {
   return `^(?:${escaped.join("|")})$`;
 }
 
+/**
+ * @param {ShardReceipt[]} receipts
+ * @param {DatabaseShard[]} matrix
+ * @param {string} source
+ */
 export function verifyShardReceipts(receipts, matrix, source) {
   if (receipts.length !== matrix.length) throw new Error("Missing database shard receipt");
   for (const { group, part, total } of matrix) {

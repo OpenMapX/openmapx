@@ -1,5 +1,8 @@
 import type { RideProvider } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { setup } from "./index.js";
 
@@ -68,7 +71,7 @@ describe("GET /providers", () => {
   it("lists available providers with the comparison policy", async () => {
     const { route } = host();
     const r = reply();
-    await route("GET", "/providers")({ query: pickupQuery, params: {}, body: null }, r);
+    await route("GET", "/providers")(routeRequest({ query: pickupQuery, body: null }), r);
     const body = r.state.body as { providers: { id: string }[]; comparison: { allowed: boolean } };
     expect(body.providers.map((p) => p.id)).toEqual(["uber"]);
     expect(body.comparison.allowed).toBe(false);
@@ -77,7 +80,7 @@ describe("GET /providers", () => {
   it("400s on a missing pickup", async () => {
     const { route } = host();
     const r = reply();
-    await route("GET", "/providers")({ query: {}, params: {}, body: null }, r);
+    await route("GET", "/providers")(routeRequest({ query: {}, body: null }), r);
     expect(r.state.code).toBe(400);
   });
 });
@@ -87,7 +90,7 @@ describe("POST /quotes", () => {
     const { route } = host();
     const r = reply();
     await route("POST", "/quotes")(
-      { query: {}, params: {}, body: { ...pickupQuery, providerIds: ["uber", "lyft"] } },
+      routeRequest({ query: {}, body: { ...pickupQuery, providerIds: ["uber", "lyft"] } }),
       r,
     );
     expect(r.state.code).toBe(400);
@@ -99,7 +102,7 @@ describe("GET /:provider/open", () => {
     const { route } = host();
     const r = reply();
     await route("GET", "/:provider/open")(
-      { query: pickupQuery, params: { provider: "uber" }, body: null },
+      routeRequest({ query: pickupQuery, params: { provider: "uber" }, body: null }),
       r,
     );
     expect(r.state.code).toBe(302);
@@ -112,7 +115,7 @@ describe("GET /:provider/handoff", () => {
     const { route } = host();
     const r = reply();
     await route("GET", "/:provider/handoff")(
-      { query: pickupQuery, params: { provider: "uber" }, body: null },
+      routeRequest({ query: pickupQuery, params: { provider: "uber" }, body: null }),
       r,
     );
     const body = r.state.body as { handoff: { webUrl: string } };
@@ -131,7 +134,11 @@ describe("precise trip response cache policy", () => {
     for (const query of [pickupQuery, {}]) {
       const r = reply();
       await route(method, path)(
-        { query, params: { provider: "uber" }, body: { ...query, providerIds: ["uber"] } },
+        routeRequest({
+          query,
+          params: { provider: "uber" },
+          body: { ...query, providerIds: ["uber"] },
+        }),
         r,
       );
       expect(r.headers["Cache-Control"]).toBe("no-store");
@@ -144,7 +151,7 @@ describe("precise trip response cache policy", () => {
       const { route } = host();
       const r = reply();
       await route("GET", path)(
-        { query: pickupQuery, params: { provider: "unknown" }, body: null },
+        routeRequest({ query: pickupQuery, params: { provider: "unknown" }, body: null }),
         r,
       );
       expect(r.state.code).toBe(404);

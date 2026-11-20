@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { captureRoutingResult, createRoutingOrchestrator } from "../orchestrator";
 import type { DirectionsResult, MatchResult, RoutingProvider, TravelMode } from "../types.js";

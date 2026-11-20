@@ -1,5 +1,8 @@
 import type { AirQualityProvider, IntegrationContext } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setup } from "../index.js";
@@ -36,12 +39,7 @@ describe("canonical forecast route", () => {
     if (!handler) throw new Error("forecast route missing");
     const output = fakeReply();
     await handler(
-      {
-        query: { lat: "52.52", lng: "13.405", hours: "2" },
-        params: {},
-        body: undefined,
-        headers: {},
-      },
+      routeRequest({ query: { lat: "52.52", lng: "13.405", hours: "2" } }),
       output.reply,
     );
 
@@ -72,12 +70,7 @@ describe("canonical forecast route", () => {
     const handler = ctx.registered.routes.find(({ path }) => path === "/forecast")?.handler;
     const output = fakeReply();
     await handler?.(
-      {
-        query: { lat: "52.52", lng: "13.405", hours: "2" },
-        params: {},
-        body: undefined,
-        headers: {},
-      },
+      routeRequest({ query: { lat: "52.52", lng: "13.405", hours: "2" } }),
       output.reply,
     );
     expect(output.state.payload).toMatchObject({
@@ -128,12 +121,7 @@ describe("canonical forecast route", () => {
     const handler = ctx.registered.routes.find(({ path }) => path === "/forecast")?.handler;
     const output = fakeReply();
     await handler?.(
-      {
-        query: { lat: "43.67", lng: "-79.39", hours: "2", country: "CA" },
-        params: {},
-        body: undefined,
-        headers: {},
-      },
+      routeRequest({ query: { lat: "43.67", lng: "-79.39", hours: "2", country: "CA" } }),
       output.reply,
     );
 

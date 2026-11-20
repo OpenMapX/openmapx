@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useMapStore } from "@openmapx/core";
-import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { IntegrationRegistry, integrationManifestSchema } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -32,7 +32,12 @@ vi.mock("@/integration-api/overlay/useRasterMapAttributions", () => ({
   useRasterMapAttributions: () => {},
 }));
 const registry = new IntegrationRegistry([
-  { ...manifest, isBuiltIn: true, enabled: true },
+  {
+    ...integrationManifestSchema.parse(manifest),
+    name: "TomTom traffic",
+    isBuiltIn: true,
+    enabled: true,
+  },
   {
     id: "overlay-traffic-flow",
     name: "Vector flow",

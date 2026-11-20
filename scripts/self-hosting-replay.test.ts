@@ -222,8 +222,9 @@ runReplayInvocation(process.argv[1], async () => { throw new Error('unexpected w
       runReplayInvocation(output, async () => ({ runs: {}, summary: {} })),
     ).rejects.toThrow();
     expect(descriptor).toBeTypeOf("number");
-    if (descriptor === undefined) throw new Error("Expected an opened report descriptor");
-    expect(() => fstatSync(descriptor)).toThrow(expect.objectContaining({ code: "EBADF" }));
+    const opened = descriptor;
+    if (opened === undefined) throw new Error("Expected an opened report descriptor");
+    expect(() => fstatSync(opened)).toThrow(expect.objectContaining({ code: "EBADF" }));
   });
   it("resolves CLI output under the harness worktree regardless of cwd", () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "replay-")));

@@ -12,13 +12,7 @@
     "types": ["node"],
     "rootDir": ".",
     "paths": {
-      "@integrations/*": ["./integrations/*"],
-      "@openmapx/integration-framework": ["./packages/integration-framework/src/index.ts"],
-      "@openmapx/mobility-core/*": [
-        "./packages/mobility-core/src/*.ts",
-        "./packages/mobility-core/src/types/*.ts"
-      ],
-      "@openmapx/mobility-core/types": ["./packages/mobility-core/src/types/shared-mobility.ts"]
+      "@integrations/*": ["./integrations/*"]
     }
   }
 }

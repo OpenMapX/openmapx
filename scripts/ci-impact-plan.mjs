@@ -26,7 +26,10 @@ export const validationJobs = [
 ];
 const shaPattern = /^[a-f0-9]{40}$/;
 
-/** The jobs each applicability scope leaves out. Every other job stays required. */
+/**
+ * The jobs each applicability scope leaves out. Every other job stays required.
+ * @type {Record<string, string[]>}
+ */
 export const scopeSkippedJobs = {
   full: [],
   docs: validationJobs.filter((id) => !["lint", "test-node"].includes(id)),
@@ -74,6 +77,26 @@ const safePath = (path) =>
   !path.includes("\\") &&
   !path.split("/").some((part) => part === ".." || !part);
 
+/**
+ * @param {object} options
+ * @param {string} options.event
+ * @param {string} [options.action]
+ * @param {string} options.head
+ * @param {string} [options.base]
+ * @param {string[]} options.paths
+ * @param {boolean} [options.baseChanged]
+ * @param {boolean} [options.metadataGateReady]
+ * @param {boolean} [options.metadataEditKnown]
+ * @param {boolean} [options.mainCurrent]
+ * @param {boolean} [options.pathsComplete]
+ * @param {boolean} [options.regularFiles]
+ * @param {string[]} [options.approvedScopes]
+ * @param {string[]} [options.approvedMergeQueueGroups]
+ * @param {boolean} [options.closedPr]
+ * @param {string} [options.rolloutCommit]
+ * @param {Record<string, unknown> | null} [options.validationSource]
+ * @param {Record<string, unknown> | null} [options.mergeQueueSource]
+ */
 export function createImpactPlan({
   event,
   action,
@@ -91,7 +114,7 @@ export function createImpactPlan({
   closedPr = false,
   rolloutCommit = "",
   validationSource = null,
-  mergeQueueSource = /** @type {Record<string, unknown> | null} */ (null),
+  mergeQueueSource = null,
 }) {
   if (!shaPattern.test(head) || (event === "pull_request" && !shaPattern.test(base)))
     throw new Error("CI selection requires immutable head/base commit identities");
@@ -124,12 +147,7 @@ export function createImpactPlan({
       scope = "docs";
     } else if (
       paths.every((path) => /^apps\/web\/src\/components\/.*\.[jt]sx?$/.test(path)) &&
-      !paths.some((path) =>
-        [
-          "apps/web/src/components/map/HostMapProvider.tsx",
-          "apps/web/src/components/search/VoiceSearchButton.tsx",
-        ].includes(path),
-      )
+      !paths.includes("apps/web/src/components/search/VoiceSearchButton.tsx")
     ) {
       // Keep node-side source/build contracts, all types and the actual web build.
       scope = "web";

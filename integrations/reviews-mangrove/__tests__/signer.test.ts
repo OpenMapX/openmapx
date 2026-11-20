@@ -3,6 +3,7 @@ import type { RouteHandler, UpstreamRuntime } from "@openmapx/integration-framew
 import {
   createMockIntegrationContext,
   fakeHttpClient,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
@@ -74,26 +75,23 @@ function fixture(config: Record<string, unknown> = CONFIG) {
     let result: unknown;
     const headers: Record<string, string> = {};
     if (!route) throw new Error("Signer route missing");
-    await route.handler(
-      { query: {}, params: {}, headers: {}, body, userId: "owner", ...extras },
-      {
-        send: (data) => {
-          result = data;
-        },
-        status: (code) => {
-          status = code;
-          return {
-            send: (data) => {
-              result = data;
-            },
-          };
-        },
-        header: (name, value) => {
-          headers[name.toLowerCase()] = value;
-        },
-        type: () => {},
+    await route.handler(routeRequest({ query: {}, body, userId: "owner", ...extras }), {
+      send: (data) => {
+        result = data;
       },
-    );
+      status: (code) => {
+        status = code;
+        return {
+          send: (data) => {
+            result = data;
+          },
+        };
+      },
+      header: (name, value) => {
+        headers[name.toLowerCase()] = value;
+      },
+      type: () => {},
+    });
     expect(headers["cache-control"]).toBe("no-store");
     return { status, body: result };
   }

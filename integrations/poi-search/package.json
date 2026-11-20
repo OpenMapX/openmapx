@@ -21,5 +21,8 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/presets": "workspace:^"
+  },
+  "devDependencies": {
+    "@openmapx/mobility-core": "workspace:^"
   }
 }

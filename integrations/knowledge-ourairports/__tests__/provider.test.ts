@@ -1,4 +1,4 @@
-import type { Logger } from "@openmapx/core";
+import type { Logger } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOurAirportsSource } from "../provider.js";
 

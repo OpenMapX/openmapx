@@ -145,8 +145,12 @@ export function validateSubjectDataInventory(
   const manifests = overrides.manifestSubjects ?? discovered.subjects;
   for (const manifest of manifests) {
     const subjectData = manifest.subjectData;
+    // An integration that stores no personal data leaves the declaration out;
+    // every service declares it.
     if (!subjectData) {
-      errors.push(`${manifest.source}/${manifest.id}: missing subjectData declaration`);
+      if (manifest.source === "service") {
+        errors.push(`${manifest.source}/${manifest.id}: missing subjectData declaration`);
+      }
       continue;
     }
     for (const id of subjectData.registrationIds) {

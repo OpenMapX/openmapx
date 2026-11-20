@@ -2,8 +2,8 @@
  * Dockerfile workspace-package gate. Every image that bakes `integrations/`
  * must ship the workspace `packages/*` that integration code depends on, and
  * neither the local toolchain nor PR CI can tell you when it doesn't: `pnpm
- * build` externalises workspace deps, `check-types` and lint never look at a
- * Dockerfile, vitest aliases workspace names straight to source, and the image
+ * build` externalises workspace deps, `check-types`, lint and tests resolve
+ * against the full checkout and never look at a Dockerfile, and the image
  * build itself only runs on push to `main`. So an omission ships green and
  * breaks after merge.
  *

@@ -55,14 +55,16 @@ describe("orchestrator searchByFilter", () => {
       id: "fake-overpass",
       categories: [],
       search: vi.fn(),
-      searchByFilter: vi.fn(async () => [
-        {
-          id: "osm:node/123",
-          name: "Test Cafe",
-          coordinates: [13.45, 52.55],
-          openingHours: "Mo-Su 00:00-24:00",
-        },
-      ]),
+      searchByFilter: vi.fn(
+        async (): Promise<PoiSearchResult[]> => [
+          {
+            id: "osm:node/123",
+            name: "Test Cafe",
+            coordinates: [13.45, 52.55],
+            openingHours: "Mo-Su 00:00-24:00",
+          },
+        ],
+      ),
     };
     const orch = createPoiSearchOrchestrator(makeCtx(provider));
     const result = await orch.searchByFilter(validFilter, bbox);
@@ -199,7 +201,7 @@ describe("orchestrator truncation reporting", () => {
       categories: ["cafes"],
       search: vi.fn(async () => {
         calls += 1;
-        if (calls === 1) throw new OverpassTimeoutError("area_too_large");
+        if (calls === 1) throw new OverpassTimeoutError();
         return spreadResults(12);
       }),
     } as unknown as PoiSearchProvider;

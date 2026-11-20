@@ -1,5 +1,7 @@
-import { resolveBrand } from "@openmapx/brands";
+// This file sits outside any workspace package, so it reaches the brands package by path.
+
 import { describe, expect, it } from "vitest";
+import { resolveBrand } from "../../packages/brands/src/index.js";
 
 describe("brand crossover resolution", () => {
   it("resolves a charging network from its network QID", () => {

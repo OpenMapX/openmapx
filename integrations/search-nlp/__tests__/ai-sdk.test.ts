@@ -170,11 +170,20 @@ describe("createAiSdkNlpProvider", () => {
   });
 });
 
+/** Parse one configured provider and require an AI (not keyword) definition. */
+function aiDefinition(raw: unknown) {
+  const [definition] = ProviderDefinitionsSchema.parse([raw]);
+  if (!definition || definition.type === "keyword") throw new Error("Expected an AI provider");
+  return definition;
+}
+
 describe("createConfiguredAiProvider", () => {
   it("builds Gemini as a cloud provider with Google disclosure metadata", () => {
-    const [definition] = ProviderDefinitionsSchema.parse([
-      { id: "gemini-fast", type: "google", model: "gemini-2.5-flash" },
-    ]);
+    const definition = aiDefinition({
+      id: "gemini-fast",
+      type: "google",
+      model: "gemini-2.5-flash",
+    });
     const provider = createConfiguredAiProvider(makeCtx({ googleApiKey: "secret" }), definition, {
       roundDecimals: 2,
     });
@@ -186,18 +195,14 @@ describe("createConfiguredAiProvider", () => {
 
   it("skips a cloud provider whose vault credential is missing", () => {
     const ctx = makeCtx({});
-    const [definition] = ProviderDefinitionsSchema.parse([
-      { id: "claude", type: "anthropic", model: "claude-haiku-4-5" },
-    ]);
+    const definition = aiDefinition({ id: "claude", type: "anthropic", model: "claude-haiku-4-5" });
 
     expect(createConfiguredAiProvider(ctx, definition, { roundDecimals: 2 })).toBeNull();
     expect(ctx.log.warn).toHaveBeenCalled();
   });
 
   it("builds Ollama through the OpenAI-compatible AI SDK transport", () => {
-    const [definition] = ProviderDefinitionsSchema.parse([
-      { id: "local", type: "ollama", model: "gemma3:4b-it-qat" },
-    ]);
+    const definition = aiDefinition({ id: "local", type: "ollama", model: "gemma3:4b-it-qat" });
     const provider = createConfiguredAiProvider(makeCtx({}), definition, {
       roundDecimals: 2,
       ollamaEndpoint: "http://local-ai:11434",
@@ -229,17 +234,15 @@ describe("createConfiguredAiProvider", () => {
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
-    const [definition] = ProviderDefinitionsSchema.parse([
-      {
-        id: "router",
-        type: "openrouter",
-        model: "openai/gpt-4.1-mini",
-        providerOrder: ["OpenAI"],
-        allowFallbacks: false,
-        dataCollection: "deny",
-        zeroDataRetention: true,
-      },
-    ]);
+    const definition = aiDefinition({
+      id: "router",
+      type: "openrouter",
+      model: "openai/gpt-4.1-mini",
+      providerOrder: ["OpenAI"],
+      allowFallbacks: false,
+      dataCollection: "deny",
+      zeroDataRetention: true,
+    });
     const provider = createConfiguredAiProvider(
       makeCtx({ openrouterApiKey: "secret" }),
       definition,

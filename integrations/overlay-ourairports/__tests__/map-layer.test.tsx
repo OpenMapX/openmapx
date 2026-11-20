@@ -1,4 +1,4 @@
-import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { IntegrationRegistry, integrationManifestSchema } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,6 +32,7 @@ import { AirportsOverlay } from "../map-layer";
 
 const CIRCLE_LAYER_ID = "openmapx-airports-circles";
 const MIN_ZOOM = manifest.frontend.overlay.minZoom;
+const { dataSources } = integrationManifestSchema.parse(manifest);
 
 const registry = new IntegrationRegistry([
   {
@@ -39,7 +40,7 @@ const registry = new IntegrationRegistry([
     name: "Airports",
     enabled: true,
     domains: ["map-overlay"],
-    dataSources: manifest.dataSources,
+    dataSources,
     isBuiltIn: true,
     frontend: { overlay: { minZoom: MIN_ZOOM } },
   },
@@ -51,9 +52,9 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   </IntegrationRegistryContext.Provider>
 );
 
-const fetchMock = vi.fn(async () => ({
+const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({
   ok: true,
-  json: async () => ({ type: "FeatureCollection", features: [] }),
+  json: async (): Promise<unknown> => ({ type: "FeatureCollection", features: [] }),
 }));
 
 beforeEach(() => {
@@ -106,7 +107,7 @@ describe("AirportsOverlay zoom gate", () => {
         name: "Airports",
         enabled: true,
         domains: ["map-overlay"],
-        dataSources: manifest.dataSources,
+        dataSources,
         isBuiltIn: true,
         frontend: { overlay: { minZoom: MIN_ZOOM + 2 } },
       },

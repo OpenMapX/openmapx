@@ -9,6 +9,8 @@ export {
   createFakeMap,
   type FakeMap,
   type FakeMapState,
+  type RenderedFeatureFields,
+  renderedFeature,
 } from "./fakeMap";
 export { mockNextIntl, renderWithIntl } from "./intl";
 export {

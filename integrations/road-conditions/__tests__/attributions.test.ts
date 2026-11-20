@@ -7,7 +7,9 @@ import { situation } from "./fixtures";
 const registry = new IntegrationRegistry([
   {
     id: "openconditions",
+    name: "OpenConditions",
     enabled: true,
+    isBuiltIn: true,
     domains: ["road-conditions"],
     dataSources: ["parent", "other", "unused"].map((sourceId) => ({
       sourceId,

@@ -44,7 +44,7 @@ describe("OpenAQ provider normalization", () => {
       sourceId: "openaq",
       owner: null,
       attribution: "AirNow",
-      licensing: licensingFromDeclaration("US Public Domain", null ?? undefined),
+      licensing: licensingFromDeclaration("US Public Domain", undefined),
     });
     expect(evidence?.qualityStatus).toBe("preliminary");
   });

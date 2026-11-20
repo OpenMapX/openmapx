@@ -163,14 +163,16 @@ export interface ClosureRoutingContractOptions {
 const CLOSURE_POINT: [number, number] = [0.15, 51.15];
 
 function operationFixture(operation: ClosureRoutingContractOptions["operation"]) {
-  const operationSpy = vi.fn(async () => createDirectionsResult());
+  const operationSpy = vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult());
   return {
     operationSpy,
     provider: {
       integrationId: "routing-closure-aware",
       providerId: "engine-b",
       getRoute:
-        operation === "directions" ? operationSpy : vi.fn(async () => createDirectionsResult()),
+        operation === "directions"
+          ? operationSpy
+          : vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult()),
       ...(operation === "optimize" ? { optimizeRoute: operationSpy } : {}),
       priority: 10,
       supportsExclusions: true,

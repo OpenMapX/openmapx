@@ -1,4 +1,8 @@
 import type { TransportMode } from "@openmapx/mobility-core/transit";
+import type {
+  LineFieldsFragment,
+  StopPlaceFieldsFragment,
+} from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
 import { describe, expect, it } from "vitest";
 import {
   buildStopIdentity,
@@ -463,6 +467,28 @@ describe("nsrPrivateCodeValue", () => {
   });
 });
 
+/** A line as the journey planner returns it, with absent fields as null. */
+function lineFields(
+  fields: Partial<LineFieldsFragment> & Pick<LineFieldsFragment, "id">,
+): LineFieldsFragment {
+  return {
+    publicCode: null,
+    name: null,
+    transportMode: null,
+    authority: null,
+    operator: null,
+    presentation: null,
+    ...fields,
+  };
+}
+
+/** A stop place as the journey planner returns it, with absent fields as null. */
+function stopPlaceFields(
+  fields: Partial<StopPlaceFieldsFragment> & Pick<StopPlaceFieldsFragment, "id" | "name">,
+): StopPlaceFieldsFragment {
+  return { latitude: null, longitude: null, transportMode: null, ...fields };
+}
+
 describe("normalizeLine", () => {
   it("maps a fully populated line", () => {
     expect(
@@ -472,8 +498,8 @@ describe("normalizeLine", () => {
         name: "Vestli",
         transportMode: "metro",
         presentation: { colour: "#EC700C", textColour: "#FFFFFF" },
-        operator: { id: "RUT:Operator:1", name: "Ruter" },
-        authority: { id: "RUT:Authority:1", name: "Ruter AS" },
+        operator: { name: "Ruter" },
+        authority: { name: "Ruter AS" },
       }),
     ).toEqual({
       id: "entur:RUT:Line:5",
@@ -487,27 +513,28 @@ describe("normalizeLine", () => {
   });
 
   it("falls back to authority name when operator is missing", () => {
-    const line = normalizeLine({
-      id: "RUT:Line:5",
-      name: "Line name",
-      authority: { id: "a", name: "Authority" },
-    });
+    const line = normalizeLine(
+      lineFields({ id: "RUT:Line:5", name: "Line name", authority: { name: "Authority" } }),
+    );
     expect(line?.operatorName).toBe("Authority");
   });
 
   it("uses name as shortName and publicCode as longName fallbacks", () => {
-    const line = normalizeLine({ id: "RUT:Line:5", name: "Only Name" });
+    const line = normalizeLine(lineFields({ id: "RUT:Line:5", name: "Only Name" }));
     expect(line?.shortName).toBe("Only Name");
     expect(line?.longName).toBe("Only Name");
   });
 
-  it.each(["air", "taxi", "unknown", null])("marks a %j line as another mode", (transportMode) => {
-    expect(normalizeLine({ id: "WIF:Line:1", publicCode: "WF", transportMode })?.mode).toBe(
-      "other",
-    );
-  });
+  it.each<LineFieldsFragment["transportMode"]>(["air", "taxi", "unknown", null])(
+    "marks a %j line as another mode",
+    (transportMode) => {
+      expect(
+        normalizeLine(lineFields({ id: "WIF:Line:1", publicCode: "WF", transportMode }))?.mode,
+      ).toBe("other");
+    },
+  );
 
-  it.each([[null], [undefined], [{ id: "" }]])("returns null for %j", (input) => {
+  it.each([[null], [undefined], [lineFields({ id: "" })]])("returns null for %j", (input) => {
     expect(normalizeLine(input)).toBeNull();
   });
 });
@@ -538,10 +565,10 @@ describe("normalizeStopPlace", () => {
   it.each([
     [null],
     [undefined],
-    [{ id: "", name: "x", latitude: 1, longitude: 2 }],
-    [{ id: "NSR:StopPlace:1", name: "", latitude: 1, longitude: 2 }],
-    [{ id: "NSR:StopPlace:1", name: "x", longitude: 2 }],
-    [{ id: "NSR:StopPlace:1", name: "x", latitude: 1 }],
+    [stopPlaceFields({ id: "", name: "x", latitude: 1, longitude: 2 })],
+    [stopPlaceFields({ id: "NSR:StopPlace:1", name: "", latitude: 1, longitude: 2 })],
+    [stopPlaceFields({ id: "NSR:StopPlace:1", name: "x", longitude: 2 })],
+    [stopPlaceFields({ id: "NSR:StopPlace:1", name: "x", latitude: 1 })],
   ])("returns null for invalid stop place %j", (input) => {
     expect(normalizeStopPlace(input)).toBeNull();
   });

@@ -1,10 +1,13 @@
+import { integrationManifestSchema } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "./index";
-import manifest from "./manifest.json";
+import manifestJson from "./manifest.json";
+
+const manifest = integrationManifestSchema.parse(manifestJson);
 
 const start = "2026-10-25T02:15:00+02:00";
 const end = "2026-10-25T02:30:00+02:00";

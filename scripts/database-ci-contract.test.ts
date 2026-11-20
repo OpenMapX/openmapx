@@ -112,7 +112,7 @@ describe("required database test gate", () => {
     [undefined, true],
   ])("fails the aggregate for database result %s", (result, shouldFail) => {
     const plan = createImpactPlan({ event: "push", head: "a".repeat(40), paths: [] });
-    const needs = Object.fromEntries(
+    const needs: Record<string, { result?: string }> = Object.fromEntries(
       Object.keys(plan.jobs).map((id) => [id, { result: "success" }]),
     );
     needs.database = { result };

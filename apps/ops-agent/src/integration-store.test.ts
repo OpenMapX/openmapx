@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import {
   closeControlInstallation,
   openControlInstallation,
@@ -126,10 +126,21 @@ async function artifact(
   };
 }
 
+interface RawEntry {
+  name: string;
+  data?: string | Buffer;
+  type?: "0" | "1" | "2" | "5" | "x" | "L" | "K";
+  link?: string;
+  /** Written into the checksum field instead of the correct sum. */
+  checksum?: number;
+}
+
 /** A raw ustar archive, for entries a packager never writes. */
-function tarGz(entries: Array<{ name: string; data?: string; type?: "0" | "2"; link?: string }>) {
+function tarGz(entries: RawEntry[], options: { endBlocks?: boolean } = {}) {
   const blocks = entries.flatMap((entry) => {
-    const payload = Buffer.from(entry.data ?? "", "utf8");
+    const payload = Buffer.isBuffer(entry.data)
+      ? entry.data
+      : Buffer.from(entry.data ?? "", "utf8");
     const header = Buffer.alloc(512);
     const octal = (offset: number, length: number, value: number) =>
       header.write(`${value.toString(8).padStart(length - 1, "0")}\0`, offset, length, "ascii");
@@ -144,14 +155,22 @@ function tarGz(entries: Array<{ name: string; data?: string; type?: "0" | "2"; l
     if (entry.link) header.write(entry.link, 157, 100, "utf8");
     header.write("ustar\0", 257, 6, "ascii");
     header.write("00", 263, 2, "ascii");
-    octal(
-      148,
-      8,
-      header.reduce((sum, byte) => sum + byte, 0),
-    );
+    octal(148, 8, entry.checksum ?? header.reduce((sum, byte) => sum + byte, 0));
     return [header, payload, Buffer.alloc((512 - (payload.length % 512)) % 512)];
   });
-  return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
+  const end = (options.endBlocks ?? true) ? [Buffer.alloc(1024)] : [];
+  return gzipSync(Buffer.concat([...blocks, ...end]));
+}
+
+/** One PAX extended-header record, its length prefix included. */
+function paxRecord(key: string, value: string): Buffer {
+  const body = Buffer.from(`${key}=${value}\n`, "utf8");
+  let length = body.length + 2;
+  for (;;) {
+    const next = Buffer.byteLength(String(length)) + 1 + body.length;
+    if (next === length) return Buffer.concat([Buffer.from(`${length} `), body]);
+    length = next;
+  }
 }
 
 function record(f: Fixture, id: string) {
@@ -554,7 +573,7 @@ describe("integration store", () => {
           sha256: sha256(readFileSync(linked)),
         },
       }),
-    ).rejects.toThrow("not a symbolic link");
+    ).rejects.toThrow("Unsupported artifact entry type '2'");
     const builtIn = await artifact(f, "routing");
     await expect(
       publish({
@@ -565,6 +584,164 @@ describe("integration store", () => {
     expect(
       readdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations")),
     ).toEqual([]);
+  });
+
+  const manifestEntry = { name: "manifest.json", data: JSON.stringify(manifest("weather-radar")) };
+  /** Publishes `bytes` as an artifact and expects the store to refuse it and keep nothing. */
+  async function expectRefusedArchive(bytes: Buffer, message: string) {
+    const f = fixture();
+    const path = join(f.root, "..", `hostile-${Math.random()}.tar.gz`);
+    roots.push(path);
+    writeFileSync(path, bytes);
+    const url = "https://artifacts.example.test/hostile.tar.gz";
+    f.artifacts.set(url, path);
+    await expect(
+      f.store.publish(
+        {
+          kind: "catalogIntegration.publish",
+          integrationId: "weather-radar",
+          source: { kind: "artifact", url, sha256: sha256(bytes) },
+        } as Parameters<IntegrationStore["publish"]>[0],
+        signal,
+      ),
+    ).rejects.toThrow(message);
+    const custom = join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations");
+    expect(readdirSync(custom)).toEqual([]);
+  }
+  it.each([
+    {
+      label: "a hard link",
+      entries: [manifestEntry, { name: "copy.json", type: "1" as const, link: "manifest.json" }],
+      message: "Unsupported artifact entry type '1'",
+    },
+    {
+      label: "a parent-directory path",
+      entries: [manifestEntry, { name: "../escape.json", data: "{}" }],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "an absolute path",
+      entries: [manifestEntry, { name: "/tmp/escape.json", data: "{}" }],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "a PAX path override that escapes",
+      entries: [
+        manifestEntry,
+        { name: "PaxHeader", type: "x" as const, data: paxRecord("path", "a/../../escape.json") },
+        { name: "harmless.json", data: "{}" },
+      ],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "a path deeper than 32 components",
+      entries: [manifestEntry, { name: Array.from({ length: 33 }, () => "d").join("/"), data: "" }],
+      message: "32 components",
+    },
+    {
+      label: "the same entry twice",
+      entries: [manifestEntry, manifestEntry],
+      message: "Duplicate normalized artifact entry",
+    },
+    {
+      label: "a directory with a payload",
+      entries: [manifestEntry, { name: "strings/", type: "5" as const, data: "x" }],
+      message: "Artifact directory has a payload",
+    },
+    {
+      label: "a header with a wrong checksum",
+      entries: [{ ...manifestEntry, checksum: 1 }],
+      message: "Invalid artifact tar header checksum",
+    },
+    {
+      label: "more than 4,096 headers",
+      entries: [
+        ...Array.from({ length: 4096 }, () => ({ name: "GlobalHead", type: "x" as const })),
+        manifestEntry,
+      ],
+      message: "tar header limit exceeded",
+    },
+    {
+      label: "a GNU long name payload over 1,025 bytes",
+      entries: [
+        { name: "././@LongLink", type: "L" as const, data: Buffer.alloc(1026, 0).fill("a", 0, 6) },
+        manifestEntry,
+      ],
+      message: "Artifact path exceeds 1,024 UTF-8 bytes",
+    },
+    {
+      label: "a GNU long link payload over 1,025 bytes",
+      entries: [
+        { name: "././@LongLink", type: "K" as const, data: Buffer.alloc(1026, 0).fill("a", 0, 6) },
+        manifestEntry,
+      ],
+      message: "Artifact link target exceeds 1,024 UTF-8 bytes",
+    },
+    {
+      label: "a whitespace-only name",
+      entries: [manifestEntry, { name: "   ", data: "{}" }],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "a whitespace-only PAX path",
+      entries: [
+        manifestEntry,
+        { name: "PaxHeader", type: "x" as const, data: paxRecord("path", " ") },
+        { name: "harmless.json", data: "{}" },
+      ],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "an entry named exactly '.'",
+      entries: [{ name: ".", type: "5" as const }, manifestEntry],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "an entry named './.'",
+      entries: [{ name: "./.", type: "5" as const }, manifestEntry],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "an entry with an empty name",
+      entries: [{ name: "", type: "5" as const }, manifestEntry],
+      message: "Unsafe artifact path",
+    },
+  ])("refuses an archive with $label and keeps nothing", async ({ entries, message }) => {
+    await expectRefusedArchive(tarGz(entries), message);
+  });
+
+  it("accepts an archive that lists its root directory as './'", async () => {
+    const f = fixture();
+    const path = join(f.root, "..", `dot-root-${Math.random()}.tar.gz`);
+    roots.push(path);
+    const bytes = tarGz([
+      { name: "./", type: "5" },
+      { ...manifestEntry, name: "./manifest.json" },
+    ]);
+    writeFileSync(path, bytes);
+    const url = "https://artifacts.example.test/dot-root.tar.gz";
+    f.artifacts.set(url, path);
+    const published = await f.store.publish(
+      {
+        kind: "catalogIntegration.publish",
+        integrationId: "weather-radar",
+        source: { kind: "artifact", url, sha256: sha256(bytes) },
+      },
+      signal,
+    );
+    expect(published.integrationId).toBe("weather-radar");
+  });
+
+  it("refuses an uncompressed tar and keeps nothing", async () => {
+    await expectRefusedArchive(
+      gunzipSync(tarGz([manifestEntry])),
+      "Artifact is not gzip-compressed",
+    );
+  });
+
+  it("refuses an archive that ends inside a payload", async () => {
+    const tar = gunzipSync(tarGz([manifestEntry], { endBlocks: false }));
+    await expectRefusedArchive(gzipSync(tar.subarray(0, 512 + 10)), "tar payload is truncated");
   });
 
   it("lets only an integration's owner change it, and never hands an unrecorded copy to an extension", async () => {

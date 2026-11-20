@@ -3,7 +3,10 @@ import {
   ProviderCancelledError,
   type SearchSuggestionProvider,
 } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  installHostCapabilities,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createSearchSuggestionsOrchestrator } from "../orchestrator.js";
 
@@ -131,7 +134,7 @@ describe("search suggestion fan-out", () => {
       }),
     };
     const ctx = context([slow]);
-    ctx.metricsRecorder = { recordProviderCall };
+    installHostCapabilities(ctx, { metricsRecorder: { recordProviderCall } });
     const work = createSearchSuggestionsOrchestrator(ctx).search({
       query: "FRA",
       lang: "en",
@@ -168,13 +171,15 @@ describe("search suggestion fan-out", () => {
     const ctx = context([slow]);
     const recordFailure = vi.fn(async () => {});
     const recordProviderCall = vi.fn();
-    ctx.metricsRecorder = { recordProviderCall };
-    ctx.providerHealth = {
-      isHealthy: async () => true,
-      recordSuccess: async () => {},
-      recordFailure,
-      getSnapshot: vi.fn(),
-    };
+    installHostCapabilities(ctx, { metricsRecorder: { recordProviderCall } });
+    installHostCapabilities(ctx, {
+      providerHealth: {
+        isHealthy: async () => true,
+        recordSuccess: async () => {},
+        recordFailure,
+        getSnapshot: vi.fn(),
+      },
+    });
     const work = createSearchSuggestionsOrchestrator(ctx).search(
       { query: "FRA", lang: "en", limit: 8 },
       controller.signal,

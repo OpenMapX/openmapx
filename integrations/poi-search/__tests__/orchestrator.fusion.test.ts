@@ -154,7 +154,7 @@ describe("(C2) OverpassTimeoutError propagates from fused search", () => {
   it("does not wait for an augment when the base exhausts timeout retries", async () => {
     const augment = Promise.withResolvers<PoiSearchResult[]>();
     const searchBase = vi.fn(async () => {
-      throw new OverpassTimeoutError("area_too_large");
+      throw new OverpassTimeoutError();
     });
     const orch = createPoiSearchOrchestrator(
       makeCtx([

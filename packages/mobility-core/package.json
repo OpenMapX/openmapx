@@ -2,8 +2,12 @@
   "name": "@openmapx/mobility-core",
   "license": "Apache-2.0",
   "version": "1.0.0",
+  "sideEffects": false,
   "private": true,
   "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
   "exports": {
     "./transit-alternative": {
       "types": "./src/transit-alternative.ts",
@@ -244,6 +248,7 @@
     "@types/geojson": "^7946.0.16",
     "@types/node": "^26.6.6",
     "@types/spdx-expression-parse": "4.0.0",
+    "typescript": "^6.0.3",
     "vitest": "^5.0.5"
   }
 }

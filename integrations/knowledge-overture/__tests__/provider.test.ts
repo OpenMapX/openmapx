@@ -1,4 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { integrationManifestSchema } from "@openmapx/integration-framework";
+import { installHostCapabilities } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The knowledge-overture provider performs a three-phase GERS lookup:
@@ -396,7 +398,7 @@ it("keeps contact property suppliers separate from discarded Overture name data"
     ]),
   );
   const ctx = makeCtx(db);
-  ctx.manifest = manifest as never;
+  installHostCapabilities(ctx, { manifest: integrationManifestSchema.parse(manifest) });
   const { setup } = await import("../index.js");
   setup(ctx);
   const { overtureKnowledgeSource } = await import("../provider.js");

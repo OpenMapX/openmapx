@@ -73,7 +73,11 @@ describe("line keys of bracket-laden names", () => {
 describe("vehicle journey lookup across a merged departure's trip ids", () => {
   type Lookup = NonNullable<TransitProvider["getVehicleJourney"]>;
   const journey = (id: string) =>
-    withAttribution({ tripId: id, stops: [] } as unknown as VehicleJourney, [], freshnessNow());
+    withAttribution<VehicleJourney>(
+      { id, name: id, provider: "test", stops: [] },
+      [],
+      freshnessNow(),
+    );
 
   function provider(id: string, getVehicleJourney: Lookup): TransitProvider {
     return {
@@ -98,8 +102,11 @@ describe("vehicle journey lookup across a merged departure's trip ids", () => {
         routes: { lookup: false, forStop: false, stops: false, geometry: false },
         planning: false,
         vehicleJourney: true,
+        vehiclePositions: false,
+        alerts: { byStop: false, byRoute: false, byBbox: false },
+        facilities: false,
       },
-      healthCheck: async () => ({ healthy: true }),
+      healthCheck: async () => ({ status: "up" }),
       getVehicleJourney,
     };
   }
@@ -129,7 +136,7 @@ describe("vehicle journey lookup across a merged departure's trip ids", () => {
 
     const result = await transit.getVehicleJourney("a:trip", ["b:trip", "a:alt"]);
 
-    expect(result.data?.tripId).toBe("b:trip");
+    expect(result.data?.id).toBe("b:trip");
     expect(primary).toHaveBeenCalledWith("a:trip", ["a:alt"]);
     expect(other).toHaveBeenCalledWith("b:trip", undefined);
   });
@@ -139,7 +146,7 @@ describe("vehicle journey lookup across a merged departure's trip ids", () => {
     const other = vi.fn<Lookup>(async (id) => journey(id));
     const transit = orchestrator([provider("a", primary), provider("b", other)]);
 
-    expect((await transit.getVehicleJourney("a:trip", ["b:trip"])).data?.tripId).toBe("a:trip");
+    expect((await transit.getVehicleJourney("a:trip", ["b:trip"])).data?.id).toBe("a:trip");
     expect(other).not.toHaveBeenCalled();
   });
 

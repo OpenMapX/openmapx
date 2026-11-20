@@ -193,7 +193,8 @@ describe("provider-bound code validation reuse", () => {
     ).toBeNull();
   });
   it("binds base repository/ref while allowing normal base-branch advancement", () => {
-    expect(targetDigest(source)).toBe(targetDigest({ ...source, baseSha: "new-main" }));
+    const advancedBase = { ...source, baseSha: "new-main" };
+    expect(targetDigest(source)).toBe(targetDigest(advancedBase));
     expect(targetDigest(source)).not.toBe(targetDigest({ ...source, baseRef: "release" }));
   });
 });
@@ -261,7 +262,7 @@ describe("merge-queue validation reused by the push to main", () => {
   });
 
   it("falls back to an older green run when the newest is not reusable", async () => {
-    const failed = queueJobs(700, [{ name: "types (not yet enforced)", conclusion: "failure" }]);
+    const failed = queueJobs(700, [{ name: "build", conclusion: "failure" }]);
     expect(
       (await lookup([queueRun(600), queueRun(700)], { 600: queueJobs(600), 700: failed }))?.runId,
     ).toBe(600);

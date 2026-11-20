@@ -1,0 +1,27 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "check-types": {
+      "dependsOn": ["^check-types"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.*.ts",
+        "$TURBO_ROOT$/services/*/src/**/*.ts",
+        "$TURBO_ROOT$/services/*/src/**/*.json",
+        "$TURBO_ROOT$/services/*/tests/**/*.ts",
+        "$TURBO_ROOT$/services/dawarich-*/*.ts",
+        "$TURBO_ROOT$/apps/*/src/**/*.ts",
+        "$TURBO_ROOT$/apps/*/src/**/*.tsx",
+        "$TURBO_ROOT$/apps/web/next.config.ts",
+        "$TURBO_ROOT$/integrations/**/*.ts",
+        "$TURBO_ROOT$/integrations/**/*.tsx",
+        "$TURBO_ROOT$/integrations/**/*.json",
+        "$TURBO_ROOT$/packages/**/*.ts",
+        "$TURBO_ROOT$/packages/**/*.tsx",
+        "$TURBO_ROOT$/packages/**/*.mts",
+        "$TURBO_ROOT$/packages/**/*.json"
+      ]
+    }
+  }
+}

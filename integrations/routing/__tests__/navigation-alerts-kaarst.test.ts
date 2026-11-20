@@ -1,7 +1,13 @@
 import { cumulativeDistances, type LngLat, projectRoadAlertsOntoRoute } from "@openmapx/core";
+import { loadJsonFixture } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
-import kaarst from "../__fixtures__/kaarst-maubisstrasse-alerts.json";
 import { type AlertOverpassElement, mapAlertElements } from "../navigation-alerts.js";
+
+/** The recorded Overpass answer around the Kaarst junction. */
+const kaarst = loadJsonFixture<{ elements: AlertOverpassElement[] }>(
+  import.meta.dirname,
+  "../__fixtures__/kaarst-maubisstrasse-alerts.json",
+);
 
 /**
  * The reported case end to end: real OSM data around Maubisstraße ×
@@ -57,7 +63,7 @@ const MAUBISSTRASSE_THEN_GRUENSTRASSE_EAST: LngLat[] = [
   [6.621325, 51.2295746],
 ];
 
-const raw = mapAlertElements(kaarst.elements as AlertOverpassElement[]);
+const raw = mapAlertElements(kaarst.elements);
 
 function alertsAlong(route: LngLat[]): string[] {
   const cum = cumulativeDistances(route);

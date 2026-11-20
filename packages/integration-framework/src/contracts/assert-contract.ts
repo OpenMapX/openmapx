@@ -95,7 +95,7 @@ function getCapabilityValue(
  * @param providerId - Optional label used in the error message.
  */
 export function assertProviderSatisfiesContract(
-  provider: Record<string, unknown>,
+  provider: object,
   capabilities: Record<string, unknown>,
   capabilityMethodPairs: ReadonlyArray<readonly [string, string]>,
   providerId?: string,
@@ -104,7 +104,7 @@ export function assertProviderSatisfiesContract(
 
   for (const [capPath, methodName] of capabilityMethodPairs) {
     if (getCapabilityValue(capabilities, capPath) === true) {
-      if (typeof provider[methodName] !== "function") {
+      if (typeof Reflect.get(provider, methodName) !== "function") {
         missing.push(`  capability "${capPath}" requires method "${methodName}"`);
       }
     }
@@ -122,9 +122,10 @@ export function assertProviderSatisfiesContract(
  * Convenience wrapper for `TransitProvider` instances. Reads `provider.id`
  * for the error label automatically.
  */
-export function assertTransitProviderContract(
-  provider: { id: string; capabilities: TransitCapabilities } & Record<string, unknown>,
-): void {
+export function assertTransitProviderContract(provider: {
+  id: string;
+  capabilities: TransitCapabilities;
+}): void {
   assertProviderSatisfiesContract(
     provider,
     provider.capabilities as unknown as Record<string, unknown>,
@@ -136,9 +137,10 @@ export function assertTransitProviderContract(
 /**
  * Convenience wrapper for `RealtimeProvider` instances.
  */
-export function assertRealtimeProviderContract(
-  provider: { id: string; capabilities: RealtimeCapabilities } & Record<string, unknown>,
-): void {
+export function assertRealtimeProviderContract(provider: {
+  id: string;
+  capabilities: RealtimeCapabilities;
+}): void {
   assertProviderSatisfiesContract(
     provider,
     provider.capabilities as unknown as Record<string, unknown>,

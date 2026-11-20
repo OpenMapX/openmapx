@@ -23,6 +23,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/i18n": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
     "@react-native-community/netinfo": "12.0.1",
     "babel-preset-expo": "~57.0.13",
     "expo": "~57.0.26",

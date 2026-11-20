@@ -558,7 +558,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
   });
 
   it("explicitly ignores binary closures when live traffic is disabled", async () => {
-    await valhallaService.optimizeRoute(WPS, "driving", { useLiveTraffic: false });
+    await valhallaService.optimizeRoute?.(WPS, "driving", { useLiveTraffic: false });
     expect(capturedBody.costing_options).toMatchObject({
       auto: {
         speed_types: ["freeflow", "constrained", "predicted"],
@@ -574,7 +574,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
       [5.1, 52.1],
       [5, 52],
     ];
-    await valhallaService.optimizeRoute(WPS, "driving", {
+    await valhallaService.optimizeRoute?.(WPS, "driving", {
       excludeLocations: [[5.1, 52.1]],
       excludePolygons: [ring],
     });
@@ -709,7 +709,7 @@ describe("buildTrafficRequestExtras", () => {
 
 describe("getRoute request body", () => {
   const capture = () => {
-    const spy = vi.fn(
+    const spy = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify(MINIMAL_VALHALLA_RESPONSE), {
           status: 200,
@@ -721,7 +721,7 @@ describe("getRoute request body", () => {
   };
 
   const bodyOf = (spy: ReturnType<typeof capture>) =>
-    JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string);
+    JSON.parse(String(spy.mock.calls[0]?.[1]?.body));
 
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type { HttpClient } from "@openmapx/integration-framework";
+import {
+  createMockIntegrationContext,
+  installHostCapabilities,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryUpstreamRuntime } from "../../overlay-air-quality/test-helpers";
 import { createSiriClient } from "../client";
@@ -11,9 +15,9 @@ function fixture() {
   const runtime = new MemoryUpstreamRuntime(now);
   const ctx = createMockIntegrationContext();
   let disabled = false;
-  ctx.upstreamRuntime = runtime;
+  installHostCapabilities(ctx, { upstreamRuntime: runtime });
   ctx.getDisallowedSourceIds = async () => new Set(disabled ? [SOURCE_ID] : []);
-  const fetch = vi.fn(async () => ({
+  const fetch = vi.fn<HttpClient["getStream"]>(async () => ({
     status: 200,
     headers: { etag: '"v1"' },
     stream: new ReadableStream<Uint8Array>({
@@ -50,7 +54,7 @@ describe("shared SIRI feed acquisition", () => {
     f.runtime.quotaDecision = { allowed: false, remaining: {}, retryAt: null };
     await createSiriClient(f.ctx, f.now).refresh();
     expect(f.fetch).not.toHaveBeenCalled();
-    f.ctx.upstreamRuntime = undefined;
+    installHostCapabilities(f.ctx, { upstreamRuntime: undefined });
     await createSiriClient(f.ctx, f.now).refresh();
     expect(f.fetch).not.toHaveBeenCalled();
   });
@@ -110,7 +114,7 @@ it("uses conditional requests and renews compact buckets on 304 without fresheni
   });
   await client.refresh();
   expect(f.fetch).toHaveBeenCalledTimes(2);
-  expect(f.fetch.mock.calls[1][1].headers).toMatchObject({ "If-None-Match": '"v1"' });
+  expect(f.fetch.mock.calls[1]?.[1]?.headers).toMatchObject({ "If-None-Match": '"v1"' });
   expect((await client.get("2026-11-06", "26839"))?.records[0].recordedAt).toBe(
     "2026-11-06T18:30:58.165Z",
   );
@@ -119,8 +123,8 @@ it("does not publish data if policy changes while acquiring the feed", async () 
   const f = fixture();
   const original = f.fetch.getMockImplementation();
   if (!original) throw new Error("Missing fixture fetch");
-  f.fetch.mockImplementation(async () => {
-    const result = await original();
+  f.fetch.mockImplementation(async (...args) => {
+    const result = await original(...args);
     f.disable();
     return result;
   });

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { declaredImportViolations } from "./check-declared-imports.mjs";
+import { declaredImportViolations, undeclaredWorkspaceImports } from "./check-declared-imports.mjs";
 
 const workspaces: string[] = [];
 afterEach(() => {
@@ -482,5 +482,61 @@ describe("dependency tree coverage", () => {
     const violations = check({ "pnpm-lock.yaml": "importers: [\n" });
     expect(violations).toHaveLength(2);
     expect(violations[0]).toMatch(/^@fixture\/lib: dependency tree cannot be resolved/);
+  });
+});
+
+describe("declared workspace imports in every workspace", () => {
+  const checkWorkspaces = (files: Record<string, string | null>) =>
+    undeclaredWorkspaceImports({ cwd: fixture(files) });
+
+  it("accepts declared workspace packages, self references and other packages", () => {
+    expect(
+      checkWorkspaces({
+        "packages/tool/src/cli.ts": 'import "@fixture/helper";\nimport "@fixture/tool/extra";',
+        "packages/app/src/view.tsx":
+          'import { useState } from "react";\nimport "@fixture/unknown";',
+      }),
+    ).toEqual([]);
+  });
+  it("rejects an undeclared workspace package in any workspace, public or not", () => {
+    expect(
+      checkWorkspaces({
+        "packages/app/src/a.ts": 'export { value } from "@fixture/lib/extra";',
+      }),
+    ).toEqual([
+      'packages/app/src/a.ts:1: "@fixture/lib" is not declared in packages/app/package.json',
+    ]);
+  });
+  it("rejects type-only, dynamic and test references too", () => {
+    expect(
+      checkWorkspaces({
+        "packages/app/src/a.test.ts": [
+          'import type { Value } from "@fixture/lib";',
+          'const helper = await import("@fixture/helper");',
+        ].join("\n"),
+      }),
+    ).toEqual([
+      'packages/app/src/a.test.ts:1: "@fixture/lib" is not declared in packages/app/package.json',
+      'packages/app/src/a.test.ts:2: "@fixture/helper" is not declared in packages/app/package.json',
+    ]);
+  });
+  it("rejects a workspace package declared only as a peer, which pnpm does not link", () => {
+    expect(
+      checkWorkspaces({
+        "packages/app/package.json": manifest("app", {
+          peerDependencies: { "@fixture/lib": "workspace:*" },
+        }),
+        "packages/tool/package.json": manifest("tool", {
+          peerDependencies: { "@fixture/helper": "workspace:*" },
+        }),
+        "packages/app/src/a.ts": 'import "@fixture/lib";',
+        "packages/tool/src/cli.ts": 'import "@fixture/helper";',
+      }),
+    ).toEqual([
+      'packages/app/src/a.ts:1: "@fixture/lib" is not declared in packages/app/package.json',
+    ]);
+  });
+  it("leaves files outside every workspace package to the root", () => {
+    expect(checkWorkspaces({ "tools/probe.ts": 'import "@fixture/lib";' })).toEqual([]);
   });
 });

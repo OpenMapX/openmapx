@@ -1,4 +1,5 @@
 import type { CacheClient } from "@openmapx/integration-framework";
+import type { SemanticCategoryDocument } from "@openmapx/presets";
 import { describe, expect, it, vi } from "vitest";
 import type { LocalEmbeddingClient } from "../ollama-embeddings.js";
 import { createSemanticCategoryIndex } from "../semantic-category-index.js";
@@ -18,20 +19,20 @@ function vector(axis: number): Float32Array {
   return value;
 }
 
-const catalog = [
+const catalog: SemanticCategoryDocument[] = [
   {
     categoryId: "alpha",
     labels: { en: "Alpha", de: "Alpha" },
     document: "alpha document",
-    filter: { selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "alpha" }] }] },
+    filter: { selectors: [{ tags: [{ key: "amenity", op: "=", value: "alpha" }] }] },
   },
   {
     categoryId: "beta",
     labels: { en: "Beta", de: "Beta" },
     document: "beta document",
-    filter: { selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "beta" }] }] },
+    filter: { selectors: [{ tags: [{ key: "amenity", op: "=", value: "beta" }] }] },
   },
-] as const;
+];
 
 function memoryCache(): CacheClient {
   const values = new Map<string, unknown>();

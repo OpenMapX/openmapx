@@ -1,12 +1,15 @@
 import type { CacheClient } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "./index.js";
 
 function makeCache() {
   const values = new Map<string, unknown>();
   const cache: CacheClient = {
-    get: vi.fn(async (key: string) => values.get(key) ?? null),
+    get: async <T>(key: string) => (values.get(key) as T | undefined) ?? null,
     set: vi.fn(async (key: string, value: unknown) => {
       values.set(key, value);
     }),
@@ -88,7 +91,7 @@ describe("food-delivery routes", () => {
     const { cache } = makeCache();
     const handler = route("/resolve", cache);
     const first = makeReply();
-    await handler({ query, params: {}, body: undefined }, first.reply);
+    await handler(routeRequest({ query }), first.reply);
     const providers = (first.result.body as { providers: Array<{ id: string; linkKind: string }> })
       .providers;
     expect(providers.map(({ id, linkKind }) => [id, linkKind])).toEqual([
@@ -103,7 +106,7 @@ describe("food-delivery routes", () => {
     );
 
     const second = makeReply();
-    await handler({ query, params: {}, body: undefined }, second.reply);
+    await handler(routeRequest({ query }), second.reply);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -111,7 +114,7 @@ describe("food-delivery routes", () => {
     const missState = makeCache();
     fetchMock.mockResolvedValueOnce(Response.json({ data: { feedItems: [] } }));
     const missHandler = route("/resolve", missState.cache);
-    await missHandler({ query, params: {}, body: undefined }, makeReply().reply);
+    await missHandler(routeRequest({ query }), makeReply().reply);
     expect(missState.cache.set).toHaveBeenCalledWith(
       expect.any(String),
       { version: 2, kind: "not_found" },
@@ -122,8 +125,8 @@ describe("food-delivery routes", () => {
     fetchMock.mockRejectedValue(new Error("upstream down"));
     const errorHandler = route("/resolve", errorState.cache);
     const errorReply = makeReply();
-    await errorHandler({ query, params: {}, body: undefined }, errorReply.reply);
-    await errorHandler({ query, params: {}, body: undefined }, makeReply().reply);
+    await errorHandler(routeRequest({ query }), errorReply.reply);
+    await errorHandler(routeRequest({ query }), makeReply().reply);
     expect(errorState.cache.set).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(errorReply.result.headers["Cache-Control"]).toContain("no-store");
@@ -133,17 +136,14 @@ describe("food-delivery routes", () => {
   it("keeps the market catalog cheap and rejects invalid resolve queries", async () => {
     const { cache } = makeCache();
     const catalog = makeReply();
-    await route("/providers", cache)(
-      { query: { country: "de" }, params: {}, body: undefined },
-      catalog.reply,
-    );
+    await route("/providers", cache)(routeRequest({ query: { country: "de" } }), catalog.reply);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
       (catalog.result.body as { providers: Array<{ linkKind: string }> }).providers,
     ).toHaveLength(3);
 
     const invalid = makeReply();
-    await route("/resolve", cache)({ query: {}, params: {}, body: undefined }, invalid.reply);
+    await route("/resolve", cache)(routeRequest({ query: {} }), invalid.reply);
     expect(invalid.result.status).toBe(400);
   });
 });

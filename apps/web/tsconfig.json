@@ -14,12 +14,7 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@integrations/*": ["../../integrations/*"],
-      "@openmapx/integration-framework": ["../../packages/integration-framework/src/index.ts"],
-      "@openmapx/mobility-core/*": [
-        "../../packages/mobility-core/src/*.ts",
-        "../../packages/mobility-core/src/types/*.ts"
-      ]
+      "@integrations/*": ["../../integrations/*"]
     }
   },
   "include": [

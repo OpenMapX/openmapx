@@ -247,7 +247,7 @@ describe("POST /filter route", () => {
                 categories: [],
                 search: vi.fn(),
                 searchByFilter: vi.fn(async () => {
-                  throw new OverpassTimeoutError("timeout");
+                  throw new OverpassTimeoutError();
                 }),
               },
             ],

@@ -5,6 +5,10 @@ import { generate } from "@graphql-codegen/cli";
 import { formatSource } from "../codegen/format-source.mjs";
 import { createCodegenConfig } from "./codegen.config.mjs";
 
+/**
+ * @param {Parameters<typeof createCodegenConfig>[0]} [selectedTargets]
+ * @returns {Promise<{ filename: string, content: string }[]>}
+ */
 export async function generateArtifacts(selectedTargets) {
   const files = await generate(createCodegenConfig(selectedTargets), false);
   return files

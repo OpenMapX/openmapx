@@ -2,6 +2,7 @@ import type { TidesPayload } from "@openmapx/core";
 import {
   createMockIntegrationContext,
   createPassthroughCache,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -43,7 +44,7 @@ async function readTides(query: Record<string, string>, values = new Map<string,
     },
     type: () => reply,
   };
-  await route.handler({ params: {}, headers: {}, body: null, query }, reply);
+  await route.handler(routeRequest({ body: null, query }), reply);
   return body as TidesPayload;
 }
 

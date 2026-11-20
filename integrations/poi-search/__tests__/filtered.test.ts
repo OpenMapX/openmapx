@@ -2,7 +2,7 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import { createPoiSearchOrchestrator } from "../orchestrator";
-import type { PoiSearchProvider } from "../types";
+import type { PoiSearchProvider, PoiSearchResult } from "../types";
 
 const BBOX = { south: 48.85, west: 2.33, north: 48.87, east: 2.37 };
 
@@ -105,7 +105,11 @@ describe("orchestrator searchFiltered", () => {
       id: "fake-overpass",
       categories: ["cafes"],
       search: vi.fn(),
-      searchFiltered: vi.fn(async () => [{ id: "1", name: "A", coordinates: [2.35, 48.86] }]),
+      searchFiltered: vi.fn(
+        async (): Promise<PoiSearchResult[]> => [
+          { id: "1", name: "A", coordinates: [2.35, 48.86] },
+        ],
+      ),
     };
     const orch = createPoiSearchOrchestrator(makeCtx(provider));
     const result = await orch.searchFiltered("cafes", { outdoor_seating: "yes" }, BBOX, {});

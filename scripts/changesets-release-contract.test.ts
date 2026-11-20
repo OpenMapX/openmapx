@@ -148,7 +148,7 @@ const baseManifests: Record<string, Record<string, unknown>> = {
 function fixture() {
   const cwd = mkdtempSync(join(tmpdir(), "openmapx-release-info-"));
   workspaces.push(cwd);
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  const env: NodeJS.ProcessEnv = { ...process.env };
   for (const key of Object.keys(env)) if (key.startsWith("GIT_")) delete env[key];
   env.GIT_CONFIG_NOSYSTEM = "1";
   env.GIT_CONFIG_GLOBAL = "/dev/null";

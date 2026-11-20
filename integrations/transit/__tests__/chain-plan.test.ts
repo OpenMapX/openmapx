@@ -1,4 +1,5 @@
-import type { TemporalCapabilities, TripPlanRequest } from "@openmapx/integration-framework";
+import type { TemporalCapabilities } from "@openmapx/core";
+import type { TripPlanRequest } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";

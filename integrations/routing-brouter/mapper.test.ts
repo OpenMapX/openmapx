@@ -36,9 +36,11 @@ describe("BRouter route mapping", () => {
   it.each(["times", "index", "geometry"])("rejects malformed %s", (kind) => {
     const f = copy();
     const line = f.features[0];
-    if (kind === "times") line.properties.times[3] = -1;
-    else if (kind === "index") line.properties.voicehints[0][0] = 999999;
-    else line.geometry.coordinates[0][0] = 999;
+    const [firstHint] = line.properties.voicehints ?? [];
+    const [firstCoordinate] = line.geometry.coordinates;
+    if (kind === "times" && line.properties.times) line.properties.times[3] = -1;
+    else if (kind === "index" && Array.isArray(firstHint)) firstHint[0] = 999999;
+    else if (kind === "geometry" && Array.isArray(firstCoordinate)) firstCoordinate[0] = 999;
     expect(() => mapBrouterRoute(f, points)).toThrow();
   });
   it("retains roundabout exits and u-turn direction", () => {

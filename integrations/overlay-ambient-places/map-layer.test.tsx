@@ -74,6 +74,7 @@ vi.mock("next-intl", () => ({ useLocale: () => "de" }));
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getAmbientIdentity } from "@/components/map/ambientPlaceIdentity";
 import { localizeTextField } from "@/components/map/localizeTextField";
+import { renderedFeature } from "@/test";
 import { AmbientPlacesLayer } from "./map-layer";
 
 const manifest = {
@@ -290,7 +291,7 @@ describe("ambient generation lifecycle", () => {
   it.each(["category marker", "DOM pin"])(
     "keeps an overlapping %s selection instead of choosing a different ambient point",
     async (owner) => {
-      const ambient = {
+      const ambient = renderedFeature({
         type: "Feature",
         layer: { id: "ambient-places-labels" },
         geometry: { type: "Point", coordinates: [6.08, 50.77] },
@@ -303,12 +304,12 @@ describe("ambient generation lifecycle", () => {
           tenant: false,
           sources: "osm",
         },
-      } as MapGeoJSONFeature;
-      const category = {
+      });
+      const category = renderedFeature({
         ...ambient,
         layer: { id: "category-results-layer" },
         properties: { id: "osm:node/2", name: "Category B" },
-      } as MapGeoJSONFeature;
+      });
       test.map.querySourceFeatures.mockReturnValue([ambient]);
       test.map.queryRenderedFeatures.mockImplementation((...args: unknown[]) => {
         const options = args[1] as { layers?: string[] } | undefined;
@@ -495,7 +496,7 @@ describe("ambient generation lifecycle", () => {
     expect(test.map.on).toHaveBeenCalledWith("click", expect.any(Function));
   });
   it("opens the canonical tile identity, suppresses its selected marker and reapplies filters after style replacement", async () => {
-    const feature = {
+    const feature = renderedFeature({
       type: "Feature",
       geometry: { type: "Point", coordinates: [6.08, 50.77] },
       properties: {
@@ -509,7 +510,7 @@ describe("ambient generation lifecycle", () => {
         tenant: false,
         sources: "osm,overture",
       },
-    } as MapGeoJSONFeature;
+    });
     test.map.querySourceFeatures.mockReturnValue([feature]);
     vi.stubGlobal(
       "fetch",
@@ -546,7 +547,7 @@ describe("ambient generation lifecycle", () => {
   it.each([2, "2", Number.MAX_SAFE_INTEGER + 1, 0, -2, 2.5, "invalid"])(
     "does not replace the explicit basemap OSM identity %s with a nearby different place",
     async (osmId) => {
-      const feature = {
+      const feature = renderedFeature({
         type: "Feature",
         geometry: { type: "Point", coordinates: [6.08, 50.77] },
         properties: {
@@ -558,8 +559,8 @@ describe("ambient generation lifecycle", () => {
           tenant: false,
           sources: "osm",
         },
-      } as MapGeoJSONFeature;
-      const basemap = {
+      });
+      const basemap = renderedFeature({
         type: "Feature",
         source: "basemap",
         sourceLayer: "poi",
@@ -567,7 +568,7 @@ describe("ambient generation lifecycle", () => {
         layer: { id: "poi-level-1" },
         geometry: { type: "Point", coordinates: [6.08, 50.77] },
         properties: { name: "Cafe", class: "cafe", osm_type: "node", osm_id: osmId },
-      } as MapGeoJSONFeature;
+      });
       test.map.querySourceFeatures.mockReturnValue([feature]);
       test.map.queryRenderedFeatures.mockReturnValue([basemap]);
       test.map.getStyle.mockReturnValue({
@@ -596,7 +597,7 @@ describe("ambient generation lifecycle", () => {
     },
   );
   it.each([1, "1"])("reconciles the exact basemap OSM identity %s", async (osmId) => {
-    const feature = {
+    const feature = renderedFeature({
       type: "Feature",
       geometry: { type: "Point", coordinates: [6.08, 50.77] },
       properties: {
@@ -608,8 +609,8 @@ describe("ambient generation lifecycle", () => {
         tenant: false,
         sources: "osm",
       },
-    } as MapGeoJSONFeature;
-    const basemap = {
+    });
+    const basemap = renderedFeature({
       type: "Feature",
       source: "basemap",
       sourceLayer: "poi",
@@ -617,7 +618,7 @@ describe("ambient generation lifecycle", () => {
       layer: { id: "poi-level-1" },
       geometry: { type: "Point", coordinates: [6.08, 50.77] },
       properties: { name: "Basemap translation", class: "cafe", osm_type: "node", osm_id: osmId },
-    } as MapGeoJSONFeature;
+    });
     test.map.querySourceFeatures.mockReturnValue([feature]);
     test.map.queryRenderedFeatures.mockReturnValue([basemap]);
     test.map.getStyle.mockReturnValue({
@@ -636,7 +637,7 @@ describe("ambient generation lifecycle", () => {
   it.each([-180.00001072883606, 180.00001072883606])(
     "reconciles and selects a buffered dateline copy at longitude %s",
     async (longitude) => {
-      const feature = {
+      const feature = renderedFeature({
         type: "Feature",
         geometry: { type: "Point", coordinates: [longitude, 0] },
         properties: {
@@ -648,9 +649,9 @@ describe("ambient generation lifecycle", () => {
           min_zoom: 13,
           sources: "osm,overture",
         },
-      } as MapGeoJSONFeature;
+      });
       test.map.querySourceFeatures.mockReturnValue([feature]);
-      const basemap = {
+      const basemap = renderedFeature({
         type: "Feature",
         source: "basemap",
         sourceLayer: "poi",
@@ -666,7 +667,7 @@ describe("ambient generation lifecycle", () => {
           osm_type: "node",
           osm_id: "9007199254740993",
         },
-      } as MapGeoJSONFeature;
+      });
       test.map.getStyle.mockReturnValue({
         layers: [{ id: "poi-level-1", type: "symbol", source: "basemap", "source-layer": "poi" }],
       });
@@ -700,7 +701,7 @@ describe("ambient generation lifecycle", () => {
     },
   );
   it("shares a real worship identity with a religion-subclass basemap tap and hides its ambient copy", async () => {
-    const place = {
+    const place = renderedFeature({
       type: "Feature",
       geometry: { type: "Point", coordinates: [6.6933392733335495, 51.19904645716551] },
       properties: {
@@ -712,15 +713,15 @@ describe("ambient generation lifecycle", () => {
         tenant: false,
         sources: "osm",
       },
-    } as MapGeoJSONFeature;
-    const base = {
+    });
+    const base = renderedFeature({
       id: 285629932,
       source: "openmaptiles",
       sourceLayer: "poi",
       layer: { id: "poi-level-3" },
       geometry: { type: "Point", coordinates: [6.693227291107178, 51.19902166658045] },
       properties: { name: "Quirinus-Münster", class: "place_of_worship", subclass: "christian" },
-    } as MapGeoJSONFeature;
+    });
     test.map.getStyle.mockReturnValue({
       layers: [
         { id: "poi-level-3", type: "symbol", source: "openmaptiles", "source-layer": "poi" },

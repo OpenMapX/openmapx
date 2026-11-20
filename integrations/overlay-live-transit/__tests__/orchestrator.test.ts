@@ -7,6 +7,7 @@ function vehicle(partial: Partial<LiveTransitVehicle> & { id: string }): LiveTra
   return {
     provider: "test",
     sourceId: "test",
+    updatedAt: "2026-10-15T18:00:00Z",
     mode: "bus",
     displayLabel: partial.id,
     positionKind: "observed",
@@ -79,23 +80,31 @@ describe("preferObservedByTrip", () => {
 it("captures serving vehicle receipts before observed replacements discard estimates", async () => {
   const a = { sourceId: "a", name: "A" };
   const b = { sourceId: "b", name: "B" };
-  const providers = [a, b].map((receipt, i) => ({
-    id: receipt.sourceId,
-    priority: i,
-    coverage: { all: true },
-    getVehiclePositions: async () => ({
-      data: [
-        vehicle({
-          id: `${i}`,
-          tripId: "same",
-          sourceId: receipt.sourceId,
-          positionKind: i === 0 ? "interpolated" : "observed",
-        }),
-      ],
-      attributions: [receipt],
-      freshness: {},
+  const providers = [a, b].map(
+    (receipt, i): RealtimeProvider => ({
+      id: receipt.sourceId,
+      priority: i,
+      coverage: { all: true },
+      capabilities: {
+        vehiclePositions: true,
+        alerts: { byStop: false, byRoute: false, byBbox: false },
+        tripUpdates: false,
+      },
+      attribution: [],
+      getVehiclePositions: async () => ({
+        data: [
+          vehicle({
+            id: `${i}`,
+            tripId: "same",
+            sourceId: receipt.sourceId,
+            positionKind: i === 0 ? "interpolated" : "observed",
+          }),
+        ],
+        attributions: [receipt],
+        freshness: { fetchedAt: "2026-10-15T18:00:00Z", hasRealtimeData: true, isStale: false },
+      }),
     }),
-  })) as RealtimeProvider[];
+  );
   const orchestrator = createLiveTransitOrchestrator({
     getIntegrationsByDomain: () => [{ providers: new Map([["live-transit", providers]]) }],
     log: { warn: vi.fn() },

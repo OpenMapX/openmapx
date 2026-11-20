@@ -15,6 +15,7 @@ function read(relativePath: string): string {
 type WorkflowStep = {
   name?: string;
   uses?: string;
+  run?: string;
   if?: string;
   "continue-on-error"?: boolean;
   with?: Record<string, unknown>;

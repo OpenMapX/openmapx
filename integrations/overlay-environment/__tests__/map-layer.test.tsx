@@ -66,7 +66,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   </IntegrationRegistryContext.Provider>
 );
 
-const fetchMock = vi.fn(async () => ({ ok: true, json: async () => [] }));
+const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({ ok: true, json: async () => [] }));
 
 beforeEach(() => {
   fake = createFakeMap();

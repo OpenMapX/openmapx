@@ -1,4 +1,5 @@
 import type { RouteHandler } from "@openmapx/integration-framework";
+import { routeRequest } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
@@ -66,7 +67,7 @@ function register(sources = manifest.dataSources): RouteHandler {
 // empty — mirror that shape rather than passing only the field this handler
 // happens to read.
 function baseReq(headers: Record<string, string | string[] | undefined> = {}) {
-  return { query: {}, params: {}, body: undefined, headers };
+  return routeRequest({ headers });
 }
 
 describe("overlay-sun-time /timezones", () => {

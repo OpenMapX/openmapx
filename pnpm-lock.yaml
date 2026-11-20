@@ -417,6 +417,9 @@ importers:
       '@openmapx/i18n':
         specifier: workspace:^
         version: link:../../packages/i18n
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@react-native-community/netinfo':
         specifier: 12.0.1
         version: 12.0.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.1)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1)
@@ -633,6 +636,9 @@ importers:
       '@mui/system':
         specifier: ^9.5.0
         version: 9.5.0(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       '@openmapx/command-palette':
         specifier: workspace:^
         version: link:../../packages/command-palette
@@ -654,6 +660,9 @@ importers:
       '@openmapx/mangrove-react':
         specifier: workspace:^
         version: link:../../packages/mangrove-react
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -827,6 +836,9 @@ importers:
       '@mui/material':
         specifier: ^9.5.0
         version: 9.5.0(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
@@ -848,6 +860,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -860,6 +875,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
@@ -1047,6 +1065,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -1086,6 +1107,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -1119,6 +1143,9 @@ importers:
       '@openmapx/integration-geocoding':
         specifier: workspace:^
         version: link:../geocoding
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/geocoding-nominatim:
     dependencies:
@@ -1173,6 +1200,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/knowledge-noaa-tides:
     dependencies:
@@ -1197,6 +1227,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/ourairports-data':
         specifier: workspace:^
         version: link:../../packages/ourairports-data
@@ -1212,6 +1245,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/knowledge-sun-time:
     dependencies:
@@ -1221,6 +1257,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       geo-tz:
         specifier: ^8.1.10
         version: 8.1.11
@@ -1278,6 +1317,10 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+    devDependencies:
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/live-transit-db-ris:
     dependencies:
@@ -1415,6 +1458,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       p-map:
         specifier: 7.1.1
         version: 7.1.1
@@ -1430,6 +1476,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       next-intl:
         specifier: ^4.14.5
         version: 4.14.9(@swc/helpers@0.5.23)(@types/react@19.3.0)(next@16.4.5(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
@@ -1555,6 +1604,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@mui/material':
         specifier: ^9.5.0
@@ -1599,6 +1651,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/noaa-coops-data':
         specifier: workspace:^
         version: link:../../packages/noaa-coops-data
@@ -1627,6 +1682,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/ourairports-data':
         specifier: workspace:^
         version: link:../../packages/ourairports-data
@@ -1680,6 +1738,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@mui/material':
         specifier: ^9.5.0
@@ -1699,6 +1760,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@mui/material':
         specifier: ^9.5.0
@@ -1758,6 +1822,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       maplibre-gl:
         specifier: ^6.16.0
         version: 6.17.0
@@ -1786,6 +1853,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@mui/material':
         specifier: ^9.5.0
@@ -1811,6 +1881,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
     devDependencies:
       '@types/react':
         specifier: ^19.3.0
@@ -1833,6 +1906,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@types/react':
         specifier: ^19.3.0
@@ -1921,6 +1997,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@mui/material':
         specifier: ^9.5.0
@@ -1964,6 +2043,10 @@ importers:
       '@openmapx/integration-geocoding':
         specifier: workspace:^
         version: link:../geocoding
+    devDependencies:
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/photos-flickr:
     dependencies:
@@ -1976,6 +2059,9 @@ importers:
       '@openmapx/integration-photos':
         specifier: workspace:^
         version: link:../photos
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/photos-mapillary:
     dependencies:
@@ -1988,6 +2074,9 @@ importers:
       '@openmapx/integration-photos':
         specifier: workspace:^
         version: link:../photos
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/photos-panoramax:
     dependencies:
@@ -2000,6 +2089,9 @@ importers:
       '@openmapx/integration-photos':
         specifier: workspace:^
         version: link:../photos
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/photos-wikimedia:
     dependencies:
@@ -2012,6 +2104,10 @@ importers:
       '@openmapx/integration-photos':
         specifier: workspace:^
         version: link:../photos
+    devDependencies:
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/poi-overpass:
     dependencies:
@@ -2024,6 +2120,9 @@ importers:
       '@openmapx/integration-poi-search':
         specifier: workspace:^
         version: link:../poi-search
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/poi-overture:
     dependencies:
@@ -2036,6 +2135,9 @@ importers:
       '@openmapx/integration-poi-search':
         specifier: workspace:^
         version: link:../poi-search
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -2054,6 +2156,10 @@ importers:
       '@openmapx/presets':
         specifier: workspace:^
         version: link:../../packages/presets
+    devDependencies:
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/restaurants:
     dependencies:
@@ -2087,6 +2193,9 @@ importers:
       '@openmapx/mangrove-client':
         specifier: workspace:^
         version: link:../../packages/mangrove-client
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/ride-deeplink:
     dependencies:
@@ -2111,6 +2220,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/ride-partner:
     dependencies:
@@ -2126,6 +2238,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@mui/material':
         specifier: ^9.5.0
@@ -2341,6 +2456,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/street-level-imagery-panoramax:
     dependencies:
@@ -2350,6 +2468,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit:
     dependencies:
@@ -2444,12 +2565,12 @@ importers:
 
   integrations/transit-mobility-database:
     dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-motis:
     dependencies:
@@ -2567,6 +2688,10 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+    devDependencies:
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/weather-bright-sky:
     dependencies:
@@ -2612,6 +2737,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -3006,9 +3134,18 @@ importers:
         specifier: ^12.1.4
         version: 12.1.4
     devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
       tsx:
         specifier: 4.23.15
         version: 4.23.15
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/integration-framework:
     dependencies:
@@ -3145,6 +3282,9 @@ importers:
       '@types/spdx-expression-parse':
         specifier: 4.0.0
         version: 4.0.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: ^5.0.5
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -3403,6 +3543,9 @@ importers:
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -3479,6 +3622,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@testcontainers/postgresql':
         specifier: ^12.2.1
         version: 12.2.1(supports-color@8.1.1)

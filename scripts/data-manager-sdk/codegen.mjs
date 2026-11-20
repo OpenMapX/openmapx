@@ -8,6 +8,11 @@ import { createCodegenConfig, operationBindings, operationIds } from "./config.m
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const generatedDirectory = join(root, "packages/core/src/services/data-manager/generated");
 
+/**
+ * @param {object} [options]
+ * @param {object} [options.document] OpenAPI document to generate from instead of the pinned file.
+ * @param {string} [options.inputPath]
+ */
 export async function generateArtifacts({
   document,
   inputPath = join(root, "services/data-manager/openapi.json"),

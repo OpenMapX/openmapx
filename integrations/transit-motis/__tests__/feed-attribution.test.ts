@@ -90,7 +90,7 @@ describe("transit-motis feed attribution", () => {
       name: "Stuttgart Hbf",
       lat: 48.7838,
       lng: 9.1815,
-      modes: ["train"],
+      modes: ["rail"],
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, fakeIndex);
@@ -108,7 +108,7 @@ describe("transit-motis feed attribution", () => {
         name: "Stuttgart Hbf",
         lat: 48.78,
         lng: 9.18,
-        modes: ["train"],
+        modes: ["rail"],
         provider: "ms",
       },
       {
@@ -116,7 +116,7 @@ describe("transit-motis feed attribution", () => {
         name: "Frankfurt(Main)Hbf",
         lat: 50.107,
         lng: 8.663,
-        modes: ["train"],
+        modes: ["rail"],
         provider: "ms",
       },
       {
@@ -124,7 +124,7 @@ describe("transit-motis feed attribution", () => {
         name: "Zürich HB",
         lat: 47.378,
         lng: 8.54,
-        modes: ["train"],
+        modes: ["rail"],
         provider: "ms",
       },
     ];
@@ -154,7 +154,7 @@ describe("transit-motis feed attribution", () => {
       name: "Stuttgart Hbf",
       lat: 48.78,
       lng: 9.18,
-      modes: ["train"],
+      modes: ["rail"],
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, undefined);

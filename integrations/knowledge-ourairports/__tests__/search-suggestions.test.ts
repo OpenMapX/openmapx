@@ -1,4 +1,8 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeAttributionIndex,
+  installHostCapabilities,
+} from "@openmapx/integration-framework/testing";
 import type { AirportRecord, AirportSearchMatch } from "@openmapx/ourairports-data";
 import { describe, expect, it, vi } from "vitest";
 import { createOurAirportsSuggestionProvider } from "../index.js";
@@ -55,10 +59,7 @@ it("snapshots the supplier before asynchronous dataset search", async () => {
     publisher: { name: "Original publisher" },
   };
   const ctx = createMockIntegrationContext();
-  ctx.attributionIndex = {
-    getById: () => credit,
-    list: () => [credit],
-  } as typeof ctx.attributionIndex;
+  installHostCapabilities(ctx, { attributionIndex: fakeAttributionIndex(() => [credit]) });
   const resultPromise = createOurAirportsSuggestionProvider(
     ctx,
     () => pending.promise,

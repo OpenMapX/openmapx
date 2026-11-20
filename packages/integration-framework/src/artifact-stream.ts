@@ -84,7 +84,7 @@ function pathStructure(value: string, label = "Artifact path"): void {
 function safePath(value: string): string[] {
   pathStructure(value);
   if (
-    !value ||
+    !value.trim() ||
     value.startsWith("/") ||
     /^[A-Za-z]:/.test(value) ||
     value.includes("\\") ||
@@ -95,6 +95,8 @@ function safePath(value: string): string[] {
     throw Error("Unsafe artifact path");
   const parts = value.split("/").filter((p) => p !== "" && p !== ".");
   if (parts.some((p) => p === "..")) throw Error("Unsafe artifact path");
+  // The extraction root itself may only be listed as a directory, such as `./`.
+  if (!parts.length && !value.endsWith("/")) throw Error("Unsafe artifact path");
   return parts;
 }
 function pax(bytes: Buffer): Record<string, string> {
@@ -185,6 +187,7 @@ export async function extractIntegrationArtifactStream(options: {
   try {
     const prefix = await wire.exact(2);
     if (!prefix) throw Error("Artifact is empty");
+    if (prefix[0] !== 0x1f || prefix[1] !== 0x8b) throw Error("Artifact is not gzip-compressed");
     magic = prefix;
   } catch (error) {
     try {
@@ -201,17 +204,13 @@ export async function extractIntegrationArtifactStream(options: {
     })(),
     { objectMode: false, highWaterMark: 64 * 1024 },
   );
-  const gzip =
-    magic[0] === 0x1f && magic[1] === 0x8b ? createGunzip({ chunkSize: 64 * 1024 }) : undefined;
-  if (gzip) {
-    supplied.on("error", (error) => {
-      gzip.destroy(error);
-    });
-    supplied.pipe(gzip);
-  }
-  const expanded = gzip ?? supplied;
+  const gzip = createGunzip({ chunkSize: 64 * 1024 });
+  supplied.on("error", (error) => {
+    gzip.destroy(error);
+  });
+  supplied.pipe(gzip);
   const bounded = async function* () {
-    for await (const part of expanded) {
+    for await (const part of gzip) {
       const bytes = part as Buffer;
       expandedBytes += bytes.byteLength;
       if (!Number.isSafeInteger(expandedBytes) || expandedBytes > options.maxExpandedBytes)
@@ -225,7 +224,7 @@ export async function extractIntegrationArtifactStream(options: {
     root = new AnchoredDirectory(options.destination, undefined, true);
   } catch (error) {
     supplied.destroy();
-    gzip?.destroy();
+    gzip.destroy();
     try {
       await reader.close();
       await wire.close();
@@ -244,7 +243,7 @@ export async function extractIntegrationArtifactStream(options: {
         ? options.signal.reason
         : Error("Artifact extraction aborted"),
     );
-    gzip?.destroy();
+    gzip.destroy();
   };
   options.signal.addEventListener("abort", abort, { once: true });
   try {
@@ -270,6 +269,11 @@ export async function extractIntegrationArtifactStream(options: {
         link = pending.linkpath ?? text(header, 157, 100);
       if (["x", "g", "L", "K"].includes(type)) {
         if (size > 16384) throw Error("Artifact extended header exceeds 16 KiB");
+        // A GNU long name or link holds one path of at most 1,024 bytes plus its NUL terminator.
+        if ((type === "L" || type === "K") && size > 1025)
+          throw Error(
+            `${type === "K" ? "Artifact link target" : "Artifact path"} exceeds 1,024 UTF-8 bytes`,
+          );
         const bytes = await reader.exact(size);
         if (!bytes) throw Error("Truncated artifact metadata");
         if (type === "x" || type === "g") {
@@ -363,7 +367,7 @@ export async function extractIntegrationArtifactStream(options: {
   } finally {
     options.signal.removeEventListener("abort", abort);
     supplied.destroy();
-    gzip?.destroy();
+    gzip.destroy();
     try {
       await reader.close();
       await wire.close();

@@ -145,6 +145,7 @@ describe("fetchGbfsData", () => {
               stationId: "station-1",
               isInstalled: true,
               isRenting: true,
+              isReturning: true,
               numBikesAvailable: 3,
             },
           ],

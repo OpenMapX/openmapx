@@ -67,7 +67,7 @@ function makeFakeCache() {
   const store = new Map<string, unknown>();
   return {
     store,
-    get: async (k: string) => (store.has(k) ? store.get(k) : null),
+    get: async <T>(k: string) => (store.has(k) ? (store.get(k) as T) : null),
     set: async (k: string, v: unknown) => {
       store.set(k, v);
     },

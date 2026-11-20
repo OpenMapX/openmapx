@@ -1,25 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024", "DOM"],
-    "strict": true,
-    "esModuleInterop": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
-    "noEmit": true,
-    "types": ["node"],
-    "paths": {
-      // The curated headless subpath, resolved the same way Vitest and Metro do.
-      "@openmapx/core/navigation": ["./src/navigation/index.ts"],
-      "@integrations/*": ["../../integrations/*"],
-      "@openmapx/integration-framework": ["../integration-framework/src/index.ts"],
-      "@openmapx/mobility-core/*": ["../mobility-core/src/*.ts", "../mobility-core/src/types/*.ts"]
-    }
+    "noEmit": true
   },
   "include": ["src", "../../integrations/*/types.ts"]
 }

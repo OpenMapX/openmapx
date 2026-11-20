@@ -104,10 +104,17 @@ If you self-host OpenMapX, a few recommendations:
   host ports before installing. Installed integration artifacts are declarative;
   service components run container code. See the
   [extension trust boundary](docs/docs/developer/building-an-external-extension.md).
-- Keep generated credentials and mobile signing output out of the repository's
-  root Docker build context. Run `pnpm check-docker-context-secrets` after
-  changing `.dockerignore`, Dockerfiles, or build contexts; the check enumerates
-  ignored path names but never opens candidate secret files.
+- Keep generated credentials, mobile signing output and host state (database
+  backups, ops-agent state, maintenance records and the runtime-recovery
+  journal under `infra/docker/`) out of the repository's root Docker build
+  context. `pnpm check-docker-context-secrets` requires the
+  root `.dockerignore` and every Dockerfile-specific `<Dockerfile>.dockerignore`
+  in the worktree to hold every required rule and to exclude every sensitive
+  ignored path, whatever builds with them. Conventionally named Dockerfiles
+  (`Dockerfile`, `*.Dockerfile`, `Dockerfile.*` and the `Containerfile` forms)
+  must be regular files, and an ignore-file name beside one must not be a
+  directory. Run it after changing an ignore file; it enumerates ignored path
+  names but never opens candidate secret files.
 - Treat persisted application logs as sensitive operational data. Current API
   logs are bounded and redact request data, credentials, and raw external URLs,
   but historical `app_logs` rows from an older release may not be. Back up the

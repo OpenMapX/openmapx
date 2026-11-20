@@ -1,7 +1,7 @@
 import type { RoutingOptions } from "@openmapx/core";
 import { RoutingProviderError } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DirectionsResult } from "../types.js";
+import type { DirectionsResult, RoutingProvider } from "../types.js";
 import { boundEvent, effect, roadConditionEvent } from "./support/road-condition.js";
 import {
   closureRoutingContract,
@@ -23,8 +23,8 @@ describe("/directions handler — avoidClosures=true with active closures", () =
   });
 
   it("filters the chain to exclusion-capable providers", async () => {
-    const fallbackSpy = vi.fn(async () => createDirectionsResult());
-    const capableSpy = vi.fn(async () => createDirectionsResult());
+    const fallbackSpy = vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult());
+    const capableSpy = vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult());
     const environment = createRoutingHandlerEnvironment({
       routingProviders: [
         {
@@ -91,7 +91,7 @@ describe("/directions handler — avoidClosures=true with active closures", () =
           integrationId: "routing-closure-aware",
           providerId: "engine-b",
           supportsExclusions: true,
-          getRoute: vi.fn(async () => createDirectionsResult()),
+          getRoute: vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult()),
         },
       ],
       closureEvents: [boundEvent()],
@@ -114,7 +114,7 @@ describe("/directions handler — avoidClosures=true with active closures", () =
   });
 
   it("never turns a situation without routing evidence into an exclusion", async () => {
-    const getRoute = vi.fn(async () => createDirectionsResult());
+    const getRoute = vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult());
     const environment = createRoutingHandlerEnvironment({
       routingProviders: [
         {
@@ -148,7 +148,7 @@ describe("/directions handler — avoidClosures=true with active closures", () =
         {
           integrationId: "routing-valhalla",
           providerId: "valhalla",
-          getRoute: vi.fn(async () => createDirectionsResult()),
+          getRoute: vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult()),
         },
       ],
     });
@@ -168,7 +168,7 @@ describe("/directions handler — avoidClosures=true with active closures", () =
   });
 
   it("disables current traffic for a future route and reports that limitation", async () => {
-    const provider = vi.fn(async () => createDirectionsResult());
+    const provider = vi.fn<RoutingProvider["getRoute"]>(async () => createDirectionsResult());
     const environment = createRoutingHandlerEnvironment({
       routingProviders: [
         {
@@ -217,12 +217,18 @@ describe("/directions handler — a road closed to all but local access", () => 
     vi.useRealTimers();
   });
 
-  const route = (geometry: [number, number][]) =>
-    ({ distance: 1, duration: 1, geometry, legs: [], steps: [] }) as DirectionsResult["routes"][0];
+  const route = (geometry: [number, number][]): DirectionsResult["routes"][0] => ({
+    distance: 1,
+    duration: 1,
+    geometry,
+    legs: [],
+    steps: [],
+    mode: "driving",
+  });
 
   it("plans the destination onto it and marks only the route that drives it", async () => {
     vi.useFakeTimers({ now: Date.parse("2026-09-12T12:00:00Z") });
-    const getRoute = vi.fn(async () =>
+    const getRoute = vi.fn<RoutingProvider["getRoute"]>(async () =>
       createDirectionsResult([
         route([
           [13.3, 52.5],

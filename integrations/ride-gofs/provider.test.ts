@@ -698,7 +698,8 @@ describe("static feed lifetime across provider operations", () => {
         store.set(key, { value, expiresAt: clock.now + (ttlSeconds ?? 0) * 1000 });
       },
       del: async (key: string) => void store.delete(key),
-      withCache: async <T>(_key: string, _ttl: number, fn: () => Promise<T>) => fn(),
+      withCache: async <T>(_key: string, _ttl: number, fn: (signal: AbortSignal) => Promise<T>) =>
+        fn(new AbortController().signal),
     };
   }
 
@@ -735,8 +736,9 @@ describe("static feed lifetime across provider operations", () => {
     it("getQuotes prices the estimated fallback from the current tariff", async () => {
       const source = syntheticSource(0);
       const provider = providerOver(source);
-      const large = (result: Awaited<ReturnType<NonNullable<typeof provider.getQuotes>>>) =>
-        result.data.find((q) => q.productId === "large");
+      const large = (
+        result: Awaited<ReturnType<NonNullable<typeof provider.getQuotes>>> | undefined,
+      ) => result?.data.find((q) => q.productId === "large");
 
       const before = large(await provider.getQuotes?.(quoteRequest));
       // 3.50 rider + (8 km x 1.75) + (15 min x 0.65)
@@ -852,16 +854,19 @@ describe("static feed lifetime across provider operations", () => {
     it.each([
       ["getAvailability", "availability"],
       ["getQuotes", "quotes"],
-    ] as const)("%s loads the static files once on its out-of-area fallback", async (method) => {
-      const source = syntheticSource(0);
-      const provider = providerOver(source);
+    ] as const)(
+      "%s loads the static files once on its out-of-area fallback",
+      async (method, _kind) => {
+        const source = syntheticSource(0);
+        const provider = providerOver(source);
 
-      const result = await provider[method]?.({ pickup: outOfZone, pickupAt });
-      expect(result?.attributions[0].name).toBe("Example Taxi Registry");
-      const fetches = source.takeFetches();
-      expect(fetches).toHaveLength(STATIC_FILE_COUNT);
-      expect(countOf(fetches, STATIC_URLS.gofs)).toBe(1);
-    });
+        const result = await provider[method]?.({ pickup: outOfZone, pickupAt });
+        expect(result?.attributions[0].name).toBe("Example Taxi Registry");
+        const fetches = source.takeFetches();
+        expect(fetches).toHaveLength(STATIC_FILE_COUNT);
+        expect(countOf(fetches, STATIC_URLS.gofs)).toBe(1);
+      },
+    );
   });
 
   describe("concurrent operations", () => {

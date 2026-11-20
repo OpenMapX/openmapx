@@ -9,6 +9,11 @@ import { createCodegenConfig } from "./codegen.config.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const packageDirectory = join(root, "integrations/transit-mbta");
 const generatedDirectory = join(packageDirectory, "generated");
+/**
+ * @param {object} [options]
+ * @param {object} [options.document] OpenAPI document to generate from instead of the pinned file.
+ * @param {string} [options.inputPath]
+ */
 export async function generateArtifacts({
   document,
   inputPath = join(packageDirectory, "schema/swagger.json"),

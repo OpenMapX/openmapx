@@ -497,7 +497,7 @@ describe("HotspotLayer", () => {
         properties: { ...feature.properties, confidence: "76" },
       })),
     };
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
       fetchMock.mock.calls.length === 1
         ? response(SLSTR_COLLECTION, headers)
         : response(percent, headers),

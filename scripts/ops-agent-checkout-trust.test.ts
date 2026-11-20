@@ -126,7 +126,10 @@ async function cli(checkout: string, ...args: string[]) {
   return runUnderUmask002(process.execPath, [join(outdir, "cli.mjs"), ...args], {
     cwd: checkout,
     env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: checkout },
-  }).catch((error: { stdout: string; stderr: string; code: number }) => error);
+  }).then(
+    (result) => ({ ...result, code: 0 }),
+    (error: { stdout: string; stderr: string; code: number }) => error,
+  );
 }
 
 async function freePort(): Promise<number> {
@@ -361,8 +364,8 @@ describe("integrations installed through the operations agent", () => {
 
     // The agent's integration store.
     const store = services.agentStatePaths(infra).customIntegrations;
-    // Files placed in the store by hand: extracted under umask 002, so
-    // group-writable, and no record.
+    // Files placed in the store by hand: a group-writable directory and no
+    // record.
     upload("by-hand", [
       { name: "manifest.json", data: manifest("by-hand"), mode: 0o664 },
       { name: "strings/en.json", data: "{}", mode: 0o664 },
@@ -372,14 +375,13 @@ describe("integrations installed through the operations agent", () => {
       const work = join(artifacts, "by-hand-extract");
       mkdirSync(work);
       mkdirSync(store, { recursive: true });
-      renameSync(
-        extractIntegrationArchive(
-          join(artifacts, "by-hand.tar.gz"),
-          join(work, "x"),
-          join(work, "y"),
-        ),
-        join(store, "by-hand"),
-      );
+      const extracted = await extractIntegrationArchive({
+        archivePath: join(artifacts, "by-hand.tar.gz"),
+        extractRoot: join(work, "x"),
+        promoted: join(work, "y"),
+        signal: new AbortController().signal,
+      });
+      renameSync(extracted.directory, join(store, "by-hand"));
       chmodSync(join(store, "by-hand"), 0o775);
     } finally {
       process.umask(previous);
@@ -424,7 +426,7 @@ describe("integrations installed through the operations agent", () => {
           { name: "copy.json", data: manifest("hard-linked") },
           { name: "manifest.json", type: "1", link: "copy.json" },
         ],
-        "must not be hard-linked",
+        "Unsupported artifact entry type '1'",
       ],
       [
         "symlinked",
@@ -432,7 +434,7 @@ describe("integrations installed through the operations agent", () => {
           { name: "real.json", data: manifest("symlinked") },
           { name: "manifest.json", type: "2", link: "real.json" },
         ],
-        "not a symbolic link",
+        "Unsupported artifact entry type '2'",
       ],
     ] as const) {
       const refused = await agentCli(

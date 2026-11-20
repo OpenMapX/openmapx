@@ -24,7 +24,12 @@ const routeProof: RoutingTrafficProof = {
 };
 
 const live = (km: number, kph = 54) => ({ length: km, speeds_non_faded: { current_flow: kph } });
-const unmeasured = (km: number) => ({ length: km, speeds_non_faded: { no_flow: 99 } });
+type TraceEdge = NonNullable<CoverageTraceResponse["edges"]>[number];
+/** An edge as Valhalla reports it without a current speed: only the `no_flow` estimate. */
+const unmeasured = (km: number): TraceEdge & { speeds_non_faded: { no_flow: number } } => ({
+  length: km,
+  speeds_non_faded: { no_flow: 99 },
+});
 
 function leg(
   geometry: [number, number][],

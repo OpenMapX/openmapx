@@ -49,7 +49,7 @@ describe("Cambio region coverage", () => {
       { id, name: town, geoposition: { latitude: lat, longitude: lng }, vehicleCount: 1 },
     ]);
 
-    const stations = await client.search(bboxAround(lat, lng));
+    const stations = await client.search(bboxAround(lat, lng), createPassthroughCache());
 
     expect(fetchMock).toHaveBeenCalledWith(
       `https://cwapi.cambio-carsharing.com/pub/${code}/stations`,
@@ -139,7 +139,7 @@ describe("Cambio stations", () => {
       },
     ]);
 
-    const [station] = await deCambioClient.search(BIELEFELD_BBOX);
+    const [station] = await deCambioClient.search(BIELEFELD_BBOX, createPassthroughCache());
 
     expect(station).toMatchObject({
       id: "de-cambio/BIL/19-17",
@@ -163,7 +163,7 @@ describe("Cambio stations", () => {
       },
     ]);
 
-    const [station] = await deCambioClient.search(BIELEFELD_BBOX);
+    const [station] = await deCambioClient.search(BIELEFELD_BBOX, createPassthroughCache());
 
     expect(station.capacity).toBe(0);
     expect(station.availableVehicles).toBeUndefined();
@@ -181,7 +181,7 @@ describe("Cambio stations", () => {
         vehicleCount: 2,
       },
     ]);
-    const cambio = await deCambioClient.search(BIELEFELD_BBOX);
+    const cambio = await deCambioClient.search(BIELEFELD_BBOX, createPassthroughCache());
     const bielefeld = parseDeNwBielefeldCsv(
       [
         "WKT;gid;website;name;addr_street;addr_housenumber;level;capacity;description",

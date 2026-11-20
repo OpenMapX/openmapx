@@ -20,7 +20,7 @@ function runHarness(secrets: Partial<Record<(typeof secretNames)[number], string
   const secretDir = join(sandbox, "secrets");
   mkdirSync(secretDir);
   for (const [name, value] of Object.entries(secrets)) {
-    writeFileSync(join(secretDir, name), value, { mode: 0o400 });
+    if (value !== undefined) writeFileSync(join(secretDir, name), value, { mode: 0o400 });
   }
 
   const stockEntrypoint = join(sandbox, "stock-entrypoint.sh");

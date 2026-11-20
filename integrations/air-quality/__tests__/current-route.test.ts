@@ -3,7 +3,10 @@ import type {
   IntegrationContext,
   ProviderHealthSnapshot,
 } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryUpstreamRuntime } from "../../overlay-air-quality/test-helpers.js";
 import { setup } from "../index.js";
@@ -33,7 +36,7 @@ async function invoke(ctx: ReturnType<typeof context>, query: Record<string, str
   const handler = ctx.registered.routes.find(({ path }) => path === "/current")?.handler;
   if (!handler) throw new Error("current route missing");
   const output = fakeReply();
-  await handler({ query, params: {}, body: undefined, headers: {} }, output.reply);
+  await handler(routeRequest({ query }), output.reply);
   return output.state;
 }
 

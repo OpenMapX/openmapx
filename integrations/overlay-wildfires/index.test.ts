@@ -295,9 +295,9 @@ describe("GET /wildfires", () => {
     const keys: string[] = [];
     const cache = {
       ...createMockIntegrationContext().cache,
-      withCache: async <T>(key: string, _ttl: number, fn: () => Promise<T>) => {
+      withCache: async <T>(key: string, _ttl: number, fn: (signal: AbortSignal) => Promise<T>) => {
         keys.push(key);
-        return fn();
+        return fn(new AbortController().signal);
       },
     };
     await call("/wildfires", [provider()], { ...VIEW, zoom: "8" }, cache);
@@ -362,9 +362,9 @@ describe("GET /wildfires", () => {
     const keys: string[] = [];
     const cache = {
       ...createMockIntegrationContext().cache,
-      withCache: async <T>(key: string, _ttl: number, fn: () => Promise<T>) => {
+      withCache: async <T>(key: string, _ttl: number, fn: (signal: AbortSignal) => Promise<T>) => {
         keys.push(key);
-        return fn();
+        return fn(new AbortController().signal);
       },
     };
     for (const path of ["/wildfires", "/wildfires/density"]) {
@@ -539,9 +539,9 @@ describe("GET /perimeters/nifc", () => {
     const keys: string[] = [];
     const cache = {
       ...createMockIntegrationContext().cache,
-      withCache: async <T>(key: string, _ttl: number, fn: () => Promise<T>) => {
+      withCache: async <T>(key: string, _ttl: number, fn: (signal: AbortSignal) => Promise<T>) => {
         keys.push(key);
-        return fn();
+        return fn(new AbortController().signal);
       },
     };
     for (const zoom of ["9", "9.7", "13", "15.25"]) {

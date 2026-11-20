@@ -76,7 +76,9 @@ const LINE_LAYER = "omx-road-conditions-line";
 const creditRegistry = new IntegrationRegistry([
   {
     id: "openconditions",
+    name: "OpenConditions",
     enabled: true,
+    isBuiltIn: true,
     domains: ["road-conditions"],
     dataSources: ["working", "offscreen", "missing-key"].map((sourceId) => ({
       sourceId,
@@ -442,7 +444,7 @@ describe("RoadConditionsLayer horizon query", () => {
     });
 
     act(() => {
-      fake.map.setStyle({});
+      fake.map.setStyle({ version: 8, sources: {}, layers: [] });
     });
 
     expect(fake.state.layers.has(MARKER_LAYER)).toBe(true);

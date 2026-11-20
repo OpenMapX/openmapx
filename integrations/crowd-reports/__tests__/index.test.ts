@@ -3,6 +3,7 @@ import {
   createMockIntegrationContext,
   type FakeHttpClient,
   fakeHttpClient,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { setup } from "../index.js";
@@ -76,7 +77,7 @@ describe("crowd-reports setup", () => {
     const { reply, captured } = fakeReply();
 
     await handler(
-      { query: {}, params: {}, body: { alg: "ES256", signature: "sig", claim: {} } },
+      routeRequest({ query: {}, body: { alg: "ES256", signature: "sig", claim: {} } }),
       reply as never,
     );
 
@@ -104,7 +105,7 @@ describe("crowd-reports setup", () => {
     const handler = handlerFor("POST /reports/:class/:id/:action", http);
     const { reply, captured } = fakeReply();
 
-    await handler({ query, params, body: {} }, reply as never);
+    await handler(routeRequest({ query, params, body: {} }), reply as never);
 
     expect(http.calls).toHaveLength(0);
     expect(captured.status).toBe(400);
@@ -116,11 +117,11 @@ describe("crowd-reports setup", () => {
     const { reply, captured } = fakeReply();
 
     await handler(
-      {
+      routeRequest({
         query: {},
         params: { class: "situation", id: "crowd:a b", action: "confirm" },
         body: { subClaim: {} },
-      },
+      }),
       reply as never,
     );
 
@@ -135,11 +136,11 @@ describe("crowd-reports setup", () => {
     const { reply, captured } = fakeReply();
 
     await handler(
-      {
+      routeRequest({
         query: { component: "lane 1&x=y" },
         params: { class: "feature", id: "f1", action: "negate" },
         body: { subClaim: {} },
-      },
+      }),
       reply as never,
     );
 
@@ -155,7 +156,7 @@ describe("crowd-reports setup", () => {
     const handler = handlerFor("GET /issuer-keys", http);
     const { reply, captured } = fakeReply();
 
-    await handler({ query: {}, params: {}, body: undefined }, reply as never);
+    await handler(routeRequest({ query: {} }), reply as never);
 
     expect(http.calls[0]?.method).toBe("getResponse");
     expect(captured.status).toBe(503);
@@ -169,7 +170,7 @@ describe("crowd-reports setup", () => {
     const handler = handlerFor("POST /enroll", http);
     const { reply, captured } = fakeReply();
 
-    await handler({ query: {}, params: {}, body: {} }, reply as never);
+    await handler(routeRequest({ query: {}, body: {} }), reply as never);
     expect(captured.status).toBe(502);
   });
 
@@ -180,7 +181,7 @@ describe("crowd-reports setup", () => {
     const handler = handlerFor("POST /tokens", http);
     const { reply, captured } = fakeReply();
 
-    await handler({ query: {}, params: {}, body: {} }, reply as never);
+    await handler(routeRequest({ query: {}, body: {} }), reply as never);
     expect(captured.status).toBe(502);
     expect(captured.body).toEqual({ error: "contributions service unavailable" });
   });

@@ -120,7 +120,7 @@ function loadStrings(dir: string): IntegrationStrings {
     try {
       const content = JSON.parse(readFileSync(join(stringsDir, file), "utf-8"));
       if (content && typeof content === "object") {
-        strings[file.replace(/\.json$/, "")] = content as Record<string, unknown>;
+        strings[file.replace(/\.json$/, "")] = content;
       }
     } catch {
       // Unreadable strings surface as empty cells below; JSON validity is a separate concern.
@@ -162,6 +162,8 @@ function toMeta(it: DiscoveredIntegration): LoadedIntegrationMeta {
     name: (en?.name as string) ?? it.manifest.name ?? it.id,
     description: (en?.description as string) ?? it.manifest.description,
     enabled: true,
+    // Everything under `integrations/` ships with the host.
+    isBuiltIn: true,
     domains: it.manifest.domains,
     frontend: it.manifest.frontend,
     dataSources: it.manifest.dataSources,
@@ -339,9 +341,7 @@ function checkHeadings(it: DiscoveredIntegration): string[] {
     }
   }
   const exposures = new Set(
-    (it.manifest.dataSources ?? [])
-      .map((ds) => ds.endUserExposure)
-      .filter((e): e is string => typeof e === "string" && e.length > 0),
+    (it.manifest.dataSources ?? []).map((ds) => ds.endUserExposure).filter((e) => e !== undefined),
   );
   for (const exposure of exposures) {
     if (!(exposure in legal.exposure)) {

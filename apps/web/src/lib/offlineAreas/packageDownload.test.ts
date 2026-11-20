@@ -1,3 +1,5 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import type { OfflineMapPackageManifest, OfflinePackageCompatibility } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OfflinePackageApi } from "./packageApi";
@@ -10,7 +12,6 @@ import {
 import type { OfflinePackageResolver } from "./packageResolver";
 import { createOfflinePackageResolver } from "./packageResolver";
 import { MemoryOfflinePackageStorage } from "./packageStorage";
-import { Sha256 } from "./sha256";
 import type { OfflinePackageStorage } from "./types";
 
 vi.mock("./pmtilesReader", () => ({
@@ -26,7 +27,7 @@ afterEach(() => {
 });
 
 function hash(bytes: Uint8Array): string {
-  return new Sha256().update(bytes).digestHex();
+  return bytesToHex(sha256(bytes));
 }
 
 function manifest(bytes: Uint8Array, sha = hash(bytes)): OfflineMapPackageManifest {

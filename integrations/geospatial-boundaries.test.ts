@@ -1,6 +1,10 @@
-import type { RouteHandler } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
+// This file sits outside any workspace package, so it reaches the framework by path.
+import type { RouteHandler } from "../packages/integration-framework/src/index.js";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "../packages/integration-framework/src/testing/index.js";
 import { parseDataSourceBBox } from "./data-source/index.js";
 import { setup as setupRouting } from "./routing/index.js";
 import { setup as setupTransit } from "./transit/index.js";
@@ -25,18 +29,15 @@ async function invoke(
   const send = (data: unknown) => {
     payload = data;
   };
-  await handler(
-    { query: input.query ?? {}, params: {}, body: input.body, headers: {} },
-    {
-      send,
-      status(code) {
-        statusCode = code;
-        return { send };
-      },
-      header() {},
-      type() {},
+  await handler(routeRequest({ query: input.query ?? {}, body: input.body }), {
+    send,
+    status(code) {
+      statusCode = code;
+      return { send };
     },
-  );
+    header() {},
+    type() {},
+  });
   return { statusCode, payload };
 }
 

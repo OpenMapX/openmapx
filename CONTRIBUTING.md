@@ -105,11 +105,6 @@ afterwards, so it refuses to run beside an existing deployment. CI runs it on
 main, nightly and on pull requests that touch the CLI, service rendering,
 `services/`, `infra/docker`, the operations agent or a Dockerfile.
 
-`pnpm verify:full` does not cover the repository scripts, the integration test
-files or `packages/mobility-core`, which still have type errors.
-`pnpm check-types:unenforced` reports their error counts without failing; when
-you change those files, check that your change does not add errors.
-
 ### Running the full test suite on a Mac
 
 Control-plane and filesystem-heavy tests (durable writes, fsync, lock files) are
@@ -159,8 +154,10 @@ pnpm check:policy
 pnpm check-release-information --base origin/main --head HEAD --body-file <description.md>
 ```
 
-Run `pnpm check-openapi` after route or schema changes and `pnpm check-types`
-for the packages you touched. When the `lint` job fails on a pull request, CI
+`pnpm check:policy` runs every check in `scripts/run-policy-checks.mjs`, also
+after one fails, and lists each failed check at the end. Run `pnpm check-openapi`
+after route or schema changes and `pnpm check-types` for the packages you
+touched. When the `lint` job fails on a pull request, CI
 cancels that run's remaining jobs: the required gate is already red, and the
 runners go to other pull requests. Fix the lint failure and push again to get
 the test results.
@@ -435,7 +432,7 @@ Do not select private application packages or broad core internals. Tests-only e
 No package release: This changes only the test runner configuration; the published files and consumer behavior stay the same.
 ```
 
-Do not add empty bookkeeping Changesets. CI validates new/updated notes, allowed packages and affected-package coverage. Shipped schemas, templates and documentation count as artifact inputs. Dependency-only changes are judged by each public package's resolved dependency tree: the `pnpm-lock.yaml` entries reachable from the package's own dependencies (build tools included) and, for the workspace packages it links, from their production dependencies and the devDependencies that provide their declared peers. This covers lockfile changes, and root or workspace `package.json` changes confined to `dependencies`, `devDependencies` and `optionalDependencies` when the manifest has its own lockfile importer. Such a change needs a note or explanation only for the packages whose tree changes; the check prints the result per package. This judgement relies on `pnpm check-declared-imports` (part of `pnpm check:policy`): every import in a public package's source, and in the workspace source the CLI bundles, must be declared in that workspace's own manifest, never only at the root or through hoisting, and a bundled workspace's runtime imports must be dependencies, optional dependencies or peers provided by a devDependency. A public package's own manifest and shipped manifests such as scaffold templates always count as artifact changes. Lockfile-wide settings such as overrides and patches, a lockfile the check cannot follow and other shared build inputs are treated conservatively; explain when they do not affect the qualified artifacts. A pending note from an earlier PR does not cover new work. These rules apply equally to humans and bots; a relevant dependency update needs a note or an accurate explanation before auto-merge.
+Do not add empty bookkeeping Changesets. CI validates new/updated notes, allowed packages and affected-package coverage. Shipped schemas, templates and documentation count as artifact inputs. Dependency-only changes are judged by each public package's resolved dependency tree: the `pnpm-lock.yaml` entries reachable from the package's own dependencies (build tools included) and, for the workspace packages it links, from their production dependencies and the devDependencies that provide their declared peers. This covers lockfile changes, and root or workspace `package.json` changes confined to `dependencies`, `devDependencies` and `optionalDependencies` when the manifest has its own lockfile importer. Such a change needs a note or explanation only for the packages whose tree changes; the check prints the result per package. This judgement relies on `pnpm check-declared-imports` (part of `pnpm check:policy`): every import in a public package's source, and in the workspace source the CLI bundles, must be declared in that workspace's own manifest, never only at the root or through hoisting, and a bundled workspace's runtime imports must be dependencies, optional dependencies or peers provided by a devDependency. The same check refuses, in every workspace, a reference to another workspace package that the workspace's own manifest does not declare. A public package's own manifest and shipped manifests such as scaffold templates always count as artifact changes. Lockfile-wide settings such as overrides and patches, a lockfile the check cannot follow and other shared build inputs are treated conservatively; explain when they do not affect the qualified artifacts. A pending note from an earlier PR does not cover new work. These rules apply equally to humans and bots; a relevant dependency update needs a note or an accurate explanation before auto-merge.
 
 For important product effects, add a fragment following [release-notes/README.md](release-notes/README.md) and declare its categories in the same PR section:
 

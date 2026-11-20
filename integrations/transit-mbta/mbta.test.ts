@@ -1,11 +1,14 @@
 import type { SharedRequestPolicy, UpstreamRuntime } from "@openmapx/integration-framework";
+import { integrationManifestSchema } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "./index";
-import manifest from "./manifest.json";
+import manifestJson from "./manifest.json";
+
+const manifest = integrationManifestSchema.parse(manifestJson);
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing provider method");

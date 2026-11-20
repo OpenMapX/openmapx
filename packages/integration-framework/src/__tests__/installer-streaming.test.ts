@@ -1,10 +1,19 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 import { afterEach, expect, it, vi } from "vitest";
 import { createDeterministicTarGz } from "../deterministic-tar";
-import { installIntegration } from "../installer";
+import { extractIntegrationArchive, installIntegration } from "../installer";
 
 const calls = vi.hoisted(() => ({
   watched: "",
@@ -74,6 +83,83 @@ it("installs a valid existing artifact without whole-file archive reads or gzip 
     manifest,
   );
   expect(calls.wholeReads).toBe(0);
+});
+it("extracts an archive file within its byte bounds and refuses one beyond them", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-integration-archive-"));
+  roots.push(root);
+  const archive = join(root, "wrapped.tar.gz");
+  const bytes = createDeterministicTarGz([
+    { path: "wrapped/manifest.json", contents: Buffer.from("{}") },
+    { path: "wrapped/padding.bin", contents: Buffer.alloc(64 * 1024) },
+  ]);
+  writeFileSync(archive, bytes);
+  expect(bytes.length).toBeLessThan(16 * 1024);
+  const signal = new AbortController().signal;
+
+  const extracted = await extractIntegrationArchive({
+    archivePath: archive,
+    extractRoot: join(root, "within"),
+    promoted: join(root, "unwrapped"),
+    maxBytes: 128 * 1024,
+    signal,
+  });
+  expect(extracted).toEqual({
+    directory: join(root, "unwrapped"),
+    archiveSha256: createHash("sha256").update(bytes).digest("hex"),
+  });
+  expect(statSync(join(root, "unwrapped", "padding.bin")).size).toBe(64 * 1024);
+
+  // The compressed archive fits, its expanded contents do not.
+  await expect(
+    extractIntegrationArchive({
+      archivePath: archive,
+      extractRoot: join(root, "expanded"),
+      promoted: join(root, "expanded-unwrapped"),
+      maxBytes: 16 * 1024,
+      signal,
+    }),
+  ).rejects.toThrow("extracted size exceeds max 16384 bytes");
+  await expect(
+    extractIntegrationArchive({
+      archivePath: archive,
+      extractRoot: join(root, "archive"),
+      promoted: join(root, "archive-unwrapped"),
+      maxBytes: bytes.length - 1,
+      signal,
+    }),
+  ).rejects.toThrow(`Artifact size ${bytes.length} exceeds max`);
+  await expect(
+    extractIntegrationArchive({
+      archivePath: archive,
+      extractRoot: join(root, "digest"),
+      promoted: join(root, "digest-unwrapped"),
+      expectedSha256: "0".repeat(64),
+      signal,
+    }),
+  ).rejects.toThrow("sha256 mismatch");
+  for (const left of ["expanded", "archive", "digest"]) {
+    expect(existsSync(join(root, left))).toBe(false);
+    expect(existsSync(join(root, `${left}-unwrapped`))).toBe(false);
+  }
+});
+it("refuses an uncompressed tar and keeps nothing", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-integration-raw-"));
+  roots.push(root);
+  const archive = join(root, "raw.tar");
+  writeFileSync(
+    archive,
+    gunzipSync(createDeterministicTarGz([{ path: "manifest.json", contents: Buffer.from("{}") }])),
+  );
+  await expect(
+    extractIntegrationArchive({
+      archivePath: archive,
+      extractRoot: join(root, "extract"),
+      promoted: join(root, "unwrapped"),
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow("Artifact is not gzip-compressed");
+  expect(existsSync(join(root, "extract"))).toBe(false);
+  expect(existsSync(join(root, "unwrapped"))).toBe(false);
 });
 it("returns ownership of an unopened byte source when cancellation precedes extraction", async () => {
   const { extractIntegrationArtifactStream } = await import("../artifact-stream");

@@ -28,6 +28,22 @@ describe("subject-data policy gate", () => {
     expect(result.errors.some((error) => error.includes("does-not-exist"))).toBe(true);
   });
 
+  it("treats an integration without a declaration as storing no personal data", () => {
+    const result = validateSubjectDataInventory({
+      directUserForeignKeys: [],
+      manifestSubjects: [{ source: "integration", id: "fixture", subjectData: undefined }],
+    });
+    expect(result.errors).toEqual([]);
+  });
+
+  it("still requires every service to declare its personal-data storage", () => {
+    const result = validateSubjectDataInventory({
+      directUserForeignKeys: [],
+      manifestSubjects: [{ source: "service", id: "fixture", subjectData: undefined }],
+    });
+    expect(result.errors).toEqual(["service/fixture: missing subjectData declaration"]);
+  });
+
   it("reports a direct user foreign key without an erasure/catalogue classification", () => {
     const result = validateSubjectDataInventory({
       directUserForeignKeys: ["new_table.user_id"],

@@ -102,7 +102,7 @@ describe("CI applicability and required result enforcement", () => {
     const skipped = ["database", "test-linux-user", "test-agent-image"];
     for (const paths of [
       ["apps/web/src/lib/navigation/useNavigationVoice.ts", "apps/web/src/app/page.tsx"],
-      ["apps/web/src/components/map/HostMapProvider.tsx"],
+      ["apps/web/src/components/search/VoiceSearchButton.tsx"],
       ["apps/web/src/components/example.tsx", "packages/i18n/locales/de.json"],
       ["apps/web/src/styles/global.css", "docs/docs/features/search.md"],
       ["apps/mobile/src/example.ts", "apps/web/src/components/example.tsx"],
@@ -278,9 +278,7 @@ describe("CI applicability and required result enforcement", () => {
   });
   it("keeps hidden docs/node and web/mobile boundary readers selected", () => {
     expect(pr(["docs/docs/features/personal-timeline.md"]).jobs["test-node"]).toBe(true);
-    for (const path of ["map/HostMapProvider.tsx", "search/VoiceSearchButton.tsx"]) {
-      expect(pr([`apps/web/src/components/${path}`]).jobs.mobile).toBe(true);
-    }
+    expect(pr(["apps/web/src/components/search/VoiceSearchButton.tsx"]).jobs.mobile).toBe(true);
   });
   it("rejects aggregate dependencies absent from the selection contract", () => {
     const plan = pr(["packages/core/src/index.ts"]);

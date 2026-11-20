@@ -8,7 +8,7 @@
 //
 // The API and the operations agent check community service repository URLs
 // here, and the integration installer
-// (`packages/core/src/integration/installer.ts`) calls into this module too, so
+// (`packages/integration-framework/src/installer.ts`) calls into this module too, so
 // the paths can't drift.
 
 export const ALLOWED_GIT_HOSTS: ReadonlySet<string> = new Set([

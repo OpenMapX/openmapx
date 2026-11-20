@@ -9,13 +9,14 @@ import {
 import {
   createMockIntegrationContext,
   type FakeHttpRequest,
+  installHostCapabilities,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { createSearchSuggestionsOrchestrator } from "../search-suggestions/orchestrator.js";
 import { createEnturGeocodingProvider } from "./provider.js";
 import { collection, fixture, LAYERS } from "./test-support.js";
 
-let mockHttp: ReturnType<typeof vi.fn>;
+let mockHttp: Mock<(request: FakeHttpRequest) => unknown>;
 let entur: ReturnType<typeof fixture>;
 beforeEach(() => {
   vi.stubGlobal(
@@ -351,14 +352,16 @@ it.each(["deadline", "caller"] as const)(
     ];
     const recordFailure = vi.fn(async () => {});
     const recordSuccess = vi.fn(async () => {});
-    ctx.providerHealth = {
-      isHealthy: async () => true,
-      recordFailure,
-      recordSuccess,
-      getSnapshot: vi.fn(),
-    };
+    installHostCapabilities(ctx, {
+      providerHealth: {
+        isHealthy: async () => true,
+        recordFailure,
+        recordSuccess,
+        getSnapshot: vi.fn(),
+      },
+    });
     const recordProviderCall = vi.fn();
-    ctx.metricsRecorder = { recordProviderCall };
+    installHostCapabilities(ctx, { metricsRecorder: { recordProviderCall } });
     const controller = new AbortController();
     const work = createSearchSuggestionsOrchestrator(ctx).search(
       { query: "Oslo", lang: "en", limit: 8 },

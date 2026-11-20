@@ -8,7 +8,10 @@ import type {
   LoadedIntegration,
   WeatherProvider,
 } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import { setup } from "./index.js";
@@ -264,10 +267,7 @@ it("serializes independent hourly/daily suppliers and keeps receipts on forecast
         body = JSON.parse(JSON.stringify(value));
       },
     };
-    await route.handler(
-      { query: { lat: "52", lng: "13" }, params: {}, body: null, headers: {} },
-      reply,
-    );
+    await route.handler(routeRequest({ query: { lat: "52", lng: "13" }, body: null }), reply);
     return body as {
       hourly: WeatherForecastResponse<HourlyForecastPoint>;
       daily: WeatherForecastResponse<DailyForecastPoint>;

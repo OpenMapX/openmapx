@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { access, readFile, realpath } from "node:fs/promises";
 import { promisify } from "node:util";
+import { executionRefSchema, opsOperationFingerprint } from "@openmapx/core/ops";
 import { createDockerRuntime } from "../src/docker-runtime";
 import { dispatchOpsOperation } from "../src/runtime";
-import { withPrivateFixture } from "./traffic-maintenance-fixture.ts";
+import { withPrivateFixture } from "./traffic-maintenance-fixture";
 
 /**
  * Disposable acceptance probe for the pinned Valhalla maintenance lifecycle.
@@ -73,11 +74,22 @@ const runtime = createDockerRuntime({
   },
 });
 const operation = { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" } as const;
+const fingerprint = "a".repeat(64);
 const result = await dispatchOpsOperation(runtime, operation, {
+  // A synthetic execution: this probe drives the runtime directly, without the agent's journal.
+  execution: executionRefSchema.parse({
+    executor: "ops-agent",
+    principal: "api",
+    executionId: "job1_synthetic-maintenance",
+    operationKey: "opk1_synthetic-maintenance",
+    operationFingerprint: opsOperationFingerprint(operation),
+    fingerprint,
+    deadlineAt: Date.now() + 90_000,
+  }),
   signal: AbortSignal.timeout(90_000),
   emitLog: () => undefined,
   claim: {
-    fingerprint: "a".repeat(64),
+    fingerprint,
     operation,
     source: "registry",
     capability: { revisionId: "synthetic-maintenance-v1", values: {} },

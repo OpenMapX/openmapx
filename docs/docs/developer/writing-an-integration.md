@@ -86,6 +86,11 @@ treats it as a workspace member and resolves the framework packages.
 }
 ```
 
+Declare every workspace package the integration's code or tests import, such as
+`@openmapx/mobility-core`. TypeScript, Vitest and the bundlers resolve workspace
+packages only through these declarations, and `pnpm check-declared-imports`
+refuses an undeclared one.
+
 The directory name should match the manifest `id`. The end state is small:
 
 ```
@@ -117,12 +122,6 @@ example for the route-only feature:
   "frontend": { "mapLayer": false, "legend": false, "panel": false },
   "backend": { "routes": true },
   "quality": "built-in",
-  "subjectData": {
-    "storesPersonalData": false,
-    "strategy": "not_personal",
-    "registrationIds": [],
-    "operatorInstructions": null
-  },
   "healthCheck": {
     "type": "http",
     "url": "https://sun-times.example.org/times?lat=0&lng=0"
@@ -167,9 +166,10 @@ Check these fields before continuing:
   `pnpm check-legal-tables` checks disclosure completeness. Route-only
   orchestrators can omit sources when they acquire no upstream data themselves;
   `backend.routes` does not universally require a source entry in the validator.
-- `subjectData` declares this example's lack of personal-data storage. The
-  separate `personalData: true` source field describes transmission of location
-  queries. Do not infer one from the other.
+- The example stores no personal data, so it has no `subjectData` declaration
+  ([personal-data storage declarations](./integration-system.md#personal-data-storage-declarations)).
+  The separate `personalData: true` source field describes transmission of
+  location queries. Do not infer one from the other.
 
 The example's unknown service licence grants no usage rights. Replace the
 illustrative terms/privacy links and confirm the service's conditions before

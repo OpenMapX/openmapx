@@ -6,6 +6,7 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { trafficFixture } from "../src/__tests__/live-writer-fixture.js";
 import { createLiveTrafficWriter } from "../src/jobs/traffic/live-writer-client.js";
+import type { WayEdge } from "../src/jobs/traffic/ways-to-edges.js";
 import { writeLiveTraffic } from "../src/jobs/traffic/write-live.js";
 
 const dir = mkdtempSync(join(tmpdir(), "openmapx-writer-bench-"));
@@ -17,11 +18,11 @@ try {
   for (const mode of ["direct", "worker", "worker-warm"] as const) {
     const tarPath = join(dir, `${mode}.tar`);
     writeFileSync(tarPath, fixture);
-    const waysToEdges = new Map(
-      Array.from(
-        { length: tiles },
-        (_, tile) => [tile + 1, [{ forward: true, level: 2, tile, index: 1 }]] as const,
-      ),
+    const waysToEdges = new Map<number, WayEdge[]>(
+      Array.from({ length: tiles }, (_, tile) => [
+        tile + 1,
+        [{ forward: true, level: 2, tile, index: 1 }],
+      ]),
     );
     const csv =
       "way_id,dir,current_kph,free_flow_kph,los\n" +

@@ -32,7 +32,7 @@ function setup(options: PlaceTransitOptions = {}, stops: TransitStop[] = station
       },
     },
   } as unknown as IntegrationContext;
-  const search = vi.fn(async () => ({
+  const search = vi.fn(async (_query: string) => ({
     data: stops,
     attributions: [],
     freshness: freshnessNow(),

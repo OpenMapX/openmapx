@@ -1,3 +1,4 @@
+import type { Place } from "@openmapx/core";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,7 +51,8 @@ describe("overture place resolver", () => {
     const { setup } = await import("../index.js");
     const { getPlaceResolver } = await import("@openmapx/place-ids");
     setup(createMockIntegrationContext({ db }));
-    const resolver = getPlaceResolver("overture")!;
+    const resolver = getPlaceResolver<Place>("overture");
+    if (!resolver) throw new Error("The Overture place resolver is not registered");
     const de = await resolver(GERS_ID, { lang: "de-DE" });
     expect(de?.brand?.name).toBe("Deutsche Marke");
     expect(de?.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
@@ -90,7 +92,7 @@ describe("overture place resolver", () => {
 
     setup(ctx);
 
-    const resolver = getPlaceResolver("overture");
+    const resolver = getPlaceResolver<Place>("overture");
     expect(resolver).toBeDefined();
 
     const place = await resolver?.(GERS_ID, { lang: "de-DE" });
@@ -118,7 +120,7 @@ describe("overture place resolver", () => {
 
     setup(ctx);
 
-    const resolver = getPlaceResolver("overture");
+    const resolver = getPlaceResolver<Place>("overture");
     expect(resolver).toBeDefined();
 
     const place = await resolver?.(GERS_ID, {});
@@ -131,7 +133,7 @@ describe("overture place resolver", () => {
     const { setup } = await import("../index.js");
     const { getPlaceResolver } = await import("@openmapx/place-ids");
     setup(ctx);
-    const place = await getPlaceResolver("overture")?.(GERS_ID, { lang: "de-DE" });
+    const place = await getPlaceResolver<Place>("overture")?.(GERS_ID, { lang: "de-DE" });
     expect(place).toMatchObject({
       id: "osm:node/9007199254740993",
       primaryScheme: "osm",
@@ -150,7 +152,7 @@ describe("overture place resolver", () => {
     setup(ctx);
 
     // No db → resolver should not have been registered (fresh registry after resetModules).
-    const resolver = getPlaceResolver("overture");
+    const resolver = getPlaceResolver<Place>("overture");
     expect(resolver).toBeUndefined();
   });
 });

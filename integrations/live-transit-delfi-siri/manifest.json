@@ -6,12 +6,6 @@
   "quality": "built-in",
   "category": "Transit",
   "documentation": "https://www.govdata.de/suche/daten/delfi-realtime-siri-et-rhein-ruhr",
-  "subjectData": {
-    "storesPersonalData": false,
-    "strategy": "not_personal",
-    "registrationIds": [],
-    "operatorInstructions": null
-  },
   "domains": ["live-transit"],
   "backend": {
     "routes": false

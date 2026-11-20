@@ -1,3 +1,5 @@
+import type { JunctionLookupPoint } from "@openmapx/core";
+import type { LngLat } from "@openmapx/mobility-core/geometry";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import holz from "../../../packages/core/src/navigation/__fixtures__/junction/a44-kreuz-holz-a46.json";
 
@@ -19,6 +21,12 @@ import {
   createRoutingHandlerEnvironment,
   createRoutingTestReply,
 } from "./support/routing-handler-contract.js";
+
+// The recorded Kreuz Holz lookup point, its trace read as coordinate pairs.
+const holzLookupPoint: JunctionLookupPoint = {
+  ...holz.lookupPoint,
+  trace: holz.lookupPoint.trace.map(([lng, lat]): LngLat => [lng, lat]),
+};
 
 // The A57 approach to exit 20: six route vertices ending 30 m past the split.
 const TRACE = [
@@ -401,7 +409,7 @@ describe("connected outgoing roads at Kreuz Holz", () => {
   it("includes the continuing motorway and the routed ramp at their shared OSM node", () => {
     const result = mapJunctionWays(
       holz.osmTopology as unknown as OverpassWayElement[],
-      holz.lookupPoint,
+      holzLookupPoint,
     );
     expect(result.outgoing?.map((way) => way.wayId).sort()).toEqual([168452743, 971245022]);
     expect(result.outgoing?.find((way) => way.wayId === 971245022)?.tags.destination).toBe(
@@ -417,7 +425,7 @@ describe("connected outgoing roads at Kreuz Holz", () => {
     };
     const result = mapJunctionWays(
       [...holz.osmTopology, adjacent] as unknown as OverpassWayElement[],
-      holz.lookupPoint,
+      holzLookupPoint,
     );
     expect(result.outgoing?.some((way) => way.wayId === 987)).toBe(false);
   });
@@ -432,7 +440,7 @@ describe("connected outgoing roads at Kreuz Holz", () => {
     };
     const result = mapJunctionWays(
       [holz.osmTopology[0], holz.osmTopology[1], reverse] as unknown as OverpassWayElement[],
-      holz.lookupPoint,
+      holzLookupPoint,
     );
     expect(result.outgoing?.map((way) => way.wayId).sort()).toEqual([168452743, 971245022]);
   });
@@ -440,12 +448,12 @@ describe("connected outgoing roads at Kreuz Holz", () => {
 
 it("binds outgoing topology to its approach way and rejects incomplete node arrays", () => {
   const elements = holz.osmTopology as unknown as OverpassWayElement[];
-  const result = mapJunctionWays(elements, holz.lookupPoint);
+  const result = mapJunctionWays(elements, holzLookupPoint);
   expect(result.outgoingApproachWayId).toBe(971245021);
   const malformed = elements.map((entry) =>
     entry.id === 971245022 ? { ...entry, nodes: entry.nodes?.slice(0, 1) } : entry,
   );
   expect(
-    mapJunctionWays(malformed, holz.lookupPoint).outgoing?.some((road) => road.wayId === 971245022),
+    mapJunctionWays(malformed, holzLookupPoint).outgoing?.some((road) => road.wayId === 971245022),
   ).toBe(false);
 });

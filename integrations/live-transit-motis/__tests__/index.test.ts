@@ -348,7 +348,7 @@ describe("live-transit-motis provider", () => {
       mod.setup(ctx);
       const provider = getProvider();
       const alerts = await provider.getAlertsForStop?.("8000105");
-      expect(vi.mocked(motisClient.stoptimes).mock.calls[0][0].client?.getConfig().baseUrl).toBe(
+      expect(vi.mocked(motisClient.stoptimes).mock.calls[0]?.[0]?.client?.getConfig().baseUrl).toBe(
         "https://api.transitous.org",
       );
       expect(alerts?.attributions.map((credit) => credit.sourceId)).toEqual(["transitous"]);

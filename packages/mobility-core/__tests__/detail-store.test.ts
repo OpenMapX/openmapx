@@ -16,7 +16,7 @@ function sharedCache() {
     del: async (key) => {
       values.delete(key);
     },
-    withCache: async (_key, _ttl, load) => load(),
+    withCache: async (_key, _ttl, load) => load(new AbortController().signal),
   };
   return { cache, writes, values };
 }

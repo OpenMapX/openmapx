@@ -1,7 +1,9 @@
 import type { CacheClient, RouteHandler } from "@openmapx/integration-framework";
+import { integrationManifestSchema } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   type MockContextOverrides,
+  routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,7 +22,9 @@ vi.mock("geo-tz", async (importOriginal) => {
 });
 
 import { setup } from "./index.js";
-import manifest from "./manifest.json";
+import manifestJson from "./manifest.json";
+
+const manifest = integrationManifestSchema.parse(manifestJson);
 
 // The /times route resolves the IANA zone from the coordinate (geo-tz), then
 // queries sunrise-sunset.org with `formatted=0` (ISO output). These tests pin
@@ -32,6 +36,7 @@ interface FakeReply {
   header: (k: string, v: string) => FakeReply;
   send: (p: unknown) => FakeReply;
   status: (n: number) => FakeReply;
+  type: (contentType: string) => FakeReply;
   payload: unknown;
   statusCode: number;
   headers: Record<string, string>;
@@ -52,6 +57,10 @@ function makeReply(): FakeReply {
     },
     status(n) {
       reply.statusCode = n;
+      return reply;
+    },
+    type(contentType) {
+      reply.headers["Content-Type"] = contentType;
       return reply;
     },
   };
@@ -80,7 +89,7 @@ async function invoke(
   const reply = makeReply();
   // The real dispatcher always passes headers, even when empty — mirror
   // that shape so this mock cannot drift from what handlers actually receive.
-  await getHandler(path, overrides)({ query, params: {}, body: undefined, headers: {} }, reply);
+  await getHandler(path, overrides)(routeRequest({ query }), reply);
   return reply;
 }
 

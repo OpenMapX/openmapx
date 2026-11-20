@@ -8,6 +8,7 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/entur-client": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^"
   }
 }

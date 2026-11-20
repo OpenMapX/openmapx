@@ -147,7 +147,7 @@ describe("useViewportWildfireSource", () => {
         getEast: () => east,
         getNorth: () => 10,
       } as ReturnType<FakeMap["map"]["getBounds"]>);
-      const fetchMock = vi.fn(async () => response());
+      const fetchMock = vi.fn<typeof fetch>(async () => response());
       vi.stubGlobal("fetch", fetchMock);
 
       mountSource();
@@ -173,7 +173,7 @@ describe("useViewportWildfireSource", () => {
         getEast: () => rawEast,
         getNorth: () => 10,
       } as ReturnType<FakeMap["map"]["getBounds"]>);
-      const fetchMock = vi.fn(async () => response());
+      const fetchMock = vi.fn<typeof fetch>(async () => response());
       vi.stubGlobal("fetch", fetchMock);
 
       mountSource();
@@ -194,7 +194,7 @@ describe("useViewportWildfireSource", () => {
       getEast: () => -170,
       getNorth: () => 10,
     } as ReturnType<FakeMap["map"]["getBounds"]>);
-    const fetchMock = vi.fn(async () => response());
+    const fetchMock = vi.fn<typeof fetch>(async () => response());
     vi.stubGlobal("fetch", fetchMock);
 
     mountSource();
@@ -224,7 +224,7 @@ describe("useViewportWildfireSource", () => {
   it("debounces moveend, floors zoom, and deduplicates an unchanged request URL", async () => {
     vi.useFakeTimers();
     fake.state.zoom = 3.9;
-    const fetchMock = vi.fn(async () => response());
+    const fetchMock = vi.fn<typeof fetch>(async () => response());
     vi.stubGlobal("fetch", fetchMock);
     mountSource();
     await act(async () => {});
@@ -272,7 +272,7 @@ describe("useViewportWildfireSource", () => {
     const first = deferredResponse();
     const second = deferredResponse();
     const fetchMock = vi
-      .fn<() => Promise<Response>>()
+      .fn<typeof fetch>()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     vi.stubGlobal("fetch", fetchMock);
@@ -296,8 +296,8 @@ describe("useViewportWildfireSource", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const firstSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal;
-    expect(firstSignal.aborted).toBe(true);
+    const firstSignal = fetchMock.mock.calls[0]?.[1]?.signal;
+    expect(firstSignal?.aborted).toBe(true);
 
     const newest = { ...EMPTY_COLLECTION, fetchedAt: "2026-08-12T12:05:00.000Z" };
     await act(async () => second.resolve(response(newest)));
@@ -314,7 +314,9 @@ describe("useViewportWildfireSource", () => {
     "refreshes %s at its source interval even when the viewport URL is unchanged",
     async (sourceId, refreshMs) => {
       vi.useFakeTimers();
-      const fetchMock = vi.fn(async () => response({ ...EMPTY_COLLECTION, source: sourceId }));
+      const fetchMock = vi.fn<typeof fetch>(async () =>
+        response({ ...EMPTY_COLLECTION, source: sourceId }),
+      );
       vi.stubGlobal("fetch", fetchMock);
       mountSource({ sourceId, refreshMs });
       await act(async () => {});
@@ -329,7 +331,7 @@ describe("useViewportWildfireSource", () => {
 
   it("asks again for a view whose request a re-run of its effects aborted", async () => {
     const data = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
-    const fetchMock = vi.fn(async () => response(data));
+    const fetchMock = vi.fn<typeof fetch>(async () => response(data));
     vi.stubGlobal("fetch", fetchMock);
     const publish = vi.fn<(data: WildfireFeatureCollection) => void>();
 
@@ -386,7 +388,7 @@ describe("useViewportWildfireSource", () => {
     vi.useFakeTimers();
     const good = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
     const fetchMock = vi
-      .fn<() => Promise<Response>>()
+      .fn<typeof fetch>()
       .mockResolvedValueOnce(response(good))
       .mockResolvedValueOnce(response(EMPTY_COLLECTION, { ok: false, status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -526,7 +528,7 @@ describe("useViewportWildfireSource", () => {
       ],
     };
     const fetchMock = vi
-      .fn<() => Promise<Response>>()
+      .fn<typeof fetch>()
       .mockResolvedValueOnce(response(good))
       .mockResolvedValueOnce(response(malformed));
     vi.stubGlobal("fetch", fetchMock);
@@ -564,7 +566,7 @@ describe("useViewportWildfireSource", () => {
         ],
       };
       const fetchMock = vi
-        .fn<() => Promise<Response>>()
+        .fn<typeof fetch>()
         .mockResolvedValueOnce(response(good))
         .mockResolvedValueOnce(response(malformed));
       vi.stubGlobal("fetch", fetchMock);
@@ -587,7 +589,7 @@ describe("useViewportWildfireSource", () => {
   it("invalid replacement bounds supersede and abort the active request", async () => {
     vi.useFakeTimers();
     const pending = deferredResponse();
-    const fetchMock = vi.fn(() => pending.promise);
+    const fetchMock = vi.fn<typeof fetch>(() => pending.promise);
     vi.stubGlobal("fetch", fetchMock);
     const bounds = { west: -5 };
     vi.spyOn(fake.map, "getBounds").mockImplementation(
@@ -601,7 +603,7 @@ describe("useViewportWildfireSource", () => {
     );
     const { params } = mountSource();
     await act(async () => {});
-    const firstSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal;
+    const firstSignal = fetchMock.mock.calls[0]?.[1]?.signal;
 
     bounds.west = Number.NaN;
     act(() => fake.emit("moveend"));
@@ -612,14 +614,14 @@ describe("useViewportWildfireSource", () => {
       pending.resolve(response({ ...EMPTY_COLLECTION, features: [NIFC_FEATURE] })),
     );
 
-    expect(firstSignal.aborted).toBe(true);
+    expect(firstSignal?.aborted).toBe(true);
     expect(params.publish).not.toHaveBeenCalled();
     expect(useWildfireStore.getState().statuses.nifc.error).toBe("unavailable");
   });
 
   it("cancels pending move timers and ignores late map events after unmount", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn(async () => response());
+    const fetchMock = vi.fn<typeof fetch>(async () => response());
     vi.stubGlobal("fetch", fetchMock);
     const { unmount } = mountSource();
     await act(async () => {});

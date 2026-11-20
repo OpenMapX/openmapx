@@ -37,6 +37,14 @@ export async function collectArtifacts(sourceDirectory, outputDirectory, require
     })),
   );
 }
+/**
+ * @param {{ filename: string, content: string }[]} files
+ * @param {object} [options]
+ * @param {boolean} [options.check] Report stale files instead of writing them.
+ * @param {string} options.outputDirectory
+ * @param {string} [options.label]
+ * @param {string} [options.regenerateCommand]
+ */
 export async function writeOrCheckArtifacts(
   files,
   { check = false, outputDirectory, label = "SDK", regenerateCommand } = {},

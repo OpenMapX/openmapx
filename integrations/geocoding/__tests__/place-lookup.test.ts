@@ -38,7 +38,19 @@ describe("reverse address lookup", () => {
     stubResponse(detail({ road: "Alexanderstraße", house_number: "1", country_code: "de" }));
     const provider = {
       id: "webcam",
-      meta: { minZoom: 8, showResultsList: true, markerStyle: { type: "icon" } },
+      meta: {
+        minZoom: 8,
+        showResultsList: true,
+        markerStyle: {
+          type: "icon",
+          variantColors: {},
+          defaultColor: "#1565c0",
+          inactiveOpacity: 0.5,
+          iconPath: "webcam",
+        },
+        placeCategory: "Webcam",
+        placeCategoryRaw: "webcam",
+      },
       attribution: [],
       getFilters: async () => [],
       search: async () => ({

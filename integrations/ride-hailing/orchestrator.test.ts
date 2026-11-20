@@ -1,5 +1,8 @@
 import { ProviderRetiredError, type RideProvider } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  installHostCapabilities,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createRideOrchestrator, redactUrlsInReason } from "./orchestrator.js";
 
@@ -85,12 +88,14 @@ describe("listProviders", () => {
     });
     const ctx = ctxWith([rejected]);
     const recordFailure = vi.fn(async () => {});
-    ctx.providerHealth = {
-      isHealthy: async () => true,
-      recordSuccess: async () => {},
-      recordFailure,
-      getSnapshot: vi.fn(),
-    };
+    installHostCapabilities(ctx, {
+      providerHealth: {
+        isHealthy: async () => true,
+        recordSuccess: async () => {},
+        recordFailure,
+        getSnapshot: vi.fn(),
+      },
+    });
     await createRideOrchestrator(ctx).listProviders(request);
     expect(recordFailure).toHaveBeenCalledWith("rejected", expect.any(Number), "auth", "HTTP 401");
   });
@@ -106,15 +111,17 @@ describe("listProviders", () => {
     const recordFailure = vi.fn(async () => {});
     const releaseProbe = vi.fn(async () => {});
     const recordProviderCall = vi.fn();
-    ctx.metricsRecorder = { recordProviderCall };
-    ctx.providerHealth = {
-      isHealthy: async () => true,
-      recordSuccess: async () => {},
-      recordFailure,
-      getSnapshot: vi.fn(),
-      heldProbe: (id: string) => (id === "retired" ? "probe-token" : undefined),
-      releaseProbe,
-    };
+    installHostCapabilities(ctx, { metricsRecorder: { recordProviderCall } });
+    installHostCapabilities(ctx, {
+      providerHealth: {
+        isHealthy: async () => true,
+        recordSuccess: async () => {},
+        recordFailure,
+        getSnapshot: vi.fn(),
+        heldProbe: (id: string) => (id === "retired" ? "probe-token" : undefined),
+        releaseProbe,
+      },
+    });
 
     await createRideOrchestrator(ctx).listProviders(request);
 
@@ -136,14 +143,16 @@ describe("listProviders", () => {
     const ctx = ctxWith([broken]);
     const recordFailure = vi.fn(async () => {});
     const releaseProbe = vi.fn(async () => {});
-    ctx.providerHealth = {
-      isHealthy: async () => true,
-      recordSuccess: async () => {},
-      recordFailure,
-      getSnapshot: vi.fn(),
-      heldProbe: () => "probe-token",
-      releaseProbe,
-    };
+    installHostCapabilities(ctx, {
+      providerHealth: {
+        isHealthy: async () => true,
+        recordSuccess: async () => {},
+        recordFailure,
+        getSnapshot: vi.fn(),
+        heldProbe: () => "probe-token",
+        releaseProbe,
+      },
+    });
 
     await createRideOrchestrator(ctx).listProviders(request);
 

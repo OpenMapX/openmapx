@@ -34,7 +34,7 @@ env:
 # `ci` job aggregates them under the job name `lint / types / test`, which is
 # the required status check in the "main protection" ruleset. Renaming that
 # job (or letting it skip) breaks branch protection — see
-# docs/plans/2026-06-12-branch-protection.md.
+# docs/docs/developer/repository-governance.md.
 jobs:
   select:
     name: select required validation
@@ -98,14 +98,7 @@ jobs:
           # Quoted because `&& 0 || 1` short-circuits past the falsy 0 and always returns 1.
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       # The root workspace intentionally excludes docs, while the image-parser
       # policy probe verifies both independently locked copies.
@@ -190,14 +183,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       # Cache benefits check-types only (lint/test don't run through turbo);
       # revisit if root scripts move under turbo.
@@ -210,37 +196,6 @@ jobs:
             turbo-${{ runner.os }}-
 
       - run: pnpm check-types
-
-  # Reports the type errors in the TypeScript that `types` does not check
-  # (repository scripts, integration tests, mobility-core). It is deliberately
-  # absent from the `ci` job's needs: it never gates a merge, and it fails only
-  # when a project cannot be type-checked at all, not because of the errors it
-  # counts.
-  types-unenforced:
-    needs: select
-    if: needs.select.outputs.code == 'true' && needs.select.outputs['types'] == 'true'
-    name: types (not yet enforced)
-    concurrency:
-      group: ci-validation-types-unenforced-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
-      cancel-in-progress: true
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Count the type errors outside the required check
-        run: pnpm check-types:unenforced --summary "$GITHUB_STEP_SUMMARY"
 
   test-node:
     needs: select
@@ -256,14 +211,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       # Plain (uninstrumented) run — coverage is collected by the scheduled
       # coverage.yml workflow, not the PR gate. No OPENMAPX_SKIP_SLOW_CRYPTO:
@@ -294,14 +242,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       - name: Set up Docker Buildx
         id: buildx
@@ -404,14 +345,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       - run: pnpm test --project web
 
@@ -429,14 +363,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       # React Native components, the bridge, coordinator, storage, permissions,
       # and background runtime use jest-expo and are intentionally outside both
@@ -512,14 +439,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       - name: Apply the production database migrations
         run: pnpm --filter @openmapx/api exec drizzle-kit migrate
@@ -685,14 +605,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       # Only main saves this cache: entries from pull requests and merge-queue
       # refs were readable by no other run and filled the 10 GB Actions cache.
