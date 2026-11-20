@@ -33,10 +33,10 @@ const MEMORY_UNIT_BYTES = { k: 1024, m: 1024 ** 2, g: 1024 ** 3 } as const;
 const MIN_COMMUNITY_MEMORY_BYTES = 6 * 1024 ** 2;
 
 function isCommunityMemoryLimit(value: string | undefined): boolean {
-  const match = COMMUNITY_MEMORY_LIMIT_REGEX.exec(value ?? "");
-  if (!match) return false;
-  const unit = match[2].toLowerCase() as keyof typeof MEMORY_UNIT_BYTES;
-  return Number(match[1]) * MEMORY_UNIT_BYTES[unit] >= MIN_COMMUNITY_MEMORY_BYTES;
+  const [, amount, unitText] = COMMUNITY_MEMORY_LIMIT_REGEX.exec(value ?? "") ?? [];
+  if (amount === undefined || unitText === undefined) return false;
+  const unit = unitText.toLowerCase() as keyof typeof MEMORY_UNIT_BYTES;
+  return Number(amount) * MEMORY_UNIT_BYTES[unit] >= MIN_COMMUNITY_MEMORY_BYTES;
 }
 
 /**

@@ -62,12 +62,17 @@ const indexBands = manifestData.transcription.indexBands;
 const severeOpenEndedAbove = manifestData.transcription.severeOpenEndedAbove;
 
 function bandsFor(pollutant: NaqiPollutant): BreakpointBand[] {
-  return pollutantBands[pollutant].map(([concentrationLow, concentrationHigh], index) => ({
-    concentrationLow,
-    concentrationHigh,
-    indexLow: indexBands[index]?.[0] ?? 401,
-    indexHigh: indexBands[index]?.[1] ?? 500,
-  }));
+  return pollutantBands[pollutant].map(([concentrationLow, concentrationHigh], index) => {
+    if (concentrationLow === undefined || concentrationHigh === undefined) {
+      throw new Error(`NAQI band table ${pollutant} has a row without both bounds`);
+    }
+    return {
+      concentrationLow,
+      concentrationHigh,
+      indexLow: indexBands[index]?.[0] ?? 401,
+      indexHigh: indexBands[index]?.[1] ?? 500,
+    };
+  });
 }
 
 export function calculateNaqiSubIndex(

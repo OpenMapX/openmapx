@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import fixtures from "../__fixtures__/eea-eaqi.json";
 import {
   calculateEeaIndex,
@@ -66,9 +66,10 @@ describe("EEA European AQI", () => {
         "traffic",
       ),
     ).toMatchObject({ level: 2, basis: "ground" });
-    expect(calculateEeaIndex([{ ...base[0], gapFilled: true }, base[1]], "traffic")?.basis).toBe(
-      "hybrid",
-    );
+    const [no2, pm25] = base;
+    assert.isDefined(no2);
+    assert.isDefined(pm25);
+    expect(calculateEeaIndex([{ ...no2, gapFilled: true }, pm25], "traffic")?.basis).toBe("hybrid");
   });
 
   it("requires hourly concentration intervals for the current adapter", () => {

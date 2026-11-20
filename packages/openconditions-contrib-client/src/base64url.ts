@@ -18,8 +18,9 @@ export function toBase64Url(bytes: Uint8Array): string {
   let out = "";
   for (let i = 0; i < bytes.length; i += 3) {
     const b0 = bytes[i];
-    const b1 = i + 1 < bytes.length ? bytes[i + 1] : undefined;
-    const b2 = i + 2 < bytes.length ? bytes[i + 2] : undefined;
+    const b1 = bytes[i + 1];
+    const b2 = bytes[i + 2];
+    if (b0 === undefined) break;
     out += ALPHABET[b0 >> 2];
     out += ALPHABET[((b0 & 0x03) << 4) | ((b1 ?? 0) >> 4)];
     if (b1 !== undefined) out += ALPHABET[((b1 & 0x0f) << 2) | ((b2 ?? 0) >> 6)];
@@ -48,19 +49,19 @@ export function fromBase64Url(text: string): Uint8Array<ArrayBuffer> {
       return value;
     });
     const [c0, c1, c2, c3] = values;
+    // A trailing group of one character is refused by the length check above.
+    if (c0 === undefined || c1 === undefined) throw new TypeError("invalid base64url input");
     out[outIndex++] = (c0 << 2) | (c1 >> 4);
-    if (values.length === 2 && (c1 & 0x0f) !== 0) {
-      throw new TypeError("non-canonical base64url trailing bits");
+    if (c2 === undefined) {
+      if ((c1 & 0x0f) !== 0) throw new TypeError("non-canonical base64url trailing bits");
+      continue;
     }
-    if (values.length >= 3) {
-      out[outIndex++] = ((c1 & 0x0f) << 4) | (c2 >> 2);
-      if (values.length === 3 && (c2 & 0x03) !== 0) {
-        throw new TypeError("non-canonical base64url trailing bits");
-      }
+    out[outIndex++] = ((c1 & 0x0f) << 4) | (c2 >> 2);
+    if (c3 === undefined) {
+      if ((c2 & 0x03) !== 0) throw new TypeError("non-canonical base64url trailing bits");
+      continue;
     }
-    if (values.length === 4) {
-      out[outIndex++] = ((c2 & 0x03) << 6) | c3;
-    }
+    out[outIndex++] = ((c2 & 0x03) << 6) | c3;
   }
   return out;
 }

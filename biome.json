@@ -286,6 +286,32 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "packages/air-quality/**",
+        "packages/command-palette/**",
+        "packages/db-schema/**",
+        "packages/extension-contracts/**",
+        "packages/hardlinks/**",
+        "packages/hey-api-client-fetch/**",
+        "packages/i18n/**",
+        "packages/mangrove-client/**",
+        "packages/mangrove-react/**",
+        "packages/mobility-formats/**",
+        "packages/mobility-formats-tomp/**",
+        "packages/motis-feed-proxy-config/**",
+        "packages/openconditions-contrib-client/**",
+        "packages/place-ids/**",
+        "packages/transitous-core/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "error"
+          }
+        }
+      }
     }
   ],
   "javascript": {

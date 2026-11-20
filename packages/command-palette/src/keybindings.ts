@@ -166,10 +166,12 @@ export function matchSequence(
   if (!candidateChord.alt) delete candidateChord.alt;
   const next = [...buffer, candidateChord];
 
-  for (let i = 0; i < sequences.length; i++) {
-    const seq = sequences[i];
+  for (const [i, seq] of sequences.entries()) {
     if (seq.length < next.length) continue;
-    const matchesPrefix = next.every((c, j) => chordsEqual(c, seq[j]));
+    const matchesPrefix = next.every((c, j) => {
+      const expected = seq[j];
+      return expected !== undefined && chordsEqual(c, expected);
+    });
     if (!matchesPrefix) continue;
     if (seq.length === next.length) return { kind: "match", consumed: next, matchedIndex: i };
     return { kind: "partial", buffered: next };

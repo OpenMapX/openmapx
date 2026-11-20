@@ -123,7 +123,7 @@ export function collectRequiredFeedCredentialKeys(
           throw unavailable();
         if (scope) {
           const region = entry.name.slice(0, -5),
-            country = region.split("-")[0]!.toLowerCase();
+            country = (region.split("-")[0] ?? region).toLowerCase();
           if (scope.countries.length && !scope.countries.includes(country)) continue;
           const sourceId =
             typeof source["openmapx-source-id"] === "string"

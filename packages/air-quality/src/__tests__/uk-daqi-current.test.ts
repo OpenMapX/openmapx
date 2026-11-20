@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import fixtures from "../__fixtures__/uk-daqi.json";
 import { calculateDaqiLevel, ukDaqiCurrentAdapter } from "../standards/uk-daqi-current";
 
@@ -95,8 +95,10 @@ describe("UK DAQI 2026", () => {
 
   it("matches every independently transcribed anchor", () => {
     for (const [pollutant, cases] of Object.entries(fixtures.anchors)) {
-      for (const [value, expected] of cases)
+      for (const [value, expected] of cases) {
+        assert.isDefined(value);
         expect(calculateDaqiLevel(pollutant as "pm25", value)).toBe(expected);
+      }
     }
   });
 

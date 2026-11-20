@@ -92,12 +92,14 @@ function sources(feeds: ReadonlyMap<string, TransitousFeedFile>) {
     bytes += Buffer.byteLength(raw, "utf8");
     if (bytes > 128 * 1024 * 1024) throw Error("Catalog review exceeds its byte limit");
     for (const source of parseCatalogFeedFile(raw).sources ?? []) {
-      const id = `${region}/${source.name}`;
+      const { name } = source;
+      if (name === undefined) throw Error("Invalid or duplicate catalog source identity");
+      const id = `${region}/${name}`;
       if (entries.has(id) || entries.size >= 100000)
         throw Error("Catalog review identity/entry limit");
       entries.set(id, {
         region,
-        source: source.name!,
+        source: name,
         data: source as unknown as Record<string, unknown>,
       });
     }
@@ -124,7 +126,8 @@ export function diffCatalogFeeds(
       a = old?.data ?? null,
       b = current?.data ?? null;
     if (canonical(a) === canonical(b)) continue;
-    const selected = current ?? old!;
+    const selected = current ?? old;
+    if (!selected) continue;
     const fields: CatalogChangeField[] = [];
     for (const [field, keys] of Object.entries(fieldKeys)) {
       if (keys.some((key) => canonical(a?.[key] ?? null) !== canonical(b?.[key] ?? null)))
@@ -322,8 +325,9 @@ export function reviewCatalogPair(input: {
     }
     const result = new Map(feeds);
     for (const [sourceId, entries] of grouped) {
-      const first = entries[0]!,
-        region = `mobilitydata.${/^[a-z]{2,3}$/.test(first.country) ? first.country : "unknown"}`;
+      const [first] = entries;
+      if (!first) continue;
+      const region = `mobilitydata.${/^[a-z]{2,3}$/.test(first.country) ? first.country : "unknown"}`;
       if (feeds.has(region)) throw Error("Catalog/GBFS namespace collision");
       const previous = result.get(region)?.sources ?? [];
       const source = {

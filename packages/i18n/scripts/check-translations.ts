@@ -80,7 +80,9 @@ export function translatorNamespaces(source: string): Map<string, string> {
   ];
   const varToNs = new Map<string, string>();
   for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) varToNs.set(match[1], match[2]);
+    for (const [, varName, ns] of source.matchAll(pattern)) {
+      if (varName && ns) varToNs.set(varName, ns);
+    }
   }
   return varToNs;
 }
@@ -124,8 +126,8 @@ export function extractICUVariables(value: string): string[] {
     if (value[i] === "{") {
       if (depth === 0) {
         const rest = value.slice(i + 1);
-        const nameMatch = rest.match(/^\s*(\w+)/);
-        if (nameMatch) vars.add(nameMatch[1]);
+        const name = rest.match(/^\s*(\w+)/)?.[1];
+        if (name) vars.add(name);
       }
       depth++;
     } else if (value[i] === "}") {
@@ -336,8 +338,8 @@ function main() {
     for (const [varName, ns] of varToNs) {
       // Static calls: varName("literal")
       const staticPattern = new RegExp(`\\b${varName}\\(\\s*["']([^"']+)["']`, "g");
-      for (const match of content.matchAll(staticPattern)) {
-        usedKeys.add(`${ns}.${match[1]}`);
+      for (const [, key] of content.matchAll(staticPattern)) {
+        usedKeys.add(`${ns}.${key}`);
       }
 
       // Dynamic calls: varName(variable) or varName(`template`)
@@ -358,29 +360,31 @@ function main() {
     if (i18nextPattern.test(content)) {
       // String literal calls: t("ns.key")
       const flatPattern = /\bt\(\s*["']([^"']+)["']/g;
-      for (const match of content.matchAll(flatPattern)) {
-        usedKeys.add(match[1]);
+      for (const [, key] of content.matchAll(flatPattern)) {
+        if (key) usedKeys.add(key);
       }
 
       // Template literals without expressions: t(`ns.key`)
-      for (const match of content.matchAll(/\bt\(`([^`$]+)`\)/g)) {
-        usedKeys.add(match[1]);
+      for (const [, key] of content.matchAll(/\bt\(`([^`$]+)`\)/g)) {
+        if (key) usedKeys.add(key);
       }
 
       // Template literals with expressions: t(`prefix.${expr}`)
-      for (const match of content.matchAll(/\bt\(`(\w+)\.\$\{/g)) {
-        namespacesWithDynamicCalls.add(match[1]);
+      for (const [, ns] of content.matchAll(/\bt\(`(\w+)\.\$\{/g)) {
+        if (ns) namespacesWithDynamicCalls.add(ns);
       }
 
       // $-prefix convention in template literals: t(`ns.${expr.slice(1)}`)
-      for (const match of content.matchAll(/\bt\(`(\w+)\.\$\{[^}]*\.(?:slice|substring)\(1\)/g)) {
-        sliceNamespaces.add(match[1]);
+      for (const [, ns] of content.matchAll(/\bt\(`(\w+)\.\$\{[^}]*\.(?:slice|substring)\(1\)/g)) {
+        if (ns) sliceNamespaces.add(ns);
       }
     }
 
     // Collect $-prefixed entity names (convention for translatable names)
-    for (const match of content.matchAll(/(?:name|label)["']?\s*[:=]\s*["']\$([a-zA-Z]\w*)["']/g)) {
-      dollarPrefixedNames.add(match[1]);
+    for (const [, name] of content.matchAll(
+      /(?:name|label)["']?\s*[:=]\s*["']\$([a-zA-Z]\w*)["']/g,
+    )) {
+      if (name) dollarPrefixedNames.add(name);
     }
   }
 
@@ -527,16 +531,17 @@ function main() {
       const raw = localeRaw.get(locale) as Record<string, unknown>;
 
       for (const flatKey of missingKeys) {
-        const parts = flatKey.split(".");
+        const parents = flatKey.split(".");
+        const leaf = parents.pop() ?? flatKey;
         let obj = raw;
-        for (let i = 0; i < parts.length - 1; i++) {
-          if (!(parts[i] in obj) || typeof obj[parts[i]] !== "object") {
-            (obj as Record<string, unknown>)[parts[i]] = {};
+        for (const part of parents) {
+          if (!(part in obj) || typeof obj[part] !== "object") {
+            obj[part] = {};
           }
-          obj = obj[parts[i]] as Record<string, unknown>;
+          obj = obj[part] as Record<string, unknown>;
         }
         const refValue = referenceKeys.get(flatKey) ?? "";
-        (obj as Record<string, unknown>)[parts[parts.length - 1]] = `TODO: ${refValue}`;
+        obj[leaf] = `TODO: ${refValue}`;
         console.log(`  Stubbed "${flatKey}" in ${locale}.json`);
       }
 

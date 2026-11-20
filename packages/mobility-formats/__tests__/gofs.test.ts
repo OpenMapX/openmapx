@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   type GofsCalendar,
   type GofsFare,
@@ -353,8 +353,10 @@ describe("parseGofsRealtimeBooking", () => {
       },
     });
     expect(entries).toHaveLength(1);
-    expect(entries[0].brand_id).toBe("regular");
-    expect(entries[0].booking_detail?.web_uri).toBe("https://book.example/ride");
+    const [entry] = entries;
+    assert.isDefined(entry);
+    expect(entry.brand_id).toBe("regular");
+    expect(entry.booking_detail?.web_uri).toBe("https://book.example/ride");
   });
 
   it("returns an empty list for a malformed document", () => {
@@ -377,9 +379,11 @@ describe("parseGofsWaitTimes", () => {
     const entries = parseGofsWaitTimes({
       data: { wait_times: [{ from_zone_ids: ["11"], to_zone_ids: ["11"], wait_time: 300 }] },
     });
-    expect(entries[0].brand_id).toBeNull();
-    expect(entries[0].wait_time).toBe(300);
-    expect(entries[0].from_zone_ids).toEqual(["11"]);
+    const [entry] = entries;
+    assert.isDefined(entry);
+    expect(entry.brand_id).toBeNull();
+    expect(entry.wait_time).toBe(300);
+    expect(entry.from_zone_ids).toEqual(["11"]);
   });
 });
 

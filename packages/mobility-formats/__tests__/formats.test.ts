@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import {
   buildSiriStopMonitoringRequest,
   buildSiriVehicleMonitoringRequest,
@@ -296,10 +296,10 @@ describe("SIRI helpers", () => {
 
     expect(getSiriServiceTimestamp(parsed)).toBe("2004-12-17T09:30:47-05:00");
     expect(activities).toHaveLength(2);
+    const [first] = activities;
+    assert.isDefined(first);
     expect(
-      xmlText(
-        ((activities[0].MonitoredVehicleJourney ?? {}) as Record<string, unknown>).VehicleRef,
-      ),
+      xmlText(((first.MonitoredVehicleJourney ?? {}) as Record<string, unknown>).VehicleRef),
     ).toBe("VEH987654");
     expect(listSiriMonitoredStopVisits(stopMonitoringResponse)).toHaveLength(1);
     expect(listSiriSituationElements(stopMonitoringResponse)).toHaveLength(2);

@@ -21,12 +21,17 @@ type EpaBandKey = keyof typeof manifestData.transcription.bands;
 
 function bands(key: EpaBandKey): BreakpointBand[] {
   return manifestData.transcription.bands[key].map(
-    ([concentrationLow, concentrationHigh, indexLow, indexHigh]) => ({
-      concentrationLow,
-      concentrationHigh,
-      indexLow,
-      indexHigh,
-    }),
+    ([concentrationLow, concentrationHigh, indexLow, indexHigh]) => {
+      if (
+        concentrationLow === undefined ||
+        concentrationHigh === undefined ||
+        indexLow === undefined ||
+        indexHigh === undefined
+      ) {
+        throw new Error(`EPA band table ${key} has a row without four values`);
+      }
+      return { concentrationLow, concentrationHigh, indexLow, indexHigh };
+    },
   );
 }
 

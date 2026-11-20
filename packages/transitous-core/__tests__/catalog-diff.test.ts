@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   catalogDiffPage,
   diffCatalogFeeds,
@@ -82,7 +82,7 @@ describe("canonical catalog review", () => {
     expect(pages.map((page) => page.rows.length)).toEqual([100, 100, 11]);
     expect(new Set(pages.flatMap((page) => page.rows.map((row) => row.id))).size).toBe(211);
     expect(pages.every((page) => page.total === 211 && page.digest === review.digest)).toBe(true);
-    expect(pages[2]!.nextOffset).toBeNull();
+    expect(pages[2]?.nextOffset).toBeNull();
     expect(() => catalogDiffPage(review, -1)).toThrow();
     expect(() => catalogDiffPage(review, 212)).toThrow();
   });
@@ -117,11 +117,11 @@ describe("canonical catalog review", () => {
       return args[0] === "ls-tree"
         ? "de.json\0at.json\0"
         : JSON.stringify({
-            sources: [{ name: args[1]!.includes("de.json") ? "German" : "Austrian" }],
+            sources: [{ name: args[1]?.includes("de.json") ? "German" : "Austrian" }],
           });
     };
     expect([...(await readCatalogFeedSnapshot(sha, git)).keys()]).toEqual(["at", "de"]);
-    expect(calls.every((args) => args.at(-1)!.startsWith(sha + ":feeds"))).toBe(true);
+    expect(calls.every((args) => args.at(-1)?.startsWith(`${sha}:feeds`))).toBe(true);
     await expect(readCatalogFeedSnapshot("main", git)).rejects.toThrow(/exact commit/);
     await expect(
       readCatalogFeedSnapshot(sha, async (args) =>
@@ -230,7 +230,10 @@ it("bounds each full-metadata review page by bytes without omitting subsequent r
     first = catalogDiffPage(diff);
   expect(first.rows).toHaveLength(1);
   expect(first.nextOffset).toBe(1);
-  expect(catalogDiffPage(diff, first.nextOffset!).rows[0]!.id).toBe(diff.changes[1]!.id);
+  assert.isNotNull(first.nextOffset);
+  const secondChange = diff.changes[1];
+  assert.isDefined(secondChange);
+  expect(catalogDiffPage(diff, first.nextOffset).rows[0]?.id).toBe(secondChange.id);
   expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThan(3 * 1024 * 1024);
 });
 
@@ -261,8 +264,10 @@ it("reviews a pinned Atlas license change even when Transitous feed JSON is unch
     maxAdditions: 50,
   });
   expect(diff.total).toBe(1);
-  expect(diff.changes[0]!.fields).toContain("license");
-  expect(diff.changes[0]!.after?.license).toEqual({
+  const [change] = diff.changes;
+  assert.isDefined(change);
+  expect(change.fields).toContain("license");
+  expect(change.after?.license).toEqual({
     spdx_identifier: "CC-BY-4.0",
     attribution: "Operator",
   });

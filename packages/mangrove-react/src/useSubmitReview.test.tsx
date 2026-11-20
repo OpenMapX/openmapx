@@ -2,7 +2,7 @@ import { generateKeypair, publicKeyToPem, signMangroveReview } from "@openmapx/m
 import { dehydrate, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { assert, beforeEach, describe, expect, it } from "vitest";
 import { useKeypairStore } from "./keypairStore";
 import { MangroveProvider } from "./provider";
 import type { SignerTransport } from "./signer";
@@ -80,7 +80,9 @@ describe("review submission with delegated signing", () => {
     });
     expect(result).toEqual({ id: "submitted" });
     expect(f.submitted).toHaveLength(1);
-    const body = JSON.parse(atob(f.submitted[0].split(".")[1]));
+    const payloadSegment = f.submitted[0]?.split(".")[1];
+    assert.isDefined(payloadSegment);
+    const body = JSON.parse(atob(payloadSegment));
     expect(body.rating).toBe(0);
     expect(
       JSON.stringify(dehydrate(f.client, { shouldDehydrateMutation: () => true })),
@@ -152,12 +154,13 @@ describe("review submission with delegated signing", () => {
         recipientsCiphertext: null,
       });
       const state = useKeypairStore.getState();
+      assert.isNotNull(state.owner);
       state.setKeypair(
         f.kp,
         f.publicPem,
         {},
         {
-          owner: state.owner!,
+          owner: state.owner,
           generation: state.generation,
           revision: "local-r1",
         },
