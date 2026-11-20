@@ -1,4 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Retry waits resolve at once; each test reads the delay that was asked for.
+const sleep = vi.hoisted(() => vi.fn(async (_ms?: number) => undefined));
+vi.mock("node:timers/promises", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:timers/promises")>()),
+  setTimeout: sleep,
+}));
+
 import {
   codesQuery,
   namesQuery,
@@ -136,12 +144,13 @@ describe("notable-places SPARQL", () => {
         ? new Response("?item\n<http://www.wikidata.org/entity/Q1>\n")
         : new Response("busy", { status, headers: { "Retry-After": "0.2" } });
     };
-    const started = Date.now();
+    sleep.mockClear();
     const rows = await collect(
       sparqlRows("SELECT", { endpoint: "x", fetchImpl, retryDelaysMs: [60_000] }),
     );
     expect(rows).toEqual([["<http://www.wikidata.org/entity/Q1>"]]);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(990);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep.mock.calls[0]?.[0]).toBe(1000);
   });
 
   it("fails on an error status or an error body sent as 200", async () => {
