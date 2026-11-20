@@ -59,9 +59,6 @@ export type ProviderHttpExceptions = Readonly<
   Record<ProviderHttpRule, Readonly<Record<string, ProviderHttpException>>>
 >;
 
-const NULL_ISLAND_PENDING =
-  "Payload validation for this provider replaces the zero fallback with a rejected or omitted record.";
-
 export const EXCEPTIONS: ProviderHttpExceptions = {
   "raw-fetch": {
     "integrations/geocoding-motis/provider.ts": {
@@ -75,9 +72,7 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
     },
   },
   "credentialed-fetch-json": {},
-  "null-island": {
-    "integrations/transit-motis/adapter.ts": { count: 14, reason: NULL_ISLAND_PENDING },
-  },
+  "null-island": {},
 };
 
 export interface ProviderHttpFinding {

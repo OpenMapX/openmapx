@@ -217,6 +217,7 @@ export async function resolveMotisTrip(
     return null;
   const itinerary = mapItinerary(instance, raw, opts?.datasetEpoch);
   if (
+    !itinerary ||
     itinerary.legs.some(
       (leg) =>
         (params.wheelchairRequired && leg.wheelchairAccessible === false) ||

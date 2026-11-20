@@ -48,8 +48,8 @@ const journey = {
     routeId: leg.routeId,
     feedTag: "de-DELFI",
   },
-  stops: [leg.from, ...leg.intermediateStops, leg.to].map((p) =>
-    motisPlaceToJourneyStop(instance, p),
+  stops: [leg.from, ...leg.intermediateStops, leg.to].flatMap(
+    (p) => motisPlaceToJourneyStop(instance, p) ?? [],
   ),
 };
 
