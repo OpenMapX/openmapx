@@ -147,7 +147,12 @@ interface SwissGtfsEntity {
   id?: string;
 }
 
-type SwissRouteStop = TransitStop & { sequence: number };
+/** A route stop keeps its place in the list even when it cannot be placed on the map. */
+type SwissRouteStop = Omit<TransitStop, "lat" | "lng"> & {
+  lat?: number;
+  lng?: number;
+  sequence: number;
+};
 
 interface SwissObservedRouteEntry {
   expiresAt: number;
@@ -2045,11 +2050,10 @@ function mapRouteStopFromCall(
   datasets: SwissStopDatasets,
   mode: TransportMode,
   sequence: number,
-): SwissRouteStop | null {
+): SwissRouteStop {
   const rawRef = call.stopPointRef ?? `route-stop:${sequence}:${call.name ?? "unknown"}`;
   const { didok, servicePoint, servicePointSloid, stopPoint } = findServicePoint(rawRef, datasets);
   const position = callPosition(call, stopPoint, servicePoint);
-  if (!position) return null;
   const ids = buildStopIds(rawRef, { didok, servicePointSloid });
   return {
     contributors: swissContributors(
@@ -2060,8 +2064,7 @@ function mapRouteStopFromCall(
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
-    lat: position.lat,
-    lng: position.lng,
+    ...(position ? { lat: position.lat, lng: position.lng } : {}),
     modes: uniqueModes([mode, ...servicePointModes(servicePoint)]),
     name: call.name || stopPoint?.designationOfficial || servicePoint?.name || rawRef,
     parentStationId: servicePoint ? providerId(servicePoint.servicePointSloid) : undefined,
@@ -2075,23 +2078,15 @@ function routeStopsFromJourney(
   journey: VehicleJourney,
   mode: TransportMode | undefined,
 ): SwissRouteStop[] {
-  // A route stop is placed on the map, so a journey stop without coordinates is left out.
-  return journey.stops.flatMap((stop, index) =>
-    stop.lat === undefined || stop.lng === undefined
-      ? []
-      : [
-          {
-            id: stop.stopId,
-            lat: stop.lat,
-            lng: stop.lng,
-            modes: mode ? [mode] : [],
-            name: stop.name,
-            platformCode: stop.platform,
-            provider: PROVIDER,
-            sequence: index + 1,
-          },
-        ],
-  );
+  return journey.stops.map((stop, index) => ({
+    id: stop.stopId,
+    ...(stop.lat !== undefined && stop.lng !== undefined ? { lat: stop.lat, lng: stop.lng } : {}),
+    modes: mode ? [mode] : [],
+    name: stop.name,
+    platformCode: stop.platform,
+    provider: PROVIDER,
+    sequence: index + 1,
+  }));
 }
 
 function matchesStopRef(
@@ -3216,11 +3211,9 @@ async function getRoutesForStop(
     );
     if (!route) continue;
     routes.set(route.id, mergeTransitRoute(routes.get(route.id), route));
-    // A stop that cannot be placed is left out of the observed route.
-    const stops = stopEventCalls(stopEvent).flatMap((call, index) => {
-      const stop = mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1);
-      return stop ? [stop] : [];
-    });
+    const stops = stopEventCalls(stopEvent).map((call, index) =>
+      mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1),
+    );
     await rememberObservedRoute(runtime, route, {
       hintStopId: stopId,
       operatorRefs: collectServiceOperatorRefs(stopEvent.service),
@@ -3242,7 +3235,7 @@ async function getRouteStops(
   runtime: SwissProviderRuntime,
   routeId: string,
   hintStopId?: string,
-): Promise<Array<TransitStop & { sequence: number }>> {
+): Promise<SwissRouteStop[]> {
   const observed = await getObservedRoute(runtime, routeId);
   if (observed?.stops?.length) return observed.stops;
 
@@ -3453,10 +3446,9 @@ async function getVehicleJourney(
     if (route) {
       await rememberObservedRoute(runtime, route, {
         operatorRefs: collectServiceOperatorRefs(tripInfo.service),
-        stops: calls.flatMap((call, index) => {
-          const stop = mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1);
-          return stop ? [stop] : [];
-        }),
+        stops: calls.map((call, index) =>
+          mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1),
+        ),
         tripId: candidate,
       });
     }

@@ -139,8 +139,8 @@ export function setup(ctx: IntegrationContext): void {
       return wrap(await entur.getRoute(routeId));
     },
     async getRouteStops(routeId, hintStopId) {
-      // Entur exposes RouteStop[] (sequence-ordered, no `modes`/`provider`);
-      // expand into TransitStop[] so consumers can treat results uniformly.
+      // Add `modes` and `provider` so Entur's route stops carry the same
+      // fields as the other providers' route stops.
       const stops = await entur.getRouteStops(routeId, hintStopId);
       return wrap(
         stops.map((s) => ({

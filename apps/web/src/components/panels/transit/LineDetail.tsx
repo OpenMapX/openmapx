@@ -170,13 +170,19 @@ export function LineDetail({
             />
             {stops.map((s, idx) => {
               const isCurrent = currentStop ? s.id === currentStop.id : false;
+              const { lat, lng } = s;
+              // A stop the source cannot place is listed but cannot be opened as a place.
+              const selectable = Boolean(
+                onSelectStop && currentStop && lat !== undefined && lng !== undefined,
+              );
               return (
                 <ClickableRow
-                  disabled={!onSelectStop || !currentStop}
+                  disabled={!selectable}
                   // biome-ignore lint/suspicious/noArrayIndexKey: stops may contain the same stop multiple times (circular routes)
                   key={`${s.id}-${idx}`}
                   onClick={() => {
-                    if (!onSelectStop || !currentStop) return;
+                    if (!onSelectStop || !currentStop || lat === undefined || lng === undefined)
+                      return;
                     onSelectStop({
                       contributors: snapshotContributors(
                         s.contributors ?? [],
@@ -195,8 +201,8 @@ export function LineDetail({
                       },
                       id: s.id,
                       name: s.name,
-                      lat: s.lat,
-                      lng: s.lng,
+                      lat,
+                      lng,
                       modes: route?.mode ? [route.mode] : currentStop.modes,
                       provider: providersList[0] ?? currentStop.provider,
                     });
@@ -206,7 +212,7 @@ export function LineDetail({
                     alignItems: "center",
                     gap: 1,
                     py: 0.75,
-                    cursor: onSelectStop && currentStop ? "pointer" : "default",
+                    cursor: selectable ? "pointer" : "default",
                     position: "relative",
                     "&:hover": { bgcolor: "action.hover" },
                     borderRadius: 1,

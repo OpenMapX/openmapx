@@ -1155,20 +1155,26 @@ describe("transit-opentransportdata-ch provider", () => {
       }),
     );
 
-    expect(await provider.getRouteStops("otdch:ojp:91006:H")).toEqual([
+    const stops = await provider.getRouteStops("otdch:ojp:91006:H");
+    expect(stops).toEqual([
       expect.objectContaining({
         id: "otdch:ch:1:sloid:7000:5:10",
         name: "Bern",
         platformCode: "10",
         sequence: 1,
+        lat: expect.any(Number),
+        lng: expect.any(Number),
       }),
       expect.objectContaining({
         id: "otdch:ch:1:sloid:7050:0:1",
         name: "Münsingen",
         sequence: 2,
       }),
-      // Route stops are placed on the map, so unplaced Thun is left out of them.
+      // Thun has neither an OJP position nor master data: it stays in the list, unplaced.
+      expect.objectContaining({ name: "Thun", sequence: 3 }),
     ]);
+    expect(stops[2]).not.toHaveProperty("lat");
+    expect(stops[2]).not.toHaveProperty("lng");
   });
 
   it("merges Swiss SIRI-SX situations into route alerts", async () => {

@@ -683,12 +683,15 @@ export interface Facility extends ContributingRecord {
   provider: string;
 }
 
+/** One stop of a route's ordered stop list. */
 export interface RouteStop extends ContributingRecord {
   id: string;
   name: string;
-  lat: number;
-  lng: number;
+  /** Absent when the source cannot place the stop: it stays in the list but is not drawn. */
+  lat?: number;
+  lng?: number;
   platformCode?: string;
+  /** Position in the list, counting from 1 without gaps. */
   sequence: number;
 }
 

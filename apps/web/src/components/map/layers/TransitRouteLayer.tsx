@@ -22,12 +22,18 @@ const CURRENT_STOP_LAYER_ID = "transit-route-detail-current-stop";
 
 type TransitRoute = ReturnType<typeof useTransitRoute>["data"];
 type RouteStop = NonNullable<ReturnType<typeof useRouteStops>["data"]>[number];
+/** A route stop the source could place; only these are drawn. */
+type PlacedRouteStop = RouteStop & { lat: number; lng: number };
+
+function isPlaced(stop: RouteStop): stop is PlacedRouteStop {
+  return stop.lat !== undefined && stop.lng !== undefined;
+}
 
 // Use route geometry from the API (road-snapped) when available,
 // otherwise fall back to connecting stop coordinates with straight lines.
 function routeLineGeometry(
   route: TransitRoute,
-  stops: readonly RouteStop[],
+  stops: readonly PlacedRouteStop[],
 ): GeoJSON.LineString | GeoJSON.MultiLineString {
   const geometry = route?.geometry;
   if (!geometry) {
@@ -40,7 +46,7 @@ function routeLineGeometry(
 
 function transitRouteGroup(
   route: TransitRoute,
-  stops: readonly RouteStop[],
+  stops: readonly PlacedRouteStop[],
   selectedPlaceId: string | undefined,
 ): MapLayerGroup {
   const lineColor = routeColor(route, PRIMARY_BLUE_HEX);
@@ -135,7 +141,10 @@ export function TransitRouteLayer() {
   const { data: route } = useTransitRoute(activeRouteId);
   const { data: stops } = useRouteStops(activeRouteId);
   const selectedPlaceId = selectedPlace?.id;
-  const shownStops = activeRouteId && stops?.length ? stops : null;
+  const shownStops = useMemo(() => {
+    const placed = activeRouteId ? (stops?.filter(isPlaced) ?? []) : [];
+    return placed.length ? placed : null;
+  }, [activeRouteId, stops]);
 
   useRenderedMapAttributions(
     "transit-route-detail",

@@ -731,16 +731,18 @@ function orderedRouteStops(
   instance: MotisInstance,
   route: RouteInfo,
   stops: Place[],
-): TransitStop[] {
+): Array<TransitStop & { sequence: number }> {
   const indexes: number[] = [];
   for (const segment of route.segments) {
     if (indexes[indexes.length - 1] !== segment.from) indexes.push(segment.from);
     if (indexes[indexes.length - 1] !== segment.to) indexes.push(segment.to);
   }
-  return indexes.flatMap((index) => {
-    const place = stops[index];
-    return (place && normalizeStop(instance, place)) || [];
-  });
+  return indexes
+    .flatMap((index) => {
+      const place = stops[index];
+      return (place && normalizeStop(instance, place)) || [];
+    })
+    .map((stop, index) => ({ ...stop, sequence: index + 1 }));
 }
 
 export async function getRouteStops(
@@ -748,7 +750,7 @@ export async function getRouteStops(
   routeId: string,
   activeEpoch: string,
   hintStopId?: string,
-): Promise<TransitStop[]> {
+): Promise<Array<TransitStop & { sequence: number }>> {
   let pattern = validateMotisRoutePatternEpoch(routeId, activeEpoch);
   if (!pattern) {
     const line = validateMotisLineReferenceEpoch(routeId, activeEpoch);
