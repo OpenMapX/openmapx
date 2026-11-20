@@ -24,6 +24,10 @@ const REQUIRED_DOCKERIGNORE_RULES = [
   "apps/mobile/android/",
   "apps/mobile/.expo/",
   "apps/mobile/.gradle/",
+  "infra/docker/state/",
+  "infra/docker/backups/",
+  "infra/docker/.maintenance/",
+  "infra/docker/.runtime-recovery/",
 ] as const;
 const RETAINED_RULES = [".env*", "**/.env*", "!.env.example", "*.pem", "**/*.pem"] as const;
 

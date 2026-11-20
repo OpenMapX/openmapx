@@ -104,8 +104,10 @@ If you self-host OpenMapX, a few recommendations:
   host ports before installing. Installed integration artifacts are declarative;
   service components run container code. See the
   [extension trust boundary](docs/docs/developer/building-an-external-extension.md).
-- Keep generated credentials and mobile signing output out of the repository's
-  root Docker build context. `pnpm check-docker-context-secrets` requires the
+- Keep generated credentials, mobile signing output and host state (database
+  backups, ops-agent state, maintenance records and the runtime-recovery
+  journal under `infra/docker/`) out of the repository's root Docker build
+  context. `pnpm check-docker-context-secrets` requires the
   root `.dockerignore` and every Dockerfile-specific `<Dockerfile>.dockerignore`
   in the worktree to hold every required rule and to exclude every sensitive
   ignored path, whatever builds with them. Conventionally named Dockerfiles

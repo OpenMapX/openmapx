@@ -31,6 +31,10 @@ apps/mobile/.expo/
 apps/mobile/.gradle/
 infra/docker/data
 infra/docker/overrides
+infra/docker/state/
+infra/docker/backups/
+infra/docker/.maintenance/
+infra/docker/.runtime-recovery/
 custom_integrations
 integrations/*/config.json
 **/.DS_Store

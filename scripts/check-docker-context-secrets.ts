@@ -31,6 +31,12 @@ const REQUIRED_DOCKERIGNORE_RULES = [
   "apps/mobile/android/",
   "apps/mobile/.expo/",
   "apps/mobile/.gradle/",
+  // Host state written beside an operator's checkout: database backups,
+  // ops-agent state, maintenance records and the runtime-recovery journal.
+  "infra/docker/state/",
+  "infra/docker/backups/",
+  "infra/docker/.maintenance/",
+  "infra/docker/.runtime-recovery/",
 ] as const;
 
 const RETAINED_SECRET_RULES = [".env*", "**/.env*", "!.env.example", "*.pem", "**/*.pem"] as const;
