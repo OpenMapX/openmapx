@@ -391,17 +391,20 @@ export function RouteLayer() {
       const idx = e.features?.[0]?.properties?.routeIndex as number | undefined;
       if (idx !== undefined) setActiveRouteIndex(idx);
     };
+    // Take back only a pointer this handler set; overlays show their own.
+    let ownsCursor = false;
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
       if (!map.getLayer(LAYER_ALT_LINE)) return;
-      const hit = map.queryRenderedFeatures(e.point, { layers: [LAYER_ALT_LINE] });
-      map.getCanvasContainer().style.cursor = hit.length > 0 ? "pointer" : "";
+      const over = map.queryRenderedFeatures(e.point, { layers: [LAYER_ALT_LINE] }).length > 0;
+      if (over || ownsCursor) map.getCanvasContainer().style.cursor = over ? "pointer" : "";
+      ownsCursor = over;
     };
     map.on("click", LAYER_ALT_LINE, onClick);
     map.on("mousemove", onMouseMove);
     return () => {
       map.off("click", LAYER_ALT_LINE, onClick);
       map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
+      if (ownsCursor) map.getCanvasContainer().style.cursor = "";
     };
   }, [mapRef, mapReady, styleVersion, setActiveRouteIndex]);
 

@@ -38,9 +38,11 @@ interface MapInteractionState {
   layerOwners: Map<string, number>;
   arbiterOwnedLayerIds: Set<string>;
   nextOrder: number;
+  /** Whether the pointer cursor on the map is the one this arbiter set. */
+  ownsCursor: boolean;
   onClick: (event: MapMouseEvent) => void;
   onMouseMove: (event: MapMouseEvent) => void;
-  onMouseLeave: () => void;
+  onMouseLeave: (event?: MapMouseEvent) => void;
 }
 
 const mapStates = new WeakMap<MaplibreMap, MapInteractionState>();
@@ -99,8 +101,15 @@ function reportHover(
   }
 }
 
-function setCursor(map: MaplibreMap, cursor: string): void {
+/**
+ * Show the pointer over an overlay hit, and take back only a pointer this
+ * arbiter set: basemap POIs and the route line keep their own cursor.
+ */
+function showPointer(map: MaplibreMap, state: MapInteractionState, pointer: boolean): void {
+  if (!pointer && !state.ownsCursor) return;
+  state.ownsCursor = pointer;
   const style = map.getCanvasContainer().style;
+  const cursor = pointer ? "pointer" : "";
   if (style.cursor !== cursor) style.cursor = cursor;
 }
 
@@ -133,6 +142,7 @@ function createMapState(map: MaplibreMap): MapInteractionState {
   state.layerOwners = new Map();
   state.arbiterOwnedLayerIds = new Set();
   state.nextOrder = 0;
+  state.ownsCursor = false;
   state.onClick = (event) => {
     if (getMapClickOwner(event)) return;
     const hit = winningHit(map, state, event, true);
@@ -140,11 +150,15 @@ function createMapState(map: MaplibreMap): MapInteractionState {
   };
   state.onMouseMove = (event) => {
     const hit = winningHit(map, state, event);
-    setCursor(map, hit ? "pointer" : "");
+    showPointer(map, state, hit !== null);
     reportHover(state, hit, event);
   };
-  state.onMouseLeave = () => {
-    setCursor(map, "");
+  state.onMouseLeave = (event) => {
+    // Moving onto a DOM marker or popup inside the map also fires mouseout, but
+    // the pointer is still over the map and the next move reports it again.
+    const entered = (event?.originalEvent as MouseEvent | undefined)?.relatedTarget;
+    if (entered && map.getCanvasContainer().contains(entered as Node)) return;
+    showPointer(map, state, false);
     reportHover(state, null);
   };
 
@@ -181,7 +195,7 @@ export function registerMapOverlayInteraction(
     map.off("click", state.onClick);
     map.off("mousemove", state.onMouseMove);
     map.off("mouseout", state.onMouseLeave);
-    setCursor(map, "");
+    showPointer(map, state, false);
     mapStates.delete(map);
   };
 }

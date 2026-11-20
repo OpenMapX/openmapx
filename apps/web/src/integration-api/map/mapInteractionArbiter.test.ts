@@ -231,6 +231,58 @@ describe("map interaction arbiter", () => {
     INTERACTIVE_LAYER_IDS.delete("test-poi");
   });
 
+  it("clears only a pointer cursor it set itself", () => {
+    const { map, state } = createMap();
+    state.addLayer("test-flow");
+    const unregister = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: vi.fn(),
+    });
+    // Another handler (basemap POIs) shows the pointer over its own features.
+    state.getCanvasContainer().style.cursor = "pointer";
+    state.emit("mousemove", event());
+    expect(state.getCanvasContainer().style.cursor).toBe("pointer");
+
+    state.setHits("test-flow", [feature("flow")]);
+    state.emit("mousemove", event());
+    state.setHits("test-flow", []);
+    state.emit("mousemove", event());
+    expect(state.getCanvasContainer().style.cursor).toBe("");
+    unregister();
+  });
+
+  it("keeps hover and the cursor when the pointer moves onto a marker inside the map", () => {
+    const { map, state } = createMap();
+    const marker = { nodeType: 1 };
+    const container = map.getCanvasContainer() as unknown as {
+      contains?: (node: unknown) => boolean;
+    };
+    container.contains = (node) => node === marker;
+    state.addLayer("test-flow");
+    state.setHits("test-flow", [feature("flow")]);
+    const onHover = vi.fn();
+    const unregister = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: vi.fn(),
+      onHover,
+    });
+    state.emit("mousemove", event());
+    onHover.mockClear();
+
+    state.emit("mouseout", { originalEvent: { relatedTarget: marker } });
+    expect(onHover).not.toHaveBeenCalled();
+    expect(state.getCanvasContainer().style.cursor).toBe("pointer");
+
+    state.emit("mouseout", { originalEvent: { relatedTarget: null } });
+    expect(onHover).toHaveBeenLastCalledWith(null, undefined);
+    expect(state.getCanvasContainer().style.cursor).toBe("");
+    unregister();
+  });
+
   it("does not report hover to an overlay after it unregisters", () => {
     const { map, state } = createMap();
     state.addLayer("test-flow");
