@@ -439,6 +439,9 @@ describe("choosing a search suggestion", () => {
       fireEvent.click(await screen.findByRole("option", { name: row }));
 
       await waitFor(() => expect(outcome()).toEqual(expected));
+      // A late map move or search would otherwise slip past the first matching poll.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(outcome()).toEqual(expected);
     },
   );
 });
