@@ -17,6 +17,7 @@ import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
+import { TransitScopeRejected } from "../src/jobs/execution/api.js";
 import { DataConfigurationMaintenanceBusy } from "../src/jobs/execution/store.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
@@ -462,6 +463,29 @@ describe("data-manager API", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("POST /transit/sync names an out-of-scope refusal in the error envelope", async () => {
+    const app = createTestApp();
+    registerApi(app, {
+      dataDir: createDataDir(),
+      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      executionReceiver: receiverFixture({
+        admitLocal: async () => {
+          throw new TransitScopeRejected();
+        },
+      }),
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/transit/sync",
+      payload: { countries: ["fr"] },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({
+      error: "Countries outside configured operations profile",
+      code: "outside-operations-profile",
+    });
   });
 
   it("POST /transit/sync starts an in-scope country", async () => {

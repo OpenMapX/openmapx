@@ -162,6 +162,11 @@ export const transitPreflightStaleSchema = z.strictObject({
   error: z.string(),
   code: z.literal("preflight_stale"),
 });
+/** A transit sync refused because it names a country outside the operations profile. */
+export const transitScopeRejectedSchema = z.strictObject({
+  error: z.string(),
+  code: z.literal("outside-operations-profile"),
+});
 /** A MOTIS restart refused because no durable receiver can admit the maintenance. */
 export const transitRestartUnavailableSchema = z.strictObject({
   error: z.string(),

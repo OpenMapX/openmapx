@@ -331,7 +331,7 @@ export const dataManagerOperations = {
       ...dataMutationErrors,
       202: json(t.transitSyncAcceptedSchema),
       409: json(z.union([httpErrorSchema, t.transitConflictSchema, t.transitPreflightStaleSchema])),
-      422: json(httpErrorSchema),
+      422: json(t.transitScopeRejectedSchema),
     },
   },
   restartMotis: {

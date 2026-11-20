@@ -27,7 +27,11 @@ import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./covera
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
-import { type DataExecutionReceiver, registerDataExecutionApi } from "./jobs/execution/api.js";
+import {
+  type DataExecutionReceiver,
+  registerDataExecutionApi,
+  TransitScopeRejected,
+} from "./jobs/execution/api.js";
 import { runLocalDataExecution, startLocalDataExecution } from "./jobs/execution/local.js";
 import { DataConfigurationMaintenanceBusy, DataExecutionConflict } from "./jobs/execution/store.js";
 import {
@@ -992,14 +996,20 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
             });
       }
     }
-    const admitted = await admitData(
-      {
-        kind: "transit-sync",
-        countries,
-        ...(preflight ? { preflight } : {}),
-      },
-      { triggeredBy: req.body?.triggeredBy, idempotencyKey: req.body?.idempotencyKey },
-    );
+    let admitted: DataExecutionStatus;
+    try {
+      admitted = await admitData(
+        {
+          kind: "transit-sync",
+          countries,
+          ...(preflight ? { preflight } : {}),
+        },
+        { triggeredBy: req.body?.triggeredBy, idempotencyKey: req.body?.idempotencyKey },
+      );
+    } catch (error) {
+      if (!(error instanceof TransitScopeRejected)) throw error;
+      return reply.code(422).send({ error: error.message, code: error.code });
+    }
     return reply.code(202).send({ ok: true, jobId: admitted.id, status: "started" });
   });
 

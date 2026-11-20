@@ -25,9 +25,8 @@ describe("complete generated administration operations", () => {
       .mockResolvedValueOnce(
         Response.json(
           {
-            statusCode: 422,
-            error: "Unprocessable Entity",
-            message: "Countries outside configured operations profile",
+            error: "Countries outside configured operations profile",
+            code: "outside-operations-profile",
           },
           { status: 422 },
         ),
@@ -66,6 +65,15 @@ describe("complete generated administration operations", () => {
       { client },
     );
     expect(rejected.status).toBe(422);
+    let refusal: unknown;
+    try {
+      sdk.unwrapAdminResponse(rejected);
+    } catch (error) {
+      refusal = error;
+    }
+    expect(sdk.adminErrorMessage(refusal, "fallback")).toBe(
+      "Countries outside configured operations profile",
+    );
   });
   it.each([400, 401, 403, 404, 429, 500])(
     "retains declared status%s without accepting malformed errors",

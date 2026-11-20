@@ -130,13 +130,20 @@ describe("data-manager wire contracts", () => {
       }).success,
     ).toBe(false);
   });
-  it("accepts the framework error for a transit scope outside the operations profile", () => {
+  it("names a transit scope outside the operations profile in the error envelope", () => {
     const body = {
-      statusCode: 422,
-      error: "Unprocessable Entity",
-      message: "Countries outside configured operations profile",
+      error: "Countries outside configured operations profile",
+      code: "outside-operations-profile",
     };
-    expect(dataManagerOperations.syncTransit.responses[422].schema.parse(body)).toEqual(body);
+    const schema = dataManagerOperations.syncTransit.responses[422].schema;
+    expect(schema.parse(body)).toEqual(body);
+    expect(
+      schema.safeParse({
+        statusCode: 422,
+        error: "Unprocessable Entity",
+        message: "Countries outside configured operations profile",
+      }).success,
+    ).toBe(false);
   });
   it("answers offline preparation refusals in the error envelope", () => {
     const refusal = {

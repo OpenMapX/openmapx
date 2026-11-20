@@ -20,7 +20,10 @@ Offline package preparation errors replace `ok`, `errorCode` and `errorMessage`
 with `error` and `code`, and keep `retryAfterSeconds`. The offline capability's
 HTTP 502 answers `{ error, code: "source-unavailable" }` instead of an
 unavailable capability. A refused transit source change or sync replaces `ok`
-and `reason` with `error` and `code` and keeps `existingJobId`. A MOTIS restart
+and `reason` with `error` and `code` and keeps `existingJobId`. A transit sync
+naming a country outside the operations profile answers HTTP 422
+`{ error, code: "outside-operations-profile" }` with the reason in `error`,
+instead of the framework's `{ statusCode, error, message }`. A MOTIS restart
 refused for lack of a durable receiver answers
 `{ error, code: "ops-agent-unavailable" }` instead of carrying that code in
 `error`. Better Auth

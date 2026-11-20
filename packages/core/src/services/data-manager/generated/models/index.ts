@@ -835,6 +835,7 @@ export * from "./syncTransit409";
 export * from "./syncTransit413";
 export * from "./syncTransit415";
 export * from "./syncTransit422";
+export * from "./syncTransit422Code";
 export * from "./syncTransit429";
 export * from "./syncTransit500";
 export * from "./syncTransit503";
