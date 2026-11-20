@@ -48,10 +48,10 @@ and is not part of this application update.
 
 Some releases change how the operations agent and Data Manager store their
 records of host operations and do not convert earlier records; their release
-notes mark the change as breaking. Upgrade to such a release only when Activity
-shows no running operation and none waiting for recovery. Finished operations'
-records are pruned 72 hours after their keys expire, so an upgrade does not need
-to wait for them.
+notes mark the change as breaking. Such a release needs a fresh installation
+with an empty API database and an empty `infra/docker/state`: do not upgrade an
+existing installation to it in place, and do not delete individual state files
+to make it start. The release that replaced the update system is one of them.
 
 ## 1. Optional: create a backup
 
