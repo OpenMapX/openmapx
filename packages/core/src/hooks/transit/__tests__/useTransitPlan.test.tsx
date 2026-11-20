@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, assert, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
-import { apiClient } from "../../../api/client";
+import { type ApiQueryParams, apiClient } from "../../../api/client";
 import { createQueryWrapper, createTestQueryClient } from "../../../test/queryWrapper";
 import type { LngLat } from "../../../types/geometry";
 import { useTransitPlan } from "../useTransitPlan";
@@ -16,11 +16,13 @@ let client: QueryClient;
 let get: MockInstance<typeof apiClient.get>;
 
 /** Wire query strings in request order. */
-function wireTimes(): (string | undefined)[] {
-  return get.mock.calls.map((call) => (call[1] as Record<string, string>).time);
+function wireTimes(): unknown[] {
+  return get.mock.calls.map((call) => call[1]?.time);
 }
-function wireParams(index: number): Record<string, string> {
-  return get.mock.calls[index]?.[1] as Record<string, string>;
+function wireParams(index: number): ApiQueryParams {
+  const params = get.mock.calls[index]?.[1];
+  assert.isDefined(params, `request ${index} was not sent with a query`);
+  return params;
 }
 /** The shared canonical request in every cached search key carries its wire time. */
 function cachedKeyTimes(): unknown[] {

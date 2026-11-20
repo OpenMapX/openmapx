@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, configureApiClient } from "../api/client";
 import { configureStorage, type StorageAdapter } from "../platform/storage";
 import { LOCAL_VEHICLES_KEY } from "../vehicles";
@@ -206,7 +206,8 @@ it("cancels the prior account acquisition when the identity changes", async () =
   const view = renderHook(() => useVehicles(), { wrapper: wrapper(shared) });
   try {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    const options = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+    const options = vi.mocked(fetch).mock.calls[0]?.[1];
+    assert.isDefined(options, "the account read was sent without options");
     session.value = { user: { id: "user-2" } };
     view.rerender();
     await waitFor(() => expect(view.result.current.data?.[0]?.id).toBe("account-two"));

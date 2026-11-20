@@ -107,8 +107,10 @@ describe("business duplicate evidence", () => {
       }),
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.contributingProviders).toEqual(["geocoding-maptiler"]);
-    expect(rows[0]?.sourceIds).toBeUndefined();
+    const [row] = rows;
+    assert.isDefined(row);
+    expect(row.contributingProviders).toEqual(["geocoding-maptiler"]);
+    expect(row.sourceIds).toBeUndefined();
     expect(rows[0]?.ids).toEqual({ osm: "way/1" });
   });
 

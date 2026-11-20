@@ -25,10 +25,12 @@ function makeRoute(over: Partial<Route> = {}): Route {
 }
 
 const fixes = simulatePositions(geometry, { speedMps: 14, intervalMs: 1000 });
+const [firstFix] = fixes;
+assert.isDefined(firstFix, "the simulated drive produced no fixes");
 
 const recording: NavRecording = {
   version: 1,
-  startedAtMs: fixes[0]?.timestampMs ?? 0,
+  startedAtMs: firstFix.timestampMs,
   mode: "driving",
   route: makeRoute(),
   reroutes: [],

@@ -685,7 +685,7 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
 });
 
 describe("sameJunction", () => {
-  const [exit] = findJunctionDecisionPoints(fixture.route as unknown as Route);
+  const [exit] = findJunctionDecisionPoints(a57Route);
   assert.isDefined(exit);
 
   it("matches the junction on a replacement route despite a new step index", () => {

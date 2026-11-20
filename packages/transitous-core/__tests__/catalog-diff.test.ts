@@ -114,11 +114,12 @@ describe("canonical catalog review", () => {
       calls: string[][] = [];
     const git = async (args: string[]) => {
       calls.push(args);
-      return args[0] === "ls-tree"
-        ? "de.json\0at.json\0"
-        : JSON.stringify({
-            sources: [{ name: args[1]?.includes("de.json") ? "German" : "Austrian" }],
-          });
+      const [command, target] = args;
+      if (command === "ls-tree") return "de.json\0at.json\0";
+      assert.isDefined(target, "git show was called without a target");
+      return JSON.stringify({
+        sources: [{ name: target.includes("de.json") ? "German" : "Austrian" }],
+      });
     };
     expect([...(await readCatalogFeedSnapshot(sha, git)).keys()]).toEqual(["at", "de"]);
     expect(calls.every((args) => args.at(-1)?.startsWith(`${sha}:feeds`))).toBe(true);

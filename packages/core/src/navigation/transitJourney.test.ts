@@ -10,10 +10,10 @@ import {
 import { prepareTransitProgress } from "./transitProgress";
 
 const now = 1800000000000;
-const tripLeg = {
+const tripLeg: TripLeg = {
   mode: "bus",
   tripId: "t1",
-  route: { shortName: "12" },
+  route: { shortName: "12", longName: "" },
   startTime: new Date(now - 600000).toISOString(),
   endTime: new Date(now + 600000).toISOString(),
   from: { name: "A", stopId: "a", lng: 0, lat: 0 },
@@ -25,7 +25,7 @@ const tripLeg = {
       [0.02, 0],
     ],
   },
-} as TripLeg;
+};
 const trip = {
   legs: [tripLeg],
   startTime: "",

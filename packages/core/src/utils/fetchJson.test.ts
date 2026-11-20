@@ -8,6 +8,12 @@ function mockFetch(impl: (url: string, init: RequestInit) => Promise<Response> |
   return fn;
 }
 
+function firstInit(fn: ReturnType<typeof mockFetch>): RequestInit {
+  const init = fn.mock.calls[0]?.[1];
+  assert.isDefined(init, "fetch was not called");
+  return init;
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -228,7 +234,7 @@ describe("fetchJson", () => {
   it("sends the shared User-Agent and merges extra headers", async () => {
     const fn = mockFetch(() => jsonResponse({}));
     await fetchJson("https://x.test/data", { headers: { "Accept-Language": "de" } });
-    const init = fn.mock.calls[0]?.[1] as RequestInit;
+    const init = firstInit(fn);
     expect((init.headers as Record<string, string>)["User-Agent"]).toBe(USER_AGENT);
     expect((init.headers as Record<string, string>)["Accept-Language"]).toBe("de");
   });
@@ -243,7 +249,7 @@ describe("fetchJson", () => {
         init: { redirect: "follow" },
       });
 
-      const init = fn.mock.calls[0]?.[1] as RequestInit;
+      const init = firstInit(fn);
       expect(init.redirect).toBe("error");
       expect((init.headers as Record<string, string>)[header]).toBe("secret-value");
     },
@@ -256,7 +262,7 @@ describe("fetchJson", () => {
 
       await fetchJson("https://x.test/data", { headers: { [header]: "value" } });
 
-      expect((fn.mock.calls[0]?.[1] as RequestInit).redirect).toBeUndefined();
+      expect(firstInit(fn).redirect).toBeUndefined();
     },
   );
 
@@ -268,7 +274,7 @@ describe("fetchJson", () => {
       init: { redirect: "manual" },
     });
 
-    expect((fn.mock.calls[0]?.[1] as RequestInit).redirect).toBe("error");
+    expect(firstInit(fn).redirect).toBe("error");
   });
 
   it("preserves a caller redirect mode when all caller headers are allowlisted", async () => {
@@ -285,7 +291,7 @@ describe("fetchJson", () => {
       init: { redirect: "manual" },
     });
 
-    expect((fn.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
+    expect(firstInit(fn).redirect).toBe("manual");
   });
 
   it("returns null when a credential-bearing request refuses a redirect", async () => {
@@ -306,7 +312,7 @@ describe("fetchJson", () => {
   it("omits the User-Agent when userAgent is null", async () => {
     const fn = mockFetch(() => jsonResponse({}));
     await fetchJson("https://x.test/data", { userAgent: null });
-    const init = fn.mock.calls[0]?.[1] as RequestInit;
+    const init = firstInit(fn);
     expect((init.headers as Record<string, string>)["User-Agent"]).toBeUndefined();
   });
 

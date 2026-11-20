@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import {
   appendErasureCompleted,
   appendErasureRequest,
@@ -67,7 +67,10 @@ describe("erasure journal", () => {
     const path = join(directory, "journal.jsonl");
     initializeErasureJournal(path, KEY);
     await appendErasureRequest(path, KEY, "subject");
-    const [coverage = "", requested = ""] = readFileSync(path, "utf8").trim().split("\n");
+    const [coverage, requested, ...rest] = readFileSync(path, "utf8").trim().split("\n");
+    assert.isDefined(coverage);
+    assert.isDefined(requested);
+    expect(rest).toEqual([]);
     writeFileSync(path, requested + "\n", { mode: 0o600 });
     expect(() => readErasureJournal(path, KEY)).toThrow(/coverage/i);
     const malformed = { ...JSON.parse(requested), subjectDigest: "bad" };
