@@ -1,10 +1,10 @@
 import type { JunctionDecisionPoint, JunctionKind } from "../types/junction";
-import type { Route } from "../types/routing";
+import type { Route, RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import { angularDifference } from "./bearing";
 import { cumulativeDistances, positionAt } from "./deadReckon";
 import { resolveLaneGuidance } from "./lanes";
-import { prepareManeuverPositions } from "./maneuverPosition";
+import { maneuverStartMeters, prepareManeuverPositions } from "./maneuverPosition";
 
 /**
  * Route-derived motorway decision points. Everything here reads `RouteStep`
@@ -33,14 +33,14 @@ export function findJunctionDecisionPoints(route: Route): JunctionDecisionPoint[
   if (geometry.length < 2) return [];
   if (!route.steps.some((step) => DECISION_TYPES.has(step.maneuver?.type ?? ""))) return [];
   const cum = cumulativeDistances(geometry);
-  const starts = prepareManeuverPositions(route).starts;
-  return decisionPoints(route, cum, starts);
+  return decisionPoints(route, cum);
 }
 
-function decisionPoints(route: Route, cum: number[], starts: number[]): JunctionDecisionPoint[] {
+function decisionPoints(route: Route, cum: number[]): JunctionDecisionPoint[] {
   const points: JunctionDecisionPoint[] = [];
-  for (let i = 1; i < route.steps.length; i += 1) {
-    const maneuverType = route.steps[i].maneuver?.type ?? "";
+  for (const [i, step] of route.steps.entries()) {
+    if (i === 0) continue;
+    const maneuverType = step.maneuver?.type ?? "";
     if (!DECISION_TYPES.has(maneuverType)) continue;
     // A decision is only a decision once you are on the motorway: the previous
     // step drives on it, or is itself a decision (a split further along an exit
@@ -51,7 +51,7 @@ function decisionPoints(route: Route, cum: number[], starts: number[]): Junction
     const fromMotorway =
       route.steps[i - 1]?.motorway === true || points.at(-1)?.stepIndex === i - 1;
     if (!fromMotorway) continue;
-    points.push(buildDecisionPoint(route, cum, i, starts[i]));
+    points.push(buildDecisionPoint(route, step, cum, i));
   }
   return points;
 }
@@ -71,11 +71,10 @@ export function findJunctionCandidates(route: Route): JunctionDecisionPoint[] {
   if (route.geometry.length < 2) return [];
   if (!route.steps.some((step) => CANDIDATE_TYPES.has(step.maneuver?.type ?? ""))) return [];
   const cum = cumulativeDistances(route.geometry);
-  const starts = prepareManeuverPositions(route).starts;
-  const accepted = new Set(decisionPoints(route, cum, starts).map((point) => point.stepIndex));
+  const accepted = new Set(decisionPoints(route, cum).map((point) => point.stepIndex));
   return route.steps.flatMap((step, i) =>
     i >= 1 && CANDIDATE_TYPES.has(step.maneuver?.type ?? "") && !accepted.has(i)
-      ? [buildDecisionPoint(route, cum, i, starts[i])]
+      ? [buildDecisionPoint(route, step, cum, i)]
       : [],
   );
 }
@@ -101,12 +100,12 @@ export function sameJunction(a: JunctionDecisionPoint, b: JunctionDecisionPoint)
 /** The decision point at step `i`: position, approach bearing, split angle and lanes. */
 function buildDecisionPoint(
   route: Route,
+  step: RouteStep,
   cum: number[],
   i: number,
-  alongMeters: number,
 ): JunctionDecisionPoint {
   const geometry = route.geometry;
-  const step = route.steps[i];
+  const alongMeters = maneuverStartMeters(route, i);
   const maneuverType = step.maneuver?.type ?? "";
   const hasExitNumber = (step.sign?.exitNumbers?.length ?? 0) > 0;
   const kind: JunctionKind =

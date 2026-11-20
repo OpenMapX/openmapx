@@ -1,7 +1,7 @@
 import type { LngLat } from "../types/geometry";
 import type { Route } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
-import { cumulativeDistances } from "./deadReckon";
+import { cumulativeDistances, distanceAtVertex } from "./deadReckon";
 import { type PreparedRouteMatcher, prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 
 export interface ManeuverPositions {
@@ -19,7 +19,9 @@ export function prepareManeuverPositions(route: Route): ManeuverPositions {
   const usableGeometry =
     route.geometry.length >= 2 && route.steps.some((s) => (s.coordinates?.length ?? 0) > 0);
   const cum = usableGeometry ? cumulativeDistances(route.geometry) : [];
-  const total = usableGeometry ? cum[cum.length - 1] : Math.max(0, route.distance);
+  const total = usableGeometry
+    ? distanceAtVertex(cum, cum.length - 1)
+    : Math.max(0, route.distance);
   let engine = 0;
   const starts = usableGeometry
     ? stepGeometryDistances(route, cum)
@@ -28,8 +30,11 @@ export function prepareManeuverPositions(route: Route): ManeuverPositions {
         engine += step.distance;
         return start;
       });
-  for (let i = 0; i < starts.length; i++)
-    starts[i] = Math.max(i ? starts[i - 1] : 0, Math.min(total, starts[i]));
+  let floor = 0;
+  for (const [i, start] of starts.entries()) {
+    floor = Math.max(floor, Math.min(total, start));
+    starts[i] = floor;
+  }
   const ends = starts.map((_, i) => starts[i + 1] ?? total);
   const result: ManeuverPositions = {
     starts,
@@ -71,26 +76,28 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
   const geometryVertices = new Map<string, number[]>();
   let previousGroup = -1;
   let previousDistance = -1;
-  for (let i = 0; i < geometry.length; i += 1) {
-    const key = coordinateKey(geometry[i]);
+  for (const [i, vertex] of geometry.entries()) {
+    const key = coordinateKey(vertex);
     const vertices = geometryVertices.get(key) ?? [];
     vertices.push(i);
     geometryVertices.set(key, vertices);
     const indices = occurrences.get(key);
     if (!indices) continue;
-    const minimum = cum[i] === previousDistance ? previousGroup : previousGroup + 1;
+    const minimum =
+      distanceAtVertex(cum, i) === previousDistance ? previousGroup : previousGroup + 1;
     let lo = 0;
     let hi = indices.length;
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
-      if (indices[mid] < minimum) lo = mid + 1;
+      const candidate = indices[mid];
+      if (candidate !== undefined && candidate < minimum) lo = mid + 1;
       else hi = mid;
     }
     const group = indices[lo];
     if (group === undefined) continue;
     anchors[group] = i;
     previousGroup = group;
-    previousDistance = cum[i];
+    previousDistance = distanceAtVertex(cum, i);
   }
   // Overview vertices are ordered anchors in the full step shape. Coordinates
   // omitted by simplification belong before their next anchor, even on a loop.
@@ -110,19 +117,22 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
   let hasShapeEnd = false;
   let shapeDistances: number[] | undefined;
   const nearestVertex = (group: number, hint: number): number | undefined => {
-    const indices = geometryVertices.get(keys[group]) ?? [];
+    const key = keys[group];
+    const indices = (key === undefined ? undefined : geometryVertices.get(key)) ?? [];
     let lo = 0;
     let hi = indices.length;
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
-      if (cum[indices[mid]] < hint) lo = mid + 1;
+      const candidate = indices[mid];
+      if (candidate !== undefined && distanceAtVertex(cum, candidate) < hint) lo = mid + 1;
       else hi = mid;
     }
     let vertex: number | undefined;
     let nearest = Number.POSITIVE_INFINITY;
     for (const candidate of [indices[lo - 1], indices[lo]]) {
-      if (candidate === undefined || cum[candidate] < confirmedAlongMeters - 1e-6) continue;
-      const difference = Math.abs(cum[candidate] - hint);
+      if (candidate === undefined || distanceAtVertex(cum, candidate) < confirmedAlongMeters - 1e-6)
+        continue;
+      const difference = Math.abs(distanceAtVertex(cum, candidate) - hint);
       if (difference < nearest) {
         nearest = difference;
         vertex = candidate;
@@ -131,8 +141,14 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
     return vertex;
   };
   const advance = (alongMeters: number): void => {
-    matchedAlongMeters = Math.max(matchedAlongMeters, Math.min(alongMeters, cum[cum.length - 1]));
-    while (geometryIndex < geometry.length - 1 && cum[geometryIndex + 1] <= matchedAlongMeters) {
+    matchedAlongMeters = Math.max(
+      matchedAlongMeters,
+      Math.min(alongMeters, distanceAtVertex(cum, cum.length - 1)),
+    );
+    while (
+      geometryIndex < geometry.length - 1 &&
+      distanceAtVertex(cum, geometryIndex + 1) <= matchedAlongMeters
+    ) {
       geometryIndex += 1;
     }
   };
@@ -148,9 +164,10 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
       advance(matchedAlongMeters + step.distance);
       return start;
     }
-    for (let i = 0; i < coordinates.length; i += 1) {
-      const coordinate = coordinates[i];
-      const group = stepGroups[stepIndex][i];
+    const groups = stepGroups[stepIndex] ?? [];
+    for (const [i, coordinate] of coordinates.entries()) {
+      const group = groups[i];
+      if (group === undefined) continue;
       let vertex = anchors[group];
       let recoveryHint: number | undefined;
       let recoveryEnd: number | undefined;
@@ -161,27 +178,28 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
         recoveryHint = hint;
         shapeDistances ??= cumulativeDistances(groupCoordinates);
         for (let following = group + 1; following < keys.length; following += 1) {
-          const prefix = shapeDistances[following] - shapeDistances[group];
+          const prefix =
+            distanceAtVertex(shapeDistances, following) - distanceAtVertex(shapeDistances, group);
           const anchor = nearestVertex(following, hint + prefix);
           if (anchor === undefined) continue;
           anchors[following] = anchor;
           recoveryEnd = anchor;
-          recoveryHint = Math.max(confirmedAlongMeters, cum[anchor] - prefix);
+          recoveryHint = Math.max(confirmedAlongMeters, distanceAtVertex(cum, anchor) - prefix);
           break;
         }
         matchedAlongMeters = confirmedAlongMeters;
         geometryIndex = confirmedIndex;
         missingShape = false;
       }
-      const upcoming = recoveryEnd ?? nextAnchor[group];
+      const upcoming = recoveryEnd ?? nextAnchor[group] ?? geometry.length - 1;
       const end =
         (recoveryHint !== undefined && recoveryEnd === undefined) ||
-        cum[upcoming] < matchedAlongMeters - 1e-6
+        distanceAtVertex(cum, upcoming) < matchedAlongMeters - 1e-6
           ? geometry.length - 1
           : Math.max(geometryIndex, upcoming);
       let offset = matchedAlongMeters;
-      if (vertex !== undefined && cum[vertex] >= matchedAlongMeters - 1e-6) {
-        offset = cum[vertex];
+      if (vertex !== undefined && distanceAtVertex(cum, vertex) >= matchedAlongMeters - 1e-6) {
+        offset = distanceAtVertex(cum, vertex);
       } else if (end > geometryIndex) {
         let projection = projections.get(end);
         if (!projection) {
@@ -211,7 +229,7 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
           let hi = end - 1;
           while (lo < hi) {
             const mid = (lo + hi + 1) >>> 1;
-            if (cum[mid] <= recoveryHint) lo = mid;
+            if (distanceAtVertex(cum, mid) <= recoveryHint) lo = mid;
             else hi = mid - 1;
           }
           const preferred = snapPreparedRoute(
@@ -224,13 +242,16 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
             segment = lo + preferred.segmentIndex;
           }
         }
-        if (segment === end) offset = cum[end];
+        if (segment === end) offset = distanceAtVertex(cum, end);
         else {
-          const length = cum[segment + 1] - cum[segment];
+          const segmentStart = geometry[segment];
+          const length = distanceAtVertex(cum, segment + 1) - distanceAtVertex(cum, segment);
           const fraction =
-            length > 0 ? haversineDistance(geometry[segment], snapped.snapped) / length : 0;
+            length > 0 && segmentStart
+              ? haversineDistance(segmentStart, snapped.snapped) / length
+              : 0;
           // Use the geometry's metric, not the matcher's independent prefix sum.
-          offset = cum[segment] + Math.min(fraction, 1) * length;
+          offset = distanceAtVertex(cum, segment) + Math.min(fraction, 1) * length;
         }
       }
       advance(offset);
@@ -246,14 +267,15 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
   let left = 0;
   for (let right = 1; right <= starts.length; right += 1) {
     if (right < starts.length && starts[right] === undefined) continue;
-    const from = starts[left]!;
-    const to = starts[right] ?? cum[cum.length - 1];
-    let distance = 0;
-    for (let i = left; i < right; i += 1) distance += route.steps[i].distance;
+    // The first step always has a start, so every span begins at a known boundary.
+    const from = starts[left] ?? 0;
+    const to = starts[right] ?? distanceAtVertex(cum, cum.length - 1);
+    const span = route.steps.slice(left, right);
+    const distance = span.reduce((sum, step) => sum + step.distance, 0);
     let traveled = 0;
-    for (let i = left + 1; i < right; i += 1) {
-      traveled += route.steps[i - 1].distance;
-      starts[i] = from + (to - from) * (distance > 0 ? traveled / distance : 0);
+    for (const [offset, step] of span.slice(0, -1).entries()) {
+      traveled += step.distance;
+      starts[left + offset + 1] = from + (to - from) * (distance > 0 ? traveled / distance : 0);
     }
     left = right;
   }

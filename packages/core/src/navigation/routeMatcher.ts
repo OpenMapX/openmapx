@@ -164,6 +164,15 @@ function turfDistanceMeters(from: LngLat, to: LngLat): number {
 }
 
 /**
+ * Reads a slot of an array the index sized itself. Callers stay within the
+ * bounds they allocated; an out-of-range read yields NaN, which is what the
+ * plain typed-array arithmetic produced, so pruning and results are unchanged.
+ */
+function slot(values: Float64Array | Int32Array, index: number): number {
+  return values[index] ?? Number.NaN;
+}
+
+/**
  * Unit vector for a lng/lat, matching the conversion inside
  * `nearestPointOnLine` so the degenerate-segment test below lands on exactly
  * the same branch Turf takes.
@@ -220,17 +229,17 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
   const n = geometry.length;
   const edges = Math.max(0, n - 1);
 
-  let finite = true;
-  for (let i = 0; i < n; i++) {
-    if (!Number.isFinite(geometry[i][0]) || !Number.isFinite(geometry[i][1])) {
-      finite = false;
-      break;
-    }
-  }
+  const finite = geometry.every(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
 
   const prefix = new Float64Array(n);
-  for (let i = 0; i < edges; i++) {
-    prefix[i + 1] = prefix[i] + turfDistanceMeters(geometry[i], geometry[i + 1]);
+  let travelled = 0;
+  let previous: LngLat | undefined;
+  for (const [i, vertex] of geometry.entries()) {
+    if (previous) {
+      travelled += turfDistanceMeters(previous, vertex);
+      prefix[i] = travelled;
+    }
+    previous = vertex;
   }
 
   const empty = new Int32Array(0);
@@ -261,7 +270,7 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
 
   // Vertex unit vectors, shared by the two edges that meet at each vertex.
   const vec = new Float64Array(n * 3);
-  for (let i = 0; i < n; i++) unitVector(geometry[i], vec, i * 3);
+  for (const [i, vertex] of geometry.entries()) unitVector(vertex, vec, i * 3);
 
   const capX = new Float64Array(edges);
   const capY = new Float64Array(edges);
@@ -273,12 +282,12 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
   for (let i = 0; i < edges; i++) {
     const a = i * 3;
     const b = a + 3;
-    const ax = vec[a];
-    const ay = vec[a + 1];
-    const az = vec[a + 2];
-    const bx = vec[b];
-    const by = vec[b + 1];
-    const bz = vec[b + 2];
+    const ax = slot(vec, a);
+    const ay = slot(vec, a + 1);
+    const az = slot(vec, a + 2);
+    const bx = slot(vec, b);
+    const by = slot(vec, b + 1);
+    const bz = slot(vec, b + 2);
 
     const crx = ay * bz - az * by;
     const cry = az * bx - ax * bz;
@@ -361,10 +370,10 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
   let nodeCount = 0;
 
   const combine = (node: number, ax: number, ay: number, az: number, ar: number, other: number) => {
-    const bx = nodeX[other];
-    const by = nodeY[other];
-    const bz = nodeZ[other];
-    const br = nodeR[other];
+    const bx = slot(nodeX, other);
+    const by = slot(nodeY, other);
+    const bz = slot(nodeZ, other);
+    const br = slot(nodeR, other);
     const mx = ax + bx;
     const my = ay + by;
     const mz = az + bz;
@@ -395,16 +404,19 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
     nodeHi[node] = hi;
     if (hi - lo <= LEAF_EDGES) {
       // Union of the member caps, grown one member at a time.
-      const first = indexed[lo];
-      let cx = capX[first];
-      let cy = capY[first];
-      let cz = capZ[first];
-      let r = capR[first];
+      const first = slot(indexed, lo);
+      let cx = slot(capX, first);
+      let cy = slot(capY, first);
+      let cz = slot(capZ, first);
+      let r = slot(capR, first);
       for (let p = lo + 1; p < hi; p++) {
-        const e = indexed[p];
-        const mx = cx + capX[e];
-        const my = cy + capY[e];
-        const mz = cz + capZ[e];
+        const e = slot(indexed, p);
+        const ex = slot(capX, e);
+        const ey = slot(capY, e);
+        const ez = slot(capZ, e);
+        const mx = cx + ex;
+        const my = cy + ey;
+        const mz = cz + ez;
         const mag = Math.sqrt(mx * mx + my * my + mz * mz);
         if (!(mag > MIN_CENTRE_MAGNITUDE)) {
           r = Math.PI;
@@ -414,7 +426,7 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
         const ny = my / mag;
         const nz = mz / mag;
         const ra = angleBetween(nx, ny, nz, cx, cy, cz) + r;
-        const rb = angleBetween(nx, ny, nz, capX[e], capY[e], capZ[e]) + capR[e];
+        const rb = angleBetween(nx, ny, nz, ex, ey, ez) + slot(capR, e);
         cx = nx;
         cy = ny;
         cz = nz;
@@ -431,7 +443,14 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
     const right = build(mid, hi);
     nodeLeft[node] = left;
     nodeRight[node] = right;
-    combine(node, nodeX[left], nodeY[left], nodeZ[left], nodeR[left], right);
+    combine(
+      node,
+      slot(nodeX, left),
+      slot(nodeY, left),
+      slot(nodeZ, left),
+      slot(nodeR, left),
+      right,
+    );
     return node;
   };
 
@@ -555,11 +574,10 @@ export function snapPreparedRoute(
 
   const evaluate = (edge: number): void => {
     if (counting) counters.evaluatedEdges++;
-    const local = nearestPointOnLine(
-      lineString([coords[edge], coords[edge + 1]]),
-      inputPoint,
-      METERS,
-    );
+    const start = coords[edge];
+    const end = coords[edge + 1];
+    if (!start || !end) return;
+    const local = nearestPointOnLine(lineString([start, end]), inputPoint, METERS);
     const dist = local.properties.dist as number;
     // Strictly closer wins; an equal distance only wins for an earlier edge,
     // which is what Turf's ascending scan with a strict comparison produces.
@@ -568,7 +586,7 @@ export function snapPreparedRoute(
       bestEdge = edge;
       bestSnapped = local.geometry.coordinates as LngLat;
       bestIndex = edge + (local.properties.index as number);
-      bestAlong = idx.prefix[edge] + (local.properties.location as number);
+      bestAlong = slot(idx.prefix, edge) + (local.properties.location as number);
     }
   };
 
@@ -582,59 +600,59 @@ export function snapPreparedRoute(
     };
   }
 
-  for (let i = 0; i < idx.always.length; i++) evaluate(idx.always[i]);
+  for (const edge of idx.always) evaluate(edge);
 
   if (seedSegmentIndex !== undefined && idx.indexed.length > 0) {
     const seed = Math.max(0, Math.min(idx.edges - 1, Math.trunc(seedSegmentIndex)));
-    if (Number.isFinite(seed) && idx.capR[seed] > 0) evaluate(seed);
+    if (Number.isFinite(seed) && slot(idx.capR, seed) > 0) evaluate(seed);
   }
 
   if (idx.root >= 0) {
     const vq = new Float64Array(3);
     unitVector(raw, vq, 0);
-    const qx = vq[0];
-    const qy = vq[1];
-    const qz = vq[2];
+    const qx = slot(vq, 0);
+    const qy = slot(vq, 1);
+    const qz = slot(vq, 2);
 
     const visit = (node: number): void => {
       if (counting) counters.visitedNodes++;
-      const left = idx.nodeLeft[node];
+      const left = slot(idx.nodeLeft, node);
       if (left < 0) {
-        const hi = idx.nodeHi[node];
-        for (let p = idx.nodeLo[node]; p < hi; p++) {
-          const e = idx.indexed[p];
+        const hi = slot(idx.nodeHi, node);
+        for (let p = slot(idx.nodeLo, node); p < hi; p++) {
+          const e = slot(idx.indexed, p);
           const bound = capLowerBound(
             qx,
             qy,
             qz,
-            idx.capX[e],
-            idx.capY[e],
-            idx.capZ[e],
-            idx.capR[e],
+            slot(idx.capX, e),
+            slot(idx.capY, e),
+            slot(idx.capZ, e),
+            slot(idx.capR, e),
           );
           if (prunable(bound, bestDist)) continue;
           evaluate(e);
         }
         return;
       }
-      const right = idx.nodeRight[node];
+      const right = slot(idx.nodeRight, node);
       const boundL = capLowerBound(
         qx,
         qy,
         qz,
-        idx.nodeX[left],
-        idx.nodeY[left],
-        idx.nodeZ[left],
-        idx.nodeR[left],
+        slot(idx.nodeX, left),
+        slot(idx.nodeY, left),
+        slot(idx.nodeZ, left),
+        slot(idx.nodeR, left),
       );
       const boundR = capLowerBound(
         qx,
         qy,
         qz,
-        idx.nodeX[right],
-        idx.nodeY[right],
-        idx.nodeZ[right],
-        idx.nodeR[right],
+        slot(idx.nodeX, right),
+        slot(idx.nodeY, right),
+        slot(idx.nodeZ, right),
+        slot(idx.nodeR, right),
       );
       // Descend into the more promising child first so its exact result can
       // prune the other one.
@@ -650,10 +668,10 @@ export function snapPreparedRoute(
       qx,
       qy,
       qz,
-      idx.nodeX[idx.root],
-      idx.nodeY[idx.root],
-      idx.nodeZ[idx.root],
-      idx.nodeR[idx.root],
+      slot(idx.nodeX, idx.root),
+      slot(idx.nodeY, idx.root),
+      slot(idx.nodeZ, idx.root),
+      slot(idx.nodeR, idx.root),
     );
     if (!prunable(rootBound, bestDist)) visit(idx.root);
   }
@@ -694,7 +712,12 @@ export function inspectRouteMatcher(prepared: PreparedRouteMatcher): RouteMatche
     prefix: Array.from(idx.prefix),
     edgeCap(edge) {
       if (!indexed.includes(edge)) return null;
-      return { x: idx.capX[edge], y: idx.capY[edge], z: idx.capZ[edge], r: idx.capR[edge] };
+      return {
+        x: slot(idx.capX, edge),
+        y: slot(idx.capY, edge),
+        z: slot(idx.capZ, edge),
+        r: slot(idx.capR, edge),
+      };
     },
     ancestorCaps(edge) {
       const position = indexed.indexOf(edge);
@@ -703,14 +726,14 @@ export function inspectRouteMatcher(prepared: PreparedRouteMatcher): RouteMatche
       let node = idx.root;
       for (;;) {
         chain.push({
-          x: idx.nodeX[node],
-          y: idx.nodeY[node],
-          z: idx.nodeZ[node],
-          r: idx.nodeR[node],
+          x: slot(idx.nodeX, node),
+          y: slot(idx.nodeY, node),
+          z: slot(idx.nodeZ, node),
+          r: slot(idx.nodeR, node),
         });
-        const left = idx.nodeLeft[node];
+        const left = slot(idx.nodeLeft, node);
         if (left < 0) return chain;
-        node = position < idx.nodeHi[left] ? left : idx.nodeRight[node];
+        node = position < slot(idx.nodeHi, left) ? left : slot(idx.nodeRight, node);
       }
     },
   };

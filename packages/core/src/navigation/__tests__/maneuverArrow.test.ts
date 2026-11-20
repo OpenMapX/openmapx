@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import { haversineDistance } from "../../utils/coordinates";
-import { cumulativeDistances, positionAt } from "../deadReckon";
+import { cumulativeDistances, distanceAtVertex, positionAt } from "../deadReckon";
 import { maneuverArrowLine, maneuverArrowTipBearing } from "../maneuverArrow";
 
 // ~1.1 km straight east, so every distance check is against a known geometry.
@@ -12,15 +12,30 @@ const geometry: LngLat[] = [
 const cum = cumulativeDistances(geometry);
 const alongMeters = 550;
 
+/** The arrow line, failing the test when the route was too short to carry one. */
+function arrowLine(
+  route: LngLat[],
+  distances: number[],
+  along: number,
+): { line: LngLat[]; first: LngLat; last: LngLat } {
+  const line = maneuverArrowLine(route, distances, along, { before: 60, after: 40 });
+  assert.isNotNull(line);
+  const [first] = line;
+  const last = line.at(-1);
+  assert.isDefined(first);
+  assert.isDefined(last);
+  return { line, first, last };
+}
+
 describe("maneuverArrowLine", () => {
   it("starts before and ends after the maneuver point by the requested spans", () => {
-    const line = maneuverArrowLine(geometry, cum, alongMeters, { before: 60, after: 40 })!;
-    expect(haversineDistance(line[0], positionAt(geometry, cum, 490).point)).toBeLessThan(1.1);
-    expect(haversineDistance(line.at(-1)!, positionAt(geometry, cum, 590).point)).toBeLessThan(1.1);
+    const { first, last } = arrowLine(geometry, cum, alongMeters);
+    expect(haversineDistance(first, positionAt(geometry, cum, 490).point)).toBeLessThan(1.1);
+    expect(haversineDistance(last, positionAt(geometry, cum, 590).point)).toBeLessThan(1.1);
   });
 
   it("carries the tip bearing of the last segment", () => {
-    const line = maneuverArrowLine(geometry, cum, alongMeters, { before: 60, after: 40 })!;
+    const { line } = arrowLine(geometry, cum, alongMeters);
     // Straight east; the tip bearing is 90 within the polyline's own precision.
     expect(maneuverArrowTipBearing(line)).toBeCloseTo(90, 1);
   });
@@ -30,15 +45,17 @@ describe("maneuverArrowLine", () => {
     // ~500 and ~555 m and nothing outside it.
     const dense: LngLat[] = Array.from({ length: 21 }, (_, i) => [i * 0.0005, 0]);
     const denseCum = cumulativeDistances(dense);
-    const line = maneuverArrowLine(dense, denseCum, alongMeters, { before: 60, after: 40 })!;
-    const interior = line.slice(1, -1);
-    expect(interior).toEqual(dense.filter((_, i) => denseCum[i] > 490 && denseCum[i] < 590));
+    const interior = arrowLine(dense, denseCum, alongMeters).line.slice(1, -1);
+    expect(interior).toEqual(
+      dense.filter(
+        (_, i) => distanceAtVertex(denseCum, i) > 490 && distanceAtVertex(denseCum, i) < 590,
+      ),
+    );
     expect(interior.length).toBe(2);
   });
 
   it("clamps the spans to the route ends", () => {
-    const line = maneuverArrowLine(geometry, cum, 5, { before: 60, after: 40 })!;
-    expect(line[0]).toEqual(geometry[0]);
+    expect(arrowLine(geometry, cum, 5).first).toEqual(geometry[0]);
   });
 
   it("returns null when the route is shorter than the minimum", () => {

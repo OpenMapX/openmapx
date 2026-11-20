@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type {
   LocalizedText,
@@ -786,9 +786,16 @@ function randomSteps(rand: () => number, route: LngLat[]): RouteStep[] {
   }
   boundaries.push(route.length);
   const steps: RouteStep[] = [];
+  const pickRoadName = () => {
+    const name = ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)];
+    assert.isDefined(name);
+    return name;
+  };
   for (let i = 0; i < stepCount; i++) {
     const from = boundaries[i];
-    const to = Math.max(from + 2, boundaries[i + 1]);
+    const end = boundaries[i + 1];
+    assert(from !== undefined && end !== undefined);
+    const to = Math.max(from + 2, end);
     const coordinates = route.slice(from, Math.min(to, route.length));
     if (coordinates.length < 2) continue;
     steps.push({
@@ -796,7 +803,7 @@ function randomSteps(rand: () => number, route: LngLat[]): RouteStep[] {
       distance: 0,
       duration: 0,
       coordinates,
-      roadNames: rand() < 0.85 ? [ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)]] : undefined,
+      roadNames: rand() < 0.85 ? [pickRoadName()] : undefined,
     });
   }
   return steps;

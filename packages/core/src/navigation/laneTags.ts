@@ -9,6 +9,7 @@ import { angularDifference } from "./bearing";
 import { type ResolvedLaneGuidance, resolveLaneGuidance } from "./lanes";
 import { prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 import { cleanSignTexts, refKind, signHeadline } from "./signFormat";
+import type { SnapResult } from "./types";
 
 export interface ApproachLaneGuidance extends ResolvedLaneGuidance {
   source: "engine" | "osm";
@@ -163,10 +164,18 @@ function incomingLayoutMatches(
   const snaps = point.approachTrace
     .slice(-2)
     .map((coordinate) => snapPreparedRoute(matcher, coordinate));
-  return snaps.every(
-    (snap, i) =>
-      snap.deviationMeters <= 8 && (i === 0 || snap.alongMeters > snaps[i - 1].alongMeters + 1),
-  );
+  return followsInOrder(snaps, 8);
+}
+
+/** Whether every snap lies within `maxDeviation` metres and more than a metre past the one before. */
+function followsInOrder(snaps: readonly SnapResult[], maxDeviation: number): boolean {
+  let previous: SnapResult | undefined;
+  for (const snap of snaps) {
+    if (!(snap.deviationMeters <= maxDeviation)) return false;
+    if (previous && !(snap.alongMeters > previous.alongMeters + 1)) return false;
+    previous = snap;
+  }
+  return true;
 }
 
 function branchLabels(way: Pick<JunctionWay, "tags">): { refs: string[]; destinations: string[] } {
@@ -185,22 +194,19 @@ function selectOutgoingBySign(
   const toward = signHeadline(point.sign).map(normalize);
   const refs = (point.sign?.exitBranches ?? []).map(normalize);
   const labeled = ways.map((way) => ({ way, ...branchLabels(way) }));
-  if ((point.departureTrace?.length ?? 0) >= 2 && ways.some((way) => way.geometry)) {
+  const departureTrace = point.departureTrace ?? [];
+  if (departureTrace.length >= 2 && ways.some((way) => way.geometry)) {
     const matched = labeled.filter(({ way, refs: labels }) => {
       if (!way.geometry || way.geometry.length < 2) return false;
       if (refs.length && labels.length && !labels.some((ref) => refs.includes(normalize(ref))))
         return false;
       const matcher = prepareRouteMatcher(way.geometry);
-      const snaps = point.departureTrace!.map((coordinate) =>
-        snapPreparedRoute(matcher, coordinate),
-      );
-      return snaps.every(
-        (snap, i) =>
-          snap.deviationMeters <= 10 &&
-          (i === 0 || snap.alongMeters > snaps[i - 1].alongMeters + 1),
+      return followsInOrder(
+        departureTrace.map((coordinate) => snapPreparedRoute(matcher, coordinate)),
+        10,
       );
     });
-    return matched.length === 1 ? matched[0].way : undefined;
+    return matched.length === 1 ? matched[0]?.way : undefined;
   }
   const destinations = labeled.filter(
     (entry) =>
@@ -209,7 +215,7 @@ function selectOutgoingBySign(
         entry.refs.length === 0 ||
         entry.refs.some((ref) => refs.includes(normalize(ref)))),
   );
-  if (destinations.length > 0) return destinations.length === 1 ? destinations[0].way : undefined;
+  if (destinations.length > 0) return destinations.length === 1 ? destinations[0]?.way : undefined;
   // A reference alone may identify a destination-less road, but cannot override
   // an explicit, different destination or resolve two same-ref roads.
   const references = labeled.filter(
@@ -217,7 +223,7 @@ function selectOutgoingBySign(
       (toward.length === 0 || entry.destinations.length === 0) &&
       entry.refs.some((ref) => refs.includes(normalize(ref))),
   );
-  return references.length === 1 ? references[0].way : undefined;
+  return references.length === 1 ? references[0]?.way : undefined;
 }
 
 /** Keep approach ways heading the same way as the route, upstream of the point. */

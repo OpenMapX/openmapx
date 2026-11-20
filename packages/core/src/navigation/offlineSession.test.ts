@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { NavigationRouteOptions } from "../stores/navigationStore";
 import type { Route, RouteStep } from "../types/routing";
 import {
@@ -9,7 +9,14 @@ import {
 } from "./offlineSession";
 import type { NavProgress } from "./types";
 
-const geometry: [number, number][] = [
+/** The first item, failing the test when there is none. */
+function first<T>(items: readonly T[]): T {
+  const [item] = items;
+  assert.isDefined(item);
+  return item;
+}
+
+const geometry: [[number, number], [number, number], [number, number]] = [
   [13.4, 52.5],
   [13.401, 52.501],
   [13.402, 52.502],
@@ -174,14 +181,14 @@ function loose(value: unknown): Record<string, unknown> {
 /** Overwrite one field of the active route's first step. */
 function onStep(field: string, value: unknown): Corrupt {
   return (snapshot) => {
-    loose((snapshot.route as Route).steps[0])[field] = value;
+    loose(first((snapshot.route as Route).steps))[field] = value;
   };
 }
 
 /** Overwrite one field of the first step inside the active route's first leg. */
 function onLegStep(field: string, value: unknown): Corrupt {
   return (snapshot) => {
-    loose((snapshot.route as Route).legs[0].steps[0])[field] = value;
+    loose(first(first((snapshot.route as Route).legs).steps))[field] = value;
   };
 }
 
@@ -259,7 +266,7 @@ const corruptions: [string, Corrupt][] = [
   [
     "an alternative route",
     (snapshot) => {
-      ((snapshot.routes as Route[])[0].steps as unknown[]).splice(0, 1, 5);
+      (first(snapshot.routes as Route[]).steps as unknown[]).splice(0, 1, 5);
     },
   ],
   [
@@ -282,7 +289,7 @@ describe("navigation session snapshot", () => {
     expect("rawResponse" in snapshot.route).toBe(false);
     expect("gpsHistory" in snapshot.route).toBe(false);
     expect("incidents" in snapshot.route).toBe(false);
-    expect(snapshot.route.steps[0].instruction).toBe("Turn right");
+    expect(first(snapshot.route.steps).instruction).toBe("Turn right");
   });
 
   it("round-trips a valid snapshot through JSON", () => {
@@ -304,9 +311,9 @@ describe("navigation session snapshot", () => {
     withBearings.motorway = true;
     const primary = { ...richRoute(), steps: [withBearings, arriveStep()] };
     const original = createNavigationSessionSnapshot(input({ route: primary, routes: [primary] }));
-    expect(original.route.steps[0].bearingBefore).toBe(283);
-    expect(original.route.steps[0].bearingAfter).toBe(300);
-    expect(original.route.steps[0].motorway).toBe(true);
+    expect(first(original.route.steps).bearingBefore).toBe(283);
+    expect(first(original.route.steps).bearingAfter).toBe(300);
+    expect(first(original.route.steps).motorway).toBe(true);
     const parsed = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(original)));
     expect(parsed).toEqual(original);
   });
@@ -314,12 +321,13 @@ describe("navigation session snapshot", () => {
   it("does not gain junction fields when the engine sent none", () => {
     const primary = { ...richRoute(), steps: [{ ...arriveStep() }] };
     const original = createNavigationSessionSnapshot(input({ route: primary, routes: [primary] }));
-    expect(original.route.steps[0].bearingBefore).toBeUndefined();
-    expect(original.route.steps[0].bearingAfter).toBeUndefined();
-    expect(original.route.steps[0].motorway).toBeUndefined();
+    expect(first(original.route.steps).bearingBefore).toBeUndefined();
+    expect(first(original.route.steps).bearingAfter).toBeUndefined();
+    expect(first(original.route.steps).motorway).toBeUndefined();
     const parsed = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(original)));
     expect(parsed).toEqual(original);
-    expect(parsed?.route.steps[0].bearingBefore).toBeUndefined();
+    assert.isNotNull(parsed);
+    expect(first(parsed.route.steps).bearingBefore).toBeUndefined();
   });
 
   it.each([
@@ -395,7 +403,7 @@ describe("navigation session snapshot", () => {
   it("preserves every optional nested route, leg, and step field through a round trip", () => {
     const original = createNavigationSessionSnapshot(richInput());
     expect(original.route.steps[0]).toEqual(richStep());
-    expect(original.route.legs[0].summary).toBe("Main Street");
+    expect(original.route.legs[0]?.summary).toBe("Main Street");
     expect(original.route.elevation).toEqual([10, 12, 14]);
     const parsed = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(original)));
     expect(parsed).toEqual(original);
@@ -453,18 +461,18 @@ describe("offline contributor receipts", () => {
     };
     const b = { ...a, attributionText: "captured B" };
     const primary = { ...route(), contributors: [a, b], fieldContributors: { geometry: [a] } };
-    primary.legs[0].contributors = [b];
-    primary.steps[0].contributors = [];
+    first(primary.legs).contributors = [b];
+    first(primary.steps).contributors = [];
     const snapshot = createNavigationSessionSnapshot(input({ route: primary, routes: [primary] }));
     const restored = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(snapshot)));
     if (!restored) throw new Error("valid captured session did not restore");
     expect(restored.route.contributors).toEqual([a, b]);
     expect(restored.route.fieldContributors).toEqual({ geometry: [a] });
-    expect(restored.route.legs[0].contributors).toEqual([b]);
-    expect(restored.route.steps[0].contributors).toEqual([]);
+    expect(first(restored.route.legs).contributors).toEqual([b]);
+    expect(first(restored.route.steps).contributors).toEqual([]);
     a.publisher.name = "changed";
-    expect(snapshot.route.contributors?.[0].publisher?.name).toBe("Publisher");
-    expect(restored.route.contributors?.[0].publisher?.name).toBe("Publisher");
+    expect(snapshot.route.contributors?.[0]?.publisher?.name).toBe("Publisher");
+    expect(restored.route.contributors?.[0]?.publisher?.name).toBe("Publisher");
   });
 
   it("rejects malformed canonical receipts instead of downgrading to legacy", () => {
@@ -520,8 +528,9 @@ describe("lane evidence in saved navigation", () => {
       input({ route: storedRoute, routes: [storedRoute] }),
     );
     const restored = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(snapshot)));
-    expect(restored?.route.steps[0].lanes).toEqual(lanes);
-    expect(restored?.route.legs[0].steps[0].lanes).toEqual(lanes);
-    expect(restored?.routes[0].steps[0].lanes).toEqual(lanes);
+    assert.isNotNull(restored);
+    expect(first(restored.route.steps).lanes).toEqual(lanes);
+    expect(first(first(restored.route.legs).steps).lanes).toEqual(lanes);
+    expect(first(first(restored.routes).steps).lanes).toEqual(lanes);
   });
 });

@@ -1,5 +1,5 @@
 import type { BoundingBox, LngLat } from "../types/geometry";
-import { cumulativeDistances, positionAt } from "./deadReckon";
+import { cumulativeDistances, distanceAtVertex, positionAt } from "./deadReckon";
 import { asRouteMatcher, type RouteMatcherInput, snapPreparedRoute } from "./routeMatcher";
 import type { RouteStopDetour } from "./routeStopDetours";
 
@@ -105,9 +105,9 @@ export function routeAheadBounds(
   let east = Number.NEGATIVE_INFINITY;
   let north = Number.NEGATIVE_INFINITY;
   let any = false;
-  for (let i = 0; i < geometry.length; i++) {
-    if (cum[i] < fromAlongMeters || cum[i] > end) continue;
-    const [lng, lat] = geometry[i];
+  for (const [i, [lng, lat]] of geometry.entries()) {
+    const along = distanceAtVertex(cum, i);
+    if (along < fromAlongMeters || along > end) continue;
     if (lng < west) west = lng;
     if (lng > east) east = lng;
     if (lat < south) south = lat;
@@ -191,7 +191,8 @@ function boundsFromPoints(points: readonly LngLat[]): {
   let east = Number.NEGATIVE_INFINITY;
   let south = Number.POSITIVE_INFINITY;
   let north = Number.NEGATIVE_INFINITY;
-  let previousLng = points[0][0];
+  // Unwrapping starts from the first point, so its own longitude stays as given.
+  let previousLng = points[0]?.[0] ?? 0;
   for (const [lng, lat] of points) {
     const unwrapped = unwrapLongitude(lng, previousLng);
     previousLng = unwrapped;
@@ -242,8 +243,9 @@ export function paddedRouteAheadBounds(
   const end = fromAlongMeters + Math.max(lookaheadMeters, 0);
 
   const points: LngLat[] = [positionAt(geometry, cum, fromAlongMeters).point];
-  for (let i = 0; i < geometry.length; i++) {
-    if (cum[i] >= fromAlongMeters && cum[i] <= end) points.push(geometry[i]);
+  for (const [i, vertex] of geometry.entries()) {
+    const along = distanceAtVertex(cum, i);
+    if (along >= fromAlongMeters && along <= end) points.push(vertex);
   }
   points.push(positionAt(geometry, cum, end).point);
 

@@ -158,8 +158,8 @@ export const REROUTE_CHURN_WINDOW_MS = 120_000;
 export const REROUTE_CHURN_LIMIT = 3;
 export const REROUTE_CHURN_COOLDOWN_MS = 30_000;
 
-const MAX_RETRY_DELAY_MS =
-  REROUTE_RETRY_DELAYS_MS[REROUTE_RETRY_DELAYS_MS.length - 1] + REROUTE_RETRY_JITTER_MS;
+const LONGEST_RETRY_DELAY_MS = Math.max(...REROUTE_RETRY_DELAYS_MS);
+const MAX_RETRY_DELAY_MS = LONGEST_RETRY_DELAY_MS + REROUTE_RETRY_JITTER_MS;
 
 export type RerouteStatus = "idle" | "pending" | "in-flight" | "unavailable" | "failed";
 
@@ -249,7 +249,8 @@ export function withheldReroute(
 export function rerouteRetryDelayMs(attempts: number, jitter01: number): number {
   const index = Math.min(Math.max(attempts, 1), REROUTE_RETRY_DELAYS_MS.length) - 1;
   const clamped = Math.min(Math.max(jitter01, 0), 1);
-  return REROUTE_RETRY_DELAYS_MS[index] + Math.round(clamped * REROUTE_RETRY_JITTER_MS);
+  const delay = REROUTE_RETRY_DELAYS_MS[index] ?? LONGEST_RETRY_DELAY_MS;
+  return delay + Math.round(clamped * REROUTE_RETRY_JITTER_MS);
 }
 
 export function onRerouteRequested(

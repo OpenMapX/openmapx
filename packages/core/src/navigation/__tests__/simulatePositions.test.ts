@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { simulatePositions } from "../simulatePositions";
+import type { FixInput } from "../types";
 
 const geometry: [number, number][] = [
   [0, 0],
@@ -7,18 +8,29 @@ const geometry: [number, number][] = [
   [0.002, 0],
 ];
 
+/** The first two fixes and the last one, failing the test when fewer were emitted. */
+function edges(fixes: FixInput[]): { first: FixInput; second: FixInput; last: FixInput } {
+  const [first, second] = fixes;
+  const last = fixes.at(-1);
+  assert.isDefined(first);
+  assert.isDefined(second);
+  assert.isDefined(last);
+  return { first, second, last };
+}
+
 describe("simulatePositions", () => {
   it("emits fixes from start to end with increasing timestamps", () => {
     const fixes = simulatePositions(geometry, { stepMeters: 20, startMs: 1000, intervalMs: 1000 });
     expect(fixes.length).toBeGreaterThan(2);
-    expect(fixes[0].coords[0]).toBeCloseTo(0, 5);
-    expect(fixes[fixes.length - 1].coords[0]).toBeCloseTo(0.002, 4);
-    expect(fixes[1].timestampMs - fixes[0].timestampMs).toBe(1000);
+    const { first, second, last } = edges(fixes);
+    expect(first.coords[0]).toBeCloseTo(0, 5);
+    expect(last.coords[0]).toBeCloseTo(0.002, 4);
+    expect(second.timestampMs - first.timestampMs).toBe(1000);
   });
 
   it("can inject lateral offset to simulate going off-route", () => {
     const fixes = simulatePositions(geometry, { stepMeters: 20, offsetMeters: 100 });
-    expect(Math.abs(fixes[1].coords[1])).toBeGreaterThan(0); // pushed off the line
+    expect(Math.abs(edges(fixes).second.coords[1])).toBeGreaterThan(0); // pushed off the line
   });
 
   it("offsets perpendicular to travel — east of a northbound route, not along it", () => {
@@ -26,28 +38,29 @@ describe("simulatePositions", () => {
       [0, 0],
       [0, 0.01],
     ];
-    const base = simulatePositions(north, { stepMeters: 2000 });
-    const off = simulatePositions(north, { stepMeters: 2000, offsetMeters: 50 });
+    const base = edges(simulatePositions(north, { stepMeters: 2000 })).first;
+    const off = edges(simulatePositions(north, { stepMeters: 2000, offsetMeters: 50 })).first;
     // Latitude (the along-route axis here) stays put — the offset is not applied
     // along the direction of travel...
-    expect(off[0].coords[1]).toBeCloseTo(base[0].coords[1], 6);
+    expect(off.coords[1]).toBeCloseTo(base.coords[1], 6);
     // ...it shifts ~50 m east instead. 50 m ≈ 0.000449° of longitude at the equator.
-    expect(off[0].coords[0] - base[0].coords[0]).toBeCloseTo(50 / 111_319.49, 5);
+    expect(off.coords[0] - base.coords[0]).toBeCloseTo(50 / 111_319.49, 5);
   });
 
   it("populates a realistic heading and speed on each fix", () => {
     const fixes = simulatePositions(geometry, { stepMeters: 20, intervalMs: 1000 });
     // Route runs due east → heading ~90°; speed = 20 m per 1 s = 20 m/s.
-    expect(fixes[0].heading).toBeCloseTo(90, 0);
-    expect(fixes[0].speed).toBeCloseTo(20, 5);
+    expect(fixes[0]?.heading).toBeCloseTo(90, 0);
+    expect(fixes[0]?.speed).toBeCloseTo(20, 5);
   });
 
   it("pins speed and derives spacing when speedMps is given", () => {
     const fixes = simulatePositions(geometry, { speedMps: 10, intervalMs: 1000 });
     // 10 m/s for 1 s → ~10 m steps; every fix reports 10 m/s.
     expect(fixes.every((f) => f.speed === 10)).toBe(true);
-    expect(haversineish(fixes[0].coords, fixes[1].coords)).toBeGreaterThan(8);
-    expect(haversineish(fixes[0].coords, fixes[1].coords)).toBeLessThan(12);
+    const { first, second } = edges(fixes);
+    expect(haversineish(first.coords, second.coords)).toBeGreaterThan(8);
+    expect(haversineish(first.coords, second.coords)).toBeLessThan(12);
   });
 });
 

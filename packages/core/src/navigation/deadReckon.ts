@@ -20,12 +20,24 @@ function segmentBearing(a: LngLat, b: LngLat): number {
  * resolve an arc-length to a point in O(log n).
  */
 export function cumulativeDistances(geometry: LngLat[]): number[] {
-  const cum = new Array<number>(geometry.length);
-  cum[0] = 0;
-  for (let i = 1; i < geometry.length; i++) {
-    cum[i] = cum[i - 1] + haversineDistance(geometry[i - 1], geometry[i]);
+  const cum = [0];
+  let total = 0;
+  let previous = geometry[0];
+  for (const vertex of geometry.slice(1)) {
+    if (previous) total += haversineDistance(previous, vertex);
+    cum.push(total);
+    previous = vertex;
   }
   return cum;
+}
+
+/**
+ * Arc-length at `index` of a {@link cumulativeDistances} result. Callers pass a
+ * vertex of the same geometry; any other index reads as NaN, as an unchecked
+ * array read did in arithmetic, so comparisons against it stay false.
+ */
+export function distanceAtVertex(cum: readonly number[], index: number): number {
+  return cum[index] ?? Number.NaN;
 }
 
 /**
@@ -40,10 +52,11 @@ export function positionAt(
   distanceMeters: number,
 ): { point: LngLat; bearing: number } {
   const n = geometry.length;
-  if (n === 0) return { point: [0, 0], bearing: 0 };
-  if (n === 1) return { point: geometry[0], bearing: 0 };
+  const first = geometry[0];
+  if (!first) return { point: [0, 0], bearing: 0 };
+  if (n === 1) return { point: first, bearing: 0 };
 
-  const total = cum[n - 1];
+  const total = distanceAtVertex(cum, n - 1);
   const d = Math.min(Math.max(distanceMeters, 0), total);
 
   // Largest i in [0, n-2] with cum[i] <= d — the segment containing d.
@@ -51,17 +64,20 @@ export function positionAt(
   let hi = n - 2;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
-    if (cum[mid] <= d) lo = mid;
+    if (distanceAtVertex(cum, mid) <= d) lo = mid;
     else hi = mid - 1;
   }
   const i = lo;
-  const segLen = cum[i + 1] - cum[i];
-  const t = segLen > 0 ? (d - cum[i]) / segLen : 0;
-  const [x1, y1] = geometry[i];
-  const [x2, y2] = geometry[i + 1];
+  const from = geometry[i];
+  const to = geometry[i + 1];
+  if (!from || !to) return { point: first, bearing: 0 };
+  const segLen = distanceAtVertex(cum, i + 1) - distanceAtVertex(cum, i);
+  const t = segLen > 0 ? (d - distanceAtVertex(cum, i)) / segLen : 0;
+  const [x1, y1] = from;
+  const [x2, y2] = to;
   return {
     point: [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t],
-    bearing: segmentBearing(geometry[i], geometry[i + 1]),
+    bearing: segmentBearing(from, to),
   };
 }
 

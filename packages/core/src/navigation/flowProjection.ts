@@ -173,14 +173,16 @@ function segmentSpans(
 
   for (const sample of indices) {
     const point = coords[sample];
+    const ahead = coords[Math.min(sample + 1, coords.length - 1)];
+    const behind = coords[Math.max(sample - 1, 0)];
+    // Sample indices come from the segment's own length, so all three exist.
+    if (!point || !ahead || !behind) continue;
     const snap = snapPreparedRoute(matcher, point, seedSegmentIndex);
     if (snap.segmentIndex >= 0) seedSegmentIndex = snap.segmentIndex;
     if (snap.deviationMeters > corridor) {
       closeRun();
       continue;
     }
-    const ahead = coords[Math.min(sample + 1, coords.length - 1)];
-    const behind = coords[Math.max(sample - 1, 0)];
     const segmentBearing = bearingBetween(behind, ahead);
     if (
       angularDifference(segmentBearing, routeBearingAt(matcher.geometry, snap.segmentIndex)) >
@@ -259,17 +261,26 @@ export function resolveFlowOverlaps(
    * Whether `a` should own an interval that both cover. Severity first, then
    * the submission order — never the order a sort happened to leave them in.
    */
-  const beats = (a: number, b: number): boolean => {
+  const spanAt = (ordinal: number): RankedFlowSpan => {
+    const span = raw[ordinal];
+    if (!span) throw new RangeError(`Flow span ${ordinal} is not one of the submitted spans`);
+    return span;
+  };
+
+  const beats = (a: number | undefined, b: number | undefined): boolean => {
+    if (a === undefined || b === undefined) return false;
     if (counters) counters.comparisons++;
-    if (raw[a].rank > raw[b].rank) return true;
-    if (raw[b].rank > raw[a].rank) return false;
+    const rankA = spanAt(a).rank;
+    const rankB = spanAt(b).rank;
+    if (rankA > rankB) return true;
+    if (rankB > rankA) return false;
     return a < b;
   };
 
   const byValue = (values: (span: RankedFlowSpan) => number): number[] =>
     Array.from({ length: count }, (_, i) => i).sort((a, b) => {
       if (counters) counters.comparisons++;
-      return values(raw[a]) - values(raw[b]) || a - b;
+      return values(spanAt(a)) - values(spanAt(b)) || a - b;
     });
   const byStart = byValue((span) => span.startMeters);
   const byEnd = byValue((span) => span.endMeters);
@@ -280,6 +291,14 @@ export function resolveFlowOverlaps(
   const heap: number[] = [];
   const open = new Uint8Array(count).fill(1);
 
+  const swap = (i: number, j: number): void => {
+    const a = heap[i];
+    const b = heap[j];
+    if (a === undefined || b === undefined) return;
+    heap[i] = b;
+    heap[j] = a;
+  };
+
   const push = (ordinal: number): void => {
     if (counters) counters.heapOperations++;
     heap.push(ordinal);
@@ -287,7 +306,7 @@ export function resolveFlowOverlaps(
     while (child > 0) {
       const parent = (child - 1) >> 1;
       if (!beats(heap[child], heap[parent])) break;
-      [heap[child], heap[parent]] = [heap[parent], heap[child]];
+      swap(child, parent);
       child = parent;
     }
   };
@@ -305,39 +324,49 @@ export function resolveFlowOverlaps(
       if (left < heap.length && beats(heap[left], heap[best])) best = left;
       if (right < heap.length && beats(heap[right], heap[best])) best = right;
       if (best === parent) return;
-      [heap[parent], heap[best]] = [heap[best], heap[parent]];
+      swap(parent, best);
       parent = best;
     }
   };
 
   /** The span owning the interval about to be emitted, or -1 if none does. */
   const owner = (): number => {
-    while (heap.length > 0 && open[heap[0]] === 0) pop();
-    return heap.length > 0 ? heap[0] : -1;
+    for (let top = heap[0]; top !== undefined; top = heap[0]) {
+      if (open[top] !== 0) return top;
+      pop();
+    }
+    return -1;
   };
 
   const intervals: RankedFlowSpan[] = [];
   let started = 0;
   let ended = 0;
-  for (let i = 1; i < bounds.length; i++) {
+  for (const [i, end] of bounds.entries()) {
     const start = bounds[i - 1];
-    const end = bounds[i];
-    if (end - start <= 0) continue;
+    if (start === undefined || end - start <= 0) continue;
     // A span covers this interval when it began at or before `start` and runs
     // past it. Both event lists are walked once across the whole sweep, so a
     // span is opened and closed once no matter how many boundaries it spans.
-    while (ended < count && raw[byEnd[ended]].endMeters <= start) {
-      open[byEnd[ended]] = 0;
+    for (
+      let closing = byEnd[ended];
+      closing !== undefined && spanAt(closing).endMeters <= start;
+      closing = byEnd[ended]
+    ) {
+      open[closing] = 0;
       ended++;
     }
-    while (started < count && raw[byStart[started]].startMeters <= start) {
-      push(byStart[started]);
+    for (
+      let opening = byStart[started];
+      opening !== undefined && spanAt(opening).startMeters <= start;
+      opening = byStart[started]
+    ) {
+      push(opening);
       started++;
     }
     const winner = owner();
     if (winner < 0) continue;
     if (counters) counters.intervals++;
-    intervals.push({ ...raw[winner], startMeters: start, endMeters: end });
+    intervals.push({ ...spanAt(winner), startMeters: start, endMeters: end });
   }
 
   const merged: RankedFlowSpan[] = [];

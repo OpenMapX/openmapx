@@ -2,6 +2,7 @@ import type { RawRoadAlert, RoadAlertRoad } from "../api/roadAlerts";
 import type { LngLat } from "../types/geometry";
 import { haversineDistance } from "../utils/coordinates";
 import type { RoadAlert } from "./alerts";
+import { distanceAtVertex } from "./deadReckon";
 
 /**
  * Attaching approach alerts (stop signs, level crossings, speed bumps, speed
@@ -65,7 +66,7 @@ function segmentAt(cum: number[], along: number): number {
   let hi = cum.length - 2;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (cum[mid + 1] < along) lo = mid + 1;
+    if (distanceAtVertex(cum, mid + 1) < along) lo = mid + 1;
     else hi = mid;
   }
   return lo;
@@ -84,24 +85,32 @@ function scanRoute(
   visit: (distance: number, along: number) => void,
 ): void {
   if (geometry.length < 2 || hi < lo) return;
-  const total = cum[cum.length - 1];
+  const total = distanceAtVertex(cum, cum.length - 1);
   const from = Math.max(0, lo);
   const to = Math.min(total, hi);
   if (to < from) return;
-  for (let i = segmentAt(cum, from); i < geometry.length - 1 && cum[i] <= to; i++) {
-    const length = cum[i + 1] - cum[i];
-    const [ax, ay] = toLocal(frame, geometry[i]);
-    const [bx, by] = toLocal(frame, geometry[i + 1]);
+  for (
+    let i = segmentAt(cum, from);
+    i < geometry.length - 1 && distanceAtVertex(cum, i) <= to;
+    i++
+  ) {
+    const start = geometry[i];
+    const end = geometry[i + 1];
+    if (!start || !end) continue;
+    const startAlong = distanceAtVertex(cum, i);
+    const length = distanceAtVertex(cum, i + 1) - startAlong;
+    const [ax, ay] = toLocal(frame, start);
+    const [bx, by] = toLocal(frame, end);
     const dx = bx - ax;
     const dy = by - ay;
     const lengthSquared = dx * dx + dy * dy;
-    const tMin = length > 0 ? Math.max(0, (from - cum[i]) / length) : 0;
-    const tMax = length > 0 ? Math.min(1, (to - cum[i]) / length) : 0;
+    const tMin = length > 0 ? Math.max(0, (from - startAlong) / length) : 0;
+    const tMax = length > 0 ? Math.min(1, (to - startAlong) / length) : 0;
     const t =
       lengthSquared > 0
         ? Math.min(tMax, Math.max(tMin, -(ax * dx + ay * dy) / lengthSquared))
         : tMin;
-    visit(Math.hypot(ax + t * dx, ay + t * dy), cum[i] + t * length);
+    visit(Math.hypot(ax + t * dx, ay + t * dy), startAlong + t * length);
   }
 }
 
@@ -133,6 +142,7 @@ function pointBehind(road: RoadAlertRoad, step: 1 | -1, distance: number): LngLa
   for (let i = road.anchorIndex; i + step >= 0 && i + step < road.line.length; i += step) {
     const a = road.line[i];
     const b = road.line[i + step];
+    if (!a || !b) return null;
     const length = haversineDistance(a, b);
     if (travelled + length >= distance) {
       const t = length > 0 ? (distance - travelled) / length : 0;
@@ -147,7 +157,9 @@ function pointBehind(road: RoadAlertRoad, step: 1 | -1, distance: number): LngLa
 function lengthBehind(road: RoadAlertRoad, step: 1 | -1): number {
   let length = 0;
   for (let i = road.anchorIndex; i + step >= 0 && i + step < road.line.length; i += step) {
-    length += haversineDistance(road.line[i], road.line[i + step]);
+    const a = road.line[i];
+    const b = road.line[i + step];
+    if (a && b) length += haversineDistance(a, b);
   }
   return length;
 }

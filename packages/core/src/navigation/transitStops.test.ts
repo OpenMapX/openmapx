@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { captureTransitLegStops, sliceJourneyToLeg } from "./transitStops";
 
 const s = (stopId: string) => ({ stopId, name: stopId });
@@ -37,11 +37,11 @@ describe("captureTransitLegStops", () => {
   it("captures only transit legs, keeping the leg index of the itinerary", () => {
     const captures = captureTransitLegStops(legs, { t1: journey }, 1_000);
     expect(captures).toHaveLength(1);
-    expect(captures[0].legIndex).toBe(1);
-    expect(captures[0].tripId).toBe("t1");
+    expect(captures[0]?.legIndex).toBe(1);
+    expect(captures[0]?.tripId).toBe("t1");
 
-    expect(captures[0].stops.map((s) => s.stopId)).toEqual(["b", "c"]);
-    expect(captures[0].status).toBe("captured");
+    expect(captures[0]?.stops.map((s) => s.stopId)).toEqual(["b", "c"]);
+    expect(captures[0]?.status).toBe("captured");
   });
 
   it("keeps schedule, live, platform and cancellation fields", () => {
@@ -50,9 +50,9 @@ describe("captureTransitLegStops", () => {
       { t1: journey },
       1_000,
     );
-    expect(capture.stops[0].scheduledDeparture).toBe("10:00");
-    expect(capture.stops[1].platform).toBe("3");
-    expect(capture.stops[2].canceled).toBe(true);
+    expect(capture?.stops[0]?.scheduledDeparture).toBe("10:00");
+    expect(capture?.stops[1]?.platform).toBe("3");
+    expect(capture?.stops[2]?.canceled).toBe(true);
   });
 
   it("drops journey metadata the engine does not need", () => {
@@ -65,8 +65,10 @@ describe("captureTransitLegStops", () => {
       { t1: noisy },
       1_000,
     );
-    expect(capture.stops[0]).not.toHaveProperty("remarks");
-    expect(capture.stops[0]).not.toHaveProperty("formation");
+    const kept = capture?.stops[0];
+    assert.isDefined(kept);
+    expect(kept).not.toHaveProperty("remarks");
+    expect(kept).not.toHaveProperty("formation");
   });
 
   it("records a typed missing capture rather than fabricating stops", () => {
@@ -75,8 +77,8 @@ describe("captureTransitLegStops", () => {
       {},
       1_000,
     );
-    expect(capture.status).toBe("missing");
-    expect(capture.stops).toEqual([]);
+    expect(capture?.status).toBe("missing");
+    expect(capture?.stops).toEqual([]);
   });
 
   it("treats an empty journey as missing", () => {
@@ -85,7 +87,7 @@ describe("captureTransitLegStops", () => {
       { t1: [] },
       1_000,
     );
-    expect(capture.status).toBe("missing");
+    expect(capture?.status).toBe("missing");
   });
 
   it("stamps every capture with the same capture time", () => {
@@ -111,7 +113,7 @@ describe("captureTransitLegStops", () => {
       { t1: broken },
       1_000,
     );
-    expect(capture.stops.map((s) => s.stopId)).toEqual(["b", "c"]);
+    expect(capture?.stops.map((s) => s.stopId)).toEqual(["b", "c"]);
   });
 
   it("matches the alight stop after the board stop on a circular route", () => {
@@ -125,7 +127,7 @@ describe("captureTransitLegStops", () => {
       { t1: ring },
       1_000,
     );
-    expect(capture.stops.map((s) => s.stopId)).toEqual(["b", "hub"]);
+    expect(capture?.stops.map((s) => s.stopId)).toEqual(["b", "hub"]);
   });
 });
 it("updates stop predictions only when the captured occurrence sequence is unchanged", async () => {
@@ -152,9 +154,9 @@ it("updates stop predictions only when the captured occurrence sequence is uncha
     },
     2000,
   );
-  expect(next[0].stops[0].name).toBe("A");
-  expect(next[0].stops[0].platform).toBe("4");
-  expect(next[0].stops[1].expectedArrival).toBe("2026-11-04T10:00:00Z");
+  expect(next[0]?.stops[0]?.name).toBe("A");
+  expect(next[0]?.stops[0]?.platform).toBe("4");
+  expect(next[0]?.stops[1]?.expectedArrival).toBe("2026-11-04T10:00:00Z");
   expect(
     refreshTransitCaptures(
       original,
@@ -203,8 +205,8 @@ it("captures the scheduled boarding occurrence on a loop instead of its earlier 
     },
     1,
   );
-  expect(capture.stops).toHaveLength(2);
-  expect(capture.stops[0].name).toBe("Second lap");
+  expect(capture?.stops).toHaveLength(2);
+  expect(capture?.stops[0]?.name).toBe("Second lap");
 });
 
 it("selects captured event evidence and removes superseded bad platform state", async () => {
@@ -241,8 +243,12 @@ it("selects captured event evidence and removes superseded bad platform state", 
     },
     1,
   );
-  const updated = refreshTransitCaptures(old, [leg], { t: fresh[0].stops }, 3);
-  expect(updated[0].stops[0].scheduledPlatform).toBeUndefined();
+  const [freshCapture] = fresh;
+  assert.isDefined(freshCapture);
+  const updated = refreshTransitCaptures(old, [leg], { t: freshCapture.stops }, 3);
+  const refreshed = updated[0]?.stops[0];
+  assert.isDefined(refreshed);
+  expect(refreshed.scheduledPlatform).toBeUndefined();
   expect(selectLegPlatform(leg, 0, updated, "departure").code).toBe("3");
 });
 
@@ -268,15 +274,17 @@ it("captures only bounded known evidence fields on initial load and refresh", as
   ];
   const original = captureTransitLegStops(legs, { t: stops }, 1);
   expect(transitLegCaptureSchema.safeParse(original[0]).success).toBe(true);
-  expect(original[0].stops[0].departurePlatform).toEqual({
+  expect(original[0]?.stops[0]?.departurePlatform).toEqual({
     code: "3",
     kind: "correction",
     sourceId: "siri",
   });
-  const malformed = stops[0].departurePlatform;
+  const malformed = stops[0]?.departurePlatform;
   if (!malformed) throw new Error("Missing fixture platform");
   malformed.code = "x".repeat(65);
   const updated = refreshTransitCaptures(original, legs, { t: stops }, 2);
-  expect(updated[0].stops[0].departurePlatform).toBeUndefined();
+  const refreshed = updated[0]?.stops[0];
+  assert.isDefined(refreshed);
+  expect(refreshed.departurePlatform).toBeUndefined();
   expect(transitLegCaptureSchema.safeParse(updated[0]).success).toBe(true);
 });

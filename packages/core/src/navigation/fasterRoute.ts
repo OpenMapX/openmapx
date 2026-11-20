@@ -1,6 +1,6 @@
 import type { LngLat } from "../types/geometry";
 import type { Route } from "../types/routing";
-import { cumulativeDistances, positionAt } from "./deadReckon";
+import { cumulativeDistances, distanceAtVertex, positionAt } from "./deadReckon";
 import { type PreparedRouteMatcher, prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 
 export interface FasterRouteOptions {
@@ -48,8 +48,9 @@ function remainingGeometry(geometry: LngLat[], alongMeters: number): LngLat[] {
   if (geometry.length < 2) return geometry;
   const cum = cumulativeDistances(geometry);
   const here = positionAt(geometry, cum, alongMeters).point;
-  const tail = geometry.filter((_, i) => cum[i] > alongMeters);
-  return tail.length > 0 ? [here, ...tail] : [here, geometry[geometry.length - 1]];
+  const tail = geometry.filter((_, i) => distanceAtVertex(cum, i) > alongMeters);
+  const last = geometry.at(-1);
+  return tail.length > 0 || !last ? [here, ...tail] : [here, last];
 }
 
 /**
@@ -84,12 +85,14 @@ function divergenceAlong(
   // Consecutive candidate vertices land on neighbouring corridor edges, so the
   // previous projection is a good place to start the next one.
   let previousSegment: number | undefined;
-  for (let i = 0; i < candidate.length; i++) {
-    const snap = snapPreparedRoute(corridor, candidate[i], previousSegment);
+  for (const [i, vertex] of candidate.entries()) {
+    const snap = snapPreparedRoute(corridor, vertex, previousSegment);
     previousSegment = snap.segmentIndex;
     const { deviationMeters, alongMeters } = snap;
-    if (deviationMeters > toleranceMeters) return cum[i];
-    if (alongMeters - cum[i] > SKIP_TOLERANCE_METERS) return i > 0 ? cum[i - 1] : 0;
+    const candidateAlong = distanceAtVertex(cum, i);
+    if (deviationMeters > toleranceMeters) return candidateAlong;
+    if (alongMeters - candidateAlong > SKIP_TOLERANCE_METERS)
+      return i > 0 ? distanceAtVertex(cum, i - 1) : 0;
   }
   return null;
 }

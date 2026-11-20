@@ -1,6 +1,6 @@
 import type { JunctionDecisionPoint, JunctionLookupPoint } from "../types/junction";
 import type { Route } from "../types/routing";
-import { cumulativeDistances, positionAt } from "./deadReckon";
+import { cumulativeDistances, distanceAtVertex, positionAt } from "./deadReckon";
 
 /**
  * The request points sent to `POST /navigation/junctions`, derived purely from
@@ -20,7 +20,7 @@ export function junctionLookupPoints(
   decisionPoints: JunctionDecisionPoint[],
 ): { stepIndex: number; lookup: JunctionLookupPoint }[] {
   const cum = cumulativeDistances(route.geometry);
-  const total = cum[cum.length - 1];
+  const total = distanceAtVertex(cum, cum.length - 1);
   const at = (along: number): [number, number] =>
     positionAt(route.geometry, cum, Math.min(Math.max(along, 0), total)).point as [number, number];
   return decisionPoints.map((point) => ({

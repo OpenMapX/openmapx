@@ -45,6 +45,7 @@ export function advanceTransitStopCursor(
     // Without a shape, require visiting the next occurrence before moving past it.
     const target = stops[current];
     const near =
+      target !== undefined &&
       haversineDistance(fix.coords, [target.lng, target.lat]) <= 35 + Math.min(fix.accuracy, 20);
     return {
       cursor: near ? Math.min(current + 1, stops.length - 1) : current,
@@ -103,7 +104,10 @@ export function advanceTransitStopCursor(
   const projected = orderedAlong(stops, leg);
   let next = current;
   // At most three occurrences per fix; the destination stays the next stop until explicit alighting.
-  while (next < Math.min(current + 3, stops.length - 1) && snap.alongMeters > projected[next] + 25)
+  while (
+    next < Math.min(current + 3, stops.length - 1) &&
+    snap.alongMeters > (projected[next] ?? Number.POSITIVE_INFINITY) + 25
+  )
     next++;
   return {
     cursor: next,

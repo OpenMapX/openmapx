@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type { DirectionsResult, Route } from "../../types/routing";
 import {
@@ -32,17 +32,21 @@ const edges: [LngLat, LngLat, number, number][] = [
 function graphRoute(points: LngLat[]): DirectionsResult {
   let duration = 0,
     distance = 0;
-  for (let i = 1; i < points.length; i++) {
-    const pending = [{ point: points[i - 1], seconds: 0, metres: 0 }];
+  for (const [i, target] of points.entries()) {
+    const start = points[i - 1];
+    if (!start) continue;
+    const pending = [{ point: start, seconds: 0, metres: 0 }];
     const visited = new Set<string>();
     let reached = false;
-    while (pending.length) {
-      pending.sort((a, b) => a.seconds - b.seconds);
-      const next = pending.shift()!;
+    for (
+      let next = pending.sort((a, b) => a.seconds - b.seconds).shift();
+      next;
+      next = pending.sort((a, b) => a.seconds - b.seconds).shift()
+    ) {
       const key = next.point.join(",");
       if (visited.has(key)) continue;
       visited.add(key);
-      if (key === points[i].join(",")) {
+      if (key === target.join(",")) {
         duration += next.seconds;
         distance += next.metres;
         reached = true;
@@ -81,8 +85,8 @@ describe("remaining-itinerary stop detours", () => {
       d: LngLat = [0.03, 0];
     const geometry: LngLat[] = [O, b, a, b, d];
     const positions = routeStopWaypointPositions(geometry, [O, a, b, d]);
-    expect(positions[0].alongMeters).toBeCloseTo(2223.9, 0);
-    expect(positions[1].alongMeters).toBeCloseTo(3335.9, 0);
+    expect(positions[0]?.alongMeters).toBeCloseTo(2223.9, 0);
+    expect(positions[1]?.alongMeters).toBeCloseTo(3335.9, 0);
     expect(remainingRouteStopWaypoints(positions, [0.0135, 0], 1500)).toEqual([
       [0.0135, 0],
       a,
@@ -143,8 +147,10 @@ describe("remaining-itinerary stop detours", () => {
       candidates: [{ id: "u", coordinates: urban }],
       requestRoute: async ({ waypoints }) => {
         const response = graphRoute(waypoints);
-        response.routes[0].contributors = [hidden];
-        response.routes[0].fieldContributors = {
+        const [selected] = response.routes;
+        assert.isDefined(selected);
+        selected.contributors = [hidden];
+        selected.fieldContributors = {
           duration: [calls++ === 0 ? baselineDuration : candidateDuration],
           distance: [distance],
           geometry: [hidden],
@@ -168,8 +174,10 @@ describe("remaining-itinerary stop detours", () => {
       candidates: [{ id: "u", coordinates: urban }],
       requestRoute: async ({ waypoints }) => {
         const response = graphRoute(waypoints);
-        response.routes[0].contributors = [{ sourceId: "hidden", name: "Hidden" }];
-        response.routes[0].fieldContributors = { duration: [], distance: [] };
+        const [selected] = response.routes;
+        assert.isDefined(selected);
+        selected.contributors = [{ sourceId: "hidden", name: "Hidden" }];
+        selected.fieldContributors = { duration: [], distance: [] };
         return response;
       },
     });
@@ -186,7 +194,7 @@ describe("remaining-itinerary stop detours", () => {
       seconds: 20,
       access: { kind: "entrance", coordinates: urban },
     });
-    expect(result.waypoints).toEqual([O, W, urban, D]);
+    expect(result?.waypoints).toEqual([O, W, urban, D]);
   });
   it("labels missing provider evidence and invalid metrics as unknown", async () => {
     for (const response of [
@@ -198,7 +206,7 @@ describe("remaining-itinerary stop detours", () => {
         candidates: [{ id: "u", coordinates: urban }],
         requestRoute: async () => response,
       });
-      expect(result.kind).toBe("unknown");
+      expect(result?.kind).toBe("unknown");
     }
   });
   it("bounds the shortlist and concurrent routing work", async () => {
@@ -231,7 +239,7 @@ describe("remaining-itinerary stop detours", () => {
         throw new Error("offline");
       },
     });
-    expect(result.kind).toBe("unknown");
+    expect(result?.kind).toBe("unknown");
     expect(calls).toBe(1);
     const controller = new AbortController();
     controller.abort();

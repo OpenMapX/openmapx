@@ -203,7 +203,7 @@ export function refreshTransitCaptures(
       capture.status !== "captured" ||
       !next ||
       next.stops.length !== capture.stops.length ||
-      next.stops.some((stop, i) => stop.stopId !== capture.stops[i].stopId)
+      next.stops.some((stop, i) => stop.stopId !== capture.stops[i]?.stopId)
     )
       return capture;
     return {
@@ -219,6 +219,7 @@ export function refreshTransitCaptures(
           ...stable
         } = stop;
         const fresh = next.stops[i];
+        if (!fresh) return stop;
         return {
           ...stable,
           expectedArrival: fresh.expectedArrival,
@@ -247,7 +248,7 @@ function matchingOccurrence(
   if (candidates.length < 2 || !time || !Number.isFinite(Date.parse(time)))
     return candidates[0] ?? -1;
   const timestamp = Date.parse(time);
-  const exact = candidates.find((i) => Date.parse(stops[i][field] ?? "") === timestamp);
+  const exact = candidates.find((i) => Date.parse(stops[i]?.[field] ?? "") === timestamp);
   // Ambiguous occurrence identity is unavailable, rather than a different lap.
   return exact ?? -1;
 }

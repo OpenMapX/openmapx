@@ -52,8 +52,10 @@ export interface PreparedTransitProgress {
 /** Total length of a polyline in metres (sum of segment haversine distances). */
 function lineLength(coords: LngLat[]): number {
   let total = 0;
-  for (let i = 1; i < coords.length; i++) {
-    total += haversineDistance(coords[i - 1], coords[i]);
+  let previous = coords[0];
+  for (const vertex of coords.slice(1)) {
+    if (previous) total += haversineDistance(previous, vertex);
+    previous = vertex;
   }
   return total;
 }
@@ -93,21 +95,16 @@ export function stopsUntilAlight(
   const stopAlong = stops.map((s) => snapPreparedRoute(matcher, [s.lng, s.lat]).alongMeters);
 
   // The next stop is the first stop strictly ahead of the snapped position.
-  let nextStopIndex = -1;
-  for (let i = 0; i < stops.length; i++) {
-    if (stopAlong[i] > snappedAlong) {
-      nextStopIndex = i;
-      break;
-    }
-  }
+  const nextStopIndex = stopAlong.findIndex((along) => along > snappedAlong);
+  const nextStop = stops[nextStopIndex];
 
   // Past the last stop (or at the alight stop) — nothing remaining.
-  if (nextStopIndex === -1) {
+  if (!nextStop) {
     return { nextStopIndex: -1, stopsRemaining: 0, nextStopName: null };
   }
 
   const stopsRemaining = stops.length - nextStopIndex;
-  return { nextStopIndex, stopsRemaining, nextStopName: stops[nextStopIndex].name };
+  return { nextStopIndex, stopsRemaining, nextStopName: nextStop.name };
 }
 
 /** A nonstop ride can have one stop remaining for hours; counting alone is not an approach. */

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   MAX_MESSAGE_BYTES,
   MAX_TOTAL_COORDINATES,
@@ -12,6 +12,13 @@ import {
   WEB_TO_NATIVE_TYPES,
   webToNativeSchema,
 } from "./mobileProtocol";
+
+/** The first item, failing the test when there is none. */
+function first<T>(items: readonly T[]): T {
+  const [item] = items;
+  assert.isDefined(item);
+  return item;
+}
 
 const NONCE = "channel-nonce-abc";
 const NOW = 1_700_000_000_000;
@@ -584,7 +591,7 @@ describe("ground route child receipt validation", () => {
     step.contributors.length = 0;
     step.fieldContributors.geometry.push(receipt() as never);
     for (const route of [value.route, ...value.alternatives]) {
-      for (const child of [route.steps[0]!, route.legs[0]!, route.legs[0]!.steps[0]!]) {
+      for (const child of [first(route.steps), first(route.legs), first(first(route.legs).steps)]) {
         for (const credit of child.contributors) credit.publisher.name = "Mutated child";
         for (const credits of Object.values(child.fieldContributors)) {
           for (const credit of credits) credit.publisher.name = "Mutated child field";
@@ -602,14 +609,14 @@ describe("ground route child receipt validation", () => {
     "rejects malformed receipts at %s",
     (target) => {
       const { value } = attributedPackage();
-      const route = target.startsWith("alternative") ? value.alternatives[0]! : value.route;
+      const route = target.startsWith("alternative") ? first(value.alternatives) : value.route;
       const key = target.replace("alternative", "").toLowerCase();
       const child =
         key === "leg"
-          ? route.legs[0]!
+          ? first(route.legs)
           : key === "legstep"
-            ? route.legs[0]!.steps[0]!
-            : route.steps[0]!;
+            ? first(first(route.legs).steps)
+            : first(route.steps);
       (child as Record<string, unknown>).contributors = { sourceId: "invalid" };
       expect(errorCodeOf(parse(message({ payload: { startPackage: value } })))).toBe(
         "invalid-message",
@@ -621,10 +628,10 @@ describe("ground route child receipt validation", () => {
     const { value } = attributedPackage();
     const child =
       target === "leg"
-        ? value.route.legs[0]!
+        ? first(value.route.legs)
         : target === "legStep"
-          ? value.route.legs[0]!.steps[0]!
-          : value.route.steps[0]!;
+          ? first(first(value.route.legs).steps)
+          : first(value.route.steps);
     (child as Record<string, unknown>).fieldContributors = {
       instruction: [{ sourceId: "missing-name" }],
     };
@@ -635,8 +642,8 @@ describe("ground route child receipt validation", () => {
 
   it("keeps aggregate child-step limits after validating receipt trees", () => {
     const { value } = attributedPackage();
-    value.route.legs[0]!.steps = Array.from({ length: MAX_TOTAL_STEPS + 1 }, () => ({
-      ...value.route.steps[0]!,
+    first(value.route.legs).steps = Array.from({ length: MAX_TOTAL_STEPS + 1 }, () => ({
+      ...first(value.route.steps),
       contributors: [],
     }));
     expect(errorCodeOf(parse(message({ payload: { startPackage: value } })))).toBe(

@@ -9,7 +9,8 @@ const t = (key: string, values?: Record<string, string>): string => {
     "incidentType.accident": "Accident",
     "incidentType.other": "Incident",
   };
-  if (key in types) return types[key];
+  const typeLabel = types[key];
+  if (typeLabel !== undefined) return typeLabel;
   if (key === "incidentAhead") return `${values?.type} ahead in ${values?.distance}`;
   if (key === "incidentRoadClosed") return "— road closed";
   return key;

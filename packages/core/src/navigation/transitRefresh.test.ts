@@ -1,6 +1,12 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import { mergeTransitRefresh } from "./transitRefresh";
+
+function legAt(itinerary: TripItinerary, index: number) {
+  const leg = itinerary.legs[index];
+  assert.isDefined(leg);
+  return leg;
+}
 
 const current = {
   legs: [
@@ -22,23 +28,23 @@ const current = {
 } as TripItinerary;
 it("keeps a repaired active walking path during live timetable refresh", () => {
   const next = structuredClone(current);
-  next.legs[0].geometry.coordinates = [
+  legAt(next, 0).geometry.coordinates = [
     [0, 0],
     [0.002, 0],
   ];
   const merged = mergeTransitRefresh(current, next, 0, 1);
-  expect(merged?.itinerary.legs[0].geometry).toBe(current.legs[0].geometry);
+  expect(merged?.itinerary.legs[0]?.geometry).toBe(legAt(current, 0).geometry);
   expect(merged?.resetWalk).toBe(false);
 });
 it("resets the walk gate when a refreshed platform changes the walking target", () => {
   const next = structuredClone(current);
-  next.legs[0].to.lng = 0.003;
+  legAt(next, 0).to.lng = 0.003;
   const merged = mergeTransitRefresh(current, next, 0, 1);
   expect(merged?.resetWalk).toBe(true);
-  expect(merged?.itinerary.legs[0].to.lng).toBe(0.003);
+  expect(merged?.itinerary.legs[0]?.to.lng).toBe(0.003);
 });
 it("does not accept a different selected vehicle", () => {
   const next = structuredClone(current);
-  next.legs[1].tripId = "other";
+  legAt(next, 1).tripId = "other";
   expect(mergeTransitRefresh(current, next, 0, 0)).toBeNull();
 });

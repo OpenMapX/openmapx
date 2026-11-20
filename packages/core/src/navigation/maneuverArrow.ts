@@ -1,7 +1,7 @@
 import type { LngLat } from "../types/geometry";
 import type { TravelMode } from "../types/routing";
 import { bearingBetween } from "./bearing";
-import { positionAt } from "./deadReckon";
+import { distanceAtVertex, positionAt } from "./deadReckon";
 
 /** How much route the arrow shows before / after the maneuver point. */
 export interface ManeuverArrowSpans {
@@ -34,14 +34,18 @@ function sliceBetween(
   fromMeters: number,
   toMeters: number,
 ): LngLat[] {
-  const points: LngLat[] = [positionAt(geometry, cum, fromMeters).point];
-  for (let i = 1; i < geometry.length - 1; i += 1) {
-    if (cum[i] <= fromMeters) continue;
-    if (cum[i] >= toMeters) break;
-    points.push(geometry[i]);
+  const start = positionAt(geometry, cum, fromMeters).point;
+  const points: LngLat[] = [start];
+  for (const [i, vertex] of geometry.entries()) {
+    if (i === 0) continue;
+    if (i === geometry.length - 1) break;
+    const along = distanceAtVertex(cum, i);
+    if (along <= fromMeters) continue;
+    if (along >= toMeters) break;
+    points.push(vertex);
   }
   const end = positionAt(geometry, cum, toMeters).point;
-  const last = points[points.length - 1];
+  const last = points.at(-1) ?? start;
   if (last[0] !== end[0] || last[1] !== end[1]) points.push(end);
   return points;
 }
@@ -57,7 +61,7 @@ export function maneuverArrowLine(
   alongMeters: number,
   spans: ManeuverArrowSpans,
 ): LngLat[] | null {
-  const total = cum[cum.length - 1];
+  const total = distanceAtVertex(cum, cum.length - 1);
   if (total < MIN_ROUTE_METERS) return null;
   const from = Math.max(alongMeters - spans.before, 0);
   const to = Math.min(alongMeters + spans.after, total);
@@ -67,5 +71,9 @@ export function maneuverArrowLine(
 
 /** Bearing (degrees from north) of the arrow's last segment — the arrowhead's rotation. */
 export function maneuverArrowTipBearing(line: LngLat[]): number {
-  return bearingBetween(line[line.length - 2], line[line.length - 1]);
+  const from = line.at(-2);
+  const to = line.at(-1);
+  // An arrow line always has two points; without them there is no direction to point in.
+  if (!from || !to) return 0;
+  return bearingBetween(from, to);
 }

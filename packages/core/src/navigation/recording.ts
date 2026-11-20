@@ -66,11 +66,18 @@ export function replayRecording(recording: NavRecording): ReplayStep[] {
   recording.fixes.forEach((fix, i) => {
     // Apply any reroute whose boundary we've reached, resetting state like the
     // engine does on a route swap.
-    while (routeIndex < boundaries.length && i >= boundaries[routeIndex]) {
+    for (
+      let boundary = boundaries[routeIndex];
+      boundary !== undefined && i >= boundary;
+      boundary = boundaries[routeIndex]
+    ) {
       routeIndex += 1;
       state = freshNavTickState();
     }
-    const result = processFix(routes[routeIndex], fix, state, opts);
+    // One route per reroute plus the original, so every boundary has a route after it.
+    const route = routes[routeIndex];
+    if (!route) return;
+    const result = processFix(route, fix, state, opts);
     state = result.nextState;
     steps.push({ fix, result, routeIndex });
   });

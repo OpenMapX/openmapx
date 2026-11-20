@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
-import { cumulativeDistances, positionAt, stepDeadReckon } from "../deadReckon";
+import { cumulativeDistances, distanceAtVertex, positionAt, stepDeadReckon } from "../deadReckon";
 
 // Route running due east along the equator: three vertices ~222 m apart.
 const geometry: LngLat[] = [
@@ -22,7 +22,7 @@ describe("positionAt", () => {
   const cum = cumulativeDistances(geometry);
 
   it("interpolates within a segment", () => {
-    const { point } = positionAt(geometry, cum, cum[1] / 2);
+    const { point } = positionAt(geometry, cum, distanceAtVertex(cum, 1) / 2);
     expect(point[0]).toBeCloseTo(0.001, 6);
     expect(point[1]).toBeCloseTo(0, 6);
   });
