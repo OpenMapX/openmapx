@@ -223,20 +223,9 @@ hard boot error rather than a silent degrade.
 
 ### Personal-data storage declarations
 
-Built-in integrations also declare `subjectData`. The portable schema makes
-this field optional, but `pnpm check-subject-data` requires it for repository
-integrations. For an integration that stores no personal data:
-
-```json
-{
-  "subjectData": {
-    "storesPersonalData": false,
-    "strategy": "not_personal",
-    "registrationIds": [],
-    "operatorInstructions": null
-  }
-}
-```
+An integration declares `subjectData` only when it stores personal data. Leaving
+it out means the integration stores none; `pnpm check-subject-data` reads an
+absent declaration that way and validates every declaration that is present.
 
 Storage requiring automated collection uses `strategy: "collector"` and actual
 privacy-catalogue registration IDs. Operator-managed handling uses

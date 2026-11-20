@@ -4,12 +4,6 @@
   "author": "OpenMapX",
   "license": "AGPL-3.0-or-later",
   "documentation": "https://openmapx.dev/docs/features/overture-places",
-  "subjectData": {
-    "storesPersonalData": false,
-    "strategy": "not_personal",
-    "registrationIds": [],
-    "operatorInstructions": null
-  },
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,

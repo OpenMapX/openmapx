@@ -3,12 +3,6 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "subjectData": {
-    "storesPersonalData": false,
-    "strategy": "not_personal",
-    "registrationIds": [],
-    "operatorInstructions": null
-  },
   "domains": ["knowledge", "search-suggestions"],
   "backend": {
     "routes": true
