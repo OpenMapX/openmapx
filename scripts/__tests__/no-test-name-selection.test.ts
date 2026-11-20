@@ -48,11 +48,14 @@ function unwrap(expression: ts.Expression): ts.Expression {
 const literalKey = (node: ts.Node | undefined) =>
   node && (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) ? node.text : undefined;
 
-/** `task`, `context.task`, `ctx?.task` or a member of one, such as `task.suite`. */
-function isTaskChain(expression: ts.Expression): boolean {
+/**
+ * A task name (`task` or a local alias), `context.task`, `ctx?.task` or a
+ * member of one, such as `task.suite`.
+ */
+function isTaskChain(expression: ts.Expression, taskNames: ReadonlySet<string>): boolean {
   let current = unwrap(expression);
   for (;;) {
-    if (ts.isIdentifier(current)) return current.text === "task";
+    if (ts.isIdentifier(current)) return taskNames.has(current.text);
     if (ts.isPropertyAccessExpression(current)) {
       if (current.name.text === "task") return true;
     } else if (ts.isElementAccessExpression(current)) {
@@ -62,46 +65,97 @@ function isTaskChain(expression: ts.Expression): boolean {
   }
 }
 
+/**
+ * `task` and the file's local names for a test task: a renamed `task` in a
+ * parameter's destructuring (`({ task: current }) => …`), and a variable
+ * declared or assigned from a task (`const t = context.task`), followed through
+ * copies. A `task` renamed while destructuring some other value is not
+ * followed, so `const { task: job } = queue` stays an ordinary name.
+ */
+function taskNamesIn(file: ts.SourceFile): Set<string> {
+  const names = new Set(["task"]);
+  let grew = true;
+  const add = (name: string) => {
+    if (names.has(name)) return;
+    names.add(name);
+    grew = true;
+  };
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isBindingElement(node) &&
+      ts.isIdentifier(node.name) &&
+      literalKey(node.propertyName) === "task" &&
+      ts.isParameter(node.parent.parent)
+    )
+      add(node.name.text);
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined &&
+      isTaskChain(node.initializer, names)
+    )
+      add(node.name.text);
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isIdentifier(node.left) &&
+      isTaskChain(node.right, names)
+    )
+      add(node.left.text);
+    ts.forEachChild(node, visit);
+  };
+  while (grew) {
+    grew = false;
+    visit(file);
+  }
+  return names;
+}
+
 /** Whether a destructuring pattern takes its properties from a test task. */
-function destructuresTask(pattern: ts.Node): boolean {
+function destructuresTask(pattern: ts.Node, taskNames: ReadonlySet<string>): boolean {
   const parent = pattern.parent;
   if (ts.isVariableDeclaration(parent))
-    return parent.initializer !== undefined && isTaskChain(parent.initializer);
+    return parent.initializer !== undefined && isTaskChain(parent.initializer, taskNames);
   if (
     ts.isBinaryExpression(parent) &&
     parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
     parent.left === pattern
   )
-    return isTaskChain(parent.right);
+    return isTaskChain(parent.right, taskNames);
   if (ts.isBindingElement(parent))
     return (
-      literalKey(parent.propertyName ?? parent.name) === "task" || destructuresTask(parent.parent)
+      literalKey(parent.propertyName ?? parent.name) === "task" ||
+      destructuresTask(parent.parent, taskNames)
     );
   if (ts.isPropertyAssignment(parent))
-    return literalKey(parent.name) === "task" || destructuresTask(parent.parent);
+    return literalKey(parent.name) === "task" || destructuresTask(parent.parent, taskNames);
   return false;
 }
 
 /** Whether `node` reads the running test's name or full name. */
-function readsTestName(node: ts.Node): boolean {
+function readsTestName(node: ts.Node, taskNames: ReadonlySet<string>): boolean {
   if (ts.isIdentifier(node) && node.text === CURRENT_TEST_NAME) return true;
   if (ts.isPropertyAccessExpression(node))
-    return NAME_PROPERTIES.has(node.name.text) && isTaskChain(node.expression);
+    return NAME_PROPERTIES.has(node.name.text) && isTaskChain(node.expression, taskNames);
   if (ts.isElementAccessExpression(node)) {
     const key = literalKey(node.argumentExpression);
     if (key === CURRENT_TEST_NAME) return true;
-    return key !== undefined && NAME_PROPERTIES.has(key) && isTaskChain(node.expression);
+    return key !== undefined && NAME_PROPERTIES.has(key) && isTaskChain(node.expression, taskNames);
   }
   if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
     const key = literalKey(node.propertyName ?? node.name);
-    return key !== undefined && NAME_PROPERTIES.has(key) && destructuresTask(node.parent);
+    return (
+      key !== undefined && NAME_PROPERTIES.has(key) && destructuresTask(node.parent, taskNames)
+    );
   }
   if (
     (ts.isShorthandPropertyAssignment(node) || ts.isPropertyAssignment(node)) &&
     ts.isObjectLiteralExpression(node.parent)
   ) {
     const key = literalKey(node.name);
-    return key !== undefined && NAME_PROPERTIES.has(key) && destructuresTask(node.parent);
+    return (
+      key !== undefined && NAME_PROPERTIES.has(key) && destructuresTask(node.parent, taskNames)
+    );
   }
   return false;
 }
@@ -110,9 +164,10 @@ function readsTestName(node: ts.Node): boolean {
 function testNameReads(source: string, fileName: string): number[] {
   if (!/\btask\b|currentTestName/.test(source)) return [];
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const taskNames = taskNamesIn(file);
   const lines = new Set<number>();
   const visit = (node: ts.Node) => {
-    if (readsTestName(node))
+    if (readsTestName(node, taskNames))
       lines.add(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1);
     ts.forEachChild(node, visit);
   };
@@ -152,6 +207,10 @@ describe("test setup selection", () => {
     ["an element access", 'const name = task["name"];'],
     ["the current test name", "const name = expect.getState().currentTestName;"],
     ["a destructured current test name", "const { currentTestName } = expect.getState();"],
+    ["a renamed task parameter", "beforeEach(({ task: current }) => use(current.name));"],
+    ["a copied task", "const t = context.task; const name = t.name;"],
+    ["a copy of a copied task", "const t = ctx.task; const u = t; const { fullName } = u;"],
+    ["a task assigned to a variable", "let t; t = context.task; use(t?.name);"],
   ])("finds %s", (_shape, line) => {
     expect(testNameReads(line, "fixture.ts")).toEqual([1]);
   });
