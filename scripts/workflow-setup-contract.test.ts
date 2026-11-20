@@ -36,6 +36,17 @@ const jobs = Object.entries(workflows).flatMap(([file, workflow]) =>
 );
 const usesAction = (step: Step, name: string) => step.uses?.split("@")[0] === name;
 
+/** Triggers that run with repository secrets or write access for code from a fork. */
+const PRIVILEGED_TRIGGERS = ["pull_request_target", "workflow_run"];
+
+/** Event names of a workflow's `on`, which may be a string, a list or a mapping. */
+function triggers(on: unknown): string[] {
+  if (typeof on === "string") return [on];
+  if (Array.isArray(on)) return on.map(String);
+  if (typeof on === "object" && on !== null) return Object.keys(on);
+  throw new Error(`unexpected workflow trigger ${JSON.stringify(on)}`);
+}
+
 describe("workspace setup in workflows", () => {
   it("installs pnpm, the .nvmrc Node with the pnpm cache, and the frozen lockfile", () => {
     const { using, steps } = action.runs;
@@ -55,7 +66,14 @@ describe("workspace setup in workflows", () => {
     expect([...new Set(inline)].sort()).toEqual([...INLINE_WORKFLOWS, ...INLINE_JOBS].sort());
   });
 
-  it("checks out the repository before the shared setup and never in a trusted workflow", () => {
+  it("reads every form of a workflow trigger", () => {
+    expect(triggers("pull_request_target")).toEqual(["pull_request_target"]);
+    expect(triggers(["push", "workflow_run"])).toEqual(["push", "workflow_run"]);
+    expect(triggers({ pull_request: null, schedule: [] })).toEqual(["pull_request", "schedule"]);
+    expect(() => triggers(undefined)).toThrow();
+  });
+
+  it("checks out the repository before the shared setup and never in a privileged workflow", () => {
     for (const { file, id, steps } of jobs) {
       const setup = steps.findIndex((step) => step.uses === SETUP);
       if (setup === -1) continue;
@@ -65,9 +83,7 @@ describe("workspace setup in workflows", () => {
       expect(checkout, `${file}#${id}`).toBeLessThan(setup);
     }
     for (const [file, workflow] of Object.entries(workflows)) {
-      const triggers =
-        typeof workflow.on === "object" && workflow.on !== null ? Object.keys(workflow.on) : [];
-      if (!triggers.includes("pull_request_target")) continue;
+      if (!triggers(workflow.on).some((event) => PRIVILEGED_TRIGGERS.includes(event))) continue;
       const steps = Object.values(workflow.jobs).flatMap((job) => job.steps ?? []);
       expect(
         steps.some((step) => step.uses === SETUP),
