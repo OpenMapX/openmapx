@@ -18,15 +18,22 @@ import { build } from "esbuild";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { transitChildCandidateId } from "./ops-children.js";
 
-/** A fault that runs at the next forward check; every check waits for it. */
+/** A fault that runs at the next forward check; every check waits for it. `bound`
+ * runs after a child's binding is recorded on its cell. */
 const forwardGate = vi.hoisted(() => ({
   fault: undefined as (() => Promise<void>) | undefined,
   running: undefined as Promise<void> | undefined,
+  bound: undefined as ((input: { phase: string }) => void) | undefined,
 }));
 vi.mock("@openmapx/core/build-artifacts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core/build-artifacts")>();
   return {
     ...actual,
+    bindControlChildPhase: async (...args: Parameters<typeof actual.bindControlChildPhase>) => {
+      const child = await actual.bindControlChildPhase(...args);
+      forwardGate.bound?.(args[1]);
+      return child;
+    },
     assertControlExecutionForward: async (
       ...args: Parameters<typeof actual.assertControlExecutionForward>
     ) => {
@@ -485,7 +492,7 @@ it.skipIf(
       expect(posts).toBe(1);
       expect(cancels).toBe(1);
       expect((await store.inspect(id))?.children).toMatchObject([
-        { state: "terminal", publication: "committed", dispatchState: "claimed" },
+        { state: "terminal", publication: "committed" },
       ]);
     } finally {
       send({ type: "release" });
@@ -654,20 +661,16 @@ it
         throw Error("Synthetic crash after confirmed restore reservation");
       return saved;
     };
-    const checkpointChild = store.checkpointChild.bind(store);
-    store.checkpointChild = async (id, version, child) => {
-      const saved = await checkpointChild(id, version, child);
-      if (
-        saved &&
-        child.phase === "proxy-restore" &&
-        child.state === "bound" &&
-        kind === "restore-files-crash"
-      )
-        throw Error(
-          "Synthetic response loss after files and confirmed binding, before validation dispatch",
-        );
-      return saved;
-    };
+    forwardGate.bound =
+      kind === "restore-files-crash"
+        ? (input) => {
+            if (input.phase !== "proxy-restore") return;
+            forwardGate.bound = undefined;
+            throw Error(
+              "Synthetic response loss after files and confirmed binding, before validation dispatch",
+            );
+          }
+        : undefined;
     const token = "c".repeat(43),
       tokenFile = join(root, "token");
     writeFileSync(tokenFile, token, { mode: 0o600 });

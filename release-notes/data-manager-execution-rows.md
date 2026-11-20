@@ -12,9 +12,14 @@ Data Manager keeps every record of a job on the job's own row in
 job row, and `execution_completion` records how the job's work ended. The
 execution record's settlement also holds the job's terminal status and finish
 time, so the separate terminal, worker and proxy recovery files are gone. The
-only per-job file left is the Transitous runner attempt journal, which holds each
-runner request's capability and stays out of the database and its backups. The
-control prune removes a pruned job's row with its other records.
+execution record is also the job's only record of its children (the operations
+it asks the operations agent to run): each reserved child has one cell holding
+what it acts on (a transit candidate, which no longer has a file of its own),
+its binding, its grant and how Data Manager last observed it. The same
+migration drops the `execution_children` column that recorded them a second
+time. The only per-job file left is the Transitous runner attempt journal, which
+holds each runner request's capability and stays out of the database and its
+backups. The control prune removes a pruned job's row with its other records.
 
 Data Manager's record of a configuration fence is now the fence row itself.
 The same migration adds a `refused` state to

@@ -139,149 +139,143 @@ describe.skipIf(
       await guard;
     }
   });
-  it.each(["claimed", "stale"] as const)(
-    "uses real body/binding/grant evidence for a single child CAS continuation (%s)",
-    async (mode) => {
-      const root = mkdtempSync(join(tmpdir(), "omx-data-child-cas-"));
-      const { installation: dm, journal: dmJournal } = await dataManagerJournal(root);
-      const store = createPostgresDataExecutionStore(sql, { controlJournal: dmJournal }),
-        requestedDeadlineAt = Date.now() + 60000;
-      const operationKey = createControlRootOperationKey({
-        notAfter: requestedDeadlineAt,
-        nonce: randomBytes(16),
-      });
-      const { record } = await store.admit(
-        { kind: "transit-sync", countries: ["de"] },
-        { operationKey, requestedDeadlineAt },
-      );
-      ids.push(record.status.id);
-      const child = record.reservations[0];
-      if (!child) throw Error("Missing original fixed child body");
-      const services = ["motis", "motis-feed-proxy", "motis-staging"];
-      const agent = control.openControlInstallation({
-        infraDir: root,
-        role: "ops-agent",
-        serviceIds: services,
-      });
-      const authority = await control.retainAdmittedControlExecution(
-        dm,
-        dataControlAdmission({
-          execution: record.execution,
-          input: record.input,
-          admittedAt: record.status.admittedAt,
-          requestedDeadlineAt,
-          parent: undefined,
-          reservations: record.reservations,
-        }),
-      );
-      const lease = await control.acquireArtifactTargetLease({
-        serviceIds: services,
-        owner: authority,
-      });
-      try {
-        const races = await Promise.all([
-          store.reserveChild(record.status.id, 0, child),
-          store.reserveChild(record.status.id, 0, child),
-        ]);
-        expect(races.filter((result) => result?.continuation)).toHaveLength(1);
-        const winner = races.find((result) => result?.continuation);
-        if (!winner?.continuation) throw Error("Missing confirmed reserved continuation");
-        expect(
-          (await store.reserveChild(record.status.id, winner.record.version, child))?.continuation,
-        ).toBeNull();
-        await expect(
-          store.checkpointChild(record.status.id, winner.record.version, {
-            ...child,
-            operationFingerprint: "b".repeat(64),
-          }),
-        ).rejects.toThrow(/child|identity/i);
-        // Only the contained worker's finalization ends an execution.
-        await expect(
-          store.checkpoint(record.status.id, winner.record.version, {
-            status: "ok",
-            publication: "committed",
-          }),
-        ).rejects.toThrow(/terminal commitment required/);
-        const exact = await control.bindControlChildPhase(authority, child);
-        const binding = await control.lookupControlChildPhaseBinding(authority, child);
-        if (!binding) throw Error("Missing original binding");
-        const bound = {
+  it("keeps one record of a child on its cell: reservation, binding, grant and observation", async () => {
+    const root = mkdtempSync(join(tmpdir(), "omx-data-child-cas-"));
+    const { installation: dm, journal: dmJournal } = await dataManagerJournal(root);
+    const store = createPostgresDataExecutionStore(sql, { controlJournal: dmJournal }),
+      requestedDeadlineAt = Date.now() + 60000;
+    const operationKey = createControlRootOperationKey({
+      notAfter: requestedDeadlineAt,
+      nonce: randomBytes(16),
+    });
+    const { record } = await store.admit(
+      { kind: "transit-sync", countries: ["de"] },
+      { operationKey, requestedDeadlineAt },
+    );
+    ids.push(record.status.id);
+    const child = record.reservations[0];
+    if (!child) throw Error("Missing original fixed child body");
+    const services = ["motis", "motis-feed-proxy", "motis-staging"];
+    const agent = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: services,
+    });
+    const authority = await control.retainAdmittedControlExecution(
+      dm,
+      dataControlAdmission({
+        execution: record.execution,
+        input: record.input,
+        admittedAt: record.status.admittedAt,
+        requestedDeadlineAt,
+        parent: undefined,
+        reservations: record.reservations,
+      }),
+    );
+    const lease = await control.acquireArtifactTargetLease({
+      serviceIds: services,
+      owner: authority,
+    });
+    try {
+      const races = await Promise.all([
+        store.reserveChild(record.status.id, 0, child),
+        store.reserveChild(record.status.id, 0, child),
+      ]);
+      expect(races.filter((result) => result?.continuation)).toHaveLength(1);
+      const winner = races.find((result) => result?.continuation);
+      if (!winner?.continuation) throw Error("Missing confirmed reserved continuation");
+      expect(
+        (await store.reserveChild(record.status.id, winner.record.version, child))?.continuation,
+      ).toBeNull();
+      await expect(
+        store.checkpointChild(record.status.id, winner.record.version, {
           ...child,
-          state: "bound" as const,
-          execution: exact.execution,
-          requestedDeadlineAt: binding.requestedDeadlineAt,
-          bindingDigest: binding.bindingDigest,
-          candidateDigest: null,
-        };
-        const saved = await store.checkpointChild(record.status.id, winner.record.version, bound);
-        if (!saved) throw Error("Lost bound checkpoint");
-        const issued = await control.issueControlChildPhase(authority, {
-          phase: child.phase,
-          ordinal: child.ordinal,
-          lease,
-        });
-        const reference = await control.lookupControlChildPhaseAttempt(authority, child);
-        if (!reference?.leaseId) throw Error("Missing original grant reference");
-        const attempted = {
-          ...bound,
-          state: "attempted" as const,
-          childKey: reference.childKey,
-          leaseId: reference.leaseId,
-          dispatchState: "claimed" as const,
-        };
-        await expect(
-          store.claimChildDispatch(record.status.id, saved.version, attempted, {
-            ...winner.continuation,
-          }),
-        ).rejects.toThrow(/continuation/i);
-        if (mode === "stale") {
-          const moved = await store.checkpoint(record.status.id, saved.version, { progress: 0.25 });
-          if (!moved) throw Error("Lost intervening CAS");
-          expect(
-            await store.claimChildDispatch(
-              record.status.id,
-              saved.version,
-              attempted,
-              winner.continuation,
-            ),
-          ).toBeNull();
-          await expect(
-            store.claimChildDispatch(
-              record.status.id,
-              moved.version,
-              attempted,
-              winner.continuation,
-            ),
-          ).rejects.toThrow(/continuation/i);
-          expect((await store.inspect(record.status.id))?.children[0]?.state).toBe("bound");
-        } else {
-          const claimed = await store.claimChildDispatch(
-            record.status.id,
-            saved.version,
-            attempted,
-            winner.continuation,
-          );
-          expect(claimed?.children[0]).toEqual(attempted);
-          await control.consumeControlChildDispatch(issued.dispatchTicket);
-          await expect(
-            control.consumeControlChildDispatch(issued.dispatchTicket),
-          ).rejects.toThrow();
-          await expect(
-            store.claimChildDispatch(
-              record.status.id,
-              claimed?.version ?? 0,
-              attempted,
-              winner.continuation,
-            ),
-          ).rejects.toThrow(/continuation/i);
-        }
-        await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
-      } finally {
-        control.closeArtifactTargetLeaseHandle(lease);
-        control.closeControlInstallation(agent);
-        control.closeControlInstallation(dm);
-        rmSync(root, { recursive: true, force: true });
-      }
-    },
-  );
+          operationFingerprint: "b".repeat(64),
+        }),
+      ).rejects.toThrow(/child|identity/i);
+      // Only the contained worker's finalization ends an execution.
+      await expect(
+        store.checkpoint(record.status.id, winner.record.version, {
+          status: "ok",
+          publication: "committed",
+        }),
+      ).rejects.toThrow(/terminal commitment required/);
+      // The kernel's binding is the child's binding: nothing else records it.
+      const exact = await control.bindControlChildPhase(authority, child);
+      const binding = await control.lookupControlChildPhaseBinding(authority, child);
+      if (!binding) throw Error("Missing original binding");
+      const bound = {
+        ...child,
+        state: "bound" as const,
+        execution: exact.execution,
+        requestedDeadlineAt: binding.requestedDeadlineAt,
+        bindingDigest: binding.bindingDigest,
+        candidateDigest: null,
+      };
+      const afterBind = await store.inspect(record.status.id);
+      expect(afterBind?.children).toEqual([bound]);
+      expect(afterBind?.version).toBe(winner.record.version);
+      const grantless = {
+        ...bound,
+        state: "attempted" as const,
+        childKey: "00000000-0000-4000-8000-000000000000",
+        leaseId: lease.leaseId,
+        publication: "unknown" as const,
+      };
+      await expect(
+        store.checkpointChild(record.status.id, winner.record.version, grantless),
+      ).rejects.toThrow("Child differs from its original body, binding or grant");
+
+      const issued = await control.issueControlChildPhase(authority, {
+        phase: child.phase,
+        ordinal: child.ordinal,
+        lease,
+      });
+      const reference = await control.lookupControlChildPhaseAttempt(authority, child);
+      if (!reference?.leaseId) throw Error("Missing original grant reference");
+      const attempted = {
+        ...bound,
+        state: "attempted" as const,
+        childKey: reference.childKey,
+        leaseId: reference.leaseId,
+        publication: "unknown" as const,
+      };
+      expect((await store.inspect(record.status.id))?.children).toEqual([attempted]);
+      await control.consumeControlChildDispatch(issued.dispatchTicket);
+      await expect(control.consumeControlChildDispatch(issued.dispatchTicket)).rejects.toThrow();
+
+      // Data-manager's own part (how it observed the child) goes on the same cell.
+      const observing = {
+        ...attempted,
+        state: "observing" as const,
+        acceptedId: child.proposedId,
+      };
+      const moved = await store.checkpoint(record.status.id, winner.record.version, {
+        progress: 0.25,
+      });
+      if (!moved) throw Error("Lost intervening CAS");
+      expect(
+        await store.checkpointChild(record.status.id, winner.record.version, observing),
+      ).toBeNull();
+      const observed = await store.checkpointChild(record.status.id, moved.version, observing);
+      expect(observed?.children).toEqual([observing]);
+      await expect(
+        store.checkpointChild(record.status.id, observed?.version ?? 0, attempted),
+      ).rejects.toThrow("Retained child identity/state conflict");
+      const [row] = await sql<Record<string, unknown>[]>`
+          SELECT * FROM data_manager.jobs WHERE id=${record.status.id}`;
+      expect(row).not.toHaveProperty("execution_children");
+      const cell = control.executionProgressSchema.parse(row?.execution_progress).children[0];
+      expect(cell?.owner).toEqual({
+        cancellationRequestedAt: null,
+        observed: { state: "observing", publication: "unknown" },
+      });
+      await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
+    } finally {
+      control.closeArtifactTargetLeaseHandle(lease);
+      control.closeControlInstallation(agent);
+      control.closeControlInstallation(dm);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

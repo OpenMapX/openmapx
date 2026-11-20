@@ -524,7 +524,7 @@ it
         expect(probe.effects).toBe(1);
         expect(probe.forward).toBe(false);
         expect(probe.operationId).toBe(
-          original.execution_children.find(
+          original.metadata.dataExecution.childReservations.find(
             (child: { phase: string }) => child.phase === "recover-primary",
           )?.proposedId,
         );

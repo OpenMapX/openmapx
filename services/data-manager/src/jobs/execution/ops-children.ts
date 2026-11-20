@@ -94,7 +94,6 @@ const attempted = {
   ...bound,
   childKey: z.uuid(),
   leaseId: z.uuid(),
-  dispatchState: z.enum(["pending", "claimed"]),
 };
 /** Kinds whose committed result a later step of the same execution reads. */
 const RESULT_KINDS = new Set(["transitousLock.approve", "feedProxy.validateAndReload"]);
@@ -117,7 +116,7 @@ export const dataOpsChildAttemptSchema = z
     z.strictObject({
       ...attempted,
       state: z.literal("attempted"),
-      publication: z.enum(["not_started", "unknown"]),
+      publication: z.literal("unknown"),
     }),
     z.strictObject({
       ...attempted,
@@ -141,12 +140,6 @@ export const dataOpsChildAttemptSchema = z
         outcome: z.enum(["contained", "committed", "failed_without_effect"]),
         terminalReceiptDigest: digest,
       }),
-    }),
-    z.strictObject({
-      ...attempted,
-      state: z.literal("unknown"),
-      acceptedId: receiverId.optional(),
-      publication: z.literal("unknown"),
     }),
   ])
   .superRefine((child, ctx) => {
@@ -401,8 +394,6 @@ import {
   consumeControlChildDispatch,
   inspectArtifactTargetLeaseChildSettlement,
   issueControlChildPhase,
-  lookupControlChildPhaseAttempt,
-  lookupControlChildPhaseBinding,
 } from "@openmapx/core/build-artifacts";
 import { type OpsJobStatus, type OpsResultFor, parseOpsResult } from "@openmapx/core/ops";
 import { opsClient } from "../../ops-client.js";
@@ -580,20 +571,9 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
         });
     child = reserved.record.children.find((value) => value.operationKey === slot.operationKey);
     if (reserved.continuation) {
-      const reservedBody = child?.state === "reserved" ? child : slot;
-      const exact = await bindControlChildPhase(context.authority, slot),
-        binding = await lookupControlChildPhaseBinding(context.authority, slot);
-      if (!binding) throw new DataOpsObservationPending(slot.operationKey);
-      const bound: DataOpsChildAttempt = {
-        ...reservedBody,
-        state: "bound",
-        execution: exact.execution,
-        requestedDeadlineAt: binding.requestedDeadlineAt,
-        bindingDigest: binding.bindingDigest,
-        candidateDigest,
-      };
-      await context.checkpointChild(bound);
-      child = bound;
+      // The binding and the grant are recorded on the child's cell; the cell
+      // then reads as bound, and as attempted before the one request below.
+      const exact = await bindControlChildPhase(context.authority, slot);
       await context.assertForward();
       if (operation.kind === "transitousLock.approve")
         await retainCatalogActivationRecord(context, exact.execution);
@@ -604,35 +584,18 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
         ordinal: slot.ordinal,
         lease: ownedLease(context),
       });
-      const reference = await lookupControlChildPhaseAttempt(context.authority, slot);
-      if (!reference?.leaseId) throw new DataOpsObservationPending(slot.operationKey);
-      const attempted: DataOpsChildAttempt = {
-        ...bound,
-        state: "attempted",
-        childKey: reference.childKey,
-        leaseId: reference.leaseId,
-        dispatchState: "claimed",
-        publication: "unknown",
-      };
-      if (attempted.state !== "attempted") throw Error("Invalid owned dispatch state");
-      await context.write(async (current) => {
-        const saved = await context.store.claimChildDispatch(
-          current.status.id,
-          current.version,
-          attempted,
-          reserved.continuation!,
-        );
-        if (!saved) throw new DataOpsObservationPending(slot.operationKey);
-        return { record: saved, value: undefined };
-      });
-      child = attempted;
+      child = (await context.record()).children.find(
+        (value) => value.operationKey === slot.operationKey,
+      );
+      if (child?.state !== "attempted" || child.candidateDigest !== candidateDigest)
+        throw new DataOpsObservationPending(slot.operationKey);
       await context.checkpoint({ publication: "unknown" });
       await consumeControlChildDispatch(issued.dispatchTicket);
       try {
         const admitted = await opsClient().execute(operation, {
           operationKey: child.operationKey,
           execution: { requestedDeadlineAt: child.execution.deadlineAt },
-          leaseChild: { leaseId: attempted.leaseId, childKey: attempted.childKey },
+          leaseChild: { leaseId: child.leaseId, childKey: child.childKey },
           signal: context.signal,
         });
         if (admitted.execution !== "async" || admitted.operationId !== child.proposedId)
@@ -688,45 +651,12 @@ export async function cancelAndSettleOwnedDataOpsChildren(
     signal = AbortSignal.timeout(30000);
   let pending = false;
   for (const slot of record.reservations) {
-    let child = record.children.find((value) => value.operationKey === slot.operationKey);
-    let reference: Awaited<ReturnType<typeof lookupControlChildPhaseAttempt>>;
+    // A child reads as attempted once its grant is on its cell; one taken up
+    // but never sent keeps the execution pending.
+    const child = record.children.find((value) => value.operationKey === slot.operationKey);
+    if (!child || child.state === "terminal") continue;
     try {
-      reference = await lookupControlChildPhaseAttempt(context.authority, slot);
-    } catch {
-      pending = true;
-      continue;
-    }
-    if (!child && !reference) continue;
-    if (child?.state === "terminal") continue;
-    try {
-      if (reference && (!child || child.state === "reserved" || child.state === "bound")) {
-        // Recover only the original binding/grant. No issuance or dispatch ticket.
-        const binding = await lookupControlChildPhaseBinding(context.authority, slot);
-        if (!binding || !reference.leaseId) throw new DataOpsObservationPending(slot.operationKey);
-        if (!child) throw new DataOpsObservationPending(slot.operationKey);
-        const bound = {
-          ...slot,
-          state: "bound" as const,
-          execution: binding.child.execution,
-          requestedDeadlineAt: binding.requestedDeadlineAt,
-          bindingDigest: binding.bindingDigest,
-          candidateDigest:
-            child.state === "bound"
-              ? child.candidateDigest
-              : await assertOwnedDataTransitCandidate(context.authority, slot),
-        };
-        if (child.state === "reserved") await context.checkpointChild(bound);
-        child = {
-          ...bound,
-          state: "attempted",
-          childKey: reference.childKey,
-          leaseId: reference.leaseId,
-          dispatchState: "pending",
-          publication: "unknown",
-        };
-        await context.checkpointChild(child);
-      }
-      if (!child || child.state === "reserved" || child.state === "bound")
+      if (child.state === "reserved" || child.state === "bound")
         throw new DataOpsObservationPending(slot.operationKey);
       await observeChild(
         context,

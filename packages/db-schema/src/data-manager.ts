@@ -54,7 +54,6 @@ export const jobs = dataManager.table(
     executionParent: jsonb("execution_parent"),
     executionInput: jsonb("execution_input"),
     executionState: jsonb("execution_state"),
-    executionChildren: jsonb("execution_children").notNull().default([]),
     /** Agent operations of in-process work: reserved at admission, recorded as
      * attempted before the request and as terminal once the agent answers. */
     executionAgentOperations: jsonb("execution_agent_operations").notNull().default([]),
@@ -63,8 +62,11 @@ export const jobs = dataManager.table(
      * origin), fixed when recorded. */
     executionAdmission: jsonb("execution_admission"),
     /** The execution row's progress: phase, effect start, settlement (with the
-     * terminal it committed) and the grants of its reserved children. Changes
-     * never touch `ownership_version`. */
+     * terminal it committed) and one cell per reserved child, the job's only
+     * record of its children: what the child acts on, its binding and grant,
+     * and data-manager's record of it (cancellation, how it last observed the
+     * child). The control kernel's changes never touch `ownership_version`;
+     * data-manager's own child records change it like the job's status. */
     executionProgress: jsonb("execution_progress"),
     /** How the worker ended, recorded once after its work returned or failed,
      * or by recovery for a worker that died with its process. */
@@ -77,7 +79,7 @@ export const jobs = dataManager.table(
       .where(sql`${table.operationKey} IS NOT NULL`),
     check(
       "data_manager_jobs_execution_bounds",
-      sql`${table.ownershipVersion} >= 0 AND jsonb_typeof(${table.executionChildren}) = 'array' AND jsonb_array_length(${table.executionChildren}) <= 32 AND octet_length(${table.executionChildren}::text) <= 131072`,
+      sql`${table.ownershipVersion} >= 0 AND (${table.executionProgress} IS NULL OR octet_length(${table.executionProgress}::text) <= 262144)`,
     ),
     check(
       "data_manager_jobs_execution_row",

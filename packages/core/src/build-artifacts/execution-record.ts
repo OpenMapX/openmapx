@@ -228,6 +228,7 @@ function newRow(
         evidence: null,
         binding: null,
         delegation: null,
+        owner: null,
       })),
     },
   };

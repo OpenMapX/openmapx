@@ -9,8 +9,9 @@ export const RESTORED_JOB_FAILURE_REASON = "restored from backup";
  * A data-manager row counts as open when any of these holds: its status is
  * queued, running or cancel-pending; it was interrupted without ever finishing
  * (an execution awaiting recovery); its publication outcome is unknown, which
- * keeps an execution non-terminal whatever its status says; or a child or
- * agent operation has not settled.
+ * keeps an execution non-terminal whatever its status says; or a child (a cell
+ * of its execution row that data-manager took up) or an agent operation has not
+ * settled.
  *
  * An open row becomes `error` unless it already carries a final status. Its
  * unknown publication is recorded as not started, and its retained child and
@@ -41,7 +42,6 @@ SET status = CASE WHEN status IN ('ok', 'partial', 'error', 'canceled') THEN sta
         THEN jsonb_set(execution_state, '{publication}', '"not_started"'::jsonb)
       ELSE execution_state
     END,
-    execution_children = '[]'::jsonb,
     execution_agent_operations = '[]'::jsonb,
     execution_admission = NULL,
     execution_progress = NULL,
@@ -50,8 +50,11 @@ WHERE status IN ('queued', 'running', 'cancel_pending')
    OR (status = 'interrupted' AND finished_at IS NULL)
    OR execution_state->>'publication' = 'unknown'
    OR EXISTS (
-     SELECT 1 FROM jsonb_array_elements(execution_children) AS child
-     WHERE child->>'state' IS DISTINCT FROM 'terminal'
+     SELECT 1 FROM jsonb_array_elements(COALESCE(execution_progress->'children', '[]'::jsonb)) AS child
+     WHERE (jsonb_typeof(child->'owner') = 'object'
+         OR jsonb_typeof(child->'binding') = 'object'
+         OR jsonb_typeof(child->'delegation') = 'object')
+       AND child #>> '{owner,observed,state}' IS DISTINCT FROM 'terminal'
    )
    OR EXISTS (
      SELECT 1 FROM jsonb_array_elements(execution_agent_operations) AS operation

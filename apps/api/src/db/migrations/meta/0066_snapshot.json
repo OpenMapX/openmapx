@@ -1,5 +1,5 @@
 {
-  "id": "02268be6-b2d5-4ec5-ab6b-a2943682bacf",
+  "id": "6a35748c-b27d-4f0c-b557-d02775062ae0",
   "prevId": "639ebc86-b820-431f-bc9d-2e96a698ed89",
   "version": "7",
   "dialect": "postgresql",
@@ -2038,13 +2038,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "execution_children": {
-          "name": "execution_children",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
         "execution_agent_operations": {
           "name": "execution_agent_operations",
           "type": "jsonb",
@@ -2103,7 +2096,7 @@
       "checkConstraints": {
         "data_manager_jobs_execution_bounds": {
           "name": "data_manager_jobs_execution_bounds",
-          "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND jsonb_typeof(\"data_manager\".\"jobs\".\"execution_children\") = 'array' AND jsonb_array_length(\"data_manager\".\"jobs\".\"execution_children\") <= 32 AND octet_length(\"data_manager\".\"jobs\".\"execution_children\"::text) <= 131072"
+          "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL OR octet_length(\"data_manager\".\"jobs\".\"execution_progress\"::text) <= 262144)"
         },
         "data_manager_jobs_execution_row": {
           "name": "data_manager_jobs_execution_row",

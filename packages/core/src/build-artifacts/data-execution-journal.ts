@@ -40,6 +40,8 @@ import {
   type DataJobRowsDatabase,
   dataJobExecutionRows,
   dataJobRowColumns,
+  type ExecutionProgress,
+  executionProgressSchema,
 } from "./execution-rows";
 import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 import {
@@ -99,7 +101,7 @@ const rowSchema = z.object({
   status: z.string(),
   execution_state: z.unknown(),
   execution_input: z.unknown(),
-  execution_children: z.array(z.unknown()),
+  execution_progress: executionProgressSchema.nullable(),
   finished_at: z
     .unknown()
     .transform((value) => (value === null ? null : retainedDataDatabaseTimestamp(value))),
@@ -126,6 +128,122 @@ const childSchema = z
       .optional(),
   })
   .passthrough();
+const digest = z.string().regex(/^[a-f0-9]{64}$/);
+/** Data-manager's own record of a child it took up, kept on the child's cell. */
+const dataChildRecordSchema = z.strictObject({
+  /** The backup a proxy restore puts back, recorded before any live file changes. */
+  proxyRecovery: z.strictObject({ version: z.literal(1), backupDigest: digest }).optional(),
+  /** When data-manager asked the agent to cancel the child. */
+  cancellationRequestedAt: z.iso.datetime({ offset: true }).nullable(),
+  /** How data-manager last observed the child's agent operation. */
+  observed: z
+    .discriminatedUnion("state", [
+      z.strictObject({
+        state: z.literal("observing"),
+        publication: z.enum(["not_started", "committed", "unknown"]),
+      }),
+      z.strictObject({
+        state: z.literal("terminal"),
+        agentState: z.enum(["succeeded", "failed", "timed_out"]),
+        result: z.unknown().optional(),
+        publication: z.enum(["not_started", "committed"]),
+        settlement: z.strictObject({
+          outcome: z.enum(["contained", "committed", "failed_without_effect"]),
+          terminalReceiptDigest: digest,
+        }),
+      }),
+    ])
+    .nullable(),
+});
+/**
+ * Data-manager's children as its execution row records them: each child it
+ * took up is its reserved body, its cell's binding and grant, and
+ * data-manager's own record of it on that cell. A cell nobody took up is no
+ * child. `reserved` are the reserved bodies of the job row.
+ */
+export function dataExecutionChildren(
+  reserved: readonly Record<string, unknown>[],
+  progress: ExecutionProgress | null,
+): Record<string, unknown>[] {
+  return (progress?.children ?? []).flatMap((cell) => {
+    if (!cell.owner && !cell.binding && !cell.delegation) return [];
+    const body = reserved.find((entry) => entry.ordinal === cell.ordinal);
+    if (!body) throw Error("Child is absent from the original reservations");
+    const {
+      state: _state,
+      publication: _publication,
+      cancellationRequestedAt: _at,
+      ...rest
+    } = body;
+    const record = dataChildRecordSchema.parse(
+      cell.owner ?? { cancellationRequestedAt: null, observed: null },
+    );
+    const base = {
+      ...rest,
+      cancellationRequestedAt: record.cancellationRequestedAt,
+      ...(record.proxyRecovery ? { proxyRecovery: record.proxyRecovery } : {}),
+    };
+    if (!cell.binding) return [{ ...base, state: "reserved", publication: "not_started" }];
+    const bound = {
+      ...base,
+      execution: cell.binding.child.execution,
+      requestedDeadlineAt: cell.binding.requestedDeadlineAt,
+      bindingDigest: controlDigest(cell.binding),
+      candidateDigest: cell.evidence ? controlDigest(cell.evidence) : null,
+    };
+    if (!cell.delegation) return [{ ...bound, state: "bound", publication: "not_started" }];
+    const attempted = {
+      ...bound,
+      childKey: cell.delegation.childKey,
+      leaseId: cell.delegation.leaseId,
+    };
+    if (!record.observed) return [{ ...attempted, state: "attempted", publication: "unknown" }];
+    return [{ ...attempted, acceptedId: rest.proposedId, ...record.observed }];
+  });
+}
+/**
+ * What data-manager keeps on a child's cell for `child`, a child as
+ * `dataExecutionChildren` composes it: everything its reserved body, binding
+ * and grant do not already say.
+ */
+export function dataChildRecord(child: {
+  state: string;
+  cancellationRequestedAt: string | null;
+  proxyRecovery?: unknown;
+  publication?: unknown;
+  agentState?: unknown;
+  result?: unknown;
+  settlement?: unknown;
+}): Record<string, unknown> {
+  const { state, publication, agentState, result, settlement } = child;
+  return dataChildRecordSchema.parse({
+    ...(child.proxyRecovery ? { proxyRecovery: child.proxyRecovery } : {}),
+    cancellationRequestedAt: child.cancellationRequestedAt,
+    observed:
+      state === "observing"
+        ? { state, publication }
+        : state === "terminal"
+          ? {
+              state,
+              agentState,
+              ...(result === undefined ? {} : { result }),
+              publication,
+              settlement,
+            }
+          : null,
+  });
+}
+/** The children a job row records, as `dataExecutionChildren` composes them. */
+function rowChildren(row: z.infer<typeof rowSchema>): Record<string, unknown>[] {
+  const { childReservations } = z
+    .object({
+      dataExecution: z.object({
+        childReservations: z.array(z.record(z.string(), z.unknown())).max(32).optional(),
+      }),
+    })
+    .parse(row.metadata).dataExecution;
+  return dataExecutionChildren(childReservations ?? [], row.execution_progress);
+}
 export const dataTerminalReceiptDigest = (status: DataExecutionStatus) =>
   controlDigest({ version: 1, status: dataExecutionStatusSchema.parse(status) });
 function statusOf(raw: unknown) {
@@ -200,7 +318,7 @@ export function createDataExecutionControlJournal(
       authority = await restoreAdmittedControlExecution(installation, execution),
       s = authority;
     const restore = s.reservations.find((slot) => slot.phase === "proxy-restore");
-    const children = value.row.execution_children.map((raw) =>
+    const children = rowChildren(value.row).map((raw) =>
       z
         .object({
           phase: z.string(),
@@ -300,7 +418,7 @@ export function createDataExecutionControlJournal(
     )
       throw Error("Original reviewed catalog activation required");
     await assertRetainedCatalogActivationChildrenSettled(authority);
-    const children = value.row.execution_children.map((raw) =>
+    const children = rowChildren(value.row).map((raw) =>
       z
         .object({
           phase: z.string(),
@@ -371,7 +489,7 @@ export function createDataExecutionControlJournal(
       containedAt: stamp,
       outcome: "catalog-activation-committed",
       publication: "committed",
-      childrenDigest: controlDigest(value.row.execution_children),
+      childrenDigest: controlDigest(rowChildren(value.row)),
       proxyRecovery: recovery,
       result: {
         kind: "catalog.activate",
@@ -409,7 +527,7 @@ export function createDataExecutionControlJournal(
         value = await load(execution);
       if (
         !s.reservations.some((slot) => slot.phase === "proxy-restore") ||
-        !value.row.execution_children.some((raw) =>
+        !rowChildren(value.row).some((raw) =>
           z.object({ phase: z.string() }).parse(raw).phase.startsWith("proxy-"),
         )
       )
@@ -572,7 +690,7 @@ export function createDataExecutionControlJournal(
       } catch {
         recovery = "pending";
       }
-      const childrenDigest = controlDigest(value.row.execution_children),
+      const childrenDigest = controlDigest(rowChildren(value.row)),
         publication =
           remotePending || recovery === "pending"
             ? "unknown"
@@ -646,9 +764,8 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original contained worker identity changed");
       if (
-        (proof.childrenDigest &&
-          proof.childrenDigest !== controlDigest(value.row.execution_children)) ||
-        (!proof.childrenDigest && value.row.execution_children.length > 0)
+        (proof.childrenDigest && proof.childrenDigest !== controlDigest(rowChildren(value.row))) ||
+        (!proof.childrenDigest && rowChildren(value.row).length > 0)
       )
         throw Error("Original worker child snapshot changed");
       await assertOwnedProxyRecoverySettled(execution);
@@ -695,7 +812,7 @@ export function createDataExecutionControlJournal(
         containedAt: Date.now(),
         outcome: "failed",
         publication,
-        childrenDigest: controlDigest(value.row.execution_children),
+        childrenDigest: controlDigest(rowChildren(value.row)),
         proxyRecovery: "not_required",
       });
       await recordCompletion(execution, proof);
@@ -729,7 +846,7 @@ export function createDataExecutionControlJournal(
       await assertOwnedProxyRecoverySettled(authority.execution);
       if (
         owned.childrenDigest !== undefined &&
-        owned.childrenDigest !== controlDigest(value.row.execution_children)
+        owned.childrenDigest !== controlDigest(rowChildren(value.row))
       )
         throw Error("Contained worker/current child union changed");
       if (
@@ -767,7 +884,7 @@ export function createDataExecutionControlJournal(
         throw Error("Terminal status differs from actual dispatcher outcome");
       if (terminal.status === "ok" && owned.error !== undefined)
         throw Error("Failed dispatcher cannot succeed");
-      const children = value.row.execution_children.map((raw) => childSchema.parse(raw));
+      const children = rowChildren(value.row).map((raw) => childSchema.parse(raw));
       for (const child of children) {
         if (child.state !== "terminal" || !child.execution || !child.settlement || !owned.lease)
           throw Error("Unsettled data descendant");
@@ -823,8 +940,8 @@ export function createDataExecutionControlJournal(
         !isDataExecutionTerminal(value.status) ||
         value.row.finished_at?.getTime() !== terminal.terminalAt ||
         dataTerminalReceiptDigest(value.status) !== dataTerminalReceiptDigest(terminal.status) ||
-        controlDigest(value.row.execution_children) !== terminal.childrenDigest ||
-        value.row.execution_children.some((raw) => childSchema.parse(raw).state !== "terminal")
+        controlDigest(rowChildren(value.row)) !== terminal.childrenDigest ||
+        rowChildren(value.row).some((raw) => childSchema.parse(raw).state !== "terminal")
       )
         throw Error("Data journal terminal containment is not proved");
     },

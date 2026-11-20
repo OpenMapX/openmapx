@@ -29,6 +29,8 @@ export {
   type ContainedDataExecution,
   createDataExecutionControlJournal,
   type DataExecutionControlJournal,
+  dataChildRecord,
+  dataExecutionChildren,
   dataExecutionHoldsLease,
   dataTerminalReceiptDigest,
 } from "./data-execution-journal";
@@ -86,6 +88,7 @@ export {
 } from "./execution-record";
 export {
   type ExecutionRow,
+  executionProgressSchema,
   type JournalExecution,
   journalExecution,
   journalExecutionRow,

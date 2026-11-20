@@ -82,6 +82,15 @@ export const childCellSchema = z.strictObject({
     .nullable(),
   /** Recorded before the child is sent: an attempted child is never sent again. */
   delegation: dataControlDelegationSchema.nullable(),
+  /**
+   * The owner's own record of a child it took up (data-manager's: when it
+   * asked for a cancellation and how it last observed the child), in the
+   * owner's terms. The kernel keeps it and never reads it.
+   */
+  owner: z
+    .record(z.string(), z.unknown())
+    .refine((value) => JSON.stringify(value).length <= 16384, "Child record too large")
+    .nullable(),
 });
 export type ChildCell = z.infer<typeof childCellSchema>;
 

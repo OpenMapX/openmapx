@@ -364,14 +364,16 @@ const publishedSchema = z.strictObject({ candidate: schema });
 export async function retainOwnedDataTransitCandidate(
   authority: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
-): Promise<string | null> {
+): Promise<void> {
   const value = snapshot(authority, input.phase, input.ordinal, input.phase === "promote-primary");
-  if (!value) return null;
-  const candidate = schema.parse(value);
-  await retainControlChildEvidence(authority, input, publishedSchema.parse({ candidate }));
-  return controlDigest(candidate);
+  if (!value) return;
+  await retainControlChildEvidence(
+    authority,
+    input,
+    publishedSchema.parse({ candidate: schema.parse(value) }),
+  );
 }
-/** The digest of the candidate the cell recorded, once the files still match it. */
+/** The digest of the evidence the cell recorded, once the files still match its candidate. */
 export async function assertOwnedDataTransitCandidate(
   authority: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
@@ -383,7 +385,7 @@ export async function assertOwnedDataTransitCandidate(
   const { candidate } = publishedSchema.parse(evidence);
   if (canonicalJson(candidate) !== canonicalJson(value))
     throw Error("Foreign or changed owned transit candidate");
-  return controlDigest(candidate);
+  return controlDigest(evidence);
 }
 /**
  * Fixed registry resource input: the candidate data-manager recorded with the

@@ -726,7 +726,10 @@ VALUES ('${DELETED_USER_ID}', 'Mixed Restore User', '${DELETED_EMAIL}', true, no
       finished: string,
       children = "[]",
     ) =>
-      `('${id}', 'full-update', '${status}', ${finished}, 2, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', 1, 100, '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '${children}', '{}', '{}', '{}')`;
+      `('${id}', 'full-update', '${status}', ${finished}, 2, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', 1, 100, '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '{}', '{"children":${children}}', '{}')`;
+    // A sent child's cell, as data-manager last observed it.
+    const sent = (observed: string) =>
+      `[{"ordinal":0,"evidence":null,"binding":{},"delegation":{},"owner":{"cancellationRequestedAt":null,"observed":${observed}}}]`;
     await psql(`
 INSERT INTO admin_job (id, type, status, finished_at)
 VALUES
@@ -746,16 +749,16 @@ VALUES
   ('00000000-0000-4000-8000-000000000005', 'transitous-sync', 'canceled', now(), NULL),
   ('00000000-0000-4000-8000-000000000006', 'transitous-sync', 'interrupted', NULL, NULL);
 INSERT INTO data_manager.jobs
-  (id, kind, status, finished_at, execution_version, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_children, execution_admission, execution_progress, execution_completion)
+  (id, kind, status, finished_at, execution_version, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_admission, execution_progress, execution_completion)
 VALUES
   ${v2("00000000-0000-4000-8000-000000000007", "a", "queued", "not_started", "NULL")},
-  ${v2("00000000-0000-4000-8000-000000000008", "b", "running", "unknown", "NULL", '[{"state":"attempted"}]')},
-  ${v2("00000000-0000-4000-8000-000000000009", "c", "cancel_pending", "not_started", "NULL", '[{"state":"observing"}]')},
+  ${v2("00000000-0000-4000-8000-000000000008", "b", "running", "unknown", "NULL", sent("null"))},
+  ${v2("00000000-0000-4000-8000-000000000009", "c", "cancel_pending", "not_started", "NULL", sent('{"state":"observing"}'))},
   ${v2("00000000-0000-4000-8000-00000000000a", "d", "interrupted", "unknown", "NULL")},
   ${v2("00000000-0000-4000-8000-00000000000b", "e", "interrupted", "not_started", "now()")},
   ${v2("00000000-0000-4000-8000-00000000000c", "f", "error", "unknown", "now()")},
-  ${v2("00000000-0000-4000-8000-00000000000d", "g", "ok", "not_started", "now()", '[{"state":"observing"}]')},
-  ${v2("00000000-0000-4000-8000-00000000000e", "h", "ok", "committed", "now()", '[{"state":"terminal"}]')};
+  ${v2("00000000-0000-4000-8000-00000000000d", "g", "ok", "not_started", "now()", sent('{"state":"observing"}'))},
+  ${v2("00000000-0000-4000-8000-00000000000e", "h", "ok", "committed", "now()", sent('{"state":"terminal"}'))};
 INSERT INTO data_manager.offline_package_jobs (id, request_key, package_id, request, status, created_at, updated_at, lease_owner, lease_expires_at)
 VALUES
   ('00000000-0000-4000-8000-000000000011', 'request-preparing', 'package-preparing', '{}', 'preparing', now(), now(), 'worker', now() + interval '1 hour'),
@@ -844,7 +847,7 @@ VALUES
     ).toBe("0");
     expect(
       await psql(
-        "SELECT right(id::text, 2) || '=' || jsonb_array_length(execution_children) FROM data_manager.jobs WHERE execution_version = 2 AND right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
+        "SELECT right(id::text, 2) || '=' || coalesce(jsonb_array_length(execution_progress->'children'), 0) FROM data_manager.jobs WHERE execution_version = 2 AND right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
       ),
     ).toBe(["08=0", "09=0", "0d=0", "0e=1"].join("\n"));
     // A closed execution loses its execution row and worker completion; a settled one keeps them.

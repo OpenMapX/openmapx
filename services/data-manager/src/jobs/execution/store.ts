@@ -4,7 +4,9 @@ import {
   type ControlAdmissionInput,
   type ControlTransportPrincipal,
   type DataExecutionControlJournal,
-  retainedControlParent,
+  dataChildRecord,
+  dataExecutionChildren,
+  executionProgressSchema,
   retainedDataDatabaseTimestamp,
   type SenderLease,
 } from "@openmapx/core/build-artifacts";
@@ -47,11 +49,8 @@ import {
 } from "./ops-children.js";
 
 const reservationBrand = Symbol("data-child-reservation");
+/** Handed out only by the reservation that took a phase up: its holder may bind and send it. */
 export type FreshDataChildReservation = Readonly<{ [reservationBrand]: true }>;
-const reservationContinuations = new WeakMap<
-  FreshDataChildReservation,
-  { store: symbol; id: string; key: string; used: boolean }
->();
 
 import type { DataConfigurationMaintenance } from "./configuration-maintenance.js";
 export const DATA_ADMISSION_LOCK = DATA_ADVISORY_LOCKS.dataAdmission;
@@ -177,12 +176,6 @@ export interface DataExecutionStore {
     record: DataExecutionRecord;
     continuation: FreshDataChildReservation | null;
   } | null>;
-  claimChildDispatch(
-    id: string,
-    expectedVersion: number,
-    child: Extract<DataOpsChildAttempt, { state: "attempted" }>,
-    continuation: FreshDataChildReservation,
-  ): Promise<DataExecutionRecord | null>;
   requestCancel(identity: DataExecutionIdentity): Promise<DataExecutionRecord | null>;
   listUnsettled(): Promise<DataExecutionRecord[]>;
   finalize(
@@ -206,7 +199,7 @@ interface Row extends Record<string, unknown> {
   execution_parent: unknown;
   execution_input: unknown;
   execution_state: unknown;
-  execution_children: unknown;
+  execution_progress: unknown;
   execution_agent_operations: unknown;
   ownership_version: number;
   finished_at: Date | string | null;
@@ -274,6 +267,11 @@ function decode(row: Row): DataExecutionRecord {
     })
   )
     throw Error("Stored execution fingerprint mismatch");
+  const reservations = (childReservations ?? []).map((value) => {
+    const parsed = dataOpsChildAttemptSchema.parse(value);
+    if (parsed.state !== "reserved") throw Error("Invalid reserved body");
+    return parsed;
+  });
   return {
     triggeredBy: z
       .string()
@@ -287,24 +285,22 @@ function decode(row: Row): DataExecutionRecord {
       row.requested_deadline_at === null ? null : safeEpoch(row.requested_deadline_at),
     parent,
     version: z.number().int().nonnegative().safe().parse(row.ownership_version),
-    children: validateChildren(row.execution_children),
-    reservations: (childReservations ?? []).map((value) => {
-      const parsed = dataOpsChildAttemptSchema.parse(value);
-      if (parsed.state !== "reserved") throw Error("Invalid reserved body");
-      return parsed;
-    }),
+    children: childrenOf(reservations, row.execution_progress),
+    reservations,
     agentOperations: z.array(dataAgentOperationSchema).max(8).parse(row.execution_agent_operations),
     finishedAt:
       row.finished_at === null ? null : retainedDataDatabaseTimestamp(row.finished_at).getTime(),
   };
 }
-function validateChildren(value: unknown): DataOpsChildAttempt[] {
-  const children = z.array(dataOpsChildAttemptSchema).max(32).parse(value);
-  if (Buffer.byteLength(JSON.stringify(children)) > 128 * 1024)
-    throw Error("Data child capacity exceeded");
-  const keys = new Set(children.map((child) => child.operationKey));
-  if (keys.size !== children.length) throw Error("Duplicate child identity");
-  return children;
+/** The children an execution row records: the cells of its progress that data-manager took up. */
+function childrenOf(
+  reservations: readonly DataOpsChildReserved[],
+  progress: unknown,
+): DataOpsChildAttempt[] {
+  return dataExecutionChildren(
+    reservations,
+    progress === null ? null : executionProgressSchema.parse(progress),
+  ).map((child) => dataOpsChildAttemptSchema.parse(child));
 }
 /** The check and job/reservation insertion must share this connection and
  * transaction. A contending admission never waits while retaining targets. */
@@ -332,7 +328,6 @@ export function createPostgresDataExecutionStore(
   },
 ): DataExecutionStore {
   const now = options.now ?? Date.now;
-  const storeIdentity = Symbol("data-store");
   const findByIdempotencyKey = async (tx: postgres.Sql | postgres.TransactionSql, key: string) => {
     const rows = await tx.unsafe<Row[]>(
       "SELECT * FROM data_manager.jobs WHERE idempotency_key=$1 AND (started_at >= $2::text::timestamptz OR finished_at IS NULL) ORDER BY started_at DESC,id LIMIT 1",
@@ -357,22 +352,18 @@ export function createPostgresDataExecutionStore(
     record: DataExecutionRecord,
     change: {
       status?: DataExecutionStatus;
-      children?: DataOpsChildAttempt[];
       agentOperations?: DataAgentOperation[];
       terminalAt?: number;
     },
   ) => {
-    const {
-      status = record.status,
-      children = record.children,
-      agentOperations = record.agentOperations,
-      terminalAt,
-    } = change;
+    const { status = record.status, agentOperations = record.agentOperations, terminalAt } = change;
     if (
       isDataExecutionTerminal(status) &&
       agentOperations.some((entry) => entry.state === "attempted")
     )
       throw new DataExecutionConflict("An attempted agent operation retains the execution");
+    if (isDataExecutionTerminal(status) && record.children.some((c) => c.state !== "terminal"))
+      throw new DataExecutionConflict("Unsettled children retain the execution fence");
     const { cancellationRequestedAt, progress, diagnostics, publication, result } = status;
     const finishedAt = isDataExecutionTerminal(status)
       ? (record.finishedAt ?? terminalAt ?? now())
@@ -381,100 +372,66 @@ export function createPostgresDataExecutionStore(
       Row[]
     >`UPDATE data_manager.jobs SET status=${status.status},ownership_version=ownership_version+1,
       execution_state=${canonicalJson({ cancellationRequestedAt, progress, diagnostics, publication, ...(result ? { result } : {}) })}::text::jsonb,
-      execution_children=${canonicalJson(children)}::text::jsonb,execution_agent_operations=${canonicalJson(agentOperations)}::text::jsonb,finished_at=${finishedAt === null ? null : new Date(finishedAt).toISOString()}::text::timestamptz
+      execution_agent_operations=${canonicalJson(agentOperations)}::text::jsonb,finished_at=${finishedAt === null ? null : new Date(finishedAt).toISOString()}::text::timestamptz
       WHERE id=${status.id} AND ownership_version=${record.version} RETURNING *`;
     return rows[0] ? decode(rows[0]) : null;
   };
-  function validateOwnedChild(record: DataExecutionRecord, child: DataOpsChildAttempt) {
-    const template = record.reservations.find((slot) => slot.operationKey === child.operationKey);
-    if (
-      !template ||
-      !sameDataChildBody(template, child) ||
-      canonicalJson(child.parentExecution) !== canonicalJson(record.execution)
-    )
-      throw new DataExecutionConflict("Child is absent from original owned reservations");
-    if (
-      child.state !== "reserved" &&
-      (child.execution.deadlineAt > record.status.deadlineAt ||
-        child.execution.fingerprint !==
-          executionFingerprint({
-            kind: child.operation.kind,
-            operationFingerprint: child.operationFingerprint,
-            deadlineAt: child.requestedDeadlineAt,
-            parent: retainedControlParent(record.execution),
-          }))
-    )
-      throw new DataExecutionConflict("Invalid retained child execution identity");
+  /**
+   * Records data-manager's own part of `child` on its cell; `record` was read
+   * under the job row's lock in `tx`. The binding and grant are the control
+   * kernel's, so the child must be exactly what the cell then composes.
+   */
+  async function writeCell(
+    tx: postgres.TransactionSql,
+    record: DataExecutionRecord,
+    child: DataOpsChildAttempt,
+  ) {
+    const [row] = await tx<
+      { execution_progress: unknown }[]
+    >`SELECT execution_progress FROM data_manager.jobs WHERE id=${record.status.id}`;
+    const progress = executionProgressSchema.parse(row?.execution_progress);
+    const cell = progress.children.find((entry) => entry.ordinal === child.ordinal);
+    if (!cell) throw new DataExecutionConflict("Child is absent from original owned reservations");
+    cell.owner = dataChildRecord(child);
+    const composed = childrenOf(record.reservations, progress).find(
+      (entry) => entry.ordinal === child.ordinal,
+    );
+    if (canonicalJson(composed) !== canonicalJson(child))
+      throw new DataExecutionConflict("Child differs from its original body, binding or grant");
+    const rows = await tx<
+      Row[]
+    >`UPDATE data_manager.jobs SET ownership_version=ownership_version+1,execution_progress=${canonicalJson(progress)}::text::jsonb
+      WHERE id=${record.status.id} AND ownership_version=${record.version} RETURNING *`;
+    return rows[0] ? decode(rows[0]) : null;
   }
+  const order: readonly DataOpsChildAttempt["state"][] = [
+    "reserved",
+    "bound",
+    "attempted",
+    "observing",
+    "terminal",
+  ];
   async function writeChild(
     tx: postgres.TransactionSql,
     record: DataExecutionRecord,
     child: DataOpsChildAttempt,
-    claim: boolean,
   ) {
-    validateOwnedChild(record, child);
-    const at = record.children.findIndex((entry) => entry.operationKey === child.operationKey),
-      previous = record.children[at];
+    const previous = record.children.find((entry) => entry.operationKey === child.operationKey);
     if (!previous)
       throw new DataExecutionConflict("A fresh reserved CAS is required before binding");
     if (canonicalJson(previous) === canonicalJson(child)) return record;
     if (isDataExecutionTerminal(record.status))
       throw new DataExecutionConflict("Terminal execution cannot change children");
-    const transitions: Record<
-      DataOpsChildAttempt["state"],
-      readonly DataOpsChildAttempt["state"][]
-    > = {
-      reserved: ["reserved", "bound"],
-      bound: ["bound", "attempted"],
-      attempted: ["attempted", "observing", "terminal", "unknown"],
-      observing: ["observing", "terminal", "unknown"],
-      unknown: ["unknown", "observing", "terminal"],
-      terminal: ["terminal"],
-    };
     if (
-      !transitions[previous.state].includes(child.state) ||
-      !sameDataChildBody(previous, child) ||
+      previous.state === "terminal" ||
+      order.indexOf(child.state) < order.indexOf(previous.state) ||
       canonicalJson(previous.proxyRecovery ?? null) !==
         canonicalJson(child.proxyRecovery ?? null) ||
-      previous.state === "terminal" ||
       (previous.cancellationRequestedAt &&
         previous.cancellationRequestedAt !== child.cancellationRequestedAt)
     )
       throw new DataExecutionConflict("Retained child identity/state conflict");
-    if (previous.state !== "reserved") {
-      if (
-        child.state === "reserved" ||
-        canonicalJson(previous.execution) !== canonicalJson(child.execution) ||
-        previous.requestedDeadlineAt !== child.requestedDeadlineAt ||
-        previous.bindingDigest !== child.bindingDigest ||
-        previous.candidateDigest !== child.candidateDigest
-      )
-        throw new DataExecutionConflict("Bound child identity is immutable");
-    }
-    if ("childKey" in previous) {
-      if (
-        !("childKey" in child) ||
-        previous.childKey !== child.childKey ||
-        previous.leaseId !== child.leaseId ||
-        (previous.dispatchState === "claimed" && child.dispatchState !== "claimed")
-      )
-        throw new DataExecutionConflict("Attempted child grant is immutable");
-    }
-    if (
-      "acceptedId" in previous &&
-      previous.acceptedId !== undefined &&
-      (!("acceptedId" in child) || previous.acceptedId !== child.acceptedId)
-    )
-      throw new DataExecutionConflict("Accepted child identity is immutable");
-    const claiming =
-      "dispatchState" in child &&
-      child.dispatchState === "claimed" &&
-      (!("dispatchState" in previous) || previous.dispatchState !== "claimed");
-    if (claiming && !claim)
-      throw new DataExecutionConflict("A live confirmed reservation is required to claim dispatch");
-    const children = [...record.children];
-    children[at] = child;
-    return update(tx, record, { children: validateChildren(children) });
+    return writeCell(tx, record, child);
   }
   /** Reserved → attempted (never after cancellation or a terminal) → terminal.
    * The attempted body never changes; only its cancellation time is added. */
@@ -709,11 +666,6 @@ export function createPostgresDataExecutionStore(
         if (!isDataExecutionTerminal(record.status) && isDataExecutionTerminal(status))
           throw new DataExecutionConflict("Actual contained worker terminal commitment required");
         if (
-          isDataExecutionTerminal(status) &&
-          record.children.some((child) => child.state !== "terminal")
-        )
-          throw new DataExecutionConflict("Unsettled children retain the execution fence");
-        if (
           isDataExecutionTerminal(record.status) &&
           canonicalJson(status) !== canonicalJson(record.status)
         )
@@ -731,7 +683,7 @@ export function createPostgresDataExecutionStore(
       return sql.begin(async (tx) => {
         const record = await find(tx, "id", id, true);
         if (!record || record.version !== version) return null;
-        return writeChild(tx, record, child, false);
+        return writeChild(tx, record, child);
       });
     },
     async checkpointAgentOperation(id, version, value) {
@@ -762,44 +714,15 @@ export function createPostgresDataExecutionStore(
         if (record.version !== version) return null;
         if (record.status.cancellationRequestedAt || isDataExecutionTerminal(record.status))
           throw new DataExecutionConflict("Canceled execution cannot reserve a phase");
-        validateOwnedChild(record, child);
-        const updated = await update(tx, record, {
-          children: validateChildren([...record.children, child]),
-        });
+        const updated = await writeCell(tx, record, child);
         return updated ? { record: updated, created: true } : null;
       });
       if (!saved) return null;
       if (!saved.created) return { record: saved.record, continuation: null };
-      const continuation = Object.freeze({ [reservationBrand]: true as const });
-      reservationContinuations.set(continuation, {
-        store: storeIdentity,
-        id,
-        key: child.operationKey,
-        used: false,
-      });
-      return { record: saved.record, continuation };
-    },
-    async claimChildDispatch(id, version, value, continuation) {
-      const permission = reservationContinuations.get(continuation);
-      if (
-        !permission ||
-        permission.used ||
-        permission.store !== storeIdentity ||
-        permission.id !== id ||
-        permission.key !== value.operationKey
-      )
-        throw new DataExecutionConflict("Missing live reservation continuation");
-      permission.used = true;
-      const child = dataOpsChildAttemptSchema.parse(value);
-      if (child.state !== "attempted" || child.dispatchState !== "claimed")
-        throw new DataExecutionConflict("Dispatch claim must retain its real attempted grant");
-      return sql.begin(async (tx) => {
-        const record = await find(tx, "id", id, true);
-        if (!record || record.version !== version) return null;
-        if (record.status.cancellationRequestedAt || isDataExecutionTerminal(record.status))
-          throw new DataExecutionConflict("Cancellation prevents a fresh dispatch claim");
-        return writeChild(tx, record, child, true);
-      });
+      return {
+        record: saved.record,
+        continuation: Object.freeze({ [reservationBrand]: true as const }),
+      };
     },
     async requestCancel(identity) {
       return sql.begin(async (tx) => {
