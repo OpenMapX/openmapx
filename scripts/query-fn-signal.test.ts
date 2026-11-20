@@ -44,43 +44,104 @@ function collectFiles(dir: string): string[] {
   return out;
 }
 
-function usesIdentifier(node: ts.Node, name: string): boolean {
-  let found = false;
+/** The references to `name` inside `node`. */
+function referencesTo(node: ts.Node, name: string): ts.Identifier[] {
+  const found: ts.Identifier[] = [];
   const visit = (child: ts.Node): void => {
-    if (found) return;
-    if (ts.isIdentifier(child) && child.text === name) found = true;
-    else ts.forEachChild(child, visit);
+    if (ts.isIdentifier(child) && child.text === name) {
+      const parent = child.parent;
+      // `x.name` and `{ name: x }` name a property, not the binding.
+      const namesProperty =
+        (ts.isPropertyAccessExpression(parent) && parent.name === child) ||
+        (ts.isPropertyAssignment(parent) && parent.name === child);
+      if (!namesProperty) found.push(child);
+    }
+    ts.forEachChild(child, visit);
   };
   ts.forEachChild(node, visit);
   return found;
 }
 
+/**
+ * Whether a use of the query context hands its signal on: reading
+ * `context.signal`, or passing the context on whole. Reading another field,
+ * such as `context.queryKey`, does not.
+ */
+function forwardsSignal(reference: ts.Identifier): boolean {
+  const parent = reference.parent;
+  if (ts.isPropertyAccessExpression(parent) && parent.expression === reference) {
+    return parent.name.text === "signal";
+  }
+  if (ts.isElementAccessExpression(parent) && parent.expression === reference) return false;
+  return true;
+}
+
+/** The function a query-function identifier names in the same file, if any. */
+function localFunction(sf: ts.SourceFile, name: string): ts.Expression | undefined {
+  let found: ts.Expression | undefined;
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name &&
+      node.initializer
+    ) {
+      found = node.initializer;
+    } else if (ts.isFunctionDeclaration(node) && node.name?.text === name && node.body) {
+      found = ts.factory.createFunctionExpression(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        node.parameters,
+        undefined,
+        node.body,
+      );
+    } else ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return found;
+}
+
 /** Whether a query function takes the signal, or forwards the context that carries it. */
-function takesSignal(fn: ts.Expression): boolean {
+function takesSignal(fn: ts.Expression, sf: ts.SourceFile): boolean {
+  if (ts.isIdentifier(fn)) {
+    const target = localFunction(sf, fn.text);
+    return target !== undefined && !ts.isIdentifier(target) && takesSignal(target, sf);
+  }
   if (!ts.isArrowFunction(fn) && !ts.isFunctionExpression(fn)) return false;
   const [first] = fn.parameters;
   if (!first) return false;
   if (ts.isObjectBindingPattern(first.name)) {
-    return first.name.elements.some(
-      (element) =>
-        (element.propertyName ?? element.name).getText() === "signal" ||
-        element.dotDotDotToken !== undefined,
-    );
+    return first.name.elements.some((element) => {
+      if (!ts.isIdentifier(element.name)) return false;
+      const binding = element.name.text;
+      if (element.dotDotDotToken !== undefined) {
+        return referencesTo(fn.body, binding).some(forwardsSignal);
+      }
+      return (
+        (element.propertyName ?? element.name).getText() === "signal" &&
+        referencesTo(fn.body, binding).length > 0
+      );
+    });
   }
-  return ts.isIdentifier(first.name) && usesIdentifier(fn.body, first.name.text);
+  return ts.isIdentifier(first.name) && referencesTo(fn.body, first.name.text).some(forwardsSignal);
 }
 
-function offendersIn(file: string): string[] {
-  const source = readFileSync(file, "utf8");
+/** The `file:line` of every query function in `source` that drops the signal. */
+function offendersIn(file: string, source = readFileSync(file, "utf8")): string[] {
   if (!source.includes("queryFn")) return [];
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const hits: string[] = [];
   const visit = (node: ts.Node): void => {
-    if (
-      ts.isPropertyAssignment(node) &&
-      node.name.getText(sf) === "queryFn" &&
-      !takesSignal(node.initializer)
-    ) {
+    const fn =
+      ts.isPropertyAssignment(node) && node.name.getText(sf) === "queryFn"
+        ? node.initializer
+        : ts.isShorthandPropertyAssignment(node) && node.name.text === "queryFn"
+          ? node.name
+          : undefined;
+    if (fn && !takesSignal(fn, sf)) {
       const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
       hits.push(`${relative(ROOT, file)}:${line + 1}`);
     }
@@ -90,9 +151,60 @@ function offendersIn(file: string): string[] {
   return hits;
 }
 
+describe("the query-function check", () => {
+  const check = (body: string) => offendersIn(join(ROOT, "fixture.ts"), body).length === 0;
+
+  it.each([
+    [
+      "a destructured signal passed on",
+      "useQuery({ queryFn: ({ signal }) => get(url, { signal }) });",
+    ],
+    [
+      "a renamed signal passed on",
+      "useQuery({ queryFn: ({ signal: s }) => get(url, { signal: s }) });",
+    ],
+    ["the context's signal", "useQuery({ queryFn: (ctx) => get(url, { signal: ctx.signal }) });"],
+    ["the whole context", "useQuery({ queryFn: (ctx) => load(ctx) });"],
+    [
+      "the rest of the context",
+      "useQuery({ queryFn: ({ queryKey, ...rest }) => load(queryKey, rest) });",
+    ],
+    [
+      "a shorthand local function",
+      "const queryFn = ({ signal }) => get(url, { signal }); useQuery({ queryFn });",
+    ],
+    [
+      "a shorthand function declaration",
+      "function queryFn({ signal }) { return get(url, { signal }); } useQuery({ queryFn });",
+    ],
+  ])("accepts %s", (_, body) => {
+    expect(check(body)).toBe(true);
+  });
+
+  it.each([
+    ["no parameter", "useQuery({ queryFn: () => get(url) });"],
+    ["a destructured signal never used", "useQuery({ queryFn: ({ signal }) => get(url) });"],
+    [
+      "a context read only for its key",
+      "useQuery({ queryFn: (ctx) => get(url, { id: ctx.queryKey[1] }) });",
+    ],
+    ["a rest read only for its key", "useQuery({ queryFn: ({ ...ctx }) => get(ctx.queryKey) });"],
+    [
+      "a shorthand function without the signal",
+      "const queryFn = () => get(url); useQuery({ queryFn });",
+    ],
+    [
+      "a shorthand name declared elsewhere",
+      "import { queryFn } from './x'; useQuery({ queryFn });",
+    ],
+  ])("rejects %s", (_, body) => {
+    expect(check(body)).toBe(false);
+  });
+});
+
 describe("query functions take the abort signal", () => {
   const files = SCANNED.flatMap((dir) => collectFiles(resolve(ROOT, dir)));
-  const offenders = files.flatMap(offendersIn);
+  const offenders = files.flatMap((file) => offendersIn(file));
   const byFile = new Map<string, number>();
   for (const hit of offenders) {
     const file = hit.slice(0, hit.lastIndexOf(":"));
