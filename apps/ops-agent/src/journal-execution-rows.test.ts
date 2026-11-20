@@ -25,13 +25,51 @@ import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { journalFileRows } from "../../../packages/core/src/build-artifacts/execution-rows";
 import { executionFor, type JobRecord, JobTable } from "./job-table";
-import { openOpsJobJournal } from "./journal";
+import { type OpsJobJournal, openOpsJobJournal } from "./journal";
 import { persistedJob } from "./test-fixtures/persisted-job";
 
 let root: string;
 let journalPath: string;
 let installation: ControlInstallation;
 let table: JobTable;
+let held: { reached: () => void; release: Promise<void> } | undefined;
+
+/** Holds the next journal write once its turn comes; writes still land in call order. */
+function holdNextWrite() {
+  let reached!: () => void, release!: () => void;
+  const turn = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  held = {
+    reached,
+    release: new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  };
+  return { turn, release };
+}
+
+/** The journal, as the agent opens it, with a write that `holdNextWrite` can hold. */
+function holdable(journal: OpsJobJournal): OpsJobJournal {
+  let tail = Promise.resolve();
+  return {
+    records: () => journal.records(),
+    replace: (rows) => {
+      const snapshot = structuredClone(rows),
+        hold = held;
+      held = undefined;
+      const next = tail.then(async () => {
+        if (hold) {
+          hold.reached();
+          await hold.release;
+        }
+        await journal.replace(snapshot);
+      });
+      tail = next.catch(() => undefined);
+      return next;
+    },
+  };
+}
 
 const settlement = {
   observe: async () => undefined,
@@ -46,7 +84,7 @@ const settlement = {
 /** The agent as it starts: its journal, its job table and its installation. */
 async function start() {
   table = new JobTable({
-    journal: await openOpsJobJournal(journalPath),
+    journal: holdable(await openOpsJobJournal(journalPath)),
     now: () => new Date(),
     maxJobEntries: 16,
     jobRetentionMs: 72 * 3600_000,
@@ -69,16 +107,17 @@ beforeEach(async () => {
   await start();
 });
 afterEach(() => {
+  held = undefined;
   closeControlInstallation(installation);
   rmSync(root, { recursive: true, force: true });
 });
 
 const operation = { kind: "service.build", serviceId: "osrm" } as const;
 
-/** Admits an operation the way the agent does: its journal row, then its execution. */
-async function admit() {
+/** A new operation, before its first journal write. */
+function newJob(): JobRecord {
   const deadline = Date.now() + 60_000;
-  const job: JobRecord = {
+  return {
     ...persistedJob(operation, {
       operationId: `job1_${randomUUID().replaceAll("-", "")}`,
       operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
@@ -91,14 +130,21 @@ async function admit() {
     eventBytes: 0,
     eventsTruncated: false,
   };
-  await table.persist({ job, with: job });
-  table.add(job);
+}
+
+/** Writes a new operation's first journal row and adds it, as admission does. */
+const record = (job: JobRecord) => table.admit(job);
+
+/** Admits an operation the way the agent does: its journal row, then its execution. */
+async function admit() {
+  const job = newJob();
+  await record(job);
   const input = {
     execution: executionFor(job),
     operation,
     kind: operation.kind,
     admittedAt: job.admittedAt,
-    requestedDeadlineAt: deadline,
+    requestedDeadlineAt: job.requestedDeadlineAt,
     serviceIds: ["osrm"],
   };
   return { job, input, handle: await retainAdmittedControlExecution(installation, input) };
@@ -145,6 +191,47 @@ it("keeps an operation's execution on its journal row, durable before the effect
       await restoreAdmittedControlExecution(installation, executionFor(job)),
     ),
   ).toBe(true);
+});
+
+it("keeps a terminal write that another row's change raced, across a restart", async () => {
+  const first = await admit(),
+    second = await admit();
+  const { turn, release } = holdNextWrite();
+  const finishing = table.transition(first.job, "succeeded", {
+    result: { completed: true },
+    terminalAt: Date.now(),
+  });
+  await turn;
+  // The other job's effect starts while the terminal write is still in flight.
+  const starting = beginControlEffect(second.handle);
+  release();
+  await Promise.all([finishing, starting]);
+  closeControlInstallation(installation);
+  await start();
+  expect(table.byId.get(first.job.operationId)).toMatchObject({
+    state: "succeeded",
+    result: { completed: true },
+  });
+  expect(journalRow(second.job.operationKey)?.execution?.progress.effectStartedAt).toEqual(
+    expect.any(Number),
+  );
+});
+
+it("keeps a newly admitted job that another row's change raced, across a restart", async () => {
+  const running = await admit(),
+    job = newJob();
+  const { turn, release } = holdNextWrite();
+  const recording = record(job);
+  await turn;
+  const starting = beginControlEffect(running.handle);
+  release();
+  await Promise.all([recording, starting]);
+  closeControlInstallation(installation);
+  await start();
+  expect(table.byId.has(job.operationId)).toBe(true);
+  expect(journalRow(running.job.operationKey)?.execution?.progress.effectStartedAt).toEqual(
+    expect.any(Number),
+  );
 });
 
 it("refuses the same key with a different admission", async () => {

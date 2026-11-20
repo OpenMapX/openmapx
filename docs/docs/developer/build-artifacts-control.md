@@ -222,7 +222,13 @@ the execution row on it before the worker starts. Every later change to the
 execution row (the effect start, a child's binding and grant, cancellation, the
 settlement) is applied to the row in memory, so each later journal write carries
 it, and the change resolves only once a journal write with it is durable: the
-effect start is on disk before the first host effect. A held target refuses the
+effect start is on disk before the first host effect. Journal writes run one at a
+time through one queue, whether or not the writer holds the admission lock. Each
+builds its rows from memory when its turn comes, with its own change in place, and
+applies a change it alone carries (a new row, a terminal state, a removal) to
+memory once it is durable, before the next write builds. So a write never undoes
+an earlier one: an execution-row change made while a terminal write or a new
+admission is still in flight lands with that terminal or row, not over it. A held target refuses the
 operation before anything is recorded, with HTTP 409 and the error class `busy`;
 the message names the holder's executor, operation key, kind and state and points
 to `openmapx control status`.

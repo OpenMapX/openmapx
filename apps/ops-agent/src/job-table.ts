@@ -113,8 +113,8 @@ const recoveryRequired = (job: JobRecord) =>
 
 /**
  * The agent's operations: the journal rows and their in-memory events, the
- * handles their executions run under, the admission lock every journal write
- * takes, and the one transition that records a state.
+ * handles their executions run under, the admission lock, the one queue every
+ * journal write goes through, and the one transition that records a state.
  */
 export class JobTable<Observation = unknown> {
   readonly byId = new Map<string, JobRecord>();
@@ -129,6 +129,7 @@ export class JobTable<Observation = unknown> {
   /** Requests holding an execution slot, admission to settlement. */
   active = 0;
   private admissionTail = Promise.resolve();
+  private writeTail = Promise.resolve();
   private diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
   private diagnosticWriteActive = false;
   private readonly dirtyDiagnostics = new Set<string>();
@@ -176,20 +177,57 @@ export class JobTable<Observation = unknown> {
     }
   }
 
-  /** Writes every row, with `replacing` written in place of its row or added. */
-  async persist(replacing?: { job: JobRecord; with: JobRecord }): Promise<void> {
-    const rows = [...this.byId.values()].map((entry) =>
-      persisted(entry === replacing?.job ? replacing.with : entry),
-    );
-    if (replacing && !this.byId.has(replacing.job.operationId))
-      rows.push(persisted(replacing.with));
-    await this.options.journal.replace(rows);
+  /**
+   * Journal writes run one at a time, whether or not the caller holds the
+   * admission lock. Each builds its rows from memory when its turn comes, with
+   * its own change in place, and applies that change to memory once it is
+   * durable, before the next write builds. So every write carries the latest
+   * state of every row, and no write undoes one that went before it.
+   */
+  private write(
+    rows: (entries: JobRecord[]) => JobRecord[] = (entries) => entries,
+    durable: () => void = () => {},
+  ): Promise<void> {
+    const turn = this.writeTail.then(async () => {
+      await this.options.journal.replace(rows([...this.byId.values()]).map(persisted));
+      durable();
+    });
+    this.writeTail = turn.catch(() => undefined);
+    return turn;
   }
 
-  /** Adds an admitted row after its first journal write. */
-  add(job: JobRecord): void {
-    this.byId.set(job.operationId, job);
-    this.byKey.set(`${job.role}:${job.operationKey}`, job);
+  /** Writes every row as it is in memory. */
+  persist(): Promise<void> {
+    return this.write();
+  }
+
+  /** Writes an admitted row's first journal entry, and adds the row once it is durable. */
+  admit(job: JobRecord): Promise<void> {
+    return this.write(
+      (entries) => [...entries, job],
+      () => {
+        this.byId.set(job.operationId, job);
+        this.byKey.set(`${job.role}:${job.operationKey}`, job);
+      },
+    );
+  }
+
+  /** Writes the rows without `removed`, and drops those from memory once that is durable. */
+  private writeWithout(removed: (job: JobRecord) => boolean): Promise<void> {
+    let gone: JobRecord[] = [];
+    return this.write(
+      (entries) => {
+        gone = entries.filter(removed);
+        return entries.filter((job) => !gone.includes(job));
+      },
+      () => {
+        for (const job of gone) {
+          this.byId.delete(job.operationId);
+          this.byKey.delete(`${job.role}:${job.operationKey}`);
+          this.authorities.delete(job.operationId);
+        }
+      },
+    );
   }
 
   scheduleDiagnostics(job: JobRecord): void {
@@ -250,14 +288,8 @@ export class JobTable<Observation = unknown> {
 
   async prune(nowMs: number): Promise<void> {
     await this.withAdmissionLock(async () => {
-      const retained = [...this.byId.values()].filter((job) => this.retained(job, nowMs));
-      if (retained.length === this.byId.size) return;
-      await this.options.journal.replace(retained.map(persisted));
-      for (const [id, job] of this.byId)
-        if (!this.retained(job, nowMs)) {
-          this.byId.delete(id);
-          this.byKey.delete(`${job.role}:${job.operationKey}`);
-        }
+      if ([...this.byId.values()].every((job) => this.retained(job, nowMs))) return;
+      await this.writeWithout((job) => !this.retained(job, nowMs));
     });
   }
 
@@ -328,18 +360,9 @@ export class JobTable<Observation = unknown> {
       },
       remove: (keys) =>
         this.withAdmissionLock(async () => {
-          const removed = [...this.byId.values()].filter(
-            (job) => offered(job) && keys.includes(job.operationKey),
-          );
-          if (!removed.length) return;
-          await this.options.journal.replace(
-            [...this.byId.values()].filter((job) => !removed.includes(job)).map(persisted),
-          );
-          for (const job of removed) {
-            this.byId.delete(job.operationId);
-            this.byKey.delete(`${job.role}:${job.operationKey}`);
-            this.authorities.delete(job.operationId);
-          }
+          const removed = (job: JobRecord) => offered(job) && keys.includes(job.operationKey);
+          if (![...this.byId.values()].some(removed)) return;
+          await this.writeWithout(removed);
         }),
     };
   }
@@ -408,7 +431,7 @@ export class JobTable<Observation = unknown> {
     state: OpsJobState,
     updates: TransitionUpdates = {},
   ): Promise<void> {
-    const { now, journal, settlement } = this.options;
+    const { now, settlement } = this.options;
     // Slow containment and published reads happen before the lock.
     const observation =
       isTerminalState(state) && !this.final(job)
@@ -445,19 +468,21 @@ export class JobTable<Observation = unknown> {
             ...updates.failureResult,
           }),
         };
-      const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
       const dropFailure = state === "succeeded" && settlement.dropsFailureResultOnSuccess(job);
-      if (isTerminalState(state)) delete candidate.progressResult;
-      if (dropFailure) delete candidate.failureResult;
+      const apply = (entry: JobRecord): JobRecord => {
+        Object.assign(entry, updates);
+        if (isTerminalState(state)) delete entry.progressResult;
+        if (dropFailure) delete entry.failureResult;
+        entry.updatedAt = updatedAt;
+        entry.state = state;
+        return entry;
+      };
       await beforeWrite?.();
-      await journal.replace(
-        [...this.byId.values()].map((entry) => persisted(entry === job ? candidate : entry)),
+      // The row in memory changes only once the journal holds the new state.
+      await this.write(
+        (entries) => entries.map((entry) => (entry === job ? apply({ ...job }) : entry)),
+        () => apply(job),
       );
-      Object.assign(job, updates);
-      if (isTerminalState(state)) delete job.progressResult;
-      if (dropFailure) delete job.failureResult;
-      job.updatedAt = updatedAt;
-      job.state = state;
       if (handles.lease && isTerminalState(state)) {
         closeArtifactTargetLeaseHandle(handles.lease);
         this.leases.delete(job.operationId);
@@ -480,10 +505,11 @@ export class JobTable<Observation = unknown> {
   }
 
   /** Replaces a row with an outcome established at startup, then writes the journal. */
-  async restoreOutcome(job: JobRecord, outcome: Partial<JobRecord>): Promise<void> {
-    const restored: JobRecord = { ...job, ...outcome };
-    await this.persist({ job, with: restored });
-    Object.assign(job, restored);
+  restoreOutcome(job: JobRecord, outcome: Partial<JobRecord>): Promise<void> {
+    return this.write(
+      (entries) => entries.map((entry) => (entry === job ? { ...job, ...outcome } : entry)),
+      () => Object.assign(job, outcome),
+    );
   }
 
   admission(job: JobRecord): OpsAdmission {

@@ -731,14 +731,13 @@ export function createAdmission(options: {
             table.pushState(job, job.state);
           }
           try {
-            await table.persist({ job, with: job });
+            await table.admit(job);
           } catch (error) {
             // Nothing was recorded, so nothing ran under the lease.
             if (admittedLease && options.leaseStore)
               await abandonUnstartedLease(options.leaseStore, admittedLease, executionFor(job));
             throw error;
           }
-          table.add(job);
           if (planningRefusal) return { type: "refused", job } as const;
           if (rootAdmission) {
             try {
