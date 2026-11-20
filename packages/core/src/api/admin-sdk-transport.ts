@@ -18,7 +18,7 @@ export {
   operationErrorMessage as adminErrorMessage,
   unwrapOperationResponse as unwrapAdminResponse,
 } from "./operation-transport";
-export type AdminSdkRequestOptions = Omit<OperationRequestOptions, "maxDownloadBytes">;
+export type AdminSdkRequestOptions = OperationRequestOptions;
 export type AdminBinaryUploadRequestOptions = Omit<
   AdminSdkRequestOptions,
   "body" | "onTextChunk" | "keepalive"

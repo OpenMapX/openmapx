@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createApiClient } from "@openmapx/core";
-import { integrationAdminOperations } from "@openmapx/core/api-contracts";
+import { auditAdminOperations, integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -362,7 +362,10 @@ describe("actual integration producers through generated SDK", () => {
     const options = { client };
     const id = MOCK_INTEGRATION.id;
     try {
-      expect([...registered.keys()].sort()).toEqual(Object.keys(integrationAdminOperations).sort());
+      // The administration plugin also serves the audit log, owned by the service family.
+      expect([...registered.keys()].sort()).toEqual(
+        [...Object.keys(integrationAdminOperations), ...Object.keys(auditAdminOperations)].sort(),
+      );
       for (const [key, operation] of Object.entries(integrationAdminOperations))
         expect(registered.get(key)).toEqual({ method: operation.method, path: operation.path });
       const detail = await sdk.getAdminIntegration(id, options);

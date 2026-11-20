@@ -895,7 +895,10 @@ export class CoverageService {
     region: CoverageRegion,
     assessment: UsageAssessment,
     now: Date,
-  ): { capabilities: CapabilityResult[]; runtimeEvidence: Map<string, RuntimeEvidence> } {
+  ): {
+    capabilities: Array<CapabilityResult & { operationRights: RightsAssessmentSummary }>;
+    runtimeEvidence: Map<string, RuntimeEvidence>;
+  } {
     const runtimeEvidence = new Map<string, RuntimeEvidence>();
     const capabilities = OPERATION_DEFINITIONS.map((definition) => {
       let providers = collection.catalog.providers.filter(
@@ -975,9 +978,7 @@ export class CoverageService {
         collection.catalog,
       );
       const operationRights = assessUsageRights(selectedRights, assessment);
-      return { ...result, operationRights } as CapabilityResult & {
-        operationRights: RightsAssessmentSummary;
-      };
+      return { ...result, operationRights };
     });
     return { capabilities, runtimeEvidence };
   }
@@ -1106,16 +1107,17 @@ export class CoverageService {
     const now = this.now();
     const region = this.regionOrThrow(revision.collected, query.regionId);
     const evaluated = this.evaluateCapabilities(revision.collected, region, assessment, now);
-    const capabilities = evaluated.capabilities;
-    const operations = capabilities.map((capability) => ({
+    // The selected candidate's rights reach the wire through the operation summary only.
+    const capabilities = evaluated.capabilities.map(
+      ({ operationRights: _rights, ...capability }) => capability,
+    );
+    const operations = evaluated.capabilities.map((capability) => ({
       operationId: capability.operationId,
       label: COVERAGE_OPERATION_LABELS[capability.operationId],
       status: capability.status,
       reasons: capability.reasons,
       evidenceKeys: capability.evidenceKeys,
-      rights:
-        (capability as CapabilityResult & { operationRights?: RightsAssessmentSummary })
-          .operationRights ?? assessUsageRights([], assessment),
+      rights: capability.operationRights,
     }));
     const allSources = sourceRowsFor(revision.collected, region, assessment, now, query);
     const page = allSources.slice(offset, offset + limit);

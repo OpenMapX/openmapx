@@ -17,6 +17,7 @@ import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
 import { resolveSettingPrecedence } from "../utils/settings-resolution";
+import { registerServiceAdminRoute } from "./admin-service-contract";
 
 export async function adminSettingsRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
@@ -25,18 +26,14 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     request.adminSession = await requireAdmin(request);
   });
 
-  app.get("/admin/settings", async () => {
+  registerServiceAdminRoute(app, "getAdminSettings", async () => {
     const groups = await resolveSettings();
     return { groups };
   });
 
-  app.patch<{ Body: Record<string, unknown> }>("/admin/settings", async (request, reply) => {
+  registerServiceAdminRoute(app, "updateAdminSettings", async (request, reply) => {
     const adminSession = getAdminSession(request);
-
     const updates = request.body;
-    if (!updates || typeof updates !== "object") {
-      return reply.status(400).send({ error: "Body must be an object of { key: value } pairs" });
-    }
 
     const allowedKeys = new Set(
       SETTING_DEFS.filter((d) => {
@@ -121,9 +118,9 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     };
   });
 
-  app.post(
-    "/admin/settings/test-email",
-    { preHandler: [emailTestLimit.preHandler()] },
+  registerServiceAdminRoute(
+    app,
+    "sendAdminTestEmail",
     async (request, reply) => {
       const adminSession = getAdminSession(request);
 
@@ -202,25 +199,11 @@ export async function adminSettingsRoute(app: FastifyInstance) {
         });
       }
     },
+    { preHandler: [emailTestLimit.preHandler()] },
   );
 
-  app.get("/admin/logs", async (request) => {
-    const {
-      level,
-      source,
-      search,
-      since,
-      limit = "100",
-      offset = "0",
-    } = request.query as {
-      level?: string;
-      source?: string;
-      search?: string;
-      since?: string;
-      limit?: string;
-      offset?: string;
-    };
-
+  registerServiceAdminRoute(app, "listAdminLogs", async (request) => {
+    const { level, source, search, since, limit = "100", offset = "0" } = request.query;
     const result = appLogger.getEntries({
       level,
       source,
@@ -229,10 +212,6 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       limit: Math.min(Number(limit), 500),
       offset: Number(offset),
     });
-
-    return {
-      ...result,
-      sources: appLogger.getSources(),
-    };
+    return { ...result, sources: appLogger.getSources() };
   });
 }

@@ -338,16 +338,60 @@ describe("PATCH /admin/settings", () => {
   });
 });
 
+describe("POST /admin/settings/test-email", () => {
+  const smtp = { provider: "smtp", from: "maps@example.test", smtp: { host: "mail.example.test" } };
+
+  it("sends through the configured provider and reports the recipient", async () => {
+    mockLoadEmailConfig.mockResolvedValueOnce(smtp);
+    const res = await app.inject({ method: "POST", url: "/admin/settings/test-email" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      ok: true,
+      message: `Test email sent to ${fakeSession.user.email} via smtp`,
+    });
+    expect(mockSendViaSmtp).toHaveBeenCalledOnce();
+  });
+
+  it("names the missing provider input before sending", async () => {
+    mockLoadEmailConfig.mockResolvedValueOnce({ ...smtp, smtp: { host: "" } });
+    const res = await app.inject({ method: "POST", url: "/admin/settings/test-email" });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "SMTP host is not configured" });
+    expect(mockSendViaSmtp).not.toHaveBeenCalled();
+  });
+
+  it("keeps the provider's failure detail in the reply", async () => {
+    mockLoadEmailConfig.mockResolvedValueOnce(smtp);
+    mockSendViaSmtp.mockRejectedValueOnce(new Error("connection refused"));
+    const res = await app.inject({ method: "POST", url: "/admin/settings/test-email" });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({
+      error: "Failed to send test email",
+      details: "connection refused",
+    });
+  });
+});
+
 describe("GET /admin/logs", () => {
   it("returns entries and sources from appLogger", async () => {
-    mockGetEntries.mockReturnValueOnce({ entries: [{ id: "log-1", level: "info" }], total: 1 });
+    mockGetEntries.mockReturnValueOnce({
+      entries: [
+        { id: 1, level: "info", source: "api", msg: "started", time: 1, metadata: { port: 3001 } },
+      ],
+      total: 1,
+    });
     mockGetSources.mockReturnValueOnce(["api", "admin"]);
 
     const res = await app.inject({ method: "GET", url: "/admin/logs" });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.entries).toHaveLength(1);
+    expect(body.entries).toEqual([
+      { id: 1, level: "info", source: "api", msg: "started", time: 1, metadata: { port: 3001 } },
+    ]);
     expect(body.sources).toEqual(["api", "admin"]);
     expect(body.total).toBe(1);
   });

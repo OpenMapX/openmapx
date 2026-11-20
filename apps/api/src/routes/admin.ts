@@ -8,6 +8,7 @@ import { declareRouteAuth } from "../utils/route-auth.js";
 import { adminIntegrationCredentialsRoute } from "./admin-integration-credentials";
 import { adminIntegrationsRoute } from "./admin-integrations";
 import { adminOverviewRoute } from "./admin-overview";
+import { registerServiceAdminRoute } from "./admin-service-contract";
 
 interface AuditFilters {
   action?: string;
@@ -58,23 +59,8 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
   await app.register(adminIntegrationsRoute);
   await app.register(adminIntegrationCredentialsRoute);
 
-  app.get("/admin/audit", async (request) => {
-    const {
-      action,
-      targetType,
-      targetId,
-      actorId,
-      limit = "50",
-      offset = "0",
-    } = request.query as {
-      action?: string;
-      targetType?: string;
-      targetId?: string;
-      actorId?: string;
-      limit?: string;
-      offset?: string;
-    };
-
+  registerServiceAdminRoute(app, "listAdminAuditLog", async (request) => {
+    const { action, targetType, targetId, actorId, limit = "50", offset = "0" } = request.query;
     const where = buildAuditQuery({ action, targetType, targetId, actorId });
     const [entries, [countRow]] = await Promise.all([
       db
@@ -96,15 +82,8 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/admin/audit/export", async (request, reply) => {
-    const { format, action, targetType, targetId, actorId } = request.query as {
-      format?: string;
-      action?: string;
-      targetType?: string;
-      targetId?: string;
-      actorId?: string;
-    };
-
+  registerServiceAdminRoute(app, "exportAdminAuditLog", async (request, reply) => {
+    const { format, action, targetType, targetId, actorId } = request.query;
     const where = buildAuditQuery({ action, targetType, targetId, actorId });
     // Fetch one more than the cap so we can detect (and flag) truncation.
     const rows = await db

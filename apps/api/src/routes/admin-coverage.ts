@@ -18,6 +18,7 @@ import {
 } from "../services/coverage/service.js";
 import { requireAdmin } from "../utils/require-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { registerServiceAdminRoute } from "./admin-service-contract";
 
 const MAX_REGION_ID = 256;
 const MAX_SOURCE_KEY = 512;
@@ -174,26 +175,6 @@ function parseSourceQuery(query: CoverageQuerystring): CoverageSourceQuery {
   };
 }
 
-function querySchema(properties: Record<string, Record<string, unknown>>, required: string[] = []) {
-  return {
-    type: "object",
-    additionalProperties: false,
-    ...(required.length > 0 ? { required } : {}),
-    properties,
-  };
-}
-
-const commonQueryProperties = {
-  snapshotId: {
-    type: "string",
-    minLength: 1,
-    maxLength: MAX_SNAPSHOT_ID,
-    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-  },
-  offset: { type: "string", pattern: "^[0-9]+$", maxLength: 8 },
-  limit: { type: "string", pattern: "^[0-9]+$", maxLength: 3 },
-};
-
 export const adminCoverageRoute: FastifyPluginAsync<AdminCoverageRouteOptions> = async (
   app,
   options,
@@ -205,77 +186,32 @@ export const adminCoverageRoute: FastifyPluginAsync<AdminCoverageRouteOptions> =
 
   const service = options.coverageService ?? createCoverageService(options);
 
-  app.get<{ Querystring: CoverageQuerystring }>(
-    "/admin/coverage/regions",
-    {
-      schema: {
-        querystring: querySchema({
-          ...commonQueryProperties,
-          search: { type: "string", minLength: 1, maxLength: MAX_SEARCH },
-        }),
-      },
-    },
-    async (request, reply) => {
-      applyNoStore(reply);
-      try {
-        return await service.regions(parseRegionsQuery(request.query));
-      } catch (error) {
-        return sendCoverageError(reply, error);
-      }
-    },
-  );
+  registerServiceAdminRoute(app, "listAdminCoverageRegions", async (request, reply) => {
+    applyNoStore(reply);
+    try {
+      return await service.regions(parseRegionsQuery(request.query));
+    } catch (error) {
+      return sendCoverageError(reply, error);
+    }
+  });
 
-  app.get<{ Querystring: CoverageQuerystring }>(
-    "/admin/coverage",
-    {
-      schema: {
-        querystring: querySchema(
-          {
-            ...commonQueryProperties,
-            regionId: { type: "string", minLength: 1, maxLength: MAX_REGION_ID },
-            domain: { type: "string", enum: [...COVERAGE_DOMAINS] },
-            attention: { type: "string", enum: ["true", "false"] },
-            enabled: { type: "string", enum: ["all", "true", "false"] },
-            assessment: { type: "string", enum: [...ASSESSMENTS] },
-          },
-          ["regionId"],
-        ),
-      },
-    },
-    async (request, reply) => {
-      applyNoStore(reply);
-      try {
-        return await service.report(parseReportQuery(request.query));
-      } catch (error) {
-        return sendCoverageError(reply, error);
-      }
-    },
-  );
+  registerServiceAdminRoute(app, "getAdminCoverageReport", async (request, reply) => {
+    applyNoStore(reply);
+    try {
+      return await service.report(parseReportQuery(request.query));
+    } catch (error) {
+      return sendCoverageError(reply, error);
+    }
+  });
 
-  app.get<{ Querystring: CoverageQuerystring }>(
-    "/admin/coverage/source",
-    {
-      schema: {
-        querystring: querySchema(
-          {
-            key: { type: "string", minLength: 1, maxLength: MAX_SOURCE_KEY },
-            regionId: { type: "string", minLength: 1, maxLength: MAX_REGION_ID },
-            snapshotId: commonQueryProperties.snapshotId,
-            assessment: { type: "string", enum: [...ASSESSMENTS] },
-          },
-          ["key", "regionId"],
-        ),
-      },
-    },
-    async (request, reply) => {
-      applyNoStore(reply);
-      try {
-        return await service.source(parseSourceQuery(request.query));
-      } catch (error) {
-        return sendCoverageError(reply, error);
-      }
-    },
-  );
+  registerServiceAdminRoute(app, "getAdminCoverageSource", async (request, reply) => {
+    applyNoStore(reply);
+    try {
+      return await service.source(parseSourceQuery(request.query));
+    } catch (error) {
+      return sendCoverageError(reply, error);
+    }
+  });
 };
 
 export type { CoverageDomain, UsageAssessment };

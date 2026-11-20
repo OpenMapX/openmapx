@@ -1,6 +1,6 @@
 import z from "zod/v4";
 import { httpErrorSchema } from "../../services/data-manager/contracts/common";
-import type { ApiOperation, ApiResponseContract } from "./operation";
+import type { ApiOperation } from "./operation";
 
 export { httpErrorSchema };
 export const adminTimestampSchema = z.iso.datetime({ offset: true });
@@ -64,9 +64,7 @@ export const adminCommonResponses = {
   429: adminJson(adminRateLimitSchema, z.object({ "retry-after": z.string().regex(/^\d+$/) })),
   500: adminJson(httpErrorSchema),
 } as const;
-/** Administration operations use every portable response kind except session text downloads. */
-export type AdminResponseContract = Exclude<ApiResponseContract, { kind: "text-download" }>;
+/** Administration operations narrow the portable contract to administrator authentication. */
 export interface AdminOperation extends ApiOperation {
   auth: "service" | "admin";
-  responses: Record<number, AdminResponseContract>;
 }

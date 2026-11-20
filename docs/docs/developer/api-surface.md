@@ -542,6 +542,21 @@ without proving terminal completion. Handle expected status variants before
 unwrapping a response. Do not convert an unknown host outcome into a successful
 retry or rollback.
 
+The family also owns system settings and the test email, the application log
+buffer, the audit log and its export, system maintenance status and admission,
+and the coverage report: `getAdminSettings`, `updateAdminSettings`,
+`sendAdminTestEmail`, `listAdminLogs`, `listAdminAuditLog`, `exportAdminAuditLog`,
+`getAdminSystemStatus`, `checkAdminSystemUpdates`, `applyAdminSystemUpdate`,
+`runAdminSystemDiagnostics`, `listAdminCoverageRegions`, `getAdminCoverageReport`
+and `getAdminCoverageSource`. Their reply schemas are strict: a field the
+producer adds must be declared in the contract before it reaches the browser.
+Configured secret settings always read as `***`. The audit export is a
+`text-download` whose `format` query selects CSV or JSON; the browser downloads
+it by navigating to the generated URL. Coverage failures carry their stable code,
+such as `snapshot_expired`, in `error`. Maintenance admission answers 409 either
+with the active job's ID or with the deployment state when host maintenance is
+unavailable.
+
 `streamAdminServiceLogs` uses a bounded text-stream transport rather than JSON
 validation. The caller owns cancellation, consumption and release. The separate
 Activity observer owns accepted-job terminal effects; log closure alone cannot

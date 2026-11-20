@@ -25,3 +25,4 @@ export * from "./generated/admin/extension-admin.generated";
 export * from "./generated/admin/integration-admin.generated";
 export * from "./generated/admin/privacy-admin.generated";
 export * from "./generated/admin/service-admin.generated";
+export { ApiContractError } from "./sdk-transport";

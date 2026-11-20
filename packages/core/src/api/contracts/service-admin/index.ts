@@ -5,9 +5,17 @@ export * from "./backup-maintenance";
 
 export * from "./release-controls";
 
+import { auditAdminOperations } from "./audit";
 import { cacheAdminOperations } from "./cache";
+import { coverageAdminOperations } from "./coverage";
+import { settingsAdminOperations } from "./settings";
+import { systemAdminOperations } from "./system";
 
+export * from "./audit";
 export * from "./cache";
+export * from "./coverage";
+export * from "./settings";
+export * from "./system";
 
 import { artifactTransferAdminOperations } from "./artifact-transfers";
 import { platformAdminOperations } from "./platform";
@@ -95,6 +103,10 @@ export const serviceAdminOperations = {
   ...releaseControlAdminOperations,
   ...backupMaintenanceAdminOperations,
   ...cacheAdminOperations,
+  ...settingsAdminOperations,
+  ...auditAdminOperations,
+  ...systemAdminOperations,
+  ...coverageAdminOperations,
   ...artifactTransferAdminOperations,
   ...platformAdminOperations,
   listAdminServicePresets: {
