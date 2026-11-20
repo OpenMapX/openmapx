@@ -22,6 +22,11 @@ function mockOk(data: unknown) {
   return data;
 }
 
+const at = (time: string, latitude = 50.9, longitude = 6.9) => ({
+  time,
+  position: { latitude, longitude },
+});
+
 describe("parseDuration", () => {
   it.each<[string | undefined, number]>([
     ["PT1H23M40S", 5020],
@@ -120,10 +125,29 @@ describe("mapLeg", () => {
   it("falls back to rail mode for an unknown transit category", () => {
     const leg = mapLeg({
       type: "JOURNEY",
+      departure: at("2026-03-10T10:00:00Z"),
+      arrival: at("2026-03-10T10:30:00Z", 51, 7),
       transport: { category: "UNKNOWN_THING", number: "42" },
     } satisfies LegInput);
     expect(leg?.mode).toBe("rail");
     expect(leg?.route).toEqual({ shortName: "42", longName: "" });
+  });
+
+  it.each([
+    ["an end without a position", { departure: { time: "2026-03-10T10:00:00Z" } }],
+    [
+      "an end outside the coordinate range",
+      { departure: { time: "2026-03-10T10:00:00Z", position: { latitude: 95, longitude: 6 } } },
+    ],
+    ["an end without a time", { departure: { position: { latitude: 50, longitude: 6 } } }],
+  ])("refuses a leg with %s instead of placing it at 0° N 0° E", (_label, departure) => {
+    expect(
+      mapLeg({
+        type: "JOURNEY",
+        ...departure,
+        arrival: at("2026-03-10T10:30:00Z"),
+      } as LegInput),
+    ).toBeNull();
   });
 });
 
@@ -133,25 +157,25 @@ describe("mapTrip", () => {
       legs: [
         {
           type: "JOURNEY",
-          departure: { time: "2026-03-10T10:00:00Z" },
-          arrival: { time: "2026-03-10T10:30:00Z" },
+          departure: at("2026-03-10T10:00:00Z"),
+          arrival: at("2026-03-10T10:30:00Z"),
           transport: { category: "REGIONAL_TRAIN", line: "RE1" },
         },
         {
           type: "JOURNEY",
-          departure: { time: "2026-03-10T10:35:00Z" },
-          arrival: { time: "2026-03-10T11:00:00Z" },
+          departure: at("2026-03-10T10:35:00Z"),
+          arrival: at("2026-03-10T11:00:00Z"),
           transport: { category: "SUBWAY", line: "U1" },
         },
       ],
     };
 
     const itinerary = mapTrip(trip);
-    expect(itinerary.startTime).toBe("2026-03-10T10:00:00Z");
-    expect(itinerary.endTime).toBe("2026-03-10T11:00:00Z");
-    expect(itinerary.duration).toBe(3600);
-    expect(itinerary.transfers).toBe(1);
-    expect(itinerary.legs).toHaveLength(2);
+    expect(itinerary?.startTime).toBe("2026-03-10T10:00:00Z");
+    expect(itinerary?.endTime).toBe("2026-03-10T11:00:00Z");
+    expect(itinerary?.duration).toBe(3600);
+    expect(itinerary?.transfers).toBe(1);
+    expect(itinerary?.legs).toHaveLength(2);
   });
 
   it("estimates walk distance from walk-leg durations and skips CONNECT legs", () => {
@@ -161,8 +185,8 @@ describe("mapTrip", () => {
         {
           type: "WALK",
           duration: "PT12M",
-          origin: { time: "2026-03-10T10:00:00Z", position: { latitude: 0, longitude: 0 } },
-          destination: { time: "2026-03-10T10:12:00Z", position: { latitude: 0, longitude: 0 } },
+          origin: at("2026-03-10T10:00:00Z"),
+          destination: at("2026-03-10T10:12:00Z"),
         },
         { type: "CONNECT" },
       ],
@@ -170,23 +194,47 @@ describe("mapTrip", () => {
 
     const itinerary = mapTrip(trip);
     // 12 min at 5 km/h ≈ 1000 m.
-    expect(itinerary.walkDistance).toBe(1000);
-    expect(itinerary.transfers).toBe(0);
-    expect(itinerary.legs).toHaveLength(1);
+    expect(itinerary?.walkDistance).toBe(1000);
+    expect(itinerary?.transfers).toBe(0);
+    expect(itinerary?.legs).toHaveLength(1);
   });
 
-  it("falls back to the trip-level ISO duration when no leg times are present", () => {
-    const itinerary = mapTrip({ duration: "PT15M", legs: [{ type: "WALK" }] });
-    expect(itinerary.duration).toBe(900);
+  it("falls back to the trip-level ISO duration when the leg times give none", () => {
+    const sameTime = at("2026-03-10T10:00:00Z");
+    const itinerary = mapTrip({
+      duration: "PT15M",
+      legs: [{ type: "WALK", origin: sameTime, destination: sameTime }],
+    });
+    expect(itinerary?.duration).toBe(900);
   });
 
   it("uses fixed day/fractional durations for fallback travel time and walk distance", () => {
+    const sameTime = at("2026-03-10T10:00:00Z");
     const itinerary = mapTrip({
       duration: "P1DT2H",
-      legs: [{ type: "WALK", duration: "PT1M0.5S" }],
+      legs: [{ type: "WALK", duration: "PT1M0.5S", origin: sameTime, destination: sameTime }],
     });
-    expect(itinerary.duration).toBe(93600);
-    expect(itinerary.walkDistance).toBe(84);
+    expect(itinerary?.duration).toBe(93600);
+    expect(itinerary?.walkDistance).toBe(84);
+  });
+
+  it("refuses a trip with a leg that cannot be placed", () => {
+    expect(
+      mapTrip({
+        legs: [
+          {
+            type: "WALK",
+            origin: at("2026-03-10T10:00:00Z"),
+            destination: at("2026-03-10T10:05:00Z"),
+          },
+          {
+            type: "JOURNEY",
+            departure: { time: "2026-03-10T10:06:00Z" },
+            arrival: at("2026-03-10T10:30:00Z"),
+          },
+        ],
+      }),
+    ).toBeNull();
   });
 });
 
@@ -245,6 +293,28 @@ describe("planJourney", () => {
     expect(plan?.itineraries).toHaveLength(1);
     const body = transport.calls[0]?.body;
     expect(body).toMatchObject({ provider: "HAFAS", departureTime: "2026-03-10T10:00" });
+  });
+
+  it("plans with the trips it can place and leaves out the rest", async () => {
+    const leg = (departure: Record<string, unknown>) => ({
+      type: "JOURNEY",
+      departure,
+      arrival: at("2026-03-10T11:00:00Z", 50.1, 8.6),
+      transport: { category: "HIGH_SPEED_TRAIN", line: "ICE 521" },
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        trips: [
+          { legs: [leg({ name: "Nowhere", time: "2026-03-10T10:00:00Z" })] },
+          { legs: [leg({ name: "Köln Hbf", ...at("2026-03-10T10:05:00Z") })] },
+        ],
+      }),
+    );
+
+    const plan = await planJourney(risClient, 50.9, 6.9, 50.1, 8.6, "2026-03-10", "10:00");
+
+    expect(plan?.itineraries).toHaveLength(1);
+    expect(plan?.from).toEqual({ name: "Köln Hbf", lat: 50.9, lng: 6.9 });
   });
 
   it("returns null when the routing response has no trips", async () => {

@@ -122,28 +122,43 @@ export function mapLang(lang?: string): string {
 
 // Leg mapping
 
+/** An event's position, or null when RIS gave none in range. */
+function eventPosition(event?: RisStopEvent): { lat: number; lng: number } | null {
+  const lat = event?.position?.latitude;
+  const lng = event?.position?.longitude;
+  return typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+    ? { lat, lng }
+    : null;
+}
+
 function makeGeometry(
-  polyline?: string,
-  from?: RisStopEvent,
-  to?: RisStopEvent,
+  polyline: string | undefined,
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
 ): GeoJSONLineString {
   if (polyline) {
     const coords = decodePolyline(polyline, 5);
     if (coords.length >= 2) return { type: "LineString", coordinates: coords };
   }
   // Straight line fallback
-  const fromPos = from?.position ?? { latitude: 0, longitude: 0 };
-  const toPos = to?.position ?? { latitude: 0, longitude: 0 };
   return {
     type: "LineString",
     coordinates: [
-      [fromPos.longitude, fromPos.latitude],
-      [toPos.longitude, toPos.latitude],
+      [from.lng, from.lat],
+      [to.lng, to.lat],
     ],
   };
 }
 
-function resolveStopEvent(event?: RisStopEvent): {
+function resolveStopEvent(
+  event: RisStopEvent | undefined,
+  at: { lat: number; lng: number },
+): {
   name: string;
   lat: number;
   lng: number;
@@ -151,12 +166,16 @@ function resolveStopEvent(event?: RisStopEvent): {
 } {
   return {
     name: event?.name ?? "",
-    lat: event?.position?.latitude ?? 0,
-    lng: event?.position?.longitude ?? 0,
+    lat: at.lat,
+    lng: at.lng,
     stopId: event?.evaNumber ? `${PREFIX}${event.evaNumber}` : undefined,
   };
 }
 
+/**
+ * A trip leg, or null for a CONNECT leg (a transfer evaluation, not a leg to
+ * draw) and for a leg whose ends RIS did not place or time.
+ */
 export function mapLeg(leg: RisLeg): TripLeg | null {
   // Skip CONNECT legs (transfer evaluation entries, not visual legs)
   if (leg.type === "CONNECT") return null;
@@ -164,17 +183,22 @@ export function mapLeg(leg: RisLeg): TripLeg | null {
   const isTransit = leg.type === "JOURNEY";
   const origin = leg.departure ?? leg.origin;
   const dest = leg.arrival ?? leg.destination;
+  const from = eventPosition(origin);
+  const to = eventPosition(dest);
+  const startTime = origin?.time ?? origin?.timeSchedule;
+  const endTime = dest?.time ?? dest?.timeSchedule;
+  if (!from || !to || !startTime || !endTime) return null;
   const mode: TransportMode = isTransit
     ? (CATEGORY_MODE[leg.transport?.category ?? ""] ?? "rail")
     : "walking";
 
   const result: TripLeg = {
     mode,
-    startTime: origin?.time ?? origin?.timeSchedule ?? "",
-    endTime: dest?.time ?? dest?.timeSchedule ?? "",
-    from: resolveStopEvent(origin),
-    to: resolveStopEvent(dest),
-    geometry: makeGeometry(leg.polyline, origin, dest),
+    startTime,
+    endTime,
+    from: resolveStopEvent(origin, from),
+    to: resolveStopEvent(dest, to),
+    geometry: makeGeometry(leg.polyline, from, to),
   };
 
   if (isTransit && leg.transport) {
@@ -193,8 +217,16 @@ export function mapLeg(leg: RisLeg): TripLeg | null {
   return result;
 }
 
-export function mapTrip(trip: RisTrip): TripItinerary {
-  const legs = (trip.legs ?? []).map(mapLeg).filter((l): l is TripLeg => l !== null);
+/** An itinerary, or null when a leg other than a CONNECT cannot be placed or timed. */
+export function mapTrip(trip: RisTrip): TripItinerary | null {
+  const legs: TripLeg[] = [];
+  for (const raw of trip.legs ?? []) {
+    if (raw.type === "CONNECT") continue;
+    const leg = mapLeg(raw);
+    if (!leg) return null;
+    legs.push(leg);
+  }
+  if (legs.length === 0) return null;
   const startTime = legs[0]?.startTime ?? "";
   const endTime = legs[legs.length - 1]?.endTime ?? "";
   const durationMs =
@@ -300,7 +332,8 @@ export async function planJourney(
       if (trips.length === 0) break;
 
       for (const trip of trips) {
-        allItineraries.push(mapTrip(trip));
+        const itinerary = mapTrip(trip);
+        if (itinerary) allItineraries.push(itinerary);
       }
 
       navContext = res.navigationContext;
