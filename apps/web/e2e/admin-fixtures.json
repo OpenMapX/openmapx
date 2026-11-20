@@ -61,16 +61,16 @@
     },
     "attention": [
       {
-        "type": "integration",
+        "type": "health_check_failed",
         "severity": "error",
-        "message": "Weather provider failed its last health check.",
-        "target": "/admin/integrations/weather-open-meteo"
+        "message": "Open-Meteo weather health check failing: timeout",
+        "target": "weather-open-meteo"
       },
       {
-        "type": "credentials",
-        "severity": "warning",
-        "message": "Two integrations are missing credentials.",
-        "target": "/admin/integrations"
+        "type": "service_unhealthy",
+        "severity": "error",
+        "message": "Docker service \"photon\" is unhealthy",
+        "target": "photon"
       }
     ],
     "recentActivity": [
@@ -1402,7 +1402,7 @@
       }
     ],
     "release": {
-      "configuredSelector": "stable",
+      "configuredSelector": "main",
       "currentReleaseId": "2026.11.1",
       "availableReleaseId": "2026.11.2",
       "currentVersion": "2026.11.1",
@@ -1937,6 +1937,80 @@
       "reasons": {
         "export": "identity-required"
       }
+    }
+  },
+  "/api/admin/platform/configuration": {
+    "expectedCurrentRevisionId": "cfg1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "configuration": {
+      "version": 1,
+      "domain": {
+        "source": "host"
+      },
+      "acmeEmail": {
+        "source": "database",
+        "value": "ops@example.test"
+      },
+      "releaseSelector": {
+        "source": "database",
+        "value": "main"
+      },
+      "defaultRegion": {
+        "source": "host"
+      },
+      "backupRetentionDays": {
+        "source": "database",
+        "value": 30
+      }
+    },
+    "values": {
+      "domain": "maps.example.test",
+      "acmeEmail": "ops@example.test",
+      "releaseSelector": "main",
+      "defaultRegion": "europe/germany/berlin",
+      "backupRetentionDays": 30
+    },
+    "sources": {
+      "domain": "host",
+      "acmeEmail": "database",
+      "releaseSelector": "database",
+      "defaultRegion": "host",
+      "backupRetentionDays": "database"
+    },
+    "pending": []
+  },
+  "/api/admin/coverage": {
+    "schemaVersion": 1,
+    "snapshotId": "snapshot-fixture",
+    "generatedAt": "2026-11-19T08:00:00.000Z",
+    "evaluatedAt": "2026-11-19T08:00:00.000Z",
+    "collectionStatus": "complete",
+    "collectionAgeSeconds": 840,
+    "warnings": [],
+    "authorities": [],
+    "region": {
+      "key": "extract:berlin",
+      "label": "Berlin",
+      "kind": "extract"
+    },
+    "summary": [],
+    "capabilities": [],
+    "operations": [],
+    "sources": [],
+    "sourcePagination": {
+      "offset": 0,
+      "limit": 50,
+      "total": 0,
+      "hasMore": false,
+      "snapshotId": "snapshot-fixture"
+    },
+    "totalSourceCount": 0,
+    "unassignedSourceCount": 1,
+    "assessment": "operational",
+    "nextDeadlineAt": null,
+    "policy": {
+      "effectiveSourcePolicy": "permissive",
+      "gatedSourceCount": 0,
+      "gatedIntegrationCount": 0
     }
   }
 }

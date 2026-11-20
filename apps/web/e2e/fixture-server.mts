@@ -312,7 +312,8 @@ function send(
   const allowedOrigin = request.headers.origin;
   response.writeHead(status, {
     "content-type": contentType,
-    "cache-control": "no-store",
+    // What the admin API sends; contracts such as coverage require it.
+    "cache-control": "private, no-store",
     ...(allowedOrigin
       ? {
           "access-control-allow-origin": allowedOrigin,
