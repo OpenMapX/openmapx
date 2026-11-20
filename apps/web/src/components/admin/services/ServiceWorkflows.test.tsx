@@ -986,11 +986,11 @@ describe("wire intent, validation, polling and policy", () => {
       );
       mount(<DataWorkspace topic="osm" />);
       await act(async () => vi.advanceTimersByTimeAsync(1));
-      expect(screen.getByText("poll-1")).toBeInTheDocument();
+      expect(screen.getByText(/^poll-1 · /)).toBeInTheDocument();
       await act(async () => vi.advanceTimersByTimeAsync(29_999));
-      expect(screen.queryByText("poll-2")).toBeNull();
+      expect(screen.queryByText(/^poll-2 · /)).toBeNull();
       await act(async () => vi.advanceTimersByTimeAsync(1));
-      expect(screen.getByText("poll-2")).toBeInTheDocument();
+      expect(screen.getByText(/^poll-2 · /)).toBeInTheDocument();
     } finally {
       cleanup();
       vi.useRealTimers();

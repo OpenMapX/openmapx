@@ -22,6 +22,7 @@ import type { OvertureRecoveryStatus, OvertureStatus } from "@openmapx/core/api-
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
@@ -136,6 +137,7 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
 }
 function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const t = useAdminTranslations("adminServices");
+  const format = useAdminFormat();
   const operationLabels: Record<Operation, string> = {
     "overture-sync": t("overtureSync"),
     "overture-conflate": t("overtureConflate"),
@@ -328,9 +330,9 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
           {[
             [t("release"), status.release ?? "—"],
             [t("region"), status.region ?? "—"],
-            [t("places"), status.placeCount?.toLocaleString() ?? "—"],
-            [t("linked"), status.linkedCount?.toLocaleString() ?? "—"],
-            [t("attempts"), String(status.attemptCount ?? "—")],
+            [t("places"), status.placeCount == null ? "—" : format.number(status.placeCount)],
+            [t("linked"), status.linkedCount == null ? "—" : format.number(status.linkedCount)],
+            [t("attempts"), status.attemptCount == null ? "—" : format.number(status.attemptCount)],
           ].map(([label, value]) => (
             <Box key={label}>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>

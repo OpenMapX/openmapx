@@ -15,6 +15,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 
@@ -28,6 +29,7 @@ export function TransitSyncDialog(props: Props) {
 }
 function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
   const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const tCommon = useTranslations("common");
   const alive = useRef(true);
   useEffect(() => {
@@ -188,8 +190,8 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
               </Typography>
               <Typography>
                 {t("diskEstimate", {
-                  required: Math.ceil(preview.result.estimate.requiredDiskBytes / 1024 ** 3),
-                  available: Math.floor(preview.result.capacity.freeDiskBytes / 1024 ** 3),
+                  required: format.bytes(preview.result.estimate.requiredDiskBytes),
+                  available: format.bytes(preview.result.capacity.freeDiskBytes),
                 })}
               </Typography>
               {preview.result.blockers.map((reason) => (

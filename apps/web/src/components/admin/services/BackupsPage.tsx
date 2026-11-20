@@ -35,12 +35,12 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { serviceAdminQueries, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationKey, useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
-import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -64,6 +64,7 @@ export function BackupsPage() {
 }
 function BackupsView() {
   const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient();
   const register = useServiceJobRegistration();
@@ -366,11 +367,11 @@ function BackupsView() {
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        {new Date(backup.createdAt).toLocaleString()}
+                        {format.dateTime(backup.createdAt)}
                         {backup.expiresAt && (
                           <Typography variant="caption" sx={{ display: "block" }}>
                             {t("expiresAt", {
-                              expiresAt: new Date(backup.expiresAt).toLocaleString(),
+                              expiresAt: format.dateTime(backup.expiresAt),
                             })}
                           </Typography>
                         )}
@@ -380,7 +381,9 @@ function BackupsView() {
                       </TableCell>
                       <TableCell>{backup.corrupt ? "—" : backup.serviceCount}</TableCell>
                       <TableCell>{backup.corrupt ? "—" : backup.volumeCount}</TableCell>
-                      <TableCell>{backup.corrupt ? "—" : formatBytes(backup.totalBytes)}</TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : format.bytes(backup.totalBytes)}
+                      </TableCell>
                       <TableCell align="right">
                         <Stack
                           direction="row"

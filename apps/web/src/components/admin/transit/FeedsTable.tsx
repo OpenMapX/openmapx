@@ -18,7 +18,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
-import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { type TransitStateSummary, useTransitFeeds } from "@/lib/admin/transitHooks";
 
 const PAGE_SIZE = 50;
@@ -41,6 +41,7 @@ function validationColor(v: string | null): "default" | "success" | "warning" | 
 
 export function FeedsTable({ state }: { state: TransitStateSummary }) {
   const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const tShared = useTranslations("adminShared");
   const [region, setRegion] = useState<string>("");
   const [status, setStatus] = useState<string>("");
@@ -205,8 +206,8 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                       "—"
                     )}
                   </TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(feed.lastFetchedAt)}</TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(feed.lastImportedAt)}</TableCell>
+                  <TableCell>{format.timestamp(feed.lastFetchedAt)}</TableCell>
+                  <TableCell>{format.timestamp(feed.lastImportedAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

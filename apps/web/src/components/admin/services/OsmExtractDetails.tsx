@@ -5,6 +5,7 @@ import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceData } from "@openmapx/core/api-contracts";
 import { useLocale } from "next-intl";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 
 type OsmExtract = NonNullable<AdminServiceData["osmExtract"]>;
@@ -29,16 +30,6 @@ export function extractAge(
   return format.format(-Math.floor(elapsed / DAY_MS), "day");
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 /**
  * When the OSM extract's data is current to, from the file's own header, and
  * the diff feed that continues it. Download time says nothing about this: a
@@ -53,6 +44,7 @@ export function OsmExtractDetails({
 }) {
   const t = useAdminTranslations("adminServices");
   const locale = useLocale();
+  const format = useAdminFormat();
   if (!extract) {
     return (
       <Box>
@@ -73,7 +65,10 @@ export function OsmExtractDetails({
           {t("dataAsOf")}
         </Typography>
         <Typography variant="body2">
-          {formatDate(extract.timestamp)} ({extractAge(extract.timestamp, now, locale, t)})
+          {t("dataAsOfValue", {
+            date: format.dateTime(extract.timestamp),
+            age: extractAge(extract.timestamp, now, locale, t),
+          })}
         </Typography>
         {stale && (
           <Chip

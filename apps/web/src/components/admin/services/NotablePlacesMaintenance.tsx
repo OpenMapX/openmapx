@@ -17,6 +17,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
@@ -42,6 +43,7 @@ export function NotablePlacesMaintenance({ apiUrl }: { apiUrl: string }) {
 }
 function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const showToast = useAdminToast();
   const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const register = useServiceJobRegistration();
@@ -151,13 +153,13 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
       {status?.ok && (
         <Stack direction="row" sx={{ gap: 3, flexWrap: "wrap", mt: 1.5 }}>
           {[
-            [t("places"), status.placeCount?.toLocaleString() ?? "—"],
-            [t("names"), status.nameCount?.toLocaleString() ?? "—"],
-            [t("minWikipedias"), status.minSitelinks?.toString() ?? "—"],
+            [t("places"), status.placeCount == null ? "—" : format.number(status.placeCount)],
+            [t("names"), status.nameCount == null ? "—" : format.number(status.nameCount)],
             [
-              t("published"),
-              status.publishedAt ? new Date(status.publishedAt).toLocaleString() : "—",
+              t("minWikipedias"),
+              status.minSitelinks == null ? "—" : format.number(status.minSitelinks),
             ],
+            [t("published"), format.timestamp(status.publishedAt)],
           ].map(([label, value]) => (
             <Box key={label}>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>

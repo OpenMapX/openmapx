@@ -28,10 +28,10 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
-import { formatBytes } from "@/lib/storageFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { TableEmptyState } from "../shared/TableEmptyState";
@@ -69,22 +69,13 @@ function stateColor(
   return "default";
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
   return <TransitSourcesView key={apiUrl} apiUrl={apiUrl} />;
 }
 function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
   const t = useAdminTranslations("adminServices");
   const tCommon = useTranslations("common");
+  const format = useAdminFormat();
   const queryClient = useQueryClient();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
@@ -554,7 +545,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                     {source.artifact
                       ? t("formatWithSize", {
                           format: source.format.toUpperCase(),
-                          size: formatBytes(source.artifact.sizeBytes),
+                          size: format.bytes(source.artifact.sizeBytes),
                         })
                       : source.format.toUpperCase()}
                   </TableCell>
@@ -567,12 +558,8 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                       </span>
                     </Tooltip>
                   </TableCell>
-                  <TableCell>
-                    {source.lastFetchedAt ? formatDate(source.lastFetchedAt) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    {source.lastImportedAt ? formatDate(source.lastImportedAt) : "—"}
-                  </TableCell>
+                  <TableCell>{format.timestamp(source.lastFetchedAt)}</TableCell>
+                  <TableCell>{format.timestamp(source.lastImportedAt)}</TableCell>
                   <TableCell align="right">
                     <Tooltip title={disabledReason || source.actions.reason || ""}>
                       <span>

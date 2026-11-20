@@ -524,7 +524,7 @@ function BrowseTab() {
                   <Alert severity="warning">{t("securityStatusStaleRevocationData")}</Alert>
                 )}
                 {e.removed && (
-                  <Alert severity="error">{t("delistedRemoved", { removed: e.removed })}</Alert>
+                  <Alert severity="error">{t("delisted", { delisting: e.removed })}</Alert>
                 )}
                 {e.critical && (
                   <Alert severity="error">

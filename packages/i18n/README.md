@@ -73,7 +73,14 @@ for codes added later, and a label already worded by a helper is passed under
 a name ending in `Label`, such as `{statusLabel}`. Open-ended server codes,
 such as audit actions, are keyed messages (`adminShared.auditActions.<code>`)
 read through a helper that shows the server's code only when the catalogue
-does not know it. Commands, environment variable names
+does not know it. Counts go to ICU as `{count, number}` or a plural, so they
+group in the reader's locale; the same test rejects a plain count argument
+and a unit glued to an argument (`{ms}ms`, `{percent}%`). Sizes, percentages,
+durations, dates and times come from `useAdminFormat()`
+(`apps/web/src/lib/admin/adminFormat.ts`), which formats in the locale the
+reader chose and follows their date and time settings; a test refuses
+`toFixed`, `toLocale…()` without that locale and hand-glued units in the admin
+tree. Commands, environment variable names
 and other strings that read the same in every language are message arguments,
 not catalogue text. Shared verbs such as Cancel, Close, Retry and Confirm come
 from `common`. A helper outside a component declares the namespace it reads as

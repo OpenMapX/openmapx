@@ -19,6 +19,7 @@ import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagina
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { useClientPagination } from "@/components/admin/shared/tableHooks";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   type ProviderHealthEntry,
@@ -26,9 +27,9 @@ import {
   useResetProvider,
 } from "@/lib/admin/transitHooks";
 
-function formatPercent(rate: number | null): string {
+function formatRate(rate: number | null, format: AdminFormatters): string {
   if (rate === null || !Number.isFinite(rate)) return "—";
-  return `${(rate * 100).toFixed(0)}%`;
+  return format.percent(rate);
 }
 
 function failureRateColor(rate: number | null): "default" | "success" | "warning" | "error" {
@@ -38,15 +39,16 @@ function failureRateColor(rate: number | null): "default" | "success" | "warning
   return "success";
 }
 
-function formatClock(at: string | null | undefined): string | null {
+function formatClock(at: string | null | undefined, format: AdminFormatters): string | null {
   if (!at) return null;
   const time = new Date(at);
-  return Number.isFinite(time.getTime()) ? time.toLocaleTimeString() : null;
+  return Number.isFinite(time.getTime()) ? format.time(time) : null;
 }
 
 function StateChip({ provider }: { provider: ProviderHealthEntry }) {
   const t = useTranslations("adminTransit");
-  const retryAt = formatClock(provider.retryAt);
+  const format = useAdminFormat();
+  const retryAt = formatClock(provider.retryAt, format);
   switch (provider.state) {
     case "healthy":
       return <Chip size="small" color="success" variant="outlined" label={t("healthy")} />;
@@ -77,6 +79,7 @@ function StateChip({ provider }: { provider: ProviderHealthEntry }) {
 
 export function ProviderHealthTable() {
   const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useProviderHealth();
   const resetMutation = useResetProvider();
@@ -168,20 +171,18 @@ export function ProviderHealthTable() {
                         )}
                       </Stack>
                     </TableCell>
-                    <TableCell align="right">{p.successCount.toLocaleString()}</TableCell>
-                    <TableCell align="right">{p.failureCount.toLocaleString()}</TableCell>
+                    <TableCell align="right">{format.number(p.successCount)}</TableCell>
+                    <TableCell align="right">{format.number(p.failureCount)}</TableCell>
                     <TableCell align="right">
                       <Chip
                         size="small"
                         variant="outlined"
                         color={failureRateColor(p.windowFailureRate)}
-                        label={formatPercent(p.windowFailureRate)}
+                        label={formatRate(p.windowFailureRate, format)}
                       />
                     </TableCell>
                     <TableCell align="right">
-                      {Number.isFinite(p.emaLatencyMs)
-                        ? t("averageLatency", { ms: Math.round(p.emaLatencyMs) })
-                        : "—"}
+                      {Number.isFinite(p.emaLatencyMs) ? format.duration(p.emaLatencyMs) : "—"}
                     </TableCell>
                     <TableCell>
                       <StateChip provider={p} />

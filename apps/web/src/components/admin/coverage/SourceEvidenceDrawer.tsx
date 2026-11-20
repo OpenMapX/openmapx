@@ -19,9 +19,10 @@ import type {
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { type CoverageRequestError, useCoverageSource } from "@/lib/admin/coverageHooks";
 import { CompactAlert } from "../shared/CompactAlert";
-import { CoverageStatus, formatCoverageDate } from "./CoverageStatus";
+import { CoverageStatus } from "./CoverageStatus";
 
 export function SourceEvidenceDrawer({
   source,
@@ -108,6 +109,7 @@ function SourceEvidenceBody({
   assessment: UsageAssessment;
 }) {
   const t = useTranslations("adminCoverage");
+  const format = useAdminFormat();
   const source = data.source;
   return (
     <Stack spacing={2}>
@@ -165,7 +167,11 @@ function SourceEvidenceBody({
         {data.evidence.count && (
           <Detail
             label={t("sourceDrawer.count")}
-            value={`${data.evidence.count.value.toLocaleString()} ${data.evidence.count.unit} (${data.evidence.count.scope})`}
+            value={t("sourceDrawer.countValue", {
+              count: data.evidence.count.value,
+              unit: data.evidence.count.unit,
+              scope: data.evidence.count.scope,
+            })}
           />
         )}
       </Section>
@@ -234,21 +240,21 @@ function SourceEvidenceBody({
         />
         <Detail
           label={t("sourceDrawer.lastAttempt")}
-          value={`${formatCoverageDate(source.lastAttemptAt)} · ${t(`attempt.${source.latestAttempt.outcome}`)}`}
+          value={`${format.timestamp(source.lastAttemptAt)} · ${t(`attempt.${source.latestAttempt.outcome}`)}`}
         />
         <Detail
           label={t("sourceDrawer.lastCheck")}
-          value={formatCoverageDate(source.lastSuccessfulCheckAt)}
+          value={format.timestamp(source.lastSuccessfulCheckAt)}
         />
         <Detail
           label={t("sourceDrawer.lastPublished")}
-          value={formatCoverageDate(source.lastPublishedAt)}
+          value={format.timestamp(source.lastPublishedAt)}
         />
         <Detail
           label={t("sourceDrawer.upstreamAsOf")}
-          value={formatCoverageDate(source.upstreamAsOf)}
+          value={format.timestamp(source.upstreamAsOf)}
         />
-        <Detail label={t("sourceDrawer.expiresAt")} value={formatCoverageDate(source.expiresAt)} />
+        <Detail label={t("sourceDrawer.expiresAt")} value={format.timestamp(source.expiresAt)} />
         <Detail
           label={t("sourceDrawer.policy")}
           value={`${data.evidence.policy.basis} · ${data.evidence.policy.provenance}`}
@@ -263,11 +269,11 @@ function SourceEvidenceBody({
           />
           <Detail
             label={t("sourceDrawer.lastCheck")}
-            value={formatCoverageDate(data.runtime.observedAt)}
+            value={format.timestamp(data.runtime.observedAt)}
           />
           <Detail
             label={t("sourceDrawer.expiresAt")}
-            value={formatCoverageDate(data.runtime.validUntil)}
+            value={format.timestamp(data.runtime.validUntil)}
           />
         </Section>
       )}
@@ -290,7 +296,7 @@ function SourceEvidenceBody({
           {data.recentAttempts.map((attempt) => (
             <ListItem key={`${attempt.key}:${attempt.at ?? "none"}`} disableGutters>
               <ListItemText
-                primary={`${formatCoverageDate(attempt.at)} · ${t(`attempt.${attempt.outcome}`)}`}
+                primary={`${format.timestamp(attempt.at)} · ${t(`attempt.${attempt.outcome}`)}`}
                 secondary={attempt.message ?? undefined}
               />
             </ListItem>
@@ -351,7 +357,7 @@ function SourceEvidenceBody({
             />
             <Detail
               label={t("rights.reviewedAt")}
-              value={right.reviewedAt ? formatCoverageDate(right.reviewedAt) : t("common.unknown")}
+              value={right.reviewedAt ? format.timestamp(right.reviewedAt) : t("common.unknown")}
             />
             <Detail
               label={t("rights.origin")}

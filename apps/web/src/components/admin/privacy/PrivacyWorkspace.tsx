@@ -20,6 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { parseAdminCaseSelection } from "@/lib/admin/adminNavigationState";
 import {
   type PrivacyAdminBinding,
@@ -37,6 +38,7 @@ export function PrivacyWorkspace() {
 function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
   const t = useTranslations("privacyAdmin"),
     account = useTranslations("account.privacyData");
+  const format = useAdminFormat();
   const queue = useQuery(binding.queries.queue());
   const { params, update } = useAdminQueryState();
   const { caseId, section } = parseAdminCaseSelection(params);
@@ -116,7 +118,7 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
                     primary={`${account("accessAndPortability")} ${r.id.slice(0, 8)}`}
                     secondary={t("queueItem", {
                       stateLabel: t("requestState", { state: r.state }),
-                      date: r.dueAt,
+                      date: format.dateTime(r.dueAt),
                     })}
                   />
                 </ListItemButton>

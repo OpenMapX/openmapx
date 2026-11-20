@@ -24,6 +24,7 @@ import type { AmbientPlacesStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -36,6 +37,7 @@ type AmbientMutation =
 
 export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
   const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const toast = useAdminToast();
   const client = useQueryClient();
   const apiClient = useMemo(
@@ -157,17 +159,17 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             <Typography variant="body2">
               {t("publishedSnapshot", {
                 name: active.region.name,
-                publishedAt: new Date(active.publishedAt).toLocaleString(),
+                publishedAt: format.dateTime(active.publishedAt),
               })}
             </Typography>
             <Typography variant="caption" sx={{ display: "block", overflowWrap: "anywhere" }}>
-              {t("generationGeneration", { generation: active.generation })}
+              {t("generation", { generation: active.generation })}
             </Typography>
             <Typography variant="caption" sx={{ display: "block" }}>
               {t("osmSnapshot", {
                 epoch: active.sources.osm.epoch,
                 count: active.sources.osm.count,
-                publishedAt: active.sources.osm.publishedAt,
+                publishedAt: format.dateTime(active.sources.osm.publishedAt),
               })}
             </Typography>
             {active.sources.overture && (
@@ -175,7 +177,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
                 {t("overtureSnapshot", {
                   release: active.sources.overture.release,
                   count: active.sources.overture.count,
-                  publishedAt: active.sources.overture.publishedAt,
+                  publishedAt: format.dateTime(active.sources.overture.publishedAt),
                 })}
               </Typography>
             )}
@@ -186,7 +188,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
         )}
         {status?.previous && (
           <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-            {t("previousGenerationPrevious", { previous: status.previous })}
+            {t("previousGeneration", { previous: status.previous })}
           </Typography>
         )}
         <RadioGroup

@@ -18,9 +18,9 @@ import { type ReactNode, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitSyncDialog } from "@/components/admin/services/TransitSyncDialog";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
-import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   type TransitStateSummary,
@@ -107,6 +107,7 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
 
 export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
   const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const showToast = useAdminToast();
   const [syncReview, setSyncReview] = useState(false);
   const [queuedJobId, setQueuedJobId] = useState<string | null>(null);
@@ -194,8 +195,8 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             }}
           >
             {t("startedElapsed", {
-              startedAt: formatTransitAdminTimestamp(inflight.startedAt),
-              seconds: durationSecs(inflight.startedAt),
+              startedAt: format.timestamp(inflight.startedAt),
+              elapsed: format.duration(durationSecs(inflight.startedAt) * 1000),
             })}
           </Typography>
           <RunningJobDetail jobId={inflight.jobId} />
@@ -210,7 +211,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           }}
         >
           <SummaryMetric label={t("lastSync")}>
-            <Typography variant="body2">{formatTransitAdminTimestamp(state.lastSyncAt)}</Typography>
+            <Typography variant="body2">{format.timestamp(state.lastSyncAt)}</Typography>
           </SummaryMetric>
           <SummaryMetric label={t("lastStatus")}>
             <JobStatusChip status={state.lastSyncStatus} />

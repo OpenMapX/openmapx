@@ -132,7 +132,7 @@ describe("Activity generated SDK consumers", () => {
     );
     expect(await screen.findByText("validate")).toBeInTheDocument();
     expect(screen.getByText("Invalid archives — archive-1: Invalid format")).toBeInTheDocument();
-    expect(screen.getByText("1.3s")).toBeInTheDocument();
+    expect(screen.getByText("1.3 sec")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 

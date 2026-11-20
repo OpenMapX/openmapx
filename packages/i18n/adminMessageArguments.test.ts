@@ -3,15 +3,21 @@ import { describe, expect, it } from "vitest";
 import { messages } from "./config";
 
 /**
- * Admin messages receive contract codes (statuses, actions, sources) from the
- * API. A code passed as a plain `{status}` argument shows the English code
- * inside a translated sentence. Argument names carry the convention: a
- * code-named argument must be an ICU `select` (its `other` branch may repeat
- * the raw value for codes added later), and an already translated label is
+ * Admin messages receive contract codes (statuses, actions, sources) and
+ * counts from the API. A code passed as a plain `{status}` argument shows the
+ * English code inside a translated sentence, and a count passed as a plain
+ * `{count}` is not grouped for the reader's locale. Argument names carry the
+ * convention: a code-named argument must be an ICU `select` (its `other`
+ * branch may repeat the raw value for codes added later), a count-named
+ * argument must be a `number` or `plural`, and an already translated label is
  * passed under a name ending in `Label`.
  */
 const CODE_ARGUMENT =
   /^(action|basis|category|change|cleanup|code|direction|kind|level|method|mode|operation|origin|outcome|phase|policy|provenance|readiness|reason|result|severity|source|stage|state|status|type)$/;
+const COUNT_ARGUMENT =
+  /^(count|total|shown|hidden|added|removed|retained|eligible|quarantined|healthy|enabled|unhealthy|unconfigured|running|stopped|missing|selected|[a-z]+Count|[a-z]+Total)$/;
+/** A unit glued to an argument means the number was formatted by hand. */
+const HAND_FORMATTED_UNIT = /\}\s?(%|ms\b|s\b)/;
 
 const ADMIN_NAMESPACE = (namespace: string) =>
   namespace.startsWith("admin") || namespace === "privacyAdmin" || namespace === "privacySetup";
@@ -37,6 +43,8 @@ function argumentProblems(ast: AstElement[], selects: readonly string[] = []): s
       problems.push(
         `{${name}} is a code; use {${name}, select, …} or pass a translated ${name}Label`,
       );
+    if (element.type === ARGUMENT && COUNT_ARGUMENT.test(name))
+      problems.push(`{${name}} is a count; use {${name}, number} or a plural`);
     if (element.type === NUMBER && CODE_ARGUMENT.test(name))
       problems.push(`{${name}} is a code, not a number`);
     if (element.type === SELECT || element.type === PLURAL) {
@@ -72,6 +80,13 @@ describe.each(Object.keys(messages) as (keyof typeof messages)[])(
       );
       expect(problems).toEqual([]);
     });
+
+    it("leave units to the locale formatters", () => {
+      const handFormatted = adminMessages(locale)
+        .filter(([, text]) => HAND_FORMATTED_UNIT.test(text))
+        .map(([path, text]) => `${path}: ${text}`);
+      expect(handFormatted).toEqual([]);
+    });
   },
 );
 
@@ -86,8 +101,15 @@ describe("admin message argument check", () => {
     expect(check("{count, plural, other {{source}}}")).toHaveLength(1);
   });
 
-  it("accepts selects, their raw fallback and translated labels", () => {
+  it("rejects a count passed as a plain argument", () => {
+    expect(check("{count} total")).toHaveLength(1);
+    expect(check("{running} running · {stopped} stopped")).toHaveLength(2);
+  });
+
+  it("accepts selects, their raw fallback, numbers, plurals and translated labels", () => {
     expect(check("{action, select, start {Start} other {{action}}} queued")).toEqual([]);
+    expect(check("{count, number} total")).toEqual([]);
+    expect(check("{count, plural, one {# job} other {# jobs}}")).toEqual([]);
     expect(check("Status: {statusLabel}")).toEqual([]);
   });
 });

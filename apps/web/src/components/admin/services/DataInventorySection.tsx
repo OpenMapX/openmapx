@@ -8,7 +8,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceData } from "@openmapx/core/api-contracts";
 import { useTranslations } from "next-intl";
-import { formatBytes } from "@/lib/storageFormat";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 
 /** Product names, which read the same in every language. */
 const PRODUCT_NAMES: Record<string, string> = {
@@ -31,6 +31,7 @@ export function DataInventorySection({
   onPageChange: (offset: number) => void;
 }) {
   const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   return (
     <Stack spacing={2}>
       <Paper variant="outlined" sx={{ p: 2.5 }}>
@@ -68,8 +69,11 @@ export function DataInventorySection({
                     />
                   </Stack>
                   <Typography variant="body2">
-                    <span>{item.region ?? t("regionNotRecorded")}</span> ·{" "}
-                    {formatBytes(item.sizeBytes)} · {new Date(item.modifiedAt).toLocaleString()}
+                    {t("extractSummary", {
+                      region: item.region ?? t("regionNotRecorded"),
+                      size: format.bytes(item.sizeBytes),
+                      modifiedAt: format.dateTime(item.modifiedAt),
+                    })}
                   </Typography>
                   <Typography variant="caption" component="p">
                     {item.sourceFingerprint
@@ -93,7 +97,7 @@ export function DataInventorySection({
                       to: Math.min(osm.offset + osm.items.length, osm.total),
                       total: osm.total,
                     })
-                  : t("n0OnThisPageTotal", { total: osm.total })}
+                  : t("emptyPageOfTotal", { total: osm.total })}
               </Typography>
               <Button
                 disabled={osm.offset + osm.items.length >= osm.total}
@@ -139,7 +143,7 @@ export function DataInventorySection({
             </Typography>
             <Typography variant="caption" component="p">
               {build.region ?? t("regionNotRecorded")} ·{" "}
-              {build.sizeBytes === null ? t("sizeUnknown") : formatBytes(build.sizeBytes)} ·{" "}
+              {build.sizeBytes === null ? t("sizeUnknown") : format.bytes(build.sizeBytes)} ·{" "}
               {build.buildRecordVersion === null
                 ? t("noBuildRecord")
                 : t("buildRecordVersion", {

@@ -19,6 +19,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 
 type HealthBucket =
@@ -26,14 +27,11 @@ type HealthBucket =
 
 type HoursWindow = 24 | 168;
 
-/** Format an ISO-ish bucket timestamp for the X axis: HH:00 for 24h, weekday for 7d. */
-function formatBucketLabel(hour: string, hours: HoursWindow): string {
+/** Format a bucket timestamp for the X axis: the hour for 24h, the weekday for 7d. */
+function formatBucketLabel(hour: string, hours: HoursWindow, format: AdminFormatters): string {
   const d = new Date(hour);
   if (Number.isNaN(d.getTime())) return hour;
-  if (hours === 24) {
-    return `${String(d.getHours()).padStart(2, "0")}:00`;
-  }
-  return d.toLocaleDateString(undefined, { weekday: "short" });
+  return hours === 24 ? format.time(d) : format.weekday(d);
 }
 
 function HealthTooltip({
@@ -46,9 +44,11 @@ function HealthTooltip({
   hours: HoursWindow;
 }) {
   const t = useTranslations("adminIntegrations");
+  const format = useAdminFormat();
   if (!active || !payload?.[0]) return null;
   const bucket = payload[0].payload;
-  const responseTime = bucket.avgResponseTime != null ? `${bucket.avgResponseTime} ms` : "—";
+  const responseTime =
+    bucket.avgResponseTime != null ? format.duration(bucket.avgResponseTime) : "—";
 
   return (
     <Box
@@ -63,10 +63,10 @@ function HealthTooltip({
       }}
     >
       <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
-        {formatBucketLabel(bucket.hour, hours)}
+        {formatBucketLabel(bucket.hour, hours, format)}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        {t("uptimePercent", { percent: bucket.uptimePercent })}
+        {t("uptimePercent", { percent: format.percent(bucket.uptimePercent / 100) })}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
         {t("averageResponse", { responseTime })}
@@ -84,6 +84,7 @@ interface HealthHistoryChartProps {
 
 export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
   const t = useTranslations("adminIntegrations");
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const [hours, setHours] = useState<HoursWindow>(24);
 
@@ -131,7 +132,7 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
               <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" stroke="#E0E0E0" />
               <XAxis
                 dataKey="hour"
-                tickFormatter={(value: string) => formatBucketLabel(value, hours)}
+                tickFormatter={(value: string) => formatBucketLabel(value, hours, format)}
                 tick={{ fontSize: 10, fill: "#999" }}
                 axisLine={false}
                 tickLine={false}

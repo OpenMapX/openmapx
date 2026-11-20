@@ -21,6 +21,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import {
   type CoverageRequestError,
   useCoverageRegions,
@@ -30,7 +31,7 @@ import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CoverageSourcesTable } from "./CoverageSourcesTable";
-import { CoverageStatus, formatCoverageDate } from "./CoverageStatus";
+import { CoverageStatus } from "./CoverageStatus";
 import { RegionCapabilities } from "./RegionCapabilities";
 import { RegionCoverageMatrix } from "./RegionCoverageMatrix";
 import { SourceEvidenceDrawer } from "./SourceEvidenceDrawer";
@@ -60,6 +61,7 @@ function numberParam(value: string | null, fallback: number): number {
 
 export function CoveragePage() {
   const t = useTranslations("adminCoverage");
+  const format = useAdminFormat();
   const transitSourceLabel = useTranslations("adminNavigation")("transitSourceOwner");
   const router = useRouter();
   const pathname = usePathname();
@@ -343,7 +345,7 @@ export function CoveragePage() {
             />
             {report && (
               <Typography variant="caption" color="text.secondary">
-                {t("collection.collectedAt", { date: formatCoverageDate(report.generatedAt) })}
+                {t("collection.collectedAt", { date: format.timestamp(report.generatedAt) })}
               </Typography>
             )}
           </Stack>

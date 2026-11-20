@@ -38,6 +38,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   hasVaultCredential,
@@ -445,6 +446,7 @@ function CredentialsTab({
   integrationId: string;
 }) {
   const t = useTranslations("adminIntegrations");
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client, integrationId);
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
@@ -629,7 +631,7 @@ function CredentialsTab({
                                 color: "text.secondary",
                               }}
                             >
-                              {new Date(cred.updatedAt).toLocaleDateString()}
+                              {format.date(cred.updatedAt)}
                             </Typography>
                           </Tooltip>
                         ) : (
@@ -716,6 +718,7 @@ function HealthTab({
   integrationId: string;
 }) {
   const t = useTranslations("adminIntegrations");
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const showToast = useAdminToast();
 
@@ -832,7 +835,7 @@ function HealthTab({
                       color: "text.secondary",
                     }}
                   >
-                    {t("responseTimeMs", { responseTime: health.responseTime })}
+                    {t("responseTime", { responseTime: format.duration(health.responseTime) })}
                   </Typography>
                 )}
                 {health.error && (

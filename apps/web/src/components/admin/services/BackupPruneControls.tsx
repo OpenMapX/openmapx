@@ -13,9 +13,9 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
-import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 import { useAdminToast } from "../shared/AdminToast";
 
@@ -25,6 +25,7 @@ type Preview = Extract<
 >["data"];
 export function BackupPruneControls() {
   const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient(),
     owner = useAdminMutationOwner(client),
@@ -108,17 +109,17 @@ export function BackupPruneControls() {
           <Stack sx={{ gap: 2, pt: 1 }}>
             <Typography>
               {t("retentionPolicy", {
-                days: intent?.preview.retentionDays ?? "",
+                days: intent?.preview.retentionDays ?? 0,
                 source: intent?.preview.policySource ?? "",
               })}
             </Typography>
             <Typography>
               {t("pruneSummary", {
-                eligible: intent?.preview.candidates.length ?? "",
-                size: formatBytes(
+                eligible: intent?.preview.candidates.length ?? 0,
+                size: format.bytes(
                   intent?.preview.candidates.reduce((sum, item) => sum + item.totalBytes, 0) ?? 0,
                 ),
-                retained: intent?.preview.retainedCount ?? "",
+                retained: intent?.preview.retainedCount ?? 0,
               })}
             </Typography>
             <Stack sx={{ maxHeight: 240, overflowY: "auto" }}>

@@ -15,6 +15,7 @@ import { REQUEST_TRANSITIONS } from "@openmapx/core/privacy";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { type PrivacyCaseClient, privacyResult } from "@/lib/admin/privacyAdmin";
 
 const DECISIONS = ["in_progress", "waiting_on_requester", "completed", "refused"] as const;
@@ -28,6 +29,7 @@ export function PrivacyCaseDecisionForms({
   client: PrivacyCaseClient;
 }) {
   const w = useTranslations("privacyAdmin.workflows");
+  const format = useAdminFormat();
   const [extended, setExtended] = useState(""),
     [notified, setNotified] = useState(""),
     [extensionReason, setExtensionReason] = useState(""),
@@ -57,12 +59,12 @@ export function PrivacyCaseDecisionForms({
     <Stack spacing={2}>
       <Typography variant="h6">{w("caseDecisions")}</Typography>
       <Typography>
-        {w("originalDueAt")}: {detail.request.originalDueAt ?? detail.request.dueAt} ·{" "}
-        {detail.request.timeZone}
+        {w("originalDueAt", {
+          date: format.dateTime(detail.request.originalDueAt ?? detail.request.dueAt),
+          timeZone: detail.request.timeZone,
+        })}
       </Typography>
-      <Typography>
-        {w("currentDueAt")}: {detail.request.dueAt}
-      </Typography>
+      <Typography>{w("currentDueAt", { date: format.dateTime(detail.request.dueAt) })}</Typography>
       <TextField
         label={w("extendedUntil")}
         type="datetime-local"

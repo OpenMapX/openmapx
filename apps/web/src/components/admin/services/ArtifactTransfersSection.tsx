@@ -20,6 +20,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
@@ -30,7 +31,6 @@ import {
   uploadArtifactFile,
 } from "@/lib/admin/artifactTransferClient";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
-import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 
 const key = () => `artifact-${crypto.randomUUID()}`;
@@ -39,6 +39,7 @@ export function ArtifactTransfersSection({ apiUrl }: { apiUrl: string }) {
 }
 function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
   const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const tCommon = useTranslations("common");
   const { client } = useActivityClient(),
     qc = useQueryClient(),
@@ -180,12 +181,12 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         {capabilities.data && (
           <Typography variant="body2">
             {t("transferLimits", {
-              maxUploadBytes: formatBytes(capabilities.data.limits.maxUploadBytes),
-              maxExpandedBytes: formatBytes(capabilities.data.limits.maxExpandedBytes),
+              maxUploadBytes: format.bytes(capabilities.data.limits.maxUploadBytes),
+              maxExpandedBytes: format.bytes(capabilities.data.limits.maxExpandedBytes),
               freeBytes:
                 capabilities.data.freeBytes === null
                   ? t("freeSpaceUnavailable")
-                  : formatBytes(capabilities.data.freeBytes),
+                  : format.bytes(capabilities.data.freeBytes),
             })}
           </Typography>
         )}
@@ -243,7 +244,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         </Stack>
         {file && (
           <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-            {file.name} · {formatBytes(file.size)}
+            {file.name} · {format.bytes(file.size)}
           </Typography>
         )}
         {progress && (
@@ -251,7 +252,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             {progress.state === "uploading" && <LinearProgress variant="indeterminate" />}
             <Typography variant="body2">
               {t("uploadProgress", {
-                received: formatBytes(progress.receivedBytes),
+                received: format.bytes(progress.receivedBytes),
                 state: progress.state,
               })}
             </Typography>
@@ -313,7 +314,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
               {t("transferStage", {
                 direction: stage.direction,
                 state: stage.state,
-                size: formatBytes(stage.bytes),
+                size: format.bytes(stage.bytes),
                 stageId: stage.stageId,
               })}
             </Typography>
@@ -324,7 +325,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             )}
             <Typography variant="caption">
               {t("expiryAndCleanup", {
-                expiresAt: new Date(stage.expiresAt).toLocaleString(),
+                expiresAt: format.dateTime(stage.expiresAt),
                 cleanup: stage.cleanup,
               })}
             </Typography>
@@ -424,8 +425,8 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             </Typography>
             <Typography>
               {t("transferArchiveSize", {
-                archiveBytes: formatBytes(preview?.bytes ?? 0),
-                additionalBytes: formatBytes(preview?.requiredFreeBytes ?? 0),
+                archiveBytes: format.bytes(preview?.bytes ?? 0),
+                additionalBytes: format.bytes(preview?.requiredFreeBytes ?? 0),
               })}
             </Typography>
             <Typography variant="body2">

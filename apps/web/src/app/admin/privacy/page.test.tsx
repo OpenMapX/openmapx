@@ -32,6 +32,7 @@ vi.mock("next-intl", () => {
       return translator;
     },
     useFormatter: () => ({ dateTime: (value: Date) => value.toISOString() }),
+    useLocale: () => "en",
   };
 });
 

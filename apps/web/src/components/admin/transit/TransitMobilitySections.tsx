@@ -8,14 +8,11 @@ import Typography from "@mui/material/Typography";
 import type { AdminServiceData } from "@openmapx/core/api-contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
-import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 
 type MotisTransitousStatus = AdminServiceData["motisTransitous"];
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
-}
 /** ICU select keys cannot hold hyphens, so `self-hosted` is selected as `self_hosted`. */
 function selectKey(value: string): string {
   return value.replaceAll("-", "_");
@@ -31,6 +28,7 @@ function motisProxyModeColor(
 
 export function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
   const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Stack
@@ -132,7 +130,7 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
             {t("epochs", {
               active: status.activeEpoch ?? t("unknownValue"),
               candidate: status.candidateEpoch ?? t("noneValue"),
-              tested: status.testedAt ? formatDate(status.testedAt) : t("neverTested"),
+              tested: status.testedAt ? format.dateTime(status.testedAt) : t("neverTested"),
               rollback: String(status.rollbackAvailable),
             })}
           </Typography>
@@ -140,11 +138,11 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
             {t("capacity", {
               required:
                 status.preflightRequiredDiskBytes != null
-                  ? t("diskRequired", { bytes: formatBytes(status.preflightRequiredDiskBytes) })
+                  ? t("diskRequired", { bytes: format.bytes(status.preflightRequiredDiskBytes) })
                   : t("notEstimated"),
               free:
                 status.preflightFreeDiskBytes != null
-                  ? t("diskFree", { bytes: formatBytes(status.preflightFreeDiskBytes) })
+                  ? t("diskFree", { bytes: format.bytes(status.preflightFreeDiskBytes) })
                   : t("freeDiskUnknown"),
               previousSlot: status.previousHealthySlot ?? t("noneValue"),
             })}

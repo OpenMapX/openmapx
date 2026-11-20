@@ -18,25 +18,26 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
-import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { DataManagerJobStages } from "@/components/admin/shared/DataManagerJobStages";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
 
-function durationLabel(startedAt: string, finishedAt: string | null): string {
+function durationLabel(
+  startedAt: string,
+  finishedAt: string | null,
+  format: AdminFormatters,
+): string {
   if (!finishedAt) return "—";
   const start = new Date(startedAt).getTime();
   const end = new Date(finishedAt).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end)) return "—";
-  const secs = Math.max(0, Math.round((end - start) / 1000));
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  const rem = secs % 60;
-  return rem ? `${mins}m ${rem}s` : `${mins}m`;
+  return format.duration(Math.max(0, Math.round((end - start) / 1000) * 1000));
 }
 
 function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => void }) {
   const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const { data, isLoading, isError } = useTransitJobDetail(jobId);
 
   return (
@@ -116,7 +117,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               <Chip
                 size="small"
                 label={t("startedAt", {
-                  startedAt: formatTransitAdminTimestamp(data.startedAt),
+                  startedAt: format.timestamp(data.startedAt),
                 })}
                 variant="outlined"
               />
@@ -124,7 +125,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
                 <Chip
                   size="small"
                   label={t("durationValue", {
-                    duration: durationLabel(data.startedAt, data.finishedAt),
+                    duration: durationLabel(data.startedAt, data.finishedAt, format),
                   })}
                   variant="outlined"
                 />
@@ -141,6 +142,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
 
 export function RecentJobsTable() {
   const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const { data, isLoading, isError } = useTransitJobs(20);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
 
@@ -201,8 +203,8 @@ export function RecentJobsTable() {
                       {job.id.slice(0, 8)}…
                     </Typography>
                   </TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(job.startedAt)}</TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(job.finishedAt)}</TableCell>
+                  <TableCell>{format.timestamp(job.startedAt)}</TableCell>
+                  <TableCell>{format.timestamp(job.finishedAt)}</TableCell>
                   <TableCell>
                     <JobStatusChip status={job.status} />
                   </TableCell>
@@ -217,7 +219,7 @@ export function RecentJobsTable() {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    {durationLabel(job.startedAt, job.finishedAt)}
+                    {durationLabel(job.startedAt, job.finishedAt, format)}
                   </TableCell>
                 </TableRow>
               ))}

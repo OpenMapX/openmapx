@@ -20,6 +20,7 @@ import { listAdminLogs, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk
 import type { AdminLogEntry } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useServerPagination } from "../shared/tableHooks";
@@ -48,7 +49,7 @@ const TIME_RANGES: Record<string, number | undefined> = {
 
 function LogLine({ entry }: { entry: AppLogEntry }) {
   const color = LEVEL_COLORS[entry.level] ?? "#9e9e9e";
-  const ts = new Date(entry.time).toLocaleTimeString("en-US", { hour12: false });
+  const ts = useAdminFormat().preciseTime(entry.time);
 
   return (
     <Box

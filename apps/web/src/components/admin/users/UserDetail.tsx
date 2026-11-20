@@ -37,6 +37,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -70,6 +71,7 @@ function ProfileTab({
   impersonate: { mutate: () => void; isPending: boolean; error: Error | null };
 }) {
   const t = useTranslations("adminUsers");
+  const format = useAdminFormat();
   const errorText = useAccountErrorText();
   const router = useRouter();
   const [name, setName] = useState(user.name);
@@ -201,10 +203,10 @@ function ProfileTab({
             <strong>{t("id")}</strong> {user.id}
           </Typography>
           <Typography variant="body2">
-            <strong>{t("joined")}</strong> {new Date(user.createdAt).toLocaleString()}
+            <strong>{t("joined")}</strong> {format.dateTime(user.createdAt)}
           </Typography>
           <Typography variant="body2">
-            <strong>{t("updated")}</strong> {new Date(user.updatedAt).toLocaleString()}
+            <strong>{t("updated")}</strong> {format.dateTime(user.updatedAt)}
           </Typography>
           <Typography variant="body2" component="div">
             <strong>{t("emailVerified")}</strong>{" "}
@@ -303,6 +305,7 @@ function ProfileTab({
 
 function SessionsTab({ userId }: { userId: string }) {
   const t = useTranslations("adminUsers");
+  const format = useAdminFormat();
   const errorText = useAccountErrorText();
   const account = useAccountAdmin();
   const { data, isLoading, error } = useQuery({
@@ -387,14 +390,10 @@ function SessionsTab({ userId }: { userId: string }) {
                       </Tooltip>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
-                        {new Date(s.createdAt).toLocaleString()}
-                      </Typography>
+                      <Typography variant="body2">{format.dateTime(s.createdAt)}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
-                        {new Date(s.expiresAt).toLocaleString()}
-                      </Typography>
+                      <Typography variant="body2">{format.dateTime(s.expiresAt)}</Typography>
                     </TableCell>
                     <TableCell>
                       <Button

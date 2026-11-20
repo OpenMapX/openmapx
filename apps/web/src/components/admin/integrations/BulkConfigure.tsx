@@ -27,6 +27,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { hasVaultCredential, useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -296,6 +297,7 @@ function CredentialsTable({
 }) {
   const t = useTranslations("adminIntegrations");
   const sourceLabel = useConfigSourceLabel();
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const showToast = useAdminToast();
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
@@ -401,11 +403,11 @@ function CredentialsTable({
                     <Typography variant="caption" sx={{ display: "block" }}>
                       {cred.updatedBy
                         ? t("vaultUpdatedBy", {
-                            updatedAt: new Date(cred.updatedAt).toLocaleDateString(),
+                            updatedAt: format.date(cred.updatedAt),
                             updatedBy: cred.updatedBy,
                           })
                         : t("vaultUpdated", {
-                            updatedAt: new Date(cred.updatedAt).toLocaleDateString(),
+                            updatedAt: format.date(cred.updatedAt),
                           })}
                     </Typography>
                   )}

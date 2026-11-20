@@ -6,6 +6,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { JobStatusChip } from "./JobStatusChip";
 import { formatStageError } from "./jobStatus";
@@ -20,13 +21,9 @@ export interface DataManagerJobStage {
   artifacts?: unknown;
 }
 
-function durationLabel(durationMs: number): string {
+function durationLabel(durationMs: number, format: AdminFormatters): string {
   if (durationMs < 0 || !Number.isFinite(durationMs)) return "—";
-  if (durationMs < 1000) return `${durationMs}ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.floor((durationMs % 60_000) / 1000);
-  return `${minutes}m ${seconds}s`;
+  return format.duration(durationMs);
 }
 
 function validationDetails(
@@ -61,6 +58,7 @@ export function DataManagerJobStages({
   emptyMessage?: string;
 }) {
   const t = useAdminTranslations("adminShared");
+  const format = useAdminFormat();
   return (
     <Stack sx={{ gap: 0.75 }}>
       <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
@@ -110,7 +108,7 @@ export function DataManagerJobStages({
                     <TableCell>
                       <JobStatusChip status={stage.status} />
                     </TableCell>
-                    <TableCell align="right">{durationLabel(stage.durationMs)}</TableCell>
+                    <TableCell align="right">{durationLabel(stage.durationMs, format)}</TableCell>
                   </TableRow>
                 );
               })}

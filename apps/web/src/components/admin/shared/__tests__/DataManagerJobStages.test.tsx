@@ -24,7 +24,7 @@ describe("DataManagerJobStages", () => {
 
     expect(html).toContain("motis import");
     expect(html).toContain("Transactional import failed");
-    expect(html).toContain("1m 1s");
+    expect(html).toContain("1 min 1 sec");
     expect(html).not.toContain("long stack");
   });
 

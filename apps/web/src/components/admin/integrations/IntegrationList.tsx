@@ -26,6 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -45,6 +46,7 @@ type QualityFilter = "all" | "built-in" | "community";
 
 function HealthCell({ integration }: { integration: IntegrationSummary }) {
   const t = useTranslations("adminIntegrations");
+  const format = useAdminFormat();
   if (!integration.hasHealthCheck) {
     return (
       <Typography
@@ -88,7 +90,7 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
       }}
     >
       {integration.health.responseTime != null
-        ? t("responseTimeShort", { responseTime: integration.health.responseTime })
+        ? format.duration(integration.health.responseTime)
         : t("up")}
     </Typography>
   );
@@ -141,7 +143,7 @@ export function IntegrationList() {
       try {
         const data = await admin.healthSweep();
         void admin.refresh();
-        if (owner.active) showToast(t("healthChecksCompletedCountChecked", { count: data.count }));
+        if (owner.active) showToast(t("healthChecksCompleted", { count: data.count }));
       } catch (err) {
         if (owner.active) showToast(t("healthChecksFailed"), "error");
         throw err;
@@ -253,19 +255,19 @@ export function IntegrationList() {
               variant="outlined"
             />
             <Chip
-              label={t("enabledEnabled", { enabled: counts.enabled })}
+              label={t("enabledCount", { count: counts.enabled })}
               size="small"
               color="success"
               variant="outlined"
             />
             <Chip
-              label={t("disabledDisabled", { disabled: counts.disabled })}
+              label={t("disabledCount", { count: counts.disabled })}
               size="small"
               variant="outlined"
             />
             {counts.unhealthy > 0 && (
               <Chip
-                label={t("unhealthyUnhealthy", { unhealthy: counts.unhealthy })}
+                label={t("unhealthyCount", { count: counts.unhealthy })}
                 size="small"
                 color="error"
                 variant="outlined"
@@ -273,7 +275,7 @@ export function IntegrationList() {
             )}
             {counts.unconfigured > 0 && (
               <Chip
-                label={t("unconfiguredUnconfigured", { unconfigured: counts.unconfigured })}
+                label={t("unconfiguredCount", { count: counts.unconfigured })}
                 size="small"
                 color="warning"
                 variant="outlined"

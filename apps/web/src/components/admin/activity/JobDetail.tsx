@@ -17,6 +17,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { DataManagerJobStages } from "../shared/DataManagerJobStages";
 import { JobStatusChip } from "../shared/JobStatusChip";
 import {
@@ -30,14 +31,15 @@ import { type JobStreamConnection, useJobEventStream } from "./useJobEventStream
 /** Poll cadence used only when the event stream is unavailable. */
 const POLL_INTERVAL_MS = 5_000;
 
-function formatDuration(startedAt: string | null, finishedAt: string | null): string {
+function formatDuration(
+  startedAt: string | null,
+  finishedAt: string | null,
+  format: AdminFormatters,
+): string {
   if (!startedAt) return "—";
   const start = new Date(startedAt).getTime();
   const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-  const ms = end - start;
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+  return format.duration(end - start);
 }
 
 function isCancelable(status: string) {
@@ -51,6 +53,7 @@ function isActive(status: string) {
 export function JobDetail({ jobId, source }: { jobId: string; source: AdminActivityJobSource }) {
   const t = useTranslations("adminActivity");
   const tCommon = useTranslations("common");
+  const format = useAdminFormat();
   const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -194,7 +197,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
             color: "text.secondary",
           }}
         >
-          {t("duration", { duration: formatDuration(data.startedAt, data.finishedAt) })}
+          {t("duration", { duration: formatDuration(data.startedAt, data.finishedAt, format) })}
         </Typography>
         {data.cancelable && data.status !== "cancel_pending" && (
           <Button

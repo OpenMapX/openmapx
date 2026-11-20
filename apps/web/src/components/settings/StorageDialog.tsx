@@ -9,7 +9,7 @@ import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import {
@@ -151,6 +151,7 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
 export function StorageDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
+  const locale = useLocale();
   const fullScreen = useFullScreenOnMobile();
   const queryClient = useQueryClient();
   const [info, setInfo] = useState<StorageInfo | null>(null);
@@ -251,8 +252,8 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
               <Box sx={{ px: 3, pb: 1 }}>
                 <Typography variant="body2" sx={{ mb: 0.75 }}>
                   {t("totalUsed", {
-                    used: formatBytes(info.total.used),
-                    total: formatBytes(info.total.quota),
+                    used: formatBytes(info.total.used, locale),
+                    total: formatBytes(info.total.quota, locale),
                     percent: info.total.percent,
                   })}
                 </Typography>
@@ -264,7 +265,7 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
               </Box>
             )}
             {info.rows.map((row) => (
-              <ValueRow key={row.label} label={row.label} value={formatBytes(row.bytes)} />
+              <ValueRow key={row.label} label={row.label} value={formatBytes(row.bytes, locale)} />
             ))}
           </Section>
         )}

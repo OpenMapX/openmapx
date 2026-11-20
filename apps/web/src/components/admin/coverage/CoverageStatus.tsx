@@ -147,17 +147,3 @@ export function CoverageStatus({
     </Tooltip>
   );
 }
-
-export function formatCoverageDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(timestamp));
-}

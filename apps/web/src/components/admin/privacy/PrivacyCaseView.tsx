@@ -14,6 +14,7 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { PRIVACY_CASE_SECTIONS, type PrivacyCaseSection } from "@/lib/admin/adminNavigationState";
 import {
   type PrivacyAdminBinding,
@@ -94,6 +95,7 @@ export function PrivacyCaseView({
   const t = useTranslations("privacyAdmin"),
     w = useTranslations("privacyAdmin.workflows"),
     nav = useTranslations("adminNavigation");
+  const format = useAdminFormat();
   const client = usePrivacyCaseClient(detail, binding);
   const [expanded, setExpanded] = useState<PrivacyCaseSection | null>(section),
     [eventCount, setEventCount] = useState(100);
@@ -126,7 +128,7 @@ export function PrivacyCaseView({
           </Button>
         </Stack>
         <Typography variant="body2">
-          {nav("privacyDue", { date: new Date(detail.request.dueAt).toLocaleString() })}
+          {nav("privacyDue", { date: format.dateTime(detail.request.dueAt) })}
         </Typography>
         <Stack
           direction="row"

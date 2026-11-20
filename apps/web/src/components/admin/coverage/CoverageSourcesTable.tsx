@@ -13,9 +13,10 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { CoverageReport, CoverageSourceRow } from "@openmapx/core/coverage";
 import { useTranslations } from "next-intl";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
-import { CoverageStatus, formatCoverageDate } from "./CoverageStatus";
+import { CoverageStatus } from "./CoverageStatus";
 
 export function CoverageSourcesTable({
   report,
@@ -90,6 +91,7 @@ function SourceRow({
   onSelect: (source: CoverageSourceRow) => void;
 }) {
   const t = useTranslations("adminCoverage");
+  const format = useAdminFormat();
   const reasons = source.reasons;
   return (
     <TableRow sx={{ "&:last-child td": { borderBottom: 0 } }}>
@@ -108,7 +110,7 @@ function SourceRow({
             </Typography>
             {source.count && (
               <Typography component="span" variant="caption" sx={{ display: "block" }}>
-                {source.count.value.toLocaleString()} {source.count.unit}
+                {t("sources.countValue", { count: source.count.value, unit: source.count.unit })}
               </Typography>
             )}
             <Typography
@@ -154,14 +156,14 @@ function SourceRow({
       </TableCell>
       <TableCell>
         <Typography variant="body2" title={source.lastSuccessfulCheckAt ?? undefined}>
-          {formatCoverageDate(source.lastSuccessfulCheckAt)}
+          {format.timestamp(source.lastSuccessfulCheckAt)}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {t(`attempt.${source.latestAttempt.outcome}`)}
         </Typography>
       </TableCell>
-      <TableCell>{formatCoverageDate(source.lastPublishedAt)}</TableCell>
-      <TableCell>{formatCoverageDate(source.expiresAt)}</TableCell>
+      <TableCell>{format.timestamp(source.lastPublishedAt)}</TableCell>
+      <TableCell>{format.timestamp(source.expiresAt)}</TableCell>
       <TableCell>
         <CoverageStatus status={source.rights.status} />
       </TableCell>

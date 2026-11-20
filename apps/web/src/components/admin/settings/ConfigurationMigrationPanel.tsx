@@ -21,6 +21,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useActivityClient } from "../activity/activityQueries";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
 import { CredentialTransferDialog } from "./CredentialTransferDialog";
@@ -29,6 +30,7 @@ import { discardStoredPreview } from "./credential-preview-storage";
 import { downloadMigrationJson } from "./migration-json-download";
 export function ConfigurationMigrationPanel() {
   const { actorId } = useAccountAdmin();
+  const format = useAdminFormat();
   const { client, apiUrl } = useActivityClient(),
     [preview, setPreview] = useState<ConfigurationMigrationPreview | null>(null),
     [error, setError] = useState(""),
@@ -218,7 +220,7 @@ export function ConfigurationMigrationPanel() {
           <>
             <Typography>
               {preview.changes.length} selected changes. Preview expires{" "}
-              {new Date(preview.expiresAt).toLocaleTimeString()}.
+              {format.time(preview.expiresAt)}.
             </Typography>
             {preview.prerequisites.map((p) => (
               <Alert key={`${p.scope}:${p.id}:${p.key}:${p.reason}:${p.source}`} severity="info">

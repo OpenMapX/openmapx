@@ -19,9 +19,9 @@ import { useEffect, useRef, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitCredentialsSection } from "@/components/admin/services/TransitCredentialsSection";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
-import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { ConfirmDialog } from "@/components/admin/shared/ConfirmDialog";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import type { TransitStateSummary } from "@/lib/admin/transitHooks";
 import {
@@ -40,6 +40,7 @@ export function LockfileCard(_props: { state?: TransitStateSummary } = {}) {
 function CatalogPinView() {
   const t = useTranslations("adminTransit");
   const tShared = useTranslations("adminShared");
+  const format = useAdminFormat();
   const [branch, setBranch] = useState(DEFAULT_CATALOG_BRANCH),
     [proposalId, setProposalId] = useState<string | undefined>(),
     [offset, setOffset] = useState(0),
@@ -226,8 +227,11 @@ function CatalogPinView() {
                 )}
               {data.page.proposals.map((entry) => (
                 <MenuItem key={entry.proposalId} value={entry.proposalId}>
-                  {entry.transitousRef} · {formatTransitAdminTimestamp(entry.createdAt)} ·{" "}
-                  {entry.proposalId.slice(0, 8)}
+                  {t("proposalOption", {
+                    ref: entry.transitousRef,
+                    createdAt: format.timestamp(entry.createdAt),
+                    id: entry.proposalId.slice(0, 8),
+                  })}
                 </MenuItem>
               ))}
             </TextField>
@@ -422,7 +426,7 @@ function CatalogPinView() {
                             : "validationNoLongerEligible",
                           {
                             countries: data.validation.countries.join(", ") || t("wholePlanet"),
-                            expiresAt: formatTransitAdminTimestamp(data.validation.expiresAt),
+                            expiresAt: format.timestamp(data.validation.expiresAt),
                           },
                         )
                       : data.validation.reason}
@@ -489,7 +493,7 @@ function CatalogPinView() {
               })}
             </Typography>
             {execution?.progress != null && (
-              <Typography variant="caption">{Math.round(execution.progress * 100)}%</Typography>
+              <Typography variant="caption">{format.percent(execution.progress)}</Typography>
             )}
             {Array.from(
               new Map(

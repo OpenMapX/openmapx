@@ -26,6 +26,7 @@ import {
   useServiceCredentials,
   useSetServiceCredential,
 } from "@/hooks/useServices";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -57,6 +58,7 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
 function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
   const t = useAdminTranslations("adminServices");
   const tCommon = useTranslations("common");
+  const format = useAdminFormat();
   const { client } = useActivityClient();
   const query = useServiceCredentials(serviceId);
   const setCred = useSetServiceCredential(serviceId);
@@ -194,10 +196,10 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
                     {cred.updatedBy
                       ? t("updatedAtBy", {
-                          updatedAt: new Date(cred.updatedAt).toLocaleString(),
+                          updatedAt: format.dateTime(cred.updatedAt),
                           updatedBy: cred.updatedBy,
                         })
-                      : t("updatedAt", { updatedAt: new Date(cred.updatedAt).toLocaleString() })}
+                      : t("updatedAt", { updatedAt: format.dateTime(cred.updatedAt) })}
                   </Typography>
                 )}
                 {cred.managedBy === "dawarich-provisioning" && (

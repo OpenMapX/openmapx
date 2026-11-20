@@ -41,6 +41,7 @@ import { useEffect, useRef, useState } from "react";
 import Menu from "@/components/ui/Menu";
 import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -242,6 +243,7 @@ function ActionsMenu({
 
 export function UserList() {
   const t = useTranslations("adminUsers");
+  const format = useAdminFormat();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterTab>("all");
   const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(25);
@@ -514,7 +516,7 @@ export function UserList() {
                               color: "text.secondary",
                             }}
                           >
-                            {new Date(user.createdAt).toLocaleDateString()}
+                            {format.date(user.createdAt)}
                           </Typography>
                         </TableCell>
                         <TableCell>

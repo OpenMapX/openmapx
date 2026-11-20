@@ -26,6 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -120,6 +121,7 @@ export function AdminOverview() {
   const t = useTranslations("adminOverview");
   const tShared = useTranslations("adminShared");
   const auditActionLabel = useAuditActionLabel();
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client);
   const showToast = useAdminToast();
@@ -344,12 +346,7 @@ export function AdminOverview() {
                       fontFamily: "monospace",
                     }}
                   >
-                    {new Date(entry.createdAt).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {format.dateTime(entry.createdAt)}
                   </Typography>
                   <Chip
                     label={auditActionLabel(entry.action)}
@@ -433,7 +430,7 @@ export function AdminOverview() {
                     {job.type}
                   </Typography>
                   {job.status === "running" && job.progress != null && (
-                    <Tooltip title={t("progress", { progress: job.progress })}>
+                    <Tooltip title={format.percent(job.progress / 100)}>
                       <CircularProgress size={16} variant="determinate" value={job.progress} />
                     </Tooltip>
                   )}
@@ -443,10 +440,7 @@ export function AdminOverview() {
                       color: "text.secondary",
                     }}
                   >
-                    {new Date(job.finishedAt ?? job.createdAt).toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {format.time(job.finishedAt ?? job.createdAt)}
                   </Typography>
                 </Stack>
               ))}
@@ -511,14 +505,14 @@ export function AdminOverview() {
               }}
             >
               <Chip
-                label={t("active24hActive", { active24h: data.users.active24h })}
+                label={t("activeCount", { count: data.users.active24h })}
                 size="small"
                 color="success"
                 variant="outlined"
               />
               {data.users.banned > 0 && (
                 <Chip
-                  label={t("bannedBanned", { banned: data.users.banned })}
+                  label={t("bannedCount", { count: data.users.banned })}
                   size="small"
                   color="error"
                   variant="outlined"
@@ -547,14 +541,14 @@ export function AdminOverview() {
               }}
             >
               <Chip
-                label={t("enabledEnabled", { enabled: data.integrations.enabled })}
+                label={t("enabledCount", { count: data.integrations.enabled })}
                 size="small"
                 color="success"
                 variant="outlined"
               />
               {data.integrations.unhealthy > 0 && (
                 <Chip
-                  label={t("unhealthyUnhealthy", { unhealthy: data.integrations.unhealthy })}
+                  label={t("unhealthyCount", { count: data.integrations.unhealthy })}
                   size="small"
                   color="error"
                   variant="outlined"
@@ -562,9 +556,7 @@ export function AdminOverview() {
               )}
               {data.integrations.unconfigured > 0 && (
                 <Chip
-                  label={t("unconfiguredUnconfigured", {
-                    unconfigured: data.integrations.unconfigured,
-                  })}
+                  label={t("unconfiguredCount", { count: data.integrations.unconfigured })}
                   size="small"
                   color="warning"
                   variant="outlined"
@@ -594,19 +586,19 @@ export function AdminOverview() {
                 }}
               >
                 <Chip
-                  label={t("runningRunning", { running: data.services.running })}
+                  label={t("runningCount", { count: data.services.running })}
                   size="small"
                   color="success"
                   variant="outlined"
                 />
                 <Chip
-                  label={t("stoppedStopped", { stopped: data.services.stopped })}
+                  label={t("stoppedCount", { count: data.services.stopped })}
                   size="small"
                   variant="outlined"
                 />
                 {data.services.unhealthy > 0 && (
                   <Chip
-                    label={t("unhealthyUnhealthy", { unhealthy: data.services.unhealthy })}
+                    label={t("unhealthyCount", { count: data.services.unhealthy })}
                     size="small"
                     color="error"
                     variant="outlined"
