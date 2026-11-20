@@ -87,6 +87,14 @@ it. Check each package's exports and scripts before assuming it has a separate
 build output. Server code should use focused server-safe entry points instead
 of barrels that also export React hooks.
 
+`@openmapx/core` and `@openmapx/mobility-core` declare `sideEffects` in their
+manifests, so a bundler drops the modules a page does not use. A module whose
+import-time code must run, such as the fetch replacement in `undici-fetch.ts`,
+is listed there. `scripts/core-bundle-boundary.test.ts` refuses an unlisted
+module with import-time code, classifies every core export as browser, server
+or test, and bundles each browser export to prove it reaches no server-only
+module.
+
 | Package                                                                                                                                                                                                                                                              | Owns                                                                                                                                                                                                                                                                                                     |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@openmapx/core`                                                                                                                                                                                                                                                     | The shared spine: domain types (`Place`, `Route`, geometry, `BBox`), Zustand stores, the typed API client, TanStack Query hooks, the strict ops-agent contract/client, and the **services framework** (manifest schema, registry, the compose renderer, the `DataManagerClient`, capability resolution). |
