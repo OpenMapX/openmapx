@@ -1508,10 +1508,7 @@ export class CrashHost {
 
   private keepEvidence(testName: string) {
     const name = `${testName.replace(/[^a-z0-9]+/gi, "-").slice(0, 80)}-${Date.now()}`;
-    const target = join(
-      process.env.OPENMAPX_CRASH_LOG_DIR ?? join(tmpdir(), "openmapx-crash-logs"),
-      name,
-    );
+    const target = join(evidenceRoot(), name);
     copyEvidence(this.workDir, join(target, "work"));
     copyEvidence(join(this.infraDir, "state"), join(target, "state"));
     process.stderr.write(`[crash-points] kept the logs and state of "${testName}" in ${target}\n`);
@@ -1519,7 +1516,8 @@ export class CrashHost {
 
   /** Stops every role and removes the host. `keepAs` names a failed test:
    * its role logs and the agent's state are copied first to
-   * `OPENMAPX_CRASH_LOG_DIR` (default `<tmpdir>/openmapx-crash-logs`). */
+   * `OPENMAPX_CRASH_LOG_DIR`, or by default to one new private directory per
+   * run under the system temp directory. */
   async close(keepAs?: string): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -1572,6 +1570,18 @@ function requestMatch(match: ReplyMatch): ReplyMatch {
   return typeof match.kind === "string" ? { ...match, kind: requestKinds(match.kind) } : match;
 }
 
+let defaultEvidenceRoot: string | undefined;
+
+/** Where failed scenarios keep their evidence: `OPENMAPX_CRASH_LOG_DIR`, or
+ * one private directory this run creates under the system temp directory, so
+ * no other user can place or read anything there. */
+function evidenceRoot(): string {
+  const configured = process.env.OPENMAPX_CRASH_LOG_DIR;
+  if (configured) return configured;
+  defaultEvidenceRoot ??= mkdtempSync(join(tmpdir(), "openmapx-crash-logs-"));
+  return defaultEvidenceRoot;
+}
+
 /** Copies a directory the roles wrote, as root where their identities
  * differ from the test's, and leaves the copy readable by the test's user. */
 function copyEvidence(source: string, target: string) {
@@ -1587,7 +1597,10 @@ function copyEvidence(source: string, target: string) {
   try {
     cpSync(source, target, { recursive: true, force: true });
   } catch (error) {
-    writeFileSync(`${target}.unreadable`, `${(error as Error).message}\n`);
+    writeFileSync(`${target}.unreadable`, `${(error as Error).message}\n`, {
+      flag: "wx",
+      mode: 0o600,
+    });
   }
 }
 

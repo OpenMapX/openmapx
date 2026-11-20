@@ -20,8 +20,9 @@ listed in `known-failures.json`. Each entry gives a one-line `reason` and a
 and, for an assertion, the values it compared. Every scenario declares itself
 through `crashScenario()` (`scenario.ts`), which opens one fresh host for it and
 closes it afterwards. A scenario that fails keeps its host's role logs and the
-agent's state in `OPENMAPX_CRASH_LOG_DIR` (default `<tmpdir>/openmapx-crash-logs`)
-before the host is removed. A listed scenario passes only when it
+agent's state in `OPENMAPX_CRASH_LOG_DIR` (by default a new private
+`openmapx-crash-logs-*` directory under the system temp directory, whose path
+the run prints) before the host is removed. A listed scenario passes only when it
 fails with its signature within its normal timeout. CI turns red when it
 passes, when it fails any other way (the original error is reported) and when
 it hangs. The rules:
