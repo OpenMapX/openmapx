@@ -8,5 +8,8 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/integration-photos": "workspace:^"
+  },
+  "devDependencies": {
+    "@openmapx/mobility-core": "workspace:^"
   }
 }

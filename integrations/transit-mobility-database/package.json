@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openmapx/integration-framework": "workspace:^"
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^"
   }
 }

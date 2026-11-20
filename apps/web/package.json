@@ -46,6 +46,7 @@
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mangrove-client": "workspace:^",
     "@openmapx/mangrove-react": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "@photo-sphere-viewer/core": "^5.15.1",
     "@photo-sphere-viewer/virtual-tour-plugin": "^5.15.1",

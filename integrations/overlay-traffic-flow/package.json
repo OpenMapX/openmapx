@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openmapx/core": "workspace:^"
+    "@openmapx/core": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^"
   },
   "peerDependencies": {
     "@mui/material": "^9.5.0",

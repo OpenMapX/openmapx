@@ -28,5 +28,8 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/integration-geocoding": "workspace:^"
+  },
+  "devDependencies": {
+    "@openmapx/mobility-core": "workspace:^"
   }
 }

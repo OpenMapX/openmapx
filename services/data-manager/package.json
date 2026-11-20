@@ -37,6 +37,7 @@
     "@fastify/swagger": "9.9.3",
     "@mapbox/vector-tile": "3.0.0",
     "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
     "@testcontainers/postgresql": "^12.2.1",
     "@types/node": "^26.6.6",
     "pbf": "5.1.2",
