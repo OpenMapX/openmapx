@@ -51,7 +51,7 @@ import Typography from "@mui/material/Typography";
 import { type Place, safeHref } from "@openmapx/core";
 import { contributorsForRecordFields } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   SiBluesky,
   SiFlickr,
@@ -127,92 +127,6 @@ function langFlag(lang: string): string {
   const cc = LANG_TO_COUNTRY[lang.toLowerCase()];
   return cc ? countryToFlag(cc) : lang.toUpperCase();
 }
-
-/**
- * All simple (non-multilingual) tag keys this component handles.
- * Used both for rendering and for computing consumed keys.
- */
-const CONSUMED_SIMPLE_KEYS = new Set([
-  // Identity
-  "operator",
-  "brand",
-  "network",
-  // Contact
-  "email",
-  "contact:email",
-  // Access & entry
-  "access",
-  "wheelchair",
-  "fee",
-  "charge",
-  // Physical
-  "indoor",
-  "level",
-  "locked",
-  "surface",
-  "ele",
-  "height",
-  "building:levels",
-  // Capacity & rating
-  "capacity",
-  "stars",
-  // Facilities
-  "smoking",
-  "dog",
-  "drinking_water",
-  "toilets",
-  "toilets:wheelchair",
-  "changing_table",
-  "shower",
-  // Services
-  "drive_through",
-  "delivery",
-  "takeaway",
-  "outdoor_seating",
-  "internet_access",
-  // Equipment
-  "manufacturer",
-  "model",
-  // Cultural
-  "cuisine",
-  "religion",
-  "denomination",
-  // Temporal
-  "start_date",
-  "heritage",
-  "min_age",
-  // Linked metadata (consumed so they don't clutter "Other details")
-  "operator:wikidata",
-  "operator:wikipedia",
-  "brand:wikidata",
-  "brand:wikipedia",
-  // Contact alternatives (consumed by overview tab detail rows)
-  "contact:phone",
-  "contact:website",
-  // Review platform links (consumed by Reviews tab)
-  "contact:tripadvisor",
-  "contact:yelp",
-  "ref:yelp",
-  // Photos (consumed by gallery)
-  "image",
-  // Social media (consumed by social row)
-  "contact:facebook",
-  "contact:instagram",
-  "contact:twitter",
-  "contact:youtube",
-  "contact:linkedin",
-  "contact:pinterest",
-  "contact:telegram",
-  "contact:whatsapp",
-  "contact:reddit",
-  "contact:tiktok",
-  "contact:mastodon",
-  "contact:bluesky",
-  "contact:vk",
-  "contact:threads",
-  "contact:flickr",
-  "contact:vimeo",
-]);
 
 /** Social media platform definitions: OSM tag key → label, icon, URL resolver. */
 const SOCIAL_PLATFORMS: Array<{
@@ -521,29 +435,576 @@ function DetailItem({ icon, children }: { icon: ReactNode; children: ReactNode }
   );
 }
 
-function BoolItem({
-  icon,
-  iconNo,
-  label,
-  value,
-  showNo = false,
-}: {
+type Translate = (key: string, values?: Record<string, string>) => string;
+
+/** One shown row: its icon, its content and the tags it credits. */
+interface TagRow {
   icon: ReactNode;
-  iconNo?: ReactNode;
-  label: string;
-  value: string;
-  showNo?: boolean;
-}) {
-  const isNo = value === "no";
-  if (isNo && !showNo) return null;
+  content: ReactNode;
+  /** The tags the row actually shows, credited to their sources. */
+  credits: string[];
+}
+
+/**
+ * One kind of detail row. `keys` are every tag the row reads, including linked
+ * metadata it uses only for a link; all of them stay out of "Other details".
+ * Practical rows answer what a visitor needs; the rest describe the place.
+ * `list` rows come first, one per line; `grid` rows share a two-column grid.
+ */
+interface TagSpec {
+  id: string;
+  keys: readonly string[];
+  section: "practical" | "remaining";
+  layout: "list" | "grid";
+  render: (tags: Record<string, string>, t: Translate, representedEmail?: string) => TagRow | null;
+}
+
+const ICON = { fontSize: 20 } as const;
+
+function text(value: ReactNode, color = "text.primary", noWrap = false) {
   return (
-    <DetailItem icon={isNo && iconNo ? iconNo : icon}>
-      <Typography variant="body2" color={isNo ? "text.secondary" : "text.primary"}>
-        {label}
-      </Typography>
-    </DetailItem>
+    <Typography variant="body2" noWrap={noWrap} sx={{ color }}>
+      {value}
+    </Typography>
   );
 }
+
+function linkedText(url: string | null, label: string) {
+  if (!url) return text(label);
+  return (
+    <Link
+      href={safeHref(url)}
+      target="_blank"
+      rel="noopener noreferrer"
+      variant="body2"
+      underline="hover"
+      sx={{ color: "text.primary" }}
+    >
+      {label}
+    </Link>
+  );
+}
+
+/** The linked tag a row's link was built from: the Wikipedia article, else the Wikidata item. */
+function linkedKeys(tags: Record<string, string>, prefix: string): string[] {
+  const wp = tags[`${prefix}:wikipedia`];
+  if (wp && wp.indexOf(":") > 0) return [`${prefix}:wikipedia`];
+  return tags[`${prefix}:wikidata`] ? [`${prefix}:wikidata`] : [];
+}
+
+function humanized(tags: Record<string, string>, key: string): string | undefined {
+  return humanizeOsmTagValue(tags[key] ?? "") || tags[key];
+}
+
+/** A row with a fixed label for an OSM value, falling back to the capitalized value. */
+function labelled(
+  key: string,
+  labels: Record<string, string>,
+  icon: (value: string) => ReactNode,
+  muted: (value: string) => boolean = () => false,
+): TagSpec["render"] {
+  return (tags, t) => {
+    const value = tags[key];
+    if (!value) return null;
+    const labelKey = labels[value];
+    return {
+      icon: icon(value),
+      content: text(
+        labelKey ? t(labelKey) : capitalize(value),
+        muted(value) ? "text.secondary" : "text.primary",
+      ),
+      credits: [key],
+    };
+  };
+}
+
+/** A row shown only for `key=yes`, with a fixed label. */
+function onlyYes(key: string, labelKey: string, icon: ReactNode): TagSpec["render"] {
+  return (tags, t) =>
+    tags[key] === "yes" ? { icon, content: text(t(labelKey)), credits: [key] } : null;
+}
+
+/** A row showing the tag's value through `format`. */
+function valued(
+  key: string,
+  icon: ReactNode,
+  format: (value: string, t: Translate) => ReactNode,
+): TagSpec["render"] {
+  return (tags, t) => {
+    const value = tags[key];
+    return value ? { icon, content: text(format(value, t)), credits: [key] } : null;
+  };
+}
+
+const WHEELCHAIR: Record<string, { color: string; labelKey: string }> = {
+  yes: { color: "success.main", labelKey: "wheelchairYes" },
+  designated: { color: "success.main", labelKey: "wheelchairDesignated" },
+  limited: { color: "warning.main", labelKey: "wheelchairLimited" },
+  no: { color: "text.secondary", labelKey: "wheelchairNo" },
+};
+
+const OPEN_ACCESS = new Set(["yes", "public", "designated", "permissive", "discouraged"]);
+const ACCESS_LABELS: Record<string, string> = {
+  yes: "accessPublic",
+  public: "accessPublic",
+  designated: "accessDesignated",
+  permissive: "accessPermissive",
+  discouraged: "accessDiscouraged",
+  customers: "accessCustomers",
+  permit: "accessPermit",
+  destination: "accessDestination",
+  delivery: "accessDelivery",
+  agricultural: "accessAgricultural",
+  forestry: "accessForestry",
+  military: "accessMilitary",
+  private: "accessPrivate",
+  no: "accessNo",
+};
+
+const TOILETS_WHEELCHAIR: Record<string, string> = {
+  yes: "toiletsWheelchairYes",
+  designated: "toiletsWheelchairDesignated",
+  limited: "toiletsWheelchairLimited",
+  no: "toiletsWheelchairNo",
+};
+
+/** Every detail row this component knows, in the order they are shown. */
+const TAG_SPECS: readonly TagSpec[] = [
+  {
+    id: "operator",
+    keys: ["operator", "operator:wikidata", "operator:wikipedia"],
+    section: "remaining",
+    layout: "list",
+    render: (tags) => {
+      const operator = humanized(tags, "operator");
+      if (!operator) return null;
+      return {
+        icon: <BusinessIcon sx={ICON} />,
+        content: linkedText(resolveLinkedUrl(tags, "operator"), operator),
+        credits: ["operator", ...linkedKeys(tags, "operator")],
+      };
+    },
+  },
+  {
+    id: "brand",
+    keys: ["brand", "network", "brand:wikidata", "brand:wikipedia"],
+    section: "remaining",
+    layout: "list",
+    render: (tags) => {
+      const brand = humanized(tags, "brand");
+      const network = humanized(tags, "network");
+      // A brand that only repeats the operator adds nothing.
+      if ((!brand && !network) || (brand && brand === humanized(tags, "operator"))) return null;
+      const label =
+        brand && network && brand !== network ? `${brand} (${network})` : (brand ?? network ?? "");
+      return {
+        icon: <StorefrontIcon sx={ICON} />,
+        content: linkedText(resolveLinkedUrl(tags, "brand"), label),
+        credits: [
+          ...(brand ? ["brand"] : []),
+          ...(network && (!brand || network !== brand) ? ["network"] : []),
+          ...linkedKeys(tags, "brand"),
+        ],
+      };
+    },
+  },
+  {
+    id: "email",
+    keys: ["email", "contact:email"],
+    section: "practical",
+    layout: "list",
+    render: (tags, _t, representedEmail) => {
+      const email = tags.email ?? tags["contact:email"];
+      // The card's own contact row may already show this address.
+      if (!email || email.trim().toLowerCase() === representedEmail?.trim().toLowerCase()) {
+        return null;
+      }
+      return {
+        icon: <EmailIcon sx={ICON} />,
+        content: (
+          <Link
+            href={`mailto:${email}`}
+            variant="body2"
+            underline="hover"
+            sx={{ color: "text.primary" }}
+          >
+            {email}
+          </Link>
+        ),
+        credits: [tags.email !== undefined ? "email" : "contact:email"],
+      };
+    },
+  },
+  {
+    id: "wheelchair",
+    keys: ["wheelchair"],
+    section: "practical",
+    layout: "list",
+    render: (tags, t) => {
+      const value = tags.wheelchair;
+      if (!value) return null;
+      const known = WHEELCHAIR[value];
+      return {
+        icon: <AccessibleIcon sx={{ ...ICON, color: known?.color ?? "text.secondary" }} />,
+        content: text(
+          known ? t(known.labelKey) : capitalize(value),
+          known?.color ?? "text.primary",
+        ),
+        credits: ["wheelchair"],
+      };
+    },
+  },
+  {
+    id: "access",
+    keys: ["access"],
+    section: "practical",
+    layout: "list",
+    render: labelled("access", ACCESS_LABELS, (value) =>
+      !ACCESS_LABELS[value] || OPEN_ACCESS.has(value) ? (
+        <LockOpenIcon sx={ICON} />
+      ) : (
+        <LockIcon sx={{ ...ICON, color: "text.secondary" }} />
+      ),
+    ),
+  },
+  {
+    id: "fee",
+    keys: ["fee", "charge"],
+    section: "practical",
+    layout: "list",
+    render: (tags, t) => {
+      const { fee, charge } = tags;
+      if (!fee && !charge) return null;
+      return {
+        icon: fee === "no" ? <MoneyOffIcon sx={ICON} /> : <AttachMoneyIcon sx={ICON} />,
+        content: text(
+          fee === "no" ? t("feeNo") : charge ? `${t("feeYes")} · ${charge}` : t("feeYes"),
+        ),
+        credits: [...(fee ? ["fee"] : []), ...(charge && fee !== "no" ? ["charge"] : [])],
+      };
+    },
+  },
+  {
+    id: "cuisine",
+    keys: ["cuisine"],
+    section: "practical",
+    layout: "list",
+    render: valued("cuisine", <RestaurantIcon sx={ICON} />, formatList),
+  },
+  {
+    id: "religion",
+    keys: ["religion", "denomination"],
+    section: "remaining",
+    layout: "list",
+    render: (tags) => {
+      const { religion, denomination } = tags;
+      if (!religion && !denomination) return null;
+      return {
+        icon: <AccountBalanceIcon sx={ICON} />,
+        content: text(
+          [religion, denomination]
+            .filter((value): value is string => Boolean(value))
+            .map(capitalize)
+            .join(" · "),
+        ),
+        credits: [...(religion ? ["religion"] : []), ...(denomination ? ["denomination"] : [])],
+      };
+    },
+  },
+  {
+    id: "indoor",
+    keys: ["indoor"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("indoor", <MeetingRoomIcon sx={ICON} />, (value, t) =>
+      value === "yes" ? t("indoor") : t("outdoor"),
+    ),
+  },
+  {
+    id: "level",
+    keys: ["level"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("level", <StairsIcon sx={ICON} />, (value, t) => `${t("level")} ${value}`),
+  },
+  {
+    id: "locked",
+    keys: ["locked"],
+    section: "remaining",
+    layout: "grid",
+    render: (tags, t) =>
+      tags.locked
+        ? {
+            icon: tags.locked === "yes" ? <LockIcon sx={ICON} /> : <LockOpenIcon sx={ICON} />,
+            content: text(tags.locked === "yes" ? t("locked") : t("unlocked")),
+            credits: ["locked"],
+          }
+        : null,
+  },
+  {
+    id: "capacity",
+    keys: ["capacity"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("capacity", <GroupIcon sx={ICON} />, (value, t) => `${t("capacity")} ${value}`),
+  },
+  {
+    id: "stars",
+    keys: ["stars"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("stars", <StarIcon sx={ICON} />, (value) => {
+      const n = parseInt(value, 10);
+      return !Number.isNaN(n) && n <= 7 ? "★".repeat(n) : `${value} ★`;
+    }),
+  },
+  {
+    id: "ele",
+    keys: ["ele"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("ele", <LandscapeIcon sx={ICON} />, (value) => `${value} m`),
+  },
+  {
+    id: "surface",
+    keys: ["surface"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("surface", <TerrainIcon sx={ICON} />, (value) =>
+      capitalize(value.replace(/_/g, " ")),
+    ),
+  },
+  {
+    id: "height",
+    keys: ["height"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("height", <HeightIcon sx={ICON} />, (value) => `${value} m`),
+  },
+  {
+    id: "building:levels",
+    keys: ["building:levels"],
+    section: "remaining",
+    layout: "grid",
+    render: valued(
+      "building:levels",
+      <ApartmentIcon sx={ICON} />,
+      (value, t) => `${value} ${t("floors")}`,
+    ),
+  },
+  {
+    id: "smoking",
+    keys: ["smoking"],
+    section: "practical",
+    layout: "grid",
+    render: labelled(
+      "smoking",
+      {
+        yes: "smokingYes",
+        no: "smokingNo",
+        outside: "smokingOutside",
+        separated: "smokingSeparated",
+        isolated: "smokingIsolated",
+      },
+      (value) => (value === "no" ? <SmokeFreeIcon sx={ICON} /> : <SmokingRoomsIcon sx={ICON} />),
+      (value) => value === "no",
+    ),
+  },
+  {
+    id: "dog",
+    keys: ["dog"],
+    section: "practical",
+    layout: "grid",
+    render: labelled(
+      "dog",
+      { yes: "dogYes", no: "dogNo", leashed: "dogLeashed" },
+      (value) => (
+        <PetsIcon sx={{ ...ICON, color: value === "no" ? "text.secondary" : undefined }} />
+      ),
+      (value) => value === "no",
+    ),
+  },
+  {
+    id: "drive_through",
+    keys: ["drive_through"],
+    section: "practical",
+    layout: "grid",
+    render: onlyYes("drive_through", "driveThrough", <DriveEtaIcon sx={ICON} />),
+  },
+  {
+    id: "delivery",
+    keys: ["delivery"],
+    section: "practical",
+    layout: "grid",
+    render: onlyYes("delivery", "delivery", <LocalShippingIcon sx={ICON} />),
+  },
+  {
+    id: "takeaway",
+    keys: ["takeaway"],
+    section: "practical",
+    layout: "grid",
+    render: (tags, t) => {
+      const labelKey = { yes: "takeawayYes", only: "takeawayOnly" }[tags.takeaway ?? ""];
+      return labelKey
+        ? {
+            icon: <TakeoutDiningIcon sx={ICON} />,
+            content: text(t(labelKey)),
+            credits: ["takeaway"],
+          }
+        : null;
+    },
+  },
+  {
+    id: "outdoor_seating",
+    keys: ["outdoor_seating"],
+    section: "practical",
+    layout: "grid",
+    render: onlyYes("outdoor_seating", "outdoorSeating", <DeckIcon sx={ICON} />),
+  },
+  {
+    id: "internet_access",
+    keys: ["internet_access"],
+    section: "practical",
+    layout: "grid",
+    render: (tags, t) => {
+      const value = tags.internet_access;
+      if (!value) return null;
+      const isNo = value === "no";
+      return {
+        icon: isNo ? (
+          <WifiOffIcon sx={{ ...ICON, color: "text.secondary" }} />
+        ) : (
+          <WifiIcon sx={ICON} />
+        ),
+        content: text(
+          isNo ? t("noWifi") : t("wifiAvailable"),
+          isNo ? "text.secondary" : "text.primary",
+        ),
+        credits: ["internet_access"],
+      };
+    },
+  },
+  {
+    id: "drinking_water",
+    keys: ["drinking_water"],
+    section: "practical",
+    layout: "grid",
+    render: onlyYes("drinking_water", "drinkingWater", <WaterDropIcon sx={ICON} />),
+  },
+  {
+    id: "toilets",
+    keys: ["toilets", "toilets:wheelchair"],
+    section: "practical",
+    layout: "grid",
+    render: (tags, t) => {
+      const wheelchair = tags["toilets:wheelchair"];
+      if (tags.toilets !== "yes" && !wheelchair) return null;
+      const wheelchairKey = wheelchair ? TOILETS_WHEELCHAIR[wheelchair] : null;
+      return {
+        icon: <WcIcon sx={ICON} />,
+        content: text(
+          <>
+            {t("toilets")}
+            {wheelchairKey && (
+              <Typography
+                component="span"
+                variant="body2"
+                color={
+                  wheelchair === "no"
+                    ? "text.secondary"
+                    : wheelchair === "limited"
+                      ? "warning.main"
+                      : "success.main"
+                }
+              >
+                {" · "}
+                {t(wheelchairKey)}
+              </Typography>
+            )}
+          </>,
+        ),
+        credits: [
+          ...(tags.toilets === "yes" ? ["toilets"] : []),
+          ...(wheelchair ? ["toilets:wheelchair"] : []),
+        ],
+      };
+    },
+  },
+  {
+    id: "changing_table",
+    keys: ["changing_table"],
+    section: "practical",
+    layout: "grid",
+    render: onlyYes("changing_table", "changingTable", <BabyChangingStationIcon sx={ICON} />),
+  },
+  {
+    id: "shower",
+    keys: ["shower"],
+    section: "remaining",
+    layout: "grid",
+    render: onlyYes("shower", "shower", <WaterDropIcon sx={ICON} />),
+  },
+  {
+    id: "start_date",
+    keys: ["start_date"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("start_date", <EventIcon sx={ICON} />, (value) => value),
+  },
+  {
+    id: "heritage",
+    keys: ["heritage"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("heritage", <AccountBalanceIcon sx={ICON} />, (value, t) =>
+      t(
+        { "1": "heritageWorld", "2": "heritageNational", "3": "heritageRegional" }[value] ??
+          "heritageYes",
+      ),
+    ),
+  },
+  {
+    id: "min_age",
+    keys: ["min_age"],
+    section: "remaining",
+    layout: "grid",
+    render: valued("min_age", <GroupIcon sx={ICON} />, (value, t) => t("minAge", { age: value })),
+  },
+  {
+    id: "manufacturer",
+    keys: ["manufacturer", "model"],
+    section: "remaining",
+    layout: "grid",
+    render: (tags) => {
+      const { manufacturer, model } = tags;
+      if (!manufacturer && !model) return null;
+      return {
+        icon: <PrecisionManufacturingIcon sx={ICON} />,
+        content: text([manufacturer, model].filter(Boolean).join(" · "), "text.primary", true),
+        credits: [...(manufacturer ? ["manufacturer"] : []), ...(model ? ["model"] : [])],
+      };
+    },
+  },
+];
+
+/**
+ * Tags other parts of the place card show (the overview's contact rows, the
+ * reviews tab and the photo gallery), kept out of "Other details" too.
+ */
+const SHOWN_ELSEWHERE_KEYS = [
+  "contact:phone",
+  "contact:website",
+  "contact:tripadvisor",
+  "contact:yelp",
+  "ref:yelp",
+  "image",
+];
+
+const CONSUMED_SIMPLE_KEYS = new Set([
+  ...TAG_SPECS.flatMap((spec) => spec.keys),
+  ...SOCIAL_PLATFORMS.map((platform) => platform.tagKey),
+  ...SHOWN_ELSEWHERE_KEYS,
+]);
 
 /**
  * Set of all OSM tag keys consumed by this component.
@@ -568,19 +1029,6 @@ interface Props {
   place?: Pick<Place, "contributors" | "fieldContributors">;
 }
 
-const PRACTICAL_GRID_KEYS = new Set([
-  "smoking",
-  "dog",
-  "drive_through",
-  "delivery",
-  "takeaway",
-  "outdoor_seating",
-  "internet_access",
-  "drinking_water",
-  "toilets",
-  "changing_table",
-]);
-
 export function PlaceTagDetails({
   osmTags,
   section = "all",
@@ -589,638 +1037,36 @@ export function PlaceTagDetails({
   place,
 }: Props) {
   const t = useTranslations("place");
+  const shows = (rowSection: TagSpec["section"]) => section === "all" || section === rowSection;
 
-  const tag = (k: string) => osmTags[k];
-
-  const operator = humanizeOsmTagValue(tag("operator") ?? "") || tag("operator");
-  const brand = humanizeOsmTagValue(tag("brand") ?? "") || tag("brand");
-  const network = humanizeOsmTagValue(tag("network") ?? "") || tag("network");
-  const email = tag("email") ?? tag("contact:email");
-  const visibleEmail =
-    email && email.trim().toLowerCase() !== representedEmail?.trim().toLowerCase() ? email : null;
-  const wheelchair = tag("wheelchair");
-  const access = tag("access");
-  const fee = tag("fee");
-  const charge = tag("charge");
-  const indoor = tag("indoor");
-  const level = tag("level");
-  const locked = tag("locked");
-  const capacity = tag("capacity");
-  const stars = tag("stars");
-  const ele = tag("ele");
-  const surface = tag("surface");
-  const height = tag("height");
-  const buildingLevels = tag("building:levels");
-  const smoking = tag("smoking");
-  const dog = tag("dog");
-  const driveThrough = tag("drive_through");
-  const delivery = tag("delivery");
-  const takeaway = tag("takeaway");
-  const outdoorSeating = tag("outdoor_seating");
-  const internetAccess = tag("internet_access");
-  const drinkingWater = tag("drinking_water");
-  const toilets = tag("toilets");
-  const toiletsWheelchair = tag("toilets:wheelchair");
-  const changingTable = tag("changing_table");
-  const shower = tag("shower");
-  const manufacturer = tag("manufacturer");
-  const model = tag("model");
-  const cuisine = tag("cuisine");
-  const religion = tag("religion");
-  const denomination = tag("denomination");
-  const startDate = tag("start_date");
-  const heritage = tag("heritage");
-  const minAge = tag("min_age");
-
-  const multilingualEntries = collectMultilingualEntries(osmTags);
-
-  const socialLinks = SOCIAL_PLATFORMS.filter((p) => osmTags[p.tagKey]).map((p) => ({
-    tagKey: p.tagKey,
-    label: p.label,
-    icon: p.icon,
-    url: p.toUrl(osmTags[p.tagKey]),
-  }));
-
-  const hasAny =
-    operator ||
-    brand ||
-    network ||
-    email ||
-    wheelchair ||
-    access ||
-    fee ||
-    charge ||
-    indoor ||
-    level ||
-    locked ||
-    capacity ||
-    stars ||
-    ele ||
-    surface ||
-    height ||
-    buildingLevels ||
-    smoking ||
-    dog ||
-    driveThrough ||
-    delivery ||
-    takeaway ||
-    outdoorSeating ||
-    internetAccess ||
-    drinkingWater ||
-    toilets ||
-    changingTable ||
-    shower ||
-    manufacturer ||
-    model ||
-    cuisine ||
-    religion ||
-    denomination ||
-    startDate ||
-    heritage ||
-    minAge ||
-    multilingualEntries.length > 0 ||
-    socialLinks.length > 0;
-
-  if (!hasAny) return null;
-
-  // Wheelchair config
-  const wheelchairCfg: Record<string, { color: string; labelKey: string }> = {
-    yes: { color: "success.main", labelKey: "wheelchairYes" },
-    designated: { color: "success.main", labelKey: "wheelchairDesignated" },
-    limited: { color: "warning.main", labelKey: "wheelchairLimited" },
-    no: { color: "text.secondary", labelKey: "wheelchairNo" },
-  };
-  const wc = wheelchair ? wheelchairCfg[wheelchair] : null;
-
-  // Access config
-  const openIcon = <LockOpenIcon sx={{ fontSize: 20 }} />;
-  const restrictedIcon = <LockIcon sx={{ fontSize: 20, color: "text.secondary" }} />;
-  const accessCfg: Record<string, { icon: ReactNode; labelKey: string }> = {
-    yes: { icon: openIcon, labelKey: "accessPublic" },
-    public: { icon: openIcon, labelKey: "accessPublic" },
-    designated: { icon: openIcon, labelKey: "accessDesignated" },
-    permissive: { icon: openIcon, labelKey: "accessPermissive" },
-    discouraged: { icon: openIcon, labelKey: "accessDiscouraged" },
-    customers: { icon: restrictedIcon, labelKey: "accessCustomers" },
-    permit: { icon: restrictedIcon, labelKey: "accessPermit" },
-    destination: { icon: restrictedIcon, labelKey: "accessDestination" },
-    delivery: { icon: restrictedIcon, labelKey: "accessDelivery" },
-    agricultural: { icon: restrictedIcon, labelKey: "accessAgricultural" },
-    forestry: { icon: restrictedIcon, labelKey: "accessForestry" },
-    military: { icon: restrictedIcon, labelKey: "accessMilitary" },
-    private: { icon: restrictedIcon, labelKey: "accessPrivate" },
-    no: { icon: restrictedIcon, labelKey: "accessNo" },
-  };
-  const ac = access ? accessCfg[access] : null;
-
-  // Collect grid items to determine whether to render the grid
-  const gridItems: ReactElement[] = [];
-
-  if (indoor) {
-    gridItems.push(
-      <DetailItem key="indoor" icon={<MeetingRoomIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {indoor === "yes" ? t("indoor") : t("outdoor")}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (level) {
-    gridItems.push(
-      <DetailItem key="level" icon={<StairsIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {t("level")} {level}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (locked) {
-    gridItems.push(
-      <DetailItem
-        key="locked"
-        icon={
-          locked === "yes" ? (
-            <LockIcon sx={{ fontSize: 20 }} />
-          ) : (
-            <LockOpenIcon sx={{ fontSize: 20 }} />
-          )
-        }
-      >
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {locked === "yes" ? t("locked") : t("unlocked")}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (capacity) {
-    gridItems.push(
-      <DetailItem key="capacity" icon={<GroupIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {t("capacity")} {capacity}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (stars) {
-    const n = parseInt(stars, 10);
-    const display = !Number.isNaN(n) && n <= 7 ? "★".repeat(n) : `${stars} ★`;
-    gridItems.push(
-      <DetailItem key="stars" icon={<StarIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {display}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (ele) {
-    gridItems.push(
-      <DetailItem key="ele" icon={<LandscapeIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {ele} m
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (surface) {
-    gridItems.push(
-      <DetailItem key="surface" icon={<TerrainIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {capitalize(surface.replace(/_/g, " "))}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (height) {
-    gridItems.push(
-      <DetailItem key="height" icon={<HeightIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {height} m
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (buildingLevels) {
-    gridItems.push(
-      <DetailItem key="building:levels" icon={<ApartmentIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {buildingLevels} {t("floors")}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (smoking) {
-    const smokingLabels: Record<string, string> = {
-      yes: "smokingYes",
-      no: "smokingNo",
-      outside: "smokingOutside",
-      separated: "smokingSeparated",
-      isolated: "smokingIsolated",
-    };
-    const labelKey = smokingLabels[smoking];
-    gridItems.push(
-      <DetailItem
-        key="smoking"
-        icon={
-          smoking === "no" ? (
-            <SmokeFreeIcon sx={{ fontSize: 20 }} />
-          ) : (
-            <SmokingRoomsIcon sx={{ fontSize: 20 }} />
-          )
-        }
-      >
-        <Typography variant="body2" color={smoking === "no" ? "text.secondary" : "text.primary"}>
-          {labelKey ? t(labelKey) : capitalize(smoking)}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (dog) {
-    const dogLabels: Record<string, string> = {
-      yes: "dogYes",
-      no: "dogNo",
-      leashed: "dogLeashed",
-    };
-    const labelKey = dogLabels[dog];
-    gridItems.push(
-      <DetailItem
-        key="dog"
-        icon={
-          <PetsIcon sx={{ fontSize: 20, color: dog === "no" ? "text.secondary" : undefined }} />
-        }
-      >
-        <Typography variant="body2" color={dog === "no" ? "text.secondary" : "text.primary"}>
-          {labelKey ? t(labelKey) : capitalize(dog)}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (driveThrough === "yes") {
-    gridItems.push(
-      <BoolItem
-        key="drive_through"
-        icon={<DriveEtaIcon sx={{ fontSize: 20 }} />}
-        label={t("driveThrough")}
-        value="yes"
-      />,
-    );
-  }
-
-  if (delivery === "yes") {
-    gridItems.push(
-      <BoolItem
-        key="delivery"
-        icon={<LocalShippingIcon sx={{ fontSize: 20 }} />}
-        label={t("delivery")}
-        value="yes"
-      />,
-    );
-  }
-
-  if (takeaway) {
-    const takeawayLabels: Record<string, string> = {
-      yes: "takeawayYes",
-      only: "takeawayOnly",
-    };
-    const labelKey = takeawayLabels[takeaway];
-    if (labelKey) {
-      gridItems.push(
-        <DetailItem key="takeaway" icon={<TakeoutDiningIcon sx={{ fontSize: 20 }} />}>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.primary",
-            }}
-          >
-            {t(labelKey)}
-          </Typography>
-        </DetailItem>,
-      );
-    }
-  }
-
-  if (outdoorSeating === "yes") {
-    gridItems.push(
-      <BoolItem
-        key="outdoor_seating"
-        icon={<DeckIcon sx={{ fontSize: 20 }} />}
-        label={t("outdoorSeating")}
-        value="yes"
-      />,
-    );
-  }
-
-  if (internetAccess) {
-    const isNo = internetAccess === "no";
-    gridItems.push(
-      <DetailItem
-        key="internet_access"
-        icon={
-          isNo ? (
-            <WifiOffIcon sx={{ fontSize: 20, color: "text.secondary" }} />
-          ) : (
-            <WifiIcon sx={{ fontSize: 20 }} />
-          )
-        }
-      >
-        <Typography variant="body2" color={isNo ? "text.secondary" : "text.primary"}>
-          {isNo ? t("noWifi") : t("wifiAvailable")}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (drinkingWater === "yes") {
-    gridItems.push(
-      <BoolItem
-        key="drinking_water"
-        icon={<WaterDropIcon sx={{ fontSize: 20 }} />}
-        label={t("drinkingWater")}
-        value="yes"
-      />,
-    );
-  }
-
-  if (toilets === "yes" || toiletsWheelchair) {
-    const twLabels: Record<string, string> = {
-      yes: "toiletsWheelchairYes",
-      designated: "toiletsWheelchairDesignated",
-      limited: "toiletsWheelchairLimited",
-      no: "toiletsWheelchairNo",
-    };
-    const twKey = toiletsWheelchair ? twLabels[toiletsWheelchair] : null;
-    gridItems.push(
-      <DetailItem key="toilets" icon={<WcIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {t("toilets")}
-          {twKey && (
-            <Typography
-              component="span"
-              variant="body2"
-              color={
-                toiletsWheelchair === "no"
-                  ? "text.secondary"
-                  : toiletsWheelchair === "limited"
-                    ? "warning.main"
-                    : "success.main"
-              }
-            >
-              {" · "}
-              {t(twKey)}
-            </Typography>
-          )}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (changingTable === "yes") {
-    gridItems.push(
-      <BoolItem
-        key="changing_table"
-        icon={<BabyChangingStationIcon sx={{ fontSize: 20 }} />}
-        label={t("changingTable")}
-        value="yes"
-      />,
-    );
-  }
-
-  if (shower === "yes") {
-    gridItems.push(
-      <BoolItem
-        key="shower"
-        icon={<WaterDropIcon sx={{ fontSize: 20 }} />}
-        label={t("shower")}
-        value="yes"
-      />,
-    );
-  }
-
-  if (startDate) {
-    gridItems.push(
-      <DetailItem key="start_date" icon={<EventIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {startDate}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (heritage) {
-    const heritageLabels: Record<string, string> = {
-      "1": "heritageWorld",
-      "2": "heritageNational",
-      "3": "heritageRegional",
-      yes: "heritageYes",
-    };
-    const labelKey = heritageLabels[heritage];
-    gridItems.push(
-      <DetailItem key="heritage" icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {labelKey ? t(labelKey) : t("heritageYes")}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  if (minAge) {
-    gridItems.push(
-      <DetailItem key="min_age" icon={<GroupIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {t("minAge", { age: minAge })}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  // Manufacturer + model: show combined when both, or just one
-  if (manufacturer && model) {
-    gridItems.push(
-      <DetailItem key="mfg" icon={<PrecisionManufacturingIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          noWrap
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {manufacturer} · {model}
-        </Typography>
-      </DetailItem>,
-    );
-  } else if (manufacturer || model) {
-    gridItems.push(
-      <DetailItem key="mfg" icon={<PrecisionManufacturingIcon sx={{ fontSize: 20 }} />}>
-        <Typography
-          variant="body2"
-          noWrap
-          sx={{
-            color: "text.primary",
-          }}
-        >
-          {manufacturer ?? model}
-        </Typography>
-      </DetailItem>,
-    );
-  }
-
-  const practicalGridItems = gridItems.filter((item) => PRACTICAL_GRID_KEYS.has(item.key ?? ""));
-  const remainingGridItems = gridItems.filter((item) => !PRACTICAL_GRID_KEYS.has(item.key ?? ""));
-  const visibleGridItems =
-    section === "all"
-      ? gridItems
-      : section === "practical"
-        ? practicalGridItems
-        : remainingGridItems;
-  const hasPractical = Boolean(
-    visibleEmail ||
-      wheelchair ||
-      access ||
-      fee ||
-      charge ||
-      cuisine ||
-      socialLinks.length ||
-      practicalGridItems.length,
-  );
-  const hasRemaining = Boolean(
-    operator ||
-      brand ||
-      network ||
-      religion ||
-      denomination ||
-      multilingualEntries.length ||
-      remainingGridItems.length,
-  );
-  if (
-    (section === "practical" && !hasPractical) ||
-    (section === "remaining" && !hasRemaining) ||
-    (section === "all" && !hasPractical && !hasRemaining)
-  ) {
+  const rows = TAG_SPECS.filter((spec) => shows(spec.section)).flatMap((spec) => {
+    const row = spec.render(osmTags, t, representedEmail);
+    return row ? [{ ...row, id: spec.id, layout: spec.layout }] : [];
+  });
+  const multilingualEntries = shows("remaining") ? collectMultilingualEntries(osmTags) : [];
+  const socialLinks = shows("practical")
+    ? SOCIAL_PLATFORMS.filter((p) => osmTags[p.tagKey]).map((p) => ({
+        tagKey: p.tagKey,
+        label: p.label,
+        icon: p.icon,
+        url: p.toUrl(osmTags[p.tagKey]),
+      }))
+    : [];
+  if (rows.length === 0 && multilingualEntries.length === 0 && socialLinks.length === 0) {
     return null;
   }
 
-  const displayedKeys = new Set<string>();
-  for (const item of visibleGridItems) {
-    const props = item.props as { value?: string; showNo?: boolean };
-    if (item.type === BoolItem && props.value === "no" && !props.showNo) continue;
-    const key = item.key;
-    if (key === "mfg") {
-      if (manufacturer) displayedKeys.add("manufacturer");
-      if (model) displayedKeys.add("model");
-    } else if (key === "toilets") {
-      if (toilets === "yes") displayedKeys.add("toilets");
-      if (toiletsWheelchair) displayedKeys.add("toilets:wheelchair");
-    } else if (key) displayedKeys.add(key);
-  }
-  const linkedKey = (prefix: string) => {
-    const wp = osmTags[`${prefix}:wikipedia`];
-    if (wp && wp.indexOf(":") > 0) displayedKeys.add(`${prefix}:wikipedia`);
-    else if (osmTags[`${prefix}:wikidata`]) displayedKeys.add(`${prefix}:wikidata`);
-  };
-  if (section !== "practical") {
-    if (operator) {
-      displayedKeys.add("operator");
-      linkedKey("operator");
-    }
-    if ((brand || network) && !(brand && brand === operator)) {
-      if (brand) displayedKeys.add("brand");
-      if (network && (!brand || network !== brand)) displayedKeys.add("network");
-      linkedKey("brand");
-    }
-    if (religion) displayedKeys.add("religion");
-    if (denomination) displayedKeys.add("denomination");
-    for (const entry of multilingualEntries) for (const key of entry.keys) displayedKeys.add(key);
-  }
-  if (section !== "remaining") {
-    if (visibleEmail) displayedKeys.add(tag("email") !== undefined ? "email" : "contact:email");
-    if (wheelchair) displayedKeys.add("wheelchair");
-    if (access) displayedKeys.add("access");
-    if (fee || charge) {
-      if (fee) displayedKeys.add("fee");
-      if (charge && fee !== "no") displayedKeys.add("charge");
-    }
-    if (cuisine) displayedKeys.add("cuisine");
-    for (const link of socialLinks) displayedKeys.add(link.tagKey);
-  }
+  const listRows = rows.filter((row) => row.layout === "list");
+  const gridRows = rows.filter((row) => row.layout === "grid");
+  const displayedKeys = [
+    ...rows.flatMap((row) => row.credits),
+    ...multilingualEntries.flatMap((entry) => entry.keys),
+    ...socialLinks.map((link) => link.tagKey),
+  ];
   const attributions = place
     ? contributorsForRecordFields(
         place,
-        Array.from(displayedKeys, (key) => `osmTags.${key}`),
+        displayedKeys.map((key) => `osmTags.${key}`),
       )
     : [];
 
@@ -1228,178 +1074,14 @@ export function PlaceTagDetails({
     <>
       {divider && <Divider sx={{ mx: section === "practical" ? 0 : 2, my: 1 }} />}
       <Box sx={{ px: section === "practical" ? 0 : 2, py: 0.5 }}>
-        {/* Operator */}
-        {section !== "practical" &&
-          operator &&
-          (() => {
-            const url = resolveLinkedUrl(osmTags, "operator");
-            return (
-              <DetailItem icon={<BusinessIcon sx={{ fontSize: 20 }} />}>
-                {url ? (
-                  <Link
-                    href={safeHref(url)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="body2"
-                    underline="hover"
-                    sx={{ color: "text.primary" }}
-                  >
-                    {operator}
-                  </Link>
-                ) : (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.primary",
-                    }}
-                  >
-                    {operator}
-                  </Typography>
-                )}
-              </DetailItem>
-            );
-          })()}
-
-        {/* Brand / Network */}
-        {section !== "practical" &&
-          (brand || network) &&
-          !(brand && brand === operator) &&
-          (() => {
-            const url = resolveLinkedUrl(osmTags, "brand");
-            const label =
-              brand && network && brand !== network ? `${brand} (${network})` : (brand ?? network);
-            return (
-              <DetailItem icon={<StorefrontIcon sx={{ fontSize: 20 }} />}>
-                {url ? (
-                  <Link
-                    href={safeHref(url)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="body2"
-                    underline="hover"
-                    sx={{ color: "text.primary" }}
-                  >
-                    {label}
-                  </Link>
-                ) : (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.primary",
-                    }}
-                  >
-                    {label}
-                  </Typography>
-                )}
-              </DetailItem>
-            );
-          })()}
-
-        {/* Email */}
-        {section !== "remaining" && visibleEmail && (
-          <DetailItem icon={<EmailIcon sx={{ fontSize: 20 }} />}>
-            <Link
-              href={`mailto:${visibleEmail}`}
-              variant="body2"
-              underline="hover"
-              sx={{ color: "text.primary" }}
-            >
-              {visibleEmail}
-            </Link>
+        {listRows.map((row) => (
+          <DetailItem key={row.id} icon={row.icon}>
+            {row.content}
           </DetailItem>
-        )}
-
-        {/* Wheelchair */}
-        {section !== "remaining" && wheelchair && (
-          <DetailItem
-            icon={<AccessibleIcon sx={{ fontSize: 20, color: wc?.color ?? "text.secondary" }} />}
-          >
-            <Typography variant="body2" color={wc?.color ?? "text.primary"}>
-              {wc ? t(wc.labelKey) : capitalize(wheelchair)}
-            </Typography>
-          </DetailItem>
-        )}
-
-        {/* Access */}
-        {section !== "remaining" && access && (
-          <DetailItem icon={ac?.icon ?? <LockOpenIcon sx={{ fontSize: 20 }} />}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.primary",
-              }}
-            >
-              {ac ? t(ac.labelKey) : capitalize(access)}
-            </Typography>
-          </DetailItem>
-        )}
-
-        {/* Fee + Charge */}
-        {section !== "remaining" && (fee || charge) && (
-          <DetailItem
-            icon={
-              fee === "no" ? (
-                <MoneyOffIcon sx={{ fontSize: 20 }} />
-              ) : (
-                <AttachMoneyIcon sx={{ fontSize: 20 }} />
-              )
-            }
-          >
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.primary",
-              }}
-            >
-              {fee === "no" ? t("feeNo") : charge ? `${t("feeYes")} · ${charge}` : t("feeYes")}
-            </Typography>
-          </DetailItem>
-        )}
-
-        {/* Cuisine */}
-        {section !== "remaining" && cuisine && (
-          <DetailItem icon={<RestaurantIcon sx={{ fontSize: 20 }} />}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.primary",
-              }}
-            >
-              {formatList(cuisine)}
-            </Typography>
-          </DetailItem>
-        )}
-
-        {/* Religion + Denomination */}
-        {section !== "practical" && religion && (
-          <DetailItem icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.primary",
-              }}
-            >
-              {denomination
-                ? `${capitalize(religion)} · ${capitalize(denomination)}`
-                : capitalize(religion)}
-            </Typography>
-          </DetailItem>
-        )}
-        {section !== "practical" && denomination && !religion && (
-          <DetailItem icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.primary",
-              }}
-            >
-              {capitalize(denomination)}
-            </Typography>
-          </DetailItem>
-        )}
+        ))}
 
         {/* Compact 2-column grid for boolean/short-value items */}
-        {visibleGridItems.length > 0 && (
+        {gridRows.length > 0 && (
           <Box
             sx={{
               display: "grid",
@@ -1408,74 +1090,74 @@ export function PlaceTagDetails({
               py: 0.25,
             }}
           >
-            {visibleGridItems}
+            {gridRows.map((row) => (
+              <DetailItem key={row.id} icon={row.icon}>
+                {row.content}
+              </DetailItem>
+            ))}
           </Box>
         )}
 
         {/* Multilingual text entries (description, note, *:location, etc.) */}
-        {section !== "practical" &&
-          multilingualEntries.map((entry) => (
-            <Box key={entry.label} sx={{ display: "flex", gap: 2, py: 0.75 }}>
-              <Box
+        {multilingualEntries.map((entry) => (
+          <Box key={entry.label} sx={{ display: "flex", gap: 2, py: 0.75 }}>
+            <Box
+              sx={{
+                color: BRAND,
+                flexShrink: 0,
+                display: "flex",
+                justifyContent: "center",
+                width: 22,
+                mt: "2px",
+              }}
+            >
+              <NotesIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                variant="caption"
                 sx={{
-                  color: BRAND,
-                  flexShrink: 0,
-                  display: "flex",
-                  justifyContent: "center",
-                  width: 22,
-                  mt: "2px",
+                  color: "text.secondary",
+                  fontWeight: 600,
                 }}
               >
-                <NotesIcon sx={{ fontSize: 20 }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
+                {entry.label}
+              </Typography>
+              {entry.defaultValue && (
                 <Typography
-                  variant="caption"
+                  variant="body2"
                   sx={{
-                    color: "text.secondary",
-                    fontWeight: 600,
+                    color: "text.primary",
+                    mt: 0.25,
                   }}
                 >
-                  {entry.label}
+                  <Linkified text={entry.defaultValue} color={BRAND} />
                 </Typography>
-                {entry.defaultValue && (
+              )}
+              {entry.translations.map(({ lang, flag, value }) => (
+                <Box key={lang} sx={{ display: "flex", alignItems: "flex-start", gap: 1, mt: 0.5 }}>
+                  <Typography
+                    component="span"
+                    sx={{ fontSize: 16, lineHeight: 1.4, flexShrink: 0 }}
+                  >
+                    {flag}
+                  </Typography>
                   <Typography
                     variant="body2"
                     sx={{
-                      color: "text.primary",
-                      mt: 0.25,
+                      color: "text.secondary",
                     }}
                   >
-                    <Linkified text={entry.defaultValue} color={BRAND} />
+                    <Linkified text={value} color={BRAND} />
                   </Typography>
-                )}
-                {entry.translations.map(({ lang, flag, value }) => (
-                  <Box
-                    key={lang}
-                    sx={{ display: "flex", alignItems: "flex-start", gap: 1, mt: 0.5 }}
-                  >
-                    <Typography
-                      component="span"
-                      sx={{ fontSize: 16, lineHeight: 1.4, flexShrink: 0 }}
-                    >
-                      {flag}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "text.secondary",
-                      }}
-                    >
-                      <Linkified text={value} color={BRAND} />
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
+                </Box>
+              ))}
             </Box>
-          ))}
+          </Box>
+        ))}
 
         {/* Social media icons row */}
-        {section !== "remaining" && socialLinks.length > 0 && (
+        {socialLinks.length > 0 && (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, pt: 0.5, pb: 0.25 }}>
             {socialLinks.map(({ label, icon, url }) => (
               <Tooltip key={label} title={label}>
