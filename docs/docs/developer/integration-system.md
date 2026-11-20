@@ -1187,6 +1187,34 @@ The contracts share these conventions:
 Domains without a typed contract, such as `map-overlay`, still appear in
 `domains`. They describe UI surfaces rather than a registered provider object.
 
+### 3D landmark models
+
+A `landmark-models` provider keeps a catalogue of georeferenced glTF models in
+memory and returns it from `snapshot()`. Each `LandmarkAsset` carries the model
+files by sha256, the OpenStreetMap elements it replaces, an optional ground
+footprint, a review tier and receipts captured when the catalogue loaded. Two
+fields decide how the browser treats it:
+
+- `grounding`: `anchor` places the model at the anchor's terrain height;
+  `footprint-minimum` uses the lowest terrain under its footprint.
+- `derivedFootprintAllowed`: whether the browser may outline the model's own
+  base to hide extruded buildings when the provider has no footprint.
+
+`fetchModelGzip(sha256, signal)` returns the verified gzip file of a listed
+model, `unlisted` for an unknown sha256 and `gone` when the upstream no longer
+has a listed file. `@openmapx/open-landmarks-client` implements all of this for
+upstreams that publish the Open Landmarks v1 static API, so a provider for such
+an upstream is a manifest and a normalizer.
+
+The `landmark-models` orchestrator merges the providers. Overlap exists only
+between providers: the best review tier wins, then the provider id. It serves:
+
+| Route                                                                | Response                                                                                                       |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /api/integrations/landmark-models/coverage`                     | The occupied z12 cells, each provider's release and the ODbL notice for the republished placements.            |
+| `GET /api/integrations/landmark-models/cells/:x/:y`                  | The merged assets of one z12 cell; pass the coverage `revision` as `r` to make the answer cacheable for a day. |
+| `GET /api/integrations/landmark-models/models/:provider/:sha256.glb` | A model of a shown asset, verified and immutable. Browsers never contact a provider's host.                    |
+
 Continue with [Data-source integrations](./data-source-integrations.md),
 [Transit integrations](./transit-integrations.md) or
 [Ride integrations](./ride-integrations.md) for the domain-specific rules.
