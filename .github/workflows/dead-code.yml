@@ -37,14 +37,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       - name: Audit unused files and dependencies
         run: pnpm check-dead-code

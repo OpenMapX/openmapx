@@ -131,7 +131,8 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
-    directory: "/"
+    # The root covers the workflows; the composite actions pin their own steps.
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: weekly
       day: monday
