@@ -1,4 +1,5 @@
 import { haversineMeters, nameSimilarity } from "./geo-server";
+import { numberAt } from "./numberAt";
 
 export interface ConflationPoint {
   id: string;
@@ -94,7 +95,7 @@ function lngNeighborRange(lat: number, maxDistM: number): number {
 }
 
 function neighborKeys(key: string, lat: number, maxDistM: number): string[] {
-  const [bx, by] = key.split(",").map(Number);
+  const [bx = Number.NaN, by = Number.NaN] = key.split(",").map(Number);
   const lngRange = lngNeighborRange(lat, maxDistM);
   const out: string[] = [];
   for (let dx = -lngRange; dx <= lngRange; dx++) {
@@ -291,10 +292,12 @@ function solveComponent(edges: ScoredConflationPair[]): ScoredConflationPair[] {
   // confidence trade-off; confidence breaks ties only at equal cardinality.
   const cardinalityBonus = size + 1;
   const weights = Array.from({ length: size }, () => new Array<number>(size).fill(0));
-  for (let i = 0; i < aIds.length; i++) {
-    for (let j = 0; j < bIds.length; j++) {
-      const edge = edgeByPair.get(`${aIds[i]}\u0000${bIds[j]}`);
-      if (edge) weights[i][j] = cardinalityBonus + edge.score.matchConfidence;
+  for (const [i, aId] of aIds.entries()) {
+    const row = weights[i];
+    if (!row) continue;
+    for (const [j, bId] of bIds.entries()) {
+      const edge = edgeByPair.get(`${aId}\u0000${bId}`);
+      if (edge) row[j] = cardinalityBonus + edge.score.matchConfidence;
     }
   }
 
@@ -310,42 +313,44 @@ function solveComponent(edges: ScoredConflationPair[]): ScoredConflationPair[] {
     const used = new Array<boolean>(size + 1).fill(false);
     do {
       used[j0] = true;
-      const i0 = p[j0];
+      const i0 = numberAt(p, j0);
+      const row = weights[i0 - 1] ?? [];
       let delta = Number.POSITIVE_INFINITY;
       let j1 = 0;
       for (let j = 1; j <= size; j++) {
         if (used[j]) continue;
-        const cost = maxWeight - weights[i0 - 1][j - 1];
-        const current = cost - u[i0] - v[j];
-        if (current < minv[j]) {
+        const cost = maxWeight - numberAt(row, j - 1);
+        const current = cost - numberAt(u, i0) - numberAt(v, j);
+        if (current < numberAt(minv, j)) {
           minv[j] = current;
           way[j] = j0;
         }
-        if (minv[j] < delta) {
-          delta = minv[j];
+        if (numberAt(minv, j) < delta) {
+          delta = numberAt(minv, j);
           j1 = j;
         }
       }
       for (let j = 0; j <= size; j++) {
         if (used[j]) {
-          u[p[j]] += delta;
-          v[j] -= delta;
+          const assigned = numberAt(p, j);
+          u[assigned] = numberAt(u, assigned) + delta;
+          v[j] = numberAt(v, j) - delta;
         } else {
-          minv[j] -= delta;
+          minv[j] = numberAt(minv, j) - delta;
         }
       }
       j0 = j1;
-    } while (p[j0] !== 0);
+    } while (numberAt(p, j0) !== 0);
     do {
-      const j1 = way[j0];
-      p[j0] = p[j1];
+      const j1 = numberAt(way, j0);
+      p[j0] = numberAt(p, j1);
       j0 = j1;
     } while (j0 !== 0);
   }
 
   const selected: ScoredConflationPair[] = [];
   for (let j = 1; j <= size; j++) {
-    const i = p[j] - 1;
+    const i = numberAt(p, j) - 1;
     if (i < 0 || i >= aIds.length || j - 1 >= bIds.length) continue;
     const edge = edgeByPair.get(`${aIds[i]}\u0000${bIds[j - 1]}`);
     if (edge) selected.push(edge);
@@ -421,22 +426,24 @@ export function conflate(
 
   // Build spatial buckets for b-side points
   const bBuckets = new Map<string, number[]>();
-  for (let j = 0; j < b.length; j++) {
-    const key = bucketKey(b[j].lat, b[j].lng);
+  for (const [j, point] of b.entries()) {
+    const key = bucketKey(point.lat, point.lng);
     const arr = bBuckets.get(key);
     if (arr) arr.push(j);
     else bBuckets.set(key, [j]);
   }
 
   const candidateEdges: ScoredConflationPair[] = [];
-  for (let i = 0; i < a.length; i++) {
-    const selfKey = bucketKey(a[i].lat, a[i].lng);
-    for (const nKey of neighborKeys(selfKey, a[i].lat, t.softWindowM)) {
+  for (const aPoint of a) {
+    const selfKey = bucketKey(aPoint.lat, aPoint.lng);
+    for (const nKey of neighborKeys(selfKey, aPoint.lat, t.softWindowM)) {
       const candidates = bBuckets.get(nKey);
       if (!candidates) continue;
       for (const jRel of candidates) {
-        const score = scoreConflationPair(a[i], b[jRel], t);
-        if (score) candidateEdges.push({ a: a[i], b: b[jRel], score });
+        const bPoint = b[jRel];
+        if (!bPoint) continue;
+        const score = scoreConflationPair(aPoint, bPoint, t);
+        if (score) candidateEdges.push({ a: aPoint, b: bPoint, score });
       }
     }
   }

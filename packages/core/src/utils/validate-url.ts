@@ -28,8 +28,9 @@ function ipv6Groups(literal: string): number[] | null {
       ? groups.map((group) => Number.parseInt(group, 16))
       : null;
   };
-  const head = parse(halves[0]);
-  const tail = halves.length === 2 ? parse(halves[1]) : [];
+  const [headText = "", tailText = ""] = halves;
+  const head = parse(headText);
+  const tail = halves.length === 2 ? parse(tailText) : [];
   if (!head || !tail) return null;
   if (halves.length === 1) return head.length === 8 ? head : null;
   const gap = 8 - head.length - tail.length;

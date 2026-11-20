@@ -12,7 +12,8 @@ describe("userAgent", () => {
 
   it("keeps the scanner name nmap out of every fixed user-agent", async () => {
     const ua = await load();
-    for (const value of [ua.USER_AGENT, ua.USER_AGENT_ADMIN, ua.userAgent("").split("(")[0]]) {
+    const [product = ""] = ua.userAgent("").split("(");
+    for (const value of [ua.USER_AGENT, ua.USER_AGENT_ADMIN, product]) {
       expect(value.toLowerCase()).not.toContain("nmap");
     }
   });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { buildAttributionPresentation, buildRuntimeAttributionHtml } from "./attribution";
 import { dedupeAttributionHtml } from "./attribution-presentation";
 
@@ -474,13 +474,15 @@ it("says beside a changed source's credit that its data was modified, in the vie
   expect(unchanged.visibleHtml).not.toContain("modified");
   expect(unchanged.fullHtml).not.toContain("modified");
   // A licence that asks for no change notice gets none, however the data was changed.
+  const [binding] = receipt.licensing.bindings;
+  assert.isDefined(binding);
   const zero = {
     ...receipt,
     licensing: {
       ...receipt.licensing,
       bindings: [
         {
-          ...receipt.licensing.bindings[0]!,
+          ...binding,
           license: { kind: "spdx" as const, expression: "DL-DE-ZERO-2.0" },
         },
       ],

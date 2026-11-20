@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { AutocompleteResult } from "../../types/geocoding";
 import { queryNamesLocation, textMatchScore } from "../searchSuggestion";
 import { enterAction, rankAutocompleteRows } from "../suggestionRanking";
@@ -7,6 +7,7 @@ import captured from "./fixtures/business-location-intent.json";
 // Adapted hosted autocomplete, captured 2026-10-07. Not raw MapTiler data.
 const places = captured as AutocompleteResult[];
 const [rijswijk, berlin] = places;
+assert(rijswijk && berlin, "the fixture holds the Rijswijk and Berlin rows");
 const context = {
   query: "MediaMarkt Alexa",
   proximity: [13.416, 52.5194] as [number, number],
@@ -23,11 +24,11 @@ describe("business location evidence", () => {
   });
 
   it("ranks Berlin above the weak remote prefix despite Rijswijk-first retrieval", () => {
-    expect(places[0].id).toBe("maptiler:poi.15539884");
+    expect(places[0]?.id).toBe("maptiler:poi.15539884");
     const rows = rankAutocompleteRows({ places }, context);
     expect(rows).toHaveLength(places.length);
-    expect(rows[0].id).toBe("maptiler:poi.15422100");
-    expect(rows[1].id).toBe("maptiler:poi.15539884");
+    expect(rows[0]?.id).toBe("maptiler:poi.15422100");
+    expect(rows[1]?.id).toBe("maptiler:poi.15539884");
     expect(enterAction(rows, context)).toEqual({ kind: "search", weak: true });
   });
 
@@ -39,7 +40,7 @@ describe("business location evidence", () => {
   ])("retains complete remote city/address intent: %s", (query) => {
     const remote = { ...context, query };
     expect(queryNamesLocation(rijswijk, query)).toBe(true);
-    expect(rankAutocompleteRows({ places }, remote)[0].id).toBe(rijswijk.id);
+    expect(rankAutocompleteRows({ places }, remote)[0]?.id).toBe(rijswijk.id);
     expect(enterAction(rankAutocompleteRows({ places }, remote), remote)).toMatchObject({
       kind: "open",
       row: { id: rijswijk.id },
@@ -95,7 +96,7 @@ describe("business location evidence", () => {
       rawCategory: "railway/station",
     };
     expect(textMatchScore(station, "Neuss Hauptbahnhof")).toBe(1);
-    expect(rankAutocompleteRows({ places }, { ...context, query: "MediaMarkt" })[0].id).toBe(
+    expect(rankAutocompleteRows({ places }, { ...context, query: "MediaMarkt" })[0]?.id).toBe(
       berlin.id,
     );
   });

@@ -138,9 +138,9 @@ function selectSpatiallyEven(
   for (let round = 0; picked.size < limit; round++) {
     let placedAny = false;
     for (const key of cellOrder) {
-      const bucket = cells.get(key);
-      if (!bucket || round >= bucket.length) continue;
-      picked.add(bucket[round]);
+      const result = cells.get(key)?.[round];
+      if (!result) continue;
+      picked.add(result);
       placedAny = true;
       if (picked.size === limit) break;
     }

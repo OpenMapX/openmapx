@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { CATEGORY_DEFINITIONS } from "../../types/category";
 import type { AutocompleteResult } from "../../types/geocoding";
 import { CONFIDENT_TEXT_SCORE, textMatchScore } from "../searchSuggestion";
@@ -73,7 +73,7 @@ describe("rankAutocompleteRows", () => {
           { places: [signal, station] },
           { query: "Hauptbahnhof Neuss", proximity, zoom: 14 },
         );
-        expect(rows[0].id).toBe(station.id);
+        expect(rows[0]?.id).toBe(station.id);
       }
     },
   );
@@ -91,7 +91,7 @@ describe("rankAutocompleteRows", () => {
         rankAutocompleteRows(
           { places: [requested, station] },
           { query: `${amenity} Neuss Hbf`, proximity: [6.6847, 51.2044], zoom: 14 },
-        )[0].id,
+        )[0]?.id,
       ).toBe("amenity");
     },
   );
@@ -120,8 +120,8 @@ describe("rankAutocompleteRows", () => {
       { query },
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].label).toBe("KFC");
-    expect(rows[0].searchMatch?.value).toBe("kentucky fried chicken");
+    expect(rows[0]?.label).toBe("KFC");
+    expect(rows[0]?.searchMatch?.value).toBe("kentucky fried chicken");
     expect(enterAction(rows, { query }).kind).toBe(action);
   });
 
@@ -146,8 +146,10 @@ describe("rankAutocompleteRows", () => {
         { query },
       );
       expect(rows).toHaveLength(1);
-      expect(rows[0].searchMatch?.value).toBe("frozen dessert");
-      expect(textMatchScore(rows[0], query)).toBeLessThan(CONFIDENT_TEXT_SCORE);
+      expect(rows[0]?.searchMatch?.value).toBe("frozen dessert");
+      const [frozen] = rows;
+      assert.isDefined(frozen);
+      expect(textMatchScore(frozen, query)).toBeLessThan(CONFIDENT_TEXT_SCORE);
       expect(enterAction(rows, { query }).kind).toBe("search");
     },
   );
@@ -166,6 +168,7 @@ describe("rankAutocompleteRows", () => {
       ],
       "",
     );
+    assert.isDefined(row);
     expect(enterAction([row], { query: "CAFÉ DU MONDE" })).toMatchObject({
       kind: "open",
       row: { label: "CDM" },
@@ -238,8 +241,8 @@ describe("rankAutocompleteRows", () => {
       { total: 5, categories: 2, brands: 2, recents: 2 },
     );
     expect(rows).toHaveLength(5);
-    expect(rows[0].id).toBe("labeled-home");
-    expect(rows[1].id).toBe("p0");
+    expect(rows[0]?.id).toBe("labeled-home");
+    expect(rows[1]?.id).toBe("p0");
   });
 
   it("drops a preset that repeats a built-in category and shortcuts that only contain the text", () => {

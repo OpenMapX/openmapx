@@ -40,8 +40,11 @@ export function matchRanges(label: string, query: string): MatchRange[] {
   const ranges: [number, number][] = [];
   for (const token of tokens) {
     for (let at = folded.indexOf(token); at !== -1; at = folded.indexOf(token, at + 1)) {
-      if (at > 0 && WORD_CHARACTER.test(folded[at - 1])) continue;
-      ranges.push([origin[at].start, origin[at + token.length - 1].end]);
+      if (at > 0 && WORD_CHARACTER.test(folded.charAt(at - 1))) continue;
+      // Every folded character records where it came from, so both ends exist.
+      const first = origin[at];
+      const last = origin[at + token.length - 1];
+      if (first && last) ranges.push([first.start, last.end]);
       break;
     }
   }

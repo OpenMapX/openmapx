@@ -92,4 +92,15 @@ export const event = (): RoadConditionEvent => ({
 });
 
 /** The fixture situation's one effect. */
-export const closure = (e: RoadConditionEvent = event()): RoadConditionEffect => e.effects[0]!;
+export const closure = (e: RoadConditionEvent = event()): RoadConditionEffect => {
+  const [first] = e.effects;
+  if (!first) throw new Error("The road condition fixture has no effect");
+  return first;
+};
+
+/** The fixture closure's routing evidence, which a test edits in place. */
+export const closureEvidence = (e: RoadConditionEvent): RoadConditionRoutingEvidence => {
+  const routing = e.routingEvidence?.["fr1/closure"];
+  if (!routing) throw new Error("The road condition fixture has no closure evidence");
+  return routing;
+};

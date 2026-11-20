@@ -1,3 +1,5 @@
+import { numberAt } from "./numberAt";
+
 const DEFAULT_BUCKET_SIZE_DEGREES = 0.002;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
 const MINIMUM_LATITUDE_COSINE = 0.01;
@@ -18,8 +20,11 @@ class UnionFind {
   }
 
   find(index: number): number {
-    if (this.parent[index] !== index) this.parent[index] = this.find(this.parent[index]);
-    return this.parent[index];
+    const parent = this.parent[index];
+    if (parent === undefined || parent === index) return index;
+    const root = this.find(parent);
+    this.parent[index] = root;
+    return root;
   }
 
   union(first: number, second: number): void {
@@ -27,13 +32,15 @@ class UnionFind {
     const secondRoot = this.find(second);
     if (firstRoot === secondRoot) return;
 
-    if (this.rank[firstRoot] < this.rank[secondRoot]) {
+    const firstRank = numberAt(this.rank, firstRoot);
+    const secondRank = numberAt(this.rank, secondRoot);
+    if (firstRank < secondRank) {
       this.parent[firstRoot] = secondRoot;
-    } else if (this.rank[firstRoot] > this.rank[secondRoot]) {
+    } else if (firstRank > secondRank) {
       this.parent[secondRoot] = firstRoot;
     } else {
       this.parent[secondRoot] = firstRoot;
-      this.rank[firstRoot]++;
+      this.rank[firstRoot] = firstRank + 1;
     }
   }
 }
@@ -44,7 +51,7 @@ function bucketKey(coordinates: readonly [number, number]): string {
 }
 
 function neighborKeys(key: string, latitude: number, searchRadiusMeters: number): string[] {
-  const [longitudeBucket, latitudeBucket] = key.split(",").map(Number);
+  const [longitudeBucket = Number.NaN, latitudeBucket = Number.NaN] = key.split(",").map(Number);
   const cosine = Math.max(Math.abs(Math.cos((latitude * Math.PI) / 180)), MINIMUM_LATITUDE_COSINE);
   const longitudeDegrees = searchRadiusMeters / (METERS_PER_LATITUDE_DEGREE * cosine);
   const latitudeDegrees = searchRadiusMeters / METERS_PER_LATITUDE_DEGREE;
@@ -71,8 +78,11 @@ function clustersAreCompatible<T>(
   shouldJoin: (first: T, second: T) => boolean,
 ): boolean {
   for (const firstIndex of first) {
+    const firstItem = items[firstIndex];
+    if (firstItem === undefined) continue;
     for (const secondIndex of second) {
-      if (!shouldJoin(items[firstIndex], items[secondIndex])) return false;
+      const secondItem = items[secondIndex];
+      if (secondItem !== undefined && !shouldJoin(firstItem, secondItem)) return false;
     }
   }
   return true;
@@ -89,8 +99,8 @@ export function clusterSpatialItems<T>(
   }
 
   const buckets = new Map<string, number[]>();
-  for (let index = 0; index < items.length; index++) {
-    const key = bucketKey(options.coordinates(items[index]));
+  for (const [index, item] of items.entries()) {
+    const key = bucketKey(options.coordinates(item));
     const members = buckets.get(key);
     if (members) members.push(index);
     else buckets.set(key, [index]);
@@ -100,8 +110,8 @@ export function clusterSpatialItems<T>(
   const clusterMembers = new Map<number, number[]>();
   for (let index = 0; index < items.length; index++) clusterMembers.set(index, [index]);
 
-  for (let index = 0; index < items.length; index++) {
-    const coordinates = options.coordinates(items[index]);
+  for (const [index, item] of items.entries()) {
+    const coordinates = options.coordinates(item);
     const key = bucketKey(coordinates);
     const candidates = neighborKeys(key, coordinates[1], options.searchRadiusMeters);
     for (const candidateKey of candidates) {
@@ -109,7 +119,12 @@ export function clusterSpatialItems<T>(
       if (!candidateIndexes) continue;
 
       for (const candidateIndex of candidateIndexes) {
-        if (candidateIndex <= index || !options.shouldJoin(items[index], items[candidateIndex])) {
+        const candidate = items[candidateIndex];
+        if (
+          candidateIndex <= index ||
+          candidate === undefined ||
+          !options.shouldJoin(item, candidate)
+        ) {
           continue;
         }
 
@@ -138,11 +153,11 @@ export function clusterSpatialItems<T>(
   }
 
   const clusters = new Map<number, T[]>();
-  for (let index = 0; index < items.length; index++) {
+  for (const [index, item] of items.entries()) {
     const root = unionFind.find(index);
     const cluster = clusters.get(root);
-    if (cluster) cluster.push(items[index]);
-    else clusters.set(root, [items[index]]);
+    if (cluster) cluster.push(item);
+    else clusters.set(root, [item]);
   }
   return Array.from(clusters.values());
 }

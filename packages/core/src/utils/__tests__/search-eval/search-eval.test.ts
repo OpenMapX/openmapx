@@ -102,7 +102,7 @@ const results = EVAL_CASES.map((evalCase) => {
   const passed =
     evalCase.expect.every((expectation, i) => {
       const rank = ranks[i];
-      return rank !== null && rank <= expectation.within;
+      return rank !== null && rank !== undefined && rank <= expectation.within;
     }) && enterAsExpected(action, evalCase);
   return { evalCase, rows, ranks, action, passed };
 });
@@ -117,7 +117,7 @@ describe("search ranking eval", () => {
       (row) => row.id === "osm:way/5013364" || row.id === "wikidata:Q243",
     );
     expect(parisTower).toHaveLength(1);
-    expect(parisTower[0].ids?.wikidata).toBe("Q243");
+    expect(parisTower[0]?.ids?.wikidata).toBe("Q243");
   });
 
   for (const { evalCase, rows, ranks, action, passed } of results) {

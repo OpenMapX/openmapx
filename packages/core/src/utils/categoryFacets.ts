@@ -190,7 +190,7 @@ export function applyFacetFilters(
         const raw = p.osmTags?.[f.tag];
         return !!raw && (f.matchValues ?? []).includes(raw);
       }
-      const selected = selections[f.id];
+      const selected = selections[f.id] ?? [];
       const keys = f.tags ?? [f.tag];
       const raw = keys
         .map((k) => p.osmTags?.[k])

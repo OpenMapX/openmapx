@@ -35,13 +35,16 @@ export function flowColorFor(los: string, speedRatio?: number | null): string {
     return FLOW_LOS_COLORS[los] ?? FLOW_FALLBACK_COLOR;
   }
   const ratio = Math.min(1, Math.max(0, speedRatio));
-  for (let i = 1; i < FLOW_RATIO_STOPS.length; i++) {
-    const [lowStop, lowColor] = FLOW_RATIO_STOPS[i - 1];
-    const [highStop, highColor] = FLOW_RATIO_STOPS[i];
+  let low = FLOW_RATIO_STOPS[0];
+  for (const high of FLOW_RATIO_STOPS.slice(1)) {
+    if (!low) break;
+    const [lowStop, lowColor] = low;
+    const [highStop, highColor] = high;
     if (ratio <= highStop) {
       const span = highStop - lowStop;
       return span === 0 ? highColor : lerpHex(lowColor, highColor, (ratio - lowStop) / span);
     }
+    low = high;
   }
-  return FLOW_RATIO_STOPS[FLOW_RATIO_STOPS.length - 1][1];
+  return FLOW_RATIO_STOPS.at(-1)?.[1] ?? FLOW_FALLBACK_COLOR;
 }

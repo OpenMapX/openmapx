@@ -92,7 +92,7 @@ describe("delivery evidence", () => {
       providers,
     );
     expect(options).toHaveLength(1);
-    expect(options[0].id).toBe("wolt");
+    expect(options[0]?.id).toBe("wolt");
   });
 
   it("lets exact evidence, but not a partner declaration, override delivery=no", () => {
@@ -117,7 +117,7 @@ describe("delivery evidence", () => {
       ),
       providers,
     );
-    expect(options[0].url).toContain("/preferred");
+    expect(options[0]?.url).toContain("/preferred");
   });
 
   it("returns explicit first-party OSM ordering URLs", () => {

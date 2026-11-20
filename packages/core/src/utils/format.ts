@@ -7,7 +7,7 @@ const ESCAPE_MAP: Record<string, string> = {
 };
 
 export function escapeHtml(str: string): string {
-  return str.replace(/[&<>"']/g, (ch) => ESCAPE_MAP[ch]);
+  return str.replace(/[&<>"']/g, (ch) => ESCAPE_MAP[ch] ?? ch);
 }
 
 /** Whether `value` is an absolute http(s) URL, the only kind an upstream link may carry. */

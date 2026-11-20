@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { PoiSearchResult } from "../../types/category";
 import {
   assignConflationPairs,
@@ -10,6 +10,13 @@ import {
   scoreConflationPair,
 } from "../poiConflation";
 import { fusePoiResults } from "../poiFusion";
+
+/** The item at `index`, failing the test when it is missing. */
+function itemAt<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  assert.isDefined(item, `no item at index ${index} of ${items.length}`);
+  return item;
+}
 
 const T: ConflationThresholds = {
   alwaysMergeM: 25,
@@ -33,8 +40,8 @@ describe("conflate — exact-coincident pair", () => {
     const b = [pt("ov:1", "McDonald's", 52.52, 13.4, "restaurants")];
     const result = conflate(a, b, T);
     expect(result.matched).toHaveLength(1);
-    expect(result.matched[0].a.id).toBe("osm:1");
-    expect(result.matched[0].b.id).toBe("ov:1");
+    expect(result.matched[0]?.a.id).toBe("osm:1");
+    expect(result.matched[0]?.b.id).toBe("ov:1");
     expect(result.unmatchedA).toHaveLength(0);
     expect(result.unmatchedB).toHaveLength(0);
   });
@@ -396,13 +403,13 @@ describe("conflate — scored global assignment", () => {
     const b = Array.from({ length: 8 }, (_, index) => pt(`b${index}`, `B${index}`, 0, 0));
     const edges = a.map((point, index) => ({
       a: point,
-      b: b[index],
+      b: itemAt(b, index),
       score: score(0.72),
     }));
     // Seven high-confidence shifted edges form a tempting but smaller matching.
     // With a fixed +1 bonus they outweighed the eight-edge diagonal (14 > 13.76).
     for (let index = 0; index < 7; index++) {
-      edges.push({ a: a[index], b: b[index + 1], score: score(1) });
+      edges.push({ a: itemAt(a, index), b: itemAt(b, index + 1), score: score(1) });
     }
 
     const selected = assignConflationPairs(edges);
@@ -423,7 +430,7 @@ describe("conflate — scored global assignment", () => {
     const forward = assignConflationPairs(edges);
     const reverse = assignConflationPairs([...edges].reverse());
     expect(reverse).toStrictEqual(forward);
-    expect(forward[0].a.id).toBe("a1");
+    expect(forward[0]?.a.id).toBe("a1");
   });
 
   it("returns auditable identity evidence independently of source confidence", () => {
@@ -464,15 +471,18 @@ describe("fusePoiResults", () => {
       openingHoursSource: { name: "Overture" },
     });
     const link = new Map([["node/1", "gers-1"]]);
-    const fused = fusePoiResults([osm], [overture], DEFAULT_CONFLATION_THRESHOLDS, link)[0];
+    const fused = itemAt(fusePoiResults([osm], [overture], DEFAULT_CONFLATION_THRESHOLDS, link), 0);
     expect(fused.openingHours).toBe("Mo-Fr 09:00-17:00");
     expect(fused.openingHoursSource).toEqual(osm.openingHoursSource);
-    const filled = fusePoiResults(
-      [{ ...osm, openingHours: undefined, openingHoursSource: undefined }],
-      [overture],
-      DEFAULT_CONFLATION_THRESHOLDS,
-      link,
-    )[0];
+    const filled = itemAt(
+      fusePoiResults(
+        [{ ...osm, openingHours: undefined, openingHoursSource: undefined }],
+        [overture],
+        DEFAULT_CONFLATION_THRESHOLDS,
+        link,
+      ),
+      0,
+    );
     expect(filled.openingHours).toBe("24/7");
     expect(filled.openingHoursSource).toEqual(overture.openingHoursSource);
   });
@@ -513,7 +523,7 @@ describe("fusePoiResults", () => {
     ];
     const result = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
     expect(result).toHaveLength(1);
-    const fused = result[0];
+    const fused = itemAt(result, 0);
     expect(fused.id).toBe("osm:node/1");
     expect(fused.gersId).toBe("gers-abc-123");
     expect(fused.osmTags?.wheelchair).toBe("yes");
@@ -669,7 +679,7 @@ describe("fusePoiResults — link-first pass", () => {
     const link = new Map([["node/999", "gers-kfc-001"]]);
     const linked = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS, link);
     expect(linked).toHaveLength(1);
-    const fused = linked[0];
+    const fused = itemAt(linked, 0);
     expect(fused.id).toBe("osm:node/999");
     expect(fused.gersId).toBe("gers-kfc-001");
     expect(fused.osmTags?.brand).toBe("KFC");
@@ -759,12 +769,15 @@ it("keeps POI field credits with actual fusion winners and copied brand override
       "osmTags.brand": [d],
     },
   });
-  const fused = fusePoiResults(
-    [osm],
-    [overture],
-    DEFAULT_CONFLATION_THRESHOLDS,
-    new Map([["node/1", "gers-1"]]),
-  )[0];
+  const fused = itemAt(
+    fusePoiResults(
+      [osm],
+      [overture],
+      DEFAULT_CONFLATION_THRESHOLDS,
+      new Map([["node/1", "gers-1"]]),
+    ),
+    0,
+  );
   expect(fused.fieldContributors?.name).toEqual([a]);
   expect(fused.fieldContributors?.coordinates).toEqual([a]);
   expect(fused.fieldContributors?.phone).toEqual([b]);
@@ -772,5 +785,5 @@ it("keeps POI field credits with actual fusion winners and copied brand override
   expect(fused.contributors).toEqual(expect.arrayContaining([a, b, d]));
   expect(fused.contributors).not.toContainEqual(c);
   b.name = "New catalogue";
-  expect(fused.fieldContributors?.phone?.[0].name).toBe("Overture phone");
+  expect(fused.fieldContributors?.phone?.[0]?.name).toBe("Overture phone");
 });

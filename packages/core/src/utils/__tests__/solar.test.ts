@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   antisolarPoint,
   darkRegion,
@@ -126,11 +126,20 @@ describe("solarAzimuthDeg", () => {
   });
 });
 
+/** A polygon's outer ring, failing the test when the polygon has none. */
+function outerRing(geometry: { coordinates: GeoJSON.Position[][] }): [number, number][] {
+  const [ring] = geometry.coordinates;
+  assert.isDefined(ring);
+  return ring as [number, number][];
+}
+
 function pointInRing(ring: [number, number][], lng: number, lat: number): boolean {
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+  let previous = ring.at(-1);
+  for (const current of ring) {
+    const [xi, yi] = current;
+    const [xj, yj] = previous ?? current;
+    previous = current;
     const intersects = yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
     if (intersects) inside = !inside;
   }
@@ -138,7 +147,7 @@ function pointInRing(ring: [number, number][], lng: number, lat: number): boolea
 }
 
 const BAND_ALTITUDES = [0, -6, -12, -18];
-const DATES = [
+const DATES: readonly [Date, Date, Date, Date] = [
   new Date("2026-03-20T12:00:00Z"),
   new Date("2026-06-21T12:00:00Z"),
   new Date("2026-09-22T18:00:00Z"),
@@ -149,7 +158,7 @@ describe("darkRegion", () => {
   it("puts every non-clamped vertex at exactly the target altitude", () => {
     for (const date of DATES) {
       for (const altitudeDeg of BAND_ALTITUDES) {
-        const ring = darkRegion(date, altitudeDeg).geometry.coordinates[0];
+        const ring = outerRing(darkRegion(date, altitudeDeg).geometry);
         for (const [lng, lat] of ring) {
           if (Math.abs(lat) >= 89.999) continue;
           expect(solarAltitudeDeg(date, lat, lng)).toBeCloseTo(altitudeDeg, 1);
@@ -171,8 +180,9 @@ describe("darkRegion", () => {
   });
 
   it("returns a closed ring with in-range latitudes", () => {
-    const ring = darkRegion(DATES[1], -12).geometry.coordinates[0];
-    expect(ring[0]).toEqual(ring[ring.length - 1]);
+    const ring = outerRing(darkRegion(DATES[1], -12).geometry);
+    expect(ring.length).toBeGreaterThan(3);
+    expect(ring[0]).toEqual(ring.at(-1));
     for (const [, lat] of ring) {
       expect(Math.abs(lat)).toBeLessThanOrEqual(90.000001);
     }
@@ -199,9 +209,9 @@ describe("twilightBands", () => {
   it("emits sequentially indexed bands from the horizon down to full night", () => {
     const fc = twilightBands(DATES[1]);
     expect(fc.features).toHaveLength(16);
-    expect(fc.features[0].properties).toMatchObject({ band: 0, altitudeDeg: 0 });
-    expect(fc.features[15].properties.band).toBe(15);
-    expect(fc.features[15].properties.altitudeDeg).toBeCloseTo(-16.875, 3);
+    expect(fc.features[0]?.properties).toMatchObject({ band: 0, altitudeDeg: 0 });
+    expect(fc.features[15]?.properties.band).toBe(15);
+    expect(fc.features[15]?.properties.altitudeDeg).toBeCloseTo(-16.875, 3);
   });
 
   it("contains the antisolar point in every band", () => {
@@ -209,7 +219,7 @@ describe("twilightBands", () => {
       const fc = twilightBands(date);
       const anti = antisolarPoint(date);
       for (const feature of fc.features) {
-        const ring = feature.geometry.coordinates[0] as [number, number][];
+        const ring = outerRing(feature.geometry);
         expect(pointInRing(ring, anti.lng, anti.lat)).toBe(true);
       }
     }
@@ -218,9 +228,11 @@ describe("twilightBands", () => {
   it("nests each band inside the one before it", () => {
     for (const date of DATES) {
       const fc = twilightBands(date);
-      for (let i = 1; i < fc.features.length; i += 1) {
-        const inner = fc.features[i].geometry.coordinates[0] as [number, number][];
-        const outer = fc.features[i - 1].geometry.coordinates[0] as [number, number][];
+      for (const [i, feature] of fc.features.entries()) {
+        const previous = fc.features[i - 1];
+        if (!previous) continue;
+        const inner = outerRing(feature.geometry);
+        const outer = outerRing(previous.geometry);
         for (const [lng, lat] of inner) {
           if (Math.abs(lat) >= 89.99) continue;
           // capBranchRing leaves longitudes unwrapped across the antimeridian,

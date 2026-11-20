@@ -9,8 +9,8 @@ describe("file-specific contributor capture", () => {
       { source: "photos", url: "https://example.test/image", licensing, author: "Creator" },
       "Photo provider",
     );
-    (licensing.bindings[0].license as { expression: string }).expression = "CC0-1.0";
-    expect(captured.licensing?.bindings[0].license).toMatchObject({ expression: "CC-BY-SA-4.0" });
+    (licensing.bindings[0]?.license as { expression: string }).expression = "CC0-1.0";
+    expect(captured.licensing?.bindings[0]?.license).toMatchObject({ expression: "CC-BY-SA-4.0" });
     expect(captured.contributors?.[0]).toMatchObject({
       sourceId: "photos",
       publisher: { name: "Creator" },
@@ -33,6 +33,6 @@ it("copies display licensing even when a photo already has authoritative capture
     { source: "photos", url: "https://example.test/image", licensing, contributors: [] },
     "Provider",
   );
-  (licensing.bindings[0].license as { expression: string }).expression = "CC0-1.0";
-  expect(captured.licensing?.bindings[0].license).toMatchObject({ expression: "CC-BY-4.0" });
+  (licensing.bindings[0]?.license as { expression: string }).expression = "CC0-1.0";
+  expect(captured.licensing?.bindings[0]?.license).toMatchObject({ expression: "CC-BY-4.0" });
 });

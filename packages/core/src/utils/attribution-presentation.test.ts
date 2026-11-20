@@ -105,7 +105,7 @@ it("retains every independent declaration URL when grouping credit-only source s
     entry("https://old.example/terms"),
     entry("https://new.example/terms"),
   ]);
-  expect(merged.attribution?.licensing?.declarations).toEqual([
+  expect(merged?.attribution?.licensing?.declarations).toEqual([
     { text: "Original terms", url: "https://old.example/terms" },
     { text: "Original terms", url: "https://new.example/terms" },
   ]);
@@ -191,7 +191,7 @@ it("retains combined links through successive visible-notice merges", () => {
     ].map((html) => ({ fullHtml: html, visibleHtml: html, logos: [] })),
   );
   expect(result.visible).toHaveLength(1);
-  expect(attributionHtml.parseAttributionHtml(result.visible[0].html)).toEqual({
+  expect(attributionHtml.parseAttributionHtml(result.visible[0]?.html ?? "")).toEqual({
     text: "© A (ODbL-1.0) | © B",
     links: [
       { label: "© A", url: "https://a.example/" },
@@ -211,7 +211,7 @@ it("preserves HTML parser normalization between successive notice merges", () =>
   // in its href to a line feed. The later original link is distinct.
   const result = projectAttributionPresentations(entries);
   expect(result.visible).toHaveLength(2);
-  expect(attributionHtml.parseAttributionHtml(result.visible[0].html).links).toEqual([
+  expect(attributionHtml.parseAttributionHtml(result.visible[0]?.html ?? "").links).toEqual([
     { label: "© A", url: "https://a.example/?x=\n" },
     { label: "© B", url: "https://b.example/" },
   ]);

@@ -606,12 +606,13 @@ export function localizedTextFor(
   text: LocalizedText | undefined,
   locale: string,
 ): string | undefined {
-  if (!text?.length) return undefined;
+  const [first] = text ?? [];
+  if (!text || !first) return undefined;
   const lang = locale.toLowerCase();
   const base = lang.split("-")[0];
   return (
     text.find((t) => t.lang.toLowerCase() === lang)?.text ??
     text.find((t) => t.lang.toLowerCase().split("-")[0] === base)?.text ??
-    text[0]!.text
+    first.text
   );
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { CategoryPlace } from "../types/category";
 import {
   applyFacetFilters,
@@ -58,6 +58,7 @@ describe("applyFacetFilters", () => {
     // Mirrors what CategoryFilterBar does: derive the chip from brandOptions,
     // then filter on the qid it reports.
     const [chip] = brandOptions(results);
+    assert.isDefined(chip);
     expect(chip.qid).toBe("Q1127798");
     const ids = applyFacetFilters(results, { brand: [chip.qid] }).map((p) => p.id);
     expect(ids).toEqual(["qpark"]);

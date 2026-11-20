@@ -1,5 +1,6 @@
 import type { LngLat } from "../types/geometry";
 import { haversineDistance } from "../utils/coordinates";
+import { numberAt } from "../utils/numberAt";
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
 
@@ -33,11 +34,10 @@ export function cumulativeDistances(geometry: LngLat[]): number[] {
 
 /**
  * Arc-length at `index` of a {@link cumulativeDistances} result. Callers pass a
- * vertex of the same geometry; any other index reads as NaN, as an unchecked
- * array read did in arithmetic, so comparisons against it stay false.
+ * vertex of the same geometry; any other index reads as NaN (see {@link numberAt}).
  */
 export function distanceAtVertex(cum: readonly number[], index: number): number {
-  return cum[index] ?? Number.NaN;
+  return numberAt(cum, index);
 }
 
 /**

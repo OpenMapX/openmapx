@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { AddressEvidence } from "../../types/address";
 import { captureKnowledgeResult, mergeKnowledgeResults } from "../knowledgeContributors";
 
@@ -51,7 +51,7 @@ describe("knowledge field ownership", () => {
     expect(result.fieldContributors?.["externalIds.yelp"]).toEqual([a]);
     expect(result.fieldContributors?.["externalIds.instagram"]).toEqual([b]);
     a.attributionText = "Changed catalogue";
-    expect(result.fieldContributors?.description[0]?.attributionText).toBe("Original notice");
+    expect(result.fieldContributors?.description?.[0]?.attributionText).toBe("Original notice");
     a.attributionText = "Original notice";
   });
 
@@ -77,7 +77,9 @@ describe("knowledge field ownership", () => {
     expect(result.photos?.[0]?.contributors).toEqual([b]);
     expect(result.facts?.[0]?.contributors).toEqual([]);
     expect(result.contributors).toEqual([b]);
-    photo.contributors[0].name = "Caller mutation";
+    const [photoReceipt] = photo.contributors;
+    assert.isDefined(photoReceipt);
+    photoReceipt.name = "Caller mutation";
     expect(result.photos?.[0]?.contributors?.[0]?.name).toBe("Second");
     b.name = "Second";
   });

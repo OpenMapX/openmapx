@@ -177,7 +177,7 @@ export function isDisplayablePhoto(photo: PlacePhoto): boolean {
         return false;
       if (
         !publicDomain &&
-        !licensingLinks(photo.licensing!).some(
+        !(photo.licensing ? licensingLinks(photo.licensing) : []).some(
           (part) => part.url || part.licenses?.some((atom) => atom.url),
         )
       )

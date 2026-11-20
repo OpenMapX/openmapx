@@ -9,6 +9,7 @@ import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
 import type { SearchMatchKind } from "../types/searchSuggestion";
 import { haversineDistance } from "./coordinates";
+import { numberAt } from "./numberAt";
 
 const AIRPORT_RAW_CATEGORY = "aeroway/aerodrome";
 
@@ -276,9 +277,13 @@ export function editDistance(a: string, b: string, limit: number): number {
     let rowMin = i;
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let value = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+      let value = Math.min(
+        numberAt(previous, j) + 1,
+        numberAt(current, j - 1) + 1,
+        numberAt(previous, j - 1) + cost,
+      );
       if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        value = Math.min(value, beforePrevious[j - 2] + 1);
+        value = Math.min(value, numberAt(beforePrevious, j - 2) + 1);
       }
       current.push(value);
       rowMin = Math.min(rowMin, value);
@@ -287,7 +292,7 @@ export function editDistance(a: string, b: string, limit: number): number {
     beforePrevious = previous;
     previous = current;
   }
-  return Math.min(previous[b.length], limit + 1);
+  return Math.min(numberAt(previous, b.length), limit + 1);
 }
 
 /**
@@ -320,7 +325,8 @@ function nameWithoutItsTown(item: AutocompleteResult): string | undefined {
   const rawAddress = item.sublabel.startsWith(item.label)
     ? item.sublabel.slice(item.label.length)
     : item.sublabel;
-  return words(matchKey(rawAddress)).includes(labelWords[0])
+  const [firstWord] = labelWords;
+  return firstWord !== undefined && words(matchKey(rawAddress)).includes(firstWord)
     ? labelWords.slice(1).join(" ")
     : undefined;
 }
@@ -429,9 +435,10 @@ export function textMatchScore(item: AutocompleteResult, query: string): number 
   const tokens = words(key);
   const labelWords = words(label);
   // A slip of one letter in a name typed from its start ("potsdamer plaz").
+  const [firstLabelWord] = labelWords;
   if (
-    labelWords.length > 0 &&
-    startsWordLoosely(tokens[0] ?? "", labelWords[0], tokens.length === 1) &&
+    firstLabelWord !== undefined &&
+    startsWordLoosely(tokens[0] ?? "", firstLabelWord, tokens.length === 1) &&
     everyTokenStartsAWordLoosely(tokens, labelWords)
   ) {
     return TEXT_SCORE.fuzzy;
@@ -896,14 +903,9 @@ export function mergeAutocompleteSuggestions(
       contributingProviders: providerIds(item).length > 0 ? providerIds(item) : undefined,
     };
     const duplicateIndex = merged.findIndex((candidate) => sameSuggestion(candidate, item));
-    if (duplicateIndex === -1) merged.push(normalizedItem);
-    else {
-      merged[duplicateIndex] = mergeDuplicate(
-        merged[duplicateIndex],
-        normalizedItem,
-        context.query,
-      );
-    }
+    const duplicate = merged[duplicateIndex];
+    if (!duplicate) merged.push(normalizedItem);
+    else merged[duplicateIndex] = mergeDuplicate(duplicate, normalizedItem, context.query);
   }
 
   return merged;

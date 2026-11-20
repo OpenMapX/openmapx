@@ -1,8 +1,15 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import type { PlacePhoto } from "../types/place";
 import { buildRuntimeAttributionHtml } from "./attribution";
 import { fetchCommonsMetadata, isDisplayablePhoto, parseCommonsPage } from "./commons-metadata";
+
+/** The page's first image record, failing the test when it has none. */
+function firstInfo<T>(page: { imageinfo: T[] }): T {
+  const [info] = page.imageinfo;
+  assert.isDefined(info);
+  return info;
+}
 
 describe("fetchCommonsMetadata strict lookup", () => {
   it("surfaces upstream failure while preserving the default empty-map fallback", async () => {
@@ -213,10 +220,12 @@ describe("Commons per-file receipt completeness", () => {
         url: expect.stringContaining("File:Photo.jpg"),
       }),
     ]);
-    expect(buildRuntimeAttributionHtml(photo!.contributors![0]!)).toContain(
+    const receipt = photo?.contributors?.[0];
+    assert.isDefined(receipt);
+    expect(buildRuntimeAttributionHtml(receipt)).toContain(
       'href="https://creativecommons.org/licenses/by-sa/4.0/"',
     );
-    expect(photo?.contributors?.[0].attributionText).toContain(
+    expect(photo?.contributors?.[0]?.attributionText).toContain(
       'href="https://commons.wikimedia.org/wiki/File:Photo.jpg"',
     );
     expect(photo?.attributionLinks).toContainEqual({
@@ -226,29 +235,29 @@ describe("Commons per-file receipt completeness", () => {
   });
   it.each(["Artist"])("defers a licensed file missing %s", (field) => {
     const copy = structuredClone(page);
-    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>)[field];
+    delete (firstInfo(copy).extmetadata as Record<string, unknown>)[field];
     expect(parseCommonsPage(copy)).toBeUndefined();
   });
   it("defers a URL-only declaration unless it identifies an exact known file grant", () => {
     const copy = structuredClone(page);
-    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).LicenseShortName;
-    expect(parseCommonsPage(copy)?.licensing?.bindings[0].license).toMatchObject({
+    delete (firstInfo(copy).extmetadata as Record<string, unknown>).LicenseShortName;
+    expect(parseCommonsPage(copy)?.licensing?.bindings[0]?.license).toMatchObject({
       kind: "spdx",
       expression: "CC-BY-SA-4.0",
     });
-    copy.imageinfo[0].extmetadata.LicenseUrl.value = "https://example.test/unrecognized-licence";
+    firstInfo(copy).extmetadata.LicenseUrl.value = "https://example.test/unrecognized-licence";
     expect(parseCommonsPage(copy)).toBeUndefined();
   });
   it("derives the canonical licence link when the exact supplied ID has no redundant URL", () => {
     const copy = structuredClone(page);
-    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).LicenseUrl;
-    expect(parseCommonsPage(copy)?.licensing?.bindings[0].license).toMatchObject({
+    delete (firstInfo(copy).extmetadata as Record<string, unknown>).LicenseUrl;
+    expect(parseCommonsPage(copy)?.licensing?.bindings[0]?.license).toMatchObject({
       kind: "spdx",
       expression: "CC-BY-SA-4.0",
     });
   });
   it("rejects metadata-less cached Commons bytes regardless of the old source label", () => {
-    expect(isDisplayablePhoto({ url: page.imageinfo[0].url, source: "wikipedia" })).toBe(false);
+    expect(isDisplayablePhoto({ url: firstInfo(page).url, source: "wikipedia" })).toBe(false);
   });
   it("retains a complete cached file with its original receipt", () => {
     const photo = parseCommonsPage(page);
@@ -257,10 +266,10 @@ describe("Commons per-file receipt completeness", () => {
   });
   it("accepts an explicitly public-domain file without inventing an artist or licence URL", () => {
     const copy = structuredClone(page);
-    copy.imageinfo[0].extmetadata.LicenseShortName.value = "Public domain";
-    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).Artist;
-    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).LicenseUrl;
-    expect(parseCommonsPage(copy)?.licensing?.bindings[0].license.kind).toBe("public-domain");
+    firstInfo(copy).extmetadata.LicenseShortName.value = "Public domain";
+    delete (firstInfo(copy).extmetadata as Record<string, unknown>).Artist;
+    delete (firstInfo(copy).extmetadata as Record<string, unknown>).LicenseUrl;
+    expect(parseCommonsPage(copy)?.licensing?.bindings[0]?.license.kind).toBe("public-domain");
   });
 });
 
@@ -284,7 +293,7 @@ it("preserves credit text entities and every artist's required link", () => {
   });
   expect(photo?.author).toBe("One & Co and Two");
   expect(photo?.attributionLinks).toContainEqual({ label: "Two", url: "https://example.org/two" });
-  expect(photo?.contributors?.[0].attributionText).toContain('href="https://example.org/two"');
+  expect(photo?.contributors?.[0]?.attributionText).toContain('href="https://example.org/two"');
 });
 
 it("retains the metadata's custom attribution and permission links", () => {
@@ -418,11 +427,11 @@ it.each([false, true])("keeps one visible creator link with custom attribution=%
     ...(custom ? [{ label: "Creator profile", url: "https://creator.example/profile" }] : []),
     { label: "permission record", url: "https://permission.example/record" },
   ]);
-  expect(photo.contributors?.[0].publisher).toEqual({
+  expect(photo.contributors?.[0]?.publisher).toEqual({
     name: "Creator",
     url: "https://creator.example/profile",
   });
-  expect(photo.contributors?.[0].attributionText).toContain(
+  expect(photo.contributors?.[0]?.attributionText).toContain(
     'href="https://creator.example/profile"',
   );
 });
@@ -449,7 +458,7 @@ it("keeps Commons source acquisition metadata separate from required display not
   });
   expect(photo?.sourceDescription).toContain("full-sized version obtained on request");
   expect(photo?.attributionText).toBe("Retain this notice");
-  expect(photo?.contributors?.[0].attributionText).toContain(
+  expect(photo?.contributors?.[0]?.attributionText).toContain(
     "full-sized version obtained on request",
   );
   expect(photo?.attributionLinks).toContainEqual({
@@ -476,5 +485,5 @@ it("preserves original UsageTerms links even when their label repeats the canoni
     label: "Public domain",
     url: "https://archive.example/rights",
   });
-  expect(photo?.contributors?.[0].attributionText).toContain("https://archive.example/rights");
+  expect(photo?.contributors?.[0]?.attributionText).toContain("https://archive.example/rights");
 });

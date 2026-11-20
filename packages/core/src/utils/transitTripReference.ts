@@ -11,6 +11,7 @@ export function itineraryMatchesTransitReference(
     legs.every((leg, i) => {
       const r = reference.legs[i];
       return (
+        r !== undefined &&
         leg.tripId === r.tripId &&
         leg.from.stopId === r.fromStopId &&
         leg.to.stopId === r.toStopId &&

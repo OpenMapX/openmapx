@@ -44,6 +44,10 @@ function createPinnedDispatcher(addresses: FetchConnectionAddress[]): Dispatcher
     connect(options, callback) {
       const connectNext = (): void => {
         const address = addresses[nextAddress++];
+        if (!address) {
+          callback(new Error("No validated addresses available for connection"), null);
+          return;
+        }
         connector(
           {
             ...options,

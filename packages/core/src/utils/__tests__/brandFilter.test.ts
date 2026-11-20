@@ -11,13 +11,13 @@ describe("brandToFilter", () => {
 
   it("emits one selector per kind, in a stable order", () => {
     const filter = brandToFilter({ qid: "Q1", kind: ["operator", "brand", "network"] });
-    expect(filter.selectors.map((s) => s.tags[0].key)).toEqual([
+    expect(filter.selectors.map((s) => s.tags[0]?.key)).toEqual([
       "brand:wikidata",
       "network:wikidata",
       "operator:wikidata",
     ]);
     for (const selector of filter.selectors) {
-      expect(selector.tags[0].value).toBe("Q1");
+      expect(selector.tags[0]?.value).toBe("Q1");
     }
   });
 

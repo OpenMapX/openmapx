@@ -86,7 +86,7 @@ export function parseAttributionHtml(
       if (url) pending.push({ url, start: parts.length });
     }
     const childNodes = children(node);
-    for (let i = childNodes.length - 1; i >= 0; i--) pending.push({ node: childNodes[i] });
+    for (const child of [...childNodes].reverse()) pending.push({ node: child });
   }
   return { text: parts.join("").trim(), links };
 }
@@ -139,7 +139,7 @@ export function sanitizeAttributionHtml(html: string, options: { urlLabel?: stri
       pending.push("</code>");
     }
     const childNodes = children(node);
-    for (let i = childNodes.length - 1; i >= 0; i--) pending.push(childNodes[i]);
+    for (const child of [...childNodes].reverse()) pending.push(child);
   }
   return out.join("");
 }

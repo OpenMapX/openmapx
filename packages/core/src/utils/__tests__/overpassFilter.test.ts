@@ -32,7 +32,7 @@ describe("validateOverpassFilter", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.filter.selectors[0].tags[0]).toEqual({ key: "amenity", op: "=", value: "cafe" });
+      expect(r.filter.selectors[0]?.tags[0]).toEqual({ key: "amenity", op: "=", value: "cafe" });
       expect(r.filter.elementTypes).toEqual(["node", "way"]);
     }
   });
@@ -145,11 +145,11 @@ describe("categoriesToFilter", () => {
     const f = categoriesToFilter(["cafes", "bakeries"], { "diet:vegan": "yes" });
     expect(f).not.toBeNull();
     expect(
-      f?.selectors.some((s) => s.tags[0].key === "amenity" && s.tags[0].value === "cafe"),
+      f?.selectors.some((s) => s.tags[0]?.key === "amenity" && s.tags[0]?.value === "cafe"),
     ).toBe(true);
-    expect(f?.selectors.some((s) => s.tags[0].key === "shop" && s.tags[0].value === "bakery")).toBe(
-      true,
-    );
+    expect(
+      f?.selectors.some((s) => s.tags[0]?.key === "shop" && s.tags[0]?.value === "bakery"),
+    ).toBe(true);
     expect(f?.require).toEqual([{ key: "diet:vegan", op: "=", value: "yes" }]);
   });
   it("returns null when no known categories", () => {
@@ -202,7 +202,7 @@ describe("searchByFilter", () => {
       expect.stringContaining('node["amenity"="cafe"](48.85,2.33,48.87,2.37);'),
     );
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Test Cafe");
+    expect(results[0]?.name).toBe("Test Cafe");
     expect(truncated).toBe(false);
   });
 });
@@ -222,7 +222,7 @@ describe("removeFilterPredicate", () => {
     const result = removeFilterPredicate(baseFilter, "require", 0);
     expect(baseFilter).toEqual(before);
     expect(result.require).toHaveLength(1);
-    expect(result.require?.[0].key).toBe("wheelchair");
+    expect(result.require?.[0]?.key).toBe("wheelchair");
     expect(result.selectors).toEqual(baseFilter.selectors);
     expect(result.exclude).toEqual(baseFilter.exclude);
   });

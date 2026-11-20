@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   actionInForce,
   actionInPlace,
@@ -15,7 +15,7 @@ import {
   validityHoldsAt,
   validityWindowHoldsAt,
 } from "../roadConditionEffects";
-import { effect, event } from "./fixtures/roadCondition";
+import { closure, effect, event } from "./fixtures/roadCondition";
 
 describe("readRoadConditionEffects", () => {
   it("keeps every effect it can read, with fields a newer producer added", () => {
@@ -114,7 +114,8 @@ describe("what an effect does to cars", () => {
       }),
     ]);
     expect(restricted).toMatchObject({ lanesRestricted: 2, lanesOperational: 0 });
-    expect(closesRoadForCars(restricted!)).toBe(false);
+    assert.isDefined(restricted);
+    expect(closesRoadForCars(restricted)).toBe(false);
   });
 
   it("keeps a delay's band and description when its length is not given", () => {
@@ -241,7 +242,7 @@ describe("when an effect is in force", () => {
       validity: { status: "active", start: "2026-09-20T00:00:00Z" },
     });
     const at = new Date("2026-09-11T12:00:00Z");
-    expect(effectInForceAt(e, e.effects[0]!, at)).toBe(true);
+    expect(effectInForceAt(e, closure(e), at)).toBe(true);
     expect(effectInForceAt(e, phase, at)).toBe(false);
   });
 
@@ -252,8 +253,8 @@ describe("when an effect is in force", () => {
       expect(validityHoldsAt({ status, start: "2026-09-11T08:00:00Z" }, at)).toBe(false);
       expect(validityWindowHoldsAt({ status, start: "2026-09-11T08:00:00Z" }, at)).toBe(true);
       const e = { ...event(), validity: { status } };
-      expect(effectStatusInForce(e, e.effects[0]!)).toBe(false);
-      expect(effectInForceAt(e, e.effects[0]!, at)).toBe(false);
+      expect(effectStatusInForce(e, closure(e))).toBe(false);
+      expect(effectInForceAt(e, closure(e), at)).toBe(false);
     }
     expect(lifecycleInForce({ status: "active" })).toBe(true);
   });
@@ -263,16 +264,18 @@ describe("when an effect is in force", () => {
     const later = new Date("2026-09-13T12:00:00Z");
     const window = { start: "2026-09-12T00:00:00Z", end: "2026-09-14T00:00:00Z" };
     const planned = { ...event(), validity: { status: "planned" as const, ...window } };
-    const closure = planned.effects[0]!;
-    expect(effectInForceAt(planned, closure, later, now)).toBe(true);
+    const plannedClosure = closure(planned);
+    expect(effectInForceAt(planned, plannedClosure, later, now)).toBe(true);
     // Not before its window, not without a wall clock, not once the start has passed.
-    expect(effectInForceAt(planned, closure, now, now)).toBe(false);
-    expect(effectInForceAt(planned, closure, later)).toBe(false);
-    expect(effectInForceAt(planned, closure, later, new Date("2026-09-12T06:00:00Z"))).toBe(false);
+    expect(effectInForceAt(planned, plannedClosure, now, now)).toBe(false);
+    expect(effectInForceAt(planned, plannedClosure, later)).toBe(false);
+    expect(effectInForceAt(planned, plannedClosure, later, new Date("2026-09-12T06:00:00Z"))).toBe(
+      false,
+    );
     const undated = { ...event(), validity: { status: "planned" as const, end: window.end } };
-    expect(effectInForceAt(undated, closure, later, now)).toBe(false);
+    expect(effectInForceAt(undated, plannedClosure, later, now)).toBe(false);
     const suspended = { ...event(), validity: { status: "suspended" as const, ...window } };
-    expect(effectInForceAt(suspended, closure, later, now)).toBe(false);
+    expect(effectInForceAt(suspended, plannedClosure, later, now)).toBe(false);
 
     const active = { ...event(), validity: { status: "active" as const, ...window } };
     const approved = effect("c", "closure", { actionStatus: "approved" });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getRoadConditionRoutingDecision, routingRightsReasons } from "../roadConditionRouting";
-import { closure, effect, event, evidence } from "./fixtures/roadCondition";
+import { closure, closureEvidence, effect, event, evidence } from "./fixtures/roadCondition";
 
 const now = Date.parse("2026-09-11T12:00:00Z");
 
@@ -56,7 +56,7 @@ describe("routing rights", () => {
 
   it("passes the policy through the routing decision", () => {
     const e = event();
-    e.routingEvidence!["fr1/closure"]!.rights.retention = "unknown";
+    closureEvidence(e).rights.retention = "unknown";
     expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).eligible).toBe(
       false,
     );
@@ -80,7 +80,7 @@ describe("road-condition routing evidence", () => {
     "withholds %s bindings",
     (status) => {
       const e = event();
-      e.routingEvidence!["fr1/closure"]!.binding_status = status as "ambiguous";
+      closureEvidence(e).binding_status = status as "ambiguous";
       expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).eligible).toBe(
         false,
       );
@@ -129,7 +129,7 @@ describe("road-condition routing evidence", () => {
 
   it("cannot use a binding of an earlier revision", () => {
     const e = event();
-    e.routingEvidence!["fr1/closure"]!.binding_revision = 2;
+    closureEvidence(e).binding_revision = 2;
     expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).reasons).toContain(
       "obsolete_binding",
     );
@@ -143,8 +143,8 @@ describe("road-condition routing evidence", () => {
 
   it("checks evidence now and a future situation at travel time separately", () => {
     const e = event();
-    e.routingEvidence!["fr1/closure"]!.valid_from = "2026-09-12T10:00:00Z";
-    e.routingEvidence!["fr1/closure"]!.valid_to = "2026-09-12T16:00:00Z";
+    closureEvidence(e).valid_from = "2026-09-12T10:00:00Z";
+    closureEvidence(e).valid_to = "2026-09-12T16:00:00Z";
     expect(
       getRoadConditionRoutingDecision(e, closure(e), {
         evaluatedAt: now,
@@ -155,7 +155,7 @@ describe("road-condition routing evidence", () => {
 
   it("rejects class-scoped evidence, denied parents and unknown grants", () => {
     const e = event();
-    e.routingEvidence!["fr1/closure"]!.applicability = {
+    closureEvidence(e).applicability = {
       kind: "classes",
       include: [{ class: "truck" }],
     };
@@ -169,7 +169,7 @@ describe("road-condition routing evidence", () => {
       }).eligible,
     ).toBe(false);
     const unknown = event();
-    unknown.routingEvidence!["fr1/closure"]!.rights.derived_redistribution = "unknown";
+    closureEvidence(unknown).rights.derived_redistribution = "unknown";
     expect(
       getRoadConditionRoutingDecision(unknown, closure(unknown), { evaluatedAt: now }).reasons,
     ).toContain("unverified_rights");
@@ -179,7 +179,7 @@ describe("road-condition routing evidence", () => {
     const cars = { kind: "classes" as const, include: [{ class: "car" as const }] };
     const rule = effect("fr1/closure", "closure", { applicability: cars });
     const e = { ...event(), effects: [rule] };
-    e.routingEvidence!["fr1/closure"]!.applicability = cars;
+    closureEvidence(e).applicability = cars;
     expect(getRoadConditionRoutingDecision(e, rule, { evaluatedAt: now }).eligible).toBe(true);
   });
 
@@ -241,7 +241,7 @@ describe("road-condition routing evidence", () => {
       { fresh_until: "bad" },
     ]) {
       const malformed = event();
-      Object.assign(malformed.routingEvidence!["fr1/closure"]!, patch);
+      Object.assign(closureEvidence(malformed), patch);
       const decide = () =>
         getRoadConditionRoutingDecision(malformed, closure(malformed), { evaluatedAt: now });
       expect(decide).not.toThrow();

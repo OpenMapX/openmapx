@@ -4,11 +4,11 @@ import type { IsochroneGeometry } from "../types/routing";
 function pointInRing(point: LngLat, ring: number[][]): boolean {
   const [x, y] = point;
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const xi = ring[i][0];
-    const yi = ring[i][1];
-    const xj = ring[j][0];
-    const yj = ring[j][1];
+  let previous = ring.at(-1);
+  for (const current of ring) {
+    const [xi = Number.NaN, yi = Number.NaN] = current;
+    const [xj = Number.NaN, yj = Number.NaN] = previous ?? current;
+    previous = current;
     const intersects = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
     if (intersects) inside = !inside;
   }
@@ -17,9 +17,10 @@ function pointInRing(point: LngLat, ring: number[][]): boolean {
 
 // polygon = [outerRing, ...holes]
 function pointInPolygon(point: LngLat, polygon: number[][][]): boolean {
-  if (polygon.length === 0 || !pointInRing(point, polygon[0])) return false;
-  for (let i = 1; i < polygon.length; i++) {
-    if (pointInRing(point, polygon[i])) return false; // inside a hole
+  const [outer, ...holes] = polygon;
+  if (!outer || !pointInRing(point, outer)) return false;
+  for (const hole of holes) {
+    if (pointInRing(point, hole)) return false; // inside a hole
   }
   return true;
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { AutocompleteResult } from "../../types/geocoding";
 import {
   compareSearchSuggestions,
@@ -107,9 +107,9 @@ describe("business duplicate evidence", () => {
       }),
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].contributingProviders).toEqual(["geocoding-maptiler"]);
-    expect(rows[0].sourceIds).toBeUndefined();
-    expect(rows[0].ids).toEqual({ osm: "way/1" });
+    expect(rows[0]?.contributingProviders).toEqual(["geocoding-maptiler"]);
+    expect(rows[0]?.sourceIds).toBeUndefined();
+    expect(rows[0]?.ids).toEqual({ osm: "way/1" });
   });
 
   it("merges valid shared identity despite conflicting addresses and provider IDs", () => {
@@ -118,7 +118,7 @@ describe("business duplicate evidence", () => {
       branch("maptiler:b", { ids: { wikidata: "Q100" }, sublabel: "REWE, Street B 2, Berlin" }),
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].ids).toEqual({ wikidata: "Q100" });
+    expect(rows[0]?.ids).toEqual({ wikidata: "Q100" });
   });
 
   it("does not let business fame override contradictory addresses", () => {
@@ -173,7 +173,7 @@ describe("business duplicate evidence", () => {
       branch("maptiler:b", { sublabel: "REWE, Friedrichstraße 2, Berlin" }),
     ]);
     expect(rows.map((row) => row.id)).toEqual(["maptiler:a", "maptiler:b"]);
-    expect(rows[1].sublabel).toBe("REWE, Friedrichstraße 2, Berlin");
+    expect(rows[1]?.sublabel).toBe("REWE, Friedrichstraße 2, Berlin");
   });
 });
 
@@ -620,8 +620,10 @@ describe("search suggestion primitives", () => {
       { query: "rom" },
     );
     expect(rome).toHaveLength(1);
-    expect(rome[0].searchMatch).toMatchObject({ normalized: "rom" });
-    expect(textMatchScore(rome[0], "rom")).toBe(1);
+    const [match] = rome;
+    assert.isDefined(match);
+    expect(match.searchMatch).toMatchObject({ normalized: "rom" });
+    expect(textMatchScore(match, "rom")).toBe(1);
   });
 
   it("keeps the geocoder's category and OSM object when merging a notable place", () => {
@@ -662,7 +664,7 @@ describe("search suggestion primitives", () => {
       rawCategory: "railway station",
       directOsmReference: { osmRef: "node/2459919677" },
     });
-    expect(station.fieldContributors?.rawCategory).toEqual([geocoderSource]);
+    expect(station?.fieldContributors?.rawCategory).toEqual([geocoderSource]);
   });
 
   it("keeps two villages of one name a few kilometres apart", () => {
@@ -702,8 +704,8 @@ describe("search suggestion primitives", () => {
       { query: "8011160" },
     );
     expect(merged).toHaveLength(1);
-    expect(merged[0].ids).toEqual({ uic: "8011160", osm: "node/123", transit: "one" });
-    expect(merged[0].contributingProviders).toEqual(["search-osm-aliases", "transit", "db"]);
+    expect(merged[0]?.ids).toEqual({ uic: "8011160", osm: "node/123", transit: "one" });
+    expect(merged[0]?.contributingProviders).toEqual(["search-osm-aliases", "transit", "db"]);
   });
 
   it("measures same-place distance geodesically so high latitudes are not penalised", () => {
@@ -728,7 +730,7 @@ describe("search suggestion primitives", () => {
       { query: "oslo" },
     );
     expect(merged).toHaveLength(1);
-    expect(merged[0].contributingProviders).toEqual(["geocoding-entur"]);
+    expect(merged[0]?.contributingProviders).toEqual(["geocoding-entur"]);
   });
 
   it("keeps the reported backends of both conflated suggestions", () => {
@@ -754,7 +756,7 @@ describe("search suggestion primitives", () => {
       { query: "oslo" },
     );
     expect(merged).toHaveLength(1);
-    expect(merged[0].sourceIds).toEqual(["photon"]);
+    expect(merged[0]?.sourceIds).toEqual(["photon"]);
   });
 
   it("keeps a station apart from the same-named square it serves", () => {
@@ -832,8 +834,8 @@ describe("retained suggestion contributor receipts", () => {
       [row("a", [a], { importance: 1 }), row("b", [b], { importance: 0 })],
       { query: "Landmark" },
     );
-    expect(result.contributors).toEqual([a]);
-    expect(result.contributingProviders).toEqual(["a"]);
+    expect(result?.contributors).toEqual([a]);
+    expect(result?.contributingProviders).toEqual(["a"]);
   });
   it("unions the supplier of a genuinely retained identity field", () => {
     const [result] = mergeAutocompleteSuggestions(
@@ -843,8 +845,8 @@ describe("retained suggestion contributor receipts", () => {
       ],
       { query: "Landmark" },
     );
-    expect(result.ids).toEqual({ wikidata: "Q1", osm: "node/1" });
-    expect(result.contributors).toEqual([a, b]);
+    expect(result?.ids).toEqual({ wikidata: "Q1", osm: "node/1" });
+    expect(result?.contributors).toEqual([a, b]);
   });
 });
 
@@ -865,8 +867,8 @@ it("keeps retained duplicate field owners separate from the winning label and co
     ],
     { query: "Cafe" },
   )[0];
-  expect(result.fieldContributors?.label).toEqual([a]);
-  expect(result.fieldContributors?.coordinates).toEqual([a]);
-  expect(result.fieldContributors?.fame).toEqual([b]);
-  expect(result.contributors).toEqual([a, b]);
+  expect(result?.fieldContributors?.label).toEqual([a]);
+  expect(result?.fieldContributors?.coordinates).toEqual([a]);
+  expect(result?.fieldContributors?.fame).toEqual([b]);
+  expect(result?.contributors).toEqual([a, b]);
 });

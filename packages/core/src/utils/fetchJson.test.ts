@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { type FetchJsonHttpError, fetchJson } from "./fetchJson";
 import { USER_AGENT } from "./userAgent";
 
@@ -51,8 +51,10 @@ describe("fetchJson", () => {
     const fetch = mockFetch(() => jsonResponse({ ok: true, n: 42 }));
     const data = await fetchJson<{ ok: boolean; n: number }>("https://x.test/data");
     expect(data).toEqual({ ok: true, n: 42 });
-    expect(fetch.mock.calls[0][1].redirect).toBeUndefined();
-    expect(new Headers(fetch.mock.calls[0][1].headers).get("User-Agent")).toBe(USER_AGENT);
+    const init = fetch.mock.calls[0]?.[1];
+    assert.isDefined(init);
+    expect(init.redirect).toBeUndefined();
+    expect(new Headers(init.headers).get("User-Agent")).toBe(USER_AGENT);
   });
 
   it("rejects a response whose declared length exceeds maxBytes before parsing", async () => {
@@ -226,7 +228,7 @@ describe("fetchJson", () => {
   it("sends the shared User-Agent and merges extra headers", async () => {
     const fn = mockFetch(() => jsonResponse({}));
     await fetchJson("https://x.test/data", { headers: { "Accept-Language": "de" } });
-    const init = fn.mock.calls[0][1] as RequestInit;
+    const init = fn.mock.calls[0]?.[1] as RequestInit;
     expect((init.headers as Record<string, string>)["User-Agent"]).toBe(USER_AGENT);
     expect((init.headers as Record<string, string>)["Accept-Language"]).toBe("de");
   });
@@ -241,7 +243,7 @@ describe("fetchJson", () => {
         init: { redirect: "follow" },
       });
 
-      const init = fn.mock.calls[0][1] as RequestInit;
+      const init = fn.mock.calls[0]?.[1] as RequestInit;
       expect(init.redirect).toBe("error");
       expect((init.headers as Record<string, string>)[header]).toBe("secret-value");
     },
@@ -254,7 +256,7 @@ describe("fetchJson", () => {
 
       await fetchJson("https://x.test/data", { headers: { [header]: "value" } });
 
-      expect((fn.mock.calls[0][1] as RequestInit).redirect).toBeUndefined();
+      expect((fn.mock.calls[0]?.[1] as RequestInit).redirect).toBeUndefined();
     },
   );
 
@@ -266,7 +268,7 @@ describe("fetchJson", () => {
       init: { redirect: "manual" },
     });
 
-    expect((fn.mock.calls[0][1] as RequestInit).redirect).toBe("error");
+    expect((fn.mock.calls[0]?.[1] as RequestInit).redirect).toBe("error");
   });
 
   it("preserves a caller redirect mode when all caller headers are allowlisted", async () => {
@@ -283,7 +285,7 @@ describe("fetchJson", () => {
       init: { redirect: "manual" },
     });
 
-    expect((fn.mock.calls[0][1] as RequestInit).redirect).toBe("manual");
+    expect((fn.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
   });
 
   it("returns null when a credential-bearing request refuses a redirect", async () => {
@@ -304,7 +306,7 @@ describe("fetchJson", () => {
   it("omits the User-Agent when userAgent is null", async () => {
     const fn = mockFetch(() => jsonResponse({}));
     await fetchJson("https://x.test/data", { userAgent: null });
-    const init = fn.mock.calls[0][1] as RequestInit;
+    const init = fn.mock.calls[0]?.[1] as RequestInit;
     expect((init.headers as Record<string, string>)["User-Agent"]).toBeUndefined();
   });
 
