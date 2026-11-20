@@ -17,7 +17,8 @@ import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
-import { TransitScopeRejected } from "../src/jobs/execution/api.js";
+import { createDataExecutionReceiver } from "../src/jobs/execution/receiver.js";
+import type { DataExecutionRuntime } from "../src/jobs/execution/runtime.js";
 import { DataConfigurationMaintenanceBusy } from "../src/jobs/execution/store.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
@@ -594,14 +595,19 @@ describe("data-manager API", () => {
   });
 
   it("POST /transit/sync names an out-of-scope refusal in the error envelope", async () => {
+    const operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
+    const admit = vi.fn();
     const app = createTestApp();
     registerApi(app, {
       dataDir: createDataDir(),
-      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
-      executionReceiver: receiverFixture({
-        admitLocal: async () => {
-          throw new TransitScopeRejected();
-        },
+      operationsPolicy,
+      // The real receiver applies the operations profile before admitting anything.
+      executionReceiver: createDataExecutionReceiver({
+        runtime: { admit } as unknown as DataExecutionRuntime,
+        installation: {} as never,
+        configurationFence: {} as never,
+        dispatcher: {} as never,
+        operationsPolicy,
       }),
     });
     const res = await app.inject({
@@ -614,6 +620,7 @@ describe("data-manager API", () => {
       error: "Countries outside configured operations profile",
       code: "outside-operations-profile",
     });
+    expect(admit).not.toHaveBeenCalled();
   });
 
   it("POST /transit/sync starts an in-scope country", async () => {
