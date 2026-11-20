@@ -1,6 +1,7 @@
 import {
   MOBILE_PROTOCOL_MAX,
   type MobileNavigationSession,
+  type TransitMobileSession,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
 import type { SendOutcome } from "../bridge/nativeBridge";
@@ -16,6 +17,14 @@ import {
   type SendStamp,
 } from "./NavigationCoordinator";
 import { type NavigationProcessor, ProcessorRegistry } from "./processor";
+import { TransitNavigationProcessor } from "./transit/TransitNavigationProcessor";
+import type { RefreshOutcome } from "./transit/TransitRefreshService";
+import {
+  FIXTURE_TOKEN,
+  transitItineraryFixture,
+  transitSessionFixture,
+  transitStartPackageFixture,
+} from "./transit/testing/transitFixture";
 
 const NOW = 1_700_000_100_000;
 
@@ -1143,7 +1152,7 @@ describe("car starts share the coordinator authority", () => {
 
 it("updates hosted captures without resurrecting an itinerary refresh handle", async () => {
   const context = await harness();
-  const { transitSessionFixture } = require("./transit/testing/transitFixture");
+  context.deps.processors.register(new TransitNavigationProcessor());
   const s = transitSessionFixture();
   s.payload.refreshToken = null;
   s.payload.refresh = {
@@ -1168,6 +1177,245 @@ it("updates hosted captures without resurrecting an itinerary refresh handle", a
   expect(updated.payload.refreshToken).toBeNull();
   expect(updated.payload.refresh.status).toBe("ready");
   await context.close();
+});
+
+describe("transit refresh answers", () => {
+  const REQUEST = "session-t1:refresh:3";
+
+  async function awaitingRefresh(adjust: (session: TransitMobileSession) => void = () => {}) {
+    const context = await harness();
+    context.deps.processors.register(new TransitNavigationProcessor());
+    const session = transitSessionFixture({ revision: 4 });
+    session.payload.refresh = {
+      status: "in-flight",
+      generation: 3,
+      requestId: REQUEST,
+      attempts: 0,
+    };
+    adjust(session);
+    await context.repository.createPreparing(session);
+    return { context, session };
+  }
+
+  function answer(overrides: Partial<Extract<RefreshOutcome, { ok: true }>> = {}): RefreshOutcome {
+    return {
+      ok: true,
+      sessionId: "session-t1",
+      requestId: REQUEST,
+      generation: 3,
+      itinerary: { ...transitItineraryFixture(), refreshToken: "tok_next" },
+      journeys: {},
+      ...overrides,
+    };
+  }
+
+  async function saved(context: Harness): Promise<TransitMobileSession> {
+    const session = await context.repository.loadActive(NOW);
+    if (session?.kind !== "transit") throw new Error("Missing transit session");
+    return session;
+  }
+
+  it.each([
+    ["another trip", { sessionId: "session-other" }],
+    ["an older generation", { generation: 2 }],
+    ["an earlier request", { requestId: "session-t1:refresh:2" }],
+  ])("drops an answer meant for %s", async (_label, overrides) => {
+    const { context } = await awaitingRefresh();
+    try {
+      await context.coordinator.applyTransitRefresh(answer(overrides));
+      const session = await saved(context);
+      expect(session.revision).toBe(4);
+      expect(session.payload.refreshToken).toBe(FIXTURE_TOKEN);
+      expect(context.effectLog).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("drops an answer when no refresh is in flight", async () => {
+    const { context } = await awaitingRefresh((session) => {
+      session.payload.refresh = { status: "ready", generation: 3, attempts: 0 };
+    });
+    try {
+      await context.coordinator.applyTransitRefresh(answer());
+      expect((await saved(context)).revision).toBe(4);
+      expect(context.effectLog).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("adopts a refreshed itinerary for the same journey with its rotated token", async () => {
+    const { context } = await awaitingRefresh();
+    const itinerary = transitItineraryFixture();
+    itinerary.legs[1].endTime = "2026-08-09T08:44:00Z";
+    try {
+      await context.coordinator.applyTransitRefresh(
+        answer({ itinerary: { ...itinerary, refreshToken: "tok_next" } }),
+      );
+      const session = await saved(context);
+      expect(session.revision).toBe(5);
+      expect(session.payload.refreshToken).toBe("tok_next");
+      expect(session.payload.navigationDataRevision).toBe(1);
+      expect(session.payload.refresh).toMatchObject({ status: "ready", generation: 3 });
+      expect(
+        (session.payload.startPackage.itinerary as { legs: Array<{ endTime: string }> }).legs[1]
+          .endTime,
+      ).toBe("2026-08-09T08:44:00Z");
+      expect(context.effectLog).toEqual(["alerts.reconcile", "publish.snapshot"]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps the current handle when only the captures were refreshed", async () => {
+    const { context, session: before } = await awaitingRefresh();
+    try {
+      await context.coordinator.applyTransitRefresh(
+        answer({ itinerary: before.payload.startPackage.itinerary, capturesOnly: true }),
+      );
+      const session = await saved(context);
+      expect(session.payload.refreshToken).toBe(FIXTURE_TOKEN);
+      expect(session.payload.refresh.status).toBe("ready");
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("updates the captured stops' predictions from the refetched journeys", async () => {
+    const { context } = await awaitingRefresh();
+    const stops = transitStartPackageFixture().captures[0].stops.map((stop) => ({ ...stop }));
+    const journey = stops.map((stop) =>
+      stop.stopId === "stop-d"
+        ? { ...stop, expectedArrival: "2026-08-09T08:44:00Z", platform: "7" }
+        : stop,
+    );
+    try {
+      await context.coordinator.applyTransitRefresh(answer({ journeys: { "trip-1": journey } }));
+      const capture = (await saved(context)).payload.startPackage.captures[0];
+      expect(capture.stops.map((stop) => stop.stopId)).toEqual(stops.map((stop) => stop.stopId));
+      expect(capture.stops[3]).toMatchObject({
+        expectedArrival: "2026-08-09T08:44:00Z",
+        platform: "7",
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("refuses an itinerary for a different journey and keeps the one being followed", async () => {
+    const { context, session: before } = await awaitingRefresh();
+    const itinerary = transitItineraryFixture();
+    itinerary.legs[1].tripId = "trip-2";
+    try {
+      await context.coordinator.applyTransitRefresh(answer({ itinerary }));
+      const session = await saved(context);
+      expect(session.revision).toBe(5);
+      expect(session.payload.startPackage.itinerary).toEqual(before.payload.startPackage.itinerary);
+      expect(session.payload.refresh.status).toBe("broken");
+      // A broken chain gives up its handle; the captured journey stays polled.
+      expect(session.payload.refreshToken).toBeNull();
+      expect(context.effectLog).toEqual(["alerts.reconcile", "publish.snapshot"]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("refuses an itinerary the start package schema rejects", async () => {
+    const { context } = await awaitingRefresh();
+    try {
+      await context.coordinator.applyTransitRefresh(answer({ itinerary: "not an itinerary" }));
+      const session = await saved(context);
+      expect(session.payload.refresh.status).toBe("broken");
+      expect(session.payload.navigationDataRevision).toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("treats an unreachable server as retryable and keeps the handle", async () => {
+    const { context } = await awaitingRefresh();
+    try {
+      await context.coordinator.applyTransitRefresh({
+        ok: false,
+        sessionId: "session-t1",
+        requestId: REQUEST,
+        generation: 3,
+        failure: "unreachable",
+      });
+      const session = await saved(context);
+      expect(session.revision).toBe(5);
+      expect(session.payload.refresh).toMatchObject({ status: "ready", attempts: 1 });
+      expect(session.payload.refreshToken).toBe(FIXTURE_TOKEN);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("counts an ambiguous answer against the same handle", async () => {
+    const { context } = await awaitingRefresh();
+    try {
+      await context.coordinator.applyTransitRefresh({
+        ok: false,
+        sessionId: "session-t1",
+        requestId: REQUEST,
+        generation: 3,
+        failure: "ambiguous",
+      });
+      const session = await saved(context);
+      expect(session.payload.refresh).toMatchObject({ status: "ready", ambiguousAttempts: 1 });
+      expect(session.payload.refreshToken).toBe(FIXTURE_TOKEN);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("restarts guidance on the active walk when the refreshed walk changed", async () => {
+    const { context } = await awaitingRefresh((session) => {
+      session.payload.tickState.currentWalkStepIndex = 2;
+    });
+    const itinerary = transitItineraryFixture();
+    Object.assign(itinerary.legs[0], {
+      steps: [{ instruction: "DEPART", distanceMeters: 120 }],
+    });
+    try {
+      await context.coordinator.applyTransitRefresh(answer({ itinerary }));
+      const session = await saved(context);
+      expect(session.payload.tickState).toMatchObject({
+        currentWalkStepIndex: 0,
+        reachedStepEnd: false,
+        walkRevision: 1,
+      });
+      expect(session.payload.progress).toMatchObject({ currentLegIndex: 0 });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps a repaired walk's own route when the refresh does not move its target", async () => {
+    const repaired = { type: "LineString", coordinates: [[8.6, 50.1]] };
+    const { context } = await awaitingRefresh((session) => {
+      session.payload.tickState.walkRevision = 1;
+      session.payload.tickState.currentWalkStepIndex = 2;
+      const legs = (session.payload.startPackage.itinerary as { legs: Record<string, unknown>[] })
+        .legs;
+      legs[0].geometry = repaired;
+    });
+    const itinerary = transitItineraryFixture();
+    Object.assign(itinerary.legs[0], {
+      geometry: { type: "LineString", coordinates: [[8.7, 50.2]] },
+    });
+    try {
+      await context.coordinator.applyTransitRefresh(answer({ itinerary }));
+      const session = await saved(context);
+      const legs = (session.payload.startPackage.itinerary as { legs: Record<string, unknown>[] })
+        .legs;
+      expect(legs[0].geometry).toEqual(repaired);
+      expect(session.payload.tickState).toMatchObject({ currentWalkStepIndex: 2, walkRevision: 1 });
+    } finally {
+      await context.close();
+    }
+  });
 });
 
 describe("NavigationCoordinator settings changes", () => {
