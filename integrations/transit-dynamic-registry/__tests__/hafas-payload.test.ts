@@ -9,6 +9,8 @@ const client = vi.hoisted(() => ({
   locations: vi.fn(),
   departures: vi.fn(),
   arrivals: vi.fn(),
+  journeys: vi.fn(),
+  trip: vi.fn(),
 }));
 const createClient = vi.hoisted(() => vi.fn(() => client));
 vi.mock("hafas-client", () => ({ createClient }));
@@ -36,6 +38,8 @@ beforeEach(() => {
   client.locations.mockReset();
   client.departures.mockReset();
   client.arrivals.mockReset();
+  client.journeys.mockReset();
+  client.trip.mockReset();
 });
 
 describe("HAFAS payload validation", () => {
@@ -221,5 +225,69 @@ describe("HAFAS client ownership", () => {
       ([profile]) => profile.endpoint,
     );
     expect(endpoints).toEqual(["https://hafas.test/mgate", "https://replacement.test/mgate"]);
+  });
+});
+
+describe("HAFAS journeys and trips without coordinates", () => {
+  const stop = (id: string, latitude?: number) => ({
+    id,
+    name: `Stop ${id}`,
+    ...(latitude === undefined ? {} : { location: { latitude, longitude: 13.4 } }),
+  });
+  const leg = (from: ReturnType<typeof stop>, to: ReturnType<typeof stop>) => ({
+    origin: from,
+    destination: to,
+    departure: "2026-03-10T10:00:00+01:00",
+    arrival: "2026-03-10T10:20:00+01:00",
+    line: { id: "u2", name: "U2", product: "subway" },
+    tripId: "trip-1",
+  });
+
+  it("leaves out a journey with a leg that cannot be placed", async () => {
+    client.journeys.mockResolvedValue({
+      journeys: [
+        { legs: [leg(stop("a", 52.5), stop("b"))] },
+        { legs: [leg(stop("a", 52.5), stop("c", 52.6))] },
+      ],
+    });
+
+    const plan = await hafasMgateAdapter.planJourney(
+      entry(),
+      52.5,
+      13.4,
+      52.6,
+      13.4,
+      "2026-03-10",
+      "09:00",
+      false,
+      2,
+    );
+
+    expect(plan?.itineraries).toHaveLength(1);
+    expect(plan?.itineraries[0]?.legs[0]?.to).toMatchObject({ lat: 52.6, lng: 13.4 });
+  });
+
+  it("answers no plan when no journey can be placed", async () => {
+    client.journeys.mockResolvedValue({ journeys: [{ legs: [leg(stop("a"), stop("b"))] }] });
+
+    expect(
+      await hafasMgateAdapter.planJourney(entry(), 52.5, 13.4, 52.6, 13.4, "2026-03-10", "09:00"),
+    ).toBeNull();
+  });
+
+  it("leaves a stopover without coordinates out of a trip", async () => {
+    client.trip.mockResolvedValue({
+      trip: {
+        id: "trip-1",
+        stopovers: [{ stop: stop("a", 52.5) }, { stop: stop("b") }, { stop: stop("c", 52.6) }],
+      },
+    });
+
+    const trip = await hafasMgateAdapter.getTrip!(entry(), "vbb:trip-1");
+
+    expect(trip?.stops.map((s) => [s.stopId, s.lat])).toEqual([
+      ["vbb:a", 52.5],
+      ["vbb:c", 52.6],
+    ]);
   });
 });

@@ -257,17 +257,35 @@ function normalizeDeparture(d: any, entry: RegistryEntry): Departure {
   return normalizeFptfDeparture(d, entry.prefix);
 }
 
+/** An FPTF location's coordinates, or null when it has none in range. */
+function fptfPosition(
+  location: { latitude?: unknown; longitude?: unknown } | null | undefined,
+): { lat: number; lng: number } | null {
+  const lat = location?.latitude;
+  const lng = location?.longitude;
+  return typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+    ? { lat, lng }
+    : null;
+}
+
+/** A trip leg, or null when either end has no coordinates to place it by. */
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
-function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg {
+function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg | null {
   const line = leg.line ?? {};
   const isWalking = leg.walking === true || !line.id;
   // Walking legs must use the "walking" mode, not "bus"
   const mode: TransportMode = isWalking ? "walking" : productToMode(line.product);
 
-  const fromLat: number = leg.origin?.location?.latitude ?? 0;
-  const fromLng: number = leg.origin?.location?.longitude ?? 0;
-  const toLat: number = leg.destination?.location?.latitude ?? 0;
-  const toLng: number = leg.destination?.location?.longitude ?? 0;
+  const origin = fptfPosition(leg.origin?.location);
+  const destination = fptfPosition(leg.destination?.location);
+  if (!origin || !destination) return null;
+  const { lat: fromLat, lng: fromLng } = origin;
+  const { lat: toLat, lng: toLng } = destination;
 
   // Use the GeoJSON polyline returned by hafas-client (when polylines: true)
   let geometry: GeoJSONLineString = {
@@ -503,28 +521,35 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
         if (!trip) return null;
         // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
         const stopovers: any[] = trip.stopovers ?? [];
-        const stops: VehicleJourneyStop[] = stopovers.map(
+        // A stop without coordinates cannot be drawn on the journey; it is left out.
+        const stops: VehicleJourneyStop[] = stopovers.flatMap(
           // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
-          (s: any): VehicleJourneyStop => ({
-            stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
-            name: s.stop?.name ?? "",
-            lat: s.stop?.location?.latitude ?? 0,
-            lng: s.stop?.location?.longitude ?? 0,
-            platform: s.platform ?? s.plannedPlatform ?? undefined,
-            scheduledPlatform: s.plannedPlatform ?? undefined,
-            scheduledArrival: s.plannedArrival ?? undefined,
-            scheduledDeparture: s.plannedDeparture ?? undefined,
-            expectedArrival: s.arrival ?? undefined,
-            expectedDeparture: s.departure ?? undefined,
-            delaySeconds:
-              typeof s.arrivalDelay === "number"
-                ? s.arrivalDelay
-                : typeof s.departureDelay === "number"
-                  ? s.departureDelay
-                  : undefined,
-            canceled: s.cancelled ?? false,
-            departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
-          }),
+          (s: any): VehicleJourneyStop[] => {
+            const at = fptfPosition(s.stop?.location);
+            if (!at) return [];
+            return [
+              {
+                stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
+                name: s.stop?.name ?? "",
+                lat: at.lat,
+                lng: at.lng,
+                platform: s.platform ?? s.plannedPlatform ?? undefined,
+                scheduledPlatform: s.plannedPlatform ?? undefined,
+                scheduledArrival: s.plannedArrival ?? undefined,
+                scheduledDeparture: s.plannedDeparture ?? undefined,
+                expectedArrival: s.arrival ?? undefined,
+                expectedDeparture: s.departure ?? undefined,
+                delaySeconds:
+                  typeof s.arrivalDelay === "number"
+                    ? s.arrivalDelay
+                    : typeof s.departureDelay === "number"
+                      ? s.departureDelay
+                      : undefined,
+                canceled: s.cancelled ?? false,
+                departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
+              },
+            ];
+          },
         );
         const remarks: TripRemark[] | undefined =
           Array.isArray(trip.remarks) && trip.remarks.length > 0
@@ -611,12 +636,17 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
         const journeys = (result as any).journeys ?? [];
         if (!journeys.length) return null;
 
-        const itineraries: TripItinerary[] = journeys.map(
+        // A journey with a leg that cannot be placed is incomplete and left out.
+        const itineraries: TripItinerary[] = journeys.flatMap(
           // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF journey
-          (j: any): TripItinerary => {
+          (j: any): TripItinerary[] => {
             const rawLegs = j.legs ?? [];
             // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
-            const legs: TripLeg[] = rawLegs.map((l: any) => legToTripLeg(l, entry));
+            const mapped = rawLegs.map((l: any) => legToTripLeg(l, entry));
+            if (mapped.length === 0 || mapped.some((leg: TripLeg | null) => leg === null)) {
+              return [];
+            }
+            const legs = mapped as TripLeg[];
             const startTime = legs[0]?.startTime ?? "";
             const endTime = legs[legs.length - 1]?.endTime ?? "";
             const durationMs =
@@ -628,16 +658,19 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
             const walkDistance = (rawLegs as Array<{ walking?: boolean; distance?: number }>)
               .filter((l) => l.walking === true)
               .reduce((sum, l) => sum + (l.distance ?? 0), 0);
-            return {
-              duration: Math.round(durationMs / 1000),
-              startTime,
-              endTime,
-              transfers,
-              walkDistance: Math.round(walkDistance),
-              legs,
-            };
+            return [
+              {
+                duration: Math.round(durationMs / 1000),
+                startTime,
+                endTime,
+                transfers,
+                walkDistance: Math.round(walkDistance),
+                legs,
+              },
+            ];
           },
         );
+        if (itineraries.length === 0) return null;
 
         const firstLeg = itineraries[0]?.legs[0];
         const lastItinerary = itineraries[0];
