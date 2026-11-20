@@ -74,7 +74,7 @@ export function useSuggestionRows({
   // The text stays in the box after a place opens and the map flies there;
   // following the moving centre would ask for rows nobody sees.
   const suggestQuery = suggesting ? debouncedQuery : "";
-  const geocodeQuery = suggesting ? debouncedGeoQuery : "";
+  const geocodeLookupQuery = suggesting ? debouncedGeoQuery : "";
   const suggestionBias = useMemo(
     () => (mapCenter ? { proximity: mapCenter, zoom: mapZoom } : null),
     [mapCenter, mapZoom],
@@ -85,7 +85,7 @@ export function useSuggestionRows({
     isFetching: autocompleteFetching,
     isPlaceholderData: autocompletePlaceholder,
   } = useAutocomplete(suggestQuery, locale, suggestionBias);
-  const { data: geocodeData } = useGeocoding(geocodeQuery, locale, mapCenter);
+  const { data: geocodeData } = useGeocoding(geocodeLookupQuery, locale, mapCenter);
   const { data: presetData } = usePresetSuggest(suggestQuery, locale);
   // One country lookup per ~1° cell: the value only steers brand ranking, so a
   // coarse cell is plenty and keeps the query cache from churning while panning.
@@ -291,6 +291,7 @@ export function useSuggestionRows({
       !autocompletePlaceholder &&
       !aggregateSearchFetching &&
       !aggregateSearchPlaceholder,
+    /** The debounced text, so a submit can tell whether `geocodeResults` answer what is typed. */
     geocodeQuery: debouncedGeoQuery,
     geocodeResults: geocodeData,
   };
