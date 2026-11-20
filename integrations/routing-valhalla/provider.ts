@@ -730,11 +730,19 @@ export function transformTraceEdge(
   };
 }
 
-function transformMatchedPoint(point: ValhallaTraceMatchedPoint): MatchPoint {
+/**
+ * One matched point, aligned with the trace point it answers. A point Valhalla
+ * returns without finite coordinates stays where it was recorded, unmatched.
+ */
+function transformMatchedPoint(
+  point: ValhallaTraceMatchedPoint,
+  recorded: MatchTracePoint,
+): MatchPoint {
+  const placed = Number.isFinite(point.lat) && Number.isFinite(point.lon);
   return {
-    lat: point.lat ?? 0,
-    lng: point.lon ?? 0,
-    type: point.type ?? "unmatched",
+    lat: placed ? (point.lat as number) : recorded.lat,
+    lng: placed ? (point.lon as number) : recorded.lng,
+    type: placed ? (point.type ?? "unmatched") : "unmatched",
     edgeIndex: point.edge_index,
     // Pass through unchanged: Valhalla returns this as a 0–1 ratio along the
     // edge. Consumers multiply by `edges[edge_index].length` (metres) to get
@@ -1226,7 +1234,10 @@ export function createValhallaService(
       return {
         geometry: data.shape ? decodePolyline(data.shape, 6) : [],
         edges: (data.edges ?? []).map((edge) => transformTraceEdge(edge, data.admins)),
-        points: (data.matched_points ?? []).map(transformMatchedPoint),
+        points: (data.matched_points ?? []).flatMap((point, index) => {
+          const recorded = trace[index];
+          return recorded ? [transformMatchedPoint(point, recorded)] : [];
+        }),
         mode,
       };
     },

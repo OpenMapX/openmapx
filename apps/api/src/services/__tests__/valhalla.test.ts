@@ -753,6 +753,26 @@ describe("valhallaService", () => {
       expect(point?.distanceFromTracePoint).toBe(4.2);
     });
 
+    it("keeps a matched point without coordinates at its recorded position, unmatched", async () => {
+      mockFetch.mockResolvedValueOnce(
+        mockOk({
+          matched_points: [
+            { type: "matched", edge_index: 0 },
+            { lat: 52.6, lon: 13.5 },
+          ],
+        }),
+      );
+
+      const result = await valhallaService.getMatch?.(trace, "driving");
+
+      expect(result?.points[0]).toMatchObject({
+        lat: trace[0]?.lat,
+        lng: trace[0]?.lng,
+        type: "unmatched",
+      });
+      expect(result?.points[1]).toMatchObject({ lat: 52.6, lng: 13.5 });
+    });
+
     it("returns the decoded polyline as geometry and mode in the result", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeTraceResponse()));
 
