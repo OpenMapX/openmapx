@@ -153,6 +153,8 @@ describe("generated dynamic OTP acquisition", () => {
           route: { id: family + ":feed:route", mode: "bus" },
         },
       ]);
+      // GTFS routes carry a colour, emitted without "#" like every other provider's.
+      if (family !== "trufi") expect(departures[0]?.route.color).toBe("ff0000");
       expect(f.http.calls).toHaveLength(3);
       expect(f.admit).toHaveBeenCalledTimes(3);
       for (const call of f.http.calls) {

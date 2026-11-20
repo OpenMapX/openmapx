@@ -215,7 +215,6 @@ export {
   serializeOsmOpeningHours,
   serializeOsmOpeningHoursRule,
 } from "./osmOpeningHoursAst";
-export { otpMode } from "./otp";
 export {
   buildNodeMap,
   buildWayMap,

@@ -1,7 +1,6 @@
-import { otpMode } from "@openmapx/core";
 import { decodePolyline } from "@openmapx/mobility-core/polyline";
 import type { TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
-import { OtpError, type OtpPlanQuery } from "@openmapx/otp-client";
+import { OtpError, type OtpPlanQuery, otpRouteColor, otpTransportMode } from "@openmapx/otp-client";
 
 type Itinerary = NonNullable<
   NonNullable<NonNullable<OtpPlanQuery["planConnection"]>["edges"]>[number]
@@ -87,7 +86,7 @@ function leg(value: Leg | null): TripLeg {
   if (Date.parse(endTime) < Date.parse(startTime)) throw new OtpError("payload");
   const state = value.tripOnServiceDate?.realTimeTripState;
   return {
-    mode: otpMode(value.mode),
+    mode: otpTransportMode(value.mode) ?? "bus",
     startTime,
     endTime,
     scheduledStartTime: iso(value.start.scheduledTime),
@@ -99,7 +98,7 @@ function leg(value: Leg | null): TripLeg {
       ? {
           shortName: value.route.shortName ?? "",
           longName: value.route.longName ?? "",
-          color: value.route.color?.replace(/^#/, ""),
+          color: otpRouteColor(value.route.color) ?? undefined,
         }
       : undefined,
     tripId: otpId(value.trip?.gtfsId),
