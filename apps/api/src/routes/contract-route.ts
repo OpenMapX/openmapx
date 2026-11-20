@@ -32,6 +32,19 @@ type ContractRequest<R extends Registry, K extends keyof R> = {
   Querystring: ContractPart<R, K, "query">;
   Params: ContractPart<R, K, "params">;
 };
+/**
+ * Replies whose JSON body preSerialization already validated against the
+ * operation's response contract, so onSend does not parse it a second time.
+ */
+const validatedReplies = new WeakSet<FastifyReply>();
+/** Marks the validated data preSerialization hands to the serializer. */
+const VALIDATED = Symbol("validated contract response");
+type ValidatedPayload = { [VALIDATED]: unknown };
+
+function isValidatedPayload(payload: unknown): payload is ValidatedPayload {
+  return typeof payload === "object" && payload !== null && VALIDATED in payload;
+}
+
 export interface RegistrationOptions {
   preHandler?: preHandlerHookHandler | preHandlerHookHandler[];
   beforeValidation?: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -178,6 +191,17 @@ export function createContractRouteRegistrar<const R extends Registry>(
       onRequest: async (_request, reply) => {
         bindAdminByteResponse(reply, responses);
       },
+      // Validate an object JSON body once, on its JSON wire value. Fastify runs
+      // this hook for objects only; strings, buffers, streams, null and errors
+      // reach the serializer or onSend unmarked and are validated there.
+      preSerialization: async (_req, reply, payload) => {
+        if (payload instanceof Error || responses[reply.statusCode]?.kind !== "json") {
+          return payload;
+        }
+        const data = validate(JSON.parse(JSON.stringify(payload)), reply.statusCode);
+        validatedReplies.add(reply);
+        return { [VALIDATED]: data } satisfies ValidatedPayload;
+      },
       validatorCompiler: () => (value) => ({ value }),
       preValidation: family.validationPhase === "preValidation" ? validateRequest : undefined,
       preHandler:
@@ -195,6 +219,7 @@ export function createContractRouteRegistrar<const R extends Registry>(
             throw new Error(
               "Administration byte response must be streamed through its send adapter",
             );
+          if (isValidatedPayload(payload)) return JSON.stringify(payload[VALIDATED]);
           let wire: unknown;
           if (payload instanceof Error) {
             const error = payload as Error & { error?: unknown; code?: unknown };
@@ -263,6 +288,7 @@ export function createContractRouteRegistrar<const R extends Registry>(
           (typeof payload !== "string" && !Buffer.isBuffer(payload))
         )
           throw new Error(`Invalid ${family.label ?? "administration"} response`);
+        if (contract.kind === "json" && validatedReplies.has(reply)) return payload;
         validate(
           contract.kind === "json" ? JSON.parse(payload.toString()) : payload.toString(),
           reply.statusCode,
