@@ -507,8 +507,10 @@ async function observeChild(
     await delay(100, undefined, { signal });
   }
 }
-/** Body-first confirmed CAS -> recorded one-time binding -> grant/ref -> confirmed
- * claimed CAS -> consume fresh nominal ticket -> exactly one mutation POST. */
+/** A child is sent in this order: reserved on its cell (a version-checked
+ * write of the original body), bound, its grant recorded (the child now reads
+ * as attempted), a version-checked `publication: unknown` checkpoint, the
+ * one-time dispatch ticket consumed, then exactly one request to the agent. */
 type OwnedDataOpsOptions = {
   context: DataExecutionContext;
   phase: DataOpsChildPhase;
@@ -517,7 +519,7 @@ type OwnedDataOpsOptions = {
   reservedContinuation?: FreshDataChildReservation;
 };
 /** Reserve the original restore before touching either live file. Only the
- * confirmed live CAS continuation may later dispatch this exact same phase. */
+ * continuation this reservation returns may later send this exact phase. */
 export async function reserveOwnedProxyRecovery(
   context: DataExecutionContext,
   backupDigest: string,
