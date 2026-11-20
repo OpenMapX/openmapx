@@ -274,6 +274,25 @@ describe("mapTrip", () => {
     ]);
   });
 
+  it("times a leg from its own duration before the neighbouring leg's end", () => {
+    const itinerary = mapTrip({
+      legs: [
+        {
+          type: "JOURNEY",
+          departure: at("2026-03-10T10:00:00Z", 50.9, 6.9),
+          arrival: at("2026-03-10T10:30:00Z", 50.7, 7.1),
+        },
+        {
+          type: "JOURNEY",
+          duration: "PT20M",
+          departure: { position: { latitude: 50.7, longitude: 7.1 } },
+          arrival: at("2026-03-10T11:00:00Z", 50.3, 7.6),
+        },
+      ],
+    });
+    expect(itinerary?.legs[1]?.startTime).toBe("2026-03-10T10:40:00.000Z");
+  });
+
   it("places a transfer stop RIS left unplaced from the leg on its other side", () => {
     const itinerary = mapTrip({
       legs: [
@@ -383,7 +402,9 @@ describe("planJourney", () => {
       mockOk({
         trips: [
           { legs: [leg({ name: "Untimed", ...at("", 50.9, 6.9) })] },
-          { legs: [leg({ name: "Köln Hbf", time: "2026-03-10T10:05:00Z" })] },
+          {
+            legs: [leg({ name: "Köln Hbf", evaNumber: "8000207", time: "2026-03-10T10:05:00Z" })],
+          },
         ],
       }),
     );
@@ -392,6 +413,12 @@ describe("planJourney", () => {
 
     expect(plan?.itineraries).toHaveLength(1);
     expect(plan?.from).toEqual({ name: "Köln Hbf", lat: 50.94, lng: 6.96 });
+    // The station only borrows the requested position, so it is not labelled as that stop.
+    expect(plan?.itineraries[0]?.legs[0]?.from).toEqual({
+      name: "Köln Hbf",
+      lat: 50.94,
+      lng: 6.96,
+    });
   });
 
   it("returns null when the routing response has no trips", async () => {

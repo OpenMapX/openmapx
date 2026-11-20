@@ -127,9 +127,14 @@ function eventPosition(event?: RisStopEvent): LatLng | null {
   return latLngOrNull(event?.position?.latitude, event?.position?.longitude);
 }
 
+/**
+ * A leg end at its position. An end that borrows the requested coordinate is
+ * not labelled as RIS's stop, because the stop is not really there.
+ */
 function resolveStopEvent(
   event: RisStopEvent | undefined,
   at: LatLng,
+  borrowed: boolean,
 ): {
   name: string;
   lat: number;
@@ -140,7 +145,7 @@ function resolveStopEvent(
     name: event?.name ?? "",
     lat: at.lat,
     lng: at.lng,
-    stopId: event?.evaNumber ? `${PREFIX}${event.evaNumber}` : undefined,
+    stopId: event?.evaNumber && !borrowed ? `${PREFIX}${event.evaNumber}` : undefined,
   };
 }
 
@@ -152,6 +157,9 @@ interface LegDraft {
   line: [number, number][] | null;
   from: LatLng | null;
   to: LatLng | null;
+  /** The end took the requested origin or destination. */
+  fromRequest?: boolean;
+  toRequest?: boolean;
   startTime?: string;
   endTime?: string;
   seconds: number | undefined;
@@ -186,17 +194,28 @@ function shift(time: string | undefined, seconds: number | undefined): string | 
 /**
  * Fills the ends RIS left without a position or time from what the trip
  * itself proves: a leg's polyline, the neighbouring leg that shares the stop,
- * the requested origin and destination, and a leg's duration.
+ * the requested origin and destination, and a leg's duration. A leg's own
+ * duration is tried before the neighbouring leg's time.
  */
 function completeEnds(drafts: LegDraft[], request?: { origin: LatLng; destination: LatLng }) {
   const last = drafts.length - 1;
   for (let i = last; i >= 0; i--) {
     const d = drafts[i] as LegDraft;
-    d.to ??= i === last ? (request?.destination ?? null) : (drafts[i + 1]?.from ?? null);
+    if (!d.to && i === last && request) {
+      d.to = request.destination;
+      d.toRequest = true;
+    }
+    d.to ??= drafts[i + 1]?.from ?? null;
   }
   for (let i = 0; i <= last; i++) {
     const d = drafts[i] as LegDraft;
-    d.from ??= i === 0 ? (request?.origin ?? null) : (drafts[i - 1]?.to ?? null);
+    if (!d.from && i === 0 && request) {
+      d.from = request.origin;
+      d.fromRequest = true;
+    }
+    d.from ??= drafts[i - 1]?.to ?? null;
+    // The leg's own duration beats the neighbour's time, which would hide a transfer.
+    d.startTime ??= shift(d.endTime, d.seconds === undefined ? undefined : -d.seconds);
     d.startTime ??= drafts[i - 1]?.endTime;
     d.endTime ??= shift(d.startTime, d.seconds);
   }
@@ -217,8 +236,8 @@ function buildLeg(draft: LegDraft, ends: { from: LatLng; to: LatLng; start: stri
     mode,
     startTime: ends.start,
     endTime: ends.end,
-    from: resolveStopEvent(origin, ends.from),
-    to: resolveStopEvent(dest, ends.to),
+    from: resolveStopEvent(origin, ends.from, draft.fromRequest === true),
+    to: resolveStopEvent(dest, ends.to, draft.toRequest === true),
     geometry: {
       type: "LineString",
       coordinates: draft.line ?? [

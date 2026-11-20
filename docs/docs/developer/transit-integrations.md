@@ -188,7 +188,8 @@ without them in its stop list with `lat` and `lng` left out, so only drawing and
 distance skip it. A route stop's `sequence` counts from 1 without gaps, unplaced
 stops included. Fill a trip leg's unplaced end from what the trip proves (its polyline,
 the neighbouring leg, the requested origin or destination) before giving up on
-the trip. An ordered structure such as a journey's stop sequence is valid only as
+the trip. An end placed only at the requested coordinate carries no stop id, and a
+leg's own duration times it before its neighbour's time does. An ordered structure such as a journey's stop sequence is valid only as
 a whole. Use recorded or documented example responses as fixtures, note their
 source in a `PROVENANCE.md`, and have test doubles assert the request they
 receive.
