@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // The template is not a workspace package, so no package link resolves its
+    // framework import until `openmapx integrations scaffold` copies it into one.
+    "paths": {
+      "@openmapx/integration-framework": ["../../packages/integration-framework/src/index.ts"]
+    }
+  },
+  "include": ["../../integrations/_template/index.ts"],
+  "exclude": []
+}

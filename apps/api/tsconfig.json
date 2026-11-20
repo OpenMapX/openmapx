@@ -10,7 +10,7 @@
     "outDir": "./dist"
   },
   "include": ["src", "scripts", "drizzle.config.ts", "../../integrations/*/index.ts"],
-  // The integration template is not a workspace package: its imports resolve
-  // only once `openmapx integrations scaffold` copies it into one.
+  // The integration template is not a workspace package; it has its own
+  // program, tsconfig.integration-template.json.
   "exclude": ["../../integrations/_template"]
 }
