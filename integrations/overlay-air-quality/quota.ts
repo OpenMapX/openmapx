@@ -1,3 +1,4 @@
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { QuotaDecision, QuotaWindow, UpstreamRuntime } from "@openmapx/integration-framework";
 
 export const OPENAQ_QUOTA_WINDOWS: readonly QuotaWindow[] = [
@@ -8,7 +9,8 @@ export const OPENAQ_QUOTA_WINDOWS: readonly QuotaWindow[] = [
 const QUOTA_BUCKET = "openaq-v3";
 const COOLDOWN_KEY = "openaq-v3:quota-cooldown:v1";
 
-function delayMilliseconds(value: string | undefined, now: number): number | null {
+/** OpenAQ's `x-ratelimit-reset`: seconds until the window resets, or a date. */
+function resetMilliseconds(value: string | undefined, now: number): number | null {
   if (!value) return null;
   const seconds = Number(value);
   if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
@@ -35,9 +37,9 @@ export function createOpenAQQuota(runtime: UpstreamRuntime, options: { now?: () 
       const at = now();
       const remaining = Number(headers["x-ratelimit-remaining"]);
       if (status !== 429 && (!Number.isFinite(remaining) || remaining > 0)) return;
-      const retryAfter = delayMilliseconds(headers["retry-after"], at);
+      const retryAfter = parseRetryAfterMs(headers["retry-after"], { now: at });
       // OpenAQ documents x-ratelimit-reset as seconds until reset, not a Unix timestamp.
-      const reset = delayMilliseconds(headers["x-ratelimit-reset"], at);
+      const reset = resetMilliseconds(headers["x-ratelimit-reset"], at);
       const delay = Math.max(retryAfter ?? 0, reset ?? 0, status === 429 ? 1_000 : 0);
       if (delay <= 0) return;
       const retryAt = at + delay;

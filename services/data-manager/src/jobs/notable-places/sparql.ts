@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import { USER_AGENT_CONTACT } from "@openmapx/core";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 
 /**
  * QLever's public Wikidata endpoint answers a query over every place with
@@ -225,7 +226,7 @@ async function postQuery(
     const delay = retryDelaysMs[attempt];
     if (!BUSY_STATUSES.has(response.status) || delay === undefined) return response;
     await response.body?.cancel();
-    const retryAfterMs = Number(response.headers.get("retry-after")) * 1000;
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after")) ?? 0;
     await sleep(retryAfterMs > 0 ? Math.min(retryAfterMs, MAX_RETRY_AFTER_MS) : delay, undefined, {
       signal,
     });

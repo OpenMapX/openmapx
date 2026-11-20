@@ -104,7 +104,6 @@ export {
   fetchJson,
   hasPotentiallyCredentialBearingHeaders,
   isJsonMediaType,
-  parseRetryAfterMs,
   readBoundedJsonResponse,
   readBoundedResponseText,
 } from "./fetchJson";

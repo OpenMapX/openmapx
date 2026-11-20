@@ -5,9 +5,9 @@ import {
   isDisplayablePhoto,
   type PlacePhoto,
   parseId,
-  parseRetryAfterMs,
   type RequestJsonScope,
 } from "@openmapx/core";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { IntegrationContext, LoadedIntegration } from "@openmapx/integration-framework";
 import {
   lookupByNameAndCoords,
@@ -330,7 +330,7 @@ async function fetchGooglePhotosSharePage(
     const error = new FetchJsonHttpError(
       `Google Photos preview HTTP ${response.status}`,
       response.status,
-      parseRetryAfterMs(response.headers.get("retry-after")),
+      parseRetryAfterMs(response.headers.get("retry-after")) ?? undefined,
     );
     if (response.body) {
       let timer: ReturnType<typeof setTimeout> | undefined;

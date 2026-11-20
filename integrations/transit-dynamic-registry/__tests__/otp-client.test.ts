@@ -296,6 +296,17 @@ describe("generated dynamic OTP acquisition", () => {
     expect(g.defer).toHaveBeenCalledWith(
       expect.objectContaining({ scope: "https://api.peatus.ee", key: "anonymous", delayMs: 37000 }),
     );
+    const d = fixture("peatus", {
+      status: 429,
+      headers: {
+        "retry-after": "Wed, 21 Oct 2026 07:30:00 GMT",
+        date: "Wed, 21 Oct 2026 07:29:15 GMT",
+      },
+      body: {},
+    });
+    await expect(d.adapter.searchByName!(d.entry, "X", 1)).rejects.toThrow("OTP upstream cooldown");
+    // An HTTP date is measured from the server's own Date header.
+    expect(d.defer).toHaveBeenCalledWith(expect.objectContaining({ delayMs: 45000 }));
   });
   it("shares credential bucket across Digitransit regions and isolates other keys", async () => {
     const f = fixture();

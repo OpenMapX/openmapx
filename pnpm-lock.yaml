@@ -1455,6 +1455,9 @@ importers:
       '@openmapx/air-quality':
         specifier: workspace:^
         version: link:../../packages/air-quality
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
@@ -3024,6 +3027,9 @@ importers:
 
   packages/entur-client:
     dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../integration-framework

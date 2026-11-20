@@ -1,4 +1,5 @@
 import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type {
   HttpClient,
   ResponseOptions,
@@ -146,9 +147,8 @@ function wait(delay: number, signal: AbortSignal): Promise<void> {
 function cooldownDelay(headers: Readonly<Record<string, string>>, now: number): number {
   const date = Date.parse(headers.date ?? "");
   const reference = Number.isFinite(date) ? date : now;
-  const retry = headers["retry-after"]?.trim() ?? "";
-  const numericRetry = /^\d+$/.test(retry);
-  const retryDelay = numericRetry ? Number(retry) * 1000 : Date.parse(retry) - reference;
+  const retryDelay =
+    parseRetryAfterMs(headers["retry-after"], { now, serverDate: headers.date }) ?? Number.NaN;
   const expiry = headers["rate-limit-expiry-time"]?.trim() ?? "";
   const numeric = /^\d+(?:\.\d+)?$/.test(expiry) ? Number(expiry) : NaN;
   const expiryDelay = Number.isFinite(numeric)

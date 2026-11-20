@@ -62,6 +62,10 @@
       "types": "./src/mobility-http-transport.ts",
       "default": "./src/mobility-http-transport.ts"
     },
+    "./retry-after": {
+      "types": "./src/http/retry-after.ts",
+      "default": "./src/http/retry-after.ts"
+    },
     "./server-env": {
       "types": "./src/server-env.ts",
       "default": "./src/server-env.ts"

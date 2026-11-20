@@ -1,3 +1,4 @@
+import { parseRetryAfterMs } from "../http/retry-after";
 import { USER_AGENT } from "./userAgent";
 
 /** Default HTTP timeout for upstream JSON APIs. */
@@ -342,15 +343,6 @@ export class FetchJsonHttpError extends Error {
   }
 }
 
-export function parseRetryAfterMs(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const seconds = /^\d+$/.test(value) ? Number(value) : Number.NaN;
-  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
-  return Number.isFinite(delay) && delay > 0 && delay <= Number.MAX_SAFE_INTEGER - Date.now()
-    ? delay
-    : undefined;
-}
-
 async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
   const {
     timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
@@ -380,7 +372,7 @@ async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
     const res = await awaitResponseWithSignal(fetchPromise, signal);
     if (!res.ok) {
       const status = res.status;
-      const retryAfterMs = parseRetryAfterMs(res.headers?.get?.("retry-after") ?? null);
+      const retryAfterMs = parseRetryAfterMs(res.headers?.get?.("retry-after")) ?? undefined;
       let body: string | undefined;
       let bodyError: unknown;
       if (res.body) {

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FetchJsonHttpError, parseRetryAfterMs } from "@openmapx/core";
+import { FetchJsonHttpError } from "@openmapx/core";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
   MobilityHttpRequestOptions,
@@ -158,7 +159,7 @@ function jsonBody<T>(value: unknown): T {
     throw new FetchJsonHttpError(
       `HTTP ${value.status}`,
       value.status,
-      parseRetryAfterMs(value.headers["retry-after"] ?? null),
+      parseRetryAfterMs(value.headers["retry-after"]) ?? undefined,
     );
   }
   return value as T;

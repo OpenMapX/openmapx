@@ -1,4 +1,5 @@
 import type { Pollutant } from "@openmapx/air-quality";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { HttpClient, HttpResponse, UpstreamRuntime } from "@openmapx/integration-framework";
 import type { z } from "zod";
 import { createOpenAQQuota } from "./quota.js";
@@ -98,12 +99,15 @@ function parseFound(value: number | string | null | undefined): number | null {
   return null;
 }
 
+/** When to retry: `Retry-After` first, else OpenAQ's `x-ratelimit-reset` seconds. */
 function retryAt(headers: Readonly<Record<string, string>>, now = Date.now()): number | null {
-  const raw = headers["retry-after"] ?? headers["x-ratelimit-reset"];
-  if (!raw) return null;
-  const seconds = Number(raw);
+  const retryAfter = parseRetryAfterMs(headers["retry-after"], { now });
+  if (retryAfter !== null) return now + retryAfter;
+  const reset = headers["x-ratelimit-reset"];
+  if (!reset) return null;
+  const seconds = Number(reset);
   if (Number.isFinite(seconds) && seconds >= 0) return now + seconds * 1_000;
-  const date = Date.parse(raw);
+  const date = Date.parse(reset);
   return Number.isFinite(date) ? date : null;
 }
 

@@ -10,6 +10,7 @@ import {
   offlinePackageCapabilitySchema,
   offlinePackagePreparationSchema,
 } from "@openmapx/core/data-manager-contracts";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 
 export class OfflinePackageApiError extends Error {
   constructor(
@@ -66,7 +67,8 @@ async function expectJson(response: Response): Promise<unknown> {
         }
       | undefined;
     const bodyRetry = Number(error?.retryAfterSeconds);
-    const headerRetry = Number(response.headers.get("retry-after"));
+    const headerDelay = parseRetryAfterMs(response.headers.get("retry-after"));
+    const headerRetry = headerDelay === null ? Number.NaN : Math.ceil(headerDelay / 1000);
     const retryAfterSeconds =
       response.status === 429
         ? [bodyRetry, headerRetry].find(

@@ -5,9 +5,9 @@ import {
   FetchJsonHttpError,
   fetchWithRedirects,
   hasPotentiallyCredentialBearingHeaders,
-  parseRetryAfterMs,
   readBoundedJsonResponse,
 } from "@openmapx/core";
+import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type {
   BinaryHttpResponse,
   CacheClient,
@@ -120,7 +120,7 @@ export function createHttpClient(_log: Logger): HttpClient {
       throw new FetchJsonHttpError(
         `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
         response.status,
-        parseRetryAfterMs(response.headers.get("retry-after")),
+        parseRetryAfterMs(response.headers.get("retry-after")) ?? undefined,
       );
     }
     return readJson<T>(response, options);

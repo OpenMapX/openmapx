@@ -6,6 +6,7 @@ import { BlockList, isIP, SocketAddress } from "node:net";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { parseRetryAfterMs } from "../http/retry-after";
 import {
   type FetchConnectionAddress,
   type FetchImplementation,
@@ -998,9 +999,10 @@ export async function safeFetchJsonResponse<T = unknown>(
 const MAX_RETRY_AFTER_SECONDS = 24 * 60 * 60;
 
 function parseRetryAfterSeconds(value: string | null): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const seconds = Number(value);
-  return Number.isSafeInteger(seconds) && seconds <= MAX_RETRY_AFTER_SECONDS ? seconds : null;
+  const delay = parseRetryAfterMs(value);
+  if (delay === null) return null;
+  const seconds = Math.ceil(delay / 1000);
+  return seconds <= MAX_RETRY_AFTER_SECONDS ? seconds : null;
 }
 
 /**
