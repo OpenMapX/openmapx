@@ -21,12 +21,13 @@ const LIST_BODY = {
 
 /** Route fetches: the list endpoint returns namespaces, clear returns a count. */
 function mockRoutes() {
-  fetchMock.mockImplementation((...args: unknown[]) => {
-    const url = String(args[0]);
-    if (url.endsWith("/api/admin/cache/clear")) {
-      return Promise.resolve({ ok: true, json: async () => ({ deleted: 12 }) });
-    }
-    return Promise.resolve({ ok: true, json: async () => LIST_BODY });
+  fetchMock.mockImplementation(async (url: unknown, init?: unknown) => {
+    if (!String(url).endsWith("/api/admin/cache/clear")) return Response.json(LIST_BODY);
+    return Response.json(
+      JSON.parse(String((init as RequestInit | undefined)?.body)).dryRun
+        ? { dryRun: true, estimatedCount: 2, patterns: ["int:geocoding:*"] }
+        : { deleted: 12, patterns: ["int:geocoding:*"] },
+    );
   });
 }
 
@@ -49,17 +50,7 @@ afterEach(() => {
 describe("CacheManager", () => {
   it("previews a scoped glob and confirms only the captured preview target", async () => {
     const user = userEvent.setup();
-    fetchMock.mockImplementation(async (url, options) =>
-      String(url).endsWith("/clear")
-        ? {
-            ok: true,
-            json: async () =>
-              JSON.parse((options as { body: string }).body).dryRun
-                ? { dryRun: true, estimatedCount: 2, patterns: ["int:geocoding:*"] }
-                : { deleted: 2, patterns: ["int:geocoding:*"] },
-          }
-        : { ok: true, json: async () => LIST_BODY },
-    );
+    mockRoutes();
     render(<CacheManager />, { wrapper: createQueryWrapper() });
     await user.type(screen.getByLabelText("Cache pattern"), "int:geocoding:*");
     await user.click(screen.getByRole("button", { name: "Preview pattern" }));
@@ -72,13 +63,7 @@ describe("CacheManager", () => {
   });
   it("invalidates the displayed preview on edit and prevents foreign-prefix requests", async () => {
     const user = userEvent.setup();
-    fetchMock.mockImplementation(async (url) => ({
-      ok: true,
-      json: async () =>
-        String(url).endsWith("/clear")
-          ? { dryRun: true, estimatedCount: 2, patterns: ["int:geocoding:*"] }
-          : LIST_BODY,
-    }));
+    mockRoutes();
     render(<CacheManager />, { wrapper: createQueryWrapper() });
     const input = screen.getByLabelText("Cache pattern");
     await user.type(input, "session:*");
@@ -133,9 +118,55 @@ describe("CacheManager", () => {
   });
 
   it("shows an empty state when there is no cached data", async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ namespaces: [] }) });
+    fetchMock.mockImplementation(async () => Response.json({ namespaces: [] }));
     render(<CacheManager />, { wrapper: createQueryWrapper() });
 
     await screen.findByText("No cached data found");
+  });
+
+  it("loads through the same-origin admin client with credentials and the query signal", async () => {
+    mockRoutes();
+    render(<CacheManager />, { wrapper: createQueryWrapper() });
+    await screen.findByText("int:geocoding");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://test.local/api/admin/cache");
+    expect(init.credentials).toBe("include");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("aborts the namespace request when the page unmounts", async () => {
+    let signal: AbortSignal | undefined;
+    fetchMock.mockImplementation(
+      (_url: unknown, init?: unknown) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal = (init as RequestInit | undefined)?.signal ?? undefined;
+          signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+        }),
+    );
+    const { unmount } = render(<CacheManager />, { wrapper: createQueryWrapper() });
+    await waitFor(() => expect(signal).toBeDefined());
+    unmount();
+    await waitFor(() => expect(signal?.aborted).toBe(true));
+  });
+
+  it("shows the server's preview refusal instead of a generic failure", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(async (url: unknown) =>
+      String(url).endsWith("/clear")
+        ? Response.json({ error: "Pattern too broad" }, { status: 400 })
+        : Response.json(LIST_BODY),
+    );
+    render(<CacheManager />, { wrapper: createQueryWrapper() });
+    await user.type(screen.getByLabelText("Cache pattern"), "int:*");
+    await user.click(screen.getByRole("button", { name: "Preview pattern" }));
+    expect(await screen.findByText("Pattern too broad")).toBeInTheDocument();
+  });
+
+  it("refuses a malformed namespace list rather than rendering it", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({ namespaces: [{ namespace: "int:geocoding", keyCount: -1 }] }),
+    );
+    render(<CacheManager />, { wrapper: createQueryWrapper() });
+    expect(await screen.findByText("Failed to load the cache.")).toBeInTheDocument();
   });
 });
