@@ -65,6 +65,24 @@ describe("createShellRuntime", () => {
     expect(mockNavigation.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores a screen reader state that arrives after it was disposed", async () => {
+    let answer!: (enabled: boolean) => void;
+    jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const runtime = compose();
+    const setScreenReader = jest.spyOn(runtime.voiceIntent, "setScreenReader");
+
+    runtime.dispose();
+    answer(true);
+    await runtime.navigation;
+    await Promise.resolve();
+
+    expect(setScreenReader).not.toHaveBeenCalled();
+  });
+
   it("composes no navigation graph for a feasibility build", async () => {
     const runtime = compose({ ...CONFIG, feasibilityMode: true });
 
