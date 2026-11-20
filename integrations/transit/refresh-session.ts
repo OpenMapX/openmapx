@@ -79,9 +79,11 @@ export function createRefreshSession(
 
   async function store(state: SearchRefreshState | ReferenceRefreshState): Promise<string> {
     const id = randomUUID();
+    // Taken before the write so the token never outlives the state it points to.
+    const expiresAt = Math.floor(Date.now() / 1000) + REFRESH_TTL_SECONDS;
     // Refresh-token session state, not cached upstream data.
     await ctx.cache.set(`transit-refresh:${id}`, state, REFRESH_TTL_SECONDS);
-    return signRefreshHandle(id, secret, Math.floor(Date.now() / 1000) + REFRESH_TTL_SECONDS);
+    return signRefreshHandle(id, secret, expiresAt);
   }
 
   /** A refresh token for an itinerary found by search, if it can be refreshed. */
