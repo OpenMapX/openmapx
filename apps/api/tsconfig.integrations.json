@@ -6,6 +6,7 @@
   },
   "include": ["../../integrations/**/*.ts"],
   "exclude": [
+    "../../integrations/_template",
     "../../integrations/**/dist/**",
     "../../integrations/**/node_modules/**",
     "../../integrations/**/*.test.ts",

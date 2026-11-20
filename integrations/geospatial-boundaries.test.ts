@@ -1,6 +1,6 @@
-import type { RouteHandler } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
-// This file sits outside any workspace package, so it reaches the test kit by path.
+// This file sits outside any workspace package, so it reaches the framework by path.
+import type { RouteHandler } from "../packages/integration-framework/src/index.js";
 import {
   createMockIntegrationContext,
   routeRequest,

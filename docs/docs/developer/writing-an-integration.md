@@ -86,6 +86,11 @@ treats it as a workspace member and resolves the framework packages.
 }
 ```
 
+Declare every workspace package the integration's code or tests import, such as
+`@openmapx/mobility-core`. TypeScript, Vitest and the bundlers resolve workspace
+packages only through these declarations, and `pnpm check-declared-imports`
+refuses an undeclared one.
+
 The directory name should match the manifest `id`. The end state is small:
 
 ```
