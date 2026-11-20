@@ -111,16 +111,19 @@ interface SourceFile {
 /**
  * Collects the codes the API writes into one audit property (`action` or
  * `targetType`) by reading every audit writer in the sources:
- * `writeAuditLog({…})`, `.insert(adminAuditLog).values({…})` and a method the
- * file assigns `writeAuditLog` to.
+ * `writeAuditLog({…})` (bare or namespace-qualified),
+ * `.insert(adminAuditLog).values({…})` (the table bare or qualified) and a
+ * private property the file assigns `writeAuditLog` to.
  *
  * A value is read when it is a string literal, a conditional between readable
  * values, a `const` with a readable initializer, or a parameter of a function
- * in the same file, read at every call of that function. Anything else must
- * be explained in `derived`, keyed by file and expression. A writer the
+ * or private method in the same file, read at every call of it. Anything else
+ * must be explained in `derived`, keyed by file and expression. A writer the
  * collector cannot read (an entry that is not an object literal, a spread
- * that may set the property, `writeAuditLog` passed as a value, an
- * unexplained expression) is reported in `unreadable` rather than skipped.
+ * that may set the property, the writer or table imported under another name
+ * or passed as a value, a wrapper other files can call, the table in any call
+ * but an insert or a read, an unexplained expression) is reported in
+ * `unreadable` rather than skipped.
  */
 function collectAuditCodes(
   files: readonly SourceFile[],
@@ -139,41 +142,72 @@ function collectAuditCodes(
     const entries: ts.Expression[] = [];
 
     const visit = (node: ts.Node) => {
-      if (ts.isIdentifier(node) && node.text === "writeAuditLog") {
-        const parent = node.parent;
-        const assigned = assignedThisProperty(node);
-        if (ts.isCallExpression(parent) && parent.expression === node) {
-          entries.push(parent.arguments[0] ?? parent);
-        } else if (assigned) writerMethods.add(assigned);
-        else if (
-          !ts.isImportSpecifier(parent) &&
-          !(ts.isFunctionDeclaration(parent) && parent.name === node) &&
-          !ts.isTypeQueryNode(parent) &&
-          !ts.isQualifiedName(parent)
-        )
-          unreadable.push(`${where(node)} writeAuditLog used as a value: ${flat(parent)}`);
-      }
-      if (
-        ts.isCallExpression(node) &&
-        ts.isPropertyAccessExpression(node.expression) &&
-        node.expression.name.text === "insert" &&
-        node.arguments.some(
-          (argument) => ts.isIdentifier(argument) && argument.text === "adminAuditLog",
-        )
-      ) {
-        const values = node.parent;
-        const call = values.parent;
-        if (
-          ts.isPropertyAccessExpression(values) &&
-          values.name.text === "values" &&
-          ts.isCallExpression(call) &&
-          call.expression === values
-        )
-          entries.push(call.arguments[0] ?? call);
-        else unreadable.push(`${where(node)} audit insert without .values(…): ${flat(node)}`);
-      }
+      if (ts.isIdentifier(node) && node.text === WRITER) readWriterReference(node);
+      if (isTableReference(node)) readTableReference(node);
       ts.forEachChild(node, visit);
     };
+
+    function readWriterReference(node: ts.Identifier) {
+      const parent = node.parent;
+      if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent)) {
+        if (parent.propertyName === node && parent.name.text !== WRITER)
+          unreadable.push(`${where(node)} ${WRITER} under another name: ${flat(parent)}`);
+        return;
+      }
+      if (
+        (ts.isFunctionDeclaration(parent) && parent.name === node) ||
+        ts.isTypeQueryNode(parent) ||
+        ts.isQualifiedName(parent)
+      )
+        return;
+      const callee = ts.isPropertyAccessExpression(parent) && parent.name === node ? parent : node;
+      if (ts.isCallExpression(callee.parent) && callee.parent.expression === callee) {
+        entries.push(callee.parent.arguments[0] ?? callee.parent);
+        return;
+      }
+      const assigned = assignedThisProperty(node);
+      if (assigned && privateClassMember(node, assigned)) writerMethods.add(assigned);
+      else if (assigned)
+        unreadable.push(`${where(node)} ${WRITER} held by the non-private this.${assigned}`);
+      else unreadable.push(`${where(node)} ${WRITER} used as a value: ${flat(parent)}`);
+    }
+
+    function readTableReference(table: ts.Expression) {
+      const parent = table.parent;
+      if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent)) {
+        if (parent.propertyName === table && parent.name.text !== TABLE)
+          unreadable.push(`${where(table)} ${TABLE} under another name: ${flat(parent)}`);
+        return;
+      }
+      if (
+        (ts.isVariableDeclaration(parent) && parent.name === table) ||
+        ts.isQualifiedName(parent) ||
+        ts.isTypeQueryNode(parent) ||
+        (ts.isPropertyAccessExpression(parent) && parent.expression === table)
+      )
+        return;
+      const method =
+        ts.isCallExpression(parent) &&
+        parent.arguments.includes(table) &&
+        ts.isPropertyAccessExpression(parent.expression)
+          ? parent.expression.name.text
+          : undefined;
+      if (method && TABLE_READS.has(method)) return;
+      if (method !== "insert" || !ts.isCallExpression(parent)) {
+        unreadable.push(`${where(table)} ${TABLE} used where no writer is read: ${flat(parent)}`);
+        return;
+      }
+      const values = parent.parent;
+      const call = values.parent;
+      if (
+        ts.isPropertyAccessExpression(values) &&
+        values.name.text === "values" &&
+        ts.isCallExpression(call) &&
+        call.expression === values
+      )
+        entries.push(call.arguments[0] ?? call);
+      else unreadable.push(`${where(parent)} audit insert without .values(…): ${flat(parent)}`);
+    }
     visit(source);
     const methodCalls = (node: ts.Node) => {
       if (
@@ -267,6 +301,41 @@ function collectAuditCodes(
   };
 }
 
+const WRITER = "writeAuditLog";
+const TABLE = "adminAuditLog";
+/** Query-builder calls that take the audit table without writing a row. */
+const TABLE_READS = new Set(["from", "delete", "leftJoin", "innerJoin", "rightJoin", "fullJoin"]);
+
+/** `adminAuditLog`, `schema.adminAuditLog` or `schema["adminAuditLog"]`. */
+function isTableReference(node: ts.Node): node is ts.Expression {
+  if (ts.isIdentifier(node))
+    return (
+      node.text === TABLE &&
+      !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)
+    );
+  if (ts.isPropertyAccessExpression(node)) return node.name.text === TABLE;
+  return (
+    ts.isElementAccessExpression(node) &&
+    ts.isStringLiteralLike(node.argumentExpression) &&
+    node.argumentExpression.text === TABLE
+  );
+}
+
+const isPrivate = (node: ts.Node) =>
+  ts.canHaveModifiers(node) &&
+  ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword) ===
+    true;
+
+/** Whether the class around `node` declares `name` private, so only its own code can call it. */
+function privateClassMember(node: ts.Node, name: string): boolean {
+  if (name.startsWith("#")) return true;
+  let owner = node.parent;
+  while (owner && !ts.isClassLike(owner)) owner = owner.parent;
+  return (
+    owner?.members.some((member) => member.name?.getText() === name && isPrivate(member)) ?? false
+  );
+}
+
 function unwrap(expression: ts.Expression): ts.Expression {
   let current = expression;
   while (
@@ -351,17 +420,20 @@ function declarationNames(name: ts.BindingName): Set<string> {
 }
 
 /**
- * Every call of a function or method declared in this file, or `undefined`
- * when it is exported or referenced other than by a direct call, so its
- * callers cannot all be seen here.
+ * Every call of a function or private method declared in this file, or
+ * `undefined` when it is exported, a method other code can reach, or
+ * referenced other than by a direct call, so its callers cannot all be seen
+ * here.
  */
 function callsOf(
   source: ts.SourceFile,
   fn: ts.FunctionLikeDeclaration,
 ): ts.CallExpression[] | undefined {
   let name: string | undefined;
-  if ((ts.isFunctionDeclaration(fn) || ts.isMethodDeclaration(fn)) && fn.name)
+  if (ts.isMethodDeclaration(fn)) {
+    if (!ts.isPrivateIdentifier(fn.name) && !isPrivate(fn)) return undefined;
     name = fn.name.getText();
+  } else if (ts.isFunctionDeclaration(fn) && fn.name) name = fn.name.text;
   else if (ts.isVariableDeclaration(fn.parent) && ts.isIdentifier(fn.parent.name))
     name = fn.parent.name.text;
   if (!name) return undefined;
@@ -373,7 +445,11 @@ function callsOf(
   const calls: ts.CallExpression[] = [];
   let escaped = false;
   const visit = (node: ts.Node) => {
-    if (ts.isIdentifier(node) && node.text === name && node !== fn.name) {
+    if (
+      (ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) &&
+      node.text === name &&
+      node !== fn.name
+    ) {
       const callee =
         ts.isPropertyAccessExpression(node.parent) &&
         node.parent.name === node &&
@@ -543,9 +619,40 @@ describe("audit code collector", () => {
     });
   });
 
+  it("reads qualified tables and writers, private wrappers and table reads", () => {
+    const { codes, unreadable } = collect(`
+      import { adminAuditLog } from "./schema";
+      import * as schema from "./schema";
+      import * as audit from "./audit-log";
+      export { adminAuditLog } from "./audit-schema";
+      export const adminAuditLog = pgTable("admin_audit_log", {});
+      type Row = typeof adminAuditLog.$inferSelect;
+      await tx.insert(schema.adminAuditLog).values({ action: "a.qualified" });
+      await tx.insert(schema["adminAuditLog"]).values({ action: "a.element" });
+      await audit.writeAuditLog({ action: "a.namespace" });
+      await db.select({ id: adminAuditLog.id }).from(adminAuditLog).leftJoin(schema.adminAuditLog, on);
+      await db.delete(adminAuditLog).where(lte(adminAuditLog.createdAt, cutoff));
+      class Service {
+        private fail(action: string) {
+          return writeAuditLog({ action });
+        }
+        #record(action: string) {
+          return writeAuditLog({ action });
+        }
+        run() {
+          this.fail("a.private");
+          this.#record("a.hash");
+        }
+      }
+    `);
+    expect(unreadable).toEqual([]);
+    expect(codes).toEqual(["a.element", "a.hash", "a.namespace", "a.private", "a.qualified"]);
+  });
+
   it("reads a method the file assigns the writer to", () => {
     const { codes, unreadable } = collect(`
       class Service {
+        private readonly audit: typeof writeAuditLog;
         constructor(options: { audit?: typeof writeAuditLog }) {
           this.audit = options.audit ?? writeAuditLog;
         }
@@ -598,6 +705,30 @@ describe("audit code collector", () => {
       "function fail(action: string) { return writeAuditLog({ action }); }\nhandlers.push(fail);",
     ],
     ["the writer passed as a value", "handlers.push(writeAuditLog);"],
+    ["a qualified-table variable insert", "tx.insert(schema.adminAuditLog).values(rows);"],
+    [
+      "an aliased table import",
+      "import { adminAuditLog as auditTable } from './schema';\ntx.insert(auditTable).values({ action: 'a.b' });",
+    ],
+    ["the table held in a variable", "const table = schema.adminAuditLog;\ntx.insert(table);"],
+    ["an update of the table", "tx.update(adminAuditLog).set({ action: 'a.b' });"],
+    [
+      "an aliased writer import",
+      "import { writeAuditLog as audit } from './audit-log';\naudit({ action: other });",
+    ],
+    ["an aliased writer re-export", "export { writeAuditLog as audit } from './audit-log';"],
+    [
+      "a public method wrapper",
+      "export class S {\n  fail(action: string) { return writeAuditLog({ action }); }\n  run() { return this.fail('a.b'); }\n}",
+    ],
+    [
+      "an object method wrapper",
+      "const service = { fail(action: string) { return writeAuditLog({ action }); } };\nservice.fail('a.b');",
+    ],
+    [
+      "a public property holding the writer",
+      "export class S {\n  audit = noop;\n  constructor() { this.audit = writeAuditLog; }\n}",
+    ],
   ])("fails on %s", (_shape, text) => {
     expect(collect(text).unreadable).toHaveLength(1);
   });
