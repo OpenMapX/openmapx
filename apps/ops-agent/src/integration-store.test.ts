@@ -129,7 +129,7 @@ async function artifact(
 interface RawEntry {
   name: string;
   data?: string | Buffer;
-  type?: "0" | "1" | "2" | "5" | "x";
+  type?: "0" | "1" | "2" | "5" | "x" | "L" | "K";
   link?: string;
   /** Written into the checksum field instead of the correct sum. */
   checksum?: number;
@@ -661,8 +661,75 @@ describe("integration store", () => {
       ],
       message: "tar header limit exceeded",
     },
+    {
+      label: "a GNU long name payload over 1,025 bytes",
+      entries: [
+        { name: "././@LongLink", type: "L" as const, data: Buffer.alloc(1026, 0).fill("a", 0, 6) },
+        manifestEntry,
+      ],
+      message: "Artifact path exceeds 1,024 UTF-8 bytes",
+    },
+    {
+      label: "a GNU long link payload over 1,025 bytes",
+      entries: [
+        { name: "././@LongLink", type: "K" as const, data: Buffer.alloc(1026, 0).fill("a", 0, 6) },
+        manifestEntry,
+      ],
+      message: "Artifact link target exceeds 1,024 UTF-8 bytes",
+    },
+    {
+      label: "a whitespace-only name",
+      entries: [manifestEntry, { name: "   ", data: "{}" }],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "a whitespace-only PAX path",
+      entries: [
+        manifestEntry,
+        { name: "PaxHeader", type: "x" as const, data: paxRecord("path", " ") },
+        { name: "harmless.json", data: "{}" },
+      ],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "an entry named exactly '.'",
+      entries: [{ name: ".", type: "5" as const }, manifestEntry],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "an entry named './.'",
+      entries: [{ name: "./.", type: "5" as const }, manifestEntry],
+      message: "Unsafe artifact path",
+    },
+    {
+      label: "an entry with an empty name",
+      entries: [{ name: "", type: "5" as const }, manifestEntry],
+      message: "Unsafe artifact path",
+    },
   ])("refuses an archive with $label and keeps nothing", async ({ entries, message }) => {
     await expectRefusedArchive(tarGz(entries), message);
+  });
+
+  it("accepts an archive that lists its root directory as './'", async () => {
+    const f = fixture();
+    const path = join(f.root, "..", `dot-root-${Math.random()}.tar.gz`);
+    roots.push(path);
+    const bytes = tarGz([
+      { name: "./", type: "5" },
+      { ...manifestEntry, name: "./manifest.json" },
+    ]);
+    writeFileSync(path, bytes);
+    const url = "https://artifacts.example.test/dot-root.tar.gz";
+    f.artifacts.set(url, path);
+    const published = await f.store.publish(
+      {
+        kind: "catalogIntegration.publish",
+        integrationId: "weather-radar",
+        source: { kind: "artifact", url, sha256: sha256(bytes) },
+      },
+      signal,
+    );
+    expect(published.integrationId).toBe("weather-radar");
   });
 
   it("refuses an uncompressed tar and keeps nothing", async () => {
