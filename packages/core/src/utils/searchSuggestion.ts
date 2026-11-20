@@ -9,7 +9,6 @@ import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
 import type { SearchMatchKind } from "../types/searchSuggestion";
 import { haversineDistance } from "./coordinates";
-import { numberAt } from "./numberAt";
 
 const AIRPORT_RAW_CATEGORY = "aeroway/aerodrome";
 
@@ -275,24 +274,27 @@ export function editDistance(a: string, b: string, limit: number): number {
   for (let i = 1; i <= a.length; i++) {
     const current = [i];
     let rowMin = i;
+    // The cells left of and diagonally above the one being filled, carried
+    // along the row so each cell reads only the one above it.
+    let left = i;
+    let diagonal = i - 1;
     for (let j = 1; j <= b.length; j++) {
+      const above = previous[j] ?? Number.NaN;
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let value = Math.min(
-        numberAt(previous, j) + 1,
-        numberAt(current, j - 1) + 1,
-        numberAt(previous, j - 1) + cost,
-      );
+      let value = Math.min(above + 1, left + 1, diagonal + cost);
       if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        value = Math.min(value, numberAt(beforePrevious, j - 2) + 1);
+        value = Math.min(value, (beforePrevious[j - 2] ?? Number.NaN) + 1);
       }
       current.push(value);
       rowMin = Math.min(rowMin, value);
+      left = value;
+      diagonal = above;
     }
     if (rowMin > limit) return limit + 1;
     beforePrevious = previous;
     previous = current;
   }
-  return Math.min(numberAt(previous, b.length), limit + 1);
+  return Math.min(previous[b.length] ?? Number.NaN, limit + 1);
 }
 
 /**
