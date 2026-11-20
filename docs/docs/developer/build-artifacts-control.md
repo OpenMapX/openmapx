@@ -570,7 +570,11 @@ directory, by one route: `POST /link` with the generation's revision, its plan a
 an operation key. Every caller uses it: configuration maintenance's hardlink step
 and the agent's `configuration.hardlinks.apply` (the API's service preparation and
 compose render), artifact imports, data updates, the service lifecycle commands,
-`control rollback`, `compose up`, `data link` and `services build`.
+`control rollback`, `compose up`, `data link` and `services build`. Every caller
+holds the configuration writer from reading the current revision and its plan
+until data-manager answers, so no configuration change commits in between and has
+its new links pruned by an older plan; a writer another change holds makes the
+host CLI report the plan as not applied (busy).
 
 - **Under the sender's lease.** A caller whose operation holds a lease names it
   (`leaseId`). Data-manager reads that lease from the agent first (`lease.read`

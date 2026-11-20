@@ -9,7 +9,7 @@ import { currentHostLease } from "./host-effect";
 // reach the host checkout and the Docker socket.
 
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createDataManagerTransport } from "@openmapx/core/data-manager-sdk";
@@ -39,11 +39,11 @@ export class DataManagerUnavailableError extends Error {
   }
 }
 
-/** Data-manager refused the plan while a configuration change or another data job runs. */
+/** Data-manager or the configuration writer was taken by a configuration change or another data job. */
 export class DataManagerBusyError extends Error {
-  constructor(entries: number) {
+  constructor(entries?: number) {
     super(
-      `The hardlink plan (${entries} ${entries === 1 ? "entry" : "entries"}) was not applied: data-manager is running another data job or a configuration change. Run pnpm openmapx data link once it has finished.`,
+      `The hardlink plan${entries === undefined ? "" : ` (${entries} ${entries === 1 ? "entry" : "entries"})`} was not applied: data-manager is running another data job or a configuration change. Run pnpm openmapx data link once it has finished.`,
     );
     this.name = "DataManagerBusyError";
   }
@@ -81,24 +81,6 @@ export interface ApplyGeneratedHardlinkResult extends ApplyHardlinkResult {
 
 function hardlinkPlanPath(infraDir: string): string {
   return coreServices.currentConfigurationFile(infraDir, coreServices.GENERATED_HARDLINK_PLAN_FILE);
-}
-
-export function readGeneratedHardlinkPlan(rootDir?: string): {
-  plan: HardlinkEntry[];
-  planPath: string;
-  dataRoot: string;
-} {
-  const paths = repoPaths(rootDir);
-  const planPath = hardlinkPlanPath(paths.infraDir);
-  const parsed = JSON.parse(readFileSync(planPath, "utf-8")) as unknown;
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Hardlink plan at ${planPath} is not an array`);
-  }
-  return {
-    plan: parsed as HardlinkEntry[],
-    planPath,
-    dataRoot: join(paths.infraDir, "data"),
-  };
 }
 
 /**
@@ -144,8 +126,33 @@ export async function applyGeneratedHardlinks(
       via: "none",
     };
   }
+  try {
+    // Like every other issuer, the CLI holds the configuration writer from
+    // reading the plan until data-manager answered, so no configuration change
+    // commits and links in between and then has its links pruned by this plan.
+    return await coreServices.withConfigurationGenerationWriter(
+      paths.infraDir,
+      () => applyCurrentHardlinks(paths.infraDir, planPath, opts),
+      cliAcquisitionOptions().signal,
+    );
+  } catch (error) {
+    if (!(error instanceof coreServices.ConfigurationGenerationError)) throw error;
+    if (error.result.outcome === "not_committed" && error.result.reason === "busy")
+      throw new DataManagerBusyError();
+    throw error.cause ?? error;
+  }
+}
 
-  const { plan, dataRoot } = readGeneratedHardlinkPlan(opts.rootDir);
+/** Sends the applied generation's plan to data-manager; the caller holds the writer. */
+async function applyCurrentHardlinks(
+  infraDir: string,
+  planPath: string,
+  opts: ApplyGeneratedHardlinkOptions,
+): Promise<ApplyGeneratedHardlinkResult> {
+  const revisionId = coreServices.currentConfigurationGeneration(infraDir);
+  if (!revisionId) throw new Error(`No applied configuration generation names ${planPath}`);
+  const { plan } = control.readGenerationHardlinkPlan(infraDir, revisionId);
+  const dataRoot = join(infraDir, "data");
   // Pre-create the host data root as the invoking user so docker doesn't
   // auto-create it as root on first compose up. Its mode is explicit rather
   // than the process umask's; the services that mount it run as other users.
@@ -181,8 +188,6 @@ export async function applyGeneratedHardlinks(
     throw new DataManagerUnavailableError(baseUrl, plan.length);
   }
   assertCliExecutionAvailable();
-  const revisionId = coreServices.currentConfigurationGeneration(paths.infraDir);
-  if (!revisionId) throw new Error(`No applied configuration generation names ${planPath}`);
   const transport = createDataManagerTransport({
     ...cliAcquisitionOptions(),
     baseUrl,

@@ -68,7 +68,7 @@ function writeOsm(): void {
 
 /** A data-manager that answers `/status` and records each `/link` request. */
 async function fakeDataManager(
-  options: { linkRefusal?: string; linkStatus?: number } = {},
+  options: { linkRefusal?: string; linkStatus?: number; onStatus?: () => void } = {},
 ): Promise<{
   url: string;
   requests: Array<{ revisionId: unknown; plan: unknown; prune: unknown }>;
@@ -79,6 +79,7 @@ async function fakeDataManager(
   const bodies: Array<Record<string, unknown>> = [];
   const server = createServer((req, res) => {
     if (req.url === "/status") {
+      options.onStatus?.();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, uptime: 1, dataDir: "/data" }));
       return;
@@ -117,7 +118,8 @@ beforeEach(() => {
   mkdirSync(dataRoot(), { recursive: true });
   // The applied generation and the `current` pointer to it.
   const infra = join(tmp, "infra", "docker");
-  mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS), { recursive: true });
+  // The configuration's directories are private, as the configuration writer requires.
+  mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS), { recursive: true, mode: 0o700 });
   mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS, REVISION), { mode: 0o700 });
   symlinkSync(`generations/${REVISION}`, join(infra, services.CURRENT_CONFIGURATION));
 });
@@ -165,6 +167,44 @@ describe("applyGeneratedHardlinks", () => {
       ]);
       // data-manager links; the CLI made nothing in the data directory.
       expect(existsSync(join(dataRoot(), "valhalla"))).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
+    }
+  });
+
+  it("sends the plan of the generation it names, even when another generation is applied meanwhile", async () => {
+    writeOsm();
+    writePlan([OSM_FOR_VALHALLA]);
+    const infra = join(tmp, "infra", "docker"),
+      next = `cfg1_${"n".repeat(43)}`;
+    mkdirSync(join(infra, services.CONFIGURATION_GENERATIONS, next), { mode: 0o700 });
+    writeFileSync(
+      join(
+        infra,
+        services.CONFIGURATION_GENERATIONS,
+        next,
+        "docker-compose.generated.hardlinks.json",
+      ),
+      JSON.stringify([]),
+      { mode: 0o600 },
+    );
+    // Another generation becomes current while the CLI waits for data-manager.
+    const dataManager = await fakeDataManager({
+      onStatus: () => {
+        rmSync(join(infra, services.CURRENT_CONFIGURATION));
+        symlinkSync(`generations/${next}`, join(infra, services.CURRENT_CONFIGURATION));
+      },
+    });
+    try {
+      await applyGeneratedHardlinks({
+        rootDir: tmp,
+        requirePlan: true,
+        prune: true,
+        dataManagerUrl: dataManager.url,
+      });
+      expect(dataManager.requests).toEqual([
+        { revisionId: REVISION, plan: [OSM_FOR_VALHALLA], prune: true },
+      ]);
     } finally {
       await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
     }
