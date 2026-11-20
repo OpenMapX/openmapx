@@ -51,6 +51,8 @@ describe("useDirections", () => {
         units: "metric",
         lang: "en",
       }),
+      undefined,
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -72,6 +74,8 @@ describe("useDirections", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fetchDirections).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "cycling", avoidHighways: false, avoidTolls: false }),
+      undefined,
+      { signal: expect.any(AbortSignal) },
     );
   });
 

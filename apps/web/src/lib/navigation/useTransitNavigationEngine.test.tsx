@@ -102,6 +102,23 @@ it("recovers after one success when a pre-outage in-flight request fails", async
   await waitFor(() => expect(useNavigationStore.getState().liveDataUnavailable).toBe(false));
 });
 
+it("aborts the vehicle journey request when navigation unmounts", async () => {
+  const signals: AbortSignal[] = [];
+  vi.spyOn(apiClient, "get").mockImplementation((...args: unknown[]) => {
+    const options = args[2] as { signal?: AbortSignal } | undefined;
+    if (options?.signal) signals.push(options.signal);
+    return new Promise<never>(() => {});
+  });
+  useNavigationStore.getState().startTransitNavigation(selectedTrip());
+  const view = renderHookWithQuery(() => useTransitNavigationEngine());
+  await waitFor(() => expect(signals).toHaveLength(1));
+  expect(signals[0]?.aborted).toBe(false);
+
+  view.unmount();
+
+  await waitFor(() => expect(signals[0]?.aborted).toBe(true));
+});
+
 it("clears the warning immediately when the rider reaches the final walking leg", async () => {
   vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
   const chosen = selectedTrip();

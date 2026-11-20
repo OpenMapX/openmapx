@@ -380,15 +380,19 @@ describe("fetchRouteFlow", () => {
         },
       ],
     });
-    const result = await fetchRouteFlow([
-      {
-        id: "r0",
-        geometry: [
-          [8, 50],
-          [8, 50.01],
-        ],
-      },
-    ]);
+    const signal = new AbortController().signal;
+    const result = await fetchRouteFlow(
+      [
+        {
+          id: "r0",
+          geometry: [
+            [8, 50],
+            [8, 50.01],
+          ],
+        },
+      ],
+      { signal },
+    );
     expect(result).toEqual({
       r0: [{ startMeters: 10, endMeters: 90, los: "queuing", confidence: "measured" }],
     });
@@ -405,6 +409,7 @@ describe("fetchRouteFlow", () => {
           },
         ],
       },
+      { signal },
     );
     post.mockRestore();
   });

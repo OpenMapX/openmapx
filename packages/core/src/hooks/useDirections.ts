@@ -122,7 +122,7 @@ export function useDirections(params: DirectionsQueryParams) {
 
   const query = useQuery({
     queryKey: directionsQueryKey(params),
-    queryFn: () => fetchDirections(directionsRequestFor(params)),
+    queryFn: ({ signal }) => fetchDirections(directionsRequestFor(params), undefined, { signal }),
     enabled: waypoints.length >= 2,
     staleTime: mode === "driving" || mode === "motorcycle" || avoidClosures ? 0 : 120_000,
     gcTime: 600_000,

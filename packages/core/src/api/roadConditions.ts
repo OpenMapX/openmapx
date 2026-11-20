@@ -15,7 +15,7 @@ import {
   readRoadConditionEffects,
   roadConditionValiditySchema,
 } from "../utils/roadConditionEffects";
-import { apiClient } from "./client";
+import { type ApiRequestOptions, apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
 export interface FetchRoadConditionsOptions {
@@ -239,12 +239,15 @@ export async function fetchRoadConditionsWithStatus(
  */
 export async function fetchRouteFlow(
   routes: RouteFlowInput[],
+  options: ApiRequestOptions = {},
 ): Promise<Record<string, RouteFlowSpan[]>> {
   if (routes.length === 0) return {};
   try {
-    const result = await apiClient.post<RouteFlowResponse>(API_ENDPOINTS.roadConditionsFlowRoute, {
-      routes,
-    });
+    const result = await apiClient.post<RouteFlowResponse>(
+      API_ENDPOINTS.roadConditionsFlowRoute,
+      { routes },
+      options,
+    );
     const out: Record<string, RouteFlowSpan[]> = {};
     for (const entry of result.routes ?? []) out[entry.id] = entry.spans ?? [];
     return out;

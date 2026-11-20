@@ -34,7 +34,7 @@ export function useRouteFlow(
   const queryKey = useMemo(() => routeFlowQueryKey(routes), [routes]);
   const { data } = useQuery({
     queryKey: ["route-flow", ...queryKey],
-    queryFn: () => fetchRouteFlow(routes),
+    queryFn: ({ signal }) => fetchRouteFlow(routes, { signal }),
     enabled: enabled && routes.length > 0,
     staleTime: 60_000,
     refetchInterval: REFRESH_MS,
