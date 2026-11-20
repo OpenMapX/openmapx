@@ -199,6 +199,38 @@ describe("MOTIS static route adapter", () => {
     ]);
   });
 
+  it("numbers route stops contiguously from 1", async () => {
+    mocks.routeDetails.mockResolvedValue({
+      data: {
+        routes: [
+          route(7, [
+            { from: 0, to: 1, polyline: 0 },
+            { from: 1, to: 2, polyline: 0 },
+          ]),
+        ],
+        polylines: [
+          line(
+            [
+              [1, 1],
+              [3, 3],
+            ],
+            [0],
+          ),
+        ],
+        stops: [stop("a", 1, 1), stop("b", 2, 2), stop("c", 3, 3)],
+        zoomFiltered: false,
+      },
+    });
+    const id = encodeMotisRoutePatternId("epoch", 7, ["de_feed_route-7"]);
+    expect(
+      (await getRouteStops(instance, id, "epoch")).map(({ id, sequence }) => [id, sequence]),
+    ).toEqual([
+      ["ms:a", 1],
+      ["ms:b", 2],
+      ["ms:c", 3],
+    ]);
+  });
+
   it("finds terminus-only and seasonal patterns while excluding envelope false positives", async () => {
     mocks.stoptimes.mockResolvedValue({ data: { place: stop("root", 8, 47), stopTimes: [] } });
     mocks.routes.mockResolvedValue({

@@ -6,6 +6,7 @@ import type {
   Facility,
   ServiceAlert,
   TransitRoute,
+  VehicleJourney,
 } from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
 import { createTransitOrchestrator } from "../orchestrator.js";
@@ -214,4 +215,44 @@ it("resolves only the referenced healthy provider and rejects stale epochs witho
   ).rejects.toThrow(/epoch/i);
   await expect(orchestrator([source], ["a"]).resolveTrip({ reference })).rejects.toThrow();
   expect(resolveTrip).toHaveBeenCalledTimes(1);
+});
+
+describe("getRouteStops through a departure's journey", () => {
+  const journey: VehicleJourney = {
+    id: "a:trip",
+    name: "2",
+    provider: "a",
+    stops: [
+      { stopId: "a:start", name: "Start", lat: 47, lng: 8, platform: "1" },
+      { stopId: "a:unplaced", name: "Unplaced" },
+      { stopId: "a:end", name: "End", lat: 47.1, lng: 8.1 },
+    ],
+  };
+
+  it("keeps an unplaced journey stop in order and numbers every stop from 1", async () => {
+    const transit = orchestrator([
+      provider({
+        getRouteStops: ok([]),
+        getDepartures: ok([departure]),
+        getVehicleJourney: ok(journey),
+      }),
+    ]);
+    const { data } = await transit.getRouteStops("a:line-2", "a:stop");
+    expect(data).toMatchObject([
+      { id: "a:start", name: "Start", lat: 47, lng: 8, platformCode: "1", sequence: 1 },
+      { id: "a:unplaced", name: "Unplaced", sequence: 2 },
+      { id: "a:end", name: "End", lat: 47.1, lng: 8.1, sequence: 3 },
+    ]);
+    expect(data[1]).not.toHaveProperty("lat");
+    expect(data[1]).not.toHaveProperty("lng");
+  });
+
+  it("answers none without a hint stop to find a departure", async () => {
+    const getDepartures = ok([departure]);
+    const transit = orchestrator([
+      provider({ getRouteStops: ok([]), getDepartures, getVehicleJourney: ok(journey) }),
+    ]);
+    expect((await transit.getRouteStops("a:line-2")).data).toEqual([]);
+    expect(getDepartures).not.toHaveBeenCalled();
+  });
 });
