@@ -43,6 +43,7 @@ function fixture() {
     "scripts/verify-full.sh",
     "biome.json",
     "scripts/biome-plugins/noClickableLayoutElement.grit",
+    "scripts/biome-plugins/noLiteralCopyProps.grit",
     ".prettierrc.json",
     ".prettierignore",
   ]) {

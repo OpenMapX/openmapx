@@ -163,6 +163,54 @@
       "plugins": ["./scripts/biome-plugins/noClickableLayoutElement.grit"]
     },
     {
+      "includes": [
+        "apps/web/src/components/admin/**",
+        "apps/web/src/app/admin/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/__tests__/**",
+        "!**/*.test-support.ts",
+        "!**/*.test-support.tsx",
+        "!apps/web/src/components/admin/cache/**",
+        "!apps/web/src/components/admin/settings/**",
+        "!apps/web/src/components/admin/system/**",
+        "!apps/web/src/components/admin/activity/AppLogViewer.tsx",
+        "!apps/web/src/components/admin/activity/AuditLog.tsx",
+        "!apps/web/src/app/admin/(full-admin)/system/cache/**",
+        "!apps/web/src/app/admin/(full-admin)/data/coverage/**",
+        "!apps/web/src/app/admin/(full-admin)/settings/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noJsxLiterals": {
+              "level": "error",
+              "options": {
+                "allowedStrings": [
+                  "·",
+                  "—",
+                  "–",
+                  "…",
+                  "(",
+                  ")",
+                  ":",
+                  "/",
+                  "%",
+                  ".",
+                  ",",
+                  "v",
+                  "+",
+                  "×",
+                  "→"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "plugins": ["./scripts/biome-plugins/noLiteralCopyProps.grit"]
+    },
+    {
       "includes": ["integrations/overlay-tool-travel-time/transit-field-layer.ts"],
       "linter": {
         "rules": {

@@ -1,0 +1,31 @@
+language js
+
+// Admin copy comes from the message catalogue so every locale can read it.
+// Biome's noJsxLiterals covers text between tags; this covers the props that
+// show text (labels, titles, placeholders, accessible names). Separators and
+// values without words, such as "·" or "—", are not copy and pass.
+jsx_attribute(name=$name, value=$value) as $attribute where {
+  $name <: or {
+    `label`,
+    `title`,
+    `placeholder`,
+    `aria-label`,
+    `helperText`,
+    `alt`,
+    `subtitle`,
+    `primary`,
+    `secondary`,
+    `tooltip`,
+    `description`,
+    `message`,
+    `emptyMessage`,
+    `confirmLabel`,
+    `cancelLabel`,
+    `backLabel`,
+    `actionLabel`
+  },
+  // A word starts the value or follows a space or punctuation; names inside a
+  // template placeholder such as `${row.state}` are code, not copy.
+  $value <: r"=\{?\s*[\"'`](?:[^\"'`]*[\s(,:;!?/·–—-])?[A-Za-z]{2,}[^\"'`]*[\"'`]\s*\}?",
+  register_diagnostic(span=$attribute, message="Visible copy belongs in the message catalogue. Use a translator call instead of a string literal.")
+}
