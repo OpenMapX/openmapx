@@ -4,15 +4,14 @@ import { buildContract, OPERATIONS } from "./contract.mjs";
 
 const original = JSON.parse(readFileSync("integrations/transit-mbta/schema/swagger.json", "utf8"));
 
-/** Reads a dotted member path of the generated contract; undefined when a step is missing. */
+/** Reads a dotted member path of the generated contract; throws when a step is missing. */
 function at(value: unknown, path: string): unknown {
-  return path
-    .split(".")
-    .reduce<unknown>(
-      (node, key) =>
-        typeof node === "object" && node !== null ? Reflect.get(node, key) : undefined,
-      value,
-    );
+  return path.split(".").reduce<unknown>((node, key) => {
+    if (typeof node !== "object" || node === null || !Object.hasOwn(node, key)) {
+      throw new Error(`Contract path ${path} has no member ${key}`);
+    }
+    return Reflect.get(node, key);
+  }, value);
 }
 describe("MBTA reviewed schema corrections", () => {
   it("limits generation to exactly the six active HTTP operations", () => {

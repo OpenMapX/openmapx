@@ -54,7 +54,7 @@ function brokenLookups(): TransitProvider {
       alerts: { byStop: true, byRoute: false, byBbox: false },
       facilities: true,
     },
-    healthCheck: async () => ({ healthy: true }),
+    healthCheck: async () => ({ status: "up" }),
     searchStopsByName: vi.fn(async () => withAttribution([stop], ATTR, freshnessNow())),
     getDepartures: vi.fn(unknown),
     getArrivals: vi.fn(unknown),

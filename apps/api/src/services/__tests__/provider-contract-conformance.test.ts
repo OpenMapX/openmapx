@@ -115,14 +115,10 @@ describe("Provider contract and temporal capability conformance", () => {
         // registered before the throw.
       }
       for (const provider of ctx.registered.transit) {
-        assertTransitProviderContract(
-          provider as unknown as Parameters<typeof assertTransitProviderContract>[0],
-        );
+        assertTransitProviderContract(provider);
       }
       for (const provider of ctx.registered.realtime) {
-        assertRealtimeProviderContract(
-          provider as unknown as Parameters<typeof assertRealtimeProviderContract>[0],
-        );
+        assertRealtimeProviderContract(provider);
       }
       for (const provider of ctx.registered.ride) {
         assertRideProviderContract(provider);

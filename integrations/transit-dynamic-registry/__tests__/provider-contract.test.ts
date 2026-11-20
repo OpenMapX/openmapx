@@ -66,18 +66,10 @@ describe("transit-dynamic-registry provider contract", () => {
 
   it("every dynamically-built provider satisfies its capability contract", () => {
     for (const provider of ctx.registered.transit) {
-      expect(() =>
-        assertTransitProviderContract(
-          provider as unknown as Parameters<typeof assertTransitProviderContract>[0],
-        ),
-      ).not.toThrow();
+      expect(() => assertTransitProviderContract(provider)).not.toThrow();
     }
     for (const provider of ctx.registered.realtime) {
-      expect(() =>
-        assertRealtimeProviderContract(
-          provider as unknown as Parameters<typeof assertRealtimeProviderContract>[0],
-        ),
-      ).not.toThrow();
+      expect(() => assertRealtimeProviderContract(provider)).not.toThrow();
     }
   });
 });
