@@ -267,6 +267,72 @@ describe("HAFAS journeys and trips without coordinates", () => {
     expect(plan?.itineraries[0]?.legs[0]?.to).toMatchObject({ lat: 52.6, lng: 13.4 });
   });
 
+  it("places walking legs whose ends are addresses with top-level coordinates", async () => {
+    // hafas-client's shapes: a stop nests its coordinates under `location`, an
+    // address or POI is itself a `location` with top-level coordinates.
+    const origin = {
+      type: "location",
+      address: "Alexanderplatz 1",
+      latitude: 52.5219,
+      longitude: 13.4132,
+    };
+    const destination = {
+      type: "location",
+      id: "900980720",
+      poi: true,
+      name: "Fernsehturm",
+      latitude: 52.5208,
+      longitude: 13.4094,
+    };
+    const station = (id: string, latitude: number, longitude: number) => ({
+      type: "stop",
+      id,
+      name: `Stop ${id}`,
+      location: { type: "location", id, latitude, longitude },
+    });
+    const a = station("900100003", 52.5216, 13.4115);
+    const b = station("900100005", 52.5206, 13.4096);
+    client.journeys.mockResolvedValue({
+      journeys: [
+        {
+          legs: [
+            {
+              origin,
+              destination: a,
+              departure: "2026-03-10T09:58:00+01:00",
+              arrival: "2026-03-10T10:00:00+01:00",
+              walking: true,
+            },
+            leg(a as unknown as ReturnType<typeof stop>, b as unknown as ReturnType<typeof stop>),
+            {
+              origin: b,
+              destination,
+              departure: "2026-03-10T10:20:00+01:00",
+              arrival: "2026-03-10T10:23:00+01:00",
+              walking: true,
+            },
+          ],
+        },
+      ],
+    });
+
+    const plan = await hafasMgateAdapter.planJourney(
+      entry(),
+      52.5219,
+      13.4132,
+      52.5208,
+      13.4094,
+      "2026-03-10",
+      "09:00",
+    );
+
+    const legs = plan?.itineraries[0]?.legs ?? [];
+    expect(legs.map((l) => l.mode)).toEqual(["walking", "subway", "walking"]);
+    expect(legs[0]?.from).toMatchObject({ lat: 52.5219, lng: 13.4132 });
+    expect(legs[0]?.to).toMatchObject({ lat: 52.5216, lng: 13.4115, stopId: "vbb:900100003" });
+    expect(legs[2]?.to).toMatchObject({ name: "Fernsehturm", lat: 52.5208, lng: 13.4094 });
+  });
+
   it("answers no plan when no journey can be placed", async () => {
     client.journeys.mockResolvedValue({ journeys: [{ legs: [leg(stop("a"), stop("b"))] }] });
 

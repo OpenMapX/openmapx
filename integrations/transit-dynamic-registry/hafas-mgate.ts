@@ -265,6 +265,18 @@ function fptfPosition(
   return latLngOrNull(location?.latitude, location?.longitude);
 }
 
+/**
+ * The coordinates of a leg end. hafas-client nests a stop's or station's
+ * coordinates under `location`; an address or POI is itself a `location` with
+ * top-level coordinates.
+ */
+function fptfPlacePosition(
+  // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop, station or location
+  place: any,
+): LatLng | null {
+  return fptfPosition(place?.type === "location" ? place : place?.location);
+}
+
 /** A trip leg, or null when either end has no coordinates to place it by. */
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
 function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg | null {
@@ -273,8 +285,8 @@ function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg | null {
   // Walking legs must use the "walking" mode, not "bus"
   const mode: TransportMode = isWalking ? "walking" : productToMode(line.product);
 
-  const origin = fptfPosition(leg.origin?.location);
-  const destination = fptfPosition(leg.destination?.location);
+  const origin = fptfPlacePosition(leg.origin);
+  const destination = fptfPlacePosition(leg.destination);
   if (!origin || !destination) return null;
   const { lat: fromLat, lng: fromLng } = origin;
   const { lat: toLat, lng: toLng } = destination;
