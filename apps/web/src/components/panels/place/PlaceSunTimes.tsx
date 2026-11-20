@@ -11,7 +11,6 @@ import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 interface Props {
   lat: number;
   lng: number;
-  enabled?: boolean;
 }
 
 function formatDayLength(seconds: number): string {
@@ -20,10 +19,10 @@ function formatDayLength(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
-export function PlaceSunTimes({ lat, lng, enabled = true }: Props) {
+export function PlaceSunTimes({ lat, lng }: Props) {
   const t = useTranslations("sunTimes");
   const dtf = useDateTimeFormat();
-  const { data, isLoading } = useSunTimes(lat, lng, enabled);
+  const { data, isLoading } = useSunTimes(lat, lng);
 
   if (isLoading)
     return (

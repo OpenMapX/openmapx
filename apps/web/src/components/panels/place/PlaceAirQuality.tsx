@@ -40,7 +40,6 @@ import {
 interface Props {
   lat: number;
   lng: number;
-  enabled?: boolean;
   countryCode?: string;
   subdivisionCode?: string;
 }
@@ -478,18 +477,17 @@ function ForecastContent({ response }: { response: AirQualityForecastResponse })
   );
 }
 
-export function PlaceAirQuality({ lat, lng, enabled = true, countryCode, subdivisionCode }: Props) {
+export function PlaceAirQuality({ lat, lng, countryCode, subdivisionCode }: Props) {
   const t = useTranslations();
   const [comparisonStandard, setComparisonStandard] = useState<AirQualityStandardId | undefined>();
   const [forecastOpen, setForecastOpen] = useState(false);
   const current = useAirQuality(lat, lng, {
-    enabled,
     countryCode,
     subdivisionCode,
     comparisonStandard,
   });
   const forecast = useAirQualityForecast(lat, lng, {
-    enabled: enabled && forecastOpen,
+    enabled: forecastOpen,
     hours: 48,
     countryCode,
     subdivisionCode,
