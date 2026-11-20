@@ -16,8 +16,10 @@
   // The test files the two integration projects leave out: backend `.test.ts`,
   // component `.test.tsx` and everything under `__tests__`. One project covers
   // both because the web app's alias set resolves every import either kind uses.
+  // No `next-env.d.ts`: Next's global declarations make `NODE_ENV` a required
+  // environment variable, which the backend tests' environment objects omit.
+  // The file exists only after a local Next build or dev run.
   "include": [
-    "next-env.d.ts",
     // Ambient module declarations that sit beside an integration's sources.
     "../../integrations/**/*.d.ts",
     "../../integrations/**/*.test.ts",
