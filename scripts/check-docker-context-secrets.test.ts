@@ -269,14 +269,41 @@ describe("Docker ignore policies, whatever builds them", () => {
     );
   });
 
+  it.each(["docker/api.Dockerfile", "scratch/Dockerfile", "deploy/Containerfile.prod"])(
+    "fails closed when the override next to %s is a directory",
+    (dockerfile) => {
+      repository();
+      write(dockerfile, "FROM scratch\nCOPY . /app\n");
+      mkdirSync(join(root, `${dockerfile}.dockerignore`, "nested"), { recursive: true });
+
+      expect(violations()).toContain(
+        `${dockerfile}.dockerignore ignore policy is not a regular file`,
+      );
+    },
+  );
+
+  it.each(["docker/api.Dockerfile", "scratch/Dockerfile"])(
+    "fails closed when %s is a symlink, since its ignore file is then ambiguous",
+    (dockerfile) => {
+      repository();
+      write(join(dirname(dockerfile), "real.Dockerfile"), "FROM scratch\nCOPY . /app\n");
+      symlinkSync("real.Dockerfile", join(root, dockerfile));
+
+      expect(violations()).toContain(`Dockerfile ${dockerfile} is a symlink, not a regular file`);
+    },
+  );
+
   it("accepts complete overrides and leaves other contexts and dependencies alone", () => {
     repository();
+    write("docker/api.Dockerfile", "FROM scratch\nCOPY . /app\n");
     write("docker/api.Dockerfile.dockerignore", complete.join("\n"));
     write("scratch/production-signing.key");
-    // Another build context's own policy and a dependency's file are never a
-    // root-context policy.
+    // Another build context's own policy and a dependency's files are never a
+    // root-context policy or Dockerfile.
     write("docs/.dockerignore", "node_modules/\n");
     write("node_modules/some-package/Dockerfile.dockerignore", "\n");
+    write("node_modules/some-package/real.Dockerfile");
+    symlinkSync("real.Dockerfile", join(root, "node_modules/some-package/Dockerfile"));
 
     expect(violations()).toEqual([]);
   });

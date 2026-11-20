@@ -6,7 +6,9 @@
  * `.dockerignore`, or `<Dockerfile>.dockerignore` next to its Dockerfile when
  * that file exists. Every one of those files in the worktree must hold every
  * required rule and exclude every sensitive ignored path, whether or not a
- * workflow or script is known to build with it.
+ * workflow or script is known to build with it. Every conventionally named
+ * Dockerfile must be a regular file, and an ignore-file name next to it must
+ * not be a directory, so the policy Docker applies is always one checked here.
  */
 import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
@@ -106,10 +108,31 @@ function isOverridePolicy(path: string): boolean {
   return /.\.dockerignore$/.test(segments.at(-1) ?? "") && !segments.includes("node_modules");
 }
 
+/** Dockerfile names Docker and Podman users conventionally pass to a build. */
+const DOCKERFILE_PATHSPECS = [
+  ":(glob,icase)**/Dockerfile",
+  ":(glob,icase)**/Dockerfile.*",
+  ":(glob,icase)**/*.Dockerfile",
+  ":(glob,icase)**/Containerfile",
+  ":(glob,icase)**/Containerfile.*",
+  ":(glob,icase)**/*.Containerfile",
+] as const;
+
+function isDockerfile(path: string): boolean {
+  const segments = path.split("/");
+  const basename = segments.at(-1) ?? "";
+  return (
+    /^(?:docker|container)file(?:\..+)?$|.\.(?:docker|container)file$/i.test(basename) &&
+    !/\.dockerignore$/i.test(basename) &&
+    !segments.includes("node_modules")
+  );
+}
+
 /**
  * Git-ignored path names in the name classes sensitiveCandidate() evaluates,
- * and Git-ignored Dockerfile-specific ignore files. One walk serves both,
- * since listing ignored files is the slow part of the check.
+ * Git-ignored Dockerfile-specific ignore files and Git-ignored Dockerfiles.
+ * One walk serves all three, since listing ignored files is the slow part of
+ * the check.
  */
 export function enumerateSensitiveIgnoredPathNames(rootDir: string): string[] {
   return gitPathNames(rootDir, [
@@ -119,6 +142,7 @@ export function enumerateSensitiveIgnoredPathNames(rootDir: string): string[] {
     "--",
     ...SENSITIVE_IGNORED_PATHSPECS,
     OVERRIDE_PATHSPEC,
+    ...DOCKERFILE_PATHSPECS,
   ]);
 }
 
@@ -135,6 +159,22 @@ function overridePolicies(rootDir: string, ignoredPaths: readonly string[]): str
     OVERRIDE_PATHSPEC,
   ]);
   return [...new Set([...visible, ...ignoredPaths])].filter(isOverridePolicy).sort();
+}
+
+/**
+ * Every conventionally named Dockerfile in the worktree outside installed
+ * dependencies: tracked, untracked and, from `ignoredPaths`, Git-ignored.
+ * Git lists a symlink by its own name, so a symlinked Dockerfile is included.
+ */
+function dockerfiles(rootDir: string, ignoredPaths: readonly string[]): string[] {
+  const visible = gitPathNames(rootDir, [
+    "--cached",
+    "--others",
+    "--exclude-standard",
+    "--",
+    ...DOCKERFILE_PATHSPECS,
+  ]);
+  return [...new Set([...visible, ...ignoredPaths])].filter(isDockerfile).sort();
 }
 
 function existingPathMetadata(path: string): ReturnType<typeof lstatSync> | undefined {
@@ -218,13 +258,27 @@ export function collectDockerContextSecretViolations(rootDir: string): string[] 
   const violations: string[] = [];
   let ignoredPaths: string[] = [];
   let overrides: string[] = [];
+  let builds: string[] = [];
   try {
     ignoredPaths = enumerateSensitiveIgnoredPathNames(rootDir);
     overrides = overridePolicies(rootDir, ignoredPaths);
+    builds = dockerfiles(rootDir, ignoredPaths);
   } catch {
     violations.push("could not enumerate path names for the root Docker context through Git");
   }
-  for (const policy of [".dockerignore", ...overrides]) {
+  const policies = new Set([".dockerignore", ...overrides]);
+  for (const dockerfile of builds) {
+    // Which ignore file Docker reads beside a symlinked Dockerfile depends on
+    // whether it follows the link, so neither candidate can be trusted.
+    if (pathHasSymlink(rootDir, dockerfile)) {
+      violations.push(`Dockerfile ${dockerfile} is a symlink, not a regular file`);
+    }
+    // Git never lists a directory, so an ignore-file name that is one is found
+    // only beside its Dockerfile.
+    const override = `${dockerfile}.dockerignore`;
+    if (existingPathMetadata(join(rootDir, override))) policies.add(override);
+  }
+  for (const policy of policies) {
     validateIgnorePolicy(rootDir, policy, ignoredPaths, violations);
   }
   return violations;
