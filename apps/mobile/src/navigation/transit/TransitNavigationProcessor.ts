@@ -2,9 +2,9 @@ import {
   type FixInput,
   freshTransitTickState,
   type JourneyStopLike,
+  lngLatSchema,
   mergeTransitRefresh,
   prepareTransitProgress,
-  type Route,
   refreshTransitCaptures,
   repairTransitWalk,
   type TransitMobileSession,
@@ -12,8 +12,11 @@ import {
   type TransitRiderAction,
   transitProgressFromTick,
   transitStartPackageSchema,
+  type WalkRoute,
+  type WalkRouteStep,
 } from "@openmapx/core/navigation";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import { z } from "zod";
 import type {
   NavigationProcessor,
   ProcessorMutation,
@@ -131,11 +134,8 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
       session.payload.tickState.phase !== "walking"
     )
       return { ok: false, code: "invalid-state" };
-    // The bridge validated the fields the repair reads (geometry, distance,
-    // duration, steps, receipts). Engine extras such as step maneuvers pass
-    // through its schema untyped, and its legs are optional, so the wire type
-    // is not a `Route` to TypeScript even though the page sent one.
-    const route = walkRoute as unknown as Route;
+    const route = checkedWalkRoute(walkRoute);
+    if (!route) return { ok: false, code: "invalid-route" };
     const itinerary = repairTransitWalk(
       session.payload.startPackage.itinerary as never,
       legIndex,
@@ -342,6 +342,51 @@ function adoptRefresh(
     prepareTransitProgress(merged.itinerary),
   );
   return { ...payload, tickState: walkTick, progress: { ...progress } };
+}
+
+/**
+ * The step fields the walk repair copies, which the bridge does not check.
+ *
+ * The page sends core `Route` steps. The bridge's schema makes a step's
+ * instruction, distance and duration optional, and lets its coordinates and
+ * maneuver through unchecked (it validates a `geometry` that route steps do not
+ * carry), so they are checked here.
+ */
+const walkStepSchema = z.object({
+  instruction: z.string(),
+  distance: z.number(),
+  duration: z.number(),
+  coordinates: z.array(lngLatSchema),
+  maneuver: z.object({ type: z.string(), modifier: z.string().optional() }).optional(),
+});
+
+/**
+ * The walking route as the repair reads it, or null when a step lacks a field
+ * the repair copies into the itinerary.
+ *
+ * The bridge has already validated the route's geometry, distance, duration and
+ * mode, and the receipts on the route and each step.
+ */
+function checkedWalkRoute(route: WalkRepairRoute): WalkRoute | null {
+  const steps: WalkRouteStep[] = [];
+  for (const step of route.steps) {
+    const checked = walkStepSchema.safeParse(step);
+    if (!checked.success) return null;
+    steps.push({
+      ...checked.data,
+      ...(step.contributors ? { contributors: step.contributors } : {}),
+      ...(step.fieldContributors ? { fieldContributors: step.fieldContributors } : {}),
+    });
+  }
+  return {
+    mode: route.mode,
+    distance: route.distance,
+    duration: route.duration,
+    geometry: route.geometry,
+    steps,
+    ...(route.contributors ? { contributors: route.contributors } : {}),
+    ...(route.fieldContributors ? { fieldContributors: route.fieldContributors } : {}),
+  };
 }
 
 /**

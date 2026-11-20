@@ -1,12 +1,32 @@
 import { contributorsForField } from "@openmapx/mobility-core/contributors";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import type { Route } from "../types/routing";
+import type { Route, RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
+
+/** The fields of a walking step that the repair copies into the transit leg. */
+export type WalkRouteStep = Pick<
+  RouteStep,
+  | "instruction"
+  | "coordinates"
+  | "distance"
+  | "duration"
+  | "maneuver"
+  | "contributors"
+  | "fieldContributors"
+>;
+
+/** The fields of a walking route that the repair reads. Every core `Route` has them. */
+export interface WalkRoute
+  extends Pick<Route, "geometry" | "distance" | "duration" | "contributors" | "fieldContributors"> {
+  mode: string;
+  steps: WalkRouteStep[];
+}
+
 /** Repair the access, transfer or egress path without changing any selected ride. */
 export function repairTransitWalk(
   itinerary: TripItinerary,
   index: number,
-  route: Route,
+  route: WalkRoute,
 ): TripItinerary | null {
   const leg = itinerary.legs[index];
   const end = route.geometry.at(-1);
@@ -51,7 +71,7 @@ export function repairTransitWalk(
 }
 
 /** Keep normalized ground-route turns when translating into the transit step vocabulary. */
-function walkDirection(maneuver: Route["steps"][number]["maneuver"]): string {
+function walkDirection(maneuver: WalkRouteStep["maneuver"]): string {
   if (maneuver?.type === "depart") return "DEPART";
   if (maneuver?.type === "stairs") return "STAIRS";
   if (maneuver?.type === "elevator") return "ELEVATOR";

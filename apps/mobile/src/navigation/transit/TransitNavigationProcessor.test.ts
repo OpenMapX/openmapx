@@ -1,4 +1,5 @@
 import type { TransitMobileSession } from "@openmapx/core/navigation";
+import type { WalkRepairRoute } from "../processor";
 import { TransitNavigationProcessor } from "./TransitNavigationProcessor";
 import {
   FIXTURE_TOKEN,
@@ -190,6 +191,67 @@ describe("TransitNavigationProcessor.onConnectivityRestored", () => {
 
     expect(mutation?.session.connectivity).toBe("online");
     expect(mutation?.session.revision).toBe(stale.revision + 1);
+  });
+});
+
+describe("TransitNavigationProcessor.repairTransitWalk", () => {
+  // Ends at the first leg's target stop; steps use the core `Route` shape the page sends.
+  const walkRoute = (step: Record<string, unknown> = {}): WalkRepairRoute => ({
+    mode: "walking",
+    distance: 120,
+    duration: 90,
+    geometry: [
+      [8.679, 50.11],
+      [8.68, 50.11],
+    ],
+    steps: [
+      {
+        instruction: "Turn left onto Main Street",
+        maneuver: { type: "turn", modifier: "left" },
+        distance: 120,
+        duration: 90,
+        coordinates: [
+          [8.679, 50.11],
+          [8.68, 50.11],
+        ],
+        ...step,
+      },
+    ],
+  });
+
+  it("copies a walking route's checked steps into the walking leg", () => {
+    const outcome = processor().repairTransitWalk(session(), 0, walkRoute(), NOW);
+    if ("ok" in outcome) throw new Error(`refused: ${outcome.code}`);
+    const itinerary = (outcome.session as TransitMobileSession).payload.startPackage.itinerary as {
+      legs: Array<{ steps?: unknown[] }>;
+    };
+
+    expect(itinerary.legs[0]?.steps).toEqual([
+      expect.objectContaining({
+        instruction: "LEFT",
+        instructionText: "Turn left onto Main Street",
+        coordinates: [
+          [8.679, 50.11],
+          [8.68, 50.11],
+        ],
+        distanceMeters: 120,
+        durationSeconds: 90,
+      }),
+    ]);
+  });
+
+  it.each([
+    ["no coordinates", { coordinates: undefined }],
+    ["positions that are not coordinates", { coordinates: [["8.68", "50.11"]] }],
+    ["no distance", { distance: undefined }],
+    ["no duration", { duration: undefined }],
+    ["no instruction", { instruction: undefined }],
+    ["a maneuver without a type", { maneuver: { modifier: "left" } }],
+  ])("refuses a walking route whose step has %s", (_shape, step) => {
+    expect(processor().repairTransitWalk(session(), 0, walkRoute(step), NOW)).toEqual({
+      ok: false,
+      code: "invalid-route",
+    });
   });
 });
 
