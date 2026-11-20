@@ -18,6 +18,7 @@ import {
 
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 const caches: ReturnType<typeof createTestQueryClient>[] = [];
 function mount<T>(fn: () => T) {
   const qc = createTestQueryClient();
