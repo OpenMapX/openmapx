@@ -183,16 +183,14 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
     });
   }
 
-  // `submit.reset` / `upload.reset` are recreated every render by TanStack
-  // Query, so listing them as deps would fire this effect on every render.
-  // We only want to clear mutation state when the dialog closes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
+  // Closing the dialog clears both mutations. TanStack binds `reset` once per
+  // mutation observer, so it is a stable dependency.
   useEffect(() => {
     if (!open) {
       submit.reset();
       upload.reset();
     }
-  }, [open]);
+  }, [open, submit.reset, upload.reset]);
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;

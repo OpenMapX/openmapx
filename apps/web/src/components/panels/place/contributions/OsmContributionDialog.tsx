@@ -105,12 +105,6 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
   const createNote = useCreateOsmNote(CALLER_SHOWS_ERRORS);
   const invalidate = useInvalidateAfterContribution();
 
-  // A new place means a new flow: never carry a draft across references.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on identity change only
-  useEffect(() => {
-    dispatch({ type: "reset" });
-  }, [ref_.type, ref_.id]);
-
   const account = capabilities.data;
   const accountReady =
     account?.enabled === true &&

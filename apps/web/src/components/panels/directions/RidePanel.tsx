@@ -1,8 +1,6 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
 import LocalTaxiIcon from "@mui/icons-material/LocalTaxi";
-import RemoveIcon from "@mui/icons-material/Remove";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
@@ -28,6 +26,7 @@ import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ClickableRow } from "@/components/ui/ClickableRow";
 import { DateTimeField } from "@/components/ui/DateTimeField";
+import { Stepper } from "@/components/ui/Stepper";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Stop refreshing quotes once the user has stopped interacting with the panel. */
@@ -114,62 +113,6 @@ function ProviderChip({
         {provider.name}
       </Typography>
     </ClickableRow>
-  );
-}
-
-function PaxStepper({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const btnSx = {
-    border: "1px solid",
-    borderColor: "divider",
-    bgcolor: "background.paper",
-    borderRadius: "50%",
-    width: 26,
-    height: 26,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    color: "text.primary",
-    "&:hover": { borderColor: BRAND, color: BRAND },
-    "&:disabled": { opacity: 0.4, cursor: "default" },
-  } as const;
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <Typography variant="body2">{label}</Typography>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`-${label}`}
-          disabled={value <= 1}
-          onClick={() => onChange(value - 1)}
-          sx={btnSx}
-        >
-          <RemoveIcon sx={{ fontSize: 16 }} />
-        </Box>
-        <Typography variant="body2" sx={{ minWidth: 16, textAlign: "center", fontWeight: 600 }}>
-          {value}
-        </Typography>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`+${label}`}
-          disabled={value >= 8}
-          onClick={() => onChange(value + 1)}
-          sx={btnSx}
-        >
-          <AddIcon sx={{ fontSize: 16 }} />
-        </Box>
-      </Box>
-    </Box>
   );
 }
 
@@ -419,9 +362,11 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
         <SectionLabel>{t("ridePassengers")}</SectionLabel>
-        <PaxStepper
+        <Stepper
           label={t("ridePassengers")}
           value={passengers}
+          min={1}
+          max={8}
           onChange={(v) => {
             touch();
             setPassengers(v);

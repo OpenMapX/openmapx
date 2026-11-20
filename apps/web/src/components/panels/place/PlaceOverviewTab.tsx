@@ -1115,7 +1115,8 @@ export function PlaceOverviewTab({
       {/* Contribute a correction back to OpenStreetMap. Only the canonical OSM
           reference is passed: every editable value comes from a live server
           read, never from this merged/enriched place record. */}
-      <OsmContributionEntry osmId={place.ids?.osm} />
+      {/* A new place cancels the previous place's sign-in or editing flow. */}
+      <OsmContributionEntry key={place.ids?.osm ?? ""} osmId={place.ids?.osm} />
       {overviewAttributions.length > 0 && (
         <SectionAttribution attributions={overviewAttributions} inset />
       )}

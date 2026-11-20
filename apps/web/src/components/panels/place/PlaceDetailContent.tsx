@@ -121,14 +121,13 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
   const setActiveRouteId = usePlaceStore((s) => s.setActiveRouteId);
 
   // Sync active route into the store: TripDetailView takes priority over LineDetail
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
   useEffect(() => {
     if (activeTripDep) {
       setActiveRouteId(activeTripDep.route.id);
     } else {
       setActiveRouteId(selectedRoute?.id ?? null);
     }
-  }, [activeTripDep, selectedRoute]);
+  }, [activeTripDep, selectedRoute, setActiveRouteId]);
 
   // A new selection remounts this detail session; identity enrichment does not.
   // The selected trip lives in an external store and needs an explicit reset.
