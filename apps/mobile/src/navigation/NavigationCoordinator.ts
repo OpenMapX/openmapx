@@ -4,17 +4,12 @@ import {
   isMobileSessionExpired,
   MOBILE_PROTOCOL_MAX,
   type MobileNavigationSession,
-  mergeTransitRefresh,
   type NativeSnapshot,
   type NativeToWebPayload,
   type NativeToWebType,
   onRerouteFailed,
   onRerouteSucceeded,
-  prepareTransitProgress,
   recordRerouteSuccess,
-  refreshTransitCaptures,
-  transitProgressFromTick,
-  transitStartPackageSchema,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
 import type { SendOutcome } from "../bridge/nativeBridge";
@@ -32,7 +27,6 @@ import { applySettingsPatch } from "./sessionSettings";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
 import { allowsNavigationStart, type NavigationStartContext } from "./startContext";
-import { onRefreshFailed, onRefreshSucceeded } from "./transit/refreshState";
 import type { RefreshOutcome } from "./transit/TransitRefreshService";
 
 /**
@@ -1053,6 +1047,11 @@ export class NavigationCoordinator {
     if (committed.ok) await this.deps.effects.run(committed.effects);
   }
 
+  /**
+   * Applies an itinerary refresh answer. Like a reroute it ran outside the
+   * queue, so only an answer for the trip still running is passed on; the
+   * transit processor drops one its session no longer waits for.
+   */
   async applyTransitRefresh(outcome: RefreshOutcome): Promise<void> {
     await this.queue.run(async () => {
       const now = this.deps.clock();
@@ -1063,102 +1062,9 @@ export class NavigationCoordinator {
         session.sessionId !== outcome.sessionId
       )
         return;
-      const refresh = session.payload.refresh;
-      if (
-        refresh.status !== "in-flight" ||
-        refresh.generation !== outcome.generation ||
-        refresh.requestId !== outcome.requestId
-      )
-        return;
-      const parsed = outcome.ok
-        ? transitStartPackageSchema.safeParse({
-            ...session.payload.startPackage,
-            itinerary: outcome.itinerary,
-          })
-        : null;
-      const merged = parsed?.success
-        ? mergeTransitRefresh(
-            session.payload.startPackage.itinerary as never,
-            parsed.data.itinerary as never,
-            session.payload.tickState.currentLegIndex,
-            session.payload.tickState.walkRevision ?? 0,
-          )
-        : null;
-      const same = !!merged;
-      if (merged && parsed?.success) parsed.data.itinerary = merged.itinerary as never;
-      const payload =
-        same && parsed?.success
-          ? {
-              ...session.payload,
-              startPackage: parsed.data,
-              navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
-              refreshToken:
-                outcome.ok && outcome.capturesOnly
-                  ? session.payload.refreshToken
-                  : typeof parsed.data.itinerary.refreshToken === "string"
-                    ? parsed.data.itinerary.refreshToken
-                    : null,
-              refresh: onRefreshSucceeded(refresh, now),
-            }
-          : {
-              ...session.payload,
-              refresh: onRefreshFailed(
-                refresh,
-                outcome.ok
-                  ? "rejected"
-                  : outcome.failure === "unreachable"
-                    ? "retryable"
-                    : outcome.failure,
-                now,
-                !!session.payload.refreshToken,
-              ),
-            };
-      // A terminal itinerary chain must not prevent the same owner polling journey evidence.
-      if (payload.refresh.status === "broken") payload.refreshToken = null;
-      if (same && outcome.ok) {
-        const captured = {
-          ...payload.startPackage,
-          captures: refreshTransitCaptures(
-            session.payload.startPackage.captures,
-            (
-              session.payload.startPackage.itinerary as unknown as {
-                legs: import("@openmapx/core/navigation/api").BuildTransitPackageInput["itinerary"]["legs"];
-              }
-            ).legs,
-            outcome.journeys as never,
-            now,
-          ),
-        };
-        const checkedCapture = transitStartPackageSchema.safeParse(captured);
-        if (checkedCapture.success) payload.startPackage = checkedCapture.data;
-      }
-      if (merged?.resetWalk) {
-        payload.tickState = {
-          ...payload.tickState,
-          currentWalkStepIndex: 0,
-          reachedStepEnd: false,
-          distanceToNextStepMeters: undefined,
-          walkRevision: (payload.tickState.walkRevision ?? 0) + 1,
-        };
-        payload.progress = transitProgressFromTick(
-          {
-            ...payload.tickState,
-            ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
-          },
-          prepareTransitProgress(merged.itinerary),
-        ) as unknown as Record<string, unknown>;
-      }
-      const committed = await this.commit(
-        session,
-        {
-          session: { ...session, revision: session.revision + 1, updatedAtMs: now, payload },
-          effects: [
-            { kind: "reconcile-alerts", sessionId: session.sessionId },
-            { kind: "publish-snapshot", immediate: true },
-          ],
-        },
-        now,
-      );
+      const mutation = this.deps.processors.get("transit")?.applyRefresh?.(session, outcome, now);
+      if (!mutation) return;
+      const committed = await this.commit(session, mutation, now);
       if (committed.ok) await this.deps.effects.run(committed.effects);
     });
   }

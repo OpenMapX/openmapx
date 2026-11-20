@@ -5,6 +5,7 @@ import type {
   WebToNativeMessage,
 } from "@openmapx/core/navigation";
 import type { ScheduledAlertInput, SessionEffect } from "../storage/SessionRepository";
+import type { RefreshOutcome } from "./transit/TransitRefreshService";
 
 /** A walking route for a transit leg, as the page sent it and the bridge validated it. */
 export type WalkRepairRoute = Extract<
@@ -86,6 +87,15 @@ export interface NavigationProcessor<K extends "ground" | "transit"> {
     action: import("@openmapx/core/navigation").TransitRiderAction,
     nowMs: number,
   ): ProcessorMutation | { ok: false; code: string };
+  /**
+   * Applies the answer to an itinerary refresh, or returns null when the
+   * session is no longer waiting on that request.
+   */
+  applyRefresh?(
+    session: Extract<MobileNavigationSession, { kind: K }>,
+    outcome: RefreshOutcome,
+    nowMs: number,
+  ): ProcessorMutation | null;
   /** A confirmed offline-to-online transition; may refresh or replan. */
   onConnectivityRestored(
     session: Extract<MobileNavigationSession, { kind: K }>,
