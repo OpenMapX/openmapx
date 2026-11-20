@@ -4,12 +4,14 @@ export default defineConfig({
   entry: { cli: "src/cli.ts" },
   format: ["esm"],
   clean: true,
-  // The bundle is ESM but inlines CommonJS dependencies (undici, reached
-  // through @openmapx/core) that call `require("assert")` at load time.
-  // esbuild's `__require` shim forwards to `require` when one exists and throws
-  // "Dynamic require of ... is not supported" when it does not — which is
-  // exactly what an ESM output lacks. Providing a real `createRequire` gives
-  // those modules a working `require` instead.
+  // One file: a dynamic import inside a core module the CLI never reaches
+  // would otherwise still be emitted as an unreferenced chunk.
+  splitting: false,
+  // The bundle is ESM but inlines CommonJS dependencies such as the spdx
+  // packages. esbuild's `__require` shim throws "Dynamic require of ... is not
+  // supported" when an ESM output has no `require`. None of today's bundled
+  // dependencies requires a Node built-in, so this real `createRequire` is
+  // insurance for one that does.
   banner: {
     js: [
       "#!/usr/bin/env node",
