@@ -73,8 +73,11 @@ function fields(text: string, now: number): DateFields | null {
   return null;
 }
 
-/** An HTTP-date in any of its three forms as epoch milliseconds, or null. */
-function httpDate(text: string, now: number): number | null {
+/**
+ * An HTTP-date in any of its three forms as epoch milliseconds, or null. `now`
+ * places an RFC 850 two-digit year.
+ */
+export function parseHttpDateMs(text: string, now = Date.now()): number | null {
   const date = fields(text, now);
   if (!date) return null;
   const at = Date.UTC(date.year, date.month, date.day, date.hour, date.minute, date.second);
@@ -120,8 +123,8 @@ export function parseRetryAfterMs(
     return Number.isSafeInteger(delay) ? delay : null;
   }
   const now = options.now ?? Date.now();
-  const at = httpDate(text, now);
+  const at = parseHttpDateMs(text, now);
   if (at === null) return null;
-  const server = options.serverDate ? httpDate(options.serverDate.trim(), now) : null;
+  const server = options.serverDate ? parseHttpDateMs(options.serverDate.trim(), now) : null;
   return Math.max(0, at - (server ?? now));
 }

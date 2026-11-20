@@ -475,6 +475,24 @@ describe("Entur host adapter", () => {
     );
     expect(f.cooldowns[0]).toMatchObject({ delayMs: 10000 });
   });
+  it("measures both cooldown headers from client time when the Date header is not an HTTP-date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-19T10:00:00Z"));
+    const f = fixture();
+    f.setResponse({
+      status: 429,
+      body: "x",
+      headers: {
+        date: "2026-10-19T09:00:00Z",
+        "retry-after": "Mon, 19 Oct 2026 10:00:30 GMT",
+        "rate-limit-expiry-time": "Mon, 19 Oct 2026 10:01:00 GMT",
+      },
+    });
+    await expect(createEnturClient(f.options).getJson("nsr", "/x", signal())).rejects.toMatchObject(
+      { status: 429 },
+    );
+    expect(f.cooldowns[0]).toMatchObject({ delayMs: 60000 });
+  });
   it("caps only local observed cooldown at 24 hours without adding a quota counter", async () => {
     vi.useFakeTimers();
     const f = fixture();
