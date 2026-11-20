@@ -3,6 +3,9 @@
   "license": "AGPL-3.0-or-later",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.next-config.json && tsc --noEmit -p discovery-eval/tsconfig.json"
+  },
   "dependencies": {
     "@graphql-codegen/cli": "8.0.0",
     "@openmapx/core": "workspace:*",
