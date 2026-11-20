@@ -30,7 +30,7 @@ beforeEach(() => {
 const maptilerGeocodingService = createMaptilerGeocodingService({
   http: fakeHttpClient(({ url }) => answer(url)),
   apiKey: () => "fixture-key",
-  budget: null,
+  budget: () => null,
   log: createNoopLogger(),
 });
 

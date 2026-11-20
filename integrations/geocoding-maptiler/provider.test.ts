@@ -37,7 +37,7 @@ beforeEach(() => {
   maptilerGeocodingService = createMaptilerGeocodingService({
     http,
     apiKey: () => apiKey,
-    budget: { admit: (signal) => budget?.admit(signal) ?? Promise.resolve({ allowed: true }) },
+    budget: () => budget,
     log: createNoopLogger(),
   });
 });
@@ -623,9 +623,19 @@ describe("MapTiler geocoding provider", () => {
 });
 
 describe("resolveMaptilerApiKey", () => {
-  it("prefers the integration's own key and falls back to MAPTILER_KEY", () => {
-    expect(resolveMaptilerApiKey("own", { MAPTILER_KEY: "shared" })).toBe("own");
-    expect(resolveMaptilerApiKey(undefined, { MAPTILER_KEY: "shared" })).toBe("shared");
+  it("prefers the integration's own key and falls back to the shared MAPTILER_KEY", () => {
+    expect(resolveMaptilerApiKey("own", { MAPTILER_KEY: "shared" })).toEqual({
+      key: "own",
+      shared: false,
+    });
+    expect(resolveMaptilerApiKey(undefined, { MAPTILER_KEY: "shared" })).toEqual({
+      key: "shared",
+      shared: true,
+    });
+    expect(resolveMaptilerApiKey("shared", { MAPTILER_KEY: "shared" })).toEqual({
+      key: "shared",
+      shared: true,
+    });
     expect(resolveMaptilerApiKey(" ", { MAPTILER_KEY: " " })).toBeUndefined();
   });
 });

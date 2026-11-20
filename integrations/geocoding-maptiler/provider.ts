@@ -40,14 +40,17 @@ const SEARCH_TYPES =
 /**
  * The integration's own `apiKey`, or else the deployment-wide `MAPTILER_KEY`
  * the tile proxy uses, so one key set in `.env` serves both maps and search.
+ * `shared` tells whether it is the deployment's key: only that key spends the
+ * deployment's MapTiler daily budget.
  */
 export function resolveMaptilerApiKey(
   configured: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
-): string | undefined {
+): { key: string; shared: boolean } | undefined {
   const own = configured?.trim();
-  if (own) return own;
-  return env.MAPTILER_KEY?.trim() || undefined;
+  const shared = env.MAPTILER_KEY?.trim() || undefined;
+  if (own) return { key: own, shared: own === shared };
+  return shared ? { key: shared, shared: true } : undefined;
 }
 
 interface MaptilerFeature {
@@ -281,8 +284,12 @@ export interface MaptilerGeocodingOptions {
   http: HttpClient;
   /** The key of the current generation, resolved when the integration activates. */
   apiKey: () => string | undefined;
-  /** The deployment's MapTiler daily budget, shared with the tile proxy; null when unset. */
-  budget: ProviderDailyBudget | null;
+  /**
+   * The daily budget the current key spends: the deployment's MapTiler budget,
+   * shared with the tile proxy, when geocoding uses the shared key; null for
+   * the integration's own key or when no budget is set.
+   */
+  budget: () => ProviderDailyBudget | null;
   log: Logger;
 }
 
@@ -297,7 +304,7 @@ export function createMaptilerGeocodingService(
     const key = options.apiKey();
     if (!key)
       throw new Error("MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_KEY)");
-    const admission = await options.budget?.admit();
+    const admission = await options.budget()?.admit();
     if (admission && !admission.allowed) {
       if (admission.firstRefusalInWindow) {
         options.log.warn(

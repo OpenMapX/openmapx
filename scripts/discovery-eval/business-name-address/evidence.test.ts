@@ -26,7 +26,7 @@ describe("business name/address adapter regression corpus", () => {
       const maptilerGeocodingService = createMaptilerGeocodingService({
         http,
         apiKey: () => "fixture-only",
-        budget: null,
+        budget: () => null,
         log: createNoopLogger(),
       });
       const adapted = await maptilerGeocodingService.autocomplete(query.query, queries.language, {

@@ -6,15 +6,16 @@ import {
 import { createMaptilerGeocodingService, resolveMaptilerApiKey } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  let apiKey: string | undefined;
+  let resolved: ReturnType<typeof resolveMaptilerApiKey>;
   ctx.onActivate(() => {
-    apiKey = resolveMaptilerApiKey(ctx.config.apiKey as string | undefined);
+    resolved = resolveMaptilerApiKey(ctx.config.apiKey as string | undefined);
   });
+  const sharedBudget = maptilerDailyBudget(sharedAdmissionOf(ctx.upstreamRuntime));
   ctx.registerGeocodingProvider(
     createMaptilerGeocodingService({
       http: ctx.http,
-      apiKey: () => apiKey,
-      budget: maptilerDailyBudget(sharedAdmissionOf(ctx.upstreamRuntime)),
+      apiKey: () => resolved?.key,
+      budget: () => (resolved?.shared ? sharedBudget : null),
       log: ctx.log,
     }),
   );

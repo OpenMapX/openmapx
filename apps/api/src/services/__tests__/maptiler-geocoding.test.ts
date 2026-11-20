@@ -34,7 +34,7 @@ async function loadModule(opts: { withApiKey?: boolean } = { withApiKey: true })
     maptilerGeocodingService: createMaptilerGeocodingService({
       http: createHttpClient(log),
       apiKey: () => (opts.withApiKey ? "test-key-123" : undefined),
-      budget: null,
+      budget: () => null,
       log,
     }),
   };
