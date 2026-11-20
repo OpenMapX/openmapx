@@ -12,8 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDockerIgnoreMatcher } from "./check-docker-context-secrets.ts";
 import { coversPath, dockerInputs, stageInputs } from "./docker-inputs.mjs";
+import { createDockerIgnoreMatcher } from "./dockerignore.ts";
 
 export { coversPath, dockerInputs };
 
@@ -45,7 +45,7 @@ const globalInputs = [
   ".github/workflows/docker.yml",
   "scripts/docker-release-plan.mjs",
   "scripts/docker-inputs.mjs",
-  "scripts/check-docker-context-secrets.ts",
+  "scripts/dockerignore.ts",
 ];
 const LOCKFILE = "pnpm-lock.yaml";
 

@@ -29,8 +29,6 @@
         "discovery-eval/run.ts",
         "record-search-eval.mts",
         "self-hosting-replay-vitest.config.ts",
-        // Docker-context scanner tests spawn this deadline-isolated fixture by path.
-        "fixtures/docker-context-redirection-probe.ts",
         // Codegen artifact tests spawn these lifetime and zombie-process fixtures by path.
         "codegen/fixtures/*.mjs",
         // Release IO tests copy this executable into fake gh/docker/trivy subprocess paths.
