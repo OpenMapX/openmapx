@@ -155,6 +155,26 @@ class RequestGuardError extends Error {
   }
 }
 
+/**
+ * The API job a request names as its parent in the parent-execution header.
+ * Without the header the request has no such parent; with it, only the API
+ * may send it and the assertion must bind this exact child request.
+ */
+function apiJobParent(
+  header: unknown,
+  role: OpsRole,
+  child: { operationKey: string; operationFingerprint: string; requestedDeadlineAt?: number },
+): VerifiedParentExecution | undefined {
+  if (header === undefined) return undefined;
+  if (role !== "api" || typeof header !== "string")
+    throw new RequestGuardError("authorization", 403);
+  try {
+    return verifyApiJobParentExecution(header, child);
+  } catch {
+    throw new RequestGuardError("authorization", 403);
+  }
+}
+
 /** A held target at the first admission attempt; the admission is tried again after a grace. */
 class BusyAdmission extends Error {
   constructor(readonly target: string) {
@@ -369,9 +389,14 @@ export function createAdmission(options: {
         !operation.candidateId
       )
         throw new OpsExecutionFailure("configuration_prerequisite", {});
-      let parent: VerifiedParentExecution | undefined;
       let controlAdmission: ReturnType<typeof inspectControlAdmission> | undefined;
       const parentHeader = request.headers["x-openmapx-parent-execution"];
+      // A lease child never carries the header; its parent comes from its lease below.
+      let parent = apiJobParent(parentHeader, role, {
+        operationKey: parsed.operationKey,
+        operationFingerprint,
+        requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+      });
       // Approval is exclusively a borrowed activation leaf. Installing its
       // future validation runtime must never enable a bearer-only root path.
       if (operation.kind === "transitousLock.approve" && parsed.leaseChild === undefined)
@@ -390,19 +415,6 @@ export function createAdmission(options: {
             requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
           });
           parent = controlAdmission.parent;
-        } catch {
-          throw new RequestGuardError("authorization", 403);
-        }
-      }
-      if (parentHeader !== undefined) {
-        if (role !== "api" || typeof parentHeader !== "string")
-          throw new RequestGuardError("authorization", 403);
-        try {
-          parent = verifyApiJobParentExecution(parentHeader, {
-            operationKey: parsed.operationKey,
-            operationFingerprint,
-            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-          });
         } catch {
           throw new RequestGuardError("authorization", 403);
         }
