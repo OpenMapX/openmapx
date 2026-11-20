@@ -7,11 +7,11 @@ import type { ManifestValidationResult } from "./service";
 // `.tar.gz` artifacts) and N services (containers, git repos) plus their config
 // and cross-part readiness. The bundle never re-packages the parts — it points
 // at the authoritative integration artifact (sha256-pinned) and service repo
-// (git ref-pinned). See docs/plans/extensions/extension-json-spec.md.
+// (git ref-pinned). See "Bundle it as an extension" in
+// docs/docs/developer/building-an-external-extension.md.
 
 const ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
-// Git tag or commit SHA — matches the version/ref grammar used elsewhere
-// (apps/api store.ts VERSION_REF_REGEX).
+// Git tag or commit SHA.
 const REF_REGEX = /^[a-zA-Z0-9._\-/]+$/;
 const SHA256_REGEX = /^[a-f0-9]{64}$/i;
 // `service:<id>` | `integration:<id>` — the component a config key / readiness

@@ -147,12 +147,7 @@ export function createImpactPlan({
       scope = "docs";
     } else if (
       paths.every((path) => /^apps\/web\/src\/components\/.*\.[jt]sx?$/.test(path)) &&
-      !paths.some((path) =>
-        [
-          "apps/web/src/components/map/HostMapProvider.tsx",
-          "apps/web/src/components/search/VoiceSearchButton.tsx",
-        ].includes(path),
-      )
+      !paths.includes("apps/web/src/components/search/VoiceSearchButton.tsx")
     ) {
       // Keep node-side source/build contracts, all types and the actual web build.
       scope = "web";

@@ -1,8 +1,9 @@
 import { extractIntegrationArtifactStream } from "./artifact-stream";
 // Pure functions for installing, removing, validating, and bundling community
 // integrations under `custom_integrations/`. The CLI (`pnpm openmapx
-// integrations …`) and the admin Store (`apps/api/src/services/store.ts`) both
-// call into this module so they share one source of truth.
+// integrations …`) and the operations agent's integration store
+// (`apps/ops-agent/src/integration-store.ts`) both call into this module so
+// they share one source of truth.
 //
 // Community install/package entry points enforce declarative-only artifacts;
 // app-api never builds or executes community bundles at runtime.

@@ -34,7 +34,7 @@ env:
 # `ci` job aggregates them under the job name `lint / types / test`, which is
 # the required status check in the "main protection" ruleset. Renaming that
 # job (or letting it skip) breaks branch protection — see
-# docs/plans/2026-06-12-branch-protection.md.
+# docs/docs/developer/repository-governance.md.
 jobs:
   select:
     name: select required validation
