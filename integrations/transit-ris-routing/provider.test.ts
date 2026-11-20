@@ -1,19 +1,14 @@
-import {
-  type FakeMobilityHttpRequest,
-  type FakeMobilityHttpTransport,
-  fakeMobilityHttpTransport,
-} from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { type FakeHttpClient, fakeHttpClient } from "@openmapx/integration-framework/testing";
+import { createRisClient, type RisClient } from "@openmapx/mobility-core/ris-client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   germanWallClock,
-  isConfigured,
   mapLang,
   mapLeg,
   mapTrip,
   parseDuration,
   planJourney,
   risCanHonor,
-  setRisCredentials,
 } from "./provider.js";
 
 type LegInput = Parameters<typeof mapLeg>[0];
@@ -192,24 +187,24 @@ describe("mapTrip", () => {
 });
 
 describe("planJourney", () => {
-  let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
-  let transport: FakeMobilityHttpTransport;
+  let mockFetch: ReturnType<typeof vi.fn>;
+  let transport: FakeHttpClient;
+  let risClient: RisClient;
 
   beforeEach(() => {
     mockFetch = vi.fn();
-    transport = fakeMobilityHttpTransport(mockFetch);
-    setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
+    transport = fakeHttpClient((request) => mockFetch(request));
+    risClient = createRisClient({ clientId: "cid", apiKey: "key" }, transport);
   });
 
   afterEach(() => {
-    setRisCredentials({}, transport);
     vi.restoreAllMocks();
   });
 
   it("returns null when credentials are not configured", async () => {
-    setRisCredentials({}, transport);
-    expect(isConfigured()).toBe(false);
-    expect(await planJourney(50, 6, 51, 7, "2026-03-10", "10:00")).toBeNull();
+    const unconfigured = createRisClient({}, transport);
+    expect(await planJourney(unconfigured, 50, 6, 51, 7, "2026-03-10", "10:00")).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("posts a routing request and maps the first trip's endpoints into a plan", async () => {
@@ -238,19 +233,19 @@ describe("planJourney", () => {
       }),
     );
 
-    const plan = await planJourney(50.9, 6.9, 50.1, 8.6, "2026-03-10", "10:00");
+    const plan = await planJourney(risClient, 50.9, 6.9, 50.1, 8.6, "2026-03-10", "10:00");
 
     expect(plan).not.toBeNull();
     expect(plan?.from).toEqual({ name: "Köln Hbf", lat: 50.9, lng: 6.9 });
     expect(plan?.to).toEqual({ name: "Frankfurt Hbf", lat: 50.1, lng: 8.6 });
     expect(plan?.itineraries).toHaveLength(1);
-    const body = JSON.parse(transport.calls[0]?.options?.body ?? "");
+    const body = transport.calls[0]?.body;
     expect(body).toMatchObject({ provider: "HAFAS", departureTime: "2026-03-10T10:00" });
   });
 
   it("returns null when the routing response has no trips", async () => {
     mockFetch.mockResolvedValueOnce(mockOk({ trips: [] }));
-    expect(await planJourney(50, 6, 51, 7, "2026-03-10", "10:00")).toBeNull();
+    expect(await planJourney(risClient, 50, 6, 51, 7, "2026-03-10", "10:00")).toBeNull();
   });
 });
 

@@ -1,11 +1,10 @@
 import {
   createMockIntegrationContext,
-  type FakeMobilityHttpRequest,
-  type FakeMobilityHttpTransport,
-  fakeMobilityHttpTransport,
+  type FakeHttpClient,
+  fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import { setRisCredentials, setup } from "./index.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setup } from "./index.js";
 
 const GERMANY_CENTER = { lat: 52.52, lng: 13.405 };
 const OUTSIDE = { lat: 0, lng: 0 };
@@ -20,9 +19,9 @@ function registerProvider() {
     id: "live-transit-db-ris",
     config: { clientId: "cid", apiKey: "key" },
     manifest: { dataSources: [] } as never,
+    http: transport,
   });
   setup(ctx);
-  setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
   const provider = ctx.registered.realtime[0];
   if (!provider?.getVehiclePositions) throw new Error("no vehicle position provider registered");
   return { ...provider, getVehiclePositions: provider.getVehiclePositions.bind(provider) };
@@ -45,16 +44,15 @@ function liveEntry(overrides: Record<string, unknown> = {}) {
   };
 }
 
-let mockFetch: Mock<(request: FakeMobilityHttpRequest) => unknown>;
-let transport: FakeMobilityHttpTransport;
+let mockFetch: ReturnType<typeof vi.fn>;
+let transport: FakeHttpClient;
 
 beforeEach(() => {
   mockFetch = vi.fn();
-  transport = fakeMobilityHttpTransport(mockFetch);
+  transport = fakeHttpClient((request) => mockFetch(request));
 });
 
 afterEach(() => {
-  setRisCredentials({}, transport);
   vi.restoreAllMocks();
 });
 

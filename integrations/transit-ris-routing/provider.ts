@@ -7,11 +7,9 @@
  */
 
 import { decodePolyline, isoWithOffsetInZone } from "@openmapx/core";
-import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import { isTransitModeRestriction } from "@openmapx/integration-framework";
 import { parseElapsedDurationSeconds } from "@openmapx/mobility-core/duration";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
-import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
+import type { RisClient } from "@openmapx/mobility-core/ris-client";
 import type {
   GeoJSONLineString,
   TransportMode,
@@ -21,14 +19,6 @@ import type {
 } from "@openmapx/mobility-core/transit";
 
 const PREFIX = "ris:";
-let risClient = createRisClient({}, mobilityHttpTransport);
-
-export function setRisCredentials(
-  credentials: RisCredentials,
-  transport: MobilityHttpTransport = mobilityHttpTransport,
-): void {
-  risClient = createRisClient(credentials, transport);
-}
 
 // RIS API types (internal)
 
@@ -230,10 +220,6 @@ export function mapTrip(trip: RisTrip): TripItinerary {
 
 // Public API
 
-export function isConfigured(): boolean {
-  return risClient.isConfigured();
-}
-
 /**
  * RIS::Routing's request schema for a mode allow-list or the Deutschlandticket
  * filter is undocumented, so the provider can't enforce either constraint. When
@@ -264,6 +250,7 @@ export function germanWallClock(instant: Date): { date: string; time: string } {
 }
 
 export async function planJourney(
+  risClient: RisClient,
   fromLat: number,
   fromLng: number,
   toLat: number,
@@ -274,7 +261,7 @@ export async function planJourney(
   numItineraries?: number,
   lang?: string,
 ): Promise<TripPlan | null> {
-  if (!isConfigured()) return null;
+  if (!risClient.isConfigured()) return null;
 
   const origin: RisLocation = { type: "COORDINATE", latitude: fromLat, longitude: fromLng };
   const destination: RisLocation = { type: "COORDINATE", latitude: toLat, longitude: toLng };
