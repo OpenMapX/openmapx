@@ -1,6 +1,7 @@
 import { PLATFORM_ENDPOINTS } from "../utils/platform-endpoints";
 import { readExternalProxyNetwork } from "./external-proxy";
-import type { LoadedService, ServiceConsumes, ServiceProduces } from "./types";
+import { buildProducerIndex, selectProducer } from "./producer-index";
+import type { LoadedService } from "./types";
 
 export const SERVICE_SELECTION_ENV = "OPENMAPX_ENABLED_SERVICES";
 const APP_API_ENV_PASSTHROUGH_PREFIXES = ["INTEGRATION_", "SERVICE_"] as const;
@@ -43,55 +44,6 @@ export interface ExpandServiceSelectionOptions {
    * `OPENMAPX_PROXY_NETWORK`; `null` ignores the environment.
    */
   externalProxyNetwork?: string | null;
-}
-
-interface ProducerEntry {
-  producerId: string;
-  produces: ServiceProduces;
-}
-
-interface ProducerIndex {
-  default: Map<string, ProducerEntry>;
-  instanced: Map<string, ProducerEntry>;
-  byType: Map<string, ProducerEntry[]>;
-}
-
-function buildProducerIndex(services: LoadedService[]): ProducerIndex {
-  const index: ProducerIndex = {
-    default: new Map(),
-    instanced: new Map(),
-    byType: new Map(),
-  };
-
-  for (const svc of services) {
-    for (const produces of svc.manifest.produces ?? []) {
-      const entry: ProducerEntry = { producerId: svc.manifest.id, produces };
-      if (produces.instance === undefined && !index.default.has(produces.type)) {
-        index.default.set(produces.type, entry);
-      }
-      if (produces.instance !== undefined) {
-        const key = `${produces.type}/${produces.instance}`;
-        if (!index.instanced.has(key)) index.instanced.set(key, entry);
-      }
-      const list = index.byType.get(produces.type) ?? [];
-      list.push(entry);
-      index.byType.set(produces.type, list);
-    }
-  }
-
-  return index;
-}
-
-function resolveProducer(consumes: ServiceConsumes, index: ProducerIndex): ProducerEntry | null {
-  if (consumes.instance !== undefined) {
-    return index.instanced.get(`${consumes.type}/${consumes.instance}`) ?? null;
-  }
-
-  const def = index.default.get(consumes.type);
-  if (def) return def;
-
-  const candidates = index.byType.get(consumes.type) ?? [];
-  return candidates.length === 1 ? (candidates[0] ?? null) : null;
 }
 
 export function normalizeServiceIds(ids: Iterable<string>): string[] {
@@ -184,7 +136,7 @@ export function expandServiceSelection(
 ): ExpandedServiceSelection {
   const requested = normalizeServiceIds(requestedIds);
   const byId = new Map(services.map((svc) => [svc.manifest.id, svc]));
-  const producerIndex = buildProducerIndex(services);
+  const producerIndex = buildProducerIndex(services, { onDuplicate: "first" });
   const enabledIds = new Set<string>();
   const missingIds: string[] = [];
   const warnings: string[] = [];
@@ -238,10 +190,10 @@ export function expandServiceSelection(
     }
 
     for (const consumes of svc.manifest.consumes ?? []) {
-      const producer = resolveProducer(consumes, producerIndex);
-      if (producer) {
-        if (producer.producerId !== id) {
-          enqueue(producer.producerId, `data dependency "${consumes.type}" of "${id}"`);
+      const selection = selectProducer(consumes, producerIndex);
+      if (selection.kind === "found") {
+        if (selection.entry.producerId !== id) {
+          enqueue(selection.entry.producerId, `data dependency "${consumes.type}" of "${id}"`);
         }
       } else if (consumes.required !== false) {
         warnings.push(
