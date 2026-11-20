@@ -2,7 +2,7 @@ import { API_ENDPOINTS, createPlace, type SavedList, type SavedPlace } from "@op
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor } from "@/test";
+import { cleanup, render, screen, userEvent, waitFor } from "@/test";
 
 vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
   useSession: () => ({ data: { user: { id: "u1" } } }),
@@ -31,12 +31,16 @@ const row = {
   createdAt: "2026-10-03T00:00:00Z",
 } as SavedPlace;
 const clients: QueryClient[] = [];
+// The dialog keeps reconciling membership after a test's last assertion and
+// refetches as it does. Unmount it and drop its queries while the fetch mock is
+// still in place, so no late request reaches the real fetch.
 afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+  cleanup();
   clients.splice(0).forEach((c) => {
     c.clear();
   });
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 function setup(initial = false, savedPlace = place) {
   const rows: SavedPlace[] = initial ? [row] : [];
