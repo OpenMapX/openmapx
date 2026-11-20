@@ -15,6 +15,7 @@ import {
   readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
+import { deriveStationIntelligence } from "@openmapx/mobility-core/station-intelligence";
 import type {
   Departure,
   FareProduct,
@@ -25,11 +26,9 @@ import type {
   TransitAmenityItem,
   TransitFormationDetail,
   TransitFormationReference,
-  TransitInterchangeComplexity,
   TransitPlatformDetail,
   TransitRoute,
   TransitServiceInfo,
-  TransitStationIntelligence,
   TransitStop,
   TransitStopAreaSummary,
   TransitStopCode,
@@ -2179,62 +2178,6 @@ function buildChildStopAreas(
       stopType: first.trafficPointElementType,
     };
   });
-}
-
-function deriveStationIntelligence(input: {
-  childStops: TransitStopAreaSummary[];
-  parentStop?: TransitStopAreaSummary;
-  parking: TransitStopParking[];
-  platforms: TransitPlatformDetail[];
-  siblingStops: TransitStopAreaSummary[];
-}): TransitStationIntelligence {
-  const modeSet = new Set<TransportMode>([
-    ...(input.parentStop?.modes ?? []),
-    ...input.childStops.flatMap((stop) => stop.modes),
-    ...input.platforms.flatMap((platform) => platform.modes),
-    ...input.siblingStops.flatMap((stop) => stop.modes),
-  ]);
-  const modeCount = modeSet.size;
-  const connectedStopAreaCount =
-    input.childStops.length > 0
-      ? input.childStops.length + 1
-      : input.siblingStops.length > 0
-        ? input.siblingStops.length + 1
-        : 1;
-  const platformCount = input.platforms.length;
-
-  let complexity: TransitInterchangeComplexity = "simple_stop";
-  if (
-    platformCount >= 8 ||
-    connectedStopAreaCount >= 4 ||
-    (modeCount >= 3 && platformCount >= 5) ||
-    (modeCount >= 4 && connectedStopAreaCount >= 3)
-  ) {
-    complexity = "major_interchange";
-  } else if (
-    platformCount >= 4 ||
-    connectedStopAreaCount >= 3 ||
-    (modeCount >= 3 && platformCount >= 3) ||
-    (modeCount >= 2 && connectedStopAreaCount >= 2 && platformCount >= 2)
-  ) {
-    complexity = "regional_hub";
-  } else if (
-    modeCount >= 2 ||
-    connectedStopAreaCount >= 2 ||
-    platformCount >= 2 ||
-    input.parking.length > 0
-  ) {
-    complexity = "interchange";
-  }
-
-  return {
-    complexity,
-    hasParking: input.parking.length > 0,
-    hasRealtimeParking: input.parking.some(
-      (parking) => parking.hasRealtimeData && typeof parking.freeSpaces === "number",
-    ),
-    modeCount,
-  };
 }
 
 function buildParking(
