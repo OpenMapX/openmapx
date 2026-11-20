@@ -237,7 +237,8 @@ export function LineDetail({
                     color={isCurrent ? "text.primary" : "text.secondary"}
                     sx={{
                       fontWeight: isCurrent ? 700 : 400,
-                      ...(placed ? {} : { color: "text.disabled" }),
+                      // Muted but still readable; the ring and caption carry the cue.
+                      ...(placed ? {} : { color: "text.secondary" }),
                     }}
                   >
                     {s.name}
@@ -246,7 +247,7 @@ export function LineDetail({
                     <Typography
                       variant="caption"
                       sx={{
-                        color: "text.disabled",
+                        color: "text.secondary",
                         fontStyle: "italic",
                       }}
                     >

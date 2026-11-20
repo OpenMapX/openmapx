@@ -1,3 +1,4 @@
+import { createTheme } from "@mui/material/styles";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -55,6 +56,10 @@ describe("LineDetail stop list", () => {
     // The unplaced row says why it cannot be opened; placed rows do not.
     expect(within(thun).getByText("stopNotPlaced")).toBeInTheDocument();
     expect(screen.getAllByText("stopNotPlaced")).toHaveLength(1);
+    // Muted but readable: secondary text, not the disabled shade.
+    const { secondary } = createTheme().palette.text;
+    expect(within(thun).getByText("Thun")).toHaveStyle({ color: secondary });
+    expect(within(thun).getByText("stopNotPlaced")).toHaveStyle({ color: secondary });
 
     fireEvent.click(thun);
     expect(onSelectStop).not.toHaveBeenCalled();
