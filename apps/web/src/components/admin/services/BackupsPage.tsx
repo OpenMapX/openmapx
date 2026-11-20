@@ -505,7 +505,7 @@ function BackupsView() {
               });
             }}
           >
-            {restoreMutation.isPending ? t("queueing2") : t("restore")}
+            {restoreMutation.isPending ? t("queueing") : t("restore")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -532,7 +532,7 @@ function BackupsView() {
             disabled={deleteMutation.isPending || !deleteTarget}
             onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.name)}
           >
-            {deleteMutation.isPending ? t("queueing2") : t("delete")}
+            {deleteMutation.isPending ? t("queueing") : t("delete")}
           </Button>
         </DialogActions>
       </Dialog>

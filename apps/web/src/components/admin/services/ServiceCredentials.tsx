@@ -192,10 +192,12 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                 )}
                 {cred.updatedAt && (
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    {t("updatedAt", {
-                      updatedAt: new Date(cred.updatedAt).toLocaleString(),
-                    })}
-                    {cred.updatedBy ? t("updatedBy", { updatedBy: cred.updatedBy }) : ""}
+                    {cred.updatedBy
+                      ? t("updatedAtBy", {
+                          updatedAt: new Date(cred.updatedAt).toLocaleString(),
+                          updatedBy: cred.updatedBy,
+                        })
+                      : t("updatedAt", { updatedAt: new Date(cred.updatedAt).toLocaleString() })}
                   </Typography>
                 )}
                 {cred.managedBy === "dawarich-provisioning" && (

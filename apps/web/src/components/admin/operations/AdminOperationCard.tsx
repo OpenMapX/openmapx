@@ -248,7 +248,7 @@ function OperationView({
             disabled={busy}
             onClick={() => runMutation.mutate()}
           >
-            {runMutation.isPending ? t("queueing2") : tCommon("confirm")}
+            {runMutation.isPending ? t("queueing") : tCommon("confirm")}
           </Button>
         </DialogActions>
       </Dialog>
