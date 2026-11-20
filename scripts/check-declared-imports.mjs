@@ -396,12 +396,8 @@ export function declaredImportViolations({
   return violations;
 }
 
-const dependencyFields = [
-  "dependencies",
-  "devDependencies",
-  "peerDependencies",
-  "optionalDependencies",
-];
+/** Fields pnpm links from; a peer-only entry links nothing. */
+const linkedDependencyFields = ["dependencies", "devDependencies", "optionalDependencies"];
 
 /**
  * Every reference from a workspace's code to another workspace package, tests
@@ -431,7 +427,8 @@ export function undeclaredWorkspaceImports({ cwd = process.cwd() } = {}) {
     for (const { fileName: specifier, pos } of ts.preProcessFile(text, true, true).importedFiles) {
       const name = packageName(specifier);
       if (!names.has(name) || name === manifest.name) continue;
-      if (dependencyFields.some((field) => Object.hasOwn(manifest[field] ?? {}, name))) continue;
+      if (linkedDependencyFields.some((field) => Object.hasOwn(manifest[field] ?? {}, name)))
+        continue;
       const line = text.slice(0, pos).split("\n").length;
       violations.push(
         `${path}:${line}: "${name}" is not declared in ${owner.directory}/package.json`,

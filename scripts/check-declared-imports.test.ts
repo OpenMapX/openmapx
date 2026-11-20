@@ -520,6 +520,22 @@ describe("declared workspace imports in every workspace", () => {
       'packages/app/src/a.test.ts:2: "@fixture/helper" is not declared in packages/app/package.json',
     ]);
   });
+  it("rejects a workspace package declared only as a peer, which pnpm does not link", () => {
+    expect(
+      checkWorkspaces({
+        "packages/app/package.json": manifest("app", {
+          peerDependencies: { "@fixture/lib": "workspace:*" },
+        }),
+        "packages/tool/package.json": manifest("tool", {
+          peerDependencies: { "@fixture/helper": "workspace:*" },
+        }),
+        "packages/app/src/a.ts": 'import "@fixture/lib";',
+        "packages/tool/src/cli.ts": 'import "@fixture/helper";',
+      }),
+    ).toEqual([
+      'packages/app/src/a.ts:1: "@fixture/lib" is not declared in packages/app/package.json',
+    ]);
+  });
   it("leaves files outside every workspace package to the root", () => {
     expect(checkWorkspaces({ "tools/probe.ts": 'import "@fixture/lib";' })).toEqual([]);
   });
