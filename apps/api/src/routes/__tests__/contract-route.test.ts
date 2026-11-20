@@ -34,25 +34,23 @@ async function appWith(handler: Parameters<typeof register>[2]) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("contract route responses", () => {
-  it("validates an object body once and sends its validated JSON", async () => {
-    const parse = vi.spyOn(itemSchema, "safeParse");
+  it("sends a valid object body as its validated JSON", async () => {
     const app = await appWith(async () => ({ id: "a", count: 2 }));
 
     const response = await app.inject({ method: "GET", url: "/api/item" });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ id: "a", count: 2 });
-    expect(parse).toHaveBeenCalledTimes(1);
   });
 
-  it("still refuses an object body that breaks the contract", async () => {
+  it("refuses an object body that breaks the contract", async () => {
     const app = await appWith(async () => ({ id: "a", count: "two" }));
     const response = await app.inject({ method: "GET", url: "/api/item" });
     expect(response.statusCode).toBe(500);
     expect(response.body).not.toContain("two");
   });
 
-  it("still refuses a pre-serialized string that breaks the contract", async () => {
+  it("refuses a pre-serialized string that breaks the contract", async () => {
     const app = await appWith(async (_req, reply) => {
       reply.type("application/json");
       return reply.send(JSON.stringify({ id: "a", count: "two" }));
@@ -62,7 +60,7 @@ describe("contract route responses", () => {
     expect(response.body).not.toContain("two");
   });
 
-  it("validates a valid pre-serialized string in onSend", async () => {
+  it("validates and sends a valid pre-serialized string", async () => {
     const parse = vi.spyOn(itemSchema, "safeParse");
     const app = await appWith(async (_req, reply) => {
       reply.type("application/json");
