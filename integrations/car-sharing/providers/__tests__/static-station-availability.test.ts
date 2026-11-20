@@ -1,4 +1,4 @@
-import { createPassthroughCache } from "@openmapx/integration-framework/testing";
+import { createPassthroughCache, fakeHttpClient } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseDeNwBielefeldCsv } from "../de-nw-bielefeld-client.js";
 import { parseDeNwWuppertalGeoJson } from "../de-nw-wuppertal-client.js";
@@ -28,7 +28,7 @@ describe("static car-sharing feeds", () => {
 
     const [station] = await deStadtteilautoClient.search(
       { west: 7.5, south: 51.9, east: 7.7, north: 52 },
-      createPassthroughCache(),
+      { cache: createPassthroughCache(), http: fakeHttpClient() },
     );
 
     expect(station.capacity).toBe(3);

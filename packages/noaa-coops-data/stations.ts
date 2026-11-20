@@ -2,6 +2,7 @@ import {
   type CacheClient,
   type ContributingRecord,
   captureCacheWriter,
+  type HttpClient,
   type Logger,
   snapshotContributors,
 } from "@openmapx/integration-framework";
@@ -12,6 +13,8 @@ const MDAPI_BASE = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stat
 const STATIONS_CACHE_KEY = "stations:catalog";
 const STATIONS_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days
 const FETCH_TIMEOUT_MS = 15_000;
+/** The largest list (current predictions) is about 4 MB. */
+const MAX_STATION_LIST_BYTES = 16 * 1024 * 1024;
 
 /** MDAPI station type filter values supported by NOAA. */
 const TYPE_PARAM: Record<NoaaStationType, string> = {
@@ -45,25 +48,23 @@ interface MdapiResponse {
 /**
  * Fetch one MDAPI station-list response.
  */
-async function fetchOneType(type: NoaaStationType, log: Logger): Promise<MdapiStation[]> {
-  const url = `${MDAPI_BASE}?type=${TYPE_PARAM[type]}&units=english&application=OpenMapX`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+async function fetchOneType(
+  http: HttpClient,
+  type: NoaaStationType,
+  log: Logger,
+): Promise<MdapiStation[]> {
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) {
-      log.warn(`noaa-coops: MDAPI ${type} returned HTTP ${res.status}`);
-      return [];
-    }
-    const body = (await res.json()) as MdapiResponse;
+    const body = await http.get<MdapiResponse>(MDAPI_BASE, {
+      params: { type: TYPE_PARAM[type], units: "english", application: "OpenMapX" },
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxResponseBytes: MAX_STATION_LIST_BYTES,
+    });
     return body.stations ?? [];
   } catch (err) {
     log.warn(
       `noaa-coops: MDAPI ${type} fetch failed: ${err instanceof Error ? err.message : String(err)}`,
     );
     return [];
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -74,6 +75,7 @@ async function fetchOneType(type: NoaaStationType, log: Logger): Promise<MdapiSt
  * gauge); we union them and record every type the station offers.
  */
 export async function loadStations(
+  http: HttpClient,
   cache: CacheClient,
   log: Logger,
   types: NoaaStationType[] = DEFAULT_TYPES,
@@ -96,7 +98,7 @@ export async function loadStations(
   if (cached?.length) return cached.map(clone);
 
   const writer = await captureCacheWriter(cache);
-  const responses = await Promise.all(types.map((t) => fetchOneType(t, log)));
+  const responses = await Promise.all(types.map((t) => fetchOneType(http, t, log)));
   const byId = new Map<string, NoaaStation>();
 
   for (let i = 0; i < types.length; i++) {

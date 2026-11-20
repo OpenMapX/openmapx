@@ -3,6 +3,7 @@ import {
   type ContributingRecord,
   captureCacheWriter,
   createTidesIntegration,
+  type HttpClient,
   type IntegrationContext,
   resolveIntegrationContributors,
   snapshotContributors,
@@ -57,17 +58,19 @@ export function isoTimeFromKartverket(stamp: string): string {
   return m[1];
 }
 
-async function fetchText(url: string): Promise<string | null> {
+/** The station list is a few KB and a 48 h curve a few tens of KB. */
+const MAX_XML_BYTES = 2 * 1024 * 1024;
+
+async function fetchText(http: HttpClient, url: string): Promise<string | null> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
+    const res = await http.getText(url, {
+      maxBytes: MAX_XML_BYTES,
+      contentTypes: ["text/xml", "application/xml"],
+      discardErrorBody: true,
       headers: { "User-Agent": USER_AGENT, Accept: "application/xml,text/xml,*/*" },
-      signal: controller.signal,
+      timeoutMs: FETCH_TIMEOUT_MS,
     });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return await res.text();
+    return res.status === 200 ? res.body : null;
   } catch {
     return null;
   }
@@ -79,7 +82,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
   const writer = await captureCacheWriter(ctx.cache);
 
-  const xml = await fetchText(`${BASE}?tide_request=stationlist&type=perm&lang=en`);
+  const xml = await fetchText(ctx.http, `${BASE}?tide_request=stationlist&type=perm&lang=en`);
   if (!xml) {
     ctx.log.warn("Kartverket station list unavailable");
     return [];
@@ -108,14 +111,14 @@ function buildDateWindow(): { from: string; to: string } {
   };
 }
 
-export async function fetchHilo(station: CachedStation): Promise<TideEvent[]> {
+export async function fetchHilo(http: HttpClient, station: CachedStation): Promise<TideEvent[]> {
   const { from, to } = buildDateWindow();
   const url =
     `${BASE}?lat=${station.lat}&lon=${station.lng}` +
     `&fromtime=${encodeURIComponent(from)}&totime=${encodeURIComponent(to)}` +
     `&datatype=TAB&refcode=CD&place=${encodeURIComponent(station.name)}` +
     `&lang=en&dst=0&tide_request=locationdata`;
-  const xml = await fetchText(url);
+  const xml = await fetchText(http, url);
   if (!xml) return [];
   const events: TideEvent[] = [];
   // <waterlevel value="14.3" time="2026-05-18T05:24:00+01:00" flag="low"/>
@@ -132,14 +135,17 @@ export async function fetchHilo(station: CachedStation): Promise<TideEvent[]> {
   return events;
 }
 
-export async function fetchCurve(station: CachedStation): Promise<TideCurvePoint[]> {
+export async function fetchCurve(
+  http: HttpClient,
+  station: CachedStation,
+): Promise<TideCurvePoint[]> {
   const { from, to } = buildDateWindow();
   const url =
     `${BASE}?lat=${station.lat}&lon=${station.lng}` +
     `&fromtime=${encodeURIComponent(from)}&totime=${encodeURIComponent(to)}` +
     `&datatype=PRE&refcode=CD&place=${encodeURIComponent(station.name)}` +
     `&lang=en&interval=30&dst=0&tide_request=locationdata`;
-  const xml = await fetchText(url);
+  const xml = await fetchText(http, url);
   if (!xml) return [];
   const curve: TideCurvePoint[] = [];
   const re = /<waterlevel\s+value="([\d.-]+)"\s+time="([^"]+)"\s+flag="pre"\s*\/>/g;
@@ -165,7 +171,10 @@ async function buildTidesResponse(
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
   const writer = await captureCacheWriter(ctx.cache);
 
-  const [events, curve] = await Promise.all([fetchHilo(station), fetchCurve(station)]);
+  const [events, curve] = await Promise.all([
+    fetchHilo(ctx.http, station),
+    fetchCurve(ctx.http, station),
+  ]);
   if (events.length === 0 && curve.length === 0) return null;
 
   const result: TideStationResponse = {

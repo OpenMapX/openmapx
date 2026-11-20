@@ -25,7 +25,7 @@ import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmap
 import { captureCacheWriter } from "@openmapx/integration-framework";
 import { type CacheClient, cacheGet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
-import type { RegionalCarSharingClient } from "./regional-client-types.js";
+import type { RegionalCarSharingClient, RegionalSearchContext } from "./regional-client-types.js";
 
 const CA_COMMUNAUTO_BASE = "https://restapifrontoffice.reservauto.net/api/v2";
 const FETCH_TIMEOUT_MS = 8_000;
@@ -172,8 +172,7 @@ async function fetchCityStations(
 /** Search Communauto stations within a bounding box across all matching Canadian cities. */
 async function searchCaCommunauto(
   bbox: BoundingBox,
-  cache: CacheClient,
-  contributors?: readonly Attribution[],
+  { cache, contributors }: RegionalSearchContext,
 ): Promise<SharedMobilityStation[]> {
   const padding = 1; // ~1° latitude of slack around each city centroid
   const cities = CA_COMMUNAUTO_CITIES.filter((c) => {

@@ -1,5 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
-import { createPassthroughCache } from "@openmapx/integration-framework/testing";
+import { createPassthroughCache, fakeHttpClient } from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RegionalCarSharingClient } from "../regional-client-types.js";
@@ -60,6 +60,7 @@ describe("searchRegionalClients — one source rejects", () => {
     const searchRegionalClients = createRegionalCarSharingRegistry({
       clients: [goodClient, badClient],
       cache: createPassthroughCache(),
+      http: fakeHttpClient(),
       log: fakeLogger,
     });
     const result = await searchRegionalClients(bbox);
@@ -91,6 +92,7 @@ describe("searchRegionalClients — all sources reject", () => {
     const searchRegionalClients = createRegionalCarSharingRegistry({
       clients: [clientA, clientB],
       cache: createPassthroughCache(),
+      http: fakeHttpClient(),
       log: fakeLogger,
     });
     const result = await searchRegionalClients(bbox);

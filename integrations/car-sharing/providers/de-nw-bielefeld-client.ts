@@ -69,6 +69,7 @@ export const deNwBielefeldClient = createStaticCarSharingClient({
   id: "de-nw-bielefeld",
   name: "Bielefeld Open Data",
   url: WFS_URL,
+  contentTypes: ["text/csv"],
   regions: [{ center: [8.533, 52.03] as LngLat, radiusKm: 15 }],
   parse: parseDeNwBielefeldCsv,
 });

@@ -1,4 +1,4 @@
-import type { Logger } from "@openmapx/integration-framework";
+import type { HttpClient, Logger } from "@openmapx/integration-framework";
 import type { MetReadings, TideEvent, WaterLevelReading } from "./types.js";
 
 const DATA_API_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter";
@@ -26,15 +26,19 @@ function utcDateMinusOneDay(): string {
   ).padStart(2, "0")}`;
 }
 
-async function fetchWithTimeout(url: string): Promise<Response | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+/** One Data API answer, or null after a transport or HTTP failure, which `onError` hears about. */
+async function getData<T>(
+  http: HttpClient,
+  params: URLSearchParams,
+  onError?: (message: string) => void,
+): Promise<T | null> {
   try {
-    return await fetch(url, { signal: controller.signal });
-  } catch {
+    return await http.get<T>(`${DATA_API_URL}?${params.toString()}`, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+    });
+  } catch (error) {
+    onError?.(error instanceof Error ? error.message : String(error));
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -50,6 +54,7 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
  * past events out.
  */
 export async function fetchHighLowPredictions(
+  http: HttpClient,
   stationId: string,
   log: Logger,
 ): Promise<TideEvent[] | null> {
@@ -66,16 +71,10 @@ export async function fetchHighLowPredictions(
     application: "OpenMapX",
   });
 
-  const res = await fetchWithTimeout(`${DATA_API_URL}?${params.toString()}`);
-  if (!res) {
-    log.warn(`noaa-coops: predictions fetch failed for ${stationId}`);
-    return null;
-  }
-  if (!res.ok) {
-    log.warn(`noaa-coops: predictions HTTP ${res.status} for ${stationId}`);
-    return null;
-  }
-  const body = (await res.json()) as DatagetterPredictionsResponse;
+  const body = await getData<DatagetterPredictionsResponse>(http, params, (message) =>
+    log.warn(`noaa-coops: predictions fetch failed for ${stationId}: ${message}`),
+  );
+  if (!body) return null;
   if (body.error?.message) {
     log.warn(`noaa-coops: predictions error for ${stationId}: ${body.error.message}`);
     return null;
@@ -94,6 +93,7 @@ export async function fetchHighLowPredictions(
  * 24 h starting yesterday-UTC (same TZ rationale as the hi/lo fetcher).
  */
 export async function fetchTideCurve(
+  http: HttpClient,
   stationId: string,
   log: Logger,
   hours = 48,
@@ -111,12 +111,10 @@ export async function fetchTideCurve(
     application: "OpenMapX",
   });
 
-  const res = await fetchWithTimeout(`${DATA_API_URL}?${params.toString()}`);
-  if (!res?.ok) {
-    log.warn(`noaa-coops: curve fetch failed for ${stationId}`);
-    return null;
-  }
-  const body = (await res.json()) as DatagetterPredictionsResponse;
+  const body = await getData<DatagetterPredictionsResponse>(http, params, (message) =>
+    log.warn(`noaa-coops: curve fetch failed for ${stationId}: ${message}`),
+  );
+  if (!body) return null;
   if (body.error?.message) return null;
   return (body.predictions ?? [])
     .map((p) => ({
@@ -133,6 +131,7 @@ export async function fetchTideCurve(
  * Surface the preliminary flag so the UI can warn users.
  */
 export async function fetchLatestWaterLevel(
+  http: HttpClient,
   stationId: string,
   log: Logger,
 ): Promise<WaterLevelReading | null> {
@@ -147,9 +146,8 @@ export async function fetchLatestWaterLevel(
     application: "OpenMapX",
   });
 
-  const res = await fetchWithTimeout(`${DATA_API_URL}?${params.toString()}`);
-  if (!res?.ok) return null;
-  const body = (await res.json()) as DatagetterWaterLevelResponse;
+  const body = await getData<DatagetterWaterLevelResponse>(http, params);
+  if (!body) return null;
   if (body.error?.message) {
     log.debug?.(`noaa-coops: no water_level for ${stationId}: ${body.error.message}`);
     return null;
@@ -172,7 +170,11 @@ export async function fetchLatestWaterLevel(
  * publish a given product return an error inside the JSON; we silently
  * drop those.
  */
-export async function fetchLatestMet(stationId: string, log: Logger): Promise<MetReadings | null> {
+export async function fetchLatestMet(
+  http: HttpClient,
+  stationId: string,
+  log: Logger,
+): Promise<MetReadings | null> {
   const products = ["wind", "air_pressure", "water_temperature", "air_temperature"] as const;
 
   const results = await Promise.all(
@@ -186,10 +188,8 @@ export async function fetchLatestMet(stationId: string, log: Logger): Promise<Me
         format: "json",
         application: "OpenMapX",
       });
-      const res = await fetchWithTimeout(`${DATA_API_URL}?${params.toString()}`);
-      if (!res?.ok) return null;
-      const body = (await res.json()) as DatagetterMetResponse;
-      if (body.error?.message) return null;
+      const body = await getData<DatagetterMetResponse>(http, params);
+      if (!body || body.error?.message) return null;
       const latest = body.data?.[body.data.length - 1];
       if (!latest) return null;
       return { product, latest };

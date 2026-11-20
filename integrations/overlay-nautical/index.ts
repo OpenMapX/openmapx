@@ -294,7 +294,7 @@ async function fetchHarborSurroundings(
     (async (): Promise<{ station: HarborSurroundings["nearestTideStation"]; ok: boolean }> => {
       try {
         const credits = stationContributors("noaa");
-        const stations = await loadNoaaStations(ctx.cache, ctx.log, undefined, credits);
+        const stations = await loadNoaaStations(ctx.http, ctx.cache, ctx.log, undefined, credits);
         // The NOAA loader answers [] when its feeds fail; the real catalog is never empty.
         if (stations.length === 0) return { station: undefined, ok: false };
         const hit = findNearestStation(stations, lat, lng, 5, "tide-predictions");
@@ -770,7 +770,7 @@ export function setup(ctx: IntegrationContext): void {
     // Load NOAA via the existing typed loader; load non-NOAA networks via the
     // new merger module. Each catalog is Redis-cached for 7d behind its own key.
     const [noaa, extra] = await Promise.all([
-      loadNoaaStations(ctx.cache, ctx.log, undefined, stationContributors("noaa")).then(
+      loadNoaaStations(ctx.http, ctx.cache, ctx.log, undefined, stationContributors("noaa")).then(
         // The NOAA loader answers [] when its feeds fail, and the real catalog is
         // never empty (the package also ignores an empty cached catalog).
         (stations) => ({ stations, available: stations.length > 0 }),

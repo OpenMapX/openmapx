@@ -1,7 +1,17 @@
 import type { BoundingBox, LngLat } from "@openmapx/core";
+import type { HttpClient } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { CacheClient } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
+
+/** What a regional client receives for one search. */
+export interface RegionalSearchContext {
+  cache: CacheClient;
+  /** Host HTTP client for fixed operator hosts. */
+  http: HttpClient;
+  /** Credits for the client's source; stations carry them when given. */
+  contributors?: readonly Attribution[];
+}
 
 /**
  * Interface for regional car-sharing operator clients.
@@ -18,11 +28,7 @@ export interface RegionalCarSharingClient {
   /** Geographic regions this client covers (used for bbox pre-filtering). */
   readonly regions: { center: LngLat; radiusKm: number }[];
   /** Search for stations within the bounding box. */
-  search(
-    bbox: BoundingBox,
-    cache: CacheClient,
-    contributors?: readonly Attribution[],
-  ): Promise<SharedMobilityStation[]>;
+  search(bbox: BoundingBox, context: RegionalSearchContext): Promise<SharedMobilityStation[]>;
 }
 
 const KM_PER_DEGREE_LATITUDE = 111;

@@ -61,9 +61,15 @@ function awaitHttpResponse(operation: Promise<Response>, signal: AbortSignal): P
 /**
  * Caller headers outside the representation-header allowlist may carry a credential.
  * Such requests refuse every redirect so the header never reaches another origin.
+ * A User-Agent identifies the client, as the core JSON helper sends it, and is no credential.
  */
 function redirectPolicyFor(headers: Record<string, string> | undefined): "error" | undefined {
-  return hasPotentiallyCredentialBearingHeaders(headers) ? "error" : undefined;
+  const callerHeaders = headers
+    ? Object.fromEntries(
+        Object.entries(headers).filter(([name]) => name.toLowerCase() !== "user-agent"),
+      )
+    : undefined;
+  return hasPotentiallyCredentialBearingHeaders(callerHeaders) ? "error" : undefined;
 }
 
 export function createHttpClient(_log: Logger): HttpClient {

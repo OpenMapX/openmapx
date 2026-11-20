@@ -52,6 +52,8 @@ function todayKey(): string {
   ).padStart(2, "0")}`;
 }
 
+type UpstreamClients = Pick<IntegrationContext, "http" | "log" | "cache">;
+
 /**
  * Read the 5-min water-level + met caches and refresh from upstream on miss.
  * Shared between the cold `buildTidesResponse` path and the warm coordinate-
@@ -60,15 +62,14 @@ function todayKey(): string {
  * expired between requests.
  */
 async function refreshLiveReadings(
+  { http, log, cache }: UpstreamClients,
   stationId: string,
-  log: Parameters<typeof fetchHighLowPredictions>[1],
-  cache: IntegrationContext["cache"],
 ): Promise<{ currentLevel: WaterLevelReading | undefined; met: MetReadings | undefined }> {
   const livePromise = (async (): Promise<WaterLevelReading | undefined> => {
     const cached = await cache.get<WaterLevelReading | { notFound: true }>(`water:${stationId}`);
     if (cached) return "notFound" in cached ? undefined : cached;
     const writer = await captureCacheWriter(cache);
-    const fetched = await fetchLatestWaterLevel(stationId, log);
+    const fetched = await fetchLatestWaterLevel(http, stationId, log);
     void writer.set(
       `water:${stationId}`,
       fetched ?? { notFound: true as const },
@@ -81,7 +82,7 @@ async function refreshLiveReadings(
     const cached = await cache.get<MetReadings | { notFound: true }>(`met:${stationId}`);
     if (cached) return "notFound" in cached ? undefined : cached;
     const writer = await captureCacheWriter(cache);
-    const fetched = await fetchLatestMet(stationId, log);
+    const fetched = await fetchLatestMet(http, stationId, log);
     void writer.set(
       `met:${stationId}`,
       fetched ?? { notFound: true as const },
@@ -102,12 +103,12 @@ async function refreshLiveReadings(
  * requested station".
  */
 async function buildTidesResponse(
+  clients: UpstreamClients,
   station: NoaaStation,
   distanceKm: number,
-  log: Parameters<typeof fetchHighLowPredictions>[1],
-  cache: IntegrationContext["cache"],
 ): Promise<TidesResponse | null> {
-  const events = await fetchHighLowPredictions(station.id, log);
+  const { http, log, cache } = clients;
+  const events = await fetchHighLowPredictions(http, station.id, log);
   if (!events) return null;
 
   // Curve + live observations run in parallel; the latter is cached
@@ -116,7 +117,7 @@ async function buildTidesResponse(
   const curvePromise: Promise<TideCurvePoint[] | null> = curveCached
     ? Promise.resolve(curveCached)
     : captureCacheWriter(cache).then(async (writer) => {
-        const c = await fetchTideCurve(station.id, log);
+        const c = await fetchTideCurve(http, station.id, log);
         const compact = c?.map((e) => ({ time: e.time, valueFt: e.valueFt })) ?? [];
         if (compact.length) {
           void writer.set(`curve:${station.id}:${todayKey()}`, compact, PREDICTIONS_CACHE_TTL);
@@ -124,10 +125,7 @@ async function buildTidesResponse(
         return compact;
       });
 
-  const [curve, live] = await Promise.all([
-    curvePromise,
-    refreshLiveReadings(station.id, log, cache),
-  ]);
+  const [curve, live] = await Promise.all([curvePromise, refreshLiveReadings(clients, station.id)]);
 
   return {
     station: {
@@ -157,7 +155,7 @@ export function setup(ctx: IntegrationContext): void {
   registerPlaceResolver("coops", async (value) => {
     const id = value.split(":")[0].trim();
     if (!id) return null;
-    const stations = await loadStations(ctx.cache, ctx.log);
+    const stations = await loadStations(ctx.http, ctx.cache, ctx.log);
     const station = findStationById(stations, id);
     if (!station) return null;
     const place: Place = createPlace({
@@ -191,7 +189,7 @@ export function setup(ctx: IntegrationContext): void {
     let distanceKm = 0;
     let coordinateEntry: { key: string; writer: CacheWriter } | null = null;
     if (stationParam) {
-      const stations = await loadStations(ctx.cache, ctx.log);
+      const stations = await loadStations(ctx.http, ctx.cache, ctx.log);
       resolvedStation = findStationById(stations, stationParam);
       if (!resolvedStation) {
         reply.status(404).send({ message: "Unknown station" });
@@ -216,7 +214,7 @@ export function setup(ctx: IntegrationContext): void {
         // `water:` and `met:` caches, but this coordinate fast path skips it.
         // Overlay the latest live readings before sending so warm hits don't
         // pin stale observations for the full PREDICTIONS_CACHE_TTL.
-        const live = await refreshLiveReadings(cached.station.id, ctx.log, ctx.cache);
+        const live = await refreshLiveReadings(ctx, cached.station.id);
         cached.currentLevel = live.currentLevel;
         cached.met = live.met;
         reply.header("Cache-Control", "public, max-age=3600");
@@ -225,7 +223,7 @@ export function setup(ctx: IntegrationContext): void {
       }
 
       const writer = await captureCacheWriter(ctx.cache);
-      const stations = await loadStations(ctx.cache, ctx.log);
+      const stations = await loadStations(ctx.http, ctx.cache, ctx.log);
       if (stations.length === 0) {
         reply.status(502).send({ message: "Tide station catalog unavailable" });
         return;
@@ -247,7 +245,7 @@ export function setup(ctx: IntegrationContext): void {
       coordinateEntry = { key: cacheKey, writer };
     }
 
-    const result = await buildTidesResponse(resolvedStation, distanceKm, ctx.log, ctx.cache);
+    const result = await buildTidesResponse(ctx, resolvedStation, distanceKm);
     if (!result) {
       reply.status(502).send({ message: "Tide predictions unavailable" });
       return;

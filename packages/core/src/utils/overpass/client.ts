@@ -1,5 +1,6 @@
 import { type Attribution, OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import { readBoundedResponseText } from "../fetchJson";
 import { type ResolvedPlatformEndpoint, resolvePlatformEndpoint } from "../platform-endpoints";
 import { urlCredentialsAsBasicAuth } from "../url-credentials";
 import { USER_AGENT } from "../userAgent";
@@ -127,11 +128,25 @@ function overpassErrorPageError(text: string): Error {
  */
 const OVERPASS_REQUEST_TIMEOUT_MS = 35_000;
 
-async function fetchOverpass(url: string, query: string): Promise<OverpassResponse> {
+/** Area queries answer a few MB at most; the ceiling stops a runaway answer from filling memory. */
+const OVERPASS_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
+
+interface OverpassQueryOptions {
+  /** Caller cancellation, combined with the request deadline. */
+  signal?: AbortSignal;
+}
+
+async function fetchOverpass(
+  url: string,
+  query: string,
+  options: OverpassQueryOptions,
+): Promise<OverpassResponse> {
   // An operator's `https://user:pass@host` goes as Basic auth: fetch refuses
   // a URL carrying credentials and names the whole URL in its error.
   const target = urlCredentialsAsBasicAuth(url);
   const contributors = snapshotContributors(captureSupplier(target.url));
+  const deadline = AbortSignal.timeout(OVERPASS_REQUEST_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   try {
     const res = await fetch(target.url, {
       method: "POST",
@@ -141,7 +156,7 @@ async function fetchOverpass(url: string, query: string): Promise<OverpassRespon
         ...(target.authorization ? { Authorization: target.authorization } : {}),
       },
       body: `data=${encodeURIComponent(query)}`,
-      signal: AbortSignal.timeout(OVERPASS_REQUEST_TIMEOUT_MS),
+      signal,
     });
 
     if (res.status === 429) throw new OverpassRateLimitError();
@@ -149,7 +164,10 @@ async function fetchOverpass(url: string, query: string): Promise<OverpassRespon
     if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
 
     // A 200 that isn't JSON is Overpass's error page, never a SyntaxError.
-    const body = await res.text();
+    const body = await readBoundedResponseText(res, OVERPASS_MAX_RESPONSE_BYTES, {
+      label: "Overpass API response",
+      signal,
+    });
     let parsed: OverpassResponse;
     try {
       parsed = JSON.parse(body) as OverpassResponse;
@@ -185,10 +203,13 @@ export function isOverpassRuntimeLimit(remark: string | undefined): boolean {
  * retries once against the public fallback (overpass.kumi.systems).
  * When a custom OVERPASS_URL is set (e.g. local instance), the fallback is skipped.
  */
-export async function overpassQuery(query: string): Promise<OverpassResponse> {
+export async function overpassQuery(
+  query: string,
+  options: OverpassQueryOptions = {},
+): Promise<OverpassResponse> {
   const endpoint = currentOverpassEndpoint();
   try {
-    return await fetchOverpass(`${endpoint.url}/api/interpreter`, query);
+    return await fetchOverpass(`${endpoint.url}/api/interpreter`, query, options);
   } catch (err) {
     // Only fall back to the public mirror when using the default public endpoint.
     // A self-hosted or operator instance is the deployment's choice — no point
@@ -196,7 +217,7 @@ export async function overpassQuery(query: string): Promise<OverpassResponse> {
     const isFallbackable =
       err instanceof OverpassRateLimitError || err instanceof OverpassUnavailableError;
     if (endpoint.source === "default" && isFallbackable) {
-      return fetchOverpass(OVERPASS_FALLBACK_URL, query);
+      return fetchOverpass(OVERPASS_FALLBACK_URL, query, options);
     }
     throw err;
   }

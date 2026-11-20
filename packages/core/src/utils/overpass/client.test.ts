@@ -35,6 +35,46 @@ describe("overpassQuery", () => {
     );
   });
 
+  it("refuses an answer above the byte ceiling", async () => {
+    setOverpassUrl("http://overpass.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("{}", {
+            status: 200,
+            headers: { "Content-Length": String(65 * 1024 * 1024) },
+          }),
+      ),
+    );
+
+    await expect(overpassQuery(QUERY)).rejects.toThrow(/Overpass API response too large/);
+  });
+
+  it("passes the caller's cancellation to the request", async () => {
+    setOverpassUrl("http://overpass.test");
+    let requestSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            requestSignal = init?.signal ?? undefined;
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+              once: true,
+            });
+          }),
+      ),
+    );
+    const controller = new AbortController();
+
+    const pending = overpassQuery(QUERY, { signal: controller.signal });
+    controller.abort(new Error("caller left"));
+
+    await expect(pending).rejects.toThrow("caller left");
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it("reports a server that does not answer in time as unavailable, not as a 500", async () => {
     setOverpassUrl("http://overpass.test");
     vi.stubGlobal(

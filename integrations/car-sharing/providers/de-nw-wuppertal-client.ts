@@ -85,6 +85,7 @@ export const deNwWuppertalClient = createStaticCarSharingClient({
   id: "de-nw-wuppertal",
   name: "Wuppertal Open Data",
   url: "https://daten.wuppertal.de/Transport_Verkehr/Carsharing_EPSG4326_JSON.json",
+  contentTypes: ["application/json", "application/geo+json"],
   regions: [{ center: [7.18, 51.26] as LngLat, radiusKm: 15 }],
   parse: parseDeNwWuppertalGeoJson,
 });

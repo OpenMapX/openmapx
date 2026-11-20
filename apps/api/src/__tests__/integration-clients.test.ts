@@ -353,10 +353,12 @@ describe("createHttpClient", () => {
     await client.post("https://x.test/b", {}, { headers: { Authorization: "Bearer secret" } });
     await client.get("https://x.test/c", { headers: { Accept: "application/json" } });
     await client.post("https://x.test/d", {});
+    await client.get("https://x.test/e", { headers: { "User-Agent": "OpenMapX/test" } });
 
     expect(fn.mock.calls.map((call) => call[1]?.redirect)).toEqual([
       "error",
       "error",
+      undefined,
       undefined,
       undefined,
     ]);

@@ -66,7 +66,6 @@ const NULL_ISLAND_PENDING =
   "Payload validation for this provider replaces the zero fallback with a rejected or omitted record.";
 
 const MOVES_TO_TILE_PROXY = "Tile proxy; it moves to the shared tile proxy handler.";
-const MOVES_TO_HOST_HTTP = "Acquisition request; it moves to the host HTTP client.";
 
 export const EXCEPTIONS: ProviderHttpExceptions = {
   "raw-fetch": {
@@ -93,15 +92,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
       count: 1,
       reason: MOVES_TO_HOST_CLIENT,
     },
-    "integrations/car-sharing/providers/static-car-sharing-client.ts": {
-      count: 1,
-      reason: MOVES_TO_HOST_HTTP,
-    },
-    "integrations/hotels/wikidata.ts": { count: 1, reason: MOVES_TO_HOST_HTTP },
-    "integrations/knowledge-tides-norway/index.ts": { count: 1, reason: MOVES_TO_HOST_HTTP },
-    "packages/noaa-coops-data/datagetter.ts": { count: 1, reason: MOVES_TO_HOST_HTTP },
-    "packages/noaa-coops-data/stations.ts": { count: 1, reason: MOVES_TO_HOST_HTTP },
-    "packages/ourairports-data/loader.ts": { count: 1, reason: MOVES_TO_HOST_HTTP },
     "integrations/overlay-hiking/index.ts": { count: 1, reason: MOVES_TO_TILE_PROXY },
     "integrations/overlay-nautical/index.ts": { count: 1, reason: MOVES_TO_TILE_PROXY },
     "integrations/overlay-satellite/index.ts": { count: 3, reason: MOVES_TO_TILE_PROXY },
