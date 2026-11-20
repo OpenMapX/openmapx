@@ -170,29 +170,51 @@ describe("ordinary hooks", () => {
     expect(readFileSync(join(f.dir, "format.ts"), "utf8")).toBe("export const value=1\n");
   });
 
-  it("lints a workspace file under the rules its workspace's dependencies turn on", () => {
-    const f = fixture();
-    f.write("apps/web/package.json", '{ "name": "web", "dependencies": { "react": "19.0.0" } }\n');
-    f.stage(
-      "apps/web/src/list.tsx",
-      [
-        "export function List({ items }: { items: string[] }) {",
-        "  return (",
-        "    <ul>",
-        "      {items.map((item, i) => (",
-        "        // biome-ignore lint/suspicious/noArrayIndexKey: items repeat",
-        "        <li key={i}>{item}</li>",
-        "      ))}",
-        "    </ul>",
-        "  );",
-        "}",
-        "",
-      ].join("\n"),
+  const commitAll = (f: ReturnType<typeof fixture>) =>
+    f.git(
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.test",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "commit",
+      "-qm",
+      "fixture",
     );
-    const result = f.run();
-    expect(result.status, result.stderr).toBe(0);
-    expect(`${result.stdout}${result.stderr}`).not.toContain("suppressions/unused");
-  });
+  const reactManifest = '{ "name": "web", "dependencies": { "react": "19.0.0" } }\n';
+  const indexKeyedList = [
+    "export function List({ items }: { items: string[] }) {",
+    "  return (",
+    "    <ul>",
+    "      {items.map((item, i) => (",
+    "        // biome-ignore lint/suspicious/noArrayIndexKey: items repeat",
+    "        <li key={i}>{item}</li>",
+    "      ))}",
+    "    </ul>",
+    "  );",
+    "}",
+    "",
+  ].join("\n");
+
+  it.each([
+    ["as committed", reactManifest],
+    ["as committed, ignoring an unstaged edit", '{ "name": "web" }\n'],
+  ])(
+    "lints a workspace file under the rules its workspace's manifest turns on %s",
+    (_, working) => {
+      const f = fixture();
+      f.stage("apps/web/package.json", reactManifest);
+      commitAll(f);
+      f.write("apps/web/package.json", working);
+      f.stage("apps/web/src/list.tsx", indexKeyedList);
+      const result = f.run();
+      expect(result.status, result.stderr).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("suppressions/unused");
+    },
+  );
 
   it("respects Biome exclusions for generated and frozen source", () => {
     const f = fixture();

@@ -64,12 +64,12 @@ if (code.length) {
       copyFileSync(plugin, destination);
     }
     // Biome turns on domain rules, such as React's, from the dependencies of the
-    // manifests above each file, so a staged file's workspace manifests come too.
-    // Staged manifests are written over these below.
+    // manifests above each file, so a staged file's workspace manifests come too,
+    // as the index holds them.
     for (const manifest of workspaceManifests(code.map(({ path }) => path))) {
       const destination = join(snapshot, manifest);
       mkdirSync(dirname(destination), { recursive: true });
-      copyFileSync(manifest, destination);
+      writeFileSync(destination, execFileSync("git", ["show", `:0:${manifest}`]));
     }
     for (const { path, content } of code) {
       const destination = join(snapshot, path);
@@ -97,13 +97,20 @@ if (code.length) {
 }
 if (failed) process.exitCode = 1;
 
-/** The package.json files between each path and the repository root, root excluded. */
+/** The indexed package.json files between each path and the repository root, root excluded. */
 function workspaceManifests(paths) {
+  const indexed = new Set(
+    execFileSync("git", ["ls-files", "-z", "--cached", "--", ":(glob)**/package.json"], {
+      encoding: "utf8",
+    })
+      .split("\0")
+      .filter(Boolean),
+  );
   const manifests = new Set();
   for (const path of paths) {
     for (let dir = dirname(path); dir !== "." && dir !== "/"; dir = dirname(dir)) {
       const manifest = join(dir, "package.json");
-      if (existsSync(manifest)) manifests.add(manifest);
+      if (indexed.has(manifest)) manifests.add(manifest);
     }
   }
   return manifests;
