@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { crc32, deflateSync } from "node:zlib";
 
@@ -254,9 +255,25 @@ const routes: Record<string, Route> = {
     }),
 };
 
-function resolve(url: URL): ReturnType<Route> | undefined {
+/**
+ * Static administration answers, shaped by the admin contracts (a unit test
+ * checks each one), so admin pages render populated. The administrator is
+ * signed in only for a browser that carries {@link ADMIN_COOKIE}; journeys
+ * without it stay signed out.
+ */
+const adminFixtures: Record<string, Body> = JSON.parse(
+  readFileSync(new URL("./admin-fixtures.json", import.meta.url), "utf8"),
+);
+const ADMIN_COOKIE = "openmapx-fixture-admin=1";
+const SESSION_ROUTES = new Set(["/api/me", "/api/auth/get-session"]);
+
+function resolve(url: URL, request: IncomingMessage): ReturnType<Route> | undefined {
+  if (SESSION_ROUTES.has(url.pathname) && request.headers.cookie?.includes(ADMIN_COOKIE))
+    return json(adminFixtures[url.pathname]);
   const route = routes[url.pathname];
   if (route) return route(url);
+  if (url.pathname in adminFixtures && !SESSION_ROUTES.has(url.pathname))
+    return json(adminFixtures[url.pathname]);
   if (url.pathname.startsWith("/tiles/data/openmapx/")) {
     return { body: encodeVectorTile(), contentType: "application/x-protobuf" };
   }
@@ -317,7 +334,7 @@ const server = createServer((request, response) => {
     send(request, response, 204, "", "text/plain");
     return;
   }
-  const answer = resolve(url);
+  const answer = resolve(url, request);
   if (answer) {
     send(request, response, answer.status ?? 200, answer.body, answer.contentType);
     return;

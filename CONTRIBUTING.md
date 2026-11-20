@@ -122,6 +122,12 @@ not answer is logged as `[fixture] unhandled …` and fails the journey. CI runs
 the journeys nightly and on manual dispatch (`browser-journeys.yml`), not on
 pull requests.
 
+The fixture server also answers the administration pages from
+`apps/web/e2e/admin-fixtures.json`, and a test checks each answer against its
+admin contract. A browser that sends the cookie `openmapx-fixture-admin=1` is
+signed in as an administrator, so admin pages render populated, for example when
+taking screenshots; journeys without the cookie stay signed out.
+
 ### Running the full test suite on a Mac
 
 Control-plane and filesystem-heavy tests (durable writes, fsync, lock files) are

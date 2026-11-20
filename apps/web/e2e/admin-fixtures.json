@@ -1,0 +1,1165 @@
+{
+  "/api/me": {
+    "user": {
+      "id": "admin-ada",
+      "name": "Ada Admin",
+      "email": "ada@example.test",
+      "role": "admin"
+    }
+  },
+  "/api/auth/get-session": {
+    "session": {
+      "id": "fixture-session",
+      "userId": "admin-ada",
+      "token": "fixture-session-token",
+      "expiresAt": "2099-01-01T00:00:00.000Z",
+      "createdAt": "2026-11-01T09:00:00.000Z",
+      "updatedAt": "2026-11-01T09:00:00.000Z"
+    },
+    "user": {
+      "id": "admin-ada",
+      "name": "Ada Admin",
+      "email": "ada@example.test",
+      "role": "admin",
+      "emailVerified": true,
+      "image": null,
+      "banned": false,
+      "twoFactorEnabled": true,
+      "createdAt": "2026-01-02T03:04:05.000Z",
+      "updatedAt": "2026-01-02T03:04:05.000Z"
+    }
+  },
+  "/api/admin/deployment": {
+    "selfHosted": true,
+    "dockerAvailable": true,
+    "hostControlConfigured": true,
+    "hostDir": "/srv/openmapx",
+    "composeRendered": true,
+    "infraDir": "/srv/openmapx/infra"
+  },
+  "/api/admin/overview": {
+    "systemHealth": {
+      "status": "degraded",
+      "unhealthyCount": 1
+    },
+    "users": {
+      "total": 128,
+      "active24h": 17,
+      "banned": 2
+    },
+    "integrations": {
+      "total": 14,
+      "enabled": 11,
+      "unhealthy": 1,
+      "unconfigured": 2
+    },
+    "services": {
+      "running": 9,
+      "stopped": 1,
+      "unknown": 0,
+      "unhealthy": 1
+    },
+    "attention": [
+      {
+        "type": "integration",
+        "severity": "error",
+        "message": "Weather provider failed its last health check.",
+        "target": "/admin/integrations/weather-open-meteo"
+      },
+      {
+        "type": "credentials",
+        "severity": "warning",
+        "message": "Two integrations are missing credentials.",
+        "target": "/admin/integrations"
+      }
+    ],
+    "recentActivity": [
+      {
+        "id": "audit-1",
+        "actorId": "admin-ada",
+        "targetId": "valhalla",
+        "targetType": "service",
+        "action": "service.restart",
+        "details": {},
+        "ipAddress": null,
+        "userAgent": null,
+        "createdAt": "2026-11-19T08:12:00.000Z"
+      },
+      {
+        "id": "audit-2",
+        "actorId": "admin-ada",
+        "targetId": "user-bo",
+        "targetType": "user",
+        "action": "user.ban",
+        "details": {
+          "reason": "Spam"
+        },
+        "ipAddress": null,
+        "userAgent": null,
+        "createdAt": "2026-11-18T16:02:00.000Z"
+      },
+      {
+        "id": "audit-3",
+        "actorId": "admin-ada",
+        "targetId": null,
+        "targetType": null,
+        "action": "integrations.reload",
+        "details": {},
+        "ipAddress": null,
+        "userAgent": null,
+        "createdAt": "2026-11-18T17:40:00.000Z"
+      }
+    ],
+    "activeJobs": [
+      {
+        "id": "job-7f3a",
+        "type": "service.restart",
+        "payload": {
+          "serviceId": "valhalla"
+        },
+        "error": null,
+        "progress": 0.42,
+        "createdBy": "admin-ada",
+        "actorLabel": "Ada Admin",
+        "createdAt": "2026-11-19T08:12:00.000Z",
+        "startedAt": "2026-11-19T08:12:00.000Z",
+        "finishedAt": null,
+        "cancelable": true,
+        "source": "application",
+        "status": "running",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      }
+    ]
+  },
+  "/api/admin/credentials": {
+    "secretsConfigured": true,
+    "credentials": [
+      {
+        "integrationId": "geocoding-pelias",
+        "name": "Pelias geocoding",
+        "enabled": true,
+        "secretFields": 0,
+        "vaultStored": 0,
+        "missingCredentials": 0
+      },
+      {
+        "integrationId": "routing-graphhopper",
+        "name": "GraphHopper routing",
+        "enabled": true,
+        "secretFields": 1,
+        "vaultStored": 0,
+        "missingCredentials": 1
+      },
+      {
+        "integrationId": "photos-mapillary",
+        "name": "Mapillary photos",
+        "enabled": true,
+        "secretFields": 1,
+        "vaultStored": 1,
+        "missingCredentials": 0
+      },
+      {
+        "integrationId": "weather-open-meteo",
+        "name": "Open-Meteo weather",
+        "enabled": true,
+        "secretFields": 2,
+        "vaultStored": 0,
+        "missingCredentials": 2
+      }
+    ]
+  },
+  "/api/admin/integrations": [
+    {
+      "id": "geocoding-pelias",
+      "name": "Pelias geocoding",
+      "description": "Address and place search from the local Pelias index.",
+      "version": "1.0.0",
+      "domains": ["geocoding"],
+      "quality": "built-in",
+      "isBuiltIn": true,
+      "blockedCode": false,
+      "enabled": true,
+      "configured": true,
+      "hasHealthCheck": true,
+      "health": {
+        "status": "up",
+        "responseTime": 42
+      },
+      "dependencies": [],
+      "requires": [
+        {
+          "service": "pelias"
+        }
+      ],
+      "infrastructure": null
+    },
+    {
+      "id": "routing-valhalla",
+      "name": "Valhalla routing",
+      "description": "Car, bike and walking routes from the local Valhalla graph.",
+      "version": "1.0.0",
+      "domains": ["routing"],
+      "quality": "built-in",
+      "isBuiltIn": true,
+      "blockedCode": false,
+      "enabled": true,
+      "configured": true,
+      "hasHealthCheck": true,
+      "health": {
+        "status": "up",
+        "responseTime": 88
+      },
+      "dependencies": [],
+      "requires": [
+        {
+          "service": "valhalla"
+        }
+      ],
+      "infrastructure": null
+    },
+    {
+      "id": "routing-graphhopper",
+      "name": "GraphHopper routing",
+      "description": "Hosted routing with an API key.",
+      "version": "1.0.0",
+      "domains": ["routing"],
+      "quality": "built-in",
+      "isBuiltIn": true,
+      "blockedCode": false,
+      "enabled": true,
+      "configured": false,
+      "hasHealthCheck": true,
+      "health": {
+        "status": "unconfigured"
+      },
+      "dependencies": [],
+      "requires": [],
+      "infrastructure": null
+    },
+    {
+      "id": "transit-motis",
+      "name": "MOTIS transit",
+      "description": "Public transport journeys from the MOTIS timetable.",
+      "version": "1.0.0",
+      "domains": ["transit"],
+      "quality": "built-in",
+      "isBuiltIn": true,
+      "blockedCode": false,
+      "enabled": true,
+      "configured": true,
+      "hasHealthCheck": true,
+      "health": {
+        "status": "up",
+        "responseTime": 120
+      },
+      "dependencies": [],
+      "requires": [
+        {
+          "service": "motis"
+        }
+      ],
+      "infrastructure": null
+    },
+    {
+      "id": "weather-open-meteo",
+      "name": "Open-Meteo weather",
+      "description": "Current weather and forecasts.",
+      "version": "1.0.0",
+      "domains": ["knowledge"],
+      "quality": "built-in",
+      "isBuiltIn": true,
+      "blockedCode": false,
+      "enabled": true,
+      "configured": true,
+      "hasHealthCheck": true,
+      "health": {
+        "status": "down",
+        "error": "HTTP 503 from upstream"
+      },
+      "dependencies": [],
+      "requires": [],
+      "infrastructure": null
+    },
+    {
+      "id": "photos-mapillary",
+      "name": "Mapillary photos",
+      "description": "Street-level imagery near a place.",
+      "version": "1.0.0",
+      "domains": ["photos", "street-level-imagery"],
+      "quality": "built-in",
+      "isBuiltIn": true,
+      "blockedCode": false,
+      "enabled": true,
+      "configured": true,
+      "hasHealthCheck": true,
+      "health": {
+        "status": "up",
+        "responseTime": 230
+      },
+      "dependencies": [],
+      "requires": [],
+      "infrastructure": null
+    },
+    {
+      "id": "bike-parking",
+      "name": "Bike parking",
+      "description": "Community bike parking layer.",
+      "version": "1.0.0",
+      "domains": ["data-source"],
+      "quality": "community",
+      "isBuiltIn": false,
+      "blockedCode": false,
+      "enabled": false,
+      "configured": true,
+      "hasHealthCheck": false,
+      "health": null,
+      "dependencies": [],
+      "requires": [],
+      "infrastructure": null
+    }
+  ],
+  "/api/admin/integrations/env-vars": {
+    "integrations": [
+      {
+        "id": "routing-graphhopper",
+        "name": "GraphHopper routing",
+        "enabled": true,
+        "envVars": [
+          {
+            "key": "apiKey",
+            "name": "INTEGRATION_ROUTING_GRAPHHOPPER_API_KEY",
+            "title": "API key",
+            "secret": true,
+            "present": false
+          },
+          {
+            "key": "profile",
+            "name": "INTEGRATION_ROUTING_GRAPHHOPPER_PROFILE",
+            "title": "Profile",
+            "secret": false,
+            "present": true,
+            "defaultValue": "car"
+          }
+        ]
+      }
+    ]
+  },
+  "/api/admin/extensions/catalog": {
+    "total": 4,
+    "revocationDataStale": false,
+    "entries": [
+      {
+        "id": "openmapx/charging-stations",
+        "name": "Charging stations",
+        "summary": "EV charging points with live availability.",
+        "author": "OpenMapX community",
+        "version": "1.2.0",
+        "categories": ["mobility"],
+        "trust": "verified",
+        "compatible": true,
+        "platformVersion": "2026.11.0",
+        "removed": null,
+        "critical": null,
+        "components": {
+          "services": 0,
+          "integrations": 1
+        },
+        "installed": true,
+        "installedVersion": "1.1.0",
+        "hasUpdate": true,
+        "status": "verified",
+        "featured": true
+      },
+      {
+        "id": "openmapx/flood-warnings",
+        "name": "Flood warnings",
+        "summary": "Official river level and flood alerts.",
+        "author": "OpenMapX community",
+        "version": "1.2.0",
+        "categories": ["mobility"],
+        "trust": "verified",
+        "compatible": true,
+        "platformVersion": "2026.11.0",
+        "removed": null,
+        "critical": null,
+        "components": {
+          "services": 0,
+          "integrations": 1
+        },
+        "installed": false,
+        "installedVersion": null,
+        "hasUpdate": false,
+        "status": "verified"
+      },
+      {
+        "id": "community/bike-parking",
+        "name": "Bike parking",
+        "summary": "Covered and guarded bike parking from OSM.",
+        "author": "Velo Club",
+        "version": "1.2.0",
+        "categories": ["mobility"],
+        "trust": "community",
+        "compatible": true,
+        "platformVersion": "2026.11.0",
+        "removed": null,
+        "critical": null,
+        "components": {
+          "services": 0,
+          "integrations": 1
+        },
+        "installed": false,
+        "installedVersion": null,
+        "hasUpdate": false,
+        "status": "community"
+      },
+      {
+        "id": "community/tile-mirror",
+        "name": "Tile mirror",
+        "summary": "A local mirror of raster tiles with its own cache service.",
+        "author": "Tile Folk",
+        "version": "1.2.0",
+        "categories": ["maps"],
+        "trust": "community",
+        "compatible": true,
+        "platformVersion": "2026.11.0",
+        "removed": null,
+        "critical": null,
+        "components": {
+          "services": 1,
+          "integrations": 1
+        },
+        "installed": false,
+        "installedVersion": null,
+        "hasUpdate": false,
+        "status": "community"
+      }
+    ]
+  },
+  "/api/admin/extensions/installed": {
+    "extensions": [
+      {
+        "id": "openmapx/charging-stations",
+        "name": "Charging stations",
+        "sourceTrust": "verified",
+        "installedVersion": "1.1.0",
+        "sourceUrl": "https://extensions.example.test/catalog.json",
+        "installedAt": "2026-11-02T10:00:00.000Z",
+        "updatedAt": "2026-11-12T10:00:00.000Z",
+        "components": [
+          {
+            "kind": "integration",
+            "componentId": "charging-stations",
+            "enabled": true
+          }
+        ],
+        "hasUpdate": true,
+        "latestVersion": "1.2.0"
+      }
+    ]
+  },
+  "/api/admin/extensions/sources": {
+    "sources": [
+      {
+        "url": "https://extensions.example.test/catalog.json",
+        "label": "OpenMapX catalog",
+        "isDefault": true
+      },
+      {
+        "url": "https://velo.example.test/catalog.json",
+        "label": "Velo Club",
+        "isDefault": false
+      }
+    ]
+  },
+  "/api/auth/admin/list-users": {
+    "total": 5,
+    "limit": 25,
+    "offset": 0,
+    "users": [
+      {
+        "id": "admin-ada",
+        "name": "Ada Admin",
+        "email": "ada@example.test",
+        "role": "admin",
+        "emailVerified": true,
+        "image": null,
+        "banned": false,
+        "banReason": null,
+        "banExpires": null,
+        "twoFactorEnabled": true,
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "updatedAt": "2026-11-19T09:00:00.000Z"
+      },
+      {
+        "id": "user-bo",
+        "name": "Bo Becker",
+        "email": "bo@example.test",
+        "role": "user",
+        "emailVerified": true,
+        "image": null,
+        "banned": true,
+        "banReason": "Spam",
+        "banExpires": null,
+        "twoFactorEnabled": false,
+        "createdAt": "2026-03-14T11:00:00.000Z",
+        "updatedAt": "2026-11-18T16:00:00.000Z"
+      },
+      {
+        "id": "user-cem",
+        "name": "Cem Çelik",
+        "email": "cem@example.test",
+        "role": "user",
+        "emailVerified": true,
+        "image": null,
+        "banned": false,
+        "banReason": null,
+        "banExpires": null,
+        "twoFactorEnabled": true,
+        "createdAt": "2026-05-20T08:30:00.000Z",
+        "updatedAt": "2026-11-17T09:00:00.000Z"
+      },
+      {
+        "id": "user-dana",
+        "name": "Dana Dietrich",
+        "email": "dana@example.test",
+        "role": "admin",
+        "emailVerified": true,
+        "image": null,
+        "banned": false,
+        "banReason": null,
+        "banExpires": null,
+        "twoFactorEnabled": true,
+        "createdAt": "2026-07-01T12:00:00.000Z",
+        "updatedAt": "2026-11-15T09:00:00.000Z"
+      },
+      {
+        "id": "user-eli",
+        "name": "Eli Ernst",
+        "email": "eli@example.test",
+        "role": "user",
+        "emailVerified": false,
+        "image": null,
+        "banned": false,
+        "banReason": null,
+        "banExpires": null,
+        "twoFactorEnabled": false,
+        "createdAt": "2026-11-19T07:45:00.000Z",
+        "updatedAt": "2026-11-19T07:45:00.000Z"
+      }
+    ]
+  },
+  "/api/admin/jobs": {
+    "total": 6,
+    "jobs": [
+      {
+        "id": "job-7f3a",
+        "type": "service.restart",
+        "payload": {
+          "serviceId": "valhalla"
+        },
+        "error": null,
+        "progress": 0.42,
+        "createdBy": "admin-ada",
+        "actorLabel": "Ada Admin",
+        "createdAt": "2026-11-19T08:12:00.000Z",
+        "startedAt": "2026-11-19T08:12:00.000Z",
+        "finishedAt": null,
+        "cancelable": true,
+        "source": "application",
+        "status": "running",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "dm-31c0",
+        "type": "transit.sync",
+        "payload": {
+          "sources": 4
+        },
+        "error": null,
+        "progress": 1,
+        "createdBy": null,
+        "actorLabel": "Data manager",
+        "createdAt": "2026-11-19T06:00:00.000Z",
+        "startedAt": "2026-11-19T06:00:00.000Z",
+        "finishedAt": "2026-11-19T06:00:30.000Z",
+        "cancelable": false,
+        "source": "data-manager",
+        "status": "success",
+        "actor": null
+      },
+      {
+        "id": "job-6e21",
+        "type": "integrations.reload",
+        "payload": {},
+        "error": null,
+        "progress": 1,
+        "createdBy": "admin-ada",
+        "actorLabel": "Ada Admin",
+        "createdAt": "2026-11-18T17:40:00.000Z",
+        "startedAt": "2026-11-18T17:40:00.000Z",
+        "finishedAt": "2026-11-18T17:40:45.000Z",
+        "cancelable": false,
+        "source": "application",
+        "status": "success",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "dm-2b9d",
+        "type": "search-index.build",
+        "payload": {
+          "region": "europe/germany"
+        },
+        "error": "Feed download returned HTTP 503",
+        "progress": 1,
+        "createdBy": null,
+        "actorLabel": "Data manager",
+        "createdAt": "2026-11-18T03:15:00.000Z",
+        "startedAt": "2026-11-18T03:15:00.000Z",
+        "finishedAt": "2026-11-18T03:15:30.000Z",
+        "cancelable": false,
+        "source": "data-manager",
+        "status": "failed",
+        "actor": null
+      },
+      {
+        "id": "job-5d10",
+        "type": "backup.create",
+        "payload": {
+          "label": "pre-upgrade"
+        },
+        "error": null,
+        "progress": 1,
+        "createdBy": "admin-ada",
+        "actorLabel": "Ada Admin",
+        "createdAt": "2026-11-17T21:05:00.000Z",
+        "startedAt": "2026-11-17T21:05:00.000Z",
+        "finishedAt": "2026-11-17T21:05:45.000Z",
+        "cancelable": false,
+        "source": "application",
+        "status": "success",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "job-4c02",
+        "type": "extension.install",
+        "payload": {
+          "id": "community/bike-parking"
+        },
+        "error": null,
+        "progress": null,
+        "createdBy": "admin-ada",
+        "actorLabel": "Ada Admin",
+        "createdAt": "2026-11-16T14:30:00.000Z",
+        "startedAt": "2026-11-16T14:30:00.000Z",
+        "finishedAt": "2026-11-16T14:30:45.000Z",
+        "cancelable": false,
+        "source": "application",
+        "status": "canceled",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      }
+    ]
+  },
+  "/api/admin/services": {
+    "acquisition": {
+      "state": "available",
+      "reason": null
+    },
+    "services": [
+      {
+        "id": "app-api",
+        "name": "Application API",
+        "version": "2026.11.0",
+        "description": "The OpenMapX API.",
+        "quality": "built-in",
+        "provides": ["api"],
+        "consumes": [],
+        "enabled": true,
+        "isBuiltIn": true,
+        "status": "running",
+        "actions": {
+          "start": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_running",
+            "workflow": null
+          },
+          "stop": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "restart": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "update": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "build": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_buildable",
+            "workflow": null
+          },
+          "logs": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "pull": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "apply": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          }
+        }
+      },
+      {
+        "id": "valhalla",
+        "name": "Valhalla",
+        "version": "3.5.1",
+        "description": "Routing engine.",
+        "quality": "built-in",
+        "provides": ["routing"],
+        "consumes": [
+          {
+            "type": "osm-extract",
+            "mountAt": "/data/osm",
+            "readOnly": true
+          }
+        ],
+        "enabled": true,
+        "isBuiltIn": true,
+        "status": "running",
+        "actions": {
+          "start": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_running",
+            "workflow": null
+          },
+          "stop": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "restart": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "update": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "build": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_buildable",
+            "workflow": null
+          },
+          "logs": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "pull": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "apply": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          }
+        }
+      },
+      {
+        "id": "pelias",
+        "name": "Pelias",
+        "version": "1.9.0",
+        "description": "Geocoder.",
+        "quality": "built-in",
+        "provides": ["geocoding"],
+        "consumes": [],
+        "enabled": true,
+        "isBuiltIn": true,
+        "status": "running",
+        "actions": {
+          "start": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_running",
+            "workflow": null
+          },
+          "stop": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "restart": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "update": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "build": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_buildable",
+            "workflow": null
+          },
+          "logs": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "pull": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "apply": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          }
+        }
+      },
+      {
+        "id": "motis",
+        "name": "MOTIS",
+        "version": "2.4.0",
+        "description": "Transit routing.",
+        "quality": "built-in",
+        "provides": ["transit"],
+        "consumes": [
+          {
+            "type": "gtfs",
+            "mountAt": "/data/gtfs",
+            "required": false
+          }
+        ],
+        "enabled": true,
+        "isBuiltIn": true,
+        "status": "running",
+        "actions": {
+          "start": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_running",
+            "workflow": null
+          },
+          "stop": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "restart": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "update": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "build": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_buildable",
+            "workflow": null
+          },
+          "logs": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "pull": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "apply": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          }
+        }
+      },
+      {
+        "id": "overpass",
+        "name": "Overpass",
+        "version": "0.7.62",
+        "description": "OSM query API.",
+        "quality": "built-in",
+        "provides": ["overpass"],
+        "consumes": [],
+        "enabled": false,
+        "isBuiltIn": true,
+        "status": "not-running",
+        "actions": {
+          "start": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "stop": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_running",
+            "workflow": null
+          },
+          "restart": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_running",
+            "workflow": null
+          },
+          "update": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "build": {
+            "available": false,
+            "execution": "direct",
+            "reason": "not_buildable",
+            "workflow": null
+          },
+          "logs": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "pull": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          },
+          "apply": {
+            "available": true,
+            "execution": "direct",
+            "reason": null,
+            "workflow": null
+          }
+        }
+      }
+    ],
+    "capabilityInventory": {
+      "recognized": ["api", "routing", "geocoding", "transit", "overpass"],
+      "unrecognized": []
+    },
+    "summary": {
+      "running": 4,
+      "stopped": 1,
+      "unknown": 0,
+      "total": 5
+    }
+  },
+  "/api/admin/services/presets": {
+    "presets": [
+      {
+        "id": "minimal",
+        "rootIds": ["app-api"],
+        "effectiveIds": ["app-api"],
+        "missingIds": []
+      },
+      {
+        "id": "routing",
+        "rootIds": ["app-api", "valhalla"],
+        "effectiveIds": ["app-api", "valhalla"],
+        "missingIds": []
+      },
+      {
+        "id": "full",
+        "rootIds": ["app-api", "valhalla", "pelias", "motis", "photon"],
+        "effectiveIds": ["app-api", "valhalla", "pelias", "motis"],
+        "missingIds": ["photon"]
+      }
+    ]
+  },
+  "/api/admin/services/selection": {
+    "source": "file",
+    "selectedRoots": ["app-api", "valhalla", "pelias", "motis"],
+    "requestedIds": ["app-api", "valhalla", "pelias", "motis"],
+    "effectiveIds": ["app-api", "valhalla", "pelias", "motis"],
+    "warnings": [],
+    "missingIds": [],
+    "envVarName": "OPENMAPX_SERVICES",
+    "envVarValue": null,
+    "selectionFilePath": "/srv/openmapx/infra/docker/service-selection.json"
+  },
+  "/api/data-manager/transit/state": {
+    "transitousRef": "a1b2c3d4e5f6",
+    "transitousLockedAt": "2026-11-10T04:00:00.000Z",
+    "transitousLockedBy": "admin-ada",
+    "lastSyncAt": "2026-11-19T06:30:00.000Z",
+    "lastSyncStatus": "success",
+    "currentJob": null,
+    "feedCount": 42,
+    "feeds": {
+      "byRegion": {
+        "de-be": 6,
+        "de-bb": 9,
+        "de-by": 15,
+        "de-nw": 12
+      },
+      "byStatus": {
+        "active": 38,
+        "stale": 3,
+        "failed": 1
+      }
+    }
+  },
+  "/api/data-manager/transit/sources": {
+    "sourceRevision": "4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+    "total": 3,
+    "limit": 50,
+    "offset": 0,
+    "sources": [
+      {
+        "id": "catalog:de:vbb",
+        "region": "de-be",
+        "name": "VBB Berlin-Brandenburg",
+        "format": "gtfs",
+        "origin": "catalog",
+        "originUrl": "https://example.test/vbb.zip",
+        "license": {
+          "spdxIdentifier": "CC-BY-4.0",
+          "attribution": "VBB Verkehrsverbund Berlin-Brandenburg"
+        },
+        "requested": true,
+        "sourceRevision": "4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+        "desiredState": "enabled",
+        "actions": {
+          "enable": false,
+          "disable": true,
+          "remove": true,
+          "reason": null
+        },
+        "active": true,
+        "activeEpoch": "2026-11-19",
+        "artifact": {
+          "path": "gtfs/vbb.zip",
+          "sha256": "abababababababababababababababababababababababababababababababab",
+          "sizeBytes": 187654321,
+          "retrievedAt": "2026-11-19T06:10:00.000Z"
+        },
+        "lastFetchedAt": "2026-11-19T06:10:00.000Z",
+        "lastImportedAt": "2026-11-19T06:25:00.000Z",
+        "validationStatus": "passed",
+        "lifecycle": "active"
+      },
+      {
+        "id": "catalog:de:mvv",
+        "region": "de-by",
+        "name": "MVV München",
+        "format": "gtfs",
+        "origin": "catalog",
+        "license": {
+          "spdxIdentifier": "CC-BY-4.0",
+          "attribution": "MVV"
+        },
+        "requested": true,
+        "sourceRevision": "4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+        "desiredState": "enabled",
+        "actions": {
+          "enable": false,
+          "disable": true,
+          "remove": true,
+          "reason": null
+        },
+        "active": false,
+        "lastFetchedAt": "2026-11-19T06:12:00.000Z",
+        "validationStatus": "warning",
+        "validationMessage": "3 stops without coordinates were skipped.",
+        "lifecycle": "update-pending"
+      },
+      {
+        "id": "operator:rheinbahn",
+        "region": "de-nw",
+        "name": "Rheinbahn",
+        "format": "netex",
+        "origin": "operator",
+        "originUrl": "https://example.test/rheinbahn.zip",
+        "license": {
+          "attribution": "Rheinbahn AG"
+        },
+        "requested": true,
+        "sourceRevision": "4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+        "desiredState": "disabled",
+        "actions": {
+          "enable": true,
+          "disable": false,
+          "remove": true,
+          "reason": null
+        },
+        "active": false,
+        "lifecycle": "disabled"
+      }
+    ]
+  }
+}
