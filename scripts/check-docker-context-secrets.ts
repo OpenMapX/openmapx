@@ -2466,6 +2466,12 @@ function parseActionValue(value: string): ActionValue {
   return isExpression(value) ? { kind: "unsupported", value } : { kind: "literal", value };
 }
 
+/** A matrix input's value in one matrix entry, or a literal input's own value. */
+function matrixEntryValue(value: ActionValue, entry: Map<string, string>): string | undefined {
+  if (value.kind === "matrix") return entry.get(value.key);
+  return value.kind === "literal" ? value.value : undefined;
+}
+
 function resolveStructuredAction(
   discovery: DiscoveryResult,
   job: StructuredJob,
@@ -2496,9 +2502,8 @@ function resolveStructuredAction(
       return;
     }
     for (const entry of job.matrixEntries) {
-      const resolvedContext = context.kind === "matrix" ? entry.get(context.key) : context.value;
-      const resolvedDockerfile =
-        dockerfile.kind === "matrix" ? entry.get(dockerfile.key) : dockerfile.value;
+      const resolvedContext = matrixEntryValue(context, entry);
+      const resolvedDockerfile = matrixEntryValue(dockerfile, entry);
       if (!resolvedContext || !resolvedDockerfile) {
         discovery.errors.push(
           `${source} job ${job.name} has incomplete matrix Docker build inputs`,
