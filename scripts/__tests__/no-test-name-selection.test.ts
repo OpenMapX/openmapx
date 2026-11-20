@@ -13,9 +13,12 @@ import { describe, expect, it } from "vitest";
  */
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SCRIPT = /\.[cm]?[jt]sx?$/;
-/** Test files, test directories, fixtures, mocks, test helpers and runner setup files. */
+/**
+ * Test files, test and end-to-end directories, fixtures, mocks, test helpers,
+ * test kits, harnesses and runner setup files.
+ */
 const TEST_SUPPORT_PATH =
-  /(^|[/._-])(tests?|spec|fixtures?|mocks?|vitest|jest)([/._-]|$)|(^|[/._-])setup/i;
+  /(^|[/._-])(tests?|testing|testkit|spec|e2e|fixtures?|mocks?|vitest|jest)([/._-]|$)|(^|[/._-])setup|harness/i;
 const NAME_PROPERTIES = new Set(["name", "fullName"]);
 const CURRENT_TEST_NAME = "currentTestName";
 
@@ -240,6 +243,13 @@ describe("test setup selection", () => {
     ["apps/mobile/jest.setup.ts", true],
     ["apps/mobile/jest.globals.js", true],
     ["packages/core/src/__fixtures__/routes.ts", true],
+    ["apps/web/e2e/support.ts", true],
+    ["packages/integration-framework/src/testing/http.ts", true],
+    ["apps/mobile/src/navigation/transit/testing/transitFixture.ts", true],
+    ["apps/mobile/src/navigation/arrivalHarness.ts", true],
+    ["apps/api/src/test-harness/server.ts", true],
+    ["packages/core/src/testkit/routes.ts", true],
+    ["apps/api/src/services/testimonials.ts", false],
     ["apps/api/src/services/latest-release.ts", false],
     ["packages/core/src/attestation.ts", false],
     ["apps/web/src/components/admin/AdminTestEmail.tsx", false],
