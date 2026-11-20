@@ -111,11 +111,6 @@ const DEFAULT_BIAS_ZOOM = 12;
 const MIN_VIEWBOX_HALF_DEG = 0.01;
 const MAX_VIEWBOX_HALF_DEG = 45;
 
-/**
- * Viewbox (lon1,lat1,lon2,lat2) centred on the bias point, roughly one screen
- * wide at the given zoom and square on the ground. Sent without `bounded`, so
- * it only ranks nearby matches higher and never filters farther ones out.
- */
 /** Results with coordinates in range and a display name; Nominatim sends coordinates as strings. */
 function usable(records: readonly NominatimResult[]) {
   return usableGeocoderRecords(
@@ -128,6 +123,11 @@ function usable(records: readonly NominatimResult[]) {
   );
 }
 
+/**
+ * Viewbox (lon1,lat1,lon2,lat2) centred on the bias point, roughly one screen
+ * wide at the given zoom and square on the ground. Sent without `bounded`, so
+ * it only ranks nearby matches higher and never filters farther ones out.
+ */
 function biasViewbox({ proximity: [lng, lat], zoom }: GeocodingBias): string {
   const halfLng = Math.min(
     MAX_VIEWBOX_HALF_DEG,

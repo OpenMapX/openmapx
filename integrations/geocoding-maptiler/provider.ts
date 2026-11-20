@@ -258,13 +258,18 @@ function mapType(placeType: string[]): SearchResult["type"] {
   return "region";
 }
 
-/** Features with coordinates in range and a place name. */
+/** A feature's display label: its full place name, else its own name. */
+function displayLabel(f: MaptilerFeature): string {
+  return f.place_name || f.text;
+}
+
+/** Features with coordinates in range and a display label. */
 function usable(features: readonly MaptilerFeature[]) {
   return usableGeocoderRecords(
     features,
     (f) => ({
       coordinates: lngLatOrNull(f.geometry?.coordinates?.[0], f.geometry?.coordinates?.[1]),
-      label: f.place_name || f.text,
+      label: displayLabel(f),
     }),
     "MapTiler features",
   );
@@ -338,7 +343,7 @@ export function createMaptilerGeocodingService(
           ...(addressEvidence.method === "osm-tags"
             ? { address: formatOwnAddress(f, addressEvidence) }
             : {}),
-          label: f.place_name,
+          label: displayLabel(f),
           name: f.text,
           ...(f.matching_text ? { aliases: [f.matching_text] } : {}),
           ...(localities.length ? { localities } : {}),
@@ -394,7 +399,7 @@ export function createMaptilerGeocodingService(
           ...(addressEvidence.method === "osm-tags"
             ? { address: formatOwnAddress(f, addressEvidence) }
             : {}),
-          label: autocompleteLabel(f),
+          label: autocompleteLabel(f) || displayLabel(f),
           sublabel: f.place_name,
           coordinates,
           type: mapType(f.place_type),

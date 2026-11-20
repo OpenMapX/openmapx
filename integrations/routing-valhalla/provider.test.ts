@@ -458,8 +458,6 @@ describe("valhalla.service.getRoute exclusion body params", () => {
     });
   });
 
-  afterEach(() => {});
-
   const WPS: [number, number][] = [
     [5.1, 52.1],
     [5.2, 52.2],
@@ -819,8 +817,6 @@ describe("getRoute near a road closed to all but local access", () => {
     const result = await valhalla.service.getRoute(WPS, "driving", options);
     return { bodies, result };
   };
-
-  afterEach(() => {});
 
   it("lets the destination snap onto the road and reach a street behind it", async () => {
     const { bodies } = await run([ok], { useLiveTraffic: true, localAccess });

@@ -1,11 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { valhallaHarness } from "./__tests__/valhalla-http.js";
 
 const valhalla = valhallaHarness();
 
 describe("valhalla.service.getMatrix", () => {
-  afterEach(() => {});
-
   it("parses /sources_to_targets into rows[s][t] of {seconds,km}", async () => {
     let capturedUrl = "";
     let capturedBody: Record<string, unknown> = {};

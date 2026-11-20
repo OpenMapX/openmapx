@@ -601,6 +601,24 @@ describe("MapTiler geocoding provider", () => {
     expect(http.calls[0]?.options?.params).toMatchObject({ key: "test-key", language: "de" });
   });
 
+  it("labels a feature without a place name by its own name, as the usability check accepts it", async () => {
+    const feature = {
+      id: "poi.9",
+      text: "Kiosk",
+      place_name: "",
+      place_type: ["poi"],
+      relevance: 1,
+      geometry: { coordinates: [13.4, 52.5] },
+    };
+    mockFetch.mockResolvedValue(mockOk({ features: [feature] }));
+
+    const [result] = await maptilerGeocodingService.geocode("kiosk");
+    const [suggestion] = await maptilerGeocodingService.autocomplete("kiosk");
+
+    expect(result?.label).toBe("Kiosk");
+    expect(suggestion?.label).toBe("Kiosk");
+  });
+
   it("passes an upstream status on for provider classification", async () => {
     mockFetch.mockResolvedValueOnce(httpStatus(403));
     await expect(maptilerGeocodingService.geocode("x")).rejects.toMatchObject({ status: 403 });
