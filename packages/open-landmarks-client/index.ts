@@ -1,4 +1,9 @@
 export {
+  createOpenLandmarksClient,
+  type OpenLandmarksClient,
+  type OpenLandmarksClientOptions,
+} from "./client";
+export {
   type CommonAssetFields,
   cleanAttributionText,
   commonAssetFields,
