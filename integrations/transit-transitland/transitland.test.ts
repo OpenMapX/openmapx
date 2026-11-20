@@ -1,10 +1,13 @@
 import { classifyProviderFailure, ProviderPayloadError } from "@openmapx/integration-framework";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import departuresFixture from "./__fixtures__/departures.json";
 import stopsFixture from "./__fixtures__/stops.json";
-import { getDepartures, getRoute, getStop, getStops, setTransitlandApiKey } from "./provider.js";
+import { getDepartures, getRoute, getStop, getStops, type TransitlandAccess } from "./provider.js";
 
+/** Called with each request URL, query included; answers like fetch. */
 let mockFetch: ReturnType<typeof vi.fn>;
+let access: TransitlandAccess;
 
 function mockOk(data: unknown) {
   return Response.json(data);
@@ -12,14 +15,15 @@ function mockOk(data: unknown) {
 
 beforeEach(() => {
   mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-  setTransitlandApiKey("test-tl-key");
-});
-
-afterEach(() => {
-  setTransitlandApiKey(undefined);
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+  const http = fakeHttpClient(async ({ url, options }) => {
+    const requestUrl = new URL(url);
+    for (const [name, value] of Object.entries(options?.params ?? {})) {
+      if (value !== undefined) requestUrl.searchParams.set(name, String(value));
+    }
+    const response = (await mockFetch(requestUrl.toString())) as Response;
+    return response.ok ? response.json() : httpStatus(response.status);
+  });
+  access = { http, apiKey: "test-tl-key" };
 });
 
 describe("Transitland transit provider", () => {
@@ -37,7 +41,7 @@ describe("Transitland transit provider", () => {
       }),
     );
 
-    const stops = await getStops([13.3, 52.4, 13.5, 52.6], ["bus"]);
+    const stops = await getStops(access, [13.3, 52.4, 13.5, 52.6], ["bus"]);
 
     expect(stops).toEqual([
       {
@@ -85,8 +89,8 @@ describe("Transitland transit provider", () => {
       }),
     );
 
-    const stop = await getStop("tl:s-stop1");
-    const route = await getRoute("tl:r-line1");
+    const stop = await getStop(access, "tl:s-stop1");
+    const route = await getRoute(access, "tl:r-line1");
 
     expect(stop?.id).toBe("tl:s-stop1");
     expect(route).toMatchObject({
@@ -105,7 +109,7 @@ describe("Transitland transit provider", () => {
   it("reads documented departure instants and realtime estimates", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(departuresFixture));
 
-    const departures = await getDepartures("tl:s-9q9p1bc1td-lakemerritt", 30);
+    const departures = await getDepartures(access, "tl:s-9q9p1bc1td-lakemerritt", 30);
 
     expect(departures).toEqual([
       {
@@ -143,7 +147,7 @@ describe("Transitland transit provider", () => {
       mockOk({ stops: [first, { platform_code: "9", departures: [] }] }),
     );
 
-    const departures = await getDepartures("tl:s-9q9p1bc1td-lakemerritt");
+    const departures = await getDepartures(access, "tl:s-9q9p1bc1td-lakemerritt");
 
     expect(departures.map((d) => [d.tripId, d.platform])).toEqual([
       ["BA:1965768", "2"],
@@ -169,7 +173,7 @@ describe("Transitland transit provider", () => {
       }),
     );
 
-    const [departure] = await getDepartures("tl:s-stop1");
+    const [departure] = await getDepartures(access, "tl:s-stop1");
 
     expect(departure).toMatchObject({ canceled: true, scheduledAt: "2026-11-09T16:24:00.000Z" });
     expect(departure?.expectedAt).toBeUndefined();
@@ -184,7 +188,7 @@ describe("Transitland transit provider", () => {
       }),
     );
 
-    const departures = await getDepartures("tl:s-stop1");
+    const departures = await getDepartures(access, "tl:s-stop1");
 
     expect(departures.map((d) => d.tripId)).toEqual(["BA:1965375"]);
   });
@@ -196,7 +200,7 @@ describe("Transitland transit provider", () => {
   ])("reports %s as an invalid payload", async (_case, body) => {
     mockFetch.mockResolvedValueOnce(mockOk(body));
 
-    const failure = await getDepartures("tl:s-stop1").catch((error: unknown) => error);
+    const failure = await getDepartures(access, "tl:s-stop1").catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(ProviderPayloadError);
     expect(classifyProviderFailure(failure)).toBe("invalid_payload");
@@ -204,7 +208,7 @@ describe("Transitland transit provider", () => {
 
   it("maps a documented stop and rejects stops without coordinates", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(stopsFixture));
-    await expect(getStops([-122.7, 45.5, -122.6, 45.6])).resolves.toEqual([
+    await expect(getStops(access, [-122.7, 45.5, -122.6, 45.6])).resolves.toEqual([
       expect.objectContaining({
         id: "tl:s-c20fbm8z95-swcolumbia~parkave",
         name: "SW Columbia & Park Ave",
@@ -214,24 +218,24 @@ describe("Transitland transit provider", () => {
     ]);
 
     mockFetch.mockResolvedValueOnce(mockOk({ stops: [{ onestop_id: "s-x", stop_name: "X" }] }));
-    await expect(getStops([0, 0, 1, 1])).rejects.toBeInstanceOf(ProviderPayloadError);
+    await expect(getStops(access, [0, 0, 1, 1])).rejects.toBeInstanceOf(ProviderPayloadError);
   });
 
   it("treats a 404 for a caller's stop id as bad input and a 404 on the stop list as a failure", async () => {
     mockFetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
-    const unknown = await getDepartures("tl:s-bogus").catch((error: unknown) => error);
+    const unknown = await getDepartures(access, "tl:s-bogus").catch((error: unknown) => error);
     expect((unknown as Error).message).toBe("Unknown Transitland timetable identifier");
     expect(classifyProviderFailure(unknown)).toBe("input");
 
     mockFetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
-    const retired = await getStops([0, 0, 1, 1]).catch((error: unknown) => error);
+    const retired = await getStops(access, [0, 0, 1, 1]).catch((error: unknown) => error);
     expect(classifyProviderFailure(retired)).toBe("connection");
   });
 
   it("reports a failed stop list as unavailable, not as no stops", async () => {
     mockFetch.mockResolvedValueOnce(new Response("down", { status: 502 }));
 
-    const failure = await getStops([0, 0, 1, 1]).catch((error: unknown) => error);
+    const failure = await getStops(access, [0, 0, 1, 1]).catch((error: unknown) => error);
 
     expect((failure as Error).message).toBe("Transitland stops unavailable");
     expect((failure as Error).message).not.toContain("test-tl-key");
@@ -239,10 +243,10 @@ describe("Transitland transit provider", () => {
   });
 
   it("returns no Transitland data without an API key", async () => {
-    setTransitlandApiKey(undefined);
+    access.apiKey = null;
 
-    const stops = await getStops([0, 0, 1, 1]);
-    const stop = await getStop("tl:test");
+    const stops = await getStops(access, [0, 0, 1, 1]);
+    const stop = await getStop(access, "tl:test");
 
     expect(stops).toEqual([]);
     expect(stop).toBeNull();
@@ -252,7 +256,7 @@ describe("Transitland transit provider", () => {
   it("reports a failed board as unavailable without the keyed request URL", async () => {
     mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
 
-    const failure = await getDepartures("tl:s-stop1").catch((error: unknown) => error);
+    const failure = await getDepartures(access, "tl:s-stop1").catch((error: unknown) => error);
 
     expect((failure as Error).message).toBe("Transitland timetable unavailable");
   });

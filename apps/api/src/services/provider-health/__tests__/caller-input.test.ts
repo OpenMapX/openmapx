@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import { createTransitOrchestrator } from "@integrations/transit/orchestrator";
 import { setup as setupTransitland } from "@integrations/transit-transitland/index";
-import { setTransitlandApiKey } from "@integrations/transit-transitland/provider";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeHttpClient,
+  httpStatus,
+} from "@openmapx/integration-framework/testing";
 import type Redis from "ioredis";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ProviderHealth } from "../index.js";
 
 /**
@@ -41,9 +44,9 @@ function transitWithTransitland(health: ProviderHealth) {
     id: "transit-transitland",
     manifest,
     config: { apiKey: "test-key" },
+    http: fakeHttpClient(() => httpStatus(404)),
   });
   setupTransitland(integration);
-  setTransitlandApiKey("test-key");
   const provider = integration.registered.transit[0];
   return createTransitOrchestrator({
     providerHealth: health,
@@ -54,17 +57,8 @@ function transitWithTransitland(health: ProviderHealth) {
   } as unknown as IntegrationContext);
 }
 
-afterEach(() => {
-  setTransitlandApiKey(undefined);
-  vi.unstubAllGlobals();
-});
-
 describe("caller-supplied identifiers and the provider circuit", () => {
   it("never counts repeated unknown stop ids, but counts a 404 on a fixed endpoint", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("not found", { status: 404 })),
-    );
     const redis = new FakeRedis();
     const health = await ProviderHealth.init({ redis: redis as unknown as Redis });
     const transit = transitWithTransitland(health);

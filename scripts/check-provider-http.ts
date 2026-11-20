@@ -87,7 +87,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
     },
   },
   "credentialed-fetch-json": {
-    "integrations/transit-transitland/provider.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },
     "integrations/weather-openweathermap/index.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },
   },
   "null-island": {
