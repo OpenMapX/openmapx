@@ -79,6 +79,9 @@ it("keeps the newer map stop when transit resolutions finish out of order", asyn
   resolveStop.mockImplementation(() => requests.shift());
   fake.map.setStyle({} as never);
   usePlaceStore.getState().setSelectedPlace(null);
+  reach.isTransitCategory = true;
+  transitStops = [{ id: "stop", name: "Stop", lat: 50, lng: 8, modes: ["bus"], provider: "test" }];
+  useCategorySearchStore.setState({ activeCategory: "transit" });
   const view = render(<CategoryResultMarkers />);
   transitClick("A");
   transitClick("B");
@@ -92,6 +95,8 @@ it("keeps the newer map stop when transit resolutions finish out of order", asyn
   });
   expect(usePlaceStore.getState().selectedPlace).toBe(placeB);
   view.unmount();
+  reach.isTransitCategory = false;
+  transitStops = undefined;
 });
 
 it.each(["dismiss", "unmount"])("does not publish a pending map stop after %s", async (action) => {
@@ -221,7 +226,8 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     await act(async () => {
       oldImage.onload?.();
     });
-    expect(fake.state.layers.has("category-results-layer")).toBe(false);
+    // The layers come back inside the style change; only the stale image stays out.
+    expect(fake.state.layers.has("category-results-layer")).toBe(true);
     // Resolve this style's optional logo while an unrelated source stays pending.
     await waitFor(() =>
       expect(
@@ -250,7 +256,7 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
 });
 
 it.each([false, true])(
-  "restores surviving-source layers and retries failed marker images (transit=%s)",
+  "draws its layers at once and retries a failed marker image with the next style (transit=%s)",
   async (transit) => {
     const OriginalImage = globalThis.Image;
     const images: Array<{ onload: (() => void) | null; onerror: (() => void) | null }> = [];
@@ -274,28 +280,20 @@ it.each([false, true])(
       fake.map.setStyle({} as never);
       useCategorySearchStore.setState({ activeCategory: "restaurant" });
       view = render(<CategoryResultMarkers />);
-      const source = fake.map.getSource(sourceId);
+      expect(fake.map.getSource(sourceId)).toBeDefined();
+      expect(fake.map.getLayer(layerId)).toBeDefined();
       await act(async () => {
         images[0].onerror?.();
       });
+      expect(fake.map.hasImage(imageId)).toBe(false);
       const attempts = images.length;
-      await act(async () => {
-        fake.emit("styledata");
-      });
+      act(() => fake.map.setStyle({} as never));
       expect(images.length).toBe(attempts + 1);
       await act(async () => {
         images.at(-1)?.onload?.();
       });
       expect(fake.map.hasImage(imageId)).toBe(true);
       expect(fake.map.getLayer(layerId)).toBeDefined();
-      const uploads = fake.state.counts.setData.get(sourceId) ?? 0;
-      await act(async () => {
-        fake.map.removeLayer(layerId);
-        fake.emit("styledata");
-      });
-      expect(fake.map.getLayer(layerId)).toBeDefined();
-      expect(fake.map.getSource(sourceId)).toBe(source);
-      expect(fake.state.counts.setData.get(sourceId) ?? 0).toBe(uploads);
     } finally {
       view?.unmount();
       globalThis.Image = OriginalImage;

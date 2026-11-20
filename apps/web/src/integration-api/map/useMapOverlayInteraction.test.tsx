@@ -81,7 +81,7 @@ describe("useMapOverlayInteraction", () => {
 
     fake.setRenderedFeatures("probe-layer", []);
     fake.emit("mousemove", pointer);
-    expect(onHover).toHaveBeenLastCalledWith(null);
+    expect(onHover).toHaveBeenLastCalledWith(null, pointer);
     expect(fake.map.getCanvasContainer().style.cursor).toBe("");
 
     unmount();

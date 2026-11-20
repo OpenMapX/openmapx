@@ -1,6 +1,6 @@
 "use client";
 
-import type { MapGeoJSONFeature, Popup } from "maplibre-gl";
+import type { MapGeoJSONFeature, MapMouseEvent, Popup } from "maplibre-gl";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
@@ -19,8 +19,12 @@ export interface MapOverlayInteractionOptions {
   priority: number;
   /** Opens what was clicked; without it the overlay only shows the pointer cursor. */
   onClick?: (event: MapOverlayInteractionEvent) => void;
-  /** Features under the pointer while this overlay owns the hover, then `null`. */
-  onHover?: (features: MapGeoJSONFeature[] | null) => void;
+  /**
+   * On every pointer move: the features under the pointer when this overlay
+   * owns the hover, otherwise `null`. The pointer event comes along while the
+   * pointer is over the map.
+   */
+  onHover?: (features: MapGeoJSONFeature[] | null, event?: MapMouseEvent) => void;
   /** Registers only while true, e.g. while the layers are drawn. Defaults to true. */
   enabled?: boolean;
 }
@@ -45,7 +49,9 @@ export function useMapOverlayInteraction({
 }: MapOverlayInteractionOptions): void {
   const { mapRef, mapReady } = useMap();
   const click = useEffectEvent((event: MapOverlayInteractionEvent) => onClick?.(event));
-  const hover = useEffectEvent((features: MapGeoJSONFeature[] | null) => onHover?.(features));
+  const hover = useEffectEvent((features: MapGeoJSONFeature[] | null, event?: MapMouseEvent) =>
+    onHover?.(features, event),
+  );
   const hasClick = onClick !== undefined;
   const hasHover = onHover !== undefined;
   const layerKey = layerIds.join("\n");

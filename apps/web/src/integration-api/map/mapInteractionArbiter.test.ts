@@ -162,7 +162,7 @@ describe("map interaction arbiter", () => {
     unregister();
   });
 
-  it("hands hover to the winning overlay and tells the previous one it lost it", () => {
+  it("reports hover to the winning overlay and null to the others on every move", () => {
     const { map, state } = createMap();
     state.addLayer("test-incident");
     state.addLayer("test-flow");
@@ -185,19 +185,17 @@ describe("map interaction arbiter", () => {
 
     state.setHits("test-flow", [feature("flow")]);
     state.emit("mousemove", event());
-    expect(flowHover).toHaveBeenLastCalledWith([feature("flow")]);
-    expect(incidentHover).not.toHaveBeenCalled();
+    expect(flowHover).toHaveBeenLastCalledWith([feature("flow")], event());
+    expect(incidentHover).toHaveBeenLastCalledWith(null, event());
 
     state.setHits("test-incident", [feature("incident")]);
     state.emit("mousemove", event());
-    expect(flowHover).toHaveBeenLastCalledWith(null);
-    expect(incidentHover).toHaveBeenLastCalledWith([feature("incident")]);
+    expect(flowHover).toHaveBeenLastCalledWith(null, event());
+    expect(incidentHover).toHaveBeenLastCalledWith([feature("incident")], event());
 
     state.emit("mouseout", {});
-    expect(incidentHover).toHaveBeenLastCalledWith(null);
-    const incidentCalls = incidentHover.mock.calls.length;
-    state.emit("mouseout", {});
-    expect(incidentHover).toHaveBeenCalledTimes(incidentCalls);
+    expect(incidentHover).toHaveBeenLastCalledWith(null, undefined);
+    expect(flowHover).toHaveBeenLastCalledWith(null, undefined);
 
     unregisterIncident();
     unregisterFlow();

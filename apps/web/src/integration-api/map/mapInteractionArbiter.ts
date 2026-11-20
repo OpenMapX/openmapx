@@ -21,11 +21,12 @@ export interface MapOverlayInteractionRegistration {
    */
   onClick?: (event: MapOverlayInteractionEvent) => void;
   /**
-   * The features under the pointer while this overlay owns the hover, and
-   * `null` once it stops owning it: the pointer left its layers, a
-   * higher-priority overlay took over, or the pointer left the map.
+   * Called on every pointer move with the features under the pointer when this
+   * overlay owns the hover, and with `null` when it does not: the pointer is
+   * off its layers, a higher-priority overlay owns it, or the pointer left the
+   * map. The pointer event comes along while the pointer is over the map.
    */
-  onHover?: (features: MapGeoJSONFeature[] | null) => void;
+  onHover?: (features: MapGeoJSONFeature[] | null, event?: MapMouseEvent) => void;
 }
 
 interface RegistrationRecord extends MapOverlayInteractionRegistration {
@@ -37,8 +38,6 @@ interface MapInteractionState {
   layerOwners: Map<string, number>;
   arbiterOwnedLayerIds: Set<string>;
   nextOrder: number;
-  /** The registration that last received hover features, until it is told it lost them. */
-  hovered: RegistrationRecord | null;
   onClick: (event: MapMouseEvent) => void;
   onMouseMove: (event: MapMouseEvent) => void;
   onMouseLeave: () => void;
@@ -90,14 +89,14 @@ function winningHit(
   return null;
 }
 
-function moveHover(
+function reportHover(
   state: MapInteractionState,
   hit: { registration: RegistrationRecord; features: MapGeoJSONFeature[] } | null,
+  event?: MapMouseEvent,
 ): void {
-  const previous = state.hovered;
-  state.hovered = hit?.registration ?? null;
-  if (previous && previous !== state.hovered) previous.onHover?.(null);
-  if (hit) hit.registration.onHover?.(hit.features);
+  for (const registration of [...state.registrations.values()]) {
+    registration.onHover?.(registration === hit?.registration ? hit.features : null, event);
+  }
 }
 
 function setCursor(map: MaplibreMap, cursor: string): void {
@@ -134,7 +133,6 @@ function createMapState(map: MaplibreMap): MapInteractionState {
   state.layerOwners = new Map();
   state.arbiterOwnedLayerIds = new Set();
   state.nextOrder = 0;
-  state.hovered = null;
   state.onClick = (event) => {
     if (getMapClickOwner(event)) return;
     const hit = winningHit(map, state, event, true);
@@ -143,11 +141,11 @@ function createMapState(map: MaplibreMap): MapInteractionState {
   state.onMouseMove = (event) => {
     const hit = winningHit(map, state, event);
     setCursor(map, hit ? "pointer" : "");
-    moveHover(state, hit);
+    reportHover(state, hit, event);
   };
   state.onMouseLeave = () => {
     setCursor(map, "");
-    moveHover(state, null);
+    reportHover(state, null);
   };
 
   map.on("click", state.onClick);
@@ -177,7 +175,6 @@ export function registerMapOverlayInteraction(
     active = false;
     if (state.registrations.get(registration.id) !== record) return;
     state.registrations.delete(registration.id);
-    if (state.hovered === record) state.hovered = null;
     if (registration.onClick) removeRegistrationLayers(state, registration.layerIds);
     if (state.registrations.size > 0) return;
 

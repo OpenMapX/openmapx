@@ -1316,8 +1316,8 @@ useMapOverlayInteraction({
 All registrations on a map share one click listener and one pointer listener.
 Where layers of several overlays overlap, the registration with the highest
 `priority` that has a rendered feature under the pointer gets the click, the
-hover and the pointer cursor; `onHover` receives `null` when that overlay loses
-the hover. The arbiter checks click ownership, adds the layers to the
+hover and the pointer cursor. `onHover` runs on every pointer move, with the
+features when its overlay owns the hover and with `null` otherwise. The arbiter checks click ownership, adds the layers to the
 interactive registry that the plain-map click handler skips, and looks layers up
 at event time, so a registration survives style changes and may start before
 its layers exist. Without `onClick` an overlay only shows the pointer cursor, for
