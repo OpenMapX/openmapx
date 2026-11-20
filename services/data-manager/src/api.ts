@@ -418,6 +418,33 @@ function registerOfflinePackageRoutes(
   registerDataManagerRoute(app, "getOfflinePackageArchive", serveArchive);
 }
 
+/**
+ * Answers a failed transit-source read or change. A `TransitSourceError` carries
+ * its status and, for a refused action, its code; any other failure of the route
+ * is a 500. Request errors that already carry an HTTP status, such as an oversized
+ * body, keep Fastify's reply.
+ */
+function transitSourceErrorReply(error: Error, _request: FastifyRequest, reply: FastifyReply) {
+  if (!(error instanceof TransitSourceError) && "statusCode" in error) throw error;
+  const known = error instanceof TransitSourceError;
+  return reply.code(known ? error.statusCode : 500).send({
+    ok: false,
+    error: error.message,
+    ...(known && error.code ? { code: error.code } : {}),
+  });
+}
+
+/** Runs a source change's prepare step; a failure it does not classify is the caller's error. */
+function prepareSourceChange<T>(prepare: () => T): T {
+  try {
+    return prepare();
+  } catch (error) {
+    throw error instanceof TransitSourceError
+      ? error
+      : new TransitSourceError((error as Error).message);
+  }
+}
+
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   registerDataExecutionApi(app, opts.executionReceiver);
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
@@ -608,12 +635,17 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     policy: publicOperationsPolicy(operationsPolicy),
   }));
 
-  registerDataManagerRoute(app, "getTransitSources", async (req, reply) => {
-    const parseCount = (raw: number | undefined, fallback: number): number => {
-      const value = Number(raw ?? fallback);
-      return Number.isFinite(value) ? value : fallback;
-    };
-    try {
+  // Transit-source reads and changes answer their refusals through one handler.
+  const transitSourceRoute = { errorHandler: transitSourceErrorReply };
+
+  registerDataManagerRoute(
+    app,
+    "getTransitSources",
+    async (req) => {
+      const parseCount = (raw: number | undefined, fallback: number): number => {
+        const value = Number(raw ?? fallback);
+        return Number.isFinite(value) ? value : fallback;
+      };
       // Desired and active evidence live on local disk; a Postgres outage
       // only degrades the fetch/import/validation columns.
       let feedStates: TransitFeedStateEvidence[] | undefined;
@@ -636,176 +668,160 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           offset: parseCount(req.query.offset, 0),
         },
       });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 500;
-      return reply.code(status).send({ ok: false, error: (error as Error).message });
-    }
-  });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "getTransitCatalog", async (_req, reply) => {
-    try {
-      return {
-        sources: listPinnedTransitCatalog(catalogDir, transitAllowedCountries(operationsPolicy)),
-      };
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 500;
-      return reply.code(status).send({ ok: false, error: (error as Error).message });
-    }
-  });
+  registerDataManagerRoute(
+    app,
+    "getTransitCatalog",
+    async () => ({
+      sources: listPinnedTransitCatalog(catalogDir, transitAllowedCountries(operationsPolicy)),
+    }),
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "addTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareAddTransitSource>;
-    try {
-      mutation = prepareAddTransitSource({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        source: {
-          spec: "gtfs",
-          type: "http",
-          region: req.body.region,
-          name: req.body.name,
-          url: req.body.url,
-          origin: "operator",
-          license: req.body.license,
-        },
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body.triggeredBy ?? "api",
-      idempotencyKey: req.body.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "add",
-      mutation: {
+  registerDataManagerRoute(
+    app,
+    "addTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareAddTransitSource({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          source: {
+            spec: "gtfs",
+            type: "http",
+            region: req.body.region,
+            name: req.body.name,
+            url: req.body.url,
+            origin: "operator",
+            license: req.body.license,
+          },
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body.triggeredBy ?? "api",
+        idempotencyKey: req.body.idempotencyKey,
+        sourceId: mutation.sourceId,
         action: "add",
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        source: {
-          region: req.body.region,
-          name: req.body.name,
-          url: req.body.url,
-          license: req.body.license,
+        mutation: {
+          action: "add",
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          source: {
+            region: req.body.region,
+            name: req.body.name,
+            url: req.body.url,
+            license: req.body.license,
+          },
         },
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "removeTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareRemoveTransitSource>;
-    try {
-      mutation = prepareRemoveTransitSource({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        sourceId: req.params.sourceId,
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body?.triggeredBy ?? "api",
-      idempotencyKey: req.body?.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "remove",
-      mutation: {
+  registerDataManagerRoute(
+    app,
+    "removeTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareRemoveTransitSource({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          sourceId: req.params.sourceId,
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body?.triggeredBy ?? "api",
+        idempotencyKey: req.body?.idempotencyKey,
+        sourceId: mutation.sourceId,
         action: "remove",
-        sourceId: mutation.sourceId,
-        expectedSourceRevision: req.body.expectedSourceRevision,
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+        mutation: {
+          action: "remove",
+          sourceId: mutation.sourceId,
+          expectedSourceRevision: req.body.expectedSourceRevision,
+        },
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "enableTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareEnableTransitSource>;
-    try {
-      mutation = prepareEnableTransitSource({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        sourceId: req.params.sourceId,
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body?.triggeredBy ?? "api",
-      idempotencyKey: req.body?.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "enable",
-      mutation: {
+  registerDataManagerRoute(
+    app,
+    "enableTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareEnableTransitSource({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          sourceId: req.params.sourceId,
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body?.triggeredBy ?? "api",
+        idempotencyKey: req.body?.idempotencyKey,
+        sourceId: mutation.sourceId,
         action: "enable",
-        sourceId: mutation.sourceId,
-        expectedSourceRevision: req.body.expectedSourceRevision,
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+        mutation: {
+          action: "enable",
+          sourceId: mutation.sourceId,
+          expectedSourceRevision: req.body.expectedSourceRevision,
+        },
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
-  registerDataManagerRoute(app, "disableTransitSource", async (req, reply) => {
-    let mutation: ReturnType<typeof prepareSetTransitSourceEnabled>;
-    try {
-      mutation = prepareSetTransitSourceEnabled({
-        catalogDir,
-        overlayPath,
-        countries: transitAllowedCountries(operationsPolicy),
-        expectedSourceRevision: req.body.expectedSourceRevision,
-        sourceId: req.params.sourceId,
-        enabled: false,
-      });
-    } catch (error) {
-      const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({
-        ok: false,
-        error: (error as Error).message,
-        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
-      });
-    }
-    const result = await reserveSourceMutation({
-      triggeredBy: req.body?.triggeredBy ?? "api",
-      idempotencyKey: req.body?.idempotencyKey,
-      sourceId: mutation.sourceId,
-      action: "disable",
-      mutation: {
-        action: "disable",
+  registerDataManagerRoute(
+    app,
+    "disableTransitSource",
+    async (req, reply) => {
+      const mutation = prepareSourceChange(() =>
+        prepareSetTransitSourceEnabled({
+          catalogDir,
+          overlayPath,
+          countries: transitAllowedCountries(operationsPolicy),
+          expectedSourceRevision: req.body.expectedSourceRevision,
+          sourceId: req.params.sourceId,
+          enabled: false,
+        }),
+      );
+      const result = await reserveSourceMutation({
+        triggeredBy: req.body?.triggeredBy ?? "api",
+        idempotencyKey: req.body?.idempotencyKey,
         sourceId: mutation.sourceId,
-        expectedSourceRevision: req.body.expectedSourceRevision,
-      },
-    });
-    if (!result.ok) return reply.code(result.status).send(result.body);
-    return reply
-      .code(202)
-      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
-  });
+        action: "disable",
+        mutation: {
+          action: "disable",
+          sourceId: mutation.sourceId,
+          expectedSourceRevision: req.body.expectedSourceRevision,
+        },
+      });
+      if (!result.ok) return reply.code(result.status).send(result.body);
+      return reply
+        .code(202)
+        .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+    },
+    transitSourceRoute,
+  );
 
   registerDataManagerRoute(app, "preflightTransit", async (req, reply) => {
     const body = req.body ?? {};

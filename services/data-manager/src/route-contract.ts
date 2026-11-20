@@ -51,11 +51,17 @@ function invalidResponse(): Error {
   return new Error("Invalid data-manager response");
 }
 
-/** Register one actual route from its authoritative service contract. */
+/**
+ * Register one actual route from its authoritative service contract. An
+ * `errorHandler` answers the errors this route throws in place of Fastify's.
+ */
 export function registerDataManagerRoute<K extends OperationId>(
   app: FastifyInstance,
   operationId: K,
   handler: (request: FastifyRequest<ContractRequest<K>>, reply: FastifyReply) => unknown,
+  options: {
+    errorHandler?: (error: Error, request: FastifyRequest, reply: FastifyReply) => unknown;
+  } = {},
 ): void {
   const operation = dataManagerOperations[operationId];
   const request = ("request" in operation ? operation.request : {}) as Record<string, z.ZodType>;
@@ -202,6 +208,7 @@ export function registerDataManagerRoute<K extends OperationId>(
       request: FastifyRequest<RouteGenericInterface>,
       reply: FastifyReply,
     ) => unknown,
+    ...(options.errorHandler ? { errorHandler: options.errorHandler } : {}),
   });
 }
 

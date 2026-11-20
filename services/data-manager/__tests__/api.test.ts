@@ -309,6 +309,110 @@ describe("data-manager API", () => {
     expect(existsSync(overlayPath)).toBe(false);
   });
 
+  describe("refused transit-source reads and changes", () => {
+    const revision = (dataDir: string) =>
+      transitSourceRevision({
+        catalogDir: join(dataDir, ".transitous-catalog"),
+        overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+      });
+    const operatorFeed = {
+      name: "operator-feed",
+      url: "https://operator.example/feed.zip",
+      license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
+    };
+
+    it.each([
+      {
+        label: "a stale source revision",
+        request: () => ({
+          method: "POST" as const,
+          url: "/transit/sources",
+          payload: { ...operatorFeed, region: "de", expectedSourceRevision: "a".repeat(64) },
+        }),
+        status: 409,
+        body: { ok: false, error: "Desired transit sources changed. Refresh before applying." },
+      },
+      {
+        label: "a region outside the country scope",
+        request: (dataDir: string) => ({
+          method: "POST" as const,
+          url: "/transit/sources",
+          payload: { ...operatorFeed, region: "fr", expectedSourceRevision: revision(dataDir) },
+        }),
+        status: 400,
+        body: {
+          ok: false,
+          error:
+            "Region fr is outside the configured country scope (de); the pipeline would never import this source",
+        },
+      },
+      {
+        label: "removing an unknown operator source",
+        request: (dataDir: string) => ({
+          method: "DELETE" as const,
+          url: "/transit/sources/operator:de:missing",
+          payload: { expectedSourceRevision: revision(dataDir) },
+        }),
+        status: 404,
+        body: { ok: false, error: "Operator source operator:de:missing not found" },
+      },
+      {
+        label: "disabling an unknown source",
+        request: (dataDir: string) => ({
+          method: "POST" as const,
+          url: "/transit/sources/missing/disable",
+          payload: { expectedSourceRevision: revision(dataDir) },
+        }),
+        status: 404,
+        body: { ok: false, error: "Transit source missing not found" },
+      },
+    ])("refuses $label without admitting work", async ({ request, status, body }) => {
+      const dataDir = createDataDir();
+      sourceCatalog(dataDir);
+      const admitLocal = vi.fn();
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir,
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+        executionReceiver: receiverFixture({ admitLocal }),
+      });
+      const res = await app.inject(request(dataDir));
+      expect(res.statusCode, res.body).toBe(status);
+      expect(res.json()).toEqual(body);
+      expect(admitLocal).not.toHaveBeenCalled();
+    });
+
+    it("answers an unexpected admission failure in the transit-source envelope", async () => {
+      const dataDir = createDataDir();
+      sourceCatalog(dataDir);
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir,
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+        executionReceiver: receiverFixture({
+          admitLocal: async () => {
+            throw new Error("Execution store unavailable");
+          },
+        }),
+      });
+      const res = await app.inject({
+        method: "POST",
+        url: "/transit/sources",
+        payload: { ...operatorFeed, region: "de", expectedSourceRevision: revision(dataDir) },
+      });
+      expect(res.statusCode).toBe(500);
+      expect(res.json()).toEqual({ ok: false, error: "Execution store unavailable" });
+    });
+
+    it("answers 409 for the pinned catalog while it is unavailable", async () => {
+      const app = createTestApp();
+      registerApi(app, { dataDir: createDataDir() });
+      const res = await app.inject({ method: "GET", url: "/transit/catalog" });
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({ ok: false, error: "Pinned Transitous catalog is unavailable" });
+    });
+  });
+
   it("rejects oversized source metadata before admitting work", async () => {
     const dataDir = createDataDir();
     sourceCatalog(dataDir);
