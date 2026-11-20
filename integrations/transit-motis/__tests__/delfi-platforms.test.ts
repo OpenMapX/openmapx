@@ -102,6 +102,6 @@ it("records a correction diagnostic when only the current bad track was withheld
     lon: 6,
     track: "37",
   });
-  expect(stop.platform).toBeUndefined();
-  expect(stop.platformQuarantined).toBe(true);
+  expect(stop?.platform).toBeUndefined();
+  expect(stop?.platformQuarantined).toBe(true);
 });
