@@ -6081,7 +6081,9 @@
     "variableOptional": "optional",
     "sourceChangeQueued": "Quelländerung als {jobId} eingereiht.",
     "sourceActionQueued": "{sourceId} als {jobId} eingereiht.",
-    "transitSyncQueued": "ÖPNV-Synchronisierung als {jobId} eingereiht."
+    "transitSyncQueued": "ÖPNV-Synchronisierung als {jobId} eingereiht.",
+    "sourceOrigin": "{origin, select, catalog {Katalog} other {Betreiber}}",
+    "validationStatus": "{status, select, passed {bestanden} warning {Warnung} failed {fehlgeschlagen} other {{status}}}"
   },
   "adminSettings": {
     "settings": {
@@ -6271,6 +6273,7 @@
     "servicePaused": "Pausiert",
     "serviceUnknown": "Unbekannt",
     "jobQueued": "Wartet auf den Start.",
+    "jobStatusLabel": "{status, select, queued {eingereiht} running {läuft} cancel_pending {Abbruch angefordert} success {erfolgreich} ok {ok} failed {fehlgeschlagen} error {Fehler} canceled {abgebrochen} partial {teilweise} stale {veraltet} interrupted {unterbrochen} skipped {übersprungen} never {nie} other {{status}}}",
     "jobRunning": "Läuft gerade.",
     "jobSucceeded": "Erfolgreich abgeschlossen.",
     "jobFailed": "Angehalten, weil der Auftrag fehlgeschlagen ist.",
@@ -6324,7 +6327,10 @@
       "integrationsReload": "Integrationen neu laden",
       "serviceEffect": "{kind, select, configuration {Konfiguration von {service}} credentials {Zugangsdaten von {service}} other {Dienstaktion für {service}}}",
       "areaEffect": "{kind, select, catalog {Dienstkatalog} backups {Sicherungen} data {Daten} operations {Datenvorgänge} compose {Compose-Konfiguration} other {Dawarich}}"
-    }
+    },
+    "rowsPerPage": "Zeilen pro Seite:",
+    "displayedRows": "{from}–{to} von {total}",
+    "paginationPage": "{type, select, first {Zur ersten Seite} last {Zur letzten Seite} next {Zur nächsten Seite} other {Zur vorherigen Seite}}"
   },
   "adminTransit": {
     "jobDetail": "Auftragsdetails",
@@ -6385,6 +6391,7 @@
     "transit": "Öffentlicher Verkehr",
     "sourcesReviewedCatalogPinsCredentials": "Quellen, geprüfte Katalog-Pins, Zugangsdaten und Zustand der Pipeline",
     "transitSections": "Bereiche des öffentlichen Verkehrs",
+    "transitTab": "{tab, select, sources {Quellen} catalog {Katalog} credentials {Zugangsdaten} pipeline {Pipeline} other {Mobilität}}",
     "motisEvidenceIsUnavailable": "MOTIS-Nachweise sind nicht verfügbar.",
     "healthy": "fehlerfrei",
     "recentCountedFailuresRequestsStill": "Kürzlich gezählte Fehler; Anfragen erreichen diesen Anbieter weiterhin",

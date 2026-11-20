@@ -333,7 +333,7 @@ describe("Activity generated SDK consumers", () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(reads).toBe(2);
-    expect(screen.getByText("cancel_pending")).toBeInTheDocument();
+    expect(screen.getByText("cancel pending")).toBeInTheDocument();
     expect(screen.getByText("Polling")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     await act(async () => {

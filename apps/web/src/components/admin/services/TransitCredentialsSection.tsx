@@ -13,7 +13,6 @@ import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -24,6 +23,7 @@ import {
   feedCredentialPreviewSchema,
 } from "@openmapx/core/api-contracts";
 import { useTranslations } from "next-intl";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 
 type FeedCredentialChange = FeedCredentialPreviewInput["changes"][number];
 
@@ -407,13 +407,14 @@ function TransitCredentialView({
                 </TableBody>
               </Table>
             </Box>
-            <TablePagination
-              component="div"
+            <AdminTablePagination
               count={entries.length}
               page={effectivePage}
               rowsPerPage={25}
               rowsPerPageOptions={[25]}
               onPageChange={(_event, next) => setPage(next)}
+              onRowsPerPageChange={() => {}}
+              hideSinglePage={false}
             />
             {changes.length > 100 && <Alert severity="warning">{t("reviewAtMost100Key")}</Alert>}
             {data.editable && (

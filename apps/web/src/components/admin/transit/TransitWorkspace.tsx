@@ -64,7 +64,7 @@ function TransitView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
             value={value}
             id={`transit-tab-${value}`}
             aria-controls={`transit-panel-${value}`}
-            label={value[0].toUpperCase() + value.slice(1)}
+            label={t("transitTab", { tab: value })}
           />
         ))}
       </Tabs>

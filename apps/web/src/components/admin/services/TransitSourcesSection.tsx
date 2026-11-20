@@ -521,7 +521,11 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                   </TableCell>
                   <TableCell>
                     <Stack spacing={0.25}>
-                      <Chip label={source.origin} size="small" variant="outlined" />
+                      <Chip
+                        label={t("sourceOrigin", { origin: source.origin })}
+                        size="small"
+                        variant="outlined"
+                      />
                       {source.originUrl && (
                         <Tooltip title={source.originUrl}>
                           <Typography
@@ -556,7 +560,11 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                   </TableCell>
                   <TableCell>
                     <Tooltip title={source.validationMessage ?? ""}>
-                      <span>{source.validationStatus ?? t("notValidated")}</span>
+                      <span>
+                        {source.validationStatus
+                          ? t("validationStatus", { status: source.validationStatus })
+                          : t("notValidated")}
+                      </span>
                     </Tooltip>
                   </TableCell>
                   <TableCell>

@@ -6081,7 +6081,9 @@
     "variableOptional": "optional",
     "sourceChangeQueued": "Source change queued as {jobId}.",
     "sourceActionQueued": "{sourceId} queued as {jobId}.",
-    "transitSyncQueued": "Transit sync queued as {jobId}."
+    "transitSyncQueued": "Transit sync queued as {jobId}.",
+    "sourceOrigin": "{origin, select, catalog {catalog} other {operator}}",
+    "validationStatus": "{status, select, passed {passed} warning {warning} failed {failed} other {{status}}}"
   },
   "adminSettings": {
     "settings": {
@@ -6271,6 +6273,7 @@
     "servicePaused": "Paused",
     "serviceUnknown": "Unknown",
     "jobQueued": "Waiting to start.",
+    "jobStatusLabel": "{status, select, queued {queued} running {running} cancel_pending {cancel pending} success {success} ok {ok} failed {failed} error {error} canceled {canceled} partial {partial} stale {stale} interrupted {interrupted} skipped {skipped} never {never} other {{status}}}",
     "jobRunning": "Currently in progress.",
     "jobSucceeded": "Completed successfully.",
     "jobFailed": "Stopped because the job failed.",
@@ -6324,7 +6327,10 @@
       "integrationsReload": "Reload integrations",
       "serviceEffect": "{kind, select, configuration {{service} configuration} credentials {{service} credentials} other {{service} service action}}",
       "areaEffect": "{kind, select, catalog {Service catalogue} backups {Backups} data {Data} operations {Data operations} compose {Compose configuration} other {Dawarich}}"
-    }
+    },
+    "rowsPerPage": "Rows per page:",
+    "displayedRows": "{from}–{to} of {total}",
+    "paginationPage": "{type, select, first {Go to first page} last {Go to last page} next {Go to next page} other {Go to previous page}}"
   },
   "adminTransit": {
     "jobDetail": "Job detail",
@@ -6385,6 +6391,7 @@
     "transit": "Transit",
     "sourcesReviewedCatalogPinsCredentials": "Sources, reviewed catalog pins, credentials and pipeline health",
     "transitSections": "Transit sections",
+    "transitTab": "{tab, select, sources {Sources} catalog {Catalog} credentials {Credentials} pipeline {Pipeline} other {Mobility}}",
     "motisEvidenceIsUnavailable": "MOTIS evidence is unavailable.",
     "healthy": "healthy",
     "recentCountedFailuresRequestsStill": "Recent counted failures; requests still reach this provider",

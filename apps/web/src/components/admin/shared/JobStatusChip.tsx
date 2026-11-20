@@ -21,7 +21,7 @@ export function JobStatusChip({
   const value = status ?? "never";
   const chip = (
     <Chip
-      label={label ?? value}
+      label={label ?? t("jobStatusLabel", { status: value })}
       size="small"
       color={jobStatusColor(value)}
       variant={variant ?? (value === "running" ? "filled" : "outlined")}
