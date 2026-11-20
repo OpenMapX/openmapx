@@ -624,7 +624,7 @@ describe("integration administration browser behavior", () => {
     });
     mount(<BulkConfigure />);
     await userEvent.click(await screen.findByRole("button", { name: /Demo demo/ }));
-    expect(await screen.findByText("env")).toBeInTheDocument();
+    expect(await screen.findByText("environment")).toBeInTheDocument();
     expect(screen.getByText(/Vault updated/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete from vault" })).toBeDisabled();
     expect(requests.filter(({ init }) => init.method === "DELETE")).toHaveLength(0);

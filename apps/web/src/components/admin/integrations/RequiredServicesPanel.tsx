@@ -13,6 +13,7 @@ import { useRef } from "react";
 import { useServicesList } from "@/hooks/useServices";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
+import { useServiceStatusLabel } from "../shared/ServiceStatusChip";
 import { CapabilityBindingPicker } from "./CapabilityBindingPicker";
 
 type RequireEntry =
@@ -26,6 +27,7 @@ function ServiceRequireRow({
   services: AdminServiceSummary[];
 }) {
   const t = useTranslations("adminIntegrations");
+  const statusLabel = useServiceStatusLabel();
   const installed = services.find((s) => s.id === req.service);
 
   return (
@@ -59,7 +61,7 @@ function ServiceRequireRow({
       </Typography>
       {installed ? (
         <Alert severity="success" sx={{ flex: 1, py: 0 }}>
-          {t("installedStatus", { status: installed.status })}
+          {t("installedStatus", { statusLabel: statusLabel(installed.status) })}
         </Alert>
       ) : req.optional ? (
         <Alert severity="info" sx={{ flex: 1, py: 0 }}>

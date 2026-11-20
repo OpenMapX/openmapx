@@ -352,7 +352,7 @@ function BackupsView() {
                           {backup.corrupt && (
                             <Tooltip
                               title={t("cannotBeRestored", {
-                                reason: backup.corruptReason ?? t("manifestMissing"),
+                                reason: backup.corruptReason ?? "",
                               })}
                             >
                               <Chip

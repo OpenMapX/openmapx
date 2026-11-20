@@ -183,7 +183,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
               <Typography>
                 {t("feedEstimate", {
                   feedCount: preview.result.estimate.feedCount,
-                  estimate: preview.result.estimate.basis.replaceAll("-", " "),
+                  basis: preview.result.estimate.basis.replaceAll("-", "_"),
                 })}
               </Typography>
               <Typography>

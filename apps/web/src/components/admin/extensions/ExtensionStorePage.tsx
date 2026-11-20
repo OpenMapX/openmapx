@@ -528,7 +528,7 @@ function BrowseTab() {
                 )}
                 {e.critical && (
                   <Alert severity="error">
-                    {t("securityAdvisoryReason", { reason: e.critical.reason })}
+                    {t("securityAdvisory", { advisory: e.critical.reason })}
                   </Alert>
                 )}
                 {!e.compatible && (

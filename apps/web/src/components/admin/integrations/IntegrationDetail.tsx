@@ -49,6 +49,7 @@ import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminJobLink } from "../activity/AdminJobLink";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
+import { useConfigSourceLabel } from "../shared/configSourceLabel";
 import { MetaRow } from "../shared/MetaRow";
 import { useClientPagination } from "../shared/tableHooks";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
@@ -325,6 +326,7 @@ function ConfigTab({
   integrationId: string;
 }) {
   const t = useTranslations("adminIntegrations");
+  const sourceLabel = useConfigSourceLabel();
   const entries = Object.entries(data.resolvedConfig);
   const { paged: pagedEntries, paginationProps: entriesPagination } = useClientPagination(entries);
 
@@ -401,7 +403,7 @@ function ConfigTab({
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={source}
+                          label={sourceLabel(source)}
                           size="small"
                           color={SOURCE_COLOR[source] ?? "default"}
                           variant="outlined"
@@ -422,9 +424,10 @@ function ConfigTab({
 }
 
 function CredentialSourceBadge({ source }: { source: CredentialStatus["source"] }) {
+  const sourceLabel = useConfigSourceLabel();
   return (
     <Chip
-      label={source}
+      label={sourceLabel(source)}
       icon={source === "vault" ? <LockIcon /> : undefined}
       size="small"
       color={source === "missing" ? "error" : SOURCE_COLOR[source]}

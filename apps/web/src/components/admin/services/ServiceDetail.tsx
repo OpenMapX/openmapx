@@ -580,7 +580,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
       showToast(t("serviceActionQueued", { action, jobId: result.jobId }));
     } catch (err) {
       if (!execution.active) return;
-      showToast(adminErrorText(err, t("actionActionFailed", { action })), "error");
+      showToast(adminErrorText(err, t("serviceActionFailed", { action })), "error");
       throw err;
     }
   }
@@ -601,7 +601,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
         badges={
           <>
             <StatusBadge quality={manifest.quality} />
-            <Tooltip title={t("containerStatusStatus", { status: statusLabel(data.status) })}>
+            <Tooltip title={t("containerStatus", { statusLabel: statusLabel(data.status) })}>
               <Chip
                 label={statusLabel(data.status)}
                 size="small"

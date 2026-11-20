@@ -64,8 +64,16 @@ manifests have no catalogue.
 
 Admin messages are whole sentences. Inline markup such as `<code>` or
 `<strong>` goes through `t.rich` tags, counts use ICU plurals, and code values
-such as statuses go through ICU `select` (select keys cannot hold hyphens, so
-`self-hosted` is passed as `self_hosted`). Commands, environment variable names
+such as statuses go through ICU `select` (select keys cannot hold hyphens or
+dots, so `self-hosted` is passed as `self_hosted`). Argument names carry the
+convention, and `adminMessageArguments.test.ts` enforces it for every admin
+message: an argument named like a code (`status`, `state`, `action`, `source`,
+`reason`, …) must be a `select`, whose `other` branch may repeat the raw code
+for codes added later, and a label already worded by a helper is passed under
+a name ending in `Label`, such as `{statusLabel}`. Open-ended server codes,
+such as audit actions, are keyed messages (`adminShared.auditActions.<code>`)
+read through a helper that shows the server's code only when the catalogue
+does not know it. Commands, environment variable names
 and other strings that read the same in every language are message arguments,
 not catalogue text. Shared verbs such as Cancel, Close, Retry and Confirm come
 from `common`. A helper outside a component declares the namespace it reads as
@@ -85,6 +93,10 @@ Strings that read the same in every language, such as the product name,
 environment variable names, commands, file names, licence identifiers and
 example input values, stay in source; the plugin's `non_copy` pattern lists
 them explicitly. Write them as expression children (`<code>{"…"}</code>`) so
-`noJsxLiterals` leaves them alone too. The override in `biome.json` lists the
+`noJsxLiterals` leaves them alone too. `scripts/biome-plugins/noRawCodeCopy.grit`
+rejects a code field, such as `job.status` or `stage.state`, rendered straight
+into a child, a text prop or a template; a field that holds written text
+rather than a code takes a `biome-ignore lint/plugin/noRawCodeCopy` comment
+that says so. The override in `biome.json` lists the
 sections not yet localized: cache, settings, system maintenance, the
 application log and the audit log; `lib/admin` is checked by the plugin only.

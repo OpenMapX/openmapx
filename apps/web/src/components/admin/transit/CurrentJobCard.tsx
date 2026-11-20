@@ -47,6 +47,7 @@ function SummaryMetric({ label, children }: { label: string; children: ReactNode
 
 function RunningJobDetail({ jobId }: { jobId: string }) {
   const t = useTranslations("adminTransit");
+  const tShared = useTranslations("adminShared");
   const { data, isLoading } = useTransitJobDetail(jobId);
 
   if (isLoading) {
@@ -92,7 +93,10 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
         {latest && (
           <JobStatusChip
             status={latest.status}
-            label={t("stageStageStatus", { stage: latest.stage, status: latest.status })}
+            label={t("latestStage", {
+              stageName: latest.stage,
+              statusLabel: tShared("jobStatusLabel", { status: latest.status }),
+            })}
             variant="filled"
           />
         )}

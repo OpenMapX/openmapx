@@ -24,6 +24,7 @@ import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
+import { useConfigSourceLabel } from "./configSourceLabel";
 
 // The shared, schema-driven config form used by BOTH the integration and the
 // service admin tabs. It renders non-secret configSchema fields from a resolved
@@ -225,6 +226,7 @@ export function SchemaConfigForm({
   emptyMessage: emptyMessageProp,
 }: SchemaConfigFormProps) {
   const t = useAdminTranslations("adminShared");
+  const sourceLabel = useConfigSourceLabel();
   const applySavedLabel = applySavedLabelProp ?? t("applySavedConfiguration");
   const applyLabel = applyLabelProp ?? t("saveAndApply");
   const applySuccessMessage = applySuccessMessageProp ?? t("configurationSavedAndApplied");
@@ -372,9 +374,9 @@ export function SchemaConfigForm({
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {field.title}
               </Typography>
-              <Tooltip title={t("currentlySourcedFromSource", { source })}>
+              <Tooltip title={t("currentlySourcedFrom", { sourceLabel: sourceLabel(source) })}>
                 <Chip
-                  label={source}
+                  label={sourceLabel(source)}
                   size="small"
                   color={SOURCE_COLOR[source] ?? "default"}
                   variant="outlined"

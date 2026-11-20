@@ -110,7 +110,7 @@ export function RegionCoverageMatrix({
                           aria-label={t("matrix.selectDomain", {
                             region: row.region.label,
                             domain: t(`domain.${domain}`),
-                            status: t(`status.${summary.status}`),
+                            statusLabel: t(`status.${summary.status}`),
                           })}
                           sx={{
                             display: "inline-flex",
@@ -209,7 +209,7 @@ export function RegionCoverageMatrix({
                       aria-label={t("matrix.selectDomain", {
                         region: row.region.label,
                         domain: t(`domain.${domain}`),
-                        status: t(`status.${summary.status}`),
+                        statusLabel: t(`status.${summary.status}`),
                       })}
                       sx={{
                         display: "flex",

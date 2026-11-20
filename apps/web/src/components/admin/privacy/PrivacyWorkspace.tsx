@@ -91,7 +91,10 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
         )}
         {queue.data?.requests.map((r) => (
           <MenuItem key={r.id} value={r.id}>
-            {r.id.slice(0, 8)} · {r.state}
+            {t("queueOption", {
+              id: r.id.slice(0, 8),
+              stateLabel: t("requestState", { state: r.state }),
+            })}
           </MenuItem>
         ))}
       </TextField>
@@ -111,7 +114,10 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
                 >
                   <ListItemText
                     primary={`${account("accessAndPortability")} ${r.id.slice(0, 8)}`}
-                    secondary={`${r.state} · ${r.dueAt}`}
+                    secondary={t("queueItem", {
+                      stateLabel: t("requestState", { state: r.state }),
+                      date: r.dueAt,
+                    })}
                   />
                 </ListItemButton>
               ))}

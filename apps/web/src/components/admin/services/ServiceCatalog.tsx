@@ -267,7 +267,7 @@ function ServiceCatalogView() {
       const result = await bulkMutation.mutateAsync(payload);
       if (execution.active) setLastAcceptedJobId(result.jobId);
       if (execution.active)
-        showToast(t("actionQueued", { action: payload.action, jobId: result.jobId }));
+        showToast(t("bulkActionQueued", { action: payload.action, jobId: result.jobId }));
       return execution.active;
     } catch (error) {
       if (execution.active) showToast(adminErrorText(error, t("bulkActionFailed")), "error");

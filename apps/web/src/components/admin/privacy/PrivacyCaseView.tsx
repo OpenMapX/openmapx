@@ -42,7 +42,7 @@ function PrivacyIdentityVerification({
     <Stack spacing={2}>
       <Typography>
         {method
-          ? t("identityVerified", { method: t(`identityMethods.${method}`) })
+          ? t("identityVerified", { methodLabel: t(`identityMethods.${method}`) })
           : t("unverified")}
       </Typography>
       {detail.capabilities.verifyIdentity && (
@@ -119,7 +119,7 @@ export function PrivacyCaseView({
           <Typography variant="h6" component="h2">
             {t("case", { id: detail.request.id.slice(0, 8) })}
           </Typography>
-          <Chip size="small" label={detail.request.state} />
+          <Chip size="small" label={t("requestState", { state: detail.request.state })} />
           <Chip size="small" label={`v${detail.request.version}`} />
           <Button size="small" onClick={onRefresh} sx={{ ml: "auto" }}>
             {t("refresh")}

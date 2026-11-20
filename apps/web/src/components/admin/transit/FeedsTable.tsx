@@ -64,7 +64,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
 
   return (
     <AdminTableSurface
-      title={t("feedState", { state: data?.total ?? 0 })}
+      title={t("feedStateTitle", { count: data?.total ?? 0 })}
       toolbar={
         <Stack
           direction={{ xs: "column", sm: "row" }}

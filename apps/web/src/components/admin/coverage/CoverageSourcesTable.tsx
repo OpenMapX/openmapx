@@ -98,7 +98,7 @@ function SourceRow({
           variant="text"
           size="small"
           onClick={() => onSelect(source)}
-          aria-label={t("sources.open", { source: source.name })}
+          aria-label={t("sources.open", { sourceName: source.name })}
           endIcon={<OpenInNewIcon fontSize="small" />}
           sx={{ justifyContent: "flex-start", textAlign: "left", px: 0.5 }}
         >

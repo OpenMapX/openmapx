@@ -208,7 +208,10 @@
           }
         }
       },
-      "plugins": ["./scripts/biome-plugins/noLiteralCopy.grit"]
+      "plugins": [
+        "./scripts/biome-plugins/noLiteralCopy.grit",
+        "./scripts/biome-plugins/noRawCodeCopy.grit"
+      ]
     },
     {
       "includes": [

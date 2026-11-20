@@ -310,7 +310,12 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         {(stages.data?.items ?? []).map((stage) => (
           <Paper key={stage.stageId} variant="outlined" sx={{ p: 1.5, minWidth: 0 }}>
             <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-              {stage.direction} · {stage.state} · {formatBytes(stage.bytes)} · {stage.stageId}
+              {t("transferStage", {
+                direction: stage.direction,
+                state: stage.state,
+                size: formatBytes(stage.bytes),
+                stageId: stage.stageId,
+              })}
             </Typography>
             {stage.sha256 && (
               <Typography variant="caption" sx={{ display: "block", overflowWrap: "anywhere" }}>

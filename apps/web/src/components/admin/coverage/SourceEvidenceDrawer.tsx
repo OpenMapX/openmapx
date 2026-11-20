@@ -217,7 +217,10 @@ function SourceEvidenceBody({
             <BindingReasons reasons={data.evidence.roadConditions.bindingReasons} />
           )}
           {data.evidence.roadConditions.action && (
-            <CompactAlert severity="info">{data.evidence.roadConditions.action}</CompactAlert>
+            <CompactAlert severity="info">
+              {/* biome-ignore lint/plugin/noRawCodeCopy: the road-condition source writes this recommended action as text, not a code */}
+              {data.evidence.roadConditions.action}
+            </CompactAlert>
           )}
         </Section>
       )}

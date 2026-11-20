@@ -31,6 +31,7 @@ import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrati
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { useAuditActionLabel } from "../shared/auditActionLabel";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CompactAlertList } from "../shared/CompactAlertList";
 import { jobStatusColor } from "../shared/jobStatus";
@@ -118,6 +119,7 @@ function attentionHref(item: AttentionItem): string {
 export function AdminOverview() {
   const t = useTranslations("adminOverview");
   const tShared = useTranslations("adminShared");
+  const auditActionLabel = useAuditActionLabel();
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client);
   const showToast = useAdminToast();
@@ -350,7 +352,7 @@ export function AdminOverview() {
                     })}
                   </Typography>
                   <Chip
-                    label={entry.action}
+                    label={auditActionLabel(entry.action)}
                     size="small"
                     variant="outlined"
                     sx={{ fontSize: 11, height: 20 }}

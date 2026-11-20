@@ -44,6 +44,7 @@ function fixture() {
     "biome.json",
     "scripts/biome-plugins/noClickableLayoutElement.grit",
     "scripts/biome-plugins/noLiteralCopy.grit",
+    "scripts/biome-plugins/noRawCodeCopy.grit",
     ".prettierrc.json",
     ".prettierignore",
   ]) {

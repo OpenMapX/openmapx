@@ -39,6 +39,7 @@ export function LockfileCard(_props: { state?: TransitStateSummary } = {}) {
 }
 function CatalogPinView() {
   const t = useTranslations("adminTransit");
+  const tShared = useTranslations("adminShared");
   const [branch, setBranch] = useState(DEFAULT_CATALOG_BRANCH),
     [proposalId, setProposalId] = useState<string | undefined>(),
     [offset, setOffset] = useState(0),
@@ -304,7 +305,7 @@ function CatalogPinView() {
                           {t("catalogDiffRow", {
                             change: row.change,
                             region: row.region,
-                            source: row.source,
+                            sourceId: row.source,
                             fields: row.fields
                               .map((field) => t("catalogField", { field }))
                               .join(", "),
@@ -482,7 +483,9 @@ function CatalogPinView() {
               )}
               {t("catalogJobStatus", {
                 jobId: ownedJobId ?? execution?.id ?? "",
-                status: execution?.status ?? t("connectingToRetainedExecution"),
+                statusLabel: execution
+                  ? tShared("jobStatusLabel", { status: execution.status })
+                  : t("connectingToRetainedExecution"),
               })}
             </Typography>
             {execution?.progress != null && (

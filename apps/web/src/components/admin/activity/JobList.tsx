@@ -161,7 +161,10 @@ export function JobList() {
         >
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1 }}>
             <Typography component="h2" variant="subtitle1" sx={{ flexGrow: 1 }}>
-              {t("selectedJobSourceId", { source: selection.source, id: selection.id })}
+              {t("selectedJobHeading", {
+                source: selection.source.replace("-", "_"),
+                id: selection.id,
+              })}
             </Typography>
             {selection.returnTo && (
               <Button component={Link} href={selection.returnTo} size="small">

@@ -221,7 +221,9 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         register({ client, apiUrl, jobId, effect });
         if (execution.active) setLastAcceptedJobId(jobId);
         if (execution.active) {
-          showToast(t("operationQueued", { operation: operationName, jobId }));
+          showToast(
+            t("overtureOperationQueued", { operation: operationName.replace("-", "_"), jobId }),
+          );
           setPrepared(null);
         }
       } catch (error) {

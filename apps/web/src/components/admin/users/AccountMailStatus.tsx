@@ -52,10 +52,10 @@ export function AccountMailStatus({
       {latest ? (
         <>
           <Typography variant="body2">
-            {t("verificationEmailStatus", { status: labels[latest.verificationDelivery] })}
+            {t("verificationEmailStatus", { statusLabel: labels[latest.verificationDelivery] })}
           </Typography>
           <Typography variant="body2">
-            {t("passwordSetupStatus", { status: labels[latest.passwordSetupDelivery] })}
+            {t("passwordSetupStatus", { statusLabel: labels[latest.passwordSetupDelivery] })}
           </Typography>
         </>
       ) : (

@@ -32,6 +32,7 @@ import { hasVaultCredential, useIntegrationAdmin } from "@/lib/admin/integration
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { useConfigSourceLabel } from "../shared/configSourceLabel";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { SetCredentialDialog } from "./SetCredentialDialog";
@@ -294,6 +295,7 @@ function CredentialsTable({
   credentials: CredentialStatus[];
 }) {
   const t = useTranslations("adminIntegrations");
+  const sourceLabel = useConfigSourceLabel();
   const admin = useIntegrationAdmin();
   const showToast = useAdminToast();
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
@@ -383,7 +385,7 @@ function CredentialsTable({
                 </TableCell>
                 <TableCell>
                   <Chip
-                    label={cred.source}
+                    label={sourceLabel(cred.source)}
                     size="small"
                     color={
                       cred.source === "missing"
