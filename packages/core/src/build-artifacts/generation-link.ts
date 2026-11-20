@@ -102,10 +102,11 @@ export function generationLinkOperationKey(
 }
 
 /**
- * Sends the plan to data-manager and waits for its outcome. A lost answer, or
- * an application data-manager reports as still running, is asked again under
- * the same key for up to two minutes, never past `deadlineAt`; after that the
- * outcome is unknown. Asking again later under the same key resolves it.
+ * Sends the plan to data-manager and waits for its outcome. A lost answer, an
+ * application data-manager reports as still running, and an unavailable or
+ * busy answer after a lost one are asked again under the same key for up to
+ * two minutes, never past `deadlineAt`; after that the outcome is unknown.
+ * Asking again later under the same key resolves it.
  */
 export async function linkGeneration(options: {
   transport: DataManagerTransport;
@@ -152,15 +153,23 @@ export async function linkGeneration(options: {
         pruned: response.data.pruned,
         via: "data-manager",
       });
-    // A refusal is an answer: nothing was linked. Only a 503 that follows an
-    // unanswered request may be data-manager restarting under it.
-    if (response && response.status !== 202 && (response.status !== 503 || !pending)) {
+    // A refusal is an answer: nothing was linked. After an unanswered request,
+    // a 503 may be data-manager restarting under it, and a busy admission may be
+    // that request's own copy still inside its admission, about to link: both
+    // are asked again.
+    if (response && response.status !== 202) {
       const message = errorMessage(response.data, response.status);
-      if (response.status === 500) throw new GenerationLinkFailed(message);
-      throw new GenerationLinkNotApplied(
-        response.status === 409 ? "busy" : response.status === 503 ? "unavailable" : "refused",
-        message,
-      );
+      const askAgain =
+        pending &&
+        (response.status === 503 ||
+          (response.status === 409 && message === "configuration_maintenance_busy"));
+      if (!askAgain) {
+        if (response.status === 500) throw new GenerationLinkFailed(message);
+        throw new GenerationLinkNotApplied(
+          response.status === 409 ? "busy" : response.status === 503 ? "unavailable" : "refused",
+          message,
+        );
+      }
     }
     if (response?.status === 202) pending = true;
     const delayMs = Math.min(250 * 2 ** attempt, 5000);
@@ -175,10 +184,13 @@ export async function linkGeneration(options: {
   }
 }
 
+/** The reason data-manager gave: a thrown error's message, else its `error` field. */
 function errorMessage(data: unknown, status: number): string {
-  return data && typeof data === "object" && "error" in data && typeof data.error === "string"
-    ? data.error
-    : `Data-manager HTTP ${status}`;
+  if (data && typeof data === "object") {
+    if ("message" in data && typeof data.message === "string") return data.message;
+    if ("error" in data && typeof data.error === "string") return data.error;
+  }
+  return `Data-manager HTTP ${status}`;
 }
 function isConnectionRefused(error: unknown): boolean {
   for (let cause = error; cause instanceof Error; cause = cause.cause)

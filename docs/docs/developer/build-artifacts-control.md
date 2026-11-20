@@ -597,11 +597,17 @@ Answers mean:
 | Answer | Meaning                                                                        | Caller                                                               |
 | ------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | 200    | Applied; the link counts                                                       | settles its lease as committed                                       |
-| 409    | Busy: another holder or a fence refused it; nothing linked                     | fails without effect (`compose up` warns and starts)                 |
+| 409    | Busy: another holder or a fence refused it; nothing linked (see below)         | fails without effect (`compose up` warns and starts)                 |
 | 403    | The named lease is not the sender's live lease on data-manager; nothing linked | fails without effect                                                 |
-| 503    | Data-manager or the agent did not answer; nothing linked                       | fails without effect (`compose up` warns and starts)                 |
+| 503    | Data-manager or the agent did not answer; nothing linked (see below)           | fails without effect (`compose up` warns and starts)                 |
 | 500    | The plan failed part-way; links may have changed                               | fails with a known outcome; the job is final                         |
 | none   | No answer within its retries                                                   | outcome unknown: the lease stays held for `openmapx control resolve` |
+
+Once a request went unanswered, its copy may still reach data-manager, so the
+caller asks again on a 503 and on a busy admission refusal
+(`configuration_maintenance_busy`, which a repeat of the key also gets while the
+first copy is inside its admission). Only when those answers last until the end
+of its retries is the outcome unknown; any other answer stays an answer.
 
 A failure part-way through linking is recorded as a committed ("may have changed")
 publication, so the job ends and holds nothing; applying the same plan again links
