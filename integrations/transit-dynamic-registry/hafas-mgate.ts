@@ -277,6 +277,17 @@ function fptfPlacePosition(
   return fptfPosition(place?.type === "location" ? place : place?.location);
 }
 
+/** The stop id of a leg end that is a stop or station; an address or POI has none. */
+function fptfStopId(
+  // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop, station or location
+  place: any,
+  prefix: string,
+): string | undefined {
+  return (place?.type === "stop" || place?.type === "station") && place.id
+    ? `${prefix}${place.id}`
+    : undefined;
+}
+
 /** A trip leg, or null when either end has no coordinates to place it by. */
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
 function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg | null {
@@ -316,13 +327,13 @@ function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg | null {
       name: leg.origin?.name ?? "",
       lat: fromLat,
       lng: fromLng,
-      stopId: leg.origin?.id ? `${entry.prefix}${leg.origin.id}` : undefined,
+      stopId: fptfStopId(leg.origin, entry.prefix),
     },
     to: {
       name: leg.destination?.name ?? "",
       lat: toLat,
       lng: toLng,
-      stopId: leg.destination?.id ? `${entry.prefix}${leg.destination.id}` : undefined,
+      stopId: fptfStopId(leg.destination, entry.prefix),
     },
     route: isWalking
       ? undefined

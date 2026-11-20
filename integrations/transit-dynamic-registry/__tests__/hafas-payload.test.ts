@@ -331,6 +331,8 @@ describe("HAFAS journeys and trips without coordinates", () => {
     expect(legs[0]?.from).toMatchObject({ lat: 52.5219, lng: 13.4132 });
     expect(legs[0]?.to).toMatchObject({ lat: 52.5216, lng: 13.4115, stopId: "vbb:900100003" });
     expect(legs[2]?.to).toMatchObject({ name: "Fernsehturm", lat: 52.5208, lng: 13.4094 });
+    // A POI's id is not a stop id.
+    expect(legs[2]?.to?.stopId).toBeUndefined();
   });
 
   it("answers no plan when no journey can be placed", async () => {
