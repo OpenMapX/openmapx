@@ -95,6 +95,19 @@ describe("RIS client", () => {
     await expect(failure).rejects.toMatchObject({ cause: upstream });
   });
 
+  it("reports the operation when the host client rejects malformed JSON", async () => {
+    const { get, http } = createHttp();
+    const malformed = new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+    get.mockRejectedValue(malformed);
+    const client = createRisClient({ clientId: "client", apiKey: "key" }, http);
+
+    const failure = client.get("maps", "/journey-positions");
+    await expect(failure).rejects.toThrow(
+      "RIS maps GET /journey-positions failed: Unexpected token '<'",
+    );
+    await expect(failure).rejects.toMatchObject({ cause: malformed });
+  });
+
   it("rejects requests before any request when credentials are incomplete", async () => {
     const { get, http } = createHttp();
     const client = createRisClient({ clientId: "client" }, http);
