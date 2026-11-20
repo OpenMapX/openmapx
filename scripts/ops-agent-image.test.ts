@@ -419,16 +419,9 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       expect(facts.rootMounts[0]).toEqual(agentMounts(root)[0]);
       const helper = configurationHandoffRunArgs(facts, root, {
         handoffId: "11111111-1111-4111-8111-111111111111",
-        assertion: "agent-image-assertion",
-        execution: {
-          executor: "host-cli",
-          principal: "api",
-          executionId: "22222222-2222-4222-8222-222222222222",
-          operationKey: "opk1_agentimagehelper",
-          operationFingerprint: "b".repeat(64),
-          fingerprint: "c".repeat(64),
-          deadlineAt: Date.now() + 60_000,
-        },
+        maintenanceId: "22222222-2222-4222-8222-222222222222",
+        leaseId: "33333333-3333-4333-8333-333333333333",
+        leaseChild: "44444444-4444-4444-8444-444444444444",
       }).join("\n");
       expect(helper).not.toContain(`target=${root}\n`);
 
