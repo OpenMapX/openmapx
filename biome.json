@@ -208,7 +208,17 @@
           }
         }
       },
-      "plugins": ["./scripts/biome-plugins/noLiteralCopyProps.grit"]
+      "plugins": ["./scripts/biome-plugins/noLiteralCopy.grit"]
+    },
+    {
+      "includes": [
+        "apps/web/src/lib/admin/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.test-support.ts",
+        "!**/*.test-support.tsx"
+      ],
+      "plugins": ["./scripts/biome-plugins/noLiteralCopy.grit"]
     },
     {
       "includes": ["integrations/overlay-tool-travel-time/transit-field-layer.ts"],

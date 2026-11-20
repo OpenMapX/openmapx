@@ -62,7 +62,16 @@ manifests have no catalogue.
 
 Server components use `getTranslations`; `pnpm check-translations` recognizes it
 alongside `useTranslations` and `createTranslator`. In admin directories, Biome
-rejects literal text between JSX tags (`noJsxLiterals`) and literal words in
-props that show text (`scripts/biome-plugins/noLiteralCopyProps.grit`). The
-override in `biome.json` lists the sections not yet localized: cache, settings,
-system maintenance, the application log and the audit log.
+rejects literal text between JSX tags (`noJsxLiterals`), and
+`scripts/biome-plugins/noLiteralCopy.grit` rejects string literals with words
+wherever else they reach the screen: expression children, props and object
+keys that show text, label maps, values handed to a translator, and toast,
+snackbar, error-setter and job-report messages. It follows ternary branches,
+`??`, `||` and `&&` operands, `+` concatenation and template literals.
+Strings that read the same in every language, such as the product name,
+environment variable names, commands, file names, licence identifiers and
+example input values, stay in source; the plugin's `non_copy` pattern lists
+them explicitly. Write them as expression children (`<code>{"…"}</code>`) so
+`noJsxLiterals` leaves them alone too. The override in `biome.json` lists the
+sections not yet localized: cache, settings, system maintenance, the
+application log and the audit log; `lib/admin` is checked by the plugin only.
