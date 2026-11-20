@@ -87,7 +87,8 @@ export interface ResponseOptions extends HttpClientOptions {
   responseHeaders?: readonly string[];
   /**
    * Reject redirects, or follow only the explicitly allowlisted target hosts.
-   * Left unset, redirects are followed unless a caller header may carry a credential.
+   * Left unset, redirects are followed unless a caller header other than
+   * User-Agent and the representation headers may carry a credential.
    */
   redirect?:
     | "error"
@@ -98,9 +99,9 @@ export interface HttpClient {
   /**
    * GET bounded JSON. A non-2xx answer rejects with `FetchJsonHttpError` from
    * `@openmapx/core`, carrying `status` and the `Retry-After` delay but never the
-   * URL. A caller header outside the representation headers (Accept,
-   * Accept-Language, Content-Type, conditional request headers) may carry a
-   * credential, so such a request refuses every redirect.
+   * URL. A caller header other than User-Agent and the representation headers
+   * (Accept, Accept-Language, Content-Type, conditional request headers) may
+   * carry a credential, so such a request refuses every redirect.
    */
   get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
   /** POST a JSON body with `params` in the query string. Errors and redirects as for `get`. */

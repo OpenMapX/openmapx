@@ -89,6 +89,25 @@ describe("overlay-satellite tile route", () => {
     );
   });
 
+  it.each([
+    ["trueColor", "image/jpeg"],
+    ["nightLights", "image/png"],
+  ])("labels a %s tile without Content-Type as the layer's format", async (layerId, expected) => {
+    const { call } = satellite(() => ({
+      status: 200,
+      headers: {},
+      stream: new Blob([new Uint8Array([1])]).stream(),
+    }));
+    const { result } = await call("/tiles/:layerId/:date/:z/:y/:x", {
+      layerId,
+      date: "2020-01-02",
+      z: "1",
+      y: "0",
+      x: "0",
+    });
+    expect(result.contentType).toBe(expected);
+  });
+
   it("caches today's tiles for an hour", async () => {
     const { call } = satellite(image("image/jpeg"));
     const today = new Date().toISOString().slice(0, 10);

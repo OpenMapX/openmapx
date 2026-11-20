@@ -156,8 +156,11 @@ function lastName(expression: ts.Expression): string | undefined {
 }
 
 /** True when an identifier named `fetch` refers to the global, not to a declaration or property. */
-function isGlobalFetchReference(node: ts.Identifier, shadowed: boolean): boolean {
-  if (node.text !== "fetch" || shadowed) return false;
+function isGlobalFetchReference(
+  node: ts.Identifier,
+  shadowingScopes: ReadonlySet<ts.Node>,
+): boolean {
+  if (node.text !== "fetch") return false;
   const parent = node.parent;
   if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
   if (
@@ -178,14 +181,54 @@ function isGlobalFetchReference(node: ts.Identifier, shadowed: boolean): boolean
   }
   if (ts.isBindingElement(parent) && parent.propertyName === node) return false;
   if (ts.isTypeQueryNode(parent) || ts.isQualifiedName(parent)) return false;
+  for (let scope: ts.Node | undefined = parent; scope; scope = scope.parent) {
+    if (shadowingScopes.has(scope)) return false;
+  }
   return true;
 }
 
-/** True when the module declares its own binding named `fetch`. */
-function declaresFetch(source: ts.SourceFile): boolean {
-  let found = false;
+function isBlockScope(node: ts.Node): boolean {
+  return (
+    ts.isSourceFile(node) ||
+    ts.isBlock(node) ||
+    ts.isModuleBlock(node) ||
+    ts.isCaseBlock(node) ||
+    ts.isCatchClause(node) ||
+    ts.isForStatement(node) ||
+    ts.isForInStatement(node) ||
+    ts.isForOfStatement(node) ||
+    ts.isFunctionLike(node)
+  );
+}
+
+/** The node whose subtree a declaration named `fetch` shadows the global in. */
+function scopeOfDeclaration(declaration: ts.Node): ts.Node | undefined {
+  let node: ts.Node = declaration;
+  // A parameter, or a binding element inside one, shadows within its function.
+  while (
+    ts.isBindingElement(node) ||
+    ts.isObjectBindingPattern(node) ||
+    ts.isArrayBindingPattern(node)
+  ) {
+    node = node.parent;
+  }
+  if (ts.isParameter(node)) return node.parent;
+  const functionScoped =
+    ts.isVariableDeclaration(node) &&
+    ts.isVariableDeclarationList(node.parent) &&
+    (node.parent.flags & ts.NodeFlags.BlockScoped) === 0;
+  for (let scope: ts.Node | undefined = node.parent; scope; scope = scope.parent) {
+    if (functionScoped ? ts.isFunctionLike(scope) || ts.isSourceFile(scope) : isBlockScope(scope)) {
+      return scope;
+    }
+  }
+  return undefined;
+}
+
+/** Scopes in which the module declares its own binding named `fetch`. */
+function fetchShadowingScopes(source: ts.SourceFile): Set<ts.Node> {
+  const scopes = new Set<ts.Node>();
   const visit = (node: ts.Node): void => {
-    if (found) return;
     if (
       (ts.isParameter(node) ||
         ts.isVariableDeclaration(node) ||
@@ -196,13 +239,13 @@ function declaresFetch(source: ts.SourceFile): boolean {
       ts.isIdentifier(node.name) &&
       node.name.text === "fetch"
     ) {
-      found = true;
-      return;
+      const scope = ts.isImportSpecifier(node) ? source : scopeOfDeclaration(node);
+      if (scope) scopes.add(scope);
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return found;
+  return scopes;
 }
 
 /** True when the module reads a credential: a secret, a key or token name, or a key header. */
@@ -262,7 +305,7 @@ export function findProviderHttpFindings(
   fileName: string,
 ): ProviderHttpFinding[] {
   const source = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
-  const shadowed = declaresFetch(source);
+  const shadowingScopes = fetchShadowingScopes(source);
   const fetchJson = fetchJsonNames(source);
   const credentialed = fetchJson.size > 0 && readsCredential(source);
   const findings: ProviderHttpFinding[] = [];
@@ -271,7 +314,7 @@ export function findProviderHttpFindings(
     findings.push({ rule, line: line + 1, text: node.getText(source).split("\n")[0] as string });
   };
   const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) && isGlobalFetchReference(node, shadowed)) {
+    if (ts.isIdentifier(node) && isGlobalFetchReference(node, shadowingScopes)) {
       record("raw-fetch", node.parent);
     }
     if (

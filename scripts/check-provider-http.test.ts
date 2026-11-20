@@ -43,6 +43,23 @@ describe("raw fetch", () => {
     ].join("\n");
     expect(lines(source, "raw-fetch")).toEqual([]);
   });
+
+  it("still finds the global in a sibling scope of a binding named fetch", () => {
+    const source = [
+      "function inject(fetch: typeof globalThis.fetch) { return fetch('x'); }",
+      "export const load = (url) => fetch(url);",
+      "export function block(url) {",
+      "  { const fetch = createFetch(); fetch(url); }",
+      "  for (const fetch of impls) fetch(url);",
+      "  return fetch(url);",
+      "}",
+      "export function hoisted(url) {",
+      "  if (url) { var fetch = createFetch(); }",
+      "  return fetch(url);",
+      "}",
+    ].join("\n");
+    expect(lines(source, "raw-fetch")).toEqual([2, 6]);
+  });
 });
 
 describe("credentialed fetchJson", () => {

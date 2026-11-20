@@ -162,7 +162,10 @@ export function setup(ctx: IntegrationContext): void {
         );
       },
       timeoutMs: FETCH_TIMEOUT_MS,
-      fallbackContentType: "image/png",
+      fallbackContentType: ({ params }) =>
+        GIBS_LAYER_BY_ID.get(params.layerId as GibsLayerId)?.format === "jpg"
+          ? "image/jpeg"
+          : "image/png",
       cacheControl: ({ params }) => {
         const today = new Date().toISOString().slice(0, 10);
         const maxAge = (params.date ?? "") < today ? 86400 : 3600;

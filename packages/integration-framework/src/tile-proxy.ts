@@ -62,7 +62,7 @@ export interface UpstreamImageProxyOptions {
   /** Cache-Control for a successful answer. */
   cacheControl: string | ((request: TileRequest) => string);
   /** Media type assumed when the upstream omits Content-Type. */
-  fallbackContentType: string;
+  fallbackContentType: string | ((request: TileRequest) => string);
   /** Request deadline including the body. Defaults to 15 seconds. */
   timeoutMs?: number;
   /** Lower byte ceiling than the kind's default. */
@@ -126,12 +126,16 @@ async function proxyUpstreamImage(
 ): Promise<void> {
   const contentTypes =
     options.kind === "raster" ? RASTER_IMAGE_MEDIA_TYPES : VECTOR_TILE_MEDIA_TYPES;
+  const fallbackContentType =
+    typeof options.fallbackContentType === "function"
+      ? options.fallbackContentType(request)
+      : options.fallbackContentType;
   const responseOptions = (signal: AbortSignal | undefined): ResponseOptions => ({
     maxBytes:
       options.maxBytes ??
       (options.kind === "raster" ? MAX_RASTER_TILE_BYTES : MAX_VECTOR_TILE_BYTES),
     contentTypes,
-    fallbackContentType: options.fallbackContentType,
+    fallbackContentType,
     responseHeaders: ["content-type"],
     discardErrorBody: true,
     headers: { "User-Agent": USER_AGENT, ...options.headers },
@@ -177,7 +181,7 @@ async function proxyUpstreamImage(
           const bytes = await new Response(response.stream).arrayBuffer();
           return {
             data: Buffer.from(bytes).toString("base64"),
-            contentType: mediaType(response.headers["content-type"], options.fallbackContentType),
+            contentType: mediaType(response.headers["content-type"], fallbackContentType),
           };
         },
         request.signal,
@@ -194,7 +198,7 @@ async function proxyUpstreamImage(
       answerStatus(response.status);
       return;
     }
-    succeed(mediaType(response.headers["content-type"], options.fallbackContentType));
+    succeed(mediaType(response.headers["content-type"], fallbackContentType));
     reply.send(Readable.fromWeb(response.stream as NodeReadableStream<Uint8Array>));
   } catch (error) {
     if (error instanceof UpstreamTileStatus) {

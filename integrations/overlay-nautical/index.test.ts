@@ -19,6 +19,7 @@ vi.mock("@openmapx/noaa-coops-data", () => ({
 import {
   createFencedMemoryCache,
   createMockIntegrationContext,
+  createRecordingReply,
   fakeHttpClient,
   httpStatus,
   type MockIntegrationContext,
@@ -70,28 +71,13 @@ describe("nautical routes", () => {
   function getRoute(path: string) {
     const route = ctx.registered.routes.find((r) => r.path === path);
     if (!route) throw new Error(`route ${path} not registered`);
-    return route.handler;
+    return (
+      request: { query: Record<string, string>; params: Record<string, string>; body: unknown },
+      reply: Parameters<typeof route.handler>[1],
+    ) => route.handler({ ...request, clientKey: "c", headers: {} }, reply);
   }
 
-  function makeReply() {
-    const result: { status: number; body: unknown } = { status: 200, body: undefined };
-    const reply = {
-      send: (data: unknown) => {
-        result.body = data;
-      },
-      status: (code: number) => {
-        result.status = code;
-        return {
-          send: (data: unknown) => {
-            result.body = data;
-          },
-        };
-      },
-      header: () => {},
-      type: () => {},
-    };
-    return { reply, result };
-  }
+  const makeReply = createRecordingReply;
 
   beforeEach(() => {
     fetchJson.mockReset();
@@ -298,10 +284,7 @@ describe("nautical routes", () => {
       const query = { west: "-72", south: "41", east: "-70", north: "43" };
       const request = async () => {
         const { reply, result } = makeReply();
-        await getRoute("/stations")(
-          { query, params: {}, body: undefined, headers: {}, clientKey: "c" },
-          reply,
-        );
+        await getRoute("/stations")({ query, params: {}, body: undefined }, reply);
         return result as {
           status: number;
           body: { features: Array<{ properties: { id: string } }> };
@@ -510,30 +493,10 @@ describe("nautical tile routes", () => {
     const call = async (path: string, params: Record<string, string>) => {
       const route = ctx.registered.routes.find((r) => r.path === path);
       if (!route) throw new Error(`route ${path} not registered`);
-      const result: {
-        status: number;
-        body: unknown;
-        headers: Record<string, string>;
-        type?: string;
-      } = { status: 200, body: undefined, headers: {} };
-      const send = (data: unknown) => {
-        result.body = data;
-      };
+      const { reply, result } = createRecordingReply();
       await route.handler(
         { query: {}, params, body: undefined, clientKey: "c", headers: {} },
-        {
-          send,
-          status: (code) => {
-            result.status = code;
-            return { send };
-          },
-          header: (name, value) => {
-            result.headers[name.toLowerCase()] = value;
-          },
-          type: (value) => {
-            result.type = value;
-          },
-        },
+        reply,
       );
       return { result, route };
     };
@@ -555,7 +518,7 @@ describe("nautical tile routes", () => {
     expect(first.route.options?.rateLimitTier).toBe("tile");
     for (const { result } of [first, second]) {
       expect(result.status).toBe(200);
-      expect(result.type).toBe("image/png");
+      expect(result.contentType).toBe("image/png");
       expect(result.headers["cross-origin-resource-policy"]).toBe("cross-origin");
       expect([...(result.body as Buffer)]).toEqual([...PNG]);
     }

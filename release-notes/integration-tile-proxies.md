@@ -7,8 +7,8 @@ impacts: [security, operator-action]
 The hiking, winter sports, satellite, weather, street-level imagery, schematic
 transit and nautical tile relays now reject coordinates outside the Web
 Mercator grid before making an upstream request. A path parameter can no
-longer steer an OpenWeatherMap or NASA GIBS request, which carries your
-OpenWeatherMap key, to another path on that provider.
+longer steer an OpenWeatherMap request (which carries your key) or a NASA GIBS
+request to another path on that provider.
 
 All of these relays now share one implementation with fixed deadlines, media
 types and byte ceilings. An upstream 404 answers 404, and every other upstream

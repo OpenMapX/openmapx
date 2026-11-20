@@ -931,9 +931,9 @@ after a cross-origin hop; same-origin redirects retain them. Trusted redirects
 reject HTTPS-to-HTTP downgrades and URL credentials before contacting the target.
 Omitting `redirect` follows redirects, unless a caller header falls outside the
 representation headers (`Accept`, `Accept-Language`, `Content-Type`,
-`If-None-Match`, `If-Modified-Since`). Such a header may carry a credential, for
-example `x-api-key`, so the request then refuses every redirect. `get()` and
-`post()` apply the same rule.
+`If-None-Match`, `If-Modified-Since`) and `User-Agent`. Such a header may carry a
+credential, for example `x-api-key`, so the request then refuses every redirect.
+`get()` and `post()` apply the same rule.
 
 #### Choosing the HTTP path
 
