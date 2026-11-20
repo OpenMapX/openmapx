@@ -444,11 +444,10 @@ function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
 }
 
 /**
- * Builds the per-integration `DatabaseClient` when the manifest requires
- * postgis (via `requires: [{ service: "postgis" }]`); returns `undefined`
- * otherwise. Shared by cold start and reload.
+ * `ctx.db` on the integration pool when the manifest requires PostGIS (via
+ * `requires: [{ service: "postgis" }]`); `undefined` otherwise. Shared by cold
+ * start and reload.
  */
-/** `ctx.db` for integrations that require PostGIS, on the integration pool. */
 function buildIntegrationDb(manifest: IntegrationManifest): IntegrationContext["db"] {
   const needsDb = manifest.requires?.some((r) => r.service === "postgis");
   return needsDb ? createIntegrationDb(integrationSql) : undefined;
