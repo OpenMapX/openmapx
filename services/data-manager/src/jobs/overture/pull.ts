@@ -216,7 +216,8 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
       requireTextStdout(statsResult.stdout, "Overture snapshot statistics"),
     ) as Array<Record<string, number>>;
     const stats = statsRows[0];
-    if (!stats || !Number.isSafeInteger(stats.row_count) || stats.row_count <= 0) {
+    const rowCount = stats?.row_count;
+    if (!stats || rowCount === undefined || !Number.isSafeInteger(rowCount) || rowCount <= 0) {
       throw new Error("Overture regional snapshot contains no rows");
     }
     for (const field of [
@@ -251,7 +252,7 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
       bbox,
       partialPath,
       {
-        rowCount: stats.row_count,
+        rowCount,
         contributors: contributorRows.map((row) => row.dataset),
       },
       basename(outPath),

@@ -290,10 +290,11 @@ export async function checkMotisReachabilityDestinations(
       requestSignal.throwIfAborted();
       const destinations = request.destinations.slice(offset, offset + batchSize);
       const durations = await runOneToManyBatch(instance, request, destinations, requestSignal);
-      for (let index = 0; index < destinations.length; index += 1) {
-        const durationSeconds = durations[index];
+      for (const [index, destination] of destinations.entries()) {
+        // One duration per destination; a missing one counts as unreachable.
+        const durationSeconds = durations[index] ?? null;
         results.push({
-          id: destinations[index].id,
+          id: destination.id,
           durationSeconds,
           reachable: durationSeconds !== null && durationSeconds <= maxTravelTime * 60,
         });

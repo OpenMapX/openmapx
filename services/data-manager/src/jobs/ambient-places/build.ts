@@ -17,6 +17,7 @@ import {
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
+import { requiredRow } from "../../db/required-row.js";
 import { cancellableTransaction } from "../execution/worker-scope.js";
 import { type AmbientBuildOptions, buildGermanyPlaces } from "./germany.js";
 import { buildPlanetPlaces } from "./planet-build.js";
@@ -31,8 +32,11 @@ import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError, ensureAmbientSchema } 
 import { lockAmbientCountrySources } from "./source-locks.js";
 
 async function lock(tx: postgres.TransactionSql) {
-  const [row] = await tx.unsafe<{ locked: boolean }[]>(
-    `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
+  const row = requiredRow(
+    await tx.unsafe<{ locked: boolean }[]>(
+      `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
+    ),
+    "Ambient write lock",
   );
   if (!row.locked) throw new AmbientPublicationBusyError();
 }
@@ -54,8 +58,9 @@ export async function buildAmbientPlaces(
         await lock(tx);
         if (region.coverage === "germany") await lockAmbientCountrySources(tx);
         await tx.unsafe(`SET LOCAL statement_timeout='120000ms'`);
-        const [clock] = await tx.unsafe<{ started_at: string }[]>(
-          `SELECT clock_timestamp()::TEXT AS started_at`,
+        const clock = requiredRow(
+          await tx.unsafe<{ started_at: string }[]>(`SELECT clock_timestamp()::TEXT AS started_at`),
+          "Ambient build clock",
         );
         startedAt = clock.started_at;
         // Progress writes share the publication transaction and its writer lock.
@@ -105,8 +110,11 @@ export async function buildAmbientPlaces(
             `SELECT region,release,status,places_published_at FROM overture_places.conflation_state WHERE singleton=1`,
           );
           if (!state) {
-            const [input] = await tx.unsafe<{ populated: boolean }[]>(
-              `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
+            const input = requiredRow(
+              await tx.unsafe<{ populated: boolean }[]>(
+                `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
+              ),
+              "Overture places check",
             );
             if (input.populated) throw new Error("Overture conflation state is missing");
           }
@@ -114,9 +122,12 @@ export async function buildAmbientPlaces(
             throw new Error("Overture conflation must be completed before ambient publication");
           if (state) {
             const publishedAt = fresh(state.places_published_at);
-            const [releases] = await tx.unsafe<{ mismatch: boolean }[]>(
-              `SELECT EXISTS(SELECT 1 FROM overture_places.places WHERE release<>$1 AND geom && ST_MakeEnvelope($2,$3,$4,$5,4326) LIMIT 1) AS mismatch`,
-              [state.release, ...params],
+            const releases = requiredRow(
+              await tx.unsafe<{ mismatch: boolean }[]>(
+                `SELECT EXISTS(SELECT 1 FROM overture_places.places WHERE release<>$1 AND geom && ST_MakeEnvelope($2,$3,$4,$5,4326) LIMIT 1) AS mismatch`,
+                [state.release, ...params],
+              ),
+              "Overture release check",
             );
             if (releases.mismatch)
               throw new Error("Overture conflation release does not match published places");
@@ -266,7 +277,7 @@ export async function buildAmbientPlaces(
         const [writer] = await tx.unsafe<{ locked: boolean }[]>(
           `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
         );
-        if (!writer.locked) return;
+        if (!writer?.locked) return;
         await tx.unsafe(
           `UPDATE ambient_places.state SET last_build_id=$1,last_build_started_at=$2,last_build_finished_at=clock_timestamp(),last_build_error=$3 WHERE singleton=1 AND (last_build_started_at IS NULL OR last_build_started_at<=$2::TIMESTAMPTZ OR last_build_id=$1)`,
           [attempt, startedAt, error instanceof Error ? error.message : "Publication failed"],
@@ -290,7 +301,7 @@ export async function rollbackAmbientPlaces(sql: postgres.Sql): Promise<void> {
     const [state] = await tx.unsafe<{ previous: string | null }[]>(
       `SELECT previous FROM ambient_places.state WHERE singleton=1`,
     );
-    if (!state.previous) throw new Error("No previous ambient generation available");
+    if (!state?.previous) throw new Error("No previous ambient generation available");
     await tx.unsafe(
       `UPDATE ambient_places.generations SET cache_lease_until=greatest(cache_lease_until,now()+interval '7 days 1 minute') WHERE id IN (SELECT active FROM ambient_places.state WHERE singleton=1 UNION SELECT previous FROM ambient_places.state WHERE singleton=1)`,
     );

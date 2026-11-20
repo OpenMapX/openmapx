@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { requiredRow } from "../../db/required-row.js";
 import { assertValidOvertureSchema } from "./schema.js";
 
 /** Exact connected components, with graph state on disk rather than one
@@ -53,7 +54,7 @@ export async function buildConflationComponents(
             (SELECT count(*)::INT FROM updated) AS n`,
           [cursorType, cursorId],
         );
-        if (!page.n || page.osm_type === null || page.osm_id === null) break;
+        if (!page?.n || page.osm_type === null || page.osm_id === null) break;
         cursorType = page.osm_type;
         cursorId = page.osm_id;
         changed += page.n;
@@ -65,8 +66,11 @@ export async function buildConflationComponents(
       (SELECT component_id,dense_rank() OVER(ORDER BY component_id) AS id FROM ${table} GROUP BY component_id) r
       WHERE c.component_id=r.component_id`);
     await sql.unsafe(`ANALYZE ${table}`);
-    const [result] = await sql.unsafe<{ n: string }[]>(
-      `SELECT coalesce(max(component_id),0)::TEXT AS n FROM ${table}`,
+    const result = requiredRow(
+      await sql.unsafe<{ n: string }[]>(
+        `SELECT coalesce(max(component_id),0)::TEXT AS n FROM ${table}`,
+      ),
+      "Component count",
     );
     return Number(result.n);
   } finally {

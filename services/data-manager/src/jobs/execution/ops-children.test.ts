@@ -15,7 +15,7 @@ import {
 } from "@openmapx/core/ops";
 import { applyHardlinkPlan } from "@openmapx/hardlinks";
 import { build } from "esbuild";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, expect, it, vi } from "vitest";
 import { transitChildCandidateId } from "./ops-children.js";
 
 /** A fault that runs at the next forward check; every check waits for it. `bound`
@@ -50,6 +50,11 @@ vi.mock("@openmapx/core/build-artifacts", async (importOriginal) => {
 });
 
 /** The lease holding `target` in the installation whose data root is `data`. */
+/** A value the test admitted or read earlier; it fails the test if it is missing. */
+function present<T>(value: T | null | undefined): T {
+  assert.exists(value);
+  return value;
+}
 function targetLease(data: string, target: string): string | undefined {
   return control
     .openLeaseStore({ directory: control.leaseStoreDirectory(dirname(data)), purpose: "test" })
@@ -477,7 +482,7 @@ it.skipIf(
       });
       send({ type: "release" });
       await expect
-        .poll(async () => (await runtime.inspect(id!))?.status, { timeout: 15000 })
+        .poll(async () => (await runtime.inspect(present(id)))?.status, { timeout: 15000 })
         .toBe("ok");
       expect((await runtime.inspect(id))?.result).toEqual({
         kind: "transit-maintenance",
@@ -766,7 +771,9 @@ it
         await expect
           .poll(
             async () =>
-              (await store.inspect(id!))?.children.some((child) => child.phase === "proxy-restore"),
+              (await store.inspect(present(id)))?.children.some(
+                (child) => child.phase === "proxy-restore",
+              ),
             { timeout: 15000 },
           )
           .toBe(true);
@@ -775,7 +782,7 @@ it
           await expect
             .poll(
               async () =>
-                (await store.inspect(id!))?.children.find(
+                (await store.inspect(present(id)))?.children.find(
                   (child) => child.phase === "proxy-restore",
                 )?.state,
               { timeout: 15000 },
@@ -785,7 +792,7 @@ it
           held = lease();
         expect(held).toBeDefined();
         await expect(
-          journal.assertOwnedProxyRecoverySettled((await store.inspect(id))!.execution),
+          journal.assertOwnedProxyRecoverySettled(present(await store.inspect(id)).execution),
         ).rejects.toThrow();
         expect((await store.inspect(id))?.finishedAt).toBeNull();
         expect(posts).toBe(1);
@@ -814,8 +821,9 @@ it
           await expect
             .poll(
               async () =>
-                (await store.inspect(id!))?.children.filter((child) => child.state === "terminal")
-                  .length,
+                (await store.inspect(present(id)))?.children.filter(
+                  (child) => child.state === "terminal",
+                ).length,
               { timeout: 15000 },
             )
             .toBe(2);
@@ -825,8 +833,9 @@ it
           await expect
             .poll(
               async () =>
-                (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id!}`)[0]
-                  ?.execution_completion != null,
+                (
+                  await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${present(id)}`
+                )[0]?.execution_completion != null,
               { timeout: 15000 },
             )
             .toBe(true);
@@ -860,7 +869,7 @@ it
           expect((await receiver.inspect(id))?.publication).toBe("unknown");
           expect(lease()).toBe(held);
           await expect(
-            journal.assertOwnedProxyRecoverySettled((await store.inspect(id))!.execution),
+            journal.assertOwnedProxyRecoverySettled(present(await store.inspect(id)).execution),
           ).rejects.toThrow();
           const clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
           try {
@@ -876,7 +885,7 @@ it
           return;
         }
         await expect
-          .poll(async () => (await receiver.inspect(id!))?.status, { timeout: 15000 })
+          .poll(async () => (await receiver.inspect(present(id)))?.status, { timeout: 15000 })
           .toBe("error");
         const failed = await store.inspect(id);
         expect(failed?.children).toMatchObject([
@@ -923,7 +932,7 @@ it
       });
       send({ type: "release" });
       await expect
-        .poll(async () => (await receiver.inspect(id!))?.status, { timeout: 15000 })
+        .poll(async () => (await receiver.inspect(present(id)))?.status, { timeout: 15000 })
         .toBe("canceled");
       expect((await receiver.inspect(id))?.publication).toBe("committed");
       await expect.poll(lease, { timeout: 10000 }).toBeUndefined();
@@ -966,8 +975,8 @@ function writePreparedFixture(staging: string, executionId: string) {
       JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), sources: [] }),
     ],
     ["test.gtfs.zip", "public-synthetic-dataset"],
-  ])
-    writeFileSync(join(staging, name!), body!, { mode: 0o600 });
+  ] as const)
+    writeFileSync(join(staging, name), body, { mode: 0o600 });
   createCandidateManifest(staging, executionId, new Date().toISOString());
 }
 function linkProxyFixture(data: string) {

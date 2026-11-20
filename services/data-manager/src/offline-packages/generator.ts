@@ -370,8 +370,8 @@ export class OfflinePackageGenerator {
             join(source.fontsDirectory, font, `${rawRange}.pbf`),
           ),
         );
-        if (files.length === 1) {
-          const path = files[0];
+        const [path, ...otherFiles] = files;
+        if (path !== undefined && otherFiles.length === 0) {
           return {
             path,
             byteLength: statSync(path).size,

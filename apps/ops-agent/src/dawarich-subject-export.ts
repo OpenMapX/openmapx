@@ -43,9 +43,9 @@ class DawarichSubjectExportRouteError extends Error {
 
 function authMatches(header: unknown, token: string): boolean {
   if (typeof header !== "string") return false;
-  const match = /^Bearer ([^\s]+)$/.exec(header);
-  if (!match || token.length < 1) return false;
-  const left = createHash("sha256").update(match[1]).digest();
+  const [, presented] = /^Bearer ([^\s]+)$/.exec(header) ?? [];
+  if (!presented || token.length < 1) return false;
+  const left = createHash("sha256").update(presented).digest();
   const right = createHash("sha256").update(token).digest();
   return timingSafeEqual(left, right);
 }
@@ -215,6 +215,12 @@ export interface DockerDawarichRuntimeInspectorOptions {
   ) => Promise<{ stdout: string; stderr: string }>;
 }
 
+/** The text before the first `separator`, or all of it when there is none. */
+function beforeFirst(value: string, separator: string): string {
+  const index = value.indexOf(separator);
+  return index < 0 ? value : value.slice(0, index);
+}
+
 function imageDigestFromInspection(value: Record<string, unknown>, image: string): string | null {
   const repoDigests = Array.isArray(value.RepoDigests) ? value.RepoDigests : [];
   const match = repoDigests.find(
@@ -286,15 +292,15 @@ export function createDockerDawarichRuntimeInspector(
         : {};
     const image = typeof config.Image === "string" ? config.Image : "";
     const inspected = { ...inspection, Config: config };
-    const digest = imageDigestFromInspection(inspected, DAWARICH_SUPPORTED_IMAGE.split(":", 1)[0]);
+    const supportedRepository = beforeFirst(DAWARICH_SUPPORTED_IMAGE, ":");
+    const digest = imageDigestFromInspection(inspected, supportedRepository);
     const commit =
       labelOrEnv(inspected, "OPENMAPX_DAWARICH_COMMIT") ??
       labelOrEnv(inspected, "org.opencontainers.image.revision");
     if (!image || !digest || !commit) throw new DawarichSubjectExportRouteError("collector_failed");
-    const imageWithoutDigest = image.includes("@") ? image.split("@", 1)[0] : image;
+    const imageWithoutDigest = beforeFirst(image, "@");
     const normalizedImage =
-      imageWithoutDigest === DAWARICH_SUPPORTED_IMAGE.split(":", 1)[0] &&
-      digest === DAWARICH_SUPPORTED_IMAGE_DIGEST
+      imageWithoutDigest === supportedRepository && digest === DAWARICH_SUPPORTED_IMAGE_DIGEST
         ? DAWARICH_SUPPORTED_IMAGE
         : imageWithoutDigest;
     return { image: normalizedImage, digest, commit };

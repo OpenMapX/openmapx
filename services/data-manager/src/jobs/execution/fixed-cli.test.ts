@@ -23,7 +23,7 @@ import { services } from "@openmapx/core/server";
 import { build } from "esbuild";
 import Fastify from "fastify";
 import postgres from "postgres";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import {
   createAdministrativeRuntime,
   createDefaultFixedCli,
@@ -216,10 +216,11 @@ it.skipIf(
       });
       expect(admitted.execution).toBe("async");
       if (admitted.execution !== "async") throw Error("Async root required");
-      id = admitted.operationId;
+      const admittedId = admitted.operationId;
+      id = admittedId;
       try {
         await expect
-          .poll(async () => await client.status(operation.kind, id!), {
+          .poll(async () => await client.status(operation.kind, admittedId), {
             timeout: 25000,
             interval: 200,
           })
@@ -227,8 +228,8 @@ it.skipIf(
       } catch (error) {
         console.info(
           "Synthetic fixed-command diagnostics",
-          await client.events(id!),
-          await client.status(operation.kind, id!),
+          await client.events(admittedId),
+          await client.status(operation.kind, admittedId),
         );
         throw error;
       }
@@ -242,7 +243,9 @@ it.skipIf(
       expect(rows[0]?.status.status).toBe("ok");
       expect(rows[0]?.parent?.issuer).toBe("host-cli");
       expect(rows[0]?.execution.principal).toBe("host-cli");
-      control.assertDataManagerTerminal(rows[0]!.execution, rows[0]!.status);
+      const [row] = rows;
+      assert.isDefined(row);
+      control.assertDataManagerTerminal(row.execution, row.status);
       expect(heldTargets(dirname(data)).includes("data-manager")).toBe(false);
 
       // The admin panel's data link: the agent runs `data link` as a fixed
@@ -287,7 +290,8 @@ it.skipIf(
         ) as { source: string; target: string; consumerService: string }[]
       ).find((value) => value.consumerService === "valhalla" && value.source === "data/osm");
       expect(entry, JSON.stringify((await client.events(linked.operationId)).events)).toBeDefined();
-      const linkedFile = join(infra, entry!.target, "planet.osm.pbf");
+      assert.isDefined(entry);
+      const linkedFile = join(infra, entry.target, "planet.osm.pbf");
       expect(statSync(linkedFile).ino).toBe(statSync(join(data, "osm", "planet.osm.pbf")).ino);
       // One application, and nothing left held once it ended.
       expect(

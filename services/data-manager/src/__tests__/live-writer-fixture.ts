@@ -10,7 +10,7 @@ export function trafficFixture(tileCount = 1, edgesPerTile = 6): Buffer {
       [116, 8, 0],
       [124, 12, size],
       [136, 12, 0],
-    ]) {
+    ] as const) {
       data.write(value.toString(8).padStart(width - 1, "0"), offset, "ascii");
     }
     data.fill(32, 148, 156);

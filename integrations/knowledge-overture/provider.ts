@@ -76,9 +76,9 @@ async function withDeadline<T>(ms: number, fn: () => Promise<T>): Promise<T | nu
  * Parse an OSM ref like "node/123456789" into { type, id } or null.
  */
 function parseOsmRef(ref: string): { type: string; id: bigint } | null {
-  const match = /^(node|way|relation)\/(\d+)$/.exec(ref);
-  if (!match) return null;
-  return { type: match[1], id: BigInt(match[2]) };
+  const [, type, id] = /^(node|way|relation)\/(\d+)$/.exec(ref) ?? [];
+  if (type === undefined || id === undefined) return null;
+  return { type, id: BigInt(id) };
 }
 
 /**
@@ -113,9 +113,8 @@ export async function resolveGers(
         `SELECT gers_id FROM overture_places.poi_conflation_link WHERE osm_type=$1 AND osm_id=$2 LIMIT 1`,
         [parsed.type, parsed.id],
       );
-      if (Array.isArray(linkRows) && linkRows.length > 0) {
-        return linkRows[0].gers_id;
-      }
+      const [link] = Array.isArray(linkRows) ? linkRows : [];
+      if (link) return link.gers_id;
     }
   }
 
@@ -211,8 +210,8 @@ async function fetchOverturePlaceByGers(
     `,
     [gersId],
   );
-  if (!Array.isArray(rows) || rows.length === 0) return null;
-  return rows[0];
+  if (!Array.isArray(rows)) return null;
+  return rows[0] ?? null;
 }
 
 function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult | null {

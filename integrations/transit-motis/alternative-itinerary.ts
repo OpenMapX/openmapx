@@ -19,33 +19,54 @@ export function alternativeReplacement(
   chain: Leg[],
   context: AlternativeContext,
 ): { fromLegIndex: number; toLegIndex: number } | null {
+  const replaced = parent.legs[index];
   if (
     !chain.length ||
     chain.length > 6 ||
-    !isTransit(parent.legs[index]) ||
-    parent.legs[index].interlineWithPreviousLeg
+    !replaced ||
+    !isTransit(replaced) ||
+    replaced.interlineWithPreviousLeg
   )
     return null;
   const runStarts = chain.filter((l) => isTransit(l) && !l.interlineWithPreviousLeg);
   if (runStarts.length !== 1 || chain.filter(isTransit).length === 0) return null;
   const firstTransit = chain.findIndex(isTransit),
     lastTransit = chain.findLastIndex(isTransit);
+  const firstTransitLeg = chain[firstTransit],
+    lastTransitLeg = chain[lastTransit],
+    chainStart = chain[0],
+    chainEnd = chain.at(-1);
+  if (!firstTransitLeg || !lastTransitLeg || !chainStart || !chainEnd) return null;
   if (chain.slice(firstTransit, lastTransit + 1).some((l) => !isTransit(l))) return null;
   let fromLegIndex = index,
     toLegIndex = index;
-  while (fromLegIndex > 0 && !isTransit(parent.legs[fromLegIndex - 1])) fromLegIndex--;
-  while (
-    toLegIndex + 1 < parent.legs.length &&
-    parent.legs[toLegIndex + 1].interlineWithPreviousLeg
+  for (
+    let leg = parent.legs[fromLegIndex - 1];
+    leg && !isTransit(leg);
+    leg = parent.legs[fromLegIndex - 1]
+  )
+    fromLegIndex--;
+  for (
+    let leg = parent.legs[toLegIndex + 1];
+    leg?.interlineWithPreviousLeg;
+    leg = parent.legs[toLegIndex + 1]
   )
     toLegIndex++;
-  while (toLegIndex + 1 < parent.legs.length && !isTransit(parent.legs[toLegIndex + 1]))
+  for (
+    let leg = parent.legs[toLegIndex + 1];
+    leg && !isTransit(leg);
+    leg = parent.legs[toLegIndex + 1]
+  )
     toLegIndex++;
   const before = parent.legs[fromLegIndex - 1],
-    after = parent.legs[toLegIndex + 1];
+    after = parent.legs[toLegIndex + 1],
+    fromLeg = parent.legs[fromLegIndex],
+    toLeg = parent.legs[toLegIndex];
   if (
-    !sameTransitPlace(place(parent.legs[fromLegIndex].from), place(chain[0].from)) ||
-    !sameTransitPlace(place(parent.legs[toLegIndex].to), place(chain[chain.length - 1].to))
+    !fromLeg ||
+    !toLeg ||
+    !sameTransitPlace(place(fromLeg.from), place(chainStart.from)) ||
+    !sameTransitPlace(place(toLeg.to), place(chainEnd.to))
   )
     return null;
   const bufferMs = (context.transferBufferMinutes ?? 0) * 60_000;
@@ -54,12 +75,9 @@ export function alternativeReplacement(
     legs.reduce((total, l) => total + Date.parse(l.endTime) - Date.parse(l.startTime), 0);
   const ingressBuffer = Math.max(bufferMs, streetMs(chain.slice(0, firstTransit)) + extraMs);
   const egressBuffer = Math.max(bufferMs, streetMs(chain.slice(lastTransit + 1)) + extraMs);
-  if (
-    before &&
-    Date.parse(chain[firstTransit].startTime) - Date.parse(before.endTime) < ingressBuffer
-  )
+  if (before && Date.parse(firstTransitLeg.startTime) - Date.parse(before.endTime) < ingressBuffer)
     return null;
-  if (after && Date.parse(after.startTime) - Date.parse(chain[lastTransit].endTime) < egressBuffer)
+  if (after && Date.parse(after.startTime) - Date.parse(lastTransitLeg.endTime) < egressBuffer)
     return null;
   const modes = expandedModes(context.modes);
   const streetModes = new Set(
@@ -74,8 +92,8 @@ export function alternativeReplacement(
   )
     return null;
   if (
-    chain[firstTransit].tripId === parent.legs[index].tripId &&
-    chain[firstTransit].startTime === parent.legs[index].startTime
+    firstTransitLeg.tripId === replaced.tripId &&
+    firstTransitLeg.startTime === replaced.startTime
   )
     return null;
   const combined = [
@@ -83,6 +101,9 @@ export function alternativeReplacement(
     ...chain,
     ...parent.legs.slice(toLegIndex + 1),
   ];
+  const combinedStart = combined[0],
+    combinedEnd = combined.at(-1);
+  if (!combinedStart || !combinedEnd) return null;
   if (
     !coherentTransitLegs(
       combined.map((l) => ({
@@ -111,8 +132,8 @@ export function alternativeReplacement(
     if (
       !Number.isFinite(bound) ||
       (context.arriveBy
-        ? Date.parse(combined[combined.length - 1].endTime) > bound
-        : Date.parse(combined[0].startTime) < bound)
+        ? Date.parse(combinedEnd.endTime) > bound
+        : Date.parse(combinedStart.startTime) < bound)
     )
       return null;
   }

@@ -6,6 +6,8 @@ import { closeControlInstallation, openControlInstallation } from "@openmapx/cor
 import {
   type CatalogPinSet,
   catalogRevisionId,
+  pinnedAtlasCommit,
+  pinnedTransitousCommit,
   readCatalogPinSet,
   readCatalogProposal,
 } from "@openmapx/core/catalog-pins";
@@ -39,8 +41,8 @@ export function inspectAgentPinnedCredentialKeys(
 ) {
   return inspectPinnedFeedCredentialKeys({
     catalogDir: join(infraDir, "data", TRANSITOUS_CATALOG_DIR),
-    transitousCommit: pins.transitous.ref.split("@").at(-1)!,
-    atlasCommit: pins.transitous.submodules["transitland-atlas"]!,
+    transitousCommit: pinnedTransitousCommit(pins.transitous),
+    atlasCommit: pinnedAtlasCommit(pins.transitous),
     scope,
     git: async (args, cwd) =>
       (

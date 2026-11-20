@@ -15,6 +15,7 @@ import {
   mergeAmbientPlaces,
 } from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
+import { requiredRow } from "../../db/required-row.js";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import { assertAmbientDiskCapacity } from "./capacity.js";
 import {
@@ -90,8 +91,11 @@ export async function buildGermanyPlaces(
       `SELECT region,release,status,places_published_at,place_count::TEXT FROM overture_places.conflation_state WHERE singleton=1`,
     );
     if (!state) {
-      const [input] = await tx.unsafe<{ populated: boolean }[]>(
-        `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
+      const input = requiredRow(
+        await tx.unsafe<{ populated: boolean }[]>(
+          `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
+        ),
+        "Overture places check",
       );
       if (input.populated) throw new Error("Overture conflation state is missing");
     } else {
@@ -99,9 +103,12 @@ export async function buildGermanyPlaces(
         throw new Error("Germany coverage requires the complete europe/germany Overture snapshot");
       if (state.status !== "completed")
         throw new Error("Overture conflation must be completed before ambient publication");
-      const [releases] = await tx.unsafe<{ mismatch: boolean }[]>(
-        `SELECT EXISTS(SELECT 1 FROM overture_places.places WHERE release<>$1 LIMIT 1) AS mismatch`,
-        [state.release],
+      const releases = requiredRow(
+        await tx.unsafe<{ mismatch: boolean }[]>(
+          `SELECT EXISTS(SELECT 1 FROM overture_places.places WHERE release<>$1 LIMIT 1) AS mismatch`,
+          [state.release],
+        ),
+        "Overture release check",
       );
       if (releases.mismatch)
         throw new Error("Overture conflation release does not match published places");
@@ -186,11 +193,13 @@ export async function buildGermanyPlaces(
       "osm",
       rows.length,
     );
-    const last = rows[rows.length - 1];
+    const last = rows.at(-1);
+    if (!last) break;
     osmType = last.osm_type;
     osmId = last.osm_id;
   }
-  if (manifest.sources.overture) {
+  const overtureSource = manifest.sources.overture;
+  if (overtureSource) {
     let cursor = "";
     for (;;) {
       const rows = await tx.unsafe<
@@ -207,14 +216,14 @@ export async function buildGermanyPlaces(
         LEFT JOIN overture_places.poi_conflation_link l ON l.gers_id=o.gers_id AND l.release=$2
         LEFT JOIN osm_search.places p ON p.osm_type=l.osm_type AND p.osm_id=l.osm_id
         LEFT JOIN overture_places.osm_pois raw ON raw.osm_type=l.osm_type AND raw.osm_id=l.osm_id ORDER BY o.gers_id`,
-        [cursor, manifest.sources.overture.release],
+        [cursor, overtureSource.release],
       );
       if (!rows.length) break;
       const places = rows.flatMap((row) => {
         const p = ambientPlaceFromOverture(row);
         if (!p || !inside(p)) return [];
         eligibleOverture(row);
-        manifest.sources.overture!.count++;
+        overtureSource.count++;
         // Existing OSM rows own policy and position, even if excluded/outside.
         if (row.indexed_osm_id !== null) return [];
         if (row.linked_osm) {
@@ -231,7 +240,9 @@ export async function buildGermanyPlaces(
         ];
       });
       await insert(places, "overture", rows.length);
-      cursor = rows[rows.length - 1].gers_id;
+      const last = rows.at(-1);
+      if (!last) break;
+      cursor = last.gers_id;
     }
   }
   if (!manifest.placeCount) throw new Error("Refusing to publish an empty ambient generation");

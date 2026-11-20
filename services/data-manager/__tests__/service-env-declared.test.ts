@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 const sourceRoot = join(process.cwd(), "services/data-manager/src");
 
@@ -32,7 +32,10 @@ function scannedEnvironmentNames(): Set<string> {
   for (const file of files) {
     const source = readFileSync(file, "utf-8");
     for (const regex of regexes) {
-      for (const match of source.matchAll(regex)) names.add(match[1]);
+      for (const [, name] of source.matchAll(regex)) {
+        assert.isDefined(name);
+        names.add(name);
+      }
     }
   }
   return names;

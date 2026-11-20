@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import * as resources from "../../src/jobs/search-index/extract.js";
 
 vi.mock("node:fs", async (importOriginal) => {
@@ -54,8 +54,11 @@ it("puts planet node locations on disk and removes them after export failure", a
   try {
     await expect(
       resources.withOsmiumLocationIndex("planet", dir, async (args) => {
-        expect(args[0]).toMatch(/^--index-type=dense_file_array,/);
-        path = args[0].split(",")[1];
+        const [indexArgument] = args;
+        expect(indexArgument).toMatch(/^--index-type=dense_file_array,/);
+        const indexPath = indexArgument?.split(",")[1];
+        assert.isDefined(indexPath);
+        path = indexPath;
         writeFileSync(path, "fixture");
         throw new Error("export failed");
       }),

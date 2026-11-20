@@ -7,6 +7,7 @@ import {
 import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import type { FastifyInstance } from "fastify";
 import type postgres from "postgres";
+import { requiredRow } from "../../db/required-row.js";
 import { registerDataManagerRoute } from "../../route-contract.js";
 import { runLocalDataExecution } from "../execution/local.js";
 import {
@@ -33,8 +34,11 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
           updatedAt: new Date(stage.updatedAt).toISOString(),
         }
       : null;
-    const [exists] = await sql.unsafe<{ exists: boolean }[]>(
-      `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
+    const exists = requiredRow(
+      await sql.unsafe<{ exists: boolean }[]>(
+        `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
+      ),
+      "Ambient state check",
     );
     if (!exists.exists)
       return {
@@ -45,19 +49,25 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
         progress,
         candidate,
       };
-    const [state] = await sql.unsafe<
-      {
-        previous: string | null;
-        last_build_error: string | null;
-        last_build_started_at: Date | string | null;
-        last_build_finished_at: Date | string | null;
-      }[]
-    >(
-      `SELECT previous,last_build_error,last_build_started_at,last_build_finished_at FROM ambient_places.state WHERE singleton=1`,
+    const state = requiredRow(
+      await sql.unsafe<
+        {
+          previous: string | null;
+          last_build_error: string | null;
+          last_build_started_at: Date | string | null;
+          last_build_finished_at: Date | string | null;
+        }[]
+      >(
+        `SELECT previous,last_build_error,last_build_started_at,last_build_finished_at FROM ambient_places.state WHERE singleton=1`,
+      ),
+      "Ambient state",
     );
-    const [writer] = await sql.unsafe<{ busy: boolean }[]>(
-      `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND classid=0 AND objsubid=1 AND objid=$1 AND granted) AS busy`,
-      [AMBIENT_WRITE_LOCK],
+    const writer = requiredRow(
+      await sql.unsafe<{ busy: boolean }[]>(
+        `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND classid=0 AND objsubid=1 AND objid=$1 AND granted) AS busy`,
+        [AMBIENT_WRITE_LOCK],
+      ),
+      "Ambient writer check",
     );
     return {
       active,

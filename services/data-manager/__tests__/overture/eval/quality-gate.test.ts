@@ -1,5 +1,5 @@
 import type postgres from "postgres";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = { unsafe: vi.fn() };
 const sql = { unsafe: mocks.unsafe } as unknown as postgres.Sql;
@@ -73,6 +73,7 @@ describe("Overture permanent quality baseline", () => {
 
   it("passes the reviewed floor and reports all metric dimensions", () => {
     const baseline = OVERTURE_QUALITY_BASELINE[0];
+    assert.isDefined(baseline);
     const ids = [
       ...baseline.judgments.map((judgment) => judgment.gersId),
       ...Array.from(
@@ -127,9 +128,12 @@ describe("Overture permanent quality baseline", () => {
 
   it("does not query unrelated regional cases", async () => {
     await expect(
-      validateOvertureQuality(sql, "overture_places__staging", "europe/france", [
-        OVERTURE_QUALITY_BASELINE[0],
-      ]),
+      validateOvertureQuality(
+        sql,
+        "overture_places__staging",
+        "europe/france",
+        OVERTURE_QUALITY_BASELINE.slice(0, 1),
+      ),
     ).resolves.toEqual({ applicableCases: 0, cases: [] });
     expect(mocks.unsafe).not.toHaveBeenCalled();
   });

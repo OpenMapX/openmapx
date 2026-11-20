@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   generateCandidatePairs,
   type OsmPoi,
@@ -37,7 +37,8 @@ describe("generateCandidatePairs", () => {
   it("includes nearby places with their identities, distance, and bounded similarity", () => {
     const pairs = generateCandidatePairs([BERLIN_CENTER], [OVERTURE_CLOSE]);
     expect(pairs).toHaveLength(1);
-    const pair = pairs[0];
+    const [pair] = pairs;
+    assert.isDefined(pair);
     expect(pair.osmPoi.osmId).toBe("1");
     expect(pair.overturePlace.gersId).toBe("ov-close");
     expect(pair.distanceM).toBeLessThan(150);
@@ -58,12 +59,14 @@ describe("generateCandidatePairs", () => {
     // These names share 9, 7, 4, and 0 of the source's 9 bigrams: the
     // independently known Dice scores are 1, 7/9, 4/9, and 0.
     // High bands deliberately precede low bands so a global slice cannot pass.
-    const places: OverturePlace[] = [
-      ["high", "abcdefghij"],
-      ["mid-high", "abcdefghzz"],
-      ["mid-low", "abcdezzzzz"],
-      ["low", "zzzzzzzzzz"],
-    ].flatMap(([band, name]) =>
+    const places: OverturePlace[] = (
+      [
+        ["high", "abcdefghij"],
+        ["mid-high", "abcdefghzz"],
+        ["mid-low", "abcdezzzzz"],
+        ["low", "zzzzzzzzzz"],
+      ] as const
+    ).flatMap(([band, name]) =>
       [1, 2].map((ordinal) => ({
         gersId: `${band}-${ordinal}`,
         name,

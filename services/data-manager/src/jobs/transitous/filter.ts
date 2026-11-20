@@ -173,7 +173,10 @@ function applyFeedsOverlayToCatalog(
   );
 
   const regionsToPatch = new Set([
-    ...materializedOverlay.patches.map((entry) => entry.sourceId.split(":")[1]).filter(Boolean),
+    ...materializedOverlay.patches.flatMap((entry) => {
+      const region = entry.sourceId.split(":")[1];
+      return region ? [region] : [];
+    }),
     ...materializedOverlay.sources.map((entry) => entry.region),
   ]);
   const feedFiles: FeedFile[] = [];

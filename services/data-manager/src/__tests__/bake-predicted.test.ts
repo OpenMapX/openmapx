@@ -224,7 +224,7 @@ describe("bakePredicted", () => {
     // by an earlier, unrelated job is what made a production bake emit 33 of
     // 2,787 rows.
     expect(refreshWaysCalls).toHaveLength(1);
-    expect([...refreshWaysCalls[0]].sort()).toEqual([3001]);
+    expect([...(refreshWaysCalls[0] ?? [])].sort()).toEqual([3001]);
 
     const maintenanceIndex = callOrder.indexOf("ops:valhalla.traffic.maintain");
 
@@ -301,7 +301,7 @@ describe("bakePredicted", () => {
     );
 
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][1]).toMatchObject({ resolvable: 4, matched: 1, matchRatePct: 25 });
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({ resolvable: 4, matched: 1, matchRatePct: 25 });
   });
 
   it("does not warn at a healthy rate", async () => {
@@ -331,7 +331,7 @@ describe("bakePredicted", () => {
     expect(result.matchRatePct).toBe(100);
     expect(result.coverageRatePct).toBe(2);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain("covers too little");
+    expect(warn.mock.calls[0]?.[0]).toContain("covers too little");
   });
 
   it("skips the bake tool and the extract rebuild when nothing matched, but keeps the refresh", async () => {

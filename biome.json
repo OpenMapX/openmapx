@@ -315,7 +315,8 @@
         "packages/ourairports-data/**",
         "packages/place-ids/**",
         "packages/presets/**",
-        "packages/transitous-core/**"
+        "packages/transitous-core/**",
+        "services/data-manager/**"
       ],
       "linter": {
         "rules": {

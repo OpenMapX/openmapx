@@ -48,11 +48,11 @@ function sourceIdentity(
   ) {
     return { osmType: type, osmId: String(id) };
   }
-  const match = /^([nwr])(-?\d+)$/.exec(feature.id ?? "");
-  if (!match) return null;
+  const [, kind, osmId] = /^([nwr])(-?\d+)$/.exec(feature.id ?? "") ?? [];
+  if (osmId === undefined) return null;
   return {
-    osmType: match[1] === "n" ? "node" : match[1] === "w" ? "way" : "relation",
-    osmId: match[2],
+    osmType: kind === "n" ? "node" : kind === "w" ? "way" : "relation",
+    osmId,
   };
 }
 
@@ -71,6 +71,7 @@ function representativePoint(geometry: {
   let cos = 0;
   let lat = 0;
   for (const [lngValue, latValue] of points) {
+    if (lngValue === undefined || latValue === undefined) return null;
     sin += Math.sin((lngValue * Math.PI) / 180);
     cos += Math.cos((lngValue * Math.PI) / 180);
     lat += latValue;
@@ -87,7 +88,8 @@ export function featureToSearchPlace(feature: SearchGeoJsonFeature): SearchPlace
       ([key, value]) => !key.startsWith("@") && typeof value === "string",
     ),
   ) as OsmTags;
-  if (!isSearchableFeature(tags) || !feature.geometry) return null;
+  const name = tags.name;
+  if (!isSearchableFeature(tags) || !feature.geometry || name === undefined) return null;
   const identity = sourceIdentity(feature);
   const point = representativePoint(feature.geometry);
   if (!identity || !point) return null;
@@ -104,7 +106,7 @@ export function featureToSearchPlace(feature: SearchGeoJsonFeature): SearchPlace
   const terms = extractTerms(tags);
   return {
     ...identity,
-    name: tags.name.trim(),
+    name: name.trim(),
     lat,
     lng,
     category: deriveCategory(tags),

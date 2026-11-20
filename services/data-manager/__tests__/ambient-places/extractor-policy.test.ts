@@ -1,5 +1,5 @@
 import { ambientPlaceFromOsm } from "@openmapx/core/ambient-places";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   featureToSearchPlace,
   type SearchGeoJsonFeature,
@@ -7,9 +7,9 @@ import {
 import corpus from "./landmark-corpus.json";
 
 function evaluate(feature: SearchGeoJsonFeature) {
-  const row = featureToSearchPlace(feature)!;
-  expect(row).not.toBeNull();
-  return ambientPlaceFromOsm({
+  const row = featureToSearchPlace(feature);
+  assert.isNotNull(row);
+  const place = ambientPlaceFromOsm({
     osm_type: row.osmType,
     osm_id: row.osmId,
     name: row.name,
@@ -18,7 +18,9 @@ function evaluate(feature: SearchGeoJsonFeature) {
     category: row.category,
     importance: row.importance,
     tags: row.tags,
-  })!;
+  });
+  assert.isNotNull(place);
+  return place;
 }
 describe("real OSM extractor to ambient policy contract", () => {
   it.each(corpus.cases)(
@@ -45,7 +47,9 @@ describe("real OSM extractor to ambient policy contract", () => {
     }
   });
   it("keeps an indoor/part tenant deferred even on a designated cultural building", () => {
-    const cathedral = corpus.cases.find((c) => c.feature.properties.name === "Kölner Dom")!.feature;
+    const cathedralCase = corpus.cases.find((c) => c.feature.properties.name === "Kölner Dom");
+    assert.isDefined(cathedralCase);
+    const cathedral = cathedralCase.feature;
     for (const tags of [{ indoor: "yes" }, { "building:part": "yes" }]) {
       expect(
         evaluate({ ...cathedral, properties: { ...cathedral.properties, ...tags } }).minZoom,

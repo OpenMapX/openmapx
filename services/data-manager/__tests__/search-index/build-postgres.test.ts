@@ -1,7 +1,7 @@
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import { StateStore } from "../../src/state.js";
 import { startPostgis } from "../helpers/postgis-testcontainer.js";
@@ -127,6 +127,7 @@ describe.skipIf(skipE2e)("atomic search-index publication", () => {
         const [stillLive] = await pg.sql.unsafe<
           { epoch: string; status: string; last_error: string }[]
         >(`SELECT epoch, status, last_error FROM osm_search.index_state`);
+        assert.isDefined(stillLive);
         expect(stillLive.epoch).toBe(result.epoch);
         expect(stillLive.status).toBe("ready");
         expect(stillLive.last_error).toContain(`[${stage}]`);
@@ -141,7 +142,7 @@ describe.skipIf(skipE2e)("atomic search-index publication", () => {
         const [staging] = await pg.sql.unsafe<{ exists: boolean }[]>(
           `SELECT to_regnamespace('osm_search__staging') IS NOT NULL AS exists`,
         );
-        expect(staging.exists).toBe(false);
+        expect(staging?.exists).toBe(false);
       }
     } finally {
       await pg.stop();
@@ -197,7 +198,7 @@ it.skipIf(skipE2e)(
       const [row] = await pg.sql.unsafe(
         `SELECT to_jsonb(s) AS state FROM osm_search.index_state s`,
       );
-      expect(row.state.source_file_identity).toEqual(expect.any(String));
+      expect(row?.state.source_file_identity).toEqual(expect.any(String));
       await expect(
         buildOsmSearchIndex({
           ...opts,
@@ -213,7 +214,7 @@ it.skipIf(skipE2e)(
         }),
       ).rejects.toThrow(/source.*changed/i);
       const [retained] = await pg.sql.unsafe(`SELECT epoch FROM osm_search.index_state`);
-      expect(retained.epoch).toBe(first.epoch);
+      expect(retained?.epoch).toBe(first.epoch);
     } finally {
       await pg.stop();
       rmSync(dir, { recursive: true, force: true });

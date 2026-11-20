@@ -28,7 +28,7 @@ describe("expandHourlyToBuckets", () => {
     // Monday 08:00 -> index 288*1 + 12*8 = 384, hourly_day[8] = 45.
     const hourly = Array<number | null>(168).fill(0);
     for (let d = 0; d < 7; d++) {
-      for (let h = 0; h < 24; h++) hourly[24 * d + h] = fixtures.rush.hourly_day[h];
+      for (const [h, speed] of fixtures.rush.hourly_day.entries()) hourly[24 * d + h] = speed;
     }
     const buckets = expandHourlyToBuckets(hourly, fixtures.rush.freeFlow);
     expect(buckets[384]).toBe(45);

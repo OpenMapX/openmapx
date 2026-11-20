@@ -115,7 +115,7 @@ export function runMotisPreflight(input: RunMotisPreflightInput): MotisPreflight
             .filter(
               (source) =>
                 !allowed.has(source.id.toLowerCase()) &&
-                !allowed.has(source.artifactId!.toLowerCase()),
+                !(source.artifactId && allowed.has(source.artifactId.toLowerCase())),
             )
             .map((source) => source.id)
         : (input.selectedFeedIds ?? []).filter((id) => !allowed.has(id.toLowerCase()));

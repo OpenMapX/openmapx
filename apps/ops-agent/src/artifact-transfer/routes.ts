@@ -72,7 +72,7 @@ export function registerArtifactTransferRoutes(
       { config: { artifactTransferBytes: true } },
       async (request, reply) => {
         if (
-          request.headers["content-type"]?.split(";")[0].trim().toLowerCase() !==
+          request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
           "application/octet-stream"
         )
           return reply

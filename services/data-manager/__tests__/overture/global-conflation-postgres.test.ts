@@ -44,7 +44,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const rows = await pg.sql.unsafe(
         `SELECT count(DISTINCT component_id)::INT AS groups FROM overture_global.poi_conflation_component WHERE osm_id IN (1,10000,10001)`,
       );
-      expect(rows[0].groups).toBe(1);
+      expect(rows[0]?.groups).toBe(1);
       const result = await module.assignOvertureCandidates({
         sql: db.sql,
         schema: "overture_global",
@@ -65,7 +65,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [roots] = await pg.sql.unsafe(
         `SELECT count(*)::INT AS n FROM overture_pages.poi_conflation_component a JOIN overture_pages.poi_conflation_component b ON b.osm_id=a.osm_id+10001 AND b.osm_type=a.osm_type WHERE a.osm_id<=10001 AND a.component_id=b.component_id`,
       );
-      expect(roots.n).toBe(10001);
+      expect(roots?.n).toBe(10001);
     }, 120000);
     it("refuses oversized connected graphs without publishing arbitrary truncated assignments", async () => {
       await edges("overture_dense", 513, false);

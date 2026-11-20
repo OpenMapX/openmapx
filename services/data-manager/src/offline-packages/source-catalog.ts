@@ -37,10 +37,17 @@ function parseMetadata(db: DatabaseSync): Map<string, string> {
 
 function parseBounds(value: string | undefined): OfflinePackageBbox {
   const values = value?.split(",").map(Number);
-  if (values?.length !== 4 || !values.every(Number.isFinite)) {
+  const [west, south, east, north] = values ?? [];
+  if (
+    values?.length !== 4 ||
+    !values.every(Number.isFinite) ||
+    west === undefined ||
+    south === undefined ||
+    east === undefined ||
+    north === undefined
+  ) {
     throw new OfflinePackageSourceError("source-unavailable", "MBTiles bounds metadata is missing");
   }
-  const [west, south, east, north] = values;
   if (west < -180 || east > 180 || south < -90 || north > 90 || east <= west || north <= south) {
     throw new OfflinePackageSourceError("source-unavailable", "MBTiles bounds metadata is invalid");
   }

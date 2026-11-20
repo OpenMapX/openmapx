@@ -6,6 +6,7 @@ import {
   type AmbientPlace,
 } from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
+import { requiredRow } from "../../db/required-row.js";
 import { retireAmbientGenerations } from "./planet-storage.js";
 
 export function fresh(value: Date | string | null): string {
@@ -19,16 +20,18 @@ export function fresh(value: Date | string | null): string {
   return new Date(date).toISOString();
 }
 export async function tableExists(tx: postgres.TransactionSql, name: string): Promise<boolean> {
-  const [row] = await tx.unsafe<{ exists: boolean }[]>(
-    `SELECT to_regclass($1) IS NOT NULL AS exists`,
-    [name],
-  );
-  return row.exists;
+  return requiredRow(
+    await tx.unsafe<{ exists: boolean }[]>(`SELECT to_regclass($1) IS NOT NULL AS exists`, [name]),
+    "Table check",
+  ).exists;
 }
 export async function prepareAmbientGeneration(tx: postgres.TransactionSql): Promise<string> {
   await retireAmbientGenerations(tx);
-  const [capacity] = await tx.unsafe<{ count: number }[]>(
-    `SELECT count(*)::INT AS count FROM ambient_places.generations`,
+  const capacity = requiredRow(
+    await tx.unsafe<{ count: number }[]>(
+      `SELECT count(*)::INT AS count FROM ambient_places.generations`,
+    ),
+    "Ambient generation count",
   );
   if (capacity.count >= AMBIENT_LIMITS.generations)
     throw new Error(
@@ -76,9 +79,12 @@ export async function activateAmbientGeneration(
   tx: postgres.TransactionSql,
   manifest: AmbientManifest,
 ): Promise<void> {
-  const [count] = await tx.unsafe<{ count: string }[]>(
-    `SELECT count(*)::TEXT AS count FROM ambient_places.features WHERE generation=$1`,
-    [manifest.generation],
+  const count = requiredRow(
+    await tx.unsafe<{ count: string }[]>(
+      `SELECT count(*)::TEXT AS count FROM ambient_places.features WHERE generation=$1`,
+      [manifest.generation],
+    ),
+    "Candidate feature count",
   );
   if (Number(count.count) !== manifest.placeCount)
     throw new Error("Candidate feature count validation failed");

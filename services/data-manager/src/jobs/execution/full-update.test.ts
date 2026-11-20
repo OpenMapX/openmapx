@@ -20,7 +20,7 @@ import { services } from "@openmapx/core/server";
 import { build } from "esbuild";
 import Fastify from "fastify";
 import postgres from "postgres";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import { ownedServiceHost } from "../../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
 import { configurationPolicyRevision } from "../../../../../apps/ops-agent/src/configured-resource-authority";
 import { configurationPayloadSource } from "../../../../../apps/ops-agent/src/data-transit-resource-source";
@@ -97,7 +97,8 @@ it.skipIf(
     writeFileSync(process.env.DATA_MANAGER_TOKEN_FILE, agentToken, { mode: 0o600 });
     process.env.POSTGRES_PASSWORD = "synthetic-full-update-password-" + "p".repeat(32);
     process.env.BETTER_AUTH_SECRET = "synthetic-full-update-secret-" + "s".repeat(32);
-    const service = host.loaded.find((s) => s.manifest.id === "osrm")!;
+    const service = host.loaded.find((s) => s.manifest.id === "osrm");
+    assert.isDefined(service);
     service.manifest.buildCommand = "openmapx services build osrm";
     writeFileSync(join(service.directory, "service.json"), JSON.stringify(service.manifest));
     const docker = join(bundle, "docker"),
@@ -294,7 +295,8 @@ it.skipIf(
           execution: { requestedDeadlineAt: deadlineAt },
         });
       if (admitted.execution !== "async") throw Error("Async Full Update required");
-      operationId = admitted.operationId;
+      const admittedId = admitted.operationId;
+      operationId = admittedId;
       rootOperationKey = key;
       let transitStartTimeout: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -315,14 +317,14 @@ it.skipIf(
       expect(heldTargets(dirname(data)).includes("osrm")).toBe(false);
       releaseTransit();
       const until = Date.now() + 90000;
-      let terminal = await client.status(operation.kind, operationId!);
+      let terminal = await client.status(operation.kind, admittedId);
       while (
         !["succeeded", "failed", "timed_out", "terminated"].includes(terminal.state) &&
         !actualFailure &&
         Date.now() < until
       ) {
         await new Promise((resolve) => setTimeout(resolve, 200));
-        terminal = await client.status(operation.kind, operationId!);
+        terminal = await client.status(operation.kind, admittedId);
       }
       expect(terminal).toMatchObject({
         state: "succeeded",
@@ -339,7 +341,7 @@ it.skipIf(
         SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link'`;
       expect(links).toHaveLength(1);
       expect(links[0]).toMatchObject({ status: "ok" });
-      expect(links[0]!.execution_input.leaseId).toEqual(expect.any(String));
+      expect(links[0]?.execution_input.leaseId).toEqual(expect.any(String));
       expect(readFileSync(commands, "utf8")).toContain("osrm-extract");
       expect(existsSync(join(data, "osrm-graph/region.osrm"))).toBe(true);
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(

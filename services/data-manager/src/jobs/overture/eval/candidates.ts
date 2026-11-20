@@ -36,20 +36,17 @@ const BANDS = [
 ];
 
 function sampleBands(pairs: CandidatePair[], targetTotal: number): CandidatePair[] {
-  const buckets: CandidatePair[][] = BANDS.map(() => []);
+  const buckets = BANDS.map((band) => ({ band, pairs: [] as CandidatePair[] }));
   for (const pair of pairs) {
-    for (let i = 0; i < BANDS.length; i++) {
-      const band = BANDS[i];
-      if (pair.nameDice >= band.min && pair.nameDice < band.max) {
-        buckets[i].push(pair);
-        break;
-      }
-    }
+    const bucket = buckets.find(
+      ({ band }) => pair.nameDice >= band.min && pair.nameDice < band.max,
+    );
+    bucket?.pairs.push(pair);
   }
   const perBand = Math.ceil(targetTotal / BANDS.length);
   const result: CandidatePair[] = [];
   for (const bucket of buckets) {
-    result.push(...bucket.slice(0, perBand));
+    result.push(...bucket.pairs.slice(0, perBand));
   }
   return result;
 }

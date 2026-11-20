@@ -338,8 +338,7 @@ export async function resolveOvertureStacContract(
   let itemCursor = 0;
   await Promise.all(
     Array.from({ length: Math.min(8, itemUrls.length) }, async () => {
-      while (itemCursor < itemUrls.length) {
-        const url = itemUrls[itemCursor++];
+      for (let url = itemUrls[itemCursor++]; url !== undefined; url = itemUrls[itemCursor++]) {
         const expectedId = new URL(url).pathname
           .split("/")
           .at(-1)

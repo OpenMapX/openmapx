@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import {
   applyFeedOverlay,
   type FeedFile,
@@ -58,7 +58,9 @@ describe("version 3 feed overlay", () => {
     ["missing license identity", { license: { attribution: "Authority" } }, /requires/],
   ])("rejects %s", (_label, patch, expected) => {
     const overlay = validOverlay();
-    Object.assign(overlay.sources[0], patch);
+    const [source] = overlay.sources;
+    assert.isDefined(source);
+    Object.assign(source, patch);
     expect(() => parseFeedOverlay(overlay)).toThrow(expected);
   });
 
@@ -72,7 +74,9 @@ describe("version 3 feed overlay", () => {
     ["URL", { name: "other" }, /duplicate source URL/],
   ])("rejects duplicate normalized %s independently", (_label, patch, expected) => {
     const overlay = validOverlay();
-    overlay.sources.push({ ...overlay.sources[0], ...patch });
+    const [source] = overlay.sources;
+    assert.isDefined(source);
+    overlay.sources.push({ ...source, ...patch });
     expect(() => parseFeedOverlay(overlay)).toThrow(expected);
   });
 

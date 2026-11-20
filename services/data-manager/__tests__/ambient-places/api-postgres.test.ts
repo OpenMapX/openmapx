@@ -51,7 +51,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const [lock] = await pg.sql.unsafe<{ blocked: boolean }[]>(
               `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=399401 AND NOT granted) AS blocked`,
             );
-            if (lock.blocked) break;
+            if (lock?.blocked) break;
             if (Date.now() > deadline)
               throw new Error("Publication did not reach the fixture barrier");
             await new Promise((resolve) => setTimeout(resolve, 10));

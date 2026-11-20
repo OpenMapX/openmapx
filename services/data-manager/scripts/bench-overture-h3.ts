@@ -28,7 +28,8 @@ try {
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query}`,
         params,
       );
-      const plan = explained[0]["QUERY PLAN"][0];
+      const plan = explained[0]?.["QUERY PLAN"]?.[0];
+      if (!plan) throw new Error("EXPLAIN returned no plan");
       buffers += plan.Plan["Shared Hit Blocks"] + plan.Plan["Shared Read Blocks"];
       if (batches === 0 || batches >= 16) plans.push({ batch: batches, ...plan });
       const rows = await pg.sql.unsafe<{ gers_id: string; lat: number; lng: number }[]>(

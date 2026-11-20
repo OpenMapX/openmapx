@@ -106,7 +106,7 @@ describe("buildOsmSearchIndex", () => {
     };
     const result = deduplicateSearchPlaces([base, { ...base, name: "Latest Airport" }]);
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("Latest Airport");
-    expect(result[0].terms).toHaveLength(1);
+    expect(result[0]?.name).toBe("Latest Airport");
+    expect(result[0]?.terms).toHaveLength(1);
   });
 });

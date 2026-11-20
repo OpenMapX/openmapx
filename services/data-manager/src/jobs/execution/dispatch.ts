@@ -87,7 +87,10 @@ export function createDataExecutionDispatcher(deps: {
   }
   function finish(id: string, result: Event) {
     done.set(id, result);
-    while (done.size > 1024) done.delete(done.keys().next().value!);
+    for (const oldest of done.keys()) {
+      if (done.size <= 1024) break;
+      done.delete(oldest);
+    }
   }
   async function dispatch(
     input: DataExecutionInput,

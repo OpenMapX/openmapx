@@ -13,6 +13,8 @@ import {
   catalogProposalSchema,
   createCatalogPinSet,
   parseCatalogPinSet,
+  pinnedAtlasCommit,
+  pinnedTransitousCommit,
   readCatalogValidation,
   readCurrentCatalogValidation,
   sameCatalogRuntimeInputs,
@@ -198,10 +200,15 @@ export function createCatalogReviewService(options: {
           ).stdout;
         const git = (args: string[]) => gitAt(catalogDir, args),
           atlasDir = join(catalogDir, "transitland-atlas");
+        const maxGbfsAdditions = catalogCompilerSettings(
+          process.env,
+        ).MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
+        if (maxGbfsAdditions === undefined)
+          throw new Error("Catalog compiler settings lack MOTIS_GBFS_CATALOG_MAX_ADDITIONS");
         const atlasCommits = [
           ...new Set([
             candidate.transitlandAtlasSha,
-            ...(active.active ? [active.active.transitous.submodules["transitland-atlas"]!] : []),
+            ...(active.active ? [pinnedAtlasCommit(active.active.transitous)] : []),
           ]),
         ];
         if (!existsSync(join(atlasDir, ".git")))
@@ -220,7 +227,7 @@ export function createCatalogReviewService(options: {
         }
         const [previousFeeds, nextFeeds, previousGbfs] = await Promise.all([
           active.active
-            ? readCatalogFeedSnapshot(active.active.transitous.ref.split("@").at(-1)!, git)
+            ? readCatalogFeedSnapshot(pinnedTransitousCommit(active.active.transitous), git)
             : Promise.resolve(new Map()),
           readCatalogFeedSnapshot(candidate.transitousSha, git),
           active.active
@@ -229,9 +236,8 @@ export function createCatalogReviewService(options: {
         ]);
         const [previousAtlas, nextAtlas] = await Promise.all([
           active.active
-            ? readAtlasFeedSnapshot(
-                active.active.transitous.submodules["transitland-atlas"]!,
-                (args) => gitAt(atlasDir, args),
+            ? readAtlasFeedSnapshot(pinnedAtlasCommit(active.active.transitous), (args) =>
+                gitAt(atlasDir, args),
               )
             : Promise.resolve(new Map()),
           readAtlasFeedSnapshot(candidate.transitlandAtlasSha, (args) => gitAt(atlasDir, args)),
@@ -245,10 +251,7 @@ export function createCatalogReviewService(options: {
           nextGbfsRows: gbfs.rows,
           countries: transitAllowedCountries(options.operationsPolicy),
           quarantine: snapshot.overlay?.quarantine ?? [],
-          maxAdditions: Number.parseInt(
-            catalogCompilerSettings(process.env).MOTIS_GBFS_CATALOG_MAX_ADDITIONS!,
-            10,
-          ),
+          maxAdditions: Number.parseInt(maxGbfsAdditions, 10),
         });
         // Preflight every complete row before retaining a proposal that the
         // bounded review endpoint could not actually display.

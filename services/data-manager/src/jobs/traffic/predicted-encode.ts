@@ -37,8 +37,8 @@ export function roundHalfAwayFromZero(x: number): number {
 
 /**
  * Expands 168 hourly speeds (Sunday-first, `hourly[24*day + hour]`) into the
- * 2016 five-minute buckets Valhalla's DCT-II encoder expects. A `null` hour
- * falls back to `freeFlowKph`. Every value is clamped to `[5, 140]` km/h —
+ * 2016 five-minute buckets Valhalla's DCT-II encoder expects. A `null` hour,
+ * or one past the end of a shorter profile, falls back to `freeFlowKph`. Every value is clamped to `[5, 140]` km/h —
  * Valhalla only warns on out-of-range predicted speeds, it never re-clamps
  * them itself, so clamping happens here before encoding.
  */
@@ -49,7 +49,8 @@ export function expandHourlyToBuckets(
   const buckets = new Array<number>(BUCKETS_PER_WEEK);
   for (let d = 0; d < DAYS_PER_WEEK; d++) {
     for (let h = 0; h < HOURS_PER_DAY; h++) {
-      const raw = hourly[HOURS_PER_DAY * d + h];
+      // An hour the profile does not reach is as unknown as a `null` one.
+      const raw = hourly[HOURS_PER_DAY * d + h] ?? null;
       const value = raw === null ? freeFlowKph : raw;
       const clamped = Math.min(MAX_SPEED_KPH, Math.max(MIN_SPEED_KPH, value));
       const base = BUCKETS_PER_HOUR * HOURS_PER_DAY * d + BUCKETS_PER_HOUR * h;
@@ -75,7 +76,9 @@ export function encodePredictedSpeeds(buckets2016: readonly number[]): string {
   for (let c = 0; c < COEFFICIENT_COUNT; c++) {
     let sum = 0;
     for (let b = 0; b < BUCKETS_PER_WEEK; b++) {
-      sum += buckets2016[b] * Math.cos((Math.PI / BUCKETS_PER_WEEK) * (b + 0.5) * c);
+      const speed = buckets2016[b];
+      if (speed === undefined) throw new RangeError("Predicted speeds need 2016 buckets");
+      sum += speed * Math.cos((Math.PI / BUCKETS_PER_WEEK) * (b + 0.5) * c);
     }
     if (c === 0) sum *= 1 / Math.sqrt(2);
     sum *= dctScale;

@@ -5,6 +5,7 @@ import {
   type AmbientManifest,
 } from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
+import { requiredRow } from "../../db/required-row.js";
 import { fresh } from "./publication.js";
 
 export interface PlanetCheckpoint extends AmbientBuildProgress {
@@ -37,8 +38,11 @@ function count(value: unknown): number {
 }
 /** Locks held by the caller freeze these published tables between batches. */
 export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSources> {
-  const [exists] = await sql.unsafe<{ exists: boolean }[]>(
-    `SELECT to_regclass('osm_search.index_state') IS NOT NULL AS exists`,
+  const exists = requiredRow(
+    await sql.unsafe<{ exists: boolean }[]>(
+      `SELECT to_regclass('osm_search.index_state') IS NOT NULL AS exists`,
+    ),
+    "Planet OSM state check",
   );
   if (!exists.exists) throw new Error("Prepare the planet OSM search snapshot first");
   const [osm] = await sql.unsafe<{ state: Record<string, unknown>; oid: number }[]>(
@@ -69,12 +73,18 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
   const osmRows = count(osm.state.place_count);
   if (!osmRows) throw new Error("Planet OSM snapshot is empty");
   let overtureRows = 0;
-  const [otExists] = await sql.unsafe<{ exists: boolean }[]>(
-    `SELECT to_regclass('overture_places.places') IS NOT NULL AS exists`,
+  const otExists = requiredRow(
+    await sql.unsafe<{ exists: boolean }[]>(
+      `SELECT to_regclass('overture_places.places') IS NOT NULL AS exists`,
+    ),
+    "Planet Overture places check",
   );
   if (otExists.exists) {
-    const [conflation] = await sql.unsafe<{ exists: boolean }[]>(
-      `SELECT to_regclass('overture_places.conflation_state') IS NOT NULL AS exists`,
+    const conflation = requiredRow(
+      await sql.unsafe<{ exists: boolean }[]>(
+        `SELECT to_regclass('overture_places.conflation_state') IS NOT NULL AS exists`,
+      ),
+      "Planet Overture conflation check",
     );
     if (!conflation.exists) throw new Error("Planet Overture conflation state is missing");
     const [ot] = await sql.unsafe<
@@ -83,8 +93,11 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
       `SELECT to_jsonb(s) AS state,'overture_places.places'::regclass::OID AS oid,'overture_places.poi_conflation_link'::regclass::OID AS links,'overture_places.osm_pois'::regclass::OID AS osm FROM overture_places.conflation_state s WHERE singleton=1`,
     );
     if (!ot) {
-      const [row] = await sql.unsafe<{ populated: boolean }[]>(
-        `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
+      const row = requiredRow(
+        await sql.unsafe<{ populated: boolean }[]>(
+          `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
+        ),
+        "Planet Overture places check",
       );
       if (row.populated) throw new Error("Planet Overture conflation state is missing");
     } else {
@@ -125,8 +138,11 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
   };
 }
 export async function readPlanetStage(sql: postgres.Sql): Promise<PlanetStage | null> {
-  const [exists] = await sql.unsafe<{ exists: boolean }[]>(
-    `SELECT to_regclass('ambient_places.planet_builds') IS NOT NULL AS exists`,
+  const exists = requiredRow(
+    await sql.unsafe<{ exists: boolean }[]>(
+      `SELECT to_regclass('ambient_places.planet_builds') IS NOT NULL AS exists`,
+    ),
+    "Planet build table check",
   );
   if (!exists.exists) return null;
   const [row] = await sql.unsafe<PlanetStage[]>(
