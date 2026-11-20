@@ -1,8 +1,62 @@
 import { useParkingStore } from "@openmapx/core";
 
-/** `marker`: a DOM marker took the click; see `bindMapMarkerActivation`. */
-type MapClickOwner = "parking" | "crowd" | "measurement" | "travel-time" | "marker";
-type ModeOwner = Exclude<MapClickOwner, "parking" | "marker">;
+/**
+ * `marker`: a DOM marker took the click; see `bindMapMarkerActivation`.
+ * `custom-content`: content drawn by a custom layer (3D models) is under the
+ * pointer; see `registerCustomMapHitTester`.
+ */
+type MapClickOwner =
+  | "parking"
+  | "crowd"
+  | "measurement"
+  | "travel-time"
+  | "marker"
+  | "custom-content";
+type ModeOwner = Exclude<MapClickOwner, "parking" | "marker" | "custom-content">;
+
+/** Point in map canvas pixels, as on a MapLibre mouse event. */
+interface CanvasPoint {
+  x: number;
+  y: number;
+}
+
+const customHitTesters = new WeakMap<object, Map<string, (point: CanvasPoint) => boolean>>();
+
+/**
+ * Custom layers are invisible to `queryRenderedFeatures`, and the map's own
+ * click handlers may run before a lazily loaded layer's. A layer registers a
+ * tester here; when it reports a hit, the click is owned by `custom-content`
+ * from the first moment any handler asks, so pins and POI cards stay away.
+ */
+export function registerCustomMapHitTester(
+  map: object,
+  id: string,
+  hit: (point: CanvasPoint) => boolean,
+): () => void {
+  let testers = customHitTesters.get(map);
+  if (!testers) {
+    testers = new Map();
+    customHitTesters.set(map, testers);
+  }
+  testers.set(id, hit);
+  return () => {
+    if (customHitTesters.get(map)?.get(id) === hit) customHitTesters.get(map)?.delete(id);
+  };
+}
+
+function hitsCustomContent(event: object): boolean {
+  const target = "target" in event ? event.target : undefined;
+  const point = "point" in event ? (event.point as CanvasPoint | undefined) : undefined;
+  if (!target || typeof target !== "object" || !point) return false;
+  for (const hit of customHitTesters.get(target)?.values() ?? []) {
+    try {
+      if (hit(point)) return true;
+    } catch {
+      // A failing tester must not break the map's click handling.
+    }
+  }
+  return false;
+}
 interface Ownership {
   owner: MapClickOwner | null;
   claimed: boolean;
@@ -24,10 +78,11 @@ function getOwnership(event: object): Ownership {
   const existing = ownership.get(key);
   if (existing) return existing;
 
-  const owner: MapClickOwner | null = useParkingStore.getState().picking
+  let owner: MapClickOwner | null = useParkingStore.getState().picking
     ? "parking"
     : readToolOwner();
-  const captured = { owner, claimed: false };
+  if (!owner && hitsCustomContent(event)) owner = "custom-content";
+  const captured = { owner, claimed: owner === "custom-content" };
   ownership.set(key, captured);
   return captured;
 }
