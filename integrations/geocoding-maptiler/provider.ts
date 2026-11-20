@@ -41,7 +41,9 @@ const SEARCH_TYPES =
  * The integration's own `apiKey`, or else the deployment-wide `MAPTILER_KEY`
  * the tile proxy uses, so one key set in `.env` serves both maps and search.
  * `shared` tells whether it is the deployment's key: only that key spends the
- * deployment's MapTiler daily budget.
+ * deployment's MapTiler daily budget. A map key saved in the admin settings is
+ * not visible here, so an own key equal to it is not charged to the budget the
+ * tile proxy spends for that key.
  */
 export function resolveMaptilerApiKey(
   configured: string | undefined,
