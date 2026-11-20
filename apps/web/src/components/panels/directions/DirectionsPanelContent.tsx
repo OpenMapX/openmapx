@@ -27,6 +27,7 @@ import { DrivingKindRow, TravelModeRow, travelModeButtons } from "./TravelModeRo
 import { TripTimeChip } from "./TripTimeChip";
 import { useDirectionsDetailsNavigation } from "./useDirectionsDetailsNavigation";
 import { useGroundDirectionsPlan } from "./useGroundDirectionsPlan";
+import { useOptimizeStops } from "./useOptimizeStops";
 import { useRouteRecovery } from "./useRouteRecovery";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
 import { useTripTimeControl } from "./useTripTimeControl";
@@ -70,6 +71,8 @@ export function DirectionsPanelContent() {
   const time = useTripTimeControl(isTransitMode);
   const [showOptions, setShowOptions] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  // Lives here rather than in its row, which unmounts while a details view is open.
+  const optimizeStops = useOptimizeStops(ground.routeWaypoints, setSnackbar);
 
   const { selectionToOpen } = transit;
   const { openTransit } = details;
@@ -180,9 +183,11 @@ export function DirectionsPanelContent() {
       <Box sx={{ position: "relative" }}>
         <Divider />
         <OptimizeStopsRow
-          routeWaypoints={ground.routeWaypoints}
+          waypoints={waypoints}
+          mode={mode}
           allWaypointsFilled={ground.allWaypointsFilled}
-          onNotify={setSnackbar}
+          pending={optimizeStops.isPending}
+          onOptimize={optimizeStops.optimize}
         />
         {/* Flight and ride modes render their own forms below, so this row is hidden. */}
         {!hidesRouteControls && showTimePicker && !timeInModeRow && (
