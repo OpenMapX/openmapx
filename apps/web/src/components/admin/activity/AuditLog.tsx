@@ -39,178 +39,17 @@ import { TableSkeleton } from "../shared/TableSkeleton";
 import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
 import { useActivityClient } from "./activityQueries";
-
-// Grouped actions emitted by `writeAuditLog` and the Better Auth admin hook
-// across the API. Keep this in sync with the call sites under `apps/api/src`;
-// their wording lives in `adminShared.auditActions`.
-const ACTION_GROUPS: Array<{ group: string; actions: string[] }> = [
-  {
-    group: "integrations",
-    actions: [
-      "integration.config.update",
-      "integration.enabled",
-      "integration.disabled",
-      "integration.reload",
-      "integration.reload.all",
-      "integration.binding.set",
-      "integration.binding.remove",
-      "standalone.adopt",
-      "standalone.remove",
-    ],
-  },
-  {
-    group: "credentials",
-    actions: [
-      "credential.set",
-      "credential.delete",
-      "credentials.export",
-      "credentials.import.preview",
-    ],
-  },
-  {
-    group: "services",
-    actions: [
-      "service.start",
-      "service.stop",
-      "service.restart",
-      "service.apply",
-      "service.bulk.start",
-      "service.bulk.stop",
-      "service.bulk.restart",
-      "service.bulk.update",
-      "service.bulk.build",
-      "service.selection.update",
-      "service.config.update",
-      "service.credential.set",
-      "service.credential.delete",
-      "service.health_check",
-      "service.images.pull",
-      "service.logs.read",
-      "compose.render",
-    ],
-  },
-  {
-    group: "data",
-    actions: [
-      "data.download-osm",
-      "data.download-fonts",
-      "data.update",
-      "data.convert-overpass",
-      "data.link",
-      "data.clean",
-      "data.overture-sync",
-      "data.overture-conflate",
-    ],
-  },
-  {
-    group: "backups",
-    actions: ["backup.create", "backup.restore", "backup.delete", "backup.prune"],
-  },
-  {
-    group: "settings",
-    actions: [
-      "settings.update",
-      "platform.configuration.save",
-      "auth.policy.apply",
-      "release.clear",
-      "cache.clear",
-    ],
-  },
-  {
-    group: "extensions",
-    actions: [
-      "extension.install",
-      "extension.update",
-      "extension.remove",
-      "extension.refresh_catalog",
-      "extension.add_source",
-      "extension.remove_source",
-    ],
-  },
-  {
-    group: "transit",
-    actions: [
-      "transit.catalog.propose",
-      "transit.catalog.validate",
-      "transit.catalog.activate",
-      "transit.catalog.cancel",
-      "transit.credentials.update",
-      "transit.lock.bump",
-      "transit.source.add",
-      "transit.source.enable",
-      "transit.source.disable",
-      "transit.source.remove",
-    ],
-  },
-  { group: "jobs", actions: ["job.cancel"] },
-  {
-    group: "system",
-    actions: [
-      "system.update.check",
-      "system.update.apply",
-      "system.diagnostics.run",
-      "dawarich.provision",
-      "dawarich.rotate_oidc_secret",
-    ],
-  },
-  {
-    group: "users",
-    actions: [
-      "user.create",
-      "user.delete",
-      "user.role.change",
-      "user.ban",
-      "user.unban",
-      "user.impersonate",
-      "user.password.set",
-      "user.password.reset",
-      "user.session.revoke",
-      "user.sessions.revoke_all",
-    ],
-  },
-];
-
-const KNOWN_ACTIONS = new Set(ACTION_GROUPS.flatMap((group) => group.actions));
-
-const TARGET_TYPES = [
-  "integration",
-  "service",
-  "data",
-  "backup",
-  "settings",
-  "platform",
-  "auth-policy",
-  "cache",
-  "release",
-  "extension",
-  "transit",
-  "transit-source",
-  "system",
-  "user",
-];
-
-const DESTRUCTIVE_ACTIONS = new Set([
-  "credential.delete",
-  "service.stop",
-  "service.bulk.stop",
-  "service.credential.delete",
-  "backup.delete",
-  "backup.prune",
-  "extension.remove",
-  "extension.remove_source",
-  "transit.source.remove",
-  "job.cancel",
-  "cache.clear",
-  "user.delete",
-  "user.ban",
-  "user.session.revoke",
-  "user.sessions.revoke_all",
-]);
+import {
+  AUDIT_ACTION_GROUPS,
+  AUDIT_TARGET_TYPES,
+  DESTRUCTIVE_AUDIT_ACTIONS,
+  KNOWN_AUDIT_ACTIONS,
+} from "./auditCatalog";
 
 function ActionChip({ action }: { action: string }) {
   const actionLabel = useAuditActionLabel();
   const category = action.split(".")[0] ?? "";
-  const isDestructive = DESTRUCTIVE_ACTIONS.has(action);
+  const isDestructive = DESTRUCTIVE_AUDIT_ACTIONS.has(action);
   const isAuth = category === "user" || category === "credential";
   // Destructive → error; auth/credential mutations → warning;
   // every other write → primary; unknown actions → default.
@@ -218,7 +57,7 @@ function ActionChip({ action }: { action: string }) {
     ? "error"
     : isAuth
       ? "warning"
-      : KNOWN_ACTIONS.has(action)
+      : KNOWN_AUDIT_ACTIONS.has(action)
         ? "primary"
         : "default";
   return (
@@ -287,8 +126,9 @@ export function AuditLog() {
     a.remove();
   }
 
-  /** ICU select keys cannot hold hyphens, so `auth-policy` is selected as `auth_policy`. */
-  const targetTypeLabel = (type: string) => t("targetTypeOption", { type: type.replace("-", "_") });
+  /** Select keys hold no `-` or `.`, so `data-manager-job` is selected as `data_manager_job`. */
+  const targetTypeLabel = (type: string) =>
+    t("targetTypeOption", { type: type.replaceAll(/[.-]/g, "_") });
 
   return (
     <AdminTableSurface
@@ -312,7 +152,7 @@ export function AuditLog() {
               }}
             >
               <MenuItem value="">{t("allActions")}</MenuItem>
-              {ACTION_GROUPS.flatMap((group) => [
+              {AUDIT_ACTION_GROUPS.flatMap((group) => [
                 <ListSubheader key={`hdr-${group.group}`}>
                   {t("actionGroup", { group: group.group })}
                 </ListSubheader>,
@@ -336,7 +176,7 @@ export function AuditLog() {
               }}
             >
               <MenuItem value="">{t("allTypes")}</MenuItem>
-              {TARGET_TYPES.map((type) => (
+              {AUDIT_TARGET_TYPES.map((type) => (
                 <MenuItem key={type} value={type}>
                   {targetTypeLabel(type)}
                 </MenuItem>

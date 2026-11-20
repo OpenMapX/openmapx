@@ -42,6 +42,9 @@ export function PrivacyCaseDecisionForms({
     REQUEST_TRANSITIONS[detail.request.state].includes(value) &&
     (value !== "in_progress" || detail.request.identityMethod !== null) &&
     (value !== "completed" || detail.tasks.every((task) => task.status === "resolved"));
+  // Statutory deadlines are read in the request's own zone, which the line names.
+  const { timeZone } = detail.request;
+  const deadline = (value: string) => format.dateTime(value, { timeZone });
   const decide = async () => {
     setConfirm(false);
     await client.execute("case-decision", (c, h) =>
@@ -60,11 +63,13 @@ export function PrivacyCaseDecisionForms({
       <Typography variant="h6">{w("caseDecisions")}</Typography>
       <Typography>
         {w("originalDueAt", {
-          date: format.dateTime(detail.request.originalDueAt ?? detail.request.dueAt),
-          timeZone: detail.request.timeZone,
+          date: deadline(detail.request.originalDueAt ?? detail.request.dueAt),
+          timeZone,
         })}
       </Typography>
-      <Typography>{w("currentDueAt", { date: format.dateTime(detail.request.dueAt) })}</Typography>
+      <Typography>
+        {w("currentDueAt", { date: deadline(detail.request.dueAt), timeZone })}
+      </Typography>
       <TextField
         label={w("extendedUntil")}
         type="datetime-local"

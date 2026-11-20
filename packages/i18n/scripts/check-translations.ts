@@ -28,6 +28,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
 const REPO_ROOT = join(PKG_ROOT, "..", "..");
 const MESSAGES_DIR = join(PKG_ROOT, "locales");
+/**
+ * Catalogues keyed by server codes and read with a computed key. Their keys
+ * are checked against the code that writes the codes, in both directions, by
+ * `scripts/admin-code-catalogue.test.ts`, so they are not reported as unused.
+ */
+const CODE_KEYED_NAMESPACES = ["adminShared.jobTypes.", "adminShared.auditActions."];
 const SRC_DIRS = [
   join(REPO_ROOT, "apps", "web", "src"),
   join(REPO_ROOT, "apps", "api", "src"),
@@ -404,6 +410,7 @@ function main() {
   let unusedCount = 0;
   for (const key of referenceKeys.keys()) {
     if (usedKeys.has(key)) continue;
+    if (CODE_KEYED_NAMESPACES.some((namespace) => key.startsWith(namespace))) continue;
 
     // Skip parent namespace keys
     const isParent = [...usedKeys].some((uk) => uk.startsWith(`${key}.`));

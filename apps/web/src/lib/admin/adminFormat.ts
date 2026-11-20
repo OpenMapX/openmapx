@@ -23,8 +23,11 @@ export interface AdminFormatters {
   percent: (ratio: number) => string;
   /** Milliseconds, such as "850 ms", "1.5 s" or "2 min 5 s". */
   duration: (ms: number) => string;
-  /** Date and time per the reader's date and time format settings. */
-  dateTime: (value: DateInput) => string;
+  /**
+   * Date and time per the reader's date and time format settings, in the
+   * browser's time zone unless a zone is given (a request's own zone, say).
+   */
+  dateTime: (value: DateInput, options?: { timeZone?: string }) => string;
   /** `dateTime` for an optional server timestamp: "—" when it is missing or unreadable. */
   timestamp: (value: string | null | undefined) => string;
   date: (value: DateInput) => string;
@@ -64,7 +67,7 @@ export function adminFormatters(locale: string, dates: DateTimeFormatters): Admi
         Math.floor((ms % 60_000) / 1000),
       )}`;
     },
-    dateTime: (value) => dates.dateTime(value),
+    dateTime: (value, options) => dates.dateTime(value, options),
     timestamp: (value) =>
       value && Number.isFinite(Date.parse(value)) ? dates.dateTime(value) : "—",
     date: (value) => dates.date(value),

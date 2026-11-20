@@ -115,7 +115,7 @@
         "id": "job-7f3a",
         "type": "service.restart",
         "payload": {
-          "serviceId": "valhalla"
+          "service": "valhalla"
         },
         "error": null,
         "progress": 0.42,
@@ -559,7 +559,7 @@
         "id": "job-7f3a",
         "type": "service.restart",
         "payload": {
-          "serviceId": "valhalla"
+          "service": "valhalla"
         },
         "error": null,
         "progress": 0.42,
@@ -579,14 +579,14 @@
       },
       {
         "id": "dm-31c0",
-        "type": "transit.sync",
+        "type": "transit-sync",
         "payload": {
-          "sources": 4
+          "countries": ["at", "de"]
         },
         "error": null,
         "progress": 1,
         "createdBy": null,
-        "actorLabel": "Data manager",
+        "actorLabel": "Scheduled",
         "createdAt": "2026-11-19T06:00:00.000Z",
         "startedAt": "2026-11-19T06:00:00.000Z",
         "finishedAt": "2026-11-19T06:00:30.000Z",
@@ -597,7 +597,7 @@
       },
       {
         "id": "job-6e21",
-        "type": "integrations.reload",
+        "type": "integration.reload",
         "payload": {},
         "error": null,
         "progress": 1,
@@ -617,14 +617,14 @@
       },
       {
         "id": "dm-2b9d",
-        "type": "search-index.build",
+        "type": "search-index-build",
         "payload": {
           "region": "europe/germany"
         },
         "error": "Feed download returned HTTP 503",
         "progress": 1,
         "createdBy": null,
-        "actorLabel": "Data manager",
+        "actorLabel": "System",
         "createdAt": "2026-11-18T03:15:00.000Z",
         "startedAt": "2026-11-18T03:15:00.000Z",
         "finishedAt": "2026-11-18T03:15:30.000Z",
@@ -635,9 +635,13 @@
       },
       {
         "id": "job-5d10",
-        "type": "backup.create",
+        "type": "data.operation",
         "payload": {
-          "label": "pre-upgrade"
+          "operation": "download-osm",
+          "version": 1,
+          "input": {
+            "region": "europe/germany"
+          }
         },
         "error": null,
         "progress": 1,
