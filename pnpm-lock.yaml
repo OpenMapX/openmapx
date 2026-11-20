@@ -1322,6 +1322,15 @@ importers:
         specifier: workspace:^
         version: link:../../packages/mobility-core
 
+  integrations/landmark-models-barrelman:
+    dependencies:
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/open-landmarks-client':
+        specifier: workspace:^
+        version: link:../../packages/open-landmarks-client
+
   integrations/live-transit-db-ris:
     dependencies:
       '@openmapx/core':

@@ -54,6 +54,7 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   "charging-sites": "chargingSites",
   cameras: "cameras",
   "message-signs": "messageSigns",
+  "landmark-models": "landmarkModels",
   "road-weather": "roadWeather",
   "service-vehicles": "serviceVehicles",
   "border-crossings": "borderCrossings",
