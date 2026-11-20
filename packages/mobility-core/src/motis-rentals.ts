@@ -674,6 +674,13 @@ interface RentalQueryOutcome {
   failure?: string;
 }
 
+/** Drops trailing slashes in linear time, whatever the configured base URL holds. */
+function withoutTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  return value.slice(0, end);
+}
+
 async function queryRentals(
   http: MotisRentalsHttp,
   instance: MotisInstance,
@@ -681,20 +688,23 @@ async function queryRentals(
 ): Promise<RentalQueryOutcome> {
   const [west, south, east, north] = bbox;
   try {
-    const response = await http.getText(`${instance.baseUrl.replace(/\/+$/, "")}/api/v1/rentals`, {
-      params: {
-        min: `${south},${west}`,
-        max: `${north},${east}`,
-        withProviders: true,
-        withStations: true,
-        withVehicles: true,
-        withZones: true,
+    const response = await http.getText(
+      `${withoutTrailingSlashes(instance.baseUrl)}/api/v1/rentals`,
+      {
+        params: {
+          min: `${south},${west}`,
+          max: `${north},${east}`,
+          withProviders: true,
+          withStations: true,
+          withVehicles: true,
+          withZones: true,
+        },
+        maxBytes: MAX_RENTALS_BYTES,
+        contentTypes: ["application/json"],
+        discardErrorBody: true,
+        timeoutMs: RENTALS_TIMEOUT_MS,
       },
-      maxBytes: MAX_RENTALS_BYTES,
-      contentTypes: ["application/json"],
-      discardErrorBody: true,
-      timeoutMs: RENTALS_TIMEOUT_MS,
-    });
+    );
     if (response.status >= 200 && response.status < 300) {
       return { data: JSON.parse(response.body) as RentalsResponse, fallbackEligible: false };
     }
