@@ -2,22 +2,16 @@ import { parseWgs84Point, type TripPlanRequest } from "@openmapx/integration-fra
 import { transitRequestFingerprint, verifyTransitPageToken } from "./page-token.js";
 import { parseModes } from "./route-helpers.js";
 
-const RENTAL_FORM_FACTORS = new Set([
+const FORM_FACTORS = [
   "BICYCLE",
   "CARGO_BICYCLE",
   "SCOOTER_STANDING",
   "SCOOTER_SEATED",
   "CAR",
   "MOPED",
-]);
-
-type RentalFormFactor =
-  | "BICYCLE"
-  | "CARGO_BICYCLE"
-  | "SCOOTER_STANDING"
-  | "SCOOTER_SEATED"
-  | "CAR"
-  | "MOPED";
+] as const;
+type RentalFormFactor = (typeof FORM_FACTORS)[number];
+const RENTAL_FORM_FACTORS: ReadonlySet<string> = new Set(FORM_FACTORS);
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
