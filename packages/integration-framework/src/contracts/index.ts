@@ -78,6 +78,16 @@ export type {
   KnowledgeResult,
 } from "./knowledge-provider.js";
 export type {
+  LandmarkAsset,
+  LandmarkCatalogueSnapshot,
+  LandmarkModelFetchResult,
+  LandmarkModelFile,
+  LandmarkModelProvider,
+  LandmarkReviewTier,
+  OsmElementRef,
+} from "./landmark-model-provider.js";
+export { assertLandmarkModelProviderContract } from "./landmark-model-provider.js";
+export type {
   MessageSign,
   MessageSignProvider,
   MessageSignQuery,

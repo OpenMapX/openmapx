@@ -270,6 +270,16 @@ export type {
   WeatherProvider,
   WeatherResponse,
 } from "./contracts/index.js";
+export type {
+  LandmarkAsset,
+  LandmarkCatalogueSnapshot,
+  LandmarkModelFetchResult,
+  LandmarkModelFile,
+  LandmarkModelProvider,
+  LandmarkReviewTier,
+  OsmElementRef,
+} from "./contracts/landmark-model-provider";
+export { assertLandmarkModelProviderContract } from "./contracts/landmark-model-provider";
 // Straight to the leaf, and without the `.js` the type-only re-export above it
 // carries. The type export is erased before anything resolves it, so it can name
 // a file that was never emitted; a value export is resolved for real, and this

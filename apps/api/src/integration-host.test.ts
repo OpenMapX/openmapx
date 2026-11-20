@@ -523,6 +523,55 @@ describe("initIntegrations — loader", () => {
     }
   });
 
+  it.each([
+    ["stores a valid provider under landmark-models", "landmark-probe", "probe", 1],
+    ["rejects undeclared sources", "landmark-probe", "other", 0],
+    ["rejects a provider id other than the integration id", "someone-else", "probe", 0],
+  ])("registerLandmarkModelProvider %s", async (_label, providerId, sourceId, expected) => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-landmark-provider-"));
+    const directory = join(parent, "landmark-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "landmark-probe",
+        version: "1.0.0",
+        author: "Test",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["landmark-models"],
+        quality: "built-in",
+        dataSources: [
+          {
+            sourceId: "probe",
+            name: "Probe",
+            url: "https://example.test/data",
+            licensing: licensingFromDeclaration("Test", undefined, "Probe"),
+            providerCountry: "US",
+            providerPrivacyUrl: "https://example.test/privacy",
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        "  ctx.registerLandmarkModelProvider({",
+        `    id: '${providerId}', sourceIds: ['${sourceId}'],`,
+        "    snapshot: () => null, fetchModelGzip: async () => ({ status: 'unlisted' }),",
+        "  });",
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(getIntegrationProviders("landmark-probe", "landmark-models")).toHaveLength(expected);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("discovers, validates, stores, and reloads air-quality providers", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-air-quality-provider-"));
     const directory = join(parent, "air-quality-probe");

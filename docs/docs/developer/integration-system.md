@@ -995,6 +995,7 @@ interface IntegrationContext {
   registerChargingSiteProvider(p: ChargingSiteProvider): void; // → "charging-sites"
   registerCameraProvider(p: CameraProvider): void; // → "cameras"
   registerMessageSignProvider(p: MessageSignProvider): void; // → "message-signs"
+  registerLandmarkModelProvider(p: LandmarkModelProvider): void; // → "landmark-models"
   registerRoadWeatherProvider(p: RoadWeatherProvider): void; // → "road-weather"
   registerServiceVehicleProvider(p: ServiceVehicleProvider): void; // → "service-vehicles"
   registerBorderCrossingProvider(p: BorderCrossingProvider): void; // → "border-crossings"
@@ -1163,6 +1164,7 @@ attribution and freshness flow through every call unmodified.
 | `fuel-stations`        | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                              |
 | `cameras`              | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                        |
 | `message-signs`        | `MessageSignProvider`        | Dynamic message signs and the pages each shows, merged by the `message-signs` data source.                                                          |
+| `landmark-models`      | `LandmarkModelProvider`      | Catalogues of georeferenced 3D landmark models, merged and drawn in the 3D view by the `landmark-models` orchestrator.                              |
 | `road-weather`         | `RoadWeatherProvider`        | Road weather stations with the surface and air values they measure, merged by the `road-weather` data source.                                       |
 | `service-vehicles`     | `ServiceVehicleProvider`     | Where road service vehicles are and the work they report, merged by the `road-maintenance` data source.                                             |
 | `border-crossings`     | `BorderCrossingProvider`     | Land border crossings with each queue's wait in each direction, merged by the `border-crossings` data source.                                       |
