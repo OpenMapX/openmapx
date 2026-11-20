@@ -4,7 +4,6 @@
 export type SaveGarageParking401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

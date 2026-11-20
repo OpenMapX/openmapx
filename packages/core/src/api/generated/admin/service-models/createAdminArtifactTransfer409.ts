@@ -4,7 +4,6 @@
 export type CreateAdminArtifactTransfer409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -4,7 +4,6 @@
 export type DiscardAmbientPlaces401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

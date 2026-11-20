@@ -271,16 +271,16 @@ function registerOfflinePackageRoutes(
       });
     }
     const result = await generator.getJob(owner, request.params.jobId);
-    if (!result) return reply.code(404).send({ ok: false, error: "offline package job not found" });
+    if (!result) return reply.code(404).send({ error: "offline package job not found" });
     return reply.send(result);
   });
 
   registerDataManagerRoute(app, "getOfflinePackageManifest", async (request, reply) => {
     if (!isContentAddressedPackageId(request.params.packageId)) {
-      return reply.code(400).send({ ok: false, error: "invalid offline package id" });
+      return reply.code(400).send({ error: "invalid offline package id" });
     }
     const manifest = await generator.getManifest(request.params.packageId);
-    if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
+    if (!manifest) return reply.code(404).send({ error: "offline package not found" });
     return reply.send(manifest);
   });
 
@@ -293,8 +293,7 @@ function registerOfflinePackageRoutes(
       request.params.fontstack,
       request.params.range,
     );
-    if (!asset)
-      return reply.code(404).send({ ok: false, error: "offline package glyph not found" });
+    if (!asset) return reply.code(404).send({ error: "offline package glyph not found" });
     reply
       .header("Cache-Control", "public, max-age=31536000, immutable")
       .header("Content-Type", asset.contentType)
@@ -306,10 +305,10 @@ function registerOfflinePackageRoutes(
 
   registerDataManagerRoute(app, "getOfflineGlyphCatalog", async (request, reply) => {
     if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)) {
-      return reply.code(400).send({ ok: false, error: "invalid offline glyph version" });
+      return reply.code(400).send({ error: "invalid offline glyph version" });
     }
     const catalog = await generator.glyphCatalog(request.params.version);
-    if (!catalog) return reply.code(404).send({ ok: false, error: "offline glyphs not found" });
+    if (!catalog) return reply.code(404).send({ error: "offline glyphs not found" });
     return reply.header("Cache-Control", "public, max-age=31536000, immutable").send(catalog);
   });
 
@@ -322,10 +321,10 @@ function registerOfflinePackageRoutes(
   ): Promise<FastifyReply> => {
     const { packageId } = request.params;
     if (!isContentAddressedPackageId(packageId)) {
-      return reply.code(400).send({ ok: false, error: "invalid offline package id" });
+      return reply.code(400).send({ error: "invalid offline package id" });
     }
     const manifest = await generator.getManifest(packageId);
-    if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
+    if (!manifest) return reply.code(404).send({ error: "offline package not found" });
     const total = manifest.archive.byteLength;
     const ifRange = request.headers["if-range"];
     const rangeHeader = request.headers.range;
@@ -363,20 +362,14 @@ function registerOfflinePackageRoutes(
     const admission = deliveryBudget.tryAcquire("offline-package-delivery");
     if (!admission.allowed) {
       reply.header("Retry-After", String(admission.retryAfterSeconds));
-      return reply.code(503).send({
-        ok: false,
-        error: "offline package delivery capacity exceeded",
-      });
+      return reply.code(503).send({ error: "offline package delivery capacity exceeded" });
     }
     const responseBytes = range ? range.end - range.start + 1 : total;
     const byteAdmission = admission.lease.consume(responseBytes);
     if (!byteAdmission.allowed) {
       admission.lease.release();
       reply.header("Retry-After", String(byteAdmission.retryAfterSeconds));
-      return reply.code(503).send({
-        ok: false,
-        error: "offline package delivery byte budget exceeded",
-      });
+      return reply.code(503).send({ error: "offline package delivery byte budget exceeded" });
     }
 
     let archive: Awaited<ReturnType<OfflinePackageGenerator["openArchive"]>>;
@@ -384,7 +377,7 @@ function registerOfflinePackageRoutes(
       archive = await generator.openArchive(packageId);
       if (!archive) {
         admission.lease.release();
-        return reply.code(404).send({ ok: false, error: "offline package not found" });
+        return reply.code(404).send({ error: "offline package not found" });
       }
       const stream = archiveStream(
         archive.path,
@@ -428,7 +421,6 @@ function transitSourceErrorReply(error: Error, _request: FastifyRequest, reply: 
   if (!(error instanceof TransitSourceError) && "statusCode" in error) throw error;
   const known = error instanceof TransitSourceError;
   return reply.code(known ? error.statusCode : 500).send({
-    ok: false,
     error: error.message,
     ...(known && error.code ? { code: error.code } : {}),
   });
@@ -547,7 +539,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return {
         ok: false,
         status: 503,
-        body: { ok: false, error: "Durable data receiver is unavailable" },
+        body: { error: "Durable data receiver is unavailable" },
       };
     const input = normalizeDataExecutionInput({
       kind: "transit-sync",
@@ -920,7 +912,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       runtimeState: searchIndexRuntimeState,
     });
     if (!status) {
-      return reply.code(404).send({ ok: false, error: "osm_search index not built" });
+      return reply.code(404).send({ error: "osm_search index not built" });
     }
     return reply.send({ ok: true, ...status });
   });
@@ -931,7 +923,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       runtimeState: notablePlaces.runtimeState,
     });
     if (!status) {
-      return reply.code(404).send({ ok: false, error: "notable_places index not built" });
+      return reply.code(404).send({ error: "notable_places index not built" });
     }
     return reply.send({ ok: true, ...status });
   });
@@ -942,7 +934,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return await inspectOvertureRecovery(sql, dataDir, req.query.region);
     } catch {
       reply.code(503);
-      return { ok: false, error: "Overture prerequisite inspection is unavailable" };
+      return { error: "Overture prerequisite inspection is unavailable" };
     }
   });
 
@@ -950,7 +942,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     const state = await getOvertureConflationState(sql);
     if (!state) {
       reply.code(404);
-      return { ok: false, error: "overture_places not ingested" };
+      return { error: "overture_places not ingested" };
     }
     const heartbeatAgeMs = Math.max(0, Date.now() - state.updatedAt.getTime());
     return {

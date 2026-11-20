@@ -163,7 +163,7 @@ describe("Compose generated consumers", () => {
     const paths: string[] = [];
     composeFetch(async (url) => {
       paths.push(new URL(url).pathname);
-      return Response.json({ ok: false, error: "Use typed service controls" }, { status: 503 });
+      return Response.json({ error: "Use typed service controls" }, { status: 503 });
     });
     mount(<ComposePreview />);
     await screen.findByText(/synthetic: \{\}/);

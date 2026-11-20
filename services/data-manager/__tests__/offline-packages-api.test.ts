@@ -238,6 +238,7 @@ describe("data-manager offline package API", () => {
       headers: { "x-offline-package-principal": "b".repeat(64) },
     });
     expect(otherPrincipal.statusCode).toBe(404);
+    expect(otherPrincipal.json()).toEqual({ error: "offline package job not found" });
 
     const packageId = `omp2-${"a".repeat(64)}`;
     const manifest = await app.inject({
@@ -317,11 +318,13 @@ describe("data-manager offline package API", () => {
       url: `/offline/packages/omp2-${"f".repeat(64)}/manifest`,
     });
     expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ error: "offline package not found" });
     const traversal = await app.inject({
       method: "GET",
       url: "/offline/packages/not-a-package/manifest",
     });
     expect(traversal.statusCode).toBe(400);
+    expect(traversal.json()).toEqual({ error: "Invalid data-manager params" });
     await app.close();
   });
 
@@ -358,6 +361,7 @@ describe("data-manager offline package API", () => {
     });
 
     expect(overlapping.statusCode).toBe(503);
+    expect(overlapping.json()).toEqual({ error: "offline package delivery capacity exceeded" });
     expect(overlapping.headers["retry-after"]).toBe("10");
     expect(openArchive).toHaveBeenCalledOnce();
     expect(archiveStream).toHaveBeenCalledOnce();
@@ -442,6 +446,7 @@ describe("data-manager offline package API", () => {
     expect(suffix.statusCode).toBe(206);
     expect(suffix.body).toBe(archiveBytes.slice(-4));
     expect(fullFallback.statusCode).toBe(503);
+    expect(fullFallback.json()).toEqual({ error: "offline package delivery byte budget exceeded" });
     expect(fullFallback.headers["retry-after"]).toBe("10");
     expect(openArchive).toHaveBeenCalledOnce();
     expect(archiveStream).toHaveBeenCalledOnce();

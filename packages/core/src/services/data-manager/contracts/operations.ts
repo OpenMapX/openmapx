@@ -372,7 +372,6 @@ export const dataManagerOperations = {
       ...dataMutationErrors,
       200: json(t.transitApprovalSchema),
       404: json(httpErrorSchema),
-      422: json(t.transitApprovalMismatchSchema),
       503: json(httpErrorSchema),
     },
   },

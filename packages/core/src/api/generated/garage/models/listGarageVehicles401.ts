@@ -4,7 +4,6 @@
 export type ListGarageVehicles401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

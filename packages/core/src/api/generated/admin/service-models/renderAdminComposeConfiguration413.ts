@@ -4,7 +4,6 @@
 export type RenderAdminComposeConfiguration413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

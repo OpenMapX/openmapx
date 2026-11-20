@@ -4,7 +4,6 @@
 export type PostApiDataManagerTransitSync413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

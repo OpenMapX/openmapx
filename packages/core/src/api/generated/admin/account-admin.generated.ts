@@ -79,7 +79,6 @@ export type CreateAdminAccount200 = {
 export type CreateAdminAccount400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -97,7 +96,6 @@ export type CreateAdminAccount400 =
 export type CreateAdminAccount401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -115,7 +113,6 @@ export type CreateAdminAccount401 =
 export type CreateAdminAccount403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -133,7 +130,6 @@ export type CreateAdminAccount403 =
 export type CreateAdminAccount404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -151,7 +147,6 @@ export type CreateAdminAccount404 =
 export type CreateAdminAccount409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -169,7 +164,6 @@ export type CreateAdminAccount409 =
 export type CreateAdminAccount413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -187,7 +181,6 @@ export type CreateAdminAccount413 =
 export type CreateAdminAccount415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -214,7 +207,6 @@ export type CreateAdminAccount429 = {
 export type CreateAdminAccount500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -232,7 +224,6 @@ export type CreateAdminAccount500 =
 export type CreateAdminAccount503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -317,7 +308,6 @@ export type GetAdminAuthPolicy200 = {
 export type GetAdminAuthPolicy400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -335,7 +325,6 @@ export type GetAdminAuthPolicy400 =
 export type GetAdminAuthPolicy401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -353,7 +342,6 @@ export type GetAdminAuthPolicy401 =
 export type GetAdminAuthPolicy403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -371,7 +359,6 @@ export type GetAdminAuthPolicy403 =
 export type GetAdminAuthPolicy413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -389,7 +376,6 @@ export type GetAdminAuthPolicy413 =
 export type GetAdminAuthPolicy415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -416,7 +402,6 @@ export type GetAdminAuthPolicy429 = {
 export type GetAdminAuthPolicy500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -434,7 +419,6 @@ export type GetAdminAuthPolicy500 =
 export type GetAdminAuthPolicy503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -516,7 +500,6 @@ export type ApplyAdminAuthPolicy200 = {
 export type ApplyAdminAuthPolicy400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -534,7 +517,6 @@ export type ApplyAdminAuthPolicy400 =
 export type ApplyAdminAuthPolicy401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -552,7 +534,6 @@ export type ApplyAdminAuthPolicy401 =
 export type ApplyAdminAuthPolicy403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -570,7 +551,6 @@ export type ApplyAdminAuthPolicy403 =
 export type ApplyAdminAuthPolicy409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -588,7 +568,6 @@ export type ApplyAdminAuthPolicy409 =
 export type ApplyAdminAuthPolicy413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -606,7 +585,6 @@ export type ApplyAdminAuthPolicy413 =
 export type ApplyAdminAuthPolicy415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -633,7 +611,6 @@ export type ApplyAdminAuthPolicy429 = {
 export type ApplyAdminAuthPolicy500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -651,7 +628,6 @@ export type ApplyAdminAuthPolicy500 =
 export type ApplyAdminAuthPolicy503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -713,7 +689,6 @@ export type GetAdminAccountDelivery200 = {
 export type GetAdminAccountDelivery400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -731,7 +706,6 @@ export type GetAdminAccountDelivery400 =
 export type GetAdminAccountDelivery401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -749,7 +723,6 @@ export type GetAdminAccountDelivery401 =
 export type GetAdminAccountDelivery403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -767,7 +740,6 @@ export type GetAdminAccountDelivery403 =
 export type GetAdminAccountDelivery404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -785,7 +757,6 @@ export type GetAdminAccountDelivery404 =
 export type GetAdminAccountDelivery409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -803,7 +774,6 @@ export type GetAdminAccountDelivery409 =
 export type GetAdminAccountDelivery413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -821,7 +791,6 @@ export type GetAdminAccountDelivery413 =
 export type GetAdminAccountDelivery415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -848,7 +817,6 @@ export type GetAdminAccountDelivery429 = {
 export type GetAdminAccountDelivery500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -866,7 +834,6 @@ export type GetAdminAccountDelivery500 =
 export type GetAdminAccountDelivery503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -924,7 +891,6 @@ export type InviteAdminAccount200 = {
 export type InviteAdminAccount400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -942,7 +908,6 @@ export type InviteAdminAccount400 =
 export type InviteAdminAccount401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -960,7 +925,6 @@ export type InviteAdminAccount401 =
 export type InviteAdminAccount403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -978,7 +942,6 @@ export type InviteAdminAccount403 =
 export type InviteAdminAccount404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -996,7 +959,6 @@ export type InviteAdminAccount404 =
 export type InviteAdminAccount409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1014,7 +976,6 @@ export type InviteAdminAccount409 =
 export type InviteAdminAccount413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1032,7 +993,6 @@ export type InviteAdminAccount413 =
 export type InviteAdminAccount415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1059,7 +1019,6 @@ export type InviteAdminAccount429 = {
 export type InviteAdminAccount500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1077,7 +1036,6 @@ export type InviteAdminAccount500 =
 export type InviteAdminAccount503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1150,7 +1108,6 @@ export type SetAdminAccountPassword200 = {
 export type SetAdminAccountPassword400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1168,7 +1125,6 @@ export type SetAdminAccountPassword400 =
 export type SetAdminAccountPassword401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1186,7 +1142,6 @@ export type SetAdminAccountPassword401 =
 export type SetAdminAccountPassword403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1204,7 +1159,6 @@ export type SetAdminAccountPassword403 =
 export type SetAdminAccountPassword404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1222,7 +1176,6 @@ export type SetAdminAccountPassword404 =
 export type SetAdminAccountPassword409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1240,7 +1193,6 @@ export type SetAdminAccountPassword409 =
 export type SetAdminAccountPassword413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1258,7 +1210,6 @@ export type SetAdminAccountPassword413 =
 export type SetAdminAccountPassword415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1285,7 +1236,6 @@ export type SetAdminAccountPassword429 = {
 export type SetAdminAccountPassword500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1303,7 +1253,6 @@ export type SetAdminAccountPassword500 =
 export type SetAdminAccountPassword503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1361,7 +1310,6 @@ export type SendAdminAccountPasswordReset200 = {
 export type SendAdminAccountPasswordReset400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1379,7 +1327,6 @@ export type SendAdminAccountPasswordReset400 =
 export type SendAdminAccountPasswordReset401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1397,7 +1344,6 @@ export type SendAdminAccountPasswordReset401 =
 export type SendAdminAccountPasswordReset403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1415,7 +1361,6 @@ export type SendAdminAccountPasswordReset403 =
 export type SendAdminAccountPasswordReset404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1433,7 +1378,6 @@ export type SendAdminAccountPasswordReset404 =
 export type SendAdminAccountPasswordReset409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1451,7 +1395,6 @@ export type SendAdminAccountPasswordReset409 =
 export type SendAdminAccountPasswordReset413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1469,7 +1412,6 @@ export type SendAdminAccountPasswordReset413 =
 export type SendAdminAccountPasswordReset415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1496,7 +1438,6 @@ export type SendAdminAccountPasswordReset429 = {
 export type SendAdminAccountPasswordReset500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1514,7 +1455,6 @@ export type SendAdminAccountPasswordReset500 =
 export type SendAdminAccountPasswordReset503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1572,7 +1512,6 @@ export type ChangeAdminAccountRole200 = {
 export type ChangeAdminAccountRole400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1590,7 +1529,6 @@ export type ChangeAdminAccountRole400 =
 export type ChangeAdminAccountRole401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1608,7 +1546,6 @@ export type ChangeAdminAccountRole401 =
 export type ChangeAdminAccountRole403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1626,7 +1563,6 @@ export type ChangeAdminAccountRole403 =
 export type ChangeAdminAccountRole404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1644,7 +1580,6 @@ export type ChangeAdminAccountRole404 =
 export type ChangeAdminAccountRole409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1662,7 +1597,6 @@ export type ChangeAdminAccountRole409 =
 export type ChangeAdminAccountRole413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1680,7 +1614,6 @@ export type ChangeAdminAccountRole413 =
 export type ChangeAdminAccountRole415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1707,7 +1640,6 @@ export type ChangeAdminAccountRole429 = {
 export type ChangeAdminAccountRole500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1725,7 +1657,6 @@ export type ChangeAdminAccountRole500 =
 export type ChangeAdminAccountRole503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1783,7 +1714,6 @@ export type SendAdminAccountVerificationEmail200 = {
 export type SendAdminAccountVerificationEmail400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1801,7 +1731,6 @@ export type SendAdminAccountVerificationEmail400 =
 export type SendAdminAccountVerificationEmail401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1819,7 +1748,6 @@ export type SendAdminAccountVerificationEmail401 =
 export type SendAdminAccountVerificationEmail403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1837,7 +1765,6 @@ export type SendAdminAccountVerificationEmail403 =
 export type SendAdminAccountVerificationEmail404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1855,7 +1782,6 @@ export type SendAdminAccountVerificationEmail404 =
 export type SendAdminAccountVerificationEmail409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1873,7 +1799,6 @@ export type SendAdminAccountVerificationEmail409 =
 export type SendAdminAccountVerificationEmail413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1891,7 +1816,6 @@ export type SendAdminAccountVerificationEmail413 =
 export type SendAdminAccountVerificationEmail415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1918,7 +1842,6 @@ export type SendAdminAccountVerificationEmail429 = {
 export type SendAdminAccountVerificationEmail500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -1936,7 +1859,6 @@ export type SendAdminAccountVerificationEmail500 =
 export type SendAdminAccountVerificationEmail503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2009,7 +1931,6 @@ export type VerifyAdminAccount200 = {
 export type VerifyAdminAccount400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2027,7 +1948,6 @@ export type VerifyAdminAccount400 =
 export type VerifyAdminAccount401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2045,7 +1965,6 @@ export type VerifyAdminAccount401 =
 export type VerifyAdminAccount403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2063,7 +1982,6 @@ export type VerifyAdminAccount403 =
 export type VerifyAdminAccount404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2081,7 +1999,6 @@ export type VerifyAdminAccount404 =
 export type VerifyAdminAccount409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2099,7 +2016,6 @@ export type VerifyAdminAccount409 =
 export type VerifyAdminAccount413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2117,7 +2033,6 @@ export type VerifyAdminAccount413 =
 export type VerifyAdminAccount415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2144,7 +2059,6 @@ export type VerifyAdminAccount429 = {
 export type VerifyAdminAccount500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2162,7 +2076,6 @@ export type VerifyAdminAccount500 =
 export type VerifyAdminAccount503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2194,7 +2107,6 @@ export type CompleteAdminReauthentication200 = {
 export type CompleteAdminReauthentication400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2212,7 +2124,6 @@ export type CompleteAdminReauthentication400 =
 export type CompleteAdminReauthentication401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2230,7 +2141,6 @@ export type CompleteAdminReauthentication401 =
 export type CompleteAdminReauthentication403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2248,7 +2158,6 @@ export type CompleteAdminReauthentication403 =
 export type CompleteAdminReauthentication409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2266,7 +2175,6 @@ export type CompleteAdminReauthentication409 =
 export type CompleteAdminReauthentication413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2284,7 +2192,6 @@ export type CompleteAdminReauthentication413 =
 export type CompleteAdminReauthentication415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2311,7 +2218,6 @@ export type CompleteAdminReauthentication429 = {
 export type CompleteAdminReauthentication500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2329,7 +2235,6 @@ export type CompleteAdminReauthentication500 =
 export type CompleteAdminReauthentication503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2394,7 +2299,6 @@ export type StartAdminReauthentication200 = {
 export type StartAdminReauthentication400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2412,7 +2316,6 @@ export type StartAdminReauthentication400 =
 export type StartAdminReauthentication401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2430,7 +2333,6 @@ export type StartAdminReauthentication401 =
 export type StartAdminReauthentication403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2448,7 +2350,6 @@ export type StartAdminReauthentication403 =
 export type StartAdminReauthentication409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2466,7 +2367,6 @@ export type StartAdminReauthentication409 =
 export type StartAdminReauthentication413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2484,7 +2384,6 @@ export type StartAdminReauthentication413 =
 export type StartAdminReauthentication415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2511,7 +2410,6 @@ export type StartAdminReauthentication429 = {
 export type StartAdminReauthentication500 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -2529,7 +2427,6 @@ export type StartAdminReauthentication500 =
 export type StartAdminReauthentication503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

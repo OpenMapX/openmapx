@@ -21,7 +21,6 @@ import type {
   ApproveTransitBump409,
   ApproveTransitBump413,
   ApproveTransitBump415,
-  ApproveTransitBump422,
   ApproveTransitBump429,
   ApproveTransitBump500,
   ApproveTransitBump503,
@@ -5300,11 +5299,6 @@ export type approveTransitBumpResponse415 = {
   status: 415;
 };
 
-export type approveTransitBumpResponse422 = {
-  data: ApproveTransitBump422;
-  status: 422;
-};
-
 export type approveTransitBumpResponse429 = {
   data: ApproveTransitBump429;
   status: 429;
@@ -5331,7 +5325,6 @@ export type approveTransitBumpResponseError = (
   | approveTransitBumpResponse409
   | approveTransitBumpResponse413
   | approveTransitBumpResponse415
-  | approveTransitBumpResponse422
   | approveTransitBumpResponse429
   | approveTransitBumpResponse500
   | approveTransitBumpResponse503

@@ -4,7 +4,6 @@
 export type RevokeShare404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Every API error reply uses the one envelope `{ error, code? }`. This scan
- * refuses an error reply whose literal body has no `error` field: a
+ * refuses an error reply whose literal body has no `error` field, or carries an
+ * `ok` flag that the status already answers: a
  * `.status(n).send({...})` or `.code(n).send({...})` chain, and a handler that
  * sets the status and then returns or sends the body. A status literal below
  * 400 is a success; any other status expression counts as an error. A body
@@ -79,16 +80,23 @@ function unwrapped(expression: ts.Expression): ts.Expression {
   return current;
 }
 
-/** A literal body without `error` and without a spread that could supply it. */
+function propertyName(property: ts.ObjectLiteralElementLike): string | undefined {
+  return property.name !== undefined &&
+    (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
+    ? property.name.text
+    : undefined;
+}
+
+/**
+ * A literal body with an `ok` flag, or without `error` and without a spread that
+ * could supply it.
+ */
 function lacksEnvelope(expression: ts.Expression | undefined): boolean {
   const body = expression && unwrapped(expression);
   if (!body || !ts.isObjectLiteralExpression(body)) return false;
+  if (body.properties.some((property) => propertyName(property) === "ok")) return true;
   return !body.properties.some(
-    (property) =>
-      ts.isSpreadAssignment(property) ||
-      (property.name !== undefined &&
-        (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
-        property.name.text === "error"),
+    (property) => ts.isSpreadAssignment(property) || propertyName(property) === "error",
   );
 }
 
@@ -142,6 +150,14 @@ describe("error envelope detection", () => {
     expect(
       offenders(`function h() {\n  reply.code(400);\n  return reply.send({ x: 1 });\n}`),
     ).toEqual([3]);
+  });
+
+  it("refuses an ok flag in an error body", () => {
+    expect(offenders(`reply.code(404).send({ ok: false, error: "missing" });`)).toEqual([1]);
+    expect(
+      offenders(`function h() {\n  reply.code(503);\n  return { ok: false, error: "down" };\n}`),
+    ).toEqual([3]);
+    expect(offenders(`reply.code(200).send({ ok: false, status: "starting" });`)).toEqual([]);
   });
 
   it("sees a literal body through satisfies, as and parentheses", () => {

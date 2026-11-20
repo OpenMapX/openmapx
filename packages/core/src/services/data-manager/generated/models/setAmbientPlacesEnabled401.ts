@@ -4,7 +4,6 @@
 export type SetAmbientPlacesEnabled401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

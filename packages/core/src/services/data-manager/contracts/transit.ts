@@ -136,7 +136,6 @@ export const transitSourceMutationResultSchema = z.strictObject({
   status: z.literal("started"),
 });
 export const transitSourceActionErrorSchema = z.strictObject({
-  ok: z.literal(false),
   error: z.string(),
   code: z.literal("source_action_not_allowed"),
 });
@@ -276,11 +275,6 @@ export const transitBumpResultSchema = z.union([
 export const transitApproveRequestSchema = z
   .strictObject({ approveRef: z.string().optional(), approvedBy: z.string().optional() })
   .optional();
-export const transitApprovalMismatchSchema = z.strictObject({
-  ok: z.literal(false),
-  error: z.literal("typed-confirmation-mismatch"),
-  expected: z.string(),
-});
 export const transitApprovalSchema = z.strictObject({
   ok: z.literal(true),
   activated: z.literal(true),

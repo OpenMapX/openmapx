@@ -4,7 +4,6 @@
 export type GetOvertureRecovery429 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -4,7 +4,6 @@
 export type ListAdminArtifactTransfers422 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

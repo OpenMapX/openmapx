@@ -4,7 +4,6 @@
 export type ClearAdminCache400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

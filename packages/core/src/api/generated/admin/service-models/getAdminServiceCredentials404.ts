@@ -4,7 +4,6 @@
 export type GetAdminServiceCredentials404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

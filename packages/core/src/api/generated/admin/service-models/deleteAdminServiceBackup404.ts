@@ -4,7 +4,6 @@
 export type DeleteAdminServiceBackup404 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

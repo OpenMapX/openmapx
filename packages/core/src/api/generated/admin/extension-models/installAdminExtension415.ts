@@ -4,7 +4,6 @@
 export type InstallAdminExtension415 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

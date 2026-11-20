@@ -184,7 +184,7 @@ describe("data-manager API", () => {
     });
     const res = await app.inject({ method: "GET", url: "/search-index/status" });
     expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
+    expect(res.json()).toEqual({ error: "osm_search index not built" });
   });
 
   it("continues an observer through running unknown publication without canceling its worker", async () => {
@@ -234,7 +234,7 @@ describe("data-manager API", () => {
     });
     const res = await app.inject({ method: "GET", url: "/notable-places/status" });
     expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ ok: false, error: "notable_places index not built" });
+    expect(res.json()).toEqual({ error: "notable_places index not built" });
   });
 
   it("POST /datasets/reload reloads state from disk", async () => {
@@ -330,7 +330,7 @@ describe("data-manager API", () => {
           payload: { ...operatorFeed, region: "de", expectedSourceRevision: "a".repeat(64) },
         }),
         status: 409,
-        body: { ok: false, error: "Desired transit sources changed. Refresh before applying." },
+        body: { error: "Desired transit sources changed. Refresh before applying." },
       },
       {
         label: "a region outside the country scope",
@@ -341,7 +341,6 @@ describe("data-manager API", () => {
         }),
         status: 400,
         body: {
-          ok: false,
           error:
             "Region fr is outside the configured country scope (de); the pipeline would never import this source",
         },
@@ -354,7 +353,7 @@ describe("data-manager API", () => {
           payload: { expectedSourceRevision: revision(dataDir) },
         }),
         status: 404,
-        body: { ok: false, error: "Operator source operator:de:missing not found" },
+        body: { error: "Operator source operator:de:missing not found" },
       },
       {
         label: "disabling an unknown source",
@@ -364,7 +363,7 @@ describe("data-manager API", () => {
           payload: { expectedSourceRevision: revision(dataDir) },
         }),
         status: 404,
-        body: { ok: false, error: "Transit source missing not found" },
+        body: { error: "Transit source missing not found" },
       },
     ])("refuses $label without admitting work", async ({ request, status, body }) => {
       const dataDir = createDataDir();
@@ -401,7 +400,24 @@ describe("data-manager API", () => {
         payload: { ...operatorFeed, region: "de", expectedSourceRevision: revision(dataDir) },
       });
       expect(res.statusCode).toBe(500);
-      expect(res.json()).toEqual({ ok: false, error: "Execution store unavailable" });
+      expect(res.json()).toEqual({ error: "Execution store unavailable" });
+    });
+
+    it("refuses a source change without a durable receiver in the error envelope", async () => {
+      const dataDir = createDataDir();
+      sourceCatalog(dataDir);
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir,
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      });
+      const res = await app.inject({
+        method: "POST",
+        url: "/transit/sources",
+        payload: { ...operatorFeed, region: "de", expectedSourceRevision: revision(dataDir) },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toEqual({ error: "Durable data receiver is unavailable" });
     });
 
     it("answers 409 for the pinned catalog while it is unavailable", async () => {
@@ -409,7 +425,7 @@ describe("data-manager API", () => {
       registerApi(app, { dataDir: createDataDir() });
       const res = await app.inject({ method: "GET", url: "/transit/catalog" });
       expect(res.statusCode).toBe(409);
-      expect(res.json()).toEqual({ ok: false, error: "Pinned Transitous catalog is unavailable" });
+      expect(res.json()).toEqual({ error: "Pinned Transitous catalog is unavailable" });
     });
   });
 

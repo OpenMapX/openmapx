@@ -5,7 +5,6 @@ export const countSchema = z.number().finite().nonnegative();
 export const timestampSchema = z.iso.datetime({ offset: true });
 export const errorResponseSchema = z.strictObject({
   error: z.string(),
-  ok: z.literal(false).optional(),
   message: z.string().optional(),
   jobId: z.string().optional(),
 });

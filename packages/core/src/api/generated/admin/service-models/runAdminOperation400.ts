@@ -4,7 +4,6 @@
 export type RunAdminOperation400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -19,7 +18,6 @@ export type RunAdminOperation400 =
       code?: string;
     }
   | {
-      ok: false;
       error: string;
       issues: {
         path: string;

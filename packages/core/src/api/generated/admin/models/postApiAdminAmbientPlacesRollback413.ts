@@ -4,7 +4,6 @@
 export type PostApiAdminAmbientPlacesRollback413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

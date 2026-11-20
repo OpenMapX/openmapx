@@ -17,10 +17,7 @@ export const adminServiceAcceptedSchema = z.strictObject({
   jobId: z.string().min(1),
 });
 export const adminServiceOkSchema = z.strictObject({ ok: z.literal(true) });
-export const adminServiceFailureSchema = z.strictObject({
-  ok: z.literal(false),
-  error: z.string(),
-});
+export const adminServiceFailureSchema = z.strictObject({ error: z.string() });
 export const adminServiceValidationErrorSchema = z.strictObject({
   error: z.string(),
   errors: z.array(z.string()),

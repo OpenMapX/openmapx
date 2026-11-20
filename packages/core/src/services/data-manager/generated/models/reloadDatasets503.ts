@@ -4,7 +4,6 @@
 export type ReloadDatasets503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

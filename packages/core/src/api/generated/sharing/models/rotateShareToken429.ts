@@ -4,7 +4,6 @@
 export type RotateShareToken429 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

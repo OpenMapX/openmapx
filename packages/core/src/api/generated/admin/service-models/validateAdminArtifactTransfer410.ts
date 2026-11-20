@@ -4,7 +4,6 @@
 export type ValidateAdminArtifactTransfer410 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

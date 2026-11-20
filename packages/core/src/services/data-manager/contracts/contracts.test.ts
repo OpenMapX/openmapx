@@ -130,6 +130,19 @@ describe("data-manager wire contracts", () => {
       }).success,
     ).toBe(false);
   });
+  it("answers errors without an ok flag", () => {
+    const missing = dataManagerOperations.getSearchIndexStatus.responses[404].schema;
+    expect(missing.parse({ error: "osm_search index not built" })).toEqual({
+      error: "osm_search index not built",
+    });
+    expect(missing.safeParse({ ok: false, error: "osm_search index not built" }).success).toBe(
+      false,
+    );
+    const refused = dataManagerOperations.addTransitSource.responses[409].schema;
+    const actionRefusal = { error: "Source is pinned", code: "source_action_not_allowed" };
+    expect(refused.parse(actionRefusal)).toEqual(actionRefusal);
+    expect(refused.safeParse({ ok: false, ...actionRefusal }).success).toBe(false);
+  });
   it("names a transit scope outside the operations profile in the error envelope", () => {
     const body = {
       error: "Countries outside configured operations profile",

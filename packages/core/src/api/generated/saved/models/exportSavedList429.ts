@@ -4,7 +4,6 @@
 export type ExportSavedList429 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -591,10 +591,13 @@ describe("canonical complete service administration contracts", () => {
     expect(Object.keys(ops.stopAdminCompose.responses).some((status) => /^2/.test(status))).toBe(
       false,
     );
-    expect(response("stopAdminCompose", 503, { ok: false, error: "Host guidance" })).toEqual({
-      ok: false,
+    expect(response("stopAdminCompose", 503, { error: "Host guidance" })).toEqual({
       error: "Host guidance",
     });
+    expect(
+      ops.stopAdminCompose.responses[503].schema.safeParse({ ok: false, error: "Host guidance" })
+        .success,
+    ).toBe(false);
     expect(
       response("startAdminCompose", 200, {
         ok: false,
@@ -657,14 +660,13 @@ describe("canonical complete service administration contracts", () => {
     };
     expect(response("previewAdminOperation", 200, preview)).toEqual(preview);
     const invalid = {
-      ok: false,
       error: "Invalid input",
       issues: [{ path: "region", message: "Required" }],
     };
     expect(response("runAdminOperation", 400, invalid)).toEqual(invalid);
-    expect(
-      response("previewAdminOperation", 404, { ok: false, error: "Unknown operation" }),
-    ).toEqual({ ok: false, error: "Unknown operation" });
+    expect(response("previewAdminOperation", 404, { error: "Unknown operation" })).toEqual({
+      error: "Unknown operation",
+    });
     const sharedMobility = {
       decisions: [
         {

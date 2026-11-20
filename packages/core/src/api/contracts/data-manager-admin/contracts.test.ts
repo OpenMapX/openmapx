@@ -148,10 +148,14 @@ describe("application data-manager administration contracts", () => {
   it("retains index absence and unsuccessful mutation outcomes in separate statuses", () => {
     expect(
       dataManagerAdminOperations.getApiDataManagerSearchIndexStatus.responses[404].schema.parse({
-        ok: false,
         error: "osm_search index not built",
       }),
-    ).toMatchObject({ ok: false });
+    ).toEqual({ error: "osm_search index not built" });
+    expect(
+      dataManagerAdminOperations.getApiDataManagerSearchIndexStatus.responses[404].schema.safeParse(
+        { ok: false, error: "osm_search index not built" },
+      ).success,
+    ).toBe(false);
     expect(
       dataManagerAdminOperations.postApiDataManagerTransitSync.responses[409].schema.parse({
         error: "Another data job is running. Try again when it finishes.",

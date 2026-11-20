@@ -71,7 +71,7 @@ describe("maintenance status contracts", () => {
     async (_name, Component, key, notice) => {
       const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
         expect((init as RequestInit | undefined)?.credentials).toBe("include");
-        return Response.json({ ok: false, error: "not built" }, { status: 404 });
+        return Response.json({ error: "not built" }, { status: 404 });
       });
       const client = view(Component);
       expect(await screen.findByRole("alert")).toHaveTextContent(notice);

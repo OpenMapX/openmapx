@@ -56,6 +56,8 @@ a data-manager route the API passes through, has one shape:
   OpenStreetMap contribution, saved-places and garage contracts do.
 - A family may add fields beside these, such as `retryAfter`, `details`, an
   `errors` list of validation messages or a `hint`.
+- An error body carries no `ok` flag: the HTTP status says that the request
+  failed.
 
 A handler throws `httpError(status, text)` or sends
 `reply.status(status).send({ error, code })`. The host's error handler answers
@@ -65,8 +67,8 @@ for any status of 500 or above. The schema is `apiErrorSchema` in
 
 `apps/api/src/__tests__/error-envelope.test.ts` scans the API, the built-in
 integrations, the integration framework and data-manager and refuses an error
-reply whose literal body has no `error`, including a body wrapped in `satisfies`
-or `as`.
+reply whose literal body has no `error` or has an `ok` field, including a body
+wrapped in `satisfies` or `as`.
 Data-manager error replies that the API passes through use the same envelope:
 offline package preparation names its reason in `code` (with
 `retryAfterSeconds` when it limits the caller), and a refused transit source

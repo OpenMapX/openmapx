@@ -4,7 +4,6 @@
 export type GetOfflinePackageCapability401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

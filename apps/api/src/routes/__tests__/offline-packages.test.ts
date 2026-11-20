@@ -894,10 +894,7 @@ describe("offline package public API", () => {
       getCount += 1;
       if (getCount === 1) {
         return new Response(
-          JSON.stringify({
-            ok: false,
-            error: "offline package delivery capacity exceeded",
-          }),
+          JSON.stringify({ error: "offline package delivery capacity exceeded" }),
           {
             status: 503,
             headers: { "content-type": "application/json", "retry-after": "10" },
@@ -928,10 +925,7 @@ describe("offline package public API", () => {
 
     expect(rejected.statusCode).toBe(503);
     expect(rejected.headers["retry-after"]).toBe("10");
-    expect(rejected.json()).toEqual({
-      ok: false,
-      error: "offline package delivery capacity exceeded",
-    });
+    expect(rejected.json()).toEqual({ error: "offline package delivery capacity exceeded" });
     expect(after.statusCode).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(4);
     await app.close();

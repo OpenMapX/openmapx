@@ -4,7 +4,6 @@
 export type PostApiDataManagerTransitBumpTransitousRef400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

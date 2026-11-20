@@ -107,7 +107,6 @@ it("collects exactly 64 actual service producers with complete statuses, media, 
               type: "object",
               properties: {
                 error: { type: "string" },
-                ok: { type: "boolean", enum: [false] },
                 message: { type: "string" },
                 jobId: { type: "string" },
               },

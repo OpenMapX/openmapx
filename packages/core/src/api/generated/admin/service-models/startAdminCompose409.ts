@@ -4,7 +4,6 @@
 export type StartAdminCompose409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -4,7 +4,6 @@
 export type ActivateAdminTransitPins400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -4,7 +4,6 @@
 export type PrepareDataConfigurationFence409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

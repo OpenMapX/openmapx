@@ -4,7 +4,6 @@
 export type ListAdminOperations403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

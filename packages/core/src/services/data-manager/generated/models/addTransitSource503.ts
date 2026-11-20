@@ -4,7 +4,6 @@
 export type AddTransitSource503 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

@@ -4,7 +4,6 @@
 export type GetTransitSources409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

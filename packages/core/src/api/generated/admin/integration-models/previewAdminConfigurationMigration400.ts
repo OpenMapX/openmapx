@@ -4,7 +4,6 @@
 export type PreviewAdminConfigurationMigration400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

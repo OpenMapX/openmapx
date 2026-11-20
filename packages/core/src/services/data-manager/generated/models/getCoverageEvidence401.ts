@@ -4,7 +4,6 @@
 export type GetCoverageEvidence401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

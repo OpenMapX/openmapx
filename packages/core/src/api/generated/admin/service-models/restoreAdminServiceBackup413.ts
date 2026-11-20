@@ -4,7 +4,6 @@
 export type RestoreAdminServiceBackup413 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

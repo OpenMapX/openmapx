@@ -4,7 +4,6 @@
 export type DeleteApiDataManagerTransitSourcesSourceId400 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

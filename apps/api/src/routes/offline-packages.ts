@@ -400,7 +400,7 @@ export function createOfflinePackagesRoute(
         if (preflight.status !== 200 && preflight.status !== 206) {
           copyArchiveHeaders(preflight, reply);
           if (preflight.status === 404) {
-            return reply.code(404).send({ ok: false, error: "offline package not found" });
+            return reply.code(404).send({ error: "offline package not found" });
           }
           return reply.code(preflight.status).send();
         }

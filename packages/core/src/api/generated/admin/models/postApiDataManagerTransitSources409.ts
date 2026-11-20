@@ -4,7 +4,6 @@
 export type PostApiDataManagerTransitSources409 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
@@ -25,7 +24,6 @@ export type PostApiDataManagerTransitSources409 =
       existingJobId: string | null;
     }
   | {
-      ok: false;
       error: string;
       code: "source_action_not_allowed";
     };

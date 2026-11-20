@@ -124,11 +124,7 @@ describe("transit source proxy", () => {
   it("preserves unavailable-action codes without a successful removal audit", async () => {
     fetchMock.mockResolvedValue(
       Response.json(
-        {
-          ok: false,
-          error: "Catalog sources cannot be removed",
-          code: "source_action_not_allowed",
-        },
+        { error: "Catalog sources cannot be removed", code: "source_action_not_allowed" },
         { status: 409 },
       ),
     );
@@ -139,7 +135,10 @@ describe("transit source proxy", () => {
       payload: { expectedSourceRevision: "a".repeat(64) },
     });
     expect(result.statusCode, result.body).toBe(409);
-    expect(result.json()).toMatchObject({ code: "source_action_not_allowed" });
+    expect(result.json()).toEqual({
+      error: "Catalog sources cannot be removed",
+      code: "source_action_not_allowed",
+    });
     expect(audit).not.toHaveBeenCalled();
   });
   it("propagates a conflict without writing a successful-mutation audit", async () => {

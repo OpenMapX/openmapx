@@ -4,7 +4,6 @@
 export type ApplyAdminCredentialTransfer403 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

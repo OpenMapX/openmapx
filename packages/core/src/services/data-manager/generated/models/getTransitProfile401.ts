@@ -4,7 +4,6 @@
 export type GetTransitProfile401 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }

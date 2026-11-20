@@ -23,8 +23,6 @@ export * from "./approveTransitBump404";
 export * from "./approveTransitBump409";
 export * from "./approveTransitBump413";
 export * from "./approveTransitBump415";
-export * from "./approveTransitBump422";
-export * from "./approveTransitBump422Error";
 export * from "./approveTransitBump429";
 export * from "./approveTransitBump500";
 export * from "./approveTransitBump503";

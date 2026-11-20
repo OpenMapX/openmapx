@@ -4,7 +4,6 @@
 export type GetAdminArtifactTransferCapabilities507 =
   | {
       error: string;
-      ok?: false;
       message?: string;
       jobId?: string;
     }
