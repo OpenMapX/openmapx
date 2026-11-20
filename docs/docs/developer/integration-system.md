@@ -1329,7 +1329,7 @@ unmounts.
 Priorities in use: area and line overlays 10 to 20, point overlays 50, moving
 live-transit vehicles 60, road-condition incidents and markers 100 to 110, and
 results the user asked for (route search results, data-source and category
-results) 200. A static test rejects pointer listeners and cursor writes in
+results) 200, and the open saved list 210. A static test rejects pointer listeners and cursor writes in
 integrations and shared integration components outside this pipeline; the
 measurement and travel-time tools, which own the map while active, are its only
 exceptions.

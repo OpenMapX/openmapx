@@ -29,12 +29,7 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
-import type {
-  ExpressionSpecification,
-  FilterSpecification,
-  Map as MaplibreMap,
-  MapMouseEvent,
-} from "maplibre-gl";
+import type { ExpressionSpecification, FilterSpecification, Map as MaplibreMap } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
@@ -45,6 +40,7 @@ import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInt
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
+import { overHoverPin } from "./hoverPin";
 import { resultMarkerLayers } from "./resultMarkerLayers";
 
 const SOURCE_ID = "category-results-source";
@@ -355,27 +351,6 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 /** Results the user asked for win over ambient overlays drawn beneath them. */
 const RESULT_INTERACTION_PRIORITY = 200;
 
-/**
- * Whether the pointer is over the hover pin drawn above a result: its DOM
- * element, or the box it covers above the result's point.
- */
-function overHoverPin(
-  map: MaplibreMap,
-  event: MapMouseEvent | undefined,
-  pin: CategoryPlace | null,
-): boolean {
-  if (!event) return false;
-  const target = event.originalEvent?.target;
-  if (target instanceof Element && target.closest("[data-openmapx-pin-marker]")) return true;
-  if (!pin) return false;
-  const point = map.project(pin.coordinates);
-  return (
-    Math.abs(event.point.x - point.x) <= 16 &&
-    event.point.y >= point.y - 36 &&
-    event.point.y <= point.y + 8
-  );
-}
-
 export function CategoryResultMarkers() {
   const { mapRef, styleVersion, flyTo } = useMap();
   useRenderedMapAttributions(
@@ -647,7 +622,7 @@ export function CategoryResultMarkers() {
         return;
       }
       const map = mapRef.current;
-      if (map && overHoverPin(map, event, hoveredPlace)) return;
+      if (map && overHoverPin(map, event, hoveredPlace?.coordinates ?? null)) return;
       setHoveredCategoryPlaceId(null);
     },
   });

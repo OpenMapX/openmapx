@@ -14,18 +14,18 @@ import {
   readCapturedContributors,
   serializeContributors,
 } from "@openmapx/mobility-core/contributors";
-import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import type { Map as MaplibreMap } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { listMarkerIcon } from "@/lib/listIcon";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { openSavedPlace, savedPlaceToPlace } from "@/lib/openSavedPlace";
+import { overHoverPin } from "../hoverPin";
 import { resultMarkerLayers } from "../resultMarkerLayers";
 
 const SOURCE_ID = "saved-places-source";
@@ -86,7 +86,7 @@ function projectSavedPlaces(places: readonly SavedPlace[], imageId: string) {
 }
 
 export function SavedPlacesLayer() {
-  const { mapRef, mapReady, styleVersion, flyTo } = useMap();
+  const { mapRef, flyTo } = useMap();
   const isPanelOpen = useSidebarStore((s) => s.activeSidebarId === PANEL.SAVED);
   const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
@@ -109,8 +109,6 @@ export function SavedPlacesLayer() {
     [shown, selectedPlace, places],
   );
   const hoverPin = hoverPlace?.id === selectedId ? null : hoverPlace;
-  const hoverRef = useRef(hoverPin);
-  hoverRef.current = hoverPin;
   const activateHoverPin = useCallback(() => {
     if (hoverPin) openSavedPlace(hoverPin, flyTo);
   }, [hoverPin, flyTo]);
@@ -177,28 +175,21 @@ export function SavedPlacesLayer() {
   }, [projected, imageId, icon, mapRef, selectedId, hoverPlace?.id]);
   useMapLayerGroup(group);
 
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !shown) return;
-    for (const id of LAYERS) INTERACTIVE_LAYER_IDS.add(id);
-    const hit = (event: MapMouseEvent) => {
-      const layers = LAYERS.filter((id) => Boolean(map.getLayer(id)));
-      if (!layers.length) return null;
-      const feature = map.queryRenderedFeatures(event.point, { layers })[0];
-      return places.find((place) => place.id === feature?.properties?.id) ?? null;
-    };
-    const onClick = (event: MapMouseEvent) => {
-      if (getMapClickOwner(event)) return;
-      const place = hit(event);
+  // Saved places sit with the route pins, above results and ambient overlays.
+  useMapOverlayInteraction({
+    id: "saved-places",
+    layerIds: LAYERS,
+    priority: 210,
+    enabled: shown,
+    onClick: ({ features }) => {
+      const place = places?.find((candidate) => candidate.id === features[0]?.properties?.id);
       if (place) openSavedPlace(place, flyTo);
-    };
-    const onMove = (event: MapMouseEvent) => {
-      const target = event.originalEvent?.target;
-      if (target instanceof Element && target.closest("[data-openmapx-pin-marker]")) return;
-      const place = hit(event);
-      map.getCanvasContainer().style.cursor = place ? "pointer" : "";
-      if (place) {
+    },
+    onHover: (features, event) => {
+      const place = features
+        ? places?.find((candidate) => candidate.id === features[0]?.properties?.id)
+        : undefined;
+      if (place && activeListId) {
         setHovered((current) =>
           current?.listId === activeListId && current.id === place.id
             ? current
@@ -206,33 +197,11 @@ export function SavedPlacesLayer() {
         );
         return;
       }
-      const pin = hoverRef.current;
-      if (pin) {
-        const point = map.project([pin.lng, pin.lat]);
-        if (
-          Math.abs(event.point.x - point.x) <= 16 &&
-          event.point.y >= point.y - 36 &&
-          event.point.y <= point.y + 8
-        )
-          return;
-      }
+      const map = mapRef.current;
+      if (map && overHoverPin(map, event, hoverPin ? [hoverPin.lng, hoverPin.lat] : null)) return;
       setHovered(null);
-    };
-    const onLeave = () => {
-      setHovered(null);
-      map.getCanvasContainer().style.cursor = "";
-    };
-    map.on("click", onClick);
-    map.on("mousemove", onMove);
-    map.on("mouseout", onLeave);
-    return () => {
-      for (const id of LAYERS) INTERACTIVE_LAYER_IDS.delete(id);
-      map.off("click", onClick);
-      map.off("mousemove", onMove);
-      map.off("mouseout", onLeave);
-      map.getCanvasContainer().style.cursor = "";
-    };
-  }, [mapRef, mapReady, styleVersion, shown, places, activeListId, flyTo]);
+    },
+  });
 
   return null;
 }
