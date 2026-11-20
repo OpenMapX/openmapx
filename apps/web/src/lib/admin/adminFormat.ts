@@ -32,7 +32,7 @@ export interface AdminFormatters {
   timestamp: (value: string | null | undefined) => string;
   date: (value: DateInput) => string;
   time: (value: DateInput) => string;
-  /** The time with seconds, for log lines. */
+  /** The time with seconds per the reader's time format setting, for log lines. */
   preciseTime: (value: DateInput) => string;
   /** The short weekday name, such as "Mon" or "Mo.". */
   weekday: (value: DateInput) => string;
@@ -54,25 +54,27 @@ export function adminFormatters(locale: string, dates: DateTimeFormatters): Admi
   const seconds = unit("second", 1);
   const wholeSeconds = unit("second");
   const minutes = unit("minute");
+  // A weekday name has no clock part, so the 12/24-hour setting does not apply.
   const weekday = new Intl.DateTimeFormat(locale, { weekday: "short" });
-  const preciseTime = new Intl.DateTimeFormat(locale, { timeStyle: "medium" });
   return {
     number: (value) => integer.format(value),
     bytes: (bytes) => formatBytes(bytes, locale),
     percent: (ratio) => percent.format(ratio),
+    // Each unit is chosen after rounding, so 999.6 ms reads "1 s", not "1,000 ms".
     duration: (ms) => {
-      if (ms < 1000) return milliseconds.format(Math.round(ms));
-      if (ms < 60_000) return seconds.format(ms / 1000);
-      return `${minutes.format(Math.floor(ms / 60_000))} ${wholeSeconds.format(
-        Math.floor((ms % 60_000) / 1000),
-      )}`;
+      const wholeMs = Math.round(ms);
+      if (wholeMs < 1000) return milliseconds.format(wholeMs);
+      const tenths = Math.round(ms / 100) / 10;
+      if (tenths < 60) return seconds.format(tenths);
+      const total = Math.round(ms / 1000);
+      return `${minutes.format(Math.floor(total / 60))} ${wholeSeconds.format(total % 60)}`;
     },
     dateTime: (value, options) => dates.dateTime(value, options),
     timestamp: (value) =>
       value && Number.isFinite(Date.parse(value)) ? dates.dateTime(value) : "—",
     date: (value) => dates.date(value),
     time: (value) => dates.time(value),
-    preciseTime: (value) => preciseTime.format(new Date(value)),
+    preciseTime: (value) => dates.time(value, { seconds: true }),
     weekday: (value) => weekday.format(new Date(value)),
     relative: (value) => dates.relative(value),
   };

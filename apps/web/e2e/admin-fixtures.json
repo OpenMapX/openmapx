@@ -71,6 +71,16 @@
         "severity": "error",
         "message": "Docker service \"photon\" is unhealthy",
         "target": "photon"
+      },
+      {
+        "type": "job_failed",
+        "severity": "error",
+        "message": "Job \"search-index-build\" failed: Feed download returned HTTP 503",
+        "target": "dm-2b9d",
+        "job": {
+          "type": "search-index-build",
+          "status": "failed"
+        }
       }
     ],
     "recentActivity": [

@@ -16,9 +16,14 @@ interface FormatOpts {
   timeZone?: string;
 }
 
+interface ClockOpts extends FormatOpts {
+  /** Include seconds. */
+  seconds?: boolean;
+}
+
 export interface DateTimeFormatters {
   /** Short wall-clock time (hour + minute) per the user's time-format preference. */
-  time: (value: string | number | Date, opts?: FormatOpts) => string;
+  time: (value: string | number | Date, opts?: ClockOpts) => string;
   /** Numeric calendar date per the user's date-format preference. */
   date: (value: string | number | Date, opts?: FormatOpts) => string;
   /** Date followed by time, both per preference. */
@@ -42,7 +47,12 @@ export function useDateTimeFormat(): DateTimeFormatters {
   return useMemo<DateTimeFormatters>(
     () => ({
       time: (value, opts) =>
-        formatClockTime(value, { locale, timeFormat, timeZone: opts?.timeZone }),
+        formatClockTime(value, {
+          locale,
+          timeFormat,
+          timeZone: opts?.timeZone,
+          seconds: opts?.seconds,
+        }),
       date: (value, opts) =>
         formatCalendarDate(value, { locale, dateFormat, timeZone: opts?.timeZone }),
       dateTime: (value, opts) =>

@@ -527,7 +527,11 @@ function SettingsGroupPanel({
               </Button>
             }
           >
-            {tShared("savedValuesChangedForConflicts", { conflicts: conflicts.join(", ") })}
+            {tShared("savedValuesChangedForConflicts", {
+              settingLabels: conflicts
+                .map((key) => group.settings.find((setting) => setting.key === key)?.label ?? key)
+                .join(", "),
+            })}
           </Alert>
         )}
         {emailGroup && (

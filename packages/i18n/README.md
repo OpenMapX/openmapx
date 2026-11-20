@@ -72,9 +72,13 @@ message: an argument named like a code (`status`, `state`, `action`, `source`,
 `reason`, …) must be a `select`, whose `other` branch may repeat the raw code
 for codes added later, and a label already worded by a helper is passed under
 a name ending in `Label`, such as `{statusLabel}`. Open-ended server codes,
-such as audit actions, are keyed messages (`adminShared.auditActions.<code>`)
-read through a helper that shows the server's code only when the catalogue
-does not know it. Counts go to ICU as `{count, number}` or a plural, so they
+such as audit actions, job types and transit stages, are keyed messages
+(`adminShared.auditActions.<code>`, `jobTypes`, `jobStages`) read through a
+helper that shows the server's code only when the catalogue does not know it.
+`scripts/admin-code-catalogue.test.ts` collects those codes from the code that
+writes them (job runner, data-manager contracts, audit writers) and fails when
+a catalogue misses a code or keeps one nothing writes; add the message in both
+locales when it fails. Counts go to ICU as `{count, number}` or a plural, so they
 group in the reader's locale; the same test rejects a plain count argument
 and a unit glued to an argument (`{ms}ms`, `{percent}%`). Sizes, percentages,
 durations, dates and times come from `useAdminFormat()`
@@ -107,7 +111,7 @@ rejects a code field, such as `job.status` or `stage.state`, rendered straight
 into a child, a text prop or a template; a field that holds written text
 rather than a code takes a `biome-ignore lint/plugin/noRawCodeCopy` comment
 that says so. The rules cover the whole admin tree with no excluded section;
-`lib/admin` is checked by the plugins only.
+`lib/admin` is checked by both plugins but not by `noJsxLiterals`.
 
 The plugins read syntax, not data flow, so some shapes stay out of their
 reach and are left to review: copy held in a variable before it is shown

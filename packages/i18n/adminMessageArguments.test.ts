@@ -87,6 +87,13 @@ describe.each(Object.keys(messages) as (keyof typeof messages)[])(
         .map(([path, text]) => `${path}: ${text}`);
       expect(handFormatted).toEqual([]);
     });
+
+    it("space the middle-dot separator on both sides", () => {
+      const unspaced = adminMessages(locale)
+        .filter(([, text]) => /·\S|\S·/.test(text))
+        .map(([path, text]) => `${path}: ${text}`);
+      expect(unspaced).toEqual([]);
+    });
   },
 );
 

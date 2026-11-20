@@ -428,7 +428,9 @@ function PlatformForm({
             <Button onClick={() => ordinaryDraft.keepEdits()}>{tShared("keepMyEdits")}</Button>
           }
         >
-          {t("ownershipChanged", { fields: ordinaryDraft.conflicts.join(", ") })}
+          {t("ownershipChanged", {
+            fieldLabels: ordinaryDraft.conflicts.map((key) => t(`fields.${key}.label`)).join(", "),
+          })}
         </Alert>
       )}
       {!validInput && <Alert severity="info">{t("completeFields")}</Alert>}

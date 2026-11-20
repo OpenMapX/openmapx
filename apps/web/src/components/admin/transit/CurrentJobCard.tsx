@@ -19,6 +19,7 @@ import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitSyncDialog } from "@/components/admin/services/TransitSyncDialog";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
+import { useJobStageLabel } from "@/components/admin/shared/jobStageLabel";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
@@ -48,6 +49,7 @@ function SummaryMetric({ label, children }: { label: string; children: ReactNode
 function RunningJobDetail({ jobId }: { jobId: string }) {
   const t = useTranslations("adminTransit");
   const tShared = useTranslations("adminShared");
+  const stageLabel = useJobStageLabel();
   const { data, isLoading } = useTransitJobDetail(jobId);
 
   if (isLoading) {
@@ -94,7 +96,7 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
           <JobStatusChip
             status={latest.status}
             label={t("latestStage", {
-              stageName: latest.stage,
+              stageLabel: stageLabel(latest.stage),
               statusLabel: tShared("jobStatusLabel", { status: latest.status }),
             })}
             variant="filled"
@@ -217,7 +219,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             <JobStatusChip status={state.lastSyncStatus} />
           </SummaryMetric>
           <SummaryMetric label={t("totalFeedsTracked")}>
-            <Typography variant="body2">{state.feedCount}</Typography>
+            <Typography variant="body2">{format.number(state.feedCount)}</Typography>
           </SummaryMetric>
         </Stack>
       )}

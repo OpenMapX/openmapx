@@ -44,6 +44,10 @@ export const adminOverviewSchema = z.strictObject({
       severity: z.enum(["warning", "error", "info"]),
       message: z.string(),
       target: z.string().optional(),
+      /** For `job_failed`: the job's type code and how it ended. */
+      job: z
+        .strictObject({ type: z.string(), status: z.enum(["failed", "interrupted"]) })
+        .optional(),
     }),
   ),
   recentActivity: z.array(adminIntegrationAuditEntrySchema),

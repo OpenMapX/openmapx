@@ -14,6 +14,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { CoverageDomain, CoverageRegionsResponse } from "@openmapx/core/coverage";
 import { useTranslations } from "next-intl";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { CoverageStatus } from "./CoverageStatus";
 
@@ -40,6 +41,7 @@ export function RegionCoverageMatrix({
   onPageChange?: (offset: number) => void;
 }) {
   const t = useTranslations("adminCoverage");
+  const format = useAdminFormat();
 
   return (
     <Paper component="section" variant="outlined" aria-labelledby="coverage-matrix-heading">
@@ -140,7 +142,7 @@ export function RegionCoverageMatrix({
                       </TableCell>
                     );
                   })}
-                  <TableCell align="right">{row.sourceCount}</TableCell>
+                  <TableCell align="right">{format.number(row.sourceCount)}</TableCell>
                   <TableCell align="right">
                     <Typography
                       component="span"
@@ -148,7 +150,7 @@ export function RegionCoverageMatrix({
                       color={row.attentionCount > 0 ? "warning.main" : "text.secondary"}
                       aria-label={t("matrix.attentionCount", { count: row.attentionCount })}
                     >
-                      {row.attentionCount}
+                      {format.number(row.attentionCount)}
                     </Typography>
                   </TableCell>
                 </TableRow>

@@ -107,7 +107,7 @@ function HealthBadge({ status }: { status: "pass" | "degraded" | "down" }) {
   );
 }
 
-const ATTENTION_TYPES = new Set(["health_check_failed", "job_failed", "service_unhealthy"]);
+const ATTENTION_TYPES = new Set(["health_check_failed", "service_unhealthy"]);
 
 function attentionHref(item: AttentionItem): string {
   if (item.type === "missing_credentials" || item.type === "health_check_failed") {
@@ -190,12 +190,14 @@ export function AdminOverview() {
   const integrationNames = new Map(credentials.map((entry) => [entry.integrationId, entry.name]));
   /** Known attention codes are worded here; the server's English stays for codes added later. */
   const attentionMessage = (item: AttentionItem) =>
-    ATTENTION_TYPES.has(item.type)
-      ? t("attention", {
-          type: item.type,
-          target: integrationNames.get(item.target ?? "") ?? item.target ?? "",
-        })
-      : item.message;
+    item.job
+      ? t("jobAttention", { status: item.job.status, jobLabel: jobTypeLabel(item.job.type) })
+      : ATTENTION_TYPES.has(item.type)
+        ? t("attention", {
+            type: item.type,
+            target: integrationNames.get(item.target ?? "") ?? item.target ?? "",
+          })
+        : item.message;
 
   return (
     <Stack
@@ -507,7 +509,7 @@ export function AdminOverview() {
                 fontWeight: 700,
               }}
             >
-              {data.users.total}
+              {format.number(data.users.total)}
             </Typography>
             <Stack
               direction="row"
@@ -543,7 +545,7 @@ export function AdminOverview() {
                 fontWeight: 700,
               }}
             >
-              {data.integrations.total}
+              {format.number(data.integrations.total)}
             </Typography>
             <Stack
               direction="row"

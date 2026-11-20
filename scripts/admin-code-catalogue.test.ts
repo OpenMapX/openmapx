@@ -20,8 +20,9 @@ import de from "../packages/i18n/locales/de.json";
 import en from "../packages/i18n/locales/en.json";
 
 /**
- * The admin area words server codes (job types, audit actions, audit target
- * types) through catalogues keyed by the code. These tests collect the codes
+ * The admin area words server codes (job types, transit stages, actor labels,
+ * audit actions, audit target types) through catalogues keyed by the code.
+ * These tests collect the codes
  * from the code that writes them and fail when the catalogue misses one or
  * keeps one nothing writes, so a new job type or audit action cannot reach
  * the screen as a raw English code.
@@ -266,6 +267,18 @@ describe("admin job type catalogue", () => {
     const expected = sorted([...applicationJobTypes(), ...dataManagerKinds()].map(catalogueKey));
     expect(sorted(Object.keys(en.adminShared.jobTypes))).toEqual(expected);
     expect(sorted(Object.keys(de.adminShared.jobTypes))).toEqual(expected);
+  });
+
+  it("words every transit pipeline stage, and nothing else", () => {
+    const types = readFileSync(
+      join(root, "services/data-manager/src/jobs/transitous/types.ts"),
+      "utf8",
+    );
+    const stages = literals(required(types, /export type StageName =([^;]+);/, "stage names")[1]);
+    expect(stages).toEqual(expect.arrayContaining(["motis-import", "promote"]));
+    const expected = sorted(stages.map(catalogueKey));
+    expect(sorted(Object.keys(en.adminShared.jobStages))).toEqual(expected);
+    expect(sorted(Object.keys(de.adminShared.jobStages))).toEqual(expected);
   });
 
   it("words every data-manager actor label the activity API sends", () => {

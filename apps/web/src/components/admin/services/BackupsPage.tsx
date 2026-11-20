@@ -379,8 +379,12 @@ function BackupsView() {
                       <TableCell>
                         {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
                       </TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.serviceCount}</TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.volumeCount}</TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : format.number(backup.serviceCount)}
+                      </TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : format.number(backup.volumeCount)}
+                      </TableCell>
                       <TableCell>
                         {backup.corrupt ? "—" : format.bytes(backup.totalBytes)}
                       </TableCell>

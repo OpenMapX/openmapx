@@ -111,6 +111,8 @@ function SourceEvidenceBody({
   const t = useTranslations("adminCoverage");
   const format = useAdminFormat();
   const source = data.source;
+  const countOrUnknown = (value: number | null | undefined) =>
+    value == null ? t("common.unknown") : format.number(value);
   return (
     <Stack spacing={2}>
       {data.warnings.length > 0 && (
@@ -122,7 +124,7 @@ function SourceEvidenceBody({
       <Section title={t("sourceDrawer.identity")}>
         <Detail
           label={t("sourceDrawer.owner")}
-          value={`${source.owner.kind}: ${source.owner.id}`}
+          value={t("sourceDrawer.ownerValue", { kind: source.owner.kind, id: source.owner.id })}
         />
         <Detail label={t("sourceDrawer.sourceId")} value={source.sourceId} />
         <Detail label={t("sourceDrawer.domain")} value={t(`domain.${source.domain}`)} />
@@ -165,14 +167,15 @@ function SourceEvidenceBody({
           <Detail label={t("sourceDrawer.bounds")} value={source.region.bounds.join(", ")} />
         )}
         {data.evidence.count && (
-          <Detail
-            label={t("sourceDrawer.count")}
-            value={t("sourceDrawer.countValue", {
-              count: data.evidence.count.value,
-              unit: data.evidence.count.unit,
-              scope: data.evidence.count.scope,
-            })}
-          />
+          <>
+            <Detail
+              label={t("sourceDrawer.count")}
+              value={format.number(data.evidence.count.value)}
+            />
+            {/* The unit and what is counted are written by the evidence producer. */}
+            <Detail label={t("sourceDrawer.countUnit")} value={data.evidence.count.unit} />
+            <Detail label={t("sourceDrawer.countScope")} value={data.evidence.count.scope} />
+          </>
         )}
       </Section>
 
@@ -181,15 +184,15 @@ function SourceEvidenceBody({
           <Detail label={t("roadConditions.status")} value={data.evidence.roadConditions.status} />
           <Detail
             label={t("roadConditions.changed")}
-            value={String(data.evidence.roadConditions.changedCount ?? t("common.unknown"))}
+            value={countOrUnknown(data.evidence.roadConditions.changedCount)}
           />
           <Detail
             label={t("roadConditions.rejected")}
-            value={String(data.evidence.roadConditions.rejectedCount ?? t("common.unknown"))}
+            value={countOrUnknown(data.evidence.roadConditions.rejectedCount)}
           />
           <Detail
             label={t("roadConditions.failures")}
-            value={String(data.evidence.roadConditions.consecutiveFailures ?? t("common.unknown"))}
+            value={countOrUnknown(data.evidence.roadConditions.consecutiveFailures)}
           />
           <Detail
             label={t("roadConditions.graph")}

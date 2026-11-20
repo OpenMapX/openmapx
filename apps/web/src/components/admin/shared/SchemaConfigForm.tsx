@@ -318,7 +318,11 @@ export function SchemaConfigForm({
             </Button>
           }
         >
-          {t("savedValuesChangedForConflicts", { conflicts: draft.conflicts.join(", ") })}
+          {t("savedValuesChangedForConflicts", {
+            settingLabels: draft.conflicts
+              .map((key) => fields.find((field) => field.key === key)?.title ?? key)
+              .join(", "),
+          })}
         </Alert>
       )}
       {error && (

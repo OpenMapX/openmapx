@@ -33,7 +33,11 @@ const MESSAGES_DIR = join(PKG_ROOT, "locales");
  * are checked against the code that writes the codes, in both directions, by
  * `scripts/admin-code-catalogue.test.ts`, so they are not reported as unused.
  */
-const CODE_KEYED_NAMESPACES = ["adminShared.jobTypes.", "adminShared.auditActions."];
+const CODE_KEYED_NAMESPACES = [
+  "adminShared.jobTypes.",
+  "adminShared.jobStages.",
+  "adminShared.auditActions.",
+];
 const SRC_DIRS = [
   join(REPO_ROOT, "apps", "web", "src"),
   join(REPO_ROOT, "apps", "api", "src"),

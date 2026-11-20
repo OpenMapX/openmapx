@@ -644,7 +644,14 @@ export function SystemMaintenance({
           toolbar={
             <Stack
               direction={{ xs: "column", sm: "row" }}
-              sx={{ gap: 1, alignItems: { sm: "center" } }}
+              sx={{
+                gap: 1,
+                alignItems: { sm: "center" },
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
+                // German labels are long; keep each action on one line and wrap between them.
+                "& .MuiButton-root": { whiteSpace: "nowrap" },
+              }}
             >
               {updateCount > 0 && (
                 <Chip color="warning" label={t("updatesAvailable", { count: updateCount })} />

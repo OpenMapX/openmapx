@@ -214,7 +214,10 @@
         "!**/*.test-support.ts",
         "!**/*.test-support.tsx"
       ],
-      "plugins": ["./scripts/biome-plugins/noLiteralCopy.grit"]
+      "plugins": [
+        "./scripts/biome-plugins/noLiteralCopy.grit",
+        "./scripts/biome-plugins/noRawCodeCopy.grit"
+      ]
     },
     {
       "includes": ["integrations/overlay-tool-travel-time/transit-field-layer.ts"],

@@ -5,12 +5,12 @@ import { describe, expect, it } from "vitest";
 import type { DateTimeFormatters } from "@/integration-api/runtime/useDateTimeFormat";
 import { adminFormatters } from "./adminFormat";
 
-function dates(locale: string): DateTimeFormatters {
-  const options = { locale, timeFormat: "24h", dateFormat: "auto", timeZone: "UTC" } as const;
+function dates(locale: string, timeFormat: "12h" | "24h" = "24h"): DateTimeFormatters {
+  const options = { locale, timeFormat, dateFormat: "auto", timeZone: "UTC" } as const;
   return {
-    time: (value) => formatClockTime(value, options),
+    time: (value, opts) => formatClockTime(value, { ...options, ...opts }),
     date: (value) => formatCalendarDate(value, options),
-    dateTime: (value) => formatDateAndTime(value, options),
+    dateTime: (value, opts) => formatDateAndTime(value, { ...options, ...opts }),
     relative: () => "",
     recent: () => "",
   };
@@ -37,6 +37,24 @@ describe("admin formatters", () => {
     expect(en.duration(850)).toMatch(/^850\sms$/);
     expect(de.duration(1500)).toMatch(/^1,5\sSek\.$/);
     expect(en.duration(125_000)).toMatch(/^2\smin 5\ssec$/);
+  });
+
+  it("choose the duration unit after rounding", () => {
+    expect(en.duration(999.6)).toMatch(/^1\ssec$/);
+    expect(en.duration(59_960)).toMatch(/^1\smin 0\ssec$/);
+    expect(en.duration(59_940)).toMatch(/^59\.9\ssec$/);
+  });
+
+  it("follow the reader's 12- or 24-hour setting for precise times", () => {
+    const at = "2026-11-18T17:02:09Z";
+    expect(de.preciseTime(at)).toBe("17:02:09");
+    expect(adminFormatters("de", dates("de", "12h")).preciseTime(at)).toMatch(/^05:02:09\sPM$/);
+  });
+
+  it("format a date in a given time zone", () => {
+    expect(en.dateTime("2026-10-01T00:00:00Z", { timeZone: "Pacific/Kiritimati" })).toBe(
+      "10/01/2026, 14:00",
+    );
   });
 
   it("show a dash for a missing or unreadable timestamp", () => {

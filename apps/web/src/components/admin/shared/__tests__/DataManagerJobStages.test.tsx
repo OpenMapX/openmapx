@@ -22,10 +22,28 @@ describe("DataManagerJobStages", () => {
       />,
     );
 
-    expect(html).toContain("motis import");
+    expect(html).toContain("MOTIS import");
     expect(html).toContain("Transactional import failed");
     expect(html).toContain("1 min 1 sec");
     expect(html).not.toContain("long stack");
+  });
+
+  it("shows a stage this build does not know by its code", () => {
+    const html = renderToStaticMarkup(
+      <DataManagerJobStages
+        stages={[
+          {
+            id: "stage-future",
+            stage: "future-stage",
+            status: "ok",
+            durationMs: 10,
+            message: null,
+            error: null,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("future-stage");
   });
 
   it("explains which validation archives caused a partial result", () => {

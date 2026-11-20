@@ -130,7 +130,7 @@ describe("Activity generated SDK consumers", () => {
         <JobDetail jobId="job-1" source="data-manager" />
       </QueryClientProvider>,
     );
-    expect(await screen.findByText("validate")).toBeInTheDocument();
+    expect(await screen.findByText("Validate feeds")).toBeInTheDocument();
     expect(screen.getByText("Invalid archives — archive-1: Invalid format")).toBeInTheDocument();
     expect(screen.getByText("1.3 sec")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();

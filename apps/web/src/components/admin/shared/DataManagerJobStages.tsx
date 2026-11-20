@@ -9,6 +9,7 @@ import Typography from "@mui/material/Typography";
 import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { JobStatusChip } from "./JobStatusChip";
+import { useJobStageLabel } from "./jobStageLabel";
 import { formatStageError } from "./jobStatus";
 
 export interface DataManagerJobStage {
@@ -59,6 +60,7 @@ export function DataManagerJobStages({
 }) {
   const t = useAdminTranslations("adminShared");
   const format = useAdminFormat();
+  const stageLabel = useJobStageLabel();
   return (
     <Stack sx={{ gap: 0.75 }}>
       <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
@@ -86,7 +88,7 @@ export function DataManagerJobStages({
                   <TableRow key={stage.id} hover>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {stage.stage.replace(/[_-]/g, " ")}
+                        {stageLabel(stage.stage)}
                       </Typography>
                       {(stage.message || error) && (
                         <Typography
