@@ -324,7 +324,9 @@ function linkReportLabels(issueNumber: string) {
   const links = load(
     readFileSync(new URL("../.github/workflows/links.yml", import.meta.url), "utf8"),
   );
-  const value: string = links.jobs.lychee.steps.find((step) => step.with?.labels).with.labels;
+  const value: string = links.jobs.lychee.steps.find(
+    (step: { with?: Record<string, string> }) => step.with?.labels,
+  ).with.labels;
   const resolved = value.startsWith("${{")
     ? runInNewContext(
         value.slice(3, -2).replaceAll("steps.find-issue.outputs.issue-number", "issueNumber"),
@@ -360,7 +362,7 @@ describe("contribution policy consumers", () => {
     );
     const references = [
       ...configs.flatMap((form) => form.labels),
-      ...dependabot.updates.flatMap((update) => update.labels),
+      ...dependabot.updates.flatMap((update: { labels: string[] }) => update.labels),
       ...linkReportLabels(""),
       ...linkReportLabels("42"),
     ];
@@ -382,7 +384,9 @@ describe("contribution policy consumers", () => {
       expect(job.steps[0].with?.["persist-credentials"]).toBe(false);
       for (const step of job.steps) expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
     }
-    const script = workflow.jobs.housekeeping.steps.find((step) => step.with?.script).with.script;
+    const script = workflow.jobs.housekeeping.steps.find(
+      (step: { with?: Record<string, string> }) => step.with?.script,
+    ).with.script;
     const context = {
       eventName: "issues",
       repo: { owner: "OpenMapX", repo: "openmapx" },

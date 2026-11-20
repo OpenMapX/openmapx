@@ -195,7 +195,7 @@ describe("publication state machine (synthetic registries only)", () => {
       { ...approved, expectedCandidateHash: candidateHash(t.candidate) },
       t.ports,
     );
-    expect(t.state.preview.digest).toBe(t.digest);
+    expect(t.state.preview?.digest).toBe(t.digest);
   });
   it("does not downgrade a newer preview during an older retry", async () => {
     const t = setup();

@@ -193,7 +193,8 @@ describe("provider-bound code validation reuse", () => {
     ).toBeNull();
   });
   it("binds base repository/ref while allowing normal base-branch advancement", () => {
-    expect(targetDigest(source)).toBe(targetDigest({ ...source, baseSha: "new-main" }));
+    const advancedBase = { ...source, baseSha: "new-main" };
+    expect(targetDigest(source)).toBe(targetDigest(advancedBase));
     expect(targetDigest(source)).not.toBe(targetDigest({ ...source, baseRef: "release" }));
   });
 });

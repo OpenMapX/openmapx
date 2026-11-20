@@ -137,6 +137,7 @@ async function readProbeMarker(path: string) {
     return await readFile(path, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return undefined;
   }
 }
 

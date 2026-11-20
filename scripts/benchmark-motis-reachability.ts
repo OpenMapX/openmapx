@@ -1,5 +1,8 @@
 #!/usr/bin/env -S pnpm exec tsx
 
+// A module, so the measurements below can await at the top level.
+export {};
+
 const args = process.argv.slice(2);
 
 function value(name: string): string | undefined {

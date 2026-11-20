@@ -140,10 +140,10 @@ async function main(): Promise<void> {
     const index = args.indexOf(name);
     return index >= 0 ? args[index + 1] : undefined;
   };
-  const fail = (message: string): never => {
+  function fail(message: string): never {
     console.error(`benchmark-transit-isochrone-accuracy: ${message}`);
     process.exit(1);
-  };
+  }
 
   const rawBaseUrl = value("--base-url");
   if (!rawBaseUrl) fail("--base-url is required (the OpenMapX API, not MOTIS)");

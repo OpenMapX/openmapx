@@ -48,11 +48,9 @@ describe("Entur operation generation", () => {
     const first = await generateArtifacts();
     const second = await generateArtifacts();
     expect(first).toHaveLength(2);
-    expect(first.every((file: { content: string }) => file.content.length > 0)).toBe(true);
+    expect(first.every((file) => file.content.length > 0)).toBe(true);
     expect(second).toEqual(first);
-    const generated = new Map(
-      first.map((file: { filename: string; content: string }) => [file.filename, file.content]),
-    );
+    const generated = new Map(first.map((file) => [file.filename, file.content] as const));
     const options = {
       noEmit: true,
       strict: true,

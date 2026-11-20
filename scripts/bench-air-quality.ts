@@ -149,7 +149,7 @@ function fixtureEvidence(at: string, forecast = false): ProviderEvidence {
         name: "Deterministic benchmark fixture",
         url: null,
         owner: "OpenMapX",
-        license: null,
+        licensing: null,
         methodologyUrl: null,
         attribution: "OpenMapX benchmark fixture",
       },
@@ -164,8 +164,26 @@ function fixtureIntegration(provider: AirQualityProvider): LoadedIntegration {
       id: "benchmark-provider-integration",
       version: "1.0.0",
       domains: ["air-quality"],
-      dataSources: [{ sourceId: "benchmark-source", name: "Benchmark", url: null }],
-    } as LoadedIntegration["manifest"],
+      dataSources: [
+        {
+          sourceId: "benchmark-source",
+          name: "Benchmark",
+          url: "https://benchmark.invalid/",
+          providerCountry: "DE",
+          providerPrivacyUrl: "https://benchmark.invalid/privacy",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Benchmark readings",
+                license: { kind: "spdx", expression: "CC0-1.0" },
+              },
+            ],
+          },
+        },
+      ],
+    },
     config: {},
     directory: "/benchmark",
     isBuiltIn: true,
@@ -247,7 +265,10 @@ function createCanonicalInjector() {
             ...(path === "/forecast" ? { hours: "24" } : {}),
           };
     const output = replyCapture();
-    await handler({ query, params: {}, body: undefined, headers: {} }, output.reply);
+    await handler(
+      { query, params: {}, body: undefined, headers: {}, clientKey: "benchmark" },
+      output.reply,
+    );
     return {
       statusCode: output.state.statusCode,
       payloadBytes: Buffer.byteLength(JSON.stringify(output.state.payload)),

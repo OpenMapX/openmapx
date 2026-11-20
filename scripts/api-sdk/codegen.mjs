@@ -15,6 +15,11 @@ import {
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const generatedDirectory = join(root, "packages/core/src/api/generated");
 
+/**
+ * @param {object} [options]
+ * @param {object} [options.document] OpenAPI document to generate from instead of the pinned file.
+ * @param {string} [options.inputPath]
+ */
 export async function generateArtifacts({
   document,
   inputPath = join(root, "apps/api/openapi.json"),

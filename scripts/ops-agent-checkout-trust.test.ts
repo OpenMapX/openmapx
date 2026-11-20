@@ -126,7 +126,10 @@ async function cli(checkout: string, ...args: string[]) {
   return runUnderUmask002(process.execPath, [join(outdir, "cli.mjs"), ...args], {
     cwd: checkout,
     env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: checkout },
-  }).catch((error: { stdout: string; stderr: string; code: number }) => error);
+  }).then(
+    (result) => ({ ...result, code: 0 }),
+    (error: { stdout: string; stderr: string; code: number }) => error,
+  );
 }
 
 async function freePort(): Promise<number> {

@@ -10,6 +10,7 @@ import {
   dockerInputs,
   imageFingerprint,
   lockfileSubgraph,
+  type ReleasePlan,
   selectChangedTargets,
   targets,
   trackedTree,
@@ -30,7 +31,7 @@ const tree = [
   oid: createHash("sha1").update(contents).digest("hex"),
 }));
 const dockerfiles: Record<string, string> = Object.fromEntries(
-  targets.map((target: { app: string; dockerfile: string }) => [
+  targets.map((target) => [
     target.dockerfile,
     target.app === "docs"
       ? "FROM scratch\nCOPY . /docs\n"
@@ -52,13 +53,19 @@ function baseline() {
     schemaVersion: 1,
     release: revision,
     images: Object.fromEntries(
-      targets.map((target: { app: string }, i: number) => [
+      targets.map((target, i) => [
         target.app,
         `ghcr.io/openmapx/${target.app}@sha256:${String(i + 1).repeat(64)}`,
       ]),
     ),
     buildMetadata: plan.buildMetadata,
   };
+}
+
+function plannedImage(plan: ReleasePlan, app: string) {
+  const image = plan.images.find((candidate) => candidate.app === app);
+  if (!image) throw new Error(`No planned image for ${app}`);
+  return image;
 }
 
 describe("Dockerfile build input coverage", () => {
@@ -167,12 +174,10 @@ describe("docs PR validation input coverage", () => {
 
 describe("selective release planning", () => {
   it("bootstraps every published image without a previous release", () => {
-    expect(createReleasePlan(options).images.map((image: { app: string }) => image.app)).toEqual(
-      targets.map((target: { app: string }) => target.app),
+    expect(createReleasePlan(options).images.map((image) => image.app)).toEqual(
+      targets.map((target) => target.app),
     );
-    expect(
-      createReleasePlan(options).images.every((image: { rebuild: boolean }) => image.rebuild),
-    ).toBe(true);
+    expect(createReleasePlan(options).images.every((image) => image.rebuild)).toBe(true);
   });
   it.each([`ghcr.io/openmapx/docs@sha256:${"a".repeat(64)}`, "ghcr.io/openmapx/docs:latest"])(
     "ignores unrelated docs image metadata in a previous release (%s)",
@@ -188,13 +193,9 @@ describe("selective release planning", () => {
   it("reuses all unchanged digests despite a new release revision", () => {
     const previous = baseline();
     const plan = createReleasePlan({ ...options, revision: "c".repeat(40), previous });
-    expect(plan.images.map((image: { rebuild: boolean }) => image.rebuild)).toEqual(
-      Array(targets.length).fill(false),
-    );
+    expect(plan.images.map((image) => image.rebuild)).toEqual(Array(targets.length).fill(false));
     expect(plan.buildMetadata).toEqual(previous.buildMetadata);
-    expect(plan.images.find((image: { app: string }) => image.app === "api").digest).toBe(
-      `sha256:${"1".repeat(64)}`,
-    );
+    expect(plannedImage(plan, "api").digest).toBe(`sha256:${"1".repeat(64)}`);
   });
   it("gives producer attempts distinct identities and accepts older baselines", () => {
     const first = createReleasePlan({ ...options, releaseId: `${revision}-124-1` });
@@ -206,7 +207,7 @@ describe("selective release planning", () => {
     });
     expect(next.release).not.toBe(first.release);
     expect(next.sourceRevision).toBe(first.sourceRevision);
-    expect(next.images.every((image: { rebuild: boolean }) => image.rebuild)).toBe(true);
+    expect(next.images.every((image) => image.rebuild)).toBe(true);
     expect(() => createReleasePlan({ ...options, releaseId: `${revision}-124-0` })).toThrow();
     expect(() => createReleasePlan({ ...options, releaseId: `${"c".repeat(40)}-124` })).toThrow();
   });
@@ -215,11 +216,7 @@ describe("selective release planning", () => {
       entry.path === "docs/page.md" ? { ...entry, oid: "0".repeat(40) } : entry,
     );
     const plan = createReleasePlan({ ...options, tree: changed, previous: baseline() });
-    expect(
-      plan.images
-        .filter((image: { rebuild: boolean }) => image.rebuild)
-        .map((image: { app: string }) => image.app),
-    ).toEqual([]);
+    expect(plan.images.filter((image) => image.rebuild).map((image) => image.app)).toEqual([]);
   });
   it.each(["packages/shared/index.ts", "pnpm-lock.yaml"])(
     "rebuilds every root app copying %s",
@@ -228,11 +225,13 @@ describe("selective release planning", () => {
         entry.path === path ? { ...entry, oid: "0".repeat(40) } : entry,
       );
       const plan = createReleasePlan({ ...options, tree: changed, previous: baseline() });
-      expect(
-        plan.images
-          .filter((image: { rebuild: boolean }) => image.rebuild)
-          .map((image: { app: string }) => image.app),
-      ).toEqual(["api", "web", "data-manager", "ops-agent", "transitous-runner"]);
+      expect(plan.images.filter((image) => image.rebuild).map((image) => image.app)).toEqual([
+        "api",
+        "web",
+        "data-manager",
+        "ops-agent",
+        "transitous-runner",
+      ]);
     },
   );
   it("compares to the successful release, retaining changes from an intervening failed release", () => {
@@ -250,7 +249,7 @@ describe("selective release planning", () => {
       tree: changed,
       previous,
     });
-    expect(next.images.find((image: { app: string }) => image.app === "api").rebuild).toBe(true);
+    expect(plannedImage(next, "api").rebuild).toBe(true);
     expect(next.buildMetadata.images.api.inputHash).toBe(failed.buildMetadata.images.api.inputHash);
   });
   it("preserves original build age on reuse and refreshes without cache after seven days", () => {
@@ -262,16 +261,12 @@ describe("selective release planning", () => {
       now: "2026-09-19T12:00:00.000Z",
       previous: { ...previous, buildMetadata: reused.buildMetadata },
     });
-    expect(
-      refreshed.images.every(
-        (image: { rebuild: boolean; refresh: boolean }) => image.rebuild && image.refresh,
-      ),
-    ).toBe(true);
+    expect(refreshed.images.every((image) => image.rebuild && image.refresh)).toBe(true);
   });
   it("forces no-cache rebuilds on request", () => {
     expect(
       createReleasePlan({ ...options, previous: baseline(), force: true }).images.every(
-        (image: { refresh: boolean }) => image.refresh,
+        (image) => image.refresh,
       ),
     ).toBe(true);
   });
@@ -286,7 +281,7 @@ describe("selective release planning", () => {
       previous,
       now: "2026-09-18T12:00:00.000Z",
     });
-    expect(cached.images.find((image: { app: string }) => image.app === "api")).toMatchObject({
+    expect(cached.images.find((image) => image.app === "api")).toMatchObject({
       rebuild: true,
       refresh: false,
     });
@@ -303,7 +298,7 @@ describe("selective release planning", () => {
         previous: published,
         now: attemptAt,
       });
-      expect(attempt.images.every((image: { refresh: boolean }) => image.refresh)).toBe(true);
+      expect(attempt.images.every((image) => image.refresh)).toBe(true);
       expect(attempt.buildMetadata.images.api.coldRefreshedAt).toBe(attemptAt);
     }
     const successful = createReleasePlan({
@@ -318,29 +313,26 @@ describe("selective release planning", () => {
       previous: { ...previous, buildMetadata: successful.buildMetadata },
       now: "2026-09-21T12:00:00.000Z",
     });
-    expect(next.images.every((image: { rebuild: boolean }) => !image.rebuild)).toBe(true);
+    expect(next.images.every((image) => !image.rebuild)).toBe(true);
     expect(next.buildMetadata.images.api.coldRefreshedAt).toBe("2026-09-20T12:00:00.000Z");
   });
   it("cold-builds a bootstrap release and records its refresh date", () => {
     const bootstrap = createReleasePlan(options);
-    expect(bootstrap.images.every((image: { refresh: boolean }) => image.refresh)).toBe(true);
+    expect(bootstrap.images.every((image) => image.refresh)).toBe(true);
     expect(bootstrap.buildMetadata.images.api.coldRefreshedAt).toBe(now);
   });
   it("refreshes an image with a future cold-refresh clock", () => {
     const previous = baseline();
     previous.buildMetadata.images.api.coldRefreshedAt = "2026-09-13T12:00:00.000Z";
     const plan = createReleasePlan({ ...options, previous });
-    expect(
-      plan.images
-        .filter((image: { refresh: boolean }) => image.refresh)
-        .map((image: { app: string }) => image.app),
-    ).toEqual(["api"]);
+    expect(plan.images.filter((image) => image.refresh).map((image) => image.app)).toEqual(["api"]);
   });
   it.each(["tomorrow", null, "", undefined])(
     "rejects malformed cold-refresh metadata: %s",
     (value) => {
       const previous = baseline();
-      previous.buildMetadata.images.api.coldRefreshedAt = value;
+      // Deliberately malformed metadata, including non-string values.
+      previous.buildMetadata.images.api.coldRefreshedAt = value as string;
       expect(() => createReleasePlan({ ...options, previous })).toThrow();
     },
   );
@@ -389,9 +381,7 @@ describe("selective release planning", () => {
       readDockerfile: (path: string) => readFileSync(resolve(root, path), "utf8"),
     };
     const plan = createReleasePlan(actual);
-    expect(plan.images.map((image: { app: string }) => image.app)).toEqual(
-      targets.map((target: { app: string }) => target.app),
-    );
+    expect(plan.images.map((image) => image.app)).toEqual(targets.map((target) => target.app));
     const changedTree = actual.tree.map((entry: { path: string; oid: string; mode: string }) =>
       entry.path === "docs/docs/install/upgrading.md" ? { ...entry, oid: "0".repeat(40) } : entry,
     );
@@ -401,11 +391,7 @@ describe("selective release planning", () => {
       buildMetadata: plan.buildMetadata,
     };
     const docsOnly = createReleasePlan({ ...actual, tree: changedTree, previous });
-    expect(
-      docsOnly.images
-        .filter((image: { rebuild: boolean }) => image.rebuild)
-        .map((image: { app: string }) => image.app),
-    ).toEqual([]);
+    expect(docsOnly.images.filter((image) => image.rebuild).map((image) => image.app)).toEqual([]);
 
     const sources = dockerInputs(actual.readDockerfile("apps/transitous-runner/Dockerfile"), ".");
     expect(sources).toContain("packages/core");
@@ -735,9 +721,9 @@ describe("bundled image fingerprints", () => {
       bundleDigests: { "transitous-runner": "c".repeat(64) },
       readFile: (path: string) => readFileSync(resolve(root, path), "utf8"),
     });
-    expect(
-      plan.images.find((image: { app: string }) => image.app === "transitous-runner"),
-    ).toMatchObject({ bundleDigest: "c".repeat(64) });
+    expect(plan.images.find((image) => image.app === "transitous-runner")).toMatchObject({
+      bundleDigest: "c".repeat(64),
+    });
     const workflow = readFileSync(resolve(root, ".github/workflows/docker.yml"), "utf8");
     expect(workflow).toContain(
       "format('EXPECTED_BUNDLE_DIGEST={0}', steps.selection.outputs.bundle_digest)",

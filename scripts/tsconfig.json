@@ -16,6 +16,9 @@
     "allowJs": true
   },
   "include": ["**/*.ts", "**/*.mts"],
-  // The discovery evaluation keeps its own project (`discovery-eval:check-types`).
-  "exclude": ["node_modules", "discovery-eval"]
+  // The discovery evaluation keeps its own project. The build contract test
+  // imports the web app's Next configuration, whose global types make
+  // `NODE_ENV` a required environment variable in every program that contains
+  // them, so it is checked alone (`tsconfig.next-config.json`).
+  "exclude": ["node_modules", "discovery-eval", "build-ci-contract.test.ts"]
 }

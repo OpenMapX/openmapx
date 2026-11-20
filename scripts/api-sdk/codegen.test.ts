@@ -4,13 +4,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { build } = createRequire(new URL("../../packages/core/package.json", import.meta.url))(
-  "esbuild",
-);
-
-const ts = createRequire(new URL("../../packages/core/package.json", import.meta.url))(
-  "typescript",
-);
+const requireFromCore = createRequire(new URL("../../packages/core/package.json", import.meta.url));
+const { build }: typeof import("esbuild") = requireFromCore("esbuild");
+const ts: typeof import("typescript") = requireFromCore("typescript");
 
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
 import { adminOperationBindings, createCodegenConfig, selectTaggedDocument } from "./config.mjs";
@@ -279,10 +275,12 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     directoryExists?.(path) === true;
   host.fileExists = (path: string) => virtual.has(path) || fileExists(path);
   host.readFile = (path: string) => virtual.get(path) ?? read(path);
-  host.getSourceFile = (path: string, language: unknown, ...rest: unknown[]) =>
-    virtual.has(path)
-      ? ts.createSourceFile(path, virtual.get(path), language, true)
-      : source(path, language, ...rest);
+  host.getSourceFile = (path, language, ...rest) => {
+    const content = virtual.get(path);
+    return content === undefined
+      ? source(path, language, ...rest)
+      : ts.createSourceFile(path, content, language, true);
+  };
   return ts
     .getPreEmitDiagnostics(
       ts.createProgram(
@@ -299,9 +297,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
         host,
       ),
     )
-    .map((diagnostic: { messageText: unknown }) =>
-      ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-    );
+    .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
 }
 
 const directories: string[] = [];
@@ -350,11 +346,15 @@ describe("SDK artifact gate", () => {
       outputDirectory: "/tmp/sdk-config",
     });
     expect(config).toHaveProperty("privacyAdmin");
-    expect(config.privacyAdmin.output).toMatchObject({
-      target: "/tmp/sdk-config/generated/admin/privacy-admin.generated.ts",
+    expect(config).toMatchObject({
+      privacyAdmin: {
+        output: {
+          target: "/tmp/sdk-config/generated/admin/privacy-admin.generated.ts",
+          client: expect.any(Function),
+        },
+      },
     });
-    expect(config.privacyAdmin.output.schemas).toBeUndefined();
-    expect(typeof config.privacyAdmin.output.client).toBe("function");
+    expect(config).not.toHaveProperty("privacyAdmin.output.schemas");
     expect(selectTaggedDocument(adopted, "privacy-admin").paths).toHaveProperty(
       "/api/admin/privacy/requests",
     );
@@ -402,11 +402,14 @@ describe("SDK artifact gate", () => {
       inputDocument: adopted,
       outputDirectory: "/tmp/sdk-config",
     });
-    expect(config).toHaveProperty("extensionAdmin");
-    expect(config.extensionAdmin.output).toMatchObject({
-      client: "fetch",
-      target: "/tmp/sdk-config/generated/admin/extension-admin.generated.ts",
-      schemas: "/tmp/sdk-config/generated/admin/extension-models",
+    expect(config).toMatchObject({
+      extensionAdmin: {
+        output: {
+          client: "fetch",
+          target: "/tmp/sdk-config/generated/admin/extension-admin.generated.ts",
+          schemas: "/tmp/sdk-config/generated/admin/extension-models",
+        },
+      },
     });
     expect(adminOperationBindings(adopted)).toContain(
       'bindAdminOperation("installAdminExtension")',
@@ -547,11 +550,11 @@ describe("SDK artifact gate", () => {
       expect(statuses, id).toEqual(Object.keys(operation.responses).sort());
     }
     // Real committed document, removing only the adopted family for the isolation baseline.
-    const previousDocument = JSON.parse(
-      await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"),
-    );
+    const previousDocument: {
+      paths: Record<string, Record<string, { tags?: string[] }>>;
+    } = JSON.parse(await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"));
     for (const methods of Object.values(previousDocument.paths)) {
-      for (const [method, operation] of Object.entries(methods as object))
+      for (const [method, operation] of Object.entries(methods))
         if (operation.tags?.includes("extension-admin")) delete methods[method];
     }
     const previousFiles = await generateArtifacts({ document: previousDocument });

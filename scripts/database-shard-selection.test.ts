@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { verifyShardReceipts } from "./database-test-shards.mjs";
+import { type ShardReceipt, verifyShardReceipts } from "./database-test-shards.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 describe("actual database launcher scenario partitions", () => {
@@ -53,7 +53,7 @@ describe("actual database launcher scenario partitions", () => {
       expect(name.length).toBeGreaterThan(0);appendFileSync('executions.jsonl',JSON.stringify(name)+'\\n');
     }); });`,
       );
-      const receipts = [];
+      const receipts: ShardReceipt[] = [];
       for (let part = 1; part <= 4; part++) {
         const receipt = join(temp, `receipt-${part}.json`);
         const result = spawnSync(
