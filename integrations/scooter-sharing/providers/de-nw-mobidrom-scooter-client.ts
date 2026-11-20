@@ -15,7 +15,8 @@ import { withContributors } from "@openmapx/mobility-core/contributors";
  * Dataset: https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw
  */
 
-import { type BoundingBox, bboxContains, type LngLat } from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import type { HttpClient } from "@openmapx/integration-framework";
 import { normalizeFormFactor, normalizeGbfsPropulsion } from "@openmapx/mobility-core/gbfs-catalog";
 import { fetchGbfsSystem } from "@openmapx/mobility-core/gbfs-client";
 import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
@@ -40,9 +41,11 @@ const FETCH_TIMEOUT_MS = 8_000;
 const FEED_CACHE_MS = 2 * 60 * 1000; // 2 min (feed updates every 5 min)
 
 /**
- * Hosts allowed to receive the operator bearer token. The manifest and the
- * per-system discovery documents are remote content, so without this the
- * token would follow whatever host they name.
+ * Hosts allowed to receive the operator bearer token. The per-system discovery
+ * documents the manifest names are remote content, so they go through the
+ * shared mobility transport's SSRF boundary, and without this the token would
+ * follow whatever host they name. The token and manifest requests go to fixed
+ * hosts through the host HTTP client.
  */
 const CREDENTIAL_HOSTS = ["www.mobilitaetsdaten.nrw", "*.mobilitaetsdaten.nrw"];
 
@@ -77,10 +80,7 @@ interface TokenResponse {
   token_type?: string;
 }
 
-async function getAccessToken(
-  state: ClientState,
-  transport: MobilityHttpTransport,
-): Promise<string | null> {
+async function getAccessToken(state: ClientState, http: HttpClient): Promise<string | null> {
   const now = Date.now();
   // Refresh 60s early to avoid edge-case expiry mid-request
   if (state.tokenCache && state.tokenCache.expiresAt > now + 60_000) {
@@ -95,21 +95,22 @@ async function getAccessToken(
         client_id: clientId(state),
         client_secret: clientSecret(state),
       });
-      const json = await transport.fetchJson<TokenResponse>(TOKEN_URL, {
-        method: "POST",
-        body: body.toString(),
+      // The body carries the client secret, so no redirect may forward it.
+      const response = await http.postText(TOKEN_URL, body.toString(), {
         timeoutMs: FETCH_TIMEOUT_MS,
         maxBytes: 1024 * 1024,
-        allowedRedirectOrigin: "https://www.mobilitaetsdaten.nrw",
+        contentTypes: ["application/json"],
+        redirect: "error",
         headers: {
-          "User-Agent": transport.userAgent,
+          "User-Agent": USER_AGENT,
           "Content-Type": "application/x-www-form-urlencoded",
         },
       });
-      if (!json) {
-        console.warn("[de-nw-mobidrom-scooter] token request failed");
+      if (response.status < 200 || response.status >= 300) {
+        console.warn(`[de-nw-mobidrom-scooter] token request failed: HTTP ${response.status}`);
         return null;
       }
+      const json = JSON.parse(response.body) as TokenResponse;
       if (!json.access_token) return null;
       state.tokenCache = {
         token: json.access_token,
@@ -143,25 +144,18 @@ interface FeedCache {
 
 const TARGET_V3 = "3.0";
 
-async function fetchManifest(
-  token: string,
-  transport: MobilityHttpTransport,
-): Promise<ManifestEntry[]> {
+async function fetchManifest(token: string, http: HttpClient): Promise<ManifestEntry[]> {
   try {
-    const json = await transport.fetchJson<Manifest>(MANIFEST_URL, {
+    // The bearer header makes the host client refuse redirects.
+    const json = await http.get<Manifest>(MANIFEST_URL, {
       timeoutMs: FETCH_TIMEOUT_MS,
-      maxBytes: 8 * 1024 * 1024,
-      allowedRedirectOrigin: "https://www.mobilitaetsdaten.nrw",
+      maxResponseBytes: 8 * 1024 * 1024,
       headers: {
-        "User-Agent": transport.userAgent,
+        "User-Agent": USER_AGENT,
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
       },
     });
-    if (!json) {
-      console.warn("[de-nw-mobidrom-scooter] manifest fetch failed");
-      return [];
-    }
     return json.data?.datasets ?? [];
   } catch (err) {
     console.warn("[de-nw-mobidrom-scooter] manifest fetch error:", err);
@@ -185,6 +179,7 @@ function prettifyOperator(systemId: string): string {
 }
 
 async function loadAllFeeds(
+  http: HttpClient,
   transport: MobilityHttpTransport,
   state: ClientState,
   contributors?: readonly Attribution[],
@@ -195,10 +190,10 @@ async function loadAllFeeds(
   if (state.inflightFeed) return state.inflightFeed;
 
   state.inflightFeed = (async () => {
-    const token = await getAccessToken(state, transport);
+    const token = await getAccessToken(state, http);
     if (!token) return { stations: [], vehicles: [], fetchedAt: Date.now() };
 
-    const entries = await fetchManifest(token, transport);
+    const entries = await fetchManifest(token, http);
     if (entries.length === 0) return { stations: [], vehicles: [], fetchedAt: Date.now() };
 
     const authHeaders = { Authorization: `Bearer ${token}` };
@@ -311,6 +306,7 @@ function bboxOverlaps(a: BoundingBox, b: BoundingBox): boolean {
 export function createDeNwMobidromScooterClient(options: {
   clientId?: string;
   clientSecret?: string;
+  http: HttpClient;
   transport: MobilityHttpTransport;
   contributors?: readonly Attribution[];
 }): (
@@ -326,7 +322,7 @@ export function createDeNwMobidromScooterClient(options: {
   };
   return async (bbox) => {
     if (!bboxOverlaps(bbox, COVERAGE_BBOX)) return { stations: [], vehicles: [] };
-    const feed = await loadAllFeeds(options.transport, state, options.contributors);
+    const feed = await loadAllFeeds(options.http, options.transport, state, options.contributors);
     return {
       stations: feed.stations.filter((station) =>
         bboxContains(bbox, station.coordinates[1], station.coordinates[0]),

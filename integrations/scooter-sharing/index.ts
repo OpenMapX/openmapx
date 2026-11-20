@@ -39,6 +39,7 @@ export function setup(ctx: IntegrationContext): void {
     searchDeNwMobidromScooter: createDeNwMobidromScooterClient({
       clientId: ctx.config["de-nw-mobidrom-scooter-client-id"] as string | undefined,
       clientSecret: ctx.config["de-nw-mobidrom-scooter-client-secret"] as string | undefined,
+      http: ctx.http,
       transport: runtime.transport,
       contributors: resolveContributors(["de-nw-mobidrom-scooter"]),
     }),
