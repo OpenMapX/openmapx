@@ -1,12 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RegistryManager } from "../registry";
 import type { RegistryEntry } from "../registry-types";
 
-vi.mock("../fetcher", () => ({
-  fetchRegistryEntries: vi.fn(),
-}));
-
-import { fetchRegistryEntries } from "../fetcher";
-import { registry } from "../registry";
+const fetchEntries = vi.fn<() => Promise<RegistryEntry[]>>();
+const registry = new RegistryManager(fetchEntries);
 
 const BERLIN_BBOX_INNER: [number, number, number, number] = [13.4, 52.5, 13.41, 52.51];
 
@@ -78,11 +75,11 @@ const DB_ENTRY: RegistryEntry = {
 
 describe("transit-dynamic-registry Berlin suppression", () => {
   beforeEach(() => {
-    vi.mocked(fetchRegistryEntries).mockReset();
+    fetchEntries.mockReset();
   });
 
   it("loads vbb and bvg dynamic entries (no longer suppressed after C1)", async () => {
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([VBB_ENTRY, BVG_ENTRY, DB_ENTRY]);
+    fetchEntries.mockResolvedValue([VBB_ENTRY, BVG_ENTRY, DB_ENTRY]);
 
     await registry.initialize();
 
@@ -94,7 +91,7 @@ describe("transit-dynamic-registry Berlin suppression", () => {
   });
 
   it("returns a Berlin-covering provider for a stop near Brandenburg Gate", async () => {
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([VBB_ENTRY, BVG_ENTRY, DB_ENTRY]);
+    fetchEntries.mockResolvedValue([VBB_ENTRY, BVG_ENTRY, DB_ENTRY]);
 
     await registry.initialize();
 
@@ -106,11 +103,24 @@ describe("transit-dynamic-registry Berlin suppression", () => {
   });
 
   it("findByPrefix resolves bvg: and vbb: prefixes", async () => {
-    vi.mocked(fetchRegistryEntries).mockResolvedValue([VBB_ENTRY, BVG_ENTRY]);
+    fetchEntries.mockResolvedValue([VBB_ENTRY, BVG_ENTRY]);
 
     await registry.initialize();
 
     expect(registry.findByPrefix("vbb:")?.id).toBe("de/vbb-hafas-mgate");
     expect(registry.findByPrefix("bvg:")?.id).toBe("de/bvg-hafas-mgate");
+  });
+});
+
+describe("registry replacement", () => {
+  it("adopts the replacement generation's catalog loader", async () => {
+    const active = new RegistryManager(async () => []);
+    const next = vi.fn(async () => [VBB_ENTRY]);
+    active.replaceWith(new RegistryManager(next));
+
+    await active.initialize();
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(active.findByPrefix("vbb:")?.id).toBe("de/vbb-hafas-mgate");
   });
 });

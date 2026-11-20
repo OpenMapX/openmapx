@@ -10,7 +10,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import { OtpError } from "@openmapx/otp-client";
 import { getAdapter } from "./adapters.js";
-import { fetchRegistryEntries, setCache, setGithubToken } from "./fetcher.js";
+import { fetchRegistryEntries } from "./fetcher.js";
 import { createHafasMgateAdapter } from "./hafas-mgate.js";
 import { RegistryManager, registry } from "./registry.js";
 import type { RegistryEntry } from "./registry-types.js";
@@ -61,10 +61,12 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   const hafas = createHafasMgateAdapter();
   const stagedRegistry = new RegistryManager(() =>
-    fetchRegistryEntries({ cache: ctx.cache, githubToken }),
+    fetchRegistryEntries({ http: ctx.http, cache: ctx.cache, githubToken }),
   );
   await stagedRegistry
-    .initialize(() => fetchRegistryEntries({ cache: ctx.cache, githubToken, preferCache: true }))
+    .initialize(() =>
+      fetchRegistryEntries({ http: ctx.http, cache: ctx.cache, githubToken, preferCache: true }),
+    )
     .catch(() => {});
 
   // Register each discovered entry as a transit provider
@@ -197,8 +199,6 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   let releaseRefresh: (() => void) | null = null;
   ctx.onActivate(() => {
-    setCache(ctx.cache);
-    setGithubToken(githubToken);
     registry.replaceWith(stagedRegistry);
     releaseRefresh = registry.startRefresh();
   });

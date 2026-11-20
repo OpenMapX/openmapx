@@ -1,5 +1,4 @@
 import type { BBox } from "@openmapx/core";
-import { fetchRegistryEntries } from "./fetcher";
 import { TRANSPORT_APIS_COMMIT } from "./pin";
 import type { ProtocolType, RegistryEntry } from "./registry-types";
 
@@ -39,9 +38,8 @@ export class RegistryManager {
   private refreshOwners = new Set<symbol>();
   private _initialized = false;
 
-  constructor(
-    private readonly fetchEntries: () => Promise<RegistryEntry[]> = fetchRegistryEntries,
-  ) {}
+  /** `fetchEntries` loads the catalog; a replacement registry brings its own. */
+  constructor(private fetchEntries: () => Promise<RegistryEntry[]>) {}
 
   get initialized(): boolean {
     return this._initialized;
@@ -128,6 +126,7 @@ export class RegistryManager {
   }
 
   replaceWith(next: RegistryManager): void {
+    this.fetchEntries = next.fetchEntries;
     this.entries = next.entries;
     this.byPrefix = new Map(next.byPrefix);
     this._initialized = next._initialized;
@@ -193,4 +192,5 @@ export class RegistryManager {
   }
 }
 
-export const registry = new RegistryManager();
+/** The active generation's registry; empty until a generation replaces it. */
+export const registry = new RegistryManager(async () => []);
