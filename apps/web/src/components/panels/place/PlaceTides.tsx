@@ -27,7 +27,7 @@ const DATUM_NOTE: Record<TideDatum, string> = {
 };
 
 /**
- * Presentation-only tide content. Mounted inside an `ExpandableDetailRow`
+ * Presentation-only tide content. Mounted inside an `ExpandableSection`
  * in `PlaceOverviewTab` (mirroring the weather + sunrise rows). The hook
  * call and "no nearby station" gating happen in the parent so the whole
  * row can be hidden for inland users instead of just collapsing empty.
