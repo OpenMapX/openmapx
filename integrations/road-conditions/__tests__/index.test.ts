@@ -1,7 +1,7 @@
 import { routeFingerprint } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
-import { parseBbox, setup } from "../index.js";
+import { MAX_EVENTS_PER_REPLY, parseBbox, setup } from "../index.js";
 import type {
   RoadConditionEvent,
   RoadConditionsProvider,
@@ -321,6 +321,44 @@ describe("GET /events failure semantics", () => {
     const body = res.body as { type: string; features: Array<{ properties: { id: string } }> };
     expect(body.type).toBe("FeatureCollection");
     expect(body.features.map((f) => f.properties.id)).toEqual(["ok:1"]);
+  });
+});
+
+describe("GET /events reply cap", () => {
+  it("keeps the most severe situations, in their order, when providers return more than the cap", async () => {
+    // A degree apart, so deduplication keeps every one.
+    const minor = Array.from({ length: MAX_EVENTS_PER_REPLY }, (_, i) =>
+      event({
+        id: `minor:${i}`,
+        severity: { label: "minor", level: 2 },
+        geometry: { type: "Point", coordinates: [-170 + (i % 340), -80 + Math.floor(i / 340)] },
+      }),
+    );
+    const critical = event({ id: "critical:1", severity: { label: "critical", level: 5 } });
+    const major = event({
+      id: "major:1",
+      severity: { label: "major", level: 4 },
+      geometry: { type: "Point", coordinates: [175, 85] },
+    });
+    const h = eventsHarness({
+      providers: [
+        eventsProvider("road-conditions-many", async () => [...minor.slice(0, 10), critical]),
+        eventsProvider("road-conditions-more", async () => [major, ...minor.slice(10)]),
+      ],
+    });
+    const res = await h.get({ bbox: "5,47,15,55" });
+    expect(res.status).toBe(200);
+    const ids = (res.body as { features: Array<{ properties: { id: string } }> }).features.map(
+      (f) => f.properties.id,
+    );
+    expect(ids).toHaveLength(MAX_EVENTS_PER_REPLY);
+    expect(ids.slice(0, 12)).toEqual([
+      ...minor.slice(0, 10).map((e) => e.id),
+      "critical:1",
+      "major:1",
+    ]);
+    expect(ids).not.toContain(`minor:${MAX_EVENTS_PER_REPLY - 1}`);
+    expect(ids).not.toContain(`minor:${MAX_EVENTS_PER_REPLY - 2}`);
   });
 });
 

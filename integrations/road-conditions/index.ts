@@ -4,7 +4,8 @@ import { eventsToFeatureCollection } from "./eventsToGeojson.js";
 import { flowSpansForRoutes, parseRouteFlowBody } from "./flowAlongRoute.js";
 import { flowToFeatureCollection } from "./flowToGeojson.js";
 import { aggregateRoadConditions, aggregateRoadFlow, collectProviders } from "./orchestrator.js";
-import { isSeverityLabel } from "./severity.js";
+import { isSeverityLabel, SEVERITY_RANK } from "./severity.js";
+import type { RoadConditionEvent } from "./types.js";
 
 /**
  * Lifetime of a cached road-situation response. The client evaluates each
@@ -19,6 +20,27 @@ const ROAD_EVENT_CACHE_MAX_AGE_S = 60;
  * provider's request path.
  */
 const BINDABLE_SITUATION_ID = /^oc:situation:[^/\\?#]+$/;
+
+/**
+ * The most situations one `/events` reply carries. The OpenConditions display
+ * read stops after 2,000 situations, so this cap binds only when further
+ * providers add to it; the browser's reply ceiling is derived from it.
+ */
+export const MAX_EVENTS_PER_REPLY = 3000;
+
+/**
+ * At most `max` situations, keeping the most severe ones in their original
+ * order when there are more.
+ */
+function mostSevere(events: RoadConditionEvent[], max: number): RoadConditionEvent[] {
+  if (events.length <= max) return events;
+  const kept = new Set(
+    [...events]
+      .sort((a, b) => SEVERITY_RANK[b.severity.label] - SEVERITY_RANK[a.severity.label])
+      .slice(0, max),
+  );
+  return events.filter((event) => kept.has(event));
+}
 
 /** The most `/flow-along-route` validation admits: four routes of 20,000 points at full precision. */
 const FLOW_ALONG_ROUTE_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
@@ -126,7 +148,7 @@ export function setup(ctx: IntegrationContext): void {
           ...(minSeverity ? { minSeverity } : {}),
           ...(horizonDays !== undefined ? { horizonDays } : {}),
         });
-        return eventsToFeatureCollection(events);
+        return eventsToFeatureCollection(mostSevere(events, MAX_EVENTS_PER_REPLY));
       });
       reply.header(
         "Cache-Control",

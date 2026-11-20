@@ -193,6 +193,15 @@ export function roadConditionFeatureToEvent(
 }
 
 /**
+ * Success ceiling for a road-conditions reply. The server caps a reply at
+ * 3,000 situations; its OpenConditions display read takes at most three
+ * situation pages and one evidence snapshot under the host's 8 MiB JSON
+ * ceiling (32 MiB), and the reply restates those records with their
+ * contributors, so twice that bounds it.
+ */
+const MAX_ROAD_CONDITIONS_REPLY_BYTES = 64 * 1024 * 1024;
+
+/**
  * Fetch road-condition events with an explicit transport status. This lets
  * interactive overlays retain their last good data when a refresh fails.
  */
@@ -207,9 +216,10 @@ export async function fetchRoadConditionsWithStatus(
     if (opts?.minSeverity) params.minSeverity = opts.minSeverity;
     // `0` is a meaningful horizon ("active now"), so test for presence.
     if (opts?.horizonDays != null) params.horizonDays = String(opts.horizonDays);
-    const raw = opts?.signal
-      ? await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params, { signal: opts.signal })
-      : await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params);
+    const raw = await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params, {
+      maxBytes: MAX_ROAD_CONDITIONS_REPLY_BYTES,
+      ...(opts?.signal ? { signal: opts.signal } : {}),
+    });
     if (!isWellFormedFeatureCollection(raw)) return { ok: false, events: [] };
     return {
       ok: true,

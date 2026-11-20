@@ -11,6 +11,16 @@ import type {
 import { type ApiClient, type ApiRequestOptions, apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
+/**
+ * Success ceiling for every reply that carries routes. The server reads at most
+ * 64 MiB of route data for one plan: BRouter answers a primary and an
+ * alternative read of 32 MiB each, and a Valhalla or OSRM reply is one read
+ * under the host's 8 MiB JSON ceiling whose encoded shape decodes to a few
+ * times its size. Multi-leg EV and scheduled trips split one trip into legs
+ * without alternatives, so they stay within the same ceiling.
+ */
+export const MAX_ROUTE_REPLY_BYTES = 64 * 1024 * 1024;
+
 export interface FetchDirectionsParams extends BikeRoutingOptions {
   waypoints: LngLat[];
   /** Pin an enabled routing integration; failure must not change graphs. */
@@ -80,7 +90,7 @@ export function fetchDirections(
       ...(departAt && { departAt }),
       ...(arriveBy && { arriveBy }),
     },
-    options,
+    { maxBytes: MAX_ROUTE_REPLY_BYTES, ...options },
   );
 }
 
@@ -90,7 +100,10 @@ export function postEvDirections(
   client: ApiClient = apiClient,
   options: ApiRequestOptions = {},
 ): Promise<EvDirectionsResult> {
-  return client.post<EvDirectionsResult>(API_ENDPOINTS.directionsEv, req, options);
+  return client.post<EvDirectionsResult>(API_ENDPOINTS.directionsEv, req, {
+    maxBytes: MAX_ROUTE_REPLY_BYTES,
+    ...options,
+  });
 }
 
 /** Plan a trip with per-waypoint time constraints, via `POST /directions/schedule`. */
@@ -99,5 +112,8 @@ export function postScheduledDirections(
   client: ApiClient = apiClient,
   options: ApiRequestOptions = {},
 ): Promise<ScheduledDirectionsResult> {
-  return client.post<ScheduledDirectionsResult>(API_ENDPOINTS.directionsSchedule, req, options);
+  return client.post<ScheduledDirectionsResult>(API_ENDPOINTS.directionsSchedule, req, {
+    maxBytes: MAX_ROUTE_REPLY_BYTES,
+    ...options,
+  });
 }

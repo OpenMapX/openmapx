@@ -289,6 +289,25 @@ Public integration health metadata contains `type`, optional `name` and
 optional `category`; operational URLs, headers and configuration keys stay
 inside the host. Source licensing uses the portable structured output schema.
 
+## Success-body ceilings of plain client reads
+
+The plain `ApiClient` methods (`get`, `getOptional`, `post`, `put`, `patch`,
+`delete`) read a success body whole and refuse one above 8 MiB. A read whose
+reply can legitimately be larger passes `maxBytes` with a ceiling derived from
+what the server can send:
+
+- Route plans (`/directions`, `/directions/optimize`, `/directions/ev` and
+  `/directions/schedule`): 64 MiB. BRouter answers with two reads of at most
+  32 MiB each; a Valhalla or OSRM reply is one read under the host's 8 MiB JSON
+  ceiling whose encoded shape decodes to a few times its size.
+- Road-condition situations (`/road-conditions/events`): the route sends at most
+  3,000 situations, keeping the most severe in their original order. The
+  OpenConditions display read takes at most three situation pages and one
+  evidence snapshot under the host's 8 MiB ceiling, and the reply restates those
+  records with their contributors, so the client allows 64 MiB.
+- Personal timeline days: 128 MiB, see
+  [Personal timeline response validation](#personal-timeline-response-validation).
+
 ## Generic weather forecasts
 
 `GET /api/integrations/weather/forecast` returns independent `hourly` and `daily`
