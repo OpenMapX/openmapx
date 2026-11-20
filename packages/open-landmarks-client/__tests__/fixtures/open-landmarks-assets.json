@@ -1,0 +1,2278 @@
+{
+  "schemaVersion": 1,
+  "release": "preview-7bd48fe030ad21eb2280",
+  "assets": [
+    {
+      "id": "arc-de-triomphe",
+      "name": "Arc de Triomphe",
+      "anchor": [2.2950372754957606, 48.87377739317819],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 15,
+      "detailZoom": 17,
+      "lods": {
+        "low": {
+          "url": "/models/arc-de-triomphe/a4be7f4e0f4e6a8aba6c928f61a84f9c7624c133c9370131f0f8cb03abf57fab/low.glb",
+          "bytes": 171800,
+          "sha256": "a4be7f4e0f4e6a8aba6c928f61a84f9c7624c133c9370131f0f8cb03abf57fab",
+          "triangles": 4468,
+          "gzip": {
+            "url": "/models/arc-de-triomphe/a4be7f4e0f4e6a8aba6c928f61a84f9c7624c133c9370131f0f8cb03abf57fab/low.glb.gz",
+            "bytes": 50351,
+            "sha256": "6d8ae027d0ba45c8b1c7d04501e702ff8151cfb9b5a15481c0c05afd2617da8f",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/arc-de-triomphe/53ad11bdbdfdedf4698c1082e2c3456bb3b9d5590a93f05feca428baed83ccdd/detail.glb",
+          "bytes": 1270888,
+          "sha256": "53ad11bdbdfdedf4698c1082e2c3456bb3b9d5590a93f05feca428baed83ccdd",
+          "triangles": 33350,
+          "gzip": {
+            "url": "/models/arc-de-triomphe/53ad11bdbdfdedf4698c1082e2c3456bb3b9d5590a93f05feca428baed83ccdd/detail.glb.gz",
+            "bytes": 399575,
+            "sha256": "ff5a116a2541bd6b20b0ec5ea9c0ef97ce58d2e49b641ddd168b62c67f1be347",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 33350,
+      "boundsBlenderM": [
+        [-23.201171875, -28.65927505493164, 0],
+        [23.567138671875, 29.001220703125, 50]
+      ],
+      "entranceLights": [],
+      "replacementFootprint": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [2.2950666, 48.8735201],
+            [2.2950977, 48.8735655],
+            [2.2951447, 48.8736319],
+            [2.2952736, 48.8738203],
+            [2.295321, 48.8738873],
+            [2.2953512, 48.8739297],
+            [2.295018, 48.8740363],
+            [2.2949835, 48.87399],
+            [2.2949356, 48.8739238],
+            [2.2947987, 48.8737379],
+            [2.2947506, 48.8736712],
+            [2.2947196, 48.8736281],
+            [2.2948743, 48.8735799],
+            [2.2950666, 48.8735201]
+          ]
+        ]
+      },
+      "basemapReplacement": {
+        "tileset": "protomaps-20260911",
+        "featureIds": [
+          35184598502340, 35184598502341, 35184598502342, 35184598502343, 35184598502344,
+          35184598502345, 35184598502346, 35184598502347, 35184598502348, 35184598502349,
+          35184598502351, 35184598502352, 35184598502353, 35184598502354, 35184598608977,
+          35184598608978
+        ],
+        "toleranceM": 0.75,
+        "sourceZoom": 15
+      },
+      "osm": {
+        "type": "way",
+        "id": 226413508,
+        "version": 55,
+        "timestamp": "2025-08-30T17:59:38Z",
+        "url": "https://www.openstreetmap.org/way/226413508"
+      },
+      "additionalOsm": [],
+      "rightsStatus": "approved",
+      "geometryStatus": "approved",
+      "attribution": "Open Landmarks; contains © OpenStreetMap contributors, ODbL-1.0",
+      "references": [
+        {
+          "title": "File:Arc de Triomphe - Août 2026.jpg",
+          "author": "ZeusUpsistos",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Arc_de_Triomphe_-_Ao%C3%BBt_2026.jpg",
+          "sourceSha1": "f85808b1ebb5822293b297912cedf190f19d93f8",
+          "use": "visual-reference-only",
+          "view": "front, daylight"
+        },
+        {
+          "title": "File:Arc de Triomphe de l'Etoile, Paris, France (8757216556).jpg",
+          "author": "Luke,Ma from Taipei, Taiwan ROC",
+          "license": "CC BY 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Arc_de_Triomphe_de_l%27Etoile,_Paris,_France_(8757216556).jpg",
+          "sourceSha1": "7a3a73ac752a1aaad43bb5061a843c536cda72d7",
+          "use": "visual-reference-only",
+          "view": "front oblique, daylight"
+        },
+        {
+          "title": "File:Arco del Triunfo París 2025 04.jpg",
+          "author": "Shitvia",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Arco_del_Triunfo_Par%C3%ADs_2025_04.jpg",
+          "sourceSha1": "25a73c5e264f45a542660e47722fd9ab46946e56",
+          "use": "visual-reference-only",
+          "view": "front oblique, daylight"
+        }
+      ],
+      "aliases": [],
+      "authors": ["Open Landmarks contributors"],
+      "artisticLicense": "CC-BY-4.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "CC BY applies to original artistic contributions only; ODbL applies to OSM-derived spatial data. Reference photographs retain their own licenses.",
+      "assistance": "AI-assisted architectural interpretation and procedural recipe authoring; deterministic Python/Blender export. No photographic textures.",
+      "review": {
+        "status": "approved",
+        "revision": "7684fecfbaea02f5c592526249611ad770bab1693359c79b4bd77b7a8a374691",
+        "reviewer": "Benjamin TD",
+        "reviewedAt": "2026-09-30",
+        "checks": {
+          "rights": "passed",
+          "footprint": "passed",
+          "appearance": "passed",
+          "mapIntegration": "passed"
+        }
+      },
+      "modelingNotes": [
+        "Alignment, cornice outline (50.4 x 28.1 m) and wall body (47.4 x 24.6 m) from the OSM minimum rectangle and building:part polygons (way 226413508); the 1.5/1.8 m cornice overhang is the OSM difference between them.",
+        "Four sculpture pedestals (8.2 m wide, 1.8 m projection, 6 m high) and the 8.4 m transverse passage width follow the mapped parts.",
+        "Published dimensions (Wikipedia FR/EN, Structurae): 49.5-50 m high, main arch 29.19 m high x 14.62 m wide, transverse arches 18.68 m high x 8.44 m wide. Total height kept at the exported 50 m (roof pavilion top).",
+        "Main arch width set to 14.0 m: OSM maps 12 m, the published 14.62 m is on a 44.8 m body; the front photograph gives arch/body ~0.29, which on the OSM 47.4 m body is 14 m, leaving 16.7 m piers.",
+        "Storey lines scaled from the reviewed front photograph (00.jpg) on the 50 m height: plinth 1.5 m, dado 5.4-6.0 m, transverse impost 14.5 m, main impost entablature 20.5-22.2 m, upper relief panels 25-31.6 m, architrave 33.9 m, frieze 34.8-37.6 m, main cornice 37.6-41.4 m, attic 41.4-46.8 m, attic cornice to 48.0 m, palmette cresting to 49.35 m.",
+        "Attic: 30 shields (11 per main face, 4 per side) between sword panels, counted from the photographs.",
+        "Sculpture groups, spandrel Fames, upper panels and the frieze are abstract relief masses (lathed figure blocks, wing slabs, raised blocks), not copies of the sculptures. The coffered vaults are rib grids with rosettes.",
+        "The roof is a flat terrace behind the attic parapet; the OSM 47-50 m rooftop parts are reduced to a small set-back stair/lift kiosk (4.4 x 3.2 m, top 50.0 m) invisible from street level. Pier and upper walls carry thin raised ashlar coursing bands every 0.95 m; the dentil course sits under the modillions."
+      ],
+      "source": {
+        "url": "/objects/6be7060955bb5b507e38886c5e821f7c4b7e957768081d174d9c42bba2bf0fe6/source.blend.gz",
+        "bytes": 591269,
+        "sha256": "6be7060955bb5b507e38886c5e821f7c4b7e957768081d174d9c42bba2bf0fe6"
+      },
+      "spatialSource": {
+        "url": "/objects/b51f21c599595de082c0dff7a204ea4c73a9b38bbf1bb28f8dd921b87cd168ed/spatial-source.json",
+        "bytes": 15594,
+        "sha256": "b51f21c599595de082c0dff7a204ea4c73a9b38bbf1bb28f8dd921b87cd168ed"
+      },
+      "preview": {
+        "url": "/objects/5f6e6a2444bf488c90d69e363f037eb3ebb622a4eebbffbb426268c5ae6861a7/preview.webp",
+        "bytes": 20328,
+        "sha256": "5f6e6a2444bf488c90d69e363f037eb3ebb622a4eebbffbb426268c5ae6861a7"
+      },
+      "revision": "7684fecfbaea02f5c592526249611ad770bab1693359c79b4bd77b7a8a374691",
+      "publicationRevision": "26e711b336ee7cc5b10f279858db5e5ed87273322dc2961c0977f8b67652c642",
+      "bounds": [2.2947196, 48.8735201, 2.2953512, 48.8740363],
+      "approved": true,
+      "materialLibrary": {
+        "schemaVersion": 1,
+        "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+        "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+      },
+      "metadata": "/assets/arc-de-triomphe/26e711b336ee7cc5b10f279858db5e5ed87273322dc2961c0977f8b67652c642/asset.json",
+      "validation": "/assets/arc-de-triomphe/26e711b336ee7cc5b10f279858db5e5ed87273322dc2961c0977f8b67652c642/validation.json"
+    },
+    {
+      "id": "eiffel-tower",
+      "name": "Tour Eiffel",
+      "anchor": [2.2944961557127317, 48.85826211154724],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 15,
+      "detailZoom": 17,
+      "lods": {
+        "low": {
+          "url": "/models/eiffel-tower/71f15c766e62ab883c2cb8c817d739af2448f370af3c45923d65b256d389972f/low.glb",
+          "bytes": 202584,
+          "sha256": "71f15c766e62ab883c2cb8c817d739af2448f370af3c45923d65b256d389972f",
+          "triangles": 5791,
+          "gzip": {
+            "url": "/models/eiffel-tower/71f15c766e62ab883c2cb8c817d739af2448f370af3c45923d65b256d389972f/low.glb.gz",
+            "bytes": 114808,
+            "sha256": "8577564b59545dbc61196e870d265c79e306217954b3a736a551bbe38e39ebc4",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/eiffel-tower/3a1a8469ed272c619f3ef9b0815483c4ff6986b57a8169dec3e611814d941160/detail.glb",
+          "bytes": 1226196,
+          "sha256": "3a1a8469ed272c619f3ef9b0815483c4ff6986b57a8169dec3e611814d941160",
+          "triangles": 28176,
+          "gzip": {
+            "url": "/models/eiffel-tower/3a1a8469ed272c619f3ef9b0815483c4ff6986b57a8169dec3e611814d941160/detail.glb.gz",
+            "bytes": 646986,
+            "sha256": "33591c4895a2603126e02c06e92ad694bc5a3205efa986cf55e4fdc707692f32",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 28176,
+      "boundsBlenderM": [
+        [-87.16863250732422, -87.50067901611328, 0],
+        [87.59599304199219, 87.2639389038086, 330]
+      ],
+      "entranceLights": [],
+      "replacementFootprint": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [2.2942817, 48.8576248],
+            [2.2942926, 48.8576181],
+            [2.2944653, 48.8575069],
+            [2.2945144, 48.8574753],
+            [2.2947414, 48.8576291],
+            [2.294725, 48.8576392],
+            [2.2947426, 48.857651],
+            [2.294706, 48.8576751],
+            [2.294698, 48.8576696],
+            [2.2946846, 48.8576782],
+            [2.2946744, 48.8576865],
+            [2.2946881, 48.8576957],
+            [2.2946548, 48.857717],
+            [2.2946554, 48.8577213],
+            [2.2946713, 48.8577905],
+            [2.2946982, 48.8578393],
+            [2.2947088, 48.8578585],
+            [2.2947529, 48.8579196],
+            [2.2948133, 48.8579803],
+            [2.2948836, 48.85803],
+            [2.2949462, 48.8580637],
+            [2.2950051, 48.8580923],
+            [2.2950719, 48.85812],
+            [2.2951347, 48.8581406],
+            [2.2951996, 48.8581564],
+            [2.2952689, 48.8581663],
+            [2.295334, 48.8581699],
+            [2.2953613, 48.8581518],
+            [2.2953739, 48.8581604],
+            [2.2953965, 48.8581497],
+            [2.2954016, 48.8581464],
+            [2.2953933, 48.8581409],
+            [2.2954304, 48.8581172],
+            [2.2954473, 48.8581285],
+            [2.2954631, 48.8581182],
+            [2.2956897, 48.8582718],
+            [2.295653, 48.8582954],
+            [2.2955837, 48.85834],
+            [2.2954575, 48.8584212],
+            [2.2954416, 48.858411],
+            [2.2954238, 48.8584227],
+            [2.2953878, 48.8583981],
+            [2.2953925, 48.858395],
+            [2.2953701, 48.8583857],
+            [2.2953419, 48.8583779],
+            [2.2953057, 48.8583737],
+            [2.2952111, 48.8583776],
+            [2.2951081, 48.858403],
+            [2.2950157, 48.8584326],
+            [2.2949284, 48.8584723],
+            [2.2948889, 48.8584961],
+            [2.2947988, 48.8585613],
+            [2.2947558, 48.8586003],
+            [2.2947144, 48.8586446],
+            [2.294682, 48.8586886],
+            [2.2946605, 48.8587289],
+            [2.2946462, 48.8587747],
+            [2.294644, 48.8587962],
+            [2.2946462, 48.8588051],
+            [2.2946486, 48.8588068],
+            [2.2946958, 48.8588392],
+            [2.294681, 48.858849],
+            [2.2947169, 48.8588737],
+            [2.2946988, 48.858885],
+            [2.2947154, 48.8588961],
+            [2.2944834, 48.8590453],
+            [2.2943809, 48.8589771],
+            [2.2943708, 48.8589703],
+            [2.2942571, 48.8588932],
+            [2.2942741, 48.8588824],
+            [2.2942567, 48.8588708],
+            [2.2942893, 48.8588493],
+            [2.2942962, 48.8588539],
+            [2.2942997, 48.8588504],
+            [2.2942884, 48.8588426],
+            [2.2943123, 48.8588276],
+            [2.2943228, 48.858821],
+            [2.2943284, 48.8588174],
+            [2.2943315, 48.8588125],
+            [2.2943333, 48.8588018],
+            [2.2943166, 48.8587327],
+            [2.294301, 48.8586978],
+            [2.2942783, 48.8586648],
+            [2.2942406, 48.8586191],
+            [2.2942064, 48.858577],
+            [2.2941734, 48.8585464],
+            [2.2941015, 48.8584943],
+            [2.2940384, 48.8584609],
+            [2.2939792, 48.8584325],
+            [2.293912, 48.8584052],
+            [2.2938415, 48.8583828],
+            [2.293784, 48.8583695],
+            [2.2937145, 48.8583599],
+            [2.2936514, 48.8583593],
+            [2.2936122, 48.8583846],
+            [2.293606, 48.8583807],
+            [2.2935688, 48.8584044],
+            [2.2935515, 48.8583929],
+            [2.293536, 48.8584028],
+            [2.2933119, 48.858248],
+            [2.2935432, 48.8581003],
+            [2.2935574, 48.8581099],
+            [2.2935712, 48.8581004],
+            [2.2936112, 48.8581232],
+            [2.2936086, 48.8581249],
+            [2.293611, 48.8581262],
+            [2.2936415, 48.8581385],
+            [2.293672, 48.8581477],
+            [2.2937035, 48.8581504],
+            [2.293734, 48.858149],
+            [2.2937827, 48.8581439],
+            [2.2938856, 48.8581182],
+            [2.2939778, 48.8580882],
+            [2.2940648, 48.8580483],
+            [2.2941435, 48.8579991],
+            [2.2941937, 48.8579588],
+            [2.2942364, 48.8579197],
+            [2.2942775, 48.8578753],
+            [2.2943096, 48.8578312],
+            [2.2943307, 48.8577908],
+            [2.2943447, 48.857745],
+            [2.2943478, 48.8577118],
+            [2.2943394, 48.8576885],
+            [2.2943306, 48.8576773],
+            [2.2943205, 48.8576677],
+            [2.2943158, 48.8576707],
+            [2.2942802, 48.8576465],
+            [2.2942977, 48.8576355],
+            [2.2942817, 48.8576248]
+          ]
+        ]
+      },
+      "basemapReplacement": {
+        "tileset": "protomaps-20260911",
+        "featureIds": [
+          35184377102196, 35184441122959, 35184441122967, 35184441122997, 35184441123011,
+          35184441123012, 35184680110221, 35184680234071, 35184680234090, 35184680234091,
+          35184680776576, 35184680776577, 35184680776580, 35184680776584, 35184680776585,
+          35184680777996, 35184680777997, 35184680777998, 35184680777999, 35184707189860,
+          35184707189867, 35184707189870, 35185834686594, 35185834686595, 35185834686596,
+          35185834686597, 52776562248087, 52776562248090
+        ],
+        "toleranceM": 0.75,
+        "sourceZoom": 15
+      },
+      "osm": {
+        "type": "way",
+        "id": 5013364,
+        "version": 181,
+        "timestamp": "2026-05-12T07:57:52Z",
+        "url": "https://www.openstreetmap.org/way/5013364"
+      },
+      "additionalOsm": [],
+      "rightsStatus": "approved",
+      "geometryStatus": "approved",
+      "attribution": "File:EiffelTower fixed.stl by Newcandle from Thingiverse, CC-BY-SA-3.0; adapted by Open Landmarks. Contains © OpenStreetMap contributors, ODbL-1.0",
+      "references": [
+        {
+          "title": "File:Tour Eiffel Wikimedia Commons.jpg",
+          "author": "Benh LIEU SONG",
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Tour_Eiffel_Wikimedia_Commons.jpg",
+          "sourceSha1": "ecddecabc256113d4b17589350de9284b135643c",
+          "use": "visual-reference-only",
+          "view": "front silhouette, daylight",
+          "licenseNote": "Source page distinguishes the public-domain architectural object from the photograph, which is CC BY-SA 3.0. Checked 2026-09-14."
+        },
+        {
+          "title": "File:56441-Paris (36201356970).jpg",
+          "author": "xiquinhosilva from Cacau",
+          "license": "CC BY 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:56441-Paris_(36201356970).jpg",
+          "sourceSha1": "39f1c1fb9e509bc4cc0727752e2e0a8f607ae6c4",
+          "use": "visual-reference-only",
+          "view": "full tower oblique, daylight"
+        },
+        {
+          "title": "File:La Tour Eiffel vue de la Tour Saint-Jacques, Paris août 2014 (2).jpg",
+          "author": "Yann Caradec from Paris, France",
+          "license": "CC BY-SA 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques,_Paris_ao%C3%BBt_2014_(2).jpg",
+          "sourceSha1": "9865b08776f7e905634dd3a65afcb0719a1bfba1",
+          "use": "visual-reference-only",
+          "view": "distant context, daylight"
+        }
+      ],
+      "aliases": [],
+      "authors": ["Newcandle from Thingiverse", "Open Landmarks contributors (adaptation)"],
+      "artisticLicense": "CC-BY-SA-3.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "CC-BY-SA-3.0 applies to the imported artistic geometry, its adaptation, editable scene and previews; ODbL-1.0 applies to OSM-derived spatial data. Visual reference photographs retain their own licenses.",
+      "assistance": "AI-assisted source research and deterministic conversion tooling; artistic geometry imported from the credited creator. No photographic textures.",
+      "review": {
+        "status": "approved",
+        "revision": "79b499ba1c1a13024334d434cb821fdbb85052c2bb5d60c7b367b99fa40e63a8",
+        "reviewer": "Benjamin TD",
+        "reviewedAt": "2026-10-08",
+        "checks": {
+          "rights": "passed",
+          "footprint": "passed",
+          "appearance": "passed",
+          "mapIntegration": "passed"
+        },
+        "notes": [
+          "Production promotion explicitly authorised by Benjamin TD on 2026-10-08 after the imported model comparison and validation.",
+          "The source credit, original STL checksum, CC BY-SA 3.0 grant and modification notice are retained.",
+          "Print-oriented geometry, independent horizontal/vertical scaling and low-LOD lattice loss were disclosed before production approval."
+        ]
+      },
+      "modelingNotes": [
+        "Converted from STL; removed degenerate/duplicate faces; independently rescaled horizontal footprint and vertical height to the saved OSM rectangle and existing declared height, baked orientation and ground placement; applied the Open Landmarks material palette; simplified two LODs and repaired normals. STL units are unspecified; scaling changes the source proportions. No photographic textures.",
+        "Registration: {\"method\": \"Independent XYZ scaling to saved OSM rectangle and existing declared height; heading baked\", \"scaleXYZ\": [2.260954069825459, 2.260954069825459, 2.7285353429420316], \"axisEastNorth\": [0.6975986957550049, 0.7164886593818665], \"centerEastNorth\": [0.21368009080060688, -0.11836828263270763], \"note\": \"STL units are unspecified. This fit changes source proportions and is a pending interpretation, not surveyed geometry.\"}",
+        "LOD conversion: {\"detail\": {\"triangles\": 28176, \"bytes\": 1226196, \"algorithm\": \"meshoptimizer simplify, Prune\", \"smoothAngleDegrees\": 60.0, \"estimatedErrorM\": 0.5688701255712658, \"sha256\": \"3a1a8469ed272c619f3ef9b0815483c4ff6986b57a8169dec3e611814d941160\", \"attempts\": [{\"triangles\": 34043, \"bytes\": 1501756, \"algorithm\": \"meshoptimizer simplify, Prune\", \"smoothAngleDegrees\": 60.0, \"estimatedErrorM\": 0.5220670870039612}, {\"triangles\": 28176, \"bytes\": 1226196, \"algorithm\": \"meshoptimizer simplify, Prune\", \"smoothAngleDegrees\": 60.0, \"estimatedErrorM\": 0.5688701255712658}]}, \"low\": {\"triangles\": 5791, \"bytes\": 202584, \"algorithm\": \"meshoptimizer simplify, Prune\", \"smoothAngleDegrees\": 180.0, \"estimatedErrorM\": 1.8229950405657291, \"sha256\": \"71f15c766e62ab883c2cb8c817d739af2448f370af3c45923d65b256d389972f\", \"attempts\": [{\"triangles\": 5791, \"bytes\": 202584, \"algorithm\": \"meshoptimizer simplify, Prune\", \"smoothAngleDegrees\": 180.0, \"estimatedErrorM\": 1.8229950405657291}]}}"
+      ],
+      "source": {
+        "url": "/objects/8fc6bd0372e5f1c4e79a55fde0d40d3d8fa24c61b6612bf87595827b6e6e038a/source.blend.gz",
+        "bytes": 2960430,
+        "sha256": "8fc6bd0372e5f1c4e79a55fde0d40d3d8fa24c61b6612bf87595827b6e6e038a"
+      },
+      "spatialSource": {
+        "url": "/objects/ee44d66e51c7e518a2bc28ba19b5b2dea72e1bbdabbdc5c26ac4ca7e00d97940/spatial-source.json",
+        "bytes": 39582,
+        "sha256": "ee44d66e51c7e518a2bc28ba19b5b2dea72e1bbdabbdc5c26ac4ca7e00d97940"
+      },
+      "preview": {
+        "url": "/objects/5373ef2a3156ca484c0aa6f9a8065d9c887c51913dd6c8d8ddeefc3b0dd2cb5d/preview.webp",
+        "bytes": 5936,
+        "sha256": "5373ef2a3156ca484c0aa6f9a8065d9c887c51913dd6c8d8ddeefc3b0dd2cb5d"
+      },
+      "wikidata": "Q243",
+      "modelSources": [
+        {
+          "title": "File:EiffelTower fixed.stl",
+          "author": "Newcandle from Thingiverse",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:EiffelTower_fixed.stl",
+          "originalFileUrl": "https://upload.wikimedia.org/wikipedia/commons/4/41/EiffelTower_fixed.stl",
+          "sha256": "bff2ce1d08609b2d761a225cb7c8c1da782369714011567ede7a5008a1e55adf",
+          "sourceTimestamp": "2018-02-25T00:39:31Z",
+          "license": "CC-BY-SA-3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+          "modifications": "Converted from STL; removed degenerate/duplicate faces; independently rescaled horizontal footprint and vertical height to the saved OSM rectangle and existing declared height, baked orientation and ground placement; applied the Open Landmarks material palette; simplified two LODs and repaired normals. STL units are unspecified; scaling changes the source proportions. No photographic textures.",
+          "retrievedAt": "2026-10-08T14:03:49.644328+00:00"
+        }
+      ],
+      "revision": "79b499ba1c1a13024334d434cb821fdbb85052c2bb5d60c7b367b99fa40e63a8",
+      "publicationRevision": "4e011f6dced3b66b9599894f5e689977b06694c5d678a09872892d7f72e9a7d1",
+      "bounds": [2.2933119, 48.8574753, 2.2956897, 48.8590453],
+      "approved": true,
+      "materialLibrary": {
+        "schemaVersion": 1,
+        "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+        "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+      },
+      "metadata": "/assets/eiffel-tower/4e011f6dced3b66b9599894f5e689977b06694c5d678a09872892d7f72e9a7d1/asset.json",
+      "validation": "/assets/eiffel-tower/4e011f6dced3b66b9599894f5e689977b06694c5d678a09872892d7f72e9a7d1/validation.json"
+    },
+    {
+      "id": "golden-gate-bridge",
+      "name": "Golden Gate Bridge",
+      "anchor": [-122.47856226195415, 37.81975851656291],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 13,
+      "detailZoom": 16,
+      "lods": {
+        "low": {
+          "url": "/models/golden-gate-bridge/8e2ef3fe0f284d2f5d98d1682f6ac09a2192dce166ab7a35d13dcedc7cc5b262/low.glb",
+          "bytes": 228908,
+          "sha256": "8e2ef3fe0f284d2f5d98d1682f6ac09a2192dce166ab7a35d13dcedc7cc5b262",
+          "triangles": 7974,
+          "gzip": {
+            "url": "/models/golden-gate-bridge/8e2ef3fe0f284d2f5d98d1682f6ac09a2192dce166ab7a35d13dcedc7cc5b262/low.glb.gz",
+            "bytes": 91511,
+            "sha256": "679dcd57538051b6881f8488aa5d7da4be78a82139e98ac1c0656937cbc01027",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/golden-gate-bridge/0cf978ad96a69e52376329e5c30dd3be98ba96eef988e97a046c8837425a5764/detail.glb",
+          "bytes": 1137772,
+          "sha256": "0cf978ad96a69e52376329e5c30dd3be98ba96eef988e97a046c8837425a5764",
+          "triangles": 39872,
+          "gzip": {
+            "url": "/models/golden-gate-bridge/0cf978ad96a69e52376329e5c30dd3be98ba96eef988e97a046c8837425a5764/detail.glb.gz",
+            "bytes": 445466,
+            "sha256": "1b9d6ee87145fbf27325354bc45acb51a9521ea0873f4e4567ed321e57cd8fe2",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 39872,
+      "boundsBlenderM": [
+        [-207.07810974121094, -1304.1279296875, 0],
+        [191.39988708496094, 1403.591552734375, 228.6298065185547]
+      ],
+      "entranceLights": [],
+      "replacementFootprint": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.4770878, 37.8091426],
+            [-122.4770408, 37.8090353],
+            [-122.4769807, 37.8089136],
+            [-122.4769171, 37.8087993],
+            [-122.4768506, 37.8086924],
+            [-122.4767753, 37.8085875],
+            [-122.4766911, 37.8084779],
+            [-122.4765887, 37.808361],
+            [-122.4764813, 37.8082522],
+            [-122.4763972, 37.8081743],
+            [-122.4764084, 37.8081666],
+            [-122.47643, 37.8081517],
+            [-122.4764699, 37.8081243],
+            [-122.4765727, 37.8080536],
+            [-122.4766506, 37.808],
+            [-122.4766694, 37.807988],
+            [-122.4769447, 37.8083456],
+            [-122.4770518, 37.8084793],
+            [-122.4771322, 37.8085903],
+            [-122.4772084, 37.8087099],
+            [-122.4772752, 37.8088285],
+            [-122.4773402, 37.8089575],
+            [-122.4773540809937, 37.808990018957175],
+            [-122.4775476, 37.8089786],
+            [-122.4775925, 37.8093383],
+            [-122.4775124, 37.8093431],
+            [-122.4775698, 37.8098821],
+            [-122.4775516, 37.8098836],
+            [-122.477562, 37.8099703],
+            [-122.4775896, 37.809968],
+            [-122.4776968, 37.8108983],
+            [-122.4776651, 37.8109004],
+            [-122.4776749, 37.8109901],
+            [-122.4794074, 37.8255727],
+            [-122.4794085, 37.8255855],
+            [-122.4797543, 37.8285406],
+            [-122.4797871, 37.8285386],
+            [-122.4797965, 37.8286217],
+            [-122.4797456, 37.8286248],
+            [-122.4797718, 37.8288195],
+            [-122.4798484, 37.828815],
+            [-122.4798536, 37.828882],
+            [-122.4798543, 37.8288906],
+            [-122.4798551, 37.8289011],
+            [-122.4798835, 37.8291561],
+            [-122.4799262, 37.8291532],
+            [-122.4799572, 37.829431],
+            [-122.4799694, 37.8294302],
+            [-122.4799779, 37.8295133],
+            [-122.4799211, 37.8295169],
+            [-122.4799195, 37.8295011],
+            [-122.4798604, 37.8295052],
+            [-122.4799501, 37.8302699],
+            [-122.4799682, 37.8304181],
+            [-122.4799884, 37.8305759],
+            [-122.4800087, 37.8307005],
+            [-122.4800376, 37.8308265],
+            [-122.4800723, 37.8309602],
+            [-122.4801133, 37.8310812],
+            [-122.4801667, 37.8312051],
+            [-122.4802227, 37.8313237],
+            [-122.4802858, 37.8314395],
+            [-122.4803548, 37.8315539],
+            [-122.4804276, 37.8316617],
+            [-122.4804447, 37.8316857],
+            [-122.4805254, 37.8317908],
+            [-122.4806215, 37.8319052],
+            [-122.4807166, 37.8320077],
+            [-122.4808396, 37.8321298],
+            [-122.4809672, 37.8322442],
+            [-122.480952, 37.8322548],
+            [-122.4808917, 37.832299],
+            [-122.4808518, 37.8323081],
+            [-122.4807224, 37.8323293],
+            [-122.4806922, 37.8323339],
+            [-122.4806229, 37.8323775],
+            [-122.4805883, 37.8323459],
+            [-122.4805121, 37.8322792],
+            [-122.4804046, 37.8321657],
+            [-122.4803028, 37.8320547],
+            [-122.4802112, 37.8319368],
+            [-122.4801231, 37.8318137],
+            [-122.480091, 37.8317623],
+            [-122.4800346, 37.8316718],
+            [-122.4799654, 37.8315458],
+            [-122.4799025, 37.8314139],
+            [-122.4798502, 37.8312845],
+            [-122.479799, 37.8311522],
+            [-122.4797544, 37.83102],
+            [-122.4797182, 37.8308784],
+            [-122.4796903, 37.830746],
+            [-122.4796698, 37.8306078],
+            [-122.4796495, 37.8304478],
+            [-122.4796312, 37.8302987],
+            [-122.4795512, 37.8295263],
+            [-122.4794867, 37.8295304],
+            [-122.4794881, 37.8295438],
+            [-122.4794365, 37.8295473],
+            [-122.4794275, 37.8294632],
+            [-122.4794428, 37.8294622],
+            [-122.4794074, 37.8291381],
+            [-122.4794466, 37.8291354],
+            [-122.4794136, 37.8288323],
+            [-122.4794863, 37.8288276],
+            [-122.4794638, 37.8286403],
+            [-122.4794121, 37.8286443],
+            [-122.4794026, 37.828563],
+            [-122.4794276, 37.8285611],
+            [-122.4790927, 37.8256833],
+            [-122.4790848, 37.8256337],
+            [-122.4773742, 37.8110119],
+            [-122.4773638, 37.8109219],
+            [-122.4773418, 37.8109234],
+            [-122.4772341, 37.8099976],
+            [-122.4772609, 37.8099954],
+            [-122.4772495, 37.8099088],
+            [-122.4772362, 37.8099099],
+            [-122.47714326137135, 37.80929921829193],
+            [-122.4771246, 37.8092403],
+            [-122.4770878, 37.8091426]
+          ]
+        ]
+      },
+      "basemapReplacement": null,
+      "osm": {
+        "type": "relation",
+        "id": 21407754,
+        "version": 1,
+        "timestamp": "2026-09-17T20:48:35Z",
+        "url": "https://www.openstreetmap.org/relation/21407754"
+      },
+      "additionalOsm": [
+        {
+          "type": "relation",
+          "id": 21407755,
+          "version": 1,
+          "timestamp": "2026-09-17T20:48:35Z",
+          "url": "https://www.openstreetmap.org/relation/21407755"
+        },
+        {
+          "type": "way",
+          "id": 1560010161,
+          "version": 2,
+          "timestamp": "2026-09-17T21:21:13Z",
+          "url": "https://www.openstreetmap.org/way/1560010161"
+        },
+        {
+          "type": "way",
+          "id": 1560010166,
+          "version": 2,
+          "timestamp": "2026-09-17T21:21:13Z",
+          "url": "https://www.openstreetmap.org/way/1560010166"
+        }
+      ],
+      "rightsStatus": "review-required",
+      "geometryStatus": "draft",
+      "attribution": "Open Landmarks; contains © OpenStreetMap contributors, ODbL-1.0; undefined",
+      "references": [
+        {
+          "title": "File:Approaching the Golden Gate Bridge from the north (178777511).jpg",
+          "author": "Joe Ross from Lansing, Michigan",
+          "license": "CC BY-SA 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Approaching_the_Golden_Gate_Bridge_from_the_north_(178777511).jpg",
+          "sourceSha1": "202f4edc94a3a9554262bcb1d29ee5bf42e69d8d",
+          "use": "visual-reference-only"
+        },
+        {
+          "title": "File:DETAIL VIEW OF APPROACH SPAN DECK ARCH AT SOUTH ABUTMENT - Golden Gate Bridge, Spanning mouth of San Francisco Bay, San Francisco, San Francisco County, CA HAER CAL,38-SANFRA,140-13.tif",
+          "author": "Lowe, Jet\nRelated names:\n\nStrauss, Joseph B\nPacific Bridge Company\nJohn Roebling's Sons Company\nBethlehem Steel Company Incorporated\nJackson, Donald C, transmitter\nYearby, Jean P, transmitter\nJandoli, Liz, transmitter",
+          "license": "Public domain",
+          "licenseUrl": "https://commons.wikimedia.org/wiki/File:DETAIL_VIEW_OF_APPROACH_SPAN_DECK_ARCH_AT_SOUTH_ABUTMENT_-_Golden_Gate_Bridge,_Spanning_mouth_of_San_Francisco_Bay,_San_Francisco,_San_Francisco_County,_CA_HAER_CAL,38-SANFRA,140-13.tif",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:DETAIL_VIEW_OF_APPROACH_SPAN_DECK_ARCH_AT_SOUTH_ABUTMENT_-_Golden_Gate_Bridge,_Spanning_mouth_of_San_Francisco_Bay,_San_Francisco,_San_Francisco_County,_CA_HAER_CAL,38-SANFRA,140-13.tif",
+          "sourceSha1": "7ed9a39bbe4919e4dcf35a7642125c8352a9ccac",
+          "use": "visual-reference-only"
+        },
+        {
+          "title": "File:Aerial view of Golden Gate Bridge from southwest dllu.jpg",
+          "author": "Daniel L. Lu (user:dllu)",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Aerial_view_of_Golden_Gate_Bridge_from_southwest_dllu.jpg",
+          "sourceSha1": "502ddf4a73b0587d344837aa7e5f1a77aca4b29c",
+          "use": "visual-reference-only"
+        },
+        {
+          "title": "File:Aerial view of Golden Gate Bridge from the south dllu.jpg",
+          "author": "Daniel L. Lu (user:dllu)",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Aerial_view_of_Golden_Gate_Bridge_from_the_south_dllu.jpg",
+          "sourceSha1": "63fc41d121b2b0b588e3bf810dd5f3a152d26090",
+          "use": "visual-reference-only"
+        },
+        {
+          "title": "File:Golden Gate Bridge from above.jpg",
+          "author": "Michael Hanselmann (www.MichaelHanselmann.de)",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Golden_Gate_Bridge_from_above.jpg",
+          "sourceSha1": "10d4b1be2bfa0a935647b756709a65f9a84dcd80",
+          "use": "visual-reference-only"
+        }
+      ],
+      "kind": "bridge",
+      "terrainPlacement": {
+        "datum": "sea-level",
+        "elevationM": 0,
+        "contacts": [
+          {
+            "id": "south-land-road",
+            "mode": "transition",
+            "boundsBlenderM": [
+              [121.72885810139314, -1308.2377525851662, 51.8],
+              [237.72885810139314, -1232.2377525851662, 67.8]
+            ],
+            "referenceElevationM": 55.8,
+            "maxDeltaM": 3,
+            "sampleBlenderM": [179.72885810139314, -1295.2377525851662],
+            "axis": "y",
+            "innerM": -1245.2377525851662,
+            "outerM": -1295.2377525851662,
+            "sourceCoordinates": [-122.47652130002452, 37.80808895001132],
+            "sourceGeometry": "OSM paired motorway carriageway source endpoints; actual abutments",
+            "note": "Only terminal50m ramp/abutment/railing mesh may move. Suspended span, main towers, cables and shore anchorages stay rigid."
+          },
+          {
+            "id": "north-land-road",
+            "mode": "transition",
+            "boundsBlenderM": [
+              [-253.8571133774637, 1331.097126863494, 58.33],
+              [-137.8571133774637, 1407.097126863494, 74.33]
+            ],
+            "referenceElevationM": 62.33,
+            "maxDeltaM": 3,
+            "sampleBlenderM": [-195.8571133774637, 1394.097126863494],
+            "axis": "y",
+            "innerM": 1344.097126863494,
+            "outerM": 1394.097126863494,
+            "sourceCoordinates": [-122.48078710000925, 37.832318700017765],
+            "sourceGeometry": "OSM paired motorway carriageway source endpoints; actual abutments",
+            "note": "Only terminal50m ramp/abutment/railing mesh may move. Suspended span, main towers, cables and shore anchorages stay rigid."
+          },
+          {
+            "id": "south-viaduct-foot-1--1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [128.63310164682412, -1238.44118273598, 43.638742832206816],
+              [131.63310164682412, -1235.44118273598, 43.70874283220681]
+            ],
+            "referenceElevationM": 43.67374283220681,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47708240245996, 37.808646048527955],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-1--1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [127.71019282951772, -1228.4838618455528, 41.49272010526269],
+              [130.71019282951772, -1225.4838618455528, 41.562720105262684]
+            ],
+            "referenceElevationM": 41.52772010526269,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47709289767876, 37.8087355100739],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-1-+1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [144.56481507150767, -1236.9645286282898, 44.866199096446216],
+              [147.56481507150767, -1233.9645286282898, 44.93619909644621]
+            ],
+            "referenceElevationM": 44.90119909644621,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47690122874572, 37.8086593155331],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-1-+1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [143.64190625420127, -1227.0072077378627, 42.6220274394354],
+              [146.64190625420127, -1224.0072077378627, 42.69202743943539]
+            ],
+            "referenceElevationM": 42.657027439435396,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47691172396452, 37.80874877706297],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-2--1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [104.88162459203278, -1180.211576802384, 25.815318979341544],
+              [107.88162459203278, -1177.211576802384, 25.885318979341545]
+            ],
+            "referenceElevationM": 25.850318979341544,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47735250167665, 37.80916921086509],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-2--1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [103.95871577472639, -1170.2542559119568, 23.34023697084807],
+              [106.95871577472639, -1167.2542559119568, 23.41023697084807]
+            ],
+            "referenceElevationM": 23.37523697084807,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47736299689545, 37.8092586717772],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-2-+1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [120.8133380167163, -1178.7349226946938, 28.979180655665438],
+              [123.8133380167163, -1175.7349226946938, 29.049180655665438]
+            ],
+            "referenceElevationM": 29.014180655665438,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47717132796241, 37.80918247777623],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-2-+1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [119.89042919940991, -1168.7776018042666, 26.73850712258967],
+              [122.89042919940991, -1165.7776018042666, 26.80850712258967]
+            ],
+            "referenceElevationM": 26.77350712258967,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47718182318121, 37.809271938672275],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-3--1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [94.06684877486659, -1118.2698112642408, 14.060936093676936],
+              [97.06684877486659, -1115.2698112642408, 14.130936093676937]
+            ],
+            "referenceElevationM": 14.095936093676936,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47747548613232, 37.809725720932356],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-3--1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [93.14393995756019, -1108.3124903738137, 13.00603530090578],
+              [96.14393995756019, -1105.3124903738137, 13.07603530090578]
+            ],
+            "referenceElevationM": 13.04103530090578,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47748598135112, 37.809815181170244],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-3-+1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [109.99856219955011, -1116.7931571565507, 18.711620976286937],
+              [112.99856219955011, -1113.7931571565507, 18.781620976286938]
+            ],
+            "referenceElevationM": 18.746620976286938,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47729431241808, 37.809738987743515],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "south-viaduct-foot-3-+1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [109.07565338224371, -1106.8358362661236, 17.55500276906674],
+              [112.07565338224371, -1103.8358362661236, 17.62500276906674]
+            ],
+            "referenceElevationM": 17.59000276906674,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47730480763688, 37.80982844796533],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-1--1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-110.74471263344455, 1089.884289032091, 31.60750431617561],
+              [-107.74471263344455, 1092.884289032091, 31.67750431617561]
+            ],
+            "referenceElevationM": 31.64250431617561,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47980458095782, 37.82956193731448],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-1--1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-112.85448218980696, 1112.6467245876077, 25.660825466822725],
+              [-109.85448218980696, 1115.6467245876077, 25.730825466822726]
+            ],
+            "referenceElevationM": 25.695825466822726,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.479828573028, 37.8297663883081],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-1-+1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-95.56975559643348, 1091.2908020696657, 26.168992209983458],
+              [-92.56975559643348, 1094.2908020696657, 26.238992209983458]
+            ],
+            "referenceElevationM": 26.203992209983458,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47963201299501, 37.829574570556694],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-1-+1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-97.67952515279589, 1114.0532376251824, 20.768275144003276],
+              [-94.67952515279589, 1117.0532376251824, 20.838275144003276]
+            ],
+            "referenceElevationM": 20.803275144003276,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.4796560050652, 37.829779021515314],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-2--1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-116.40598021800292, 1152.6260582092218, 17.979528740615613],
+              [-113.40598021800292, 1155.6260582092218, 18.049528740615614]
+            ],
+            "referenceElevationM": 18.014528740615614,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47986896027774, 37.83012547919929],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-2--1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-118.51574977436533, 1175.3884937647385, 16.615761945869412],
+              [-115.51574977436533, 1178.3884937647385, 16.685761945869412]
+            ],
+            "referenceElevationM": 16.650761945869412,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47989295234794, 37.830329928631414],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-2-+1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-101.23102318099185, 1154.0325712467966, 13.878290610413531],
+              [-98.23102318099185, 1157.0325712467966, 13.948290610413531]
+            ],
+            "referenceElevationM": 13.913290610413531,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47969639231493, 37.83013811234501],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-2-+1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-103.34079273735426, 1176.7950068023133, 12.817706103055297],
+              [-100.34079273735426, 1179.7950068023133, 12.887706103055297]
+            ],
+            "referenceElevationM": 12.852706103055297,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47972038438513, 37.830342561742135],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-3--1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-123.53595047123828, 1215.199454720241, 16.564919808549188],
+              [-120.53595047123828, 1218.199454720241, 16.63491980854919]
+            ],
+            "referenceElevationM": 16.59991980854919,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47995004152486, 37.83068750448663],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-3--1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-125.64572002760069, 1237.9618902757577, 17.166350048191564],
+              [-122.64572002760069, 1240.9618902757577, 17.236350048191564]
+            ],
+            "referenceElevationM": 17.201350048191564,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47997403359506, 37.83089195236143],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-3-+1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-108.36099343422721, 1216.6059677578157, 13.783414377418909],
+              [-105.36099343422721, 1219.6059677578157, 13.85341437741891]
+            ],
+            "referenceElevationM": 13.81841437741891,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47977747356205, 37.830700137536134],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-3-+1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-110.47076299058962, 1239.3684033133325, 14.800186619176051],
+              [-107.47076299058962, 1242.3684033133325, 14.870186619176051]
+            ],
+            "referenceElevationM": 14.835186619176051,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47980146563224, 37.83090458537594],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-4--1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-139.9951333303827, 1275.9074719402122, 20.97037584362571],
+              [-136.9951333303827, 1278.9074719402122, 21.04037584362571]
+            ],
+            "referenceElevationM": 21.00537584362571,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.4801372135642, 37.83123277111279],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-4--1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-142.10490288674515, 1298.669907495729, 24.144962638587863],
+              [-139.10490288674515, 1301.669907495729, 24.214962638587863]
+            ],
+            "referenceElevationM": 24.179962638587863,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.48016120563439, 37.8314372174767],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-4-+1--1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-124.82017629337167, 1277.313984977787, 19.7857498816465],
+              [-121.82017629337167, 1280.313984977787, 19.8557498816465]
+            ],
+            "referenceElevationM": 19.8207498816465,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.4799646456014, 37.83124540406892],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          },
+          {
+            "id": "north-viaduct-foot-4-+1-+1",
+            "mode": "skirt",
+            "boundsBlenderM": [
+              [-126.92994584973408, 1300.0764205333037, 23.67519314065682],
+              [-123.92994584973408, 1303.0764205333037, 23.74519314065682]
+            ],
+            "referenceElevationM": 23.71019314065682,
+            "maxDeltaM": 3,
+            "sourceCoordinates": [-122.47998863767158, 37.83144985039784],
+            "note": "Only four lowest vertices of this individual2.2m concrete footing may extend downward toDEM−0.25m. Base is initially cached host DEM+1m, never an official surveyed elevation. Steel support leg and deck vertices lie above this narrow band and remain rigid."
+          }
+        ],
+        "evidence": {
+          "officialDatum": "NOAA9414290 MSL−MLLW0.951m",
+          "footingEvidence": "reports/golden-gate-bridge/host/approach-foot-dem.json",
+          "footingSourceUrl": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/654/1582.png",
+          "method": "Bilinear Terrarium interpolation at four authored support feet; supports are photo-guided inference, northern50ft×75ft tower footprint follows District Phase1 source; DEM approximately38m pixels, not surveyed footing elevations",
+          "coordinateSystem": "Blender X east,Y north,Z up; datum≈MSL"
+        }
+      },
+      "bridgeReplacement": {
+        "sourceLayer": "roads",
+        "names": [
+          "Golden Gate Bridge",
+          "Golden Gate Bridge East Sidewalk",
+          "Golden Gate Bridge West Sidewalk"
+        ],
+        "includeUntaggedNamedSegments": true,
+        "coverage": 0.95,
+        "buildingFootprint": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [-122.47947782278061, 37.82550373484801],
+                [-122.4794751405716, 37.82546348088739],
+                [-122.47945636510849, 37.82542746416719],
+                [-122.47943222522736, 37.825395684693575],
+                [-122.47901380062103, 37.82542746416719],
+                [-122.47899770736694, 37.8254613622573],
+                [-122.4789896607399, 37.825499497590044],
+                [-122.47900038957596, 37.8255567005522],
+                [-122.47903525829315, 37.825607547592455],
+                [-122.47945368289948, 37.825577886823226],
+                [-122.47946977615356, 37.82554398878666],
+                [-122.47947782278061, 37.82550373484801]
+              ]
+            ],
+            [
+              [
+                [-122.47813671827316, 37.81401563479018],
+                [-122.47813403606415, 37.81398808832202],
+                [-122.4781330478822, 37.81398808832202],
+                [-122.47813135385513, 37.81397537456401],
+                [-122.4781259894371, 37.81396054184357],
+                [-122.47809112071991, 37.81390756781768],
+                [-122.47767001390457, 37.813939352237796],
+                [-122.47765392065048, 37.813973255604125],
+                [-122.47765183448759, 37.81398808832202],
+                [-122.47765123844147, 37.81398808832202],
+                [-122.47764855623245, 37.81401139687266],
+                [-122.47765928506851, 37.81406860873851],
+                [-122.47769147157669, 37.81411946369316],
+                [-122.47811257839203, 37.814089798307194],
+                [-122.4781259894371, 37.81405589499437],
+                [-122.47813671827316, 37.81401563479018]
+              ]
+            ]
+          ]
+        },
+        "buildingCoverage": 0.8,
+        "buildingFootprintEvidence": "Two separate tower base outlines from Protomaps buildings, inspected 2026-10-08; matches the obsolete OSM tower-building interpretation alongside the modeled tower locations. This footprint excludes the suspended road corridor and Fort Point."
+      },
+      "aliases": [],
+      "authors": ["Open Landmarks contributors"],
+      "artisticLicense": "CC-BY-4.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "CC BY applies to original artistic contributions only; ODbL applies to OSM-derived spatial data. Reference photographs retain their own licenses. Dimension evidence from undefined retains undefined.",
+      "assistance": "AI-assisted architectural interpretation and procedural recipe authoring; deterministic Python/Blender export. No photographic textures.",
+      "review": {
+        "status": "pending",
+        "reviewer": null,
+        "checks": {}
+      },
+      "modelingNotes": [
+        "Source plan: actual OSM man_made=bridge relation21407754, Marin approach21407755, San Francisco approach1560010161 and Fort Point arch1560010166; original tags and geometry retained. Tower centers average the mapped bridge-tower leg outlines. The obsolete height.01 building relation19109535 is not the model source.",
+        "Official District design statistics https://www.goldengate.org/bridge/history-research/statistics-data/design-construction-stats/ give4200ft tower span,1125ft side spans,90ft overall width,62ft curb roadway,10ft sidewalks,746ft tower/cable saddle,36 3/8in main cable diameter and250 pairs of2 11/16in vertical suspender ropes at50ft spacing. Model tower spacing1280.576m follows OSM,0.416m beyond official nominal1280.16m.",
+        "Official engineering elevation, District2025-06-26 seismic presentation page4 https://www.goldengate.org/assets/1/25/2025-0626-bocomm-no8-seismicpresentation.pdf: historic MLLW crown elevations218.24ft at side pylons,246.25ft at towers,266.87ft at midpoint; pier top44ft; cable saddle746ft;3% approach tangent. These are separate from navigation clearance220ft above historic MHHW.",
+        "Z0 is approximate mean sea level. NOAA9414290 accepted tidal epoch1983-2001 gives MSL−MLLW0.951m; historic engineering elevations are converted by feet×0.3048−0.951. Tidal epochs/datums differ; this is not a surveyed NAVD88 reconciliation. Host DEM must not translate the main span to seabed or ground.",
+        "International Orange source evidence is the official CMYK0/69/100/6, approximated as#f04a00 and matching actual OSM colour. https://www.goldengate.org/bridge/history-research/bridge-features/color-art-deco-styling/ . The named golden-gate-orange finish is an authored display calibration#d45f1f,roughness.9,metalness0, selected after user review to soften excess red; it is not a measured spectral paint color. Art Deco ribs and the four ascending open portals are observed in individually inspected Commons photographs.",
+        "The main cable parabola has an authored midpoint3.3m above the official road crown; side cable and anchorage profiles, tower taper/rib section, truss depth7m and repeated members are photograph-guided inference. The small source-observed summit beacon2.2m above the official cable-saddle datum is inferred, giving total model height228.63m. The low LOD samples every third suspender station with single ropes, simpler ribs and larger truss panels; both retain real air beneath and between structural members.",
+        "Real curved OSM carriageway approaches continue to actual land abutments. Southern terminal crown55.8m extends the official3% tangent; northern terminal62.33m is inferred nearly level beyondN2 from the official elevation and inspected aerials. These inferred terminal heights match host DEM within1m and have separate limited50m transition contacts; span/towers/cables stay rigid.",
+        "Four Marin approach support towers use official50×75ft footprints from https://www.goldengate.org/district/district-projects/seismic-retrofit/phase-1/ . Their longitudinal stations and the three southern steel bents are photo-guided, not surveyed. Individual footing bottoms use cached host Terrarium DEM estimates+1m and narrow downward skirt contacts; coarse38m pixels are not a footing survey.",
+        "Four parallel real open Fort Point arch ribs and lattice spandrels follow the inspected public-domain HAER photograph. No masonry curtain or artificial terrain block fills the arch or suspended span. Fine wire safety-net mesh, rivets and vehicles are omitted at these budgets."
+      ],
+      "source": {
+        "url": "/objects/fb365cac3db7b6c4296659c4b5a8a0150cec17c45fd7a553e050c4db7f9be11f/source.blend.gz",
+        "bytes": 997897,
+        "sha256": "fb365cac3db7b6c4296659c4b5a8a0150cec17c45fd7a553e050c4db7f9be11f"
+      },
+      "spatialSource": {
+        "url": "/objects/b9d71e38498452817cab5ece9cc3d99272aa98d21ce8f9843fb1e3ff92c25b94/spatial-source.json",
+        "bytes": 44580,
+        "sha256": "b9d71e38498452817cab5ece9cc3d99272aa98d21ce8f9843fb1e3ff92c25b94"
+      },
+      "preview": {
+        "url": "/objects/bfad1c7bba6ad634ba9ff66fecc60fd6e9584ab0785c6943a96ab257949a208a/preview.webp",
+        "bytes": 70220,
+        "sha256": "bfad1c7bba6ad634ba9ff66fecc60fd6e9584ab0785c6943a96ab257949a208a"
+      },
+      "previewDirection": [1.7, 0.3, 0.8],
+      "revision": "12551dd67e67318a49e8b6877cf9eae089c51cd186542de957e0449abfe4927f",
+      "publicationRevision": "28637cfcb1bd781c3fd5c373654ead0329b0ff01913cef676803732097bebb09",
+      "bounds": [-122.4809672, 37.807988, -122.4763972, 37.8323775],
+      "approved": false,
+      "materialLibrary": {
+        "schemaVersion": 1,
+        "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+        "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+      },
+      "metadata": "/assets/golden-gate-bridge/28637cfcb1bd781c3fd5c373654ead0329b0ff01913cef676803732097bebb09/asset.json",
+      "validation": "/assets/golden-gate-bridge/28637cfcb1bd781c3fd5c373654ead0329b0ff01913cef676803732097bebb09/validation.json"
+    },
+    {
+      "id": "painted-ladies",
+      "name": "Painted Ladies",
+      "anchor": [-122.43274514456145, 37.77627233505377],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 15,
+      "detailZoom": 17,
+      "lods": {
+        "low": {
+          "url": "/models/painted-ladies/d0f001bd0157e750d2360f424e0eeb8ab61818ff5a2a06cd0d91721b2bb964a2/low.glb",
+          "bytes": 189232,
+          "sha256": "d0f001bd0157e750d2360f424e0eeb8ab61818ff5a2a06cd0d91721b2bb964a2",
+          "triangles": 3345,
+          "gzip": {
+            "url": "/models/painted-ladies/d0f001bd0157e750d2360f424e0eeb8ab61818ff5a2a06cd0d91721b2bb964a2/low.glb.gz",
+            "bytes": 42999,
+            "sha256": "cf8af45d180e67fc966a45ca0e9a7bde4d42edb669c7c1af1429fcfdd11b8f6d",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/painted-ladies/acd72eeb74a1286365abd35ae6d1657965fa3a369238bf461695dac55467a1b2/detail.glb",
+          "bytes": 682716,
+          "sha256": "acd72eeb74a1286365abd35ae6d1657965fa3a369238bf461695dac55467a1b2",
+          "triangles": 12367,
+          "gzip": {
+            "url": "/models/painted-ladies/acd72eeb74a1286365abd35ae6d1657965fa3a369238bf461695dac55467a1b2/detail.glb.gz",
+            "bytes": 134646,
+            "sha256": "cd873746fbaec7a0fcab49fa34e846fec0e54fc390c96a6e7da0dab80fd0be89",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 12367,
+      "boundsBlenderM": [
+        [-12.300354957580566, -26.96785545349121, 0],
+        [11.858379364013672, 27.29322624206543, 13]
+      ],
+      "entranceLights": [],
+      "replacementFootprint": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-122.4326121, 37.7760483],
+              [-122.432722, 37.7760346],
+              [-122.4327229, 37.7760391],
+              [-122.4327911, 37.7760306],
+              [-122.4328024, 37.7760873],
+              [-122.4326243, 37.7761095],
+              [-122.4326121, 37.7760483]
+            ]
+          ],
+          [
+            [
+              [-122.4327347, 37.7760979],
+              [-122.4327354, 37.7761011],
+              [-122.4328052, 37.7760924],
+              [-122.4328169, 37.7761508],
+              [-122.4326365, 37.7761733],
+              [-122.4326242, 37.7761117],
+              [-122.4327347, 37.7760979]
+            ]
+          ],
+          [
+            [
+              [-122.4326399, 37.7761798],
+              [-122.4326392, 37.7761764],
+              [-122.432738, 37.776164],
+              [-122.4327387, 37.7761675],
+              [-122.432821, 37.7761572],
+              [-122.4328326, 37.7762153],
+              [-122.4327618, 37.776224],
+              [-122.4327629, 37.7762298],
+              [-122.4328305, 37.7762212],
+              [-122.4328418, 37.7762775],
+              [-122.432773, 37.7762861],
+              [-122.4327746, 37.776294],
+              [-122.4328435, 37.7762853],
+              [-122.4328548, 37.7763412],
+              [-122.4328673, 37.7764028],
+              [-122.4326865, 37.7764256],
+              [-122.4326741, 37.776364],
+              [-122.4327497, 37.7763544],
+              [-122.4327491, 37.7763513],
+              [-122.4326763, 37.7763605],
+              [-122.432664, 37.7762999],
+              [-122.4326515, 37.7762379],
+              [-122.4326399, 37.7761798]
+            ]
+          ],
+          [
+            [
+              [-122.4328673, 37.7764293],
+              [-122.432871, 37.7764457],
+              [-122.4328603, 37.7764564],
+              [-122.4328627, 37.7764683],
+              [-122.4328794, 37.7764662],
+              [-122.4328832, 37.7764845],
+              [-122.4328665, 37.7764867],
+              [-122.4328679, 37.7764937],
+              [-122.4326837, 37.776517],
+              [-122.432681, 37.7765039],
+              [-122.4326711, 37.7765052],
+              [-122.4326659, 37.7764795],
+              [-122.4326758, 37.7764783],
+              [-122.4326731, 37.7764651],
+              [-122.4326905, 37.7764628],
+              [-122.4326846, 37.776434],
+              [-122.4327944, 37.7764201],
+              [-122.4327959, 37.7764275],
+              [-122.4328508, 37.7764206],
+              [-122.4328673, 37.7764293]
+            ]
+          ]
+        ]
+      },
+      "basemapReplacement": null,
+      "osm": {
+        "type": "way",
+        "id": 261412896,
+        "version": 7,
+        "timestamp": "2023-03-17T17:37:19Z",
+        "url": "https://www.openstreetmap.org/way/261412896"
+      },
+      "additionalOsm": [
+        {
+          "type": "way",
+          "id": 261412895,
+          "version": 7,
+          "timestamp": "2023-03-17T17:37:19Z",
+          "url": "https://www.openstreetmap.org/way/261412895"
+        },
+        {
+          "type": "way",
+          "id": 261412900,
+          "version": 6,
+          "timestamp": "2023-03-17T17:37:19Z",
+          "url": "https://www.openstreetmap.org/way/261412900"
+        },
+        {
+          "type": "way",
+          "id": 261412894,
+          "version": 7,
+          "timestamp": "2023-03-17T17:37:19Z",
+          "url": "https://www.openstreetmap.org/way/261412894"
+        },
+        {
+          "type": "way",
+          "id": 261412879,
+          "version": 8,
+          "timestamp": "2023-03-17T17:37:19Z",
+          "url": "https://www.openstreetmap.org/way/261412879"
+        },
+        {
+          "type": "way",
+          "id": 261412899,
+          "version": 8,
+          "timestamp": "2023-03-17T17:37:19Z",
+          "url": "https://www.openstreetmap.org/way/261412899"
+        },
+        {
+          "type": "way",
+          "id": 261412887,
+          "version": 7,
+          "timestamp": "2023-03-17T17:39:45Z",
+          "url": "https://www.openstreetmap.org/way/261412887"
+        },
+        {
+          "type": "node",
+          "id": 822484002,
+          "version": 6,
+          "timestamp": "2024-03-27T14:55:03Z",
+          "url": "https://www.openstreetmap.org/node/822484002"
+        }
+      ],
+      "rightsStatus": "review-required",
+      "geometryStatus": "draft",
+      "attribution": "Open Landmarks; contains © OpenStreetMap contributors, ODbL-1.0",
+      "references": [
+        {
+          "title": "File:Painted Ladies San Francisco January 2013 panorama 2.jpg",
+          "author": "King of Hearts",
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Painted_Ladies_San_Francisco_January_2013_panorama_2.jpg",
+          "sourceSha1": "f1bab1398fb45cb851148f7ce89e76432c98d45e",
+          "use": "visual-reference-only",
+          "view": "exterior"
+        },
+        {
+          "title": "File:Alamo Square, San Francisco, California, USA - 52461549517.jpg",
+          "author": "dconvertini",
+          "license": "CC BY-SA 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Alamo_Square,_San_Francisco,_California,_USA_-_52461549517.jpg",
+          "sourceSha1": "c154c628e8b3a4dc16d76bf26f66ff3c5e73d9ad",
+          "use": "visual-reference-only",
+          "view": "exterior"
+        }
+      ],
+      "kind": "building-ensemble",
+      "terrainComponents": {
+        "attribute": "_TERRAIN_COMPONENT",
+        "maxOffsetM": 20,
+        "maxFoundationDepthM": 6,
+        "components": [
+          {
+            "id": "710",
+            "value": 1,
+            "osm": "way/261412896",
+            "sampleBlenderM": [3.464245724683694, -22.588650274109895]
+          },
+          {
+            "id": "712",
+            "value": 2,
+            "osm": "way/261412895",
+            "sampleBlenderM": [2.2569507811765197, -15.577343381839574]
+          },
+          {
+            "id": "714",
+            "value": 3,
+            "osm": "way/261412900",
+            "sampleBlenderM": [0.9150804647511546, -8.392728654127902]
+          },
+          {
+            "id": "716",
+            "value": 4,
+            "osm": "way/261412894",
+            "sampleBlenderM": [0.0258532899824699, -1.484476554659824]
+          },
+          {
+            "id": "718",
+            "value": 5,
+            "osm": "way/261412879",
+            "sampleBlenderM": [-1.1242258550232813, 5.458333369484562]
+          },
+          {
+            "id": "720",
+            "value": 6,
+            "osm": "way/261412899",
+            "sampleBlenderM": [-2.2490337422168394, 12.325996306623864]
+          },
+          {
+            "id": "722",
+            "value": 7,
+            "osm": "way/261412887",
+            "sampleBlenderM": [-2.3246194638836153, 21.59332500356415]
+          }
+        ]
+      },
+      "aliases": [],
+      "authors": ["Open Landmarks contributors"],
+      "artisticLicense": "CC-BY-4.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "CC BY applies to original artistic contributions only; ODbL applies to OSM-derived spatial data. Reference photographs retain their own licenses.",
+      "assistance": "AI-assisted architectural interpretation and procedural recipe authoring; deterministic Python/Blender export. No photographic textures.",
+      "review": {
+        "status": "pending",
+        "reviewer": null,
+        "checks": {}
+      },
+      "modelingNotes": [
+        "Mapped: the seven independent OSM outlines at710,712,714,716,718,720,722 Steiner Street form an actual MultiPolygon. Each original house ID/version/date/address/height/roof tag is retained without injected identity tags. Houses710–720 have12m height/3m gabled roofs;722 has13m height/4m hipped roof. OSM attraction node822484002 links the broad Painted ladies WikidataQ1418042; the bundle explicitly scopes the seven-house ensemble rather than claiming the house ways carry that QID.",
+        "Resourced: SF Planning Alamo Square historic walking tour expressly identifies710–722 Steiner as Postcard Row. Individually inspected Commons January2013 panorama(CC BY-SA3.0) and Alamo Square52461549517(CC BY-SA2.0) show six narrow front gables, projecting two-floor angled bays, entry stairs, decorative brackets, paired windows and a larger722corner house. Colors are a restrained cream/sage/blue interpretation using opaque library painted finishes rather than photo textures.",
+        "Inferred: bay depth.9m, floor/stair heights, gable bargeboards, porch colonnettes, roof ridge placement and original abstract spindle/bracket geometry follow those photos. The six narrow-house bays and stairs sit within source footprints by setting back the main front wall;722 instead keeps its two original mapped bays. Canonical house bases are0m. Each complete house carries its own terrain component so the SDK can translate its walls, roof, windows and stairs together to the sampled ground level while keeping them upright. No guessed street slope is baked into source geometry. Both LODs retain seven distinct plans/heights, gables, inset entry stairs, bay projections and larger corner house."
+      ],
+      "source": {
+        "url": "/objects/82e9135677b5fa6e9614baae859b0a4584e338e03c366ff0505ef5106885e239/source.blend.gz",
+        "bytes": 269382,
+        "sha256": "82e9135677b5fa6e9614baae859b0a4584e338e03c366ff0505ef5106885e239"
+      },
+      "spatialSource": {
+        "url": "/objects/8bef0b87cc24655950f5dbf489f4e7acb12b1b5c9562e2b15ec404390b085eef/spatial-source.json",
+        "bytes": 13801,
+        "sha256": "8bef0b87cc24655950f5dbf489f4e7acb12b1b5c9562e2b15ec404390b085eef"
+      },
+      "preview": {
+        "url": "/objects/efcc2eb0ac94e76f76b8263a2151284e36d101df0e17f876713af128f000e2fc/preview.webp",
+        "bytes": 20086,
+        "sha256": "efcc2eb0ac94e76f76b8263a2151284e36d101df0e17f876713af128f000e2fc"
+      },
+      "previewDirection": [-1, 0.5, -0.05],
+      "revision": "9bb86b91b599b6a4292fb7141aa5e3ec712e528e5872e156b893c7a38f7017a2",
+      "publicationRevision": "166b30bd1d2de8ee06dfbcbda107c2a8347bcd92aced229d9f138ada592f7a57",
+      "bounds": [-122.4328832, 37.7760306, -122.4326121, 37.776517],
+      "approved": false,
+      "materialLibrary": {
+        "schemaVersion": 1,
+        "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+        "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+      },
+      "metadata": "/assets/painted-ladies/166b30bd1d2de8ee06dfbcbda107c2a8347bcd92aced229d9f138ada592f7a57/asset.json",
+      "validation": "/assets/painted-ladies/166b30bd1d2de8ee06dfbcbda107c2a8347bcd92aced229d9f138ada592f7a57/validation.json"
+    },
+    {
+      "id": "conservatory-of-flowers",
+      "name": "Conservatory of Flowers",
+      "anchor": [-122.46023301037332, 37.77263054951847],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 15,
+      "detailZoom": 17,
+      "lods": {
+        "low": {
+          "url": "/models/conservatory-of-flowers/ccc38b0641c0270e24d2473bbcfb83ec7480c834b55fbf257db9a23b5da85c61/low.glb",
+          "bytes": 190236,
+          "sha256": "ccc38b0641c0270e24d2473bbcfb83ec7480c834b55fbf257db9a23b5da85c61",
+          "triangles": 5113,
+          "gzip": {
+            "url": "/models/conservatory-of-flowers/ccc38b0641c0270e24d2473bbcfb83ec7480c834b55fbf257db9a23b5da85c61/low.glb.gz",
+            "bytes": 68031,
+            "sha256": "547fd67d7eb0f2a2ede9a4048540971f373f26b6875130658c1dfe32bda0afa8",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/conservatory-of-flowers/3447db5b5a4bcfb8fe9d321393298f924be8b457a6815597b62847319f54574c/detail.glb",
+          "bytes": 832576,
+          "sha256": "3447db5b5a4bcfb8fe9d321393298f924be8b457a6815597b62847319f54574c",
+          "triangles": 22275,
+          "gzip": {
+            "url": "/models/conservatory-of-flowers/3447db5b5a4bcfb8fe9d321393298f924be8b457a6815597b62847319f54574c/detail.glb.gz",
+            "bytes": 270056,
+            "sha256": "a44f686daad6931b317283d0694d0224338a462fd02bcc20da74d249376efd5c",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 22275,
+      "boundsBlenderM": [
+        [-37.06188201904297, -21.242816925048828, 0],
+        [38.571876525878906, 17.664478302001953, 20.72640037536621]
+      ],
+      "entranceLights": [],
+      "replacementFootprint": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.4602519, 37.7724688],
+            [-122.4602279, 37.7724697],
+            [-122.4602265, 37.7724574],
+            [-122.4602084, 37.7724587],
+            [-122.460188, 37.7724599],
+            [-122.4601892, 37.7724742],
+            [-122.460163, 37.772476],
+            [-122.4601716, 37.7725389],
+            [-122.4601525, 37.7725406],
+            [-122.4601217, 37.7725697],
+            [-122.4601222, 37.7725738],
+            [-122.4599279, 37.7725898],
+            [-122.4599186, 37.7725195],
+            [-122.4598998, 37.7725065],
+            [-122.4598724, 37.7725081],
+            [-122.4598716, 37.7724997],
+            [-122.45984, 37.7725024],
+            [-122.4598366, 37.7725027],
+            [-122.4598374, 37.7725115],
+            [-122.4598112, 37.772513],
+            [-122.4597955, 37.7725296],
+            [-122.4598093, 37.772651],
+            [-122.4598133, 37.7726763],
+            [-122.4598049, 37.7726897],
+            [-122.4598325, 37.7727073],
+            [-122.4598439, 37.7726969],
+            [-122.4601332, 37.7726721],
+            [-122.4601702, 37.772696],
+            [-122.4598436, 37.7727225],
+            [-122.4598478, 37.7727511],
+            [-122.4599097, 37.7727465],
+            [-122.4599106, 37.7727564],
+            [-122.4600213, 37.772748],
+            [-122.4600286, 37.7727897],
+            [-122.460205, 37.7727736],
+            [-122.4602052, 37.7727788],
+            [-122.4602905, 37.7727717],
+            [-122.4602889, 37.7727622],
+            [-122.4605351, 37.7727407],
+            [-122.4605335, 37.7727175],
+            [-122.4606051, 37.7727116],
+            [-122.4605979, 37.7726592],
+            [-122.4603065, 37.7726834],
+            [-122.4603349, 37.7726545],
+            [-122.4606534, 37.7726244],
+            [-122.4606307, 37.7724617],
+            [-122.4606083, 37.7724467],
+            [-122.4605807, 37.7724477],
+            [-122.4605792, 37.7724394],
+            [-122.4605436, 37.7724417],
+            [-122.4605445, 37.7724512],
+            [-122.4605188, 37.7724536],
+            [-122.460501, 37.7724734],
+            [-122.4605108, 37.7725401],
+            [-122.4603212, 37.7725522],
+            [-122.460283, 37.7725284],
+            [-122.4602599, 37.7725306],
+            [-122.4602519, 37.7724688]
+          ]
+        ]
+      },
+      "basemapReplacement": null,
+      "osm": {
+        "type": "way",
+        "id": 30675038,
+        "version": 24,
+        "timestamp": "2025-12-03T03:37:13Z",
+        "url": "https://www.openstreetmap.org/way/30675038"
+      },
+      "additionalOsm": [],
+      "rightsStatus": "review-required",
+      "geometryStatus": "draft",
+      "attribution": "Open Landmarks; contains © OpenStreetMap contributors, ODbL-1.0; undefined",
+      "references": [
+        {
+          "title": "File:SF Conservatory of Flowers 2014-05.jpg",
+          "author": "WolfmanSF",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:SF_Conservatory_of_Flowers_2014-05.jpg",
+          "sourceSha1": "d179b06a9928ed8a4e34a14daca6393d0ea59780",
+          "use": "visual-reference-only",
+          "view": "Current2014 oblique full south elevation: rotunda, tall finial, curved connecting roofs and both end pavilions"
+        },
+        {
+          "title": "File:Front of Conservatory of Flowers, San Francisco.jpg",
+          "author": "Kefr4000",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Front_of_Conservatory_of_Flowers,_San_Francisco.jpg",
+          "sourceSha1": "d54db25d137569f8ce029a1d7009432a21468236",
+          "use": "visual-reference-only",
+          "view": "Current full south front: whitewashed glass, octagonal clerestory and dome, long central finial, paired side cupolas and projecting vestibule"
+        },
+        {
+          "title": "File:San Francisco Conservatory of Flowers-13.jpg",
+          "author": "Almonroth",
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:San_Francisco_Conservatory_of_Flowers-13.jpg",
+          "sourceSha1": "380ca36f7ada0b78129f01e499100bac30cdd98d",
+          "use": "visual-reference-only",
+          "view": "Current southwest oblique: central stepped drum and dome, western curved wing, end pavilion glazing grid and door gables"
+        }
+      ],
+      "kind": "building",
+      "aliases": [],
+      "authors": ["Open Landmarks contributors"],
+      "artisticLicense": "CC-BY-4.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "CC BY applies to original artistic contributions only; ODbL applies to OSM-derived spatial data. Reference photographs retain their own licenses. Dimension evidence from undefined retains undefined.",
+      "assistance": "AI-assisted architectural interpretation and procedural recipe authoring; deterministic Python/Blender export. No photographic textures.",
+      "review": {
+        "status": "pending",
+        "reviewer": null,
+        "checks": {}
+      },
+      "modelingNotes": [
+        "Actual OSM way30675038 and its E-shaped main building plus mapped rear service annexes are retained. The original OSM height15m is preserved as contradictory evidence. Authored overall crown is approximately20.7m: dome55ft plus separate13ft finial from the mirrored operator-authored Lowland Tropics Gallery brochure;55ft=16.764m and13ft=3.9624m are unit conversions, not millimetre survey accuracy. Relative wall/wing/drum heights remain current-photo proportional inferences, scaled to the dome crown. Rear service heights are uncertain.",
+        "National Park Service1971 nomination71000184, downloaded from https://npgallery.nps.gov/NRHP/GetAsset/NRHP/71000184_text and reviewed atp2, describes an elongated octagonal dome, flanking L-shaped wings, brick foundation, wood arches and shingled rigid glass with side-room finials. Its250ft width agrees with the76m mapped span. Current selected Commons2014/front/angled photographs were individually inspected; the1879 original lower dome and postcard were not used as current geometry.",
+        "The operator history at https://gggp.org/about/ records the1883 fire and subsequent dome raised6ft. The nearly60ft figure is unsourced secondary description and its finial scope is unclear; the historic LoC guide gives58ft dome, also without specifying finial. The brochure mirror distinctly separates55ft dome and13ft finial; Chronicle2009 first-hand architecture reporting gives68ft dome, consistent with that combined crown. The unavailable original brochure URL/date/page and mirror provenance uncertainty are explicit in dimensions.json; no source is represented as a present surveyed measurement.",
+        "The photographs show opaque whitewashed glazing and white-painted wood, represented with the shared warm white trim surface and slightly contrasting stone frame. Restoration architect https://www.argcreate.com/portfolio/conservatory-of-flowers/ confirms annual spring whitewashing. Supported blue-grey window panels appear only on the actual vertical door, dormer and clerestory faces. Curved roof glazing uses closed white solids with a raised wood-rib grid, not a flat conventional roof or transparent sorting-dependent glass.",
+        "Both LODs independently preserve the mapped E-plan, central octagonal stepped drum and dome, two curved side rooms with cupolas, curved connecting wings and projecting front vestibule. The low LOD reduces roof sections, fine frame subdivisions, ridge ornaments and panel rows while keeping the principal structural rhythm. Landscaped terraces, palms, flower beds, interior plants and current exhibition fittings are outside the building footprint and omitted."
+      ],
+      "source": {
+        "url": "/objects/2ee9a7920112aa4e75f12be589f2a27b4c0ee10fd82885ef59ef95becddd5d51/source.blend.gz",
+        "bytes": 587671,
+        "sha256": "2ee9a7920112aa4e75f12be589f2a27b4c0ee10fd82885ef59ef95becddd5d51"
+      },
+      "spatialSource": {
+        "url": "/objects/e37c2c7a439fe9fc17b1fc80059b2080145ef06c353421dea0490857e13ccf07/spatial-source.json",
+        "bytes": 8698,
+        "sha256": "e37c2c7a439fe9fc17b1fc80059b2080145ef06c353421dea0490857e13ccf07"
+      },
+      "preview": {
+        "url": "/objects/5c6931b92415739ba531894873e194ab5c3d9a52f4787daacf4e1871f8016b5e/preview.webp",
+        "bytes": 12582,
+        "sha256": "5c6931b92415739ba531894873e194ab5c3d9a52f4787daacf4e1871f8016b5e"
+      },
+      "previewDirection": [1, 0.7, 2],
+      "revision": "ee230840abfc68ffe342c3540b27578b588ee9dd2c8baed19d415b6e57c51b99",
+      "publicationRevision": "f19bd0a8385115ef7a6578b9b7fef97395805662e6cb5ad411bb69dbfdbab006",
+      "bounds": [-122.4606534, 37.7724394, -122.4597955, 37.7727897],
+      "approved": false,
+      "materialLibrary": {
+        "schemaVersion": 1,
+        "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+        "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+      },
+      "metadata": "/assets/conservatory-of-flowers/f19bd0a8385115ef7a6578b9b7fef97395805662e6cb5ad411bb69dbfdbab006/asset.json",
+      "validation": "/assets/conservatory-of-flowers/f19bd0a8385115ef7a6578b9b7fef97395805662e6cb5ad411bb69dbfdbab006/validation.json"
+    },
+    {
+      "id": "london-eye",
+      "name": "London Eye",
+      "anchor": [-0.1196765, 51.503341600000006],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 15,
+      "detailZoom": 17,
+      "lods": {
+        "low": {
+          "url": "/models/london-eye/720e9fee1ab7dd29cbe465c156ccd22efe2e680890cdb498c5b30b7dc6dc2404/low.glb",
+          "bytes": 141076,
+          "sha256": "720e9fee1ab7dd29cbe465c156ccd22efe2e680890cdb498c5b30b7dc6dc2404",
+          "triangles": 6678,
+          "gzip": {
+            "url": "/models/london-eye/720e9fee1ab7dd29cbe465c156ccd22efe2e680890cdb498c5b30b7dc6dc2404/low.glb.gz",
+            "bytes": 81211,
+            "sha256": "939f5fc94525d2b8f8d71ef8f69afe35c0c7ea7063446863a23aa1b958db89f9",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/london-eye/83267b7584aec63b539b7bd96f76996b26a2d4fc50fd041008b4920de4eeb2b9/detail.glb",
+          "bytes": 706164,
+          "sha256": "83267b7584aec63b539b7bd96f76996b26a2d4fc50fd041008b4920de4eeb2b9",
+          "triangles": 37558,
+          "gzip": {
+            "url": "/models/london-eye/83267b7584aec63b539b7bd96f76996b26a2d4fc50fd041008b4920de4eeb2b9/detail.glb.gz",
+            "bytes": 392625,
+            "sha256": "05f6af90ed0e350f41a79885c983d95cf24dcf8ac7e951c42fc7bb0cb7c4f26d",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 37558,
+      "boundsBlenderM": [
+        [-12.345829963684082, -66.97171020507812, 0],
+        [41.459835052490234, 66.86441040039062, 135]
+      ],
+      "entranceLights": [],
+      "replacementFootprint": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-0.11983099999999683, 51.503198600000005],
+            [-0.11976857133907926, 51.503193645344524],
+            [-0.11974091785784506, 51.503328133690545],
+            [-0.11975179999999658, 51.503329],
+            [-0.11974439999998639, 51.50336469999999],
+            [-0.11973357636557407, 51.503363837746114],
+            [-0.11970591795633428, 51.50349834904432],
+            [-0.11976830000000377, 51.5035033],
+            [-0.11974259999999985, 51.5036281],
+            [-0.11968027565122463, 51.50362305469577],
+            [-0.11961350000000047, 51.5039478],
+            [-0.11949219999999938, 51.50393809999999],
+            [-0.11955895321040026, 51.50361346383145],
+            [-0.11949639999999725, 51.50360840000001],
+            [-0.11949969999999996, 51.5035924],
+            [-0.11943819999999906, 51.5035875],
+            [-0.1194827000000015, 51.50337100000001],
+            [-0.11948248654060907, 51.50337098461556],
+            [-0.11948055890508029, 51.503371250496265],
+            [-0.11947900000000895, 51.50337249999999],
+            [-0.11946461053042315, 51.50337445913012],
+            [-0.119463200000001, 51.50337560000001],
+            [-0.11944831138587789, 51.503377602953094],
+            [-0.11944719999999912, 51.5033785],
+            [-0.11943207856932965, 51.5033806130389],
+            [-0.11943109999999905, 51.5033814],
+            [-0.11941549691642266, 51.50338353375559],
+            [-0.11941479999999673, 51.50338410000002],
+            [-0.11939885389947454, 51.50338625306056],
+            [-0.11939830000000466, 51.50338669999999],
+            [-0.11938193708202502, 51.5033889093397],
+            [-0.11938169999999827, 51.503389100000014],
+            [-0.11936496114572194, 51.50339145056305],
+            [-0.11936490000000866, 51.503391500000006],
+            [-0.11935833897539545, 51.50339238048433],
+            [-0.11935820000000254, 51.503392399999996],
+            [-0.11935819810373588, 51.50339239938919],
+            [-0.11934179999999915, 51.50339460000001],
+            [-0.11934169935751893, 51.50339456808899],
+            [-0.11932550000001209, 51.50339679999999],
+            [-0.11932489675508189, 51.50339660599165],
+            [-0.11930930000000098, 51.5033987],
+            [-0.1193084438576254, 51.50339842940588],
+            [-0.11929310000000162, 51.503400600000006],
+            [-0.1192918259712389, 51.50340018924771],
+            [-0.1192769, 51.5034022],
+            [-0.11927545467072892, 51.503401735128165],
+            [-0.11926079999999784, 51.5034037],
+            [-0.11925911473839117, 51.503403156023296],
+            [-0.11924479999999957, 51.5034051],
+            [-0.11924255151482667, 51.50340437671124],
+            [-0.11922879999999894, 51.503406299999995],
+            [-0.11922563156492968, 51.50340526900148],
+            [-0.11922510000000007, 51.5034057],
+            [-0.11921289999999958, 51.5034073],
+            [-0.1192082970131952, 51.50340583736887],
+            [-0.1192081226272445, 51.503405901521205],
+            [-0.11920690000000284, 51.5034069],
+            [-0.1192045672977947, 51.50340720944018],
+            [-0.11919970000000044, 51.503409],
+            [-0.11919298042427715, 51.50340994267495],
+            [-0.11918609999999549, 51.50341250000001],
+            [-0.11917940392594961, 51.50341342430552],
+            [-0.1191724999999967, 51.50341600000001],
+            [-0.11916569527555876, 51.503416943589436],
+            [-0.11915880000000695, 51.50341949999999],
+            [-0.11911659999999633, 51.50342530000001],
+            [-0.11908249999999504, 51.5034231],
+            [-0.11907939999998766, 51.5034144],
+            [-0.11910880000000194, 51.5034034],
+            [-0.11915099999999472, 51.50339759999999],
+            [-0.11915599152843617, 51.503397922034715],
+            [-0.11916550000000564, 51.503396599999995],
+            [-0.11917045082210316, 51.50339692786956],
+            [-0.11918010000001074, 51.50339559999999],
+            [-0.11918514048623603, 51.50339592705491],
+            [-0.1191946000000008, 51.503394600000014],
+            [-0.11919777477605763, 51.50339481355024],
+            [-0.11920240000000332, 51.50339420000001],
+            [-0.11920361217790054, 51.503394590126284],
+            [-0.1192072999999983, 51.50339160000001],
+            [-0.11921950000000209, 51.503389899999995],
+            [-0.11921961368447359, 51.50338993684219],
+            [-0.11922229999998642, 51.5033878],
+            [-0.11923504215388628, 51.50338600533052],
+            [-0.11923739999999915, 51.5033841],
+            [-0.11925047834346662, 51.50338231289735],
+            [-0.11925259999999165, 51.50338059999999],
+            [-0.11926613871069607, 51.50337869849596],
+            [-0.11926799999998917, 51.503377199999996],
+            [-0.1192819109688515, 51.503375253906256],
+            [-0.11928360000000728, 51.5033739],
+            [-0.11929782014284147, 51.50337188837046],
+            [-0.1192992999999971, 51.50337069999999],
+            [-0.11931386007232908, 51.50336867776822],
+            [-0.11931520000000036, 51.50336759999999],
+            [-0.11933017672531256, 51.50336552732872],
+            [-0.11933120000000143, 51.50336469999999],
+            [-0.1193465666841856, 51.503362571282395],
+            [-0.11934739999999405, 51.503361900000016],
+            [-0.11936300308242244, 51.5033597662457],
+            [-0.11936370000000028, 51.50335919999999],
+            [-0.1193797941262095, 51.503357026953985],
+            [-0.11938019999999828, 51.5033567],
+            [-0.11939680241659126, 51.5033543784762],
+            [-0.11939690000000051, 51.5033543],
+            [-0.11942030000000041, 51.503351],
+            [-0.11942046773446478, 51.503351054290896],
+            [-0.11943660000000005, 51.5033488],
+            [-0.11943698026407815, 51.50334892302666],
+            [-0.11945289999999936, 51.503346699999994],
+            [-0.11945357331076559, 51.50334691763589],
+            [-0.11946920000001153, 51.50334480000001],
+            [-0.11947013566533153, 51.50334510198734],
+            [-0.11947705658555695, 51.50334414265197],
+            [-0.1194790841013225, 51.50333446045691],
+            [-0.11940269999999943, 51.50332840000001],
+            [-0.11940640000000083, 51.503310500000005],
+            [-0.11948282383162255, 51.50331660174483],
+            [-0.1194848503764382, 51.503306924174645],
+            [-0.11947856234484401, 51.50330491880229],
+            [-0.11947729999998792, 51.503305100000006],
+            [-0.11946318248320423, 51.50330058821676],
+            [-0.11946239999999589, 51.503300700000004],
+            [-0.11944786863785975, 51.50329604710133],
+            [-0.11944750000000214, 51.5032961],
+            [-0.11943273563891253, 51.5032913669279],
+            [-0.11943249999998974, 51.5032914],
+            [-0.11941120000000578, 51.50328460000001],
+            [-0.11941106631356924, 51.50328440314313],
+            [-0.11939610000001308, 51.50327960000001],
+            [-0.11939582766174618, 51.503279204670385],
+            [-0.1193810999999905, 51.503274499999996],
+            [-0.11938072686265601, 51.5032739524617],
+            [-0.11936640000000182, 51.50326940000001],
+            [-0.11936580762683965, 51.50326853719587],
+            [-0.1193519000000012, 51.5032641],
+            [-0.1193512430403041, 51.50326314704776],
+            [-0.11933759999999502, 51.50325879999999],
+            [-0.11933677956288279, 51.50325761082744],
+            [-0.11932340000000474, 51.50325339999999],
+            [-0.11932237880527807, 51.503251910257504],
+            [-0.11930949999999077, 51.5032478],
+            [-0.11930841015279287, 51.503246212321756],
+            [-0.11929580000001058, 51.50324220000001],
+            [-0.11929453441081503, 51.5032403515741],
+            [-0.11928230000000778, 51.50323650000001],
+            [-0.11928087470286489, 51.50323440277749],
+            [-0.119268899999993, 51.50323059999999],
+            [-0.11926743356215358, 51.503228458535574],
+            [-0.11925580000000646, 51.50322469999999],
+            [-0.11925406546755922, 51.50322219112305],
+            [-0.1192540000000071, 51.5032222],
+            [-0.11924289999999786, 51.5032187],
+            [-0.11924052109177588, 51.50321520756056],
+            [-0.11923909999999575, 51.5032154],
+            [-0.11923496632221543, 51.50321409951724],
+            [-0.11923179999999993, 51.50321379999999],
+            [-0.11922294089954556, 51.50321096368816],
+            [-0.119218099999999, 51.5032105],
+            [-0.11920944869966023, 51.50320776187918],
+            [-0.11920450000000868, 51.5032073],
+            [-0.11919599932557194, 51.50320458277703],
+            [-0.11919089999999886, 51.5032041],
+            [-0.11915230000001219, 51.5031918],
+            [-0.11912829999999819, 51.50317660000001],
+            [-0.11913490000001052, 51.5031686],
+            [-0.11916870000000414, 51.503171800000004],
+            [-0.11920729999999824, 51.503184099999984],
+            [-0.1192128278804347, 51.50318760099227],
+            [-0.11921909999999761, 51.503189600000006],
+            [-0.11922464567712243, 51.50319313144648],
+            [-0.11923080000000003, 51.50319509999999],
+            [-0.11923631481205214, 51.50319858774694],
+            [-0.11924260000000021, 51.50320060000001],
+            [-0.1192465966100453, 51.503203145612105],
+            [-0.11924870000000161, 51.5032038],
+            [-0.11924949409671963, 51.5032049911452],
+            [-0.11924964262073584, 51.50320508574651],
+            [-0.11925470000000513, 51.5032044],
+            [-0.11926579999999916, 51.5032079],
+            [-0.11926613219197153, 51.503208387686165],
+            [-0.11926970000000252, 51.5032079],
+            [-0.11928218682393285, 51.50321183815222],
+            [-0.11928459999999659, 51.503211500000006],
+            [-0.11929770424552005, 51.50321566148351],
+            [-0.11929959999999351, 51.50321540000001],
+            [-0.11931285942283211, 51.50321954865402],
+            [-0.11931460000001531, 51.503219300000005],
+            [-0.11932814936779874, 51.5032236881479],
+            [-0.11932950000000567, 51.50322349999999],
+            [-0.11934340278191291, 51.503227937058504],
+            [-0.11934440000000651, 51.50322779999999],
+            [-0.11935858925412235, 51.50323231476319],
+            [-0.11935940000000828, 51.5032322],
+            [-0.11937408884578458, 51.503236929092374],
+            [-0.11937429999999487, 51.5032369],
+            [-0.11938908381773616, 51.50324161674244],
+            [-0.11938920000000472, 51.50324160000001],
+            [-0.11941059999999987, 51.5032485],
+            [-0.11941072813873033, 51.5032486866369],
+            [-0.11942569999999889, 51.5032534],
+            [-0.11942605663760235, 51.50325392153472],
+            [-0.11944060000000613, 51.5032585],
+            [-0.11944104356160803, 51.50325914864943],
+            [-0.11945530000000067, 51.503263700000005],
+            [-0.11945589354178981, 51.503264574006856],
+            [-0.11946969999999878, 51.503268999999996],
+            [-0.11947042328038825, 51.50327005277509],
+            [-0.11948400000000083, 51.50327440000001],
+            [-0.11948480303565204, 51.503275572247766],
+            [-0.11949809999999593, 51.503279800000016],
+            [-0.11949912961287588, 51.50328129539053],
+            [-0.11950099491138112, 51.50328189026958],
+            [-0.11950106408798677, 51.50328189667482],
+            [-0.11951340645457177, 51.503221895823124],
+            [-0.1195309000000016, 51.5031366],
+            [-0.11951980000000449, 51.5031357],
+            [-0.11952730000000333, 51.5031009],
+            [-0.11953805815183007, 51.50310189612516],
+            [-0.11955000000000203, 51.50304400000001],
+            [-0.11963589999999957, 51.50305079999999],
+            [-0.11963480287754774, 51.50305612880394],
+            [-0.11967293060974511, 51.503059154810444],
+            [-0.11973950000000035, 51.5027354],
+            [-0.11986079999999992, 51.502745100000006],
+            [-0.11979423300767558, 51.503068843148384],
+            [-0.11985670000000172, 51.5030739],
+            [-0.11983099999999683, 51.503198600000005]
+          ],
+          [
+            [-0.11921190488367882, 51.503404510121136],
+            [-0.11921190488367882, 51.503404510121136],
+            [-0.11921289999999958, 51.5034073],
+            [-0.11921190488367882, 51.503404510121136]
+          ],
+          [
+            [-0.1192234924311169, 51.503391193843605],
+            [-0.1192234924311177, 51.5033911938436],
+            [-0.11922229999998642, 51.5033878],
+            [-0.1192234924311169, 51.503391193843605]
+          ],
+          [
+            [-0.11931549983672074, 51.50336845002309],
+            [-0.11931549983672074, 51.50336845002309],
+            [-0.11931520000000036, 51.50336759999999],
+            [-0.11931549983672074, 51.50336845002309]
+          ],
+          [
+            [-0.11938029249453214, 51.503356959663726],
+            [-0.11938029249453214, 51.503356959663726],
+            [-0.11938019999999828, 51.5033567],
+            [-0.11938029249453214, 51.503356959663726]
+          ],
+          [
+            [-0.11958846741326631, 51.50346992800665],
+            [-0.11957030000000145, 51.5034685],
+            [-0.11956649999999953, 51.503487199999995],
+            [-0.1195846155126887, 51.50348866092847],
+            [-0.11958846741326631, 51.50346992800665]
+          ],
+          [
+            [-0.1196049410428219, 51.503389811740895],
+            [-0.11958679567521692, 51.50338833135081],
+            [-0.11960494104281945, 51.503389811740895],
+            [-0.1196049410428219, 51.503389811740895]
+          ],
+          [
+            [-0.11964343041958628, 51.503202625098865],
+            [-0.11964726890753564, 51.50318395717001],
+            [-0.11962919999999917, 51.50318250000001],
+            [-0.11962530000000166, 51.50320119999999],
+            [-0.11964343041958628, 51.503202625098865]
+          ]
+        ]
+      },
+      "basemapReplacement": null,
+      "osm": {
+        "type": "way",
+        "id": 204068874,
+        "version": 46,
+        "timestamp": "2025-12-20T11:22:20Z",
+        "url": "https://www.openstreetmap.org/way/204068874"
+      },
+      "additionalOsm": [],
+      "rightsStatus": "review-required",
+      "geometryStatus": "draft",
+      "attribution": "Open Landmarks; contains © OpenStreetMap contributors, ODbL-1.0; Architectural measurements from the linked official sources",
+      "references": [
+        {
+          "title": "File:LE Capsule.JPG",
+          "author": "Jcfrye at English Wikipedia",
+          "license": "Public domain",
+          "licenseUrl": "https://commons.wikimedia.org/wiki/File:LE_Capsule.JPG",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:LE_Capsule.JPG",
+          "sourceSha1": "a82581053b1e5cde464dd8eaa3a7565d3f621abd",
+          "use": "visual-reference-only",
+          "view": "Individually inspected north-bank exterior,00776p wider opposite view and LE Capsule close-up. Single-sided A-frame, two tension-spoke planes, white triangular rim truss, upright elliptical pods, transverse hoops and exterior radial mounts identified. Canonical32-pod configuration; no claim about temporary pod refurbishment status. Photographs are visual references only."
+        },
+        {
+          "title": "File:London Eye (00776p).jpg",
+          "author": "Rhododendrites",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:London_Eye_(00776p).jpg",
+          "sourceSha1": "2e02d250a8f7712514344bb8bd8d7f982f4ba411",
+          "use": "visual-reference-only",
+          "view": "Individually inspected north-bank exterior,00776p wider opposite view and LE Capsule close-up. Single-sided A-frame, two tension-spoke planes, white triangular rim truss, upright elliptical pods, transverse hoops and exterior radial mounts identified. Canonical32-pod configuration; no claim about temporary pod refurbishment status. Photographs are visual references only."
+        },
+        {
+          "title": "File:London Eye seen from the north bank of the Thames, London.jpg",
+          "author": "Christian David",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:London_Eye_seen_from_the_north_bank_of_the_Thames,_London.jpg",
+          "sourceSha1": "21fa7091c036c734f6ac9fd88da72278e692e9a9",
+          "use": "visual-reference-only",
+          "view": "Individually inspected north-bank exterior,00776p wider opposite view and LE Capsule close-up. Single-sided A-frame, two tension-spoke planes, white triangular rim truss, upright elliptical pods, transverse hoops and exterior radial mounts identified. Canonical32-pod configuration; no claim about temporary pod refurbishment status. Photographs are visual references only."
+        }
+      ],
+      "kind": "observation-wheel",
+      "aliases": ["Millennium Wheel", "London"],
+      "authors": ["Open Landmarks contributors"],
+      "artisticLicense": "CC-BY-4.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "CC BY applies to original artistic contributions only; ODbL applies to OSM-derived spatial data. Reference photographs retain their own licenses. Dimension evidence from https://www.londoneye.com/about-us/history/, https://www.londoneye.com/plan-your-visit/information-and-support/faqs/ retains factual measurements; source documents are linked, not redistributed.",
+      "assistance": "AI-assisted architectural interpretation and procedural recipe authoring; deterministic Python/Blender export. No photographic textures.",
+      "review": {
+        "status": "pending",
+        "reviewer": null,
+        "checks": {},
+        "notes": "Automated export and source-registration checks, and multi-view studio inspection, are retained in the linked evidence. Independent rights, appearance and map integration approval remains pending.",
+        "evidence": "https://github.com/benjamintd/open-landmarks/blob/main/collection/london-eye/review-evidence.json"
+      },
+      "modelingNotes": [
+        "Actual OSM way/204068874 (Q160659) supplies the wheel plane and anchor. The preserved446-part OSM authoring group supplies32 glass capsule positions and vertical intervals, rim slices, two one-sided support legs and boarding pavilion. Model envelope includes those mapped parts outside the narrow original wheel outline; it is not a filled building slab.",
+        "London Eye operator publishes135m height,120m wheel diameter and32 pods, and describes a single-sided cantilever with tension spokes and two angled legs. https://www.londoneye.com/about-us/history/ https://www.londoneye.com/plan-your-visit/information-and-support/faqs/ https://www.londoneye.com/our-company/blog/how-the-london-eye-was-built/ Source tags136.5m overall are retained unchanged; mapped vertical dimensions are scaled135/136.5 for the published height. Capsule frame at the highest mapped pod completes the135m tip.",
+        "Individually inspected Commons north-bank exterior and capsule close-up establish the triangular white rim truss, paired cable spoke planes, one-sided axle support, oval level capsules with transverse frame hoops, paired outside capsule cradles and low boarding canopy. Canonical32-pod configuration is modeled; the operator FAQ notes a temporarily removed pod for refurbishment, so this is not a claim about the operating fleet on a particular day.",
+        "Inference: rim chord radii60 and58.6m, tube radii.18-.34m, wire radius.065m, hub shoulder profile, capsule ellipsoid and hoop thickness, and omitted concealed portions of the23m spindle. The two support axes are fitted between mapped base slices and the axle; their source positions are retained. Tube sections and low-LOD wires are enlarged slightly for map readability.",
+        "Both authored LODs retain32 level pods, full open wheel, two spoke planes, triangular rim, cantilever legs and boarding platform. Low reduces curved sections and capsule hoops. Glazing is opaque libraryglass without photographic textures; seats, passengers, signs, branding, river water and interior machinery are omitted."
+      ],
+      "source": {
+        "url": "/objects/6ba173ef3a84776a82df98568e2592e528120367f819bb1f53faf3462eb016a7/source.blend.gz",
+        "bytes": 810143,
+        "sha256": "6ba173ef3a84776a82df98568e2592e528120367f819bb1f53faf3462eb016a7"
+      },
+      "spatialSource": {
+        "url": "/objects/a839165b11f63c15d4ad101281e4fbfde794bf43506185356fc5c3191597b9d1/spatial-source.json",
+        "bytes": 259457,
+        "sha256": "a839165b11f63c15d4ad101281e4fbfde794bf43506185356fc5c3191597b9d1"
+      },
+      "preview": {
+        "url": "/objects/e00026ec61e7285440156ffcd4b966a331742d7f78db390d1d5cb97478243920/preview.webp",
+        "bytes": 37606,
+        "sha256": "e00026ec61e7285440156ffcd4b966a331742d7f78db390d1d5cb97478243920"
+      },
+      "previewDirection": [-2, 0.7, -0.1],
+      "wikidata": "Q160659",
+      "revision": "630cc43535a4d4086917c767925405d11b8682f94f285367139c9f1404d8fe81",
+      "publicationRevision": "9e762d5406a3f1e1e7c97c6ee5ab28481713f9b2951af8a6bee17eb4f771a3c0",
+      "bounds": [-0.11986079999999992, 51.5027354, -0.11907939999998766, 51.5039478],
+      "approved": false,
+      "materialLibrary": {
+        "schemaVersion": 1,
+        "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+        "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+      },
+      "metadata": "/assets/london-eye/9e762d5406a3f1e1e7c97c6ee5ab28481713f9b2951af8a6bee17eb4f771a3c0/asset.json",
+      "validation": "/assets/london-eye/9e762d5406a3f1e1e7c97c6ee5ab28481713f9b2951af8a6bee17eb4f771a3c0/validation.json"
+    },
+    {
+      "id": "alcatraz-cellhouse",
+      "name": "Alcatraz Cellhouse",
+      "anchor": [-122.42293162630791, 37.826630157716195],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 15,
+      "detailZoom": 17,
+      "lods": {
+        "low": {
+          "url": "/models/alcatraz-cellhouse/1cee6672c564289d4d64df2346830535d01348f3cafb1bb3845b4891c57446ca/low.glb",
+          "bytes": 229072,
+          "sha256": "1cee6672c564289d4d64df2346830535d01348f3cafb1bb3845b4891c57446ca",
+          "triangles": 4246,
+          "gzip": {
+            "url": "/models/alcatraz-cellhouse/1cee6672c564289d4d64df2346830535d01348f3cafb1bb3845b4891c57446ca/low.glb.gz",
+            "bytes": 50890,
+            "sha256": "0daf32657eeb1ac1be775aa70b83784e2e0dc0c3778ec0cc9524e412fee00368",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/alcatraz-cellhouse/a9b3bfc56b8fda8e757098fd6c11fa6d36e8a3a4da82c6fb6edee6bca935c3df/detail.glb",
+          "bytes": 1329868,
+          "sha256": "a9b3bfc56b8fda8e757098fd6c11fa6d36e8a3a4da82c6fb6edee6bca935c3df",
+          "triangles": 24628,
+          "gzip": {
+            "url": "/models/alcatraz-cellhouse/a9b3bfc56b8fda8e757098fd6c11fa6d36e8a3a4da82c6fb6edee6bca935c3df/detail.glb.gz",
+            "bytes": 251943,
+            "sha256": "298befd6b5de3e586adbb68724adaf8dec71389799d5b0a04da9db84902e06a1",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 24628,
+      "boundsBlenderM": [
+        [-40.63114547729492, -33.1042594909668, 0],
+        [40.69750213623047, 33.391143798828125, 15.837709426879883]
+      ],
+      "entranceLights": [],
+      "replacementFootprint": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.4232787, 37.8267701],
+            [-122.4233228, 37.8267364],
+            [-122.4233896, 37.8266853],
+            [-122.423009, 37.8263745],
+            [-122.4229185, 37.8264437],
+            [-122.422785, 37.8263347],
+            [-122.4227583, 37.8263552],
+            [-122.4224729, 37.8265733],
+            [-122.4228524, 37.826883],
+            [-122.4229371, 37.8268182],
+            [-122.4230718, 37.8269282],
+            [-122.4231146, 37.8268955],
+            [-122.4232787, 37.8267701]
+          ]
+        ]
+      },
+      "basemapReplacement": null,
+      "osm": {
+        "type": "way",
+        "id": 128245373,
+        "version": 4,
+        "timestamp": "2019-08-29T18:17:10Z",
+        "url": "https://www.openstreetmap.org/way/128245373"
+      },
+      "additionalOsm": [],
+      "rightsStatus": "review-required",
+      "geometryStatus": "draft",
+      "attribution": "Open Landmarks; contains © OpenStreetMap contributors, ODbL-1.0",
+      "references": [
+        {
+          "title": "File:Alcatraz - Main Cellhouse (4409210917).jpg",
+          "author": "Daniel Ramirez from Honolulu, USA",
+          "license": "CC BY 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Alcatraz_-_Main_Cellhouse_(4409210917).jpg",
+          "sourceSha1": "3127866466fa40c1881cab897522d349f7dd7bc6",
+          "use": "visual-reference-only",
+          "view": "northwest-recreation-yard-frontage"
+        },
+        {
+          "title": "File:Alcatraz aerial.jpg",
+          "author": "druchoy",
+          "license": "CC BY-SA 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Alcatraz_aerial.jpg",
+          "sourceSha1": "04d2f637dab21bef9a4bf997be3af69fde4eb162",
+          "use": "visual-reference-only",
+          "view": "aerial-before-photovoltaics"
+        },
+        {
+          "title": "File:Alcatraz Cellhouse side.jpg",
+          "author": "Technochick",
+          "license": "CC BY-SA 2.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0",
+          "sourcePage": "https://commons.wikimedia.org/wiki/File:Alcatraz_Cellhouse_side.jpg",
+          "sourceSha1": "723ca79ffb3e42f9372c8c7ab613564587566775",
+          "use": "visual-reference-only",
+          "view": "long-facade-barred-bays"
+        }
+      ],
+      "aliases": [],
+      "authors": ["Open Landmarks contributors"],
+      "artisticLicense": "CC-BY-4.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "CC BY applies to original artistic contributions only; ODbL applies to OSM-derived spatial data. Reference photographs retain their own licenses.",
+      "assistance": "AI-assisted architectural interpretation and procedural recipe authoring; deterministic Python/Blender export. No photographic textures.",
+      "review": {
+        "status": "pending",
+        "reviewer": null,
+        "checks": {}
+      },
+      "modelingNotes": [
+        "The actual Main Prison outline is OSM way128245373 v4,29August2019. Its two opposite reentrant corners and full orientation are retained in both LODs. No mapped building parts or height exist; original tags are preserved without fabricated survey values.",
+        "Alcatraz Federal Penitentiary Q1142661 identifies the prison; this model covers only the principal Cellhouse, Hospital and Administration envelope. Lighthouse, water tower, recreation yard, ruins and other island buildings are separate objects and excluded.",
+        "NPS https://www.nps.gov/places/000/alcatraz-cellhouse.htm establishes the1910–1912 reinforced-concrete building and three-story cellhouse. Facade rhythm, barred security glazing, cornice and roof-light positions are proportional interpretations from the individually inspected licensed Commons references, not measured elevations.",
+        "Authored body13.4m, parapet14.35m and roof-light ridge15.8m are approximate, inferred by comparing photographed bays with the mapped65×49m envelope. No surveyed height is claimed. Coarse terrain foundation skirts belong to the SDK; roof heights stay local to the model ground datum.",
+        "The inspected aerial predates solar installation. NPS https://www.nps.gov/articles/000/structural-upgrades-for-alcatraz-prison-hospital-wing.htm documents contemporary rooftop photovoltaics. The authored panel groups acknowledge that change; their positions, count and dimensions are inferred, rather than an exact1300-panel survey.",
+        "Thin grills and roof seams simplify in the low LOD. Security bars are real rods over wall-backed opaque window panels; all windows remain attached to the actual facade. Temporary scaffolding, graffiti, photographic textures and ornamental weathering are omitted."
+      ],
+      "source": {
+        "url": "/objects/6ab790cb92086a8b49fe6e4a70481e76cd5c57876c76d7906763f263b63fc17d/source.blend.gz",
+        "bytes": 440214,
+        "sha256": "6ab790cb92086a8b49fe6e4a70481e76cd5c57876c76d7906763f263b63fc17d"
+      },
+      "spatialSource": {
+        "url": "/objects/8660fb2ed2a335778f3f576872241bfe2e279a663b60cd0bce1918c6b9637312/spatial-source.json",
+        "bytes": 1510,
+        "sha256": "8660fb2ed2a335778f3f576872241bfe2e279a663b60cd0bce1918c6b9637312"
+      },
+      "preview": {
+        "url": "/objects/2b3e37259f45e89baeb5f06b6dbfb0f7190712e5cfc776d95d13a09e1847dcc2/preview.webp",
+        "bytes": 32704,
+        "sha256": "2b3e37259f45e89baeb5f06b6dbfb0f7190712e5cfc776d95d13a09e1847dcc2"
+      },
+      "previewDirection": [-1.4, 0.75, -0.7],
+      "revision": "7a08b4dfb243f837bce30205889c873e14b603725dc5f96f278bc6998f627a69",
+      "publicationRevision": "a3262baccfd8192a342eeb47ccfb590c8eec9e6bfcd3e61bc8e6ec9fb7a4c021",
+      "bounds": [-122.4233896, 37.8263347, -122.4224729, 37.8269282],
+      "approved": false,
+      "materialLibrary": {
+        "schemaVersion": 1,
+        "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+        "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+      },
+      "metadata": "/assets/alcatraz-cellhouse/a3262baccfd8192a342eeb47ccfb590c8eec9e6bfcd3e61bc8e6ec9fb7a4c021/asset.json",
+      "validation": "/assets/alcatraz-cellhouse/a3262baccfd8192a342eeb47ccfb590c8eec9e6bfcd3e61bc8e6ec9fb7a4c021/validation.json"
+    }
+  ]
+}

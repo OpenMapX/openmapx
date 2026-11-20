@@ -31,6 +31,7 @@ COPY packages/otp-client/package.json packages/otp-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/open-landmarks-client/package.json packages/open-landmarks-client/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "release": "landmarks-a6be78485df5e621bd85",
+  "channel": "latest",
+  "count": 1849,
+  "status": "published",
+  "assetBase": "/",
+  "bounds": [-123.118263, -34.3538509, 151.2163687, 55.7569088],
+  "maxHeightM": 828,
+  "attribution": "© OpenStreetMap contributors",
+  "dataLicense": "ODbL-1.0",
+  "repository": "https://github.com/alexwohlbruck/landmarks",
+  "index": {
+    "zoom": 12,
+    "template": "/api/v1/releases/landmarks-a6be78485df5e621bd85/index/12/{x}/{y}.json",
+    "occupied": ["1021/1570", "1022/1689", "1022/1690", "1023/1620", "1023/1689"]
+  },
+  "assets": "/api/v1/releases/landmarks-a6be78485df5e621bd85/assets.json"
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "release": "preview-7bd48fe030ad21eb2280",
+  "channel": "preview",
+  "count": 88,
+  "status": "includes-unreviewed-drafts",
+  "assetBase": "/",
+  "materialLibrary": {
+    "schemaVersion": 1,
+    "sha256": "7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd",
+    "url": "/materials/7afc40cf0b82b7c3c054f287817be2a37e52192aa734f187f8b20ee3277187dd.json"
+  },
+  "bounds": [-122.4809672, 37.7724394, 2.3985133, 51.5147302],
+  "maxHeightM": 330,
+  "minZoom": 13,
+  "attribution": "Open Landmarks; © OpenStreetMap contributors",
+  "dataLicense": "ODbL-1.0",
+  "index": {
+    "zoom": 12,
+    "template": "/api/v1/releases/preview-7bd48fe030ad21eb2280/index/12/{x}/{y}.json",
+    "occupied": ["2046/1362", "2047/1361", "2073/1408", "2073/1409", "2074/1408"]
+  },
+  "assets": "/api/v1/releases/preview-7bd48fe030ad21eb2280/assets.json",
+  "sourceDatabase": "/api/v1/releases/preview-7bd48fe030ad21eb2280/spatial-database.json"
+}
