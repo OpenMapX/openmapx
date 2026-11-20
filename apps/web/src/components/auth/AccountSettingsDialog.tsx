@@ -61,7 +61,20 @@ function createEmailLifetime() {
   return { active: false, busy: false, generation: 0 };
 }
 
-export function AccountSettingsDialog({
+/**
+ * Account settings. Every opening and every account start the dialog afresh,
+ * so no draft, code or message from one carries into the next; closing keeps
+ * the content in place while the dialog fades out.
+ */
+export function AccountSettingsDialog(props: AccountSettingsDialogProps) {
+  const [openings, setOpenings] = useState({ open: props.open, count: 0 });
+  if (openings.open !== props.open) {
+    setOpenings({ open: props.open, count: openings.count + (props.open ? 1 : 0) });
+  }
+  return <AccountSettingsDialogContent key={`${props.user.id}:${openings.count}`} {...props} />;
+}
+
+function AccountSettingsDialogContent({
   open,
   onClose,
   user,
@@ -118,16 +131,18 @@ export function AccountSettingsDialog({
   const [emailOtp, setEmailOtp] = useState("");
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailPending, setEmailPending] = useState<"send" | "confirm" | null>(null);
-  const [emailLifetime, setEmailLifetime] = useState(createEmailLifetime);
+  const [emailLifetime] = useState(createEmailLifetime);
   // The last message published by the email flow, so retiring an address clears only that message.
   const emailMessageRef = useRef<typeof message>(null);
 
+  // The email flow runs only while the dialog is open; closing retires it.
   useLayoutEffect(() => {
+    if (!open) return;
     emailLifetime.active = true;
     return () => {
       emailLifetime.active = false;
     };
-  }, [emailLifetime]);
+  }, [emailLifetime, open]);
 
   // Password change state
   const [changingPassword, setChangingPassword] = useState(false);
@@ -148,36 +163,6 @@ export function AccountSettingsDialog({
   const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
   const [showDisable2fa, setShowDisable2fa] = useState(false);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
-  const sessionKey = open ? user.id : null;
-  const [previousSessionKey, setPreviousSessionKey] = useState(sessionKey);
-
-  if (sessionKey !== previousSessionKey) {
-    setPreviousSessionKey(sessionKey);
-    setEmailLifetime(createEmailLifetime());
-    if (open) {
-      setName(user.name);
-      setMessage(null);
-      setConfirmDelete(false);
-      setChangingEmail(false);
-      setNewEmail("");
-      setEmailOtp("");
-      setEmailOtpSent(false);
-      setChangingPassword(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setShowCurrentPassword(false);
-      setShowNewPassword(false);
-      setShowTwoFactorSetup(false);
-      setShowDisable2fa(false);
-      setShowBackupCodes(false);
-      setTotpSetupUri(null);
-      setBackupCodes(null);
-      setTwoFactorPassword("");
-      setTotpVerifyCode("");
-      setTwoFactorEnabled(!!(user as Record<string, unknown>).twoFactorEnabled);
-    }
-  }
-
   useEffect(() => {
     if (!totpSetupUri) {
       setQrDataUrl(null);
@@ -420,10 +405,13 @@ export function AccountSettingsDialog({
     }
   };
 
-  const handleCopyBackupCodes = () => {
-    if (backupCodes) {
-      navigator.clipboard.writeText(backupCodes.join("\n"));
+  const handleCopyBackupCodes = async () => {
+    if (!backupCodes) return;
+    try {
+      await navigator.clipboard.writeText(backupCodes.join("\n"));
       setMessage({ type: "success", text: t("backupCodesCopied") });
+    } catch {
+      setMessage({ type: "error", text: t("backupCodesCopyFailed") });
     }
   };
 

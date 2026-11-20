@@ -2257,6 +2257,7 @@
     "newBackupCodesGenerated": "Neue Wiederherstellungscodes generiert",
     "failedGenerateBackupCodes": "Wiederherstellungscodes konnten nicht generiert werden",
     "backupCodesCopied": "Wiederherstellungscodes in die Zwischenablage kopiert",
+    "backupCodesCopyFailed": "Die Wiederherstellungscodes konnten nicht kopiert werden. Markiere und kopiere sie oder lade sie herunter.",
     "connectedAccounts": "Verknüpfte Konten",
     "connected": "Verknüpft",
     "notConnected": "Nicht verknüpft",

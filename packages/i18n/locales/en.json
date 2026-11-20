@@ -2257,6 +2257,7 @@
     "newBackupCodesGenerated": "New backup codes generated",
     "failedGenerateBackupCodes": "Failed to generate backup codes",
     "backupCodesCopied": "Backup codes copied to clipboard",
+    "backupCodesCopyFailed": "Couldn't copy the backup codes. Select and copy them, or download them instead.",
     "connectedAccounts": "Connected accounts",
     "connected": "Connected",
     "notConnected": "Not connected",
