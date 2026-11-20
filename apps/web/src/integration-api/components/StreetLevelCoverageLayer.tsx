@@ -8,7 +8,7 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { FilterSpecification, Map as MapLibreMap } from "maplibre-gl";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
@@ -186,23 +186,47 @@ export function StreetLevelCoverageLayer() {
   // with: a metadata refresh cannot relabel tile bytes MapLibre already holds.
   const snapshots = useRef(new WeakMap<MapLibreMap, Map<string, CoverageSnapshot>>());
 
-  const group = useMemo<MapLayerGroup | null>(() => {
-    const retained = currentMap ? (snapshots.current.get(currentMap) ?? new Map()) : undefined;
-    if (currentMap && retained) snapshots.current.set(currentMap, retained);
-    if (!layerVisible) {
-      retained?.clear();
-      return null;
+  const coverageSources = useMemo(
+    () =>
+      layerVisible
+        ? providers.flatMap((provider) => {
+            const coverage = provider.coverage;
+            if (coverage.kind !== "mvt") return [];
+            const sourceId = coverageSourceId(provider.id);
+            return [
+              { provider, coverage, sourceId, tileUrl: `${apiUrl}${coverage.tileUrlTemplate}` },
+            ];
+          })
+        : [],
+    [layerVisible, providers, apiUrl],
+  );
+
+  // Recorded after commit and before the group effect below puts the sources
+  // on the map, so every tile drawn from a source finds its snapshot.
+  useEffect(() => {
+    if (!currentMap) return;
+    let retained = snapshots.current.get(currentMap);
+    if (!retained) {
+      retained = new Map();
+      snapshots.current.set(currentMap, retained);
     }
-    const sources: MapLayerGroup["sources"] = {};
-    const layers: SlottedLayer[] = [];
-    for (const provider of providers) {
-      const coverage = provider.coverage;
-      if (coverage.kind !== "mvt") continue;
-      const sourceId = coverageSourceId(provider.id);
-      const tileUrl = `${apiUrl}${coverage.tileUrlTemplate}`;
-      if (retained && retained.get(sourceId)?.tileUrl !== tileUrl) {
+    const wanted = new Set<string>();
+    for (const { provider, coverage, sourceId, tileUrl } of coverageSources) {
+      wanted.add(sourceId);
+      if (retained.get(sourceId)?.tileUrl !== tileUrl) {
         retained.set(sourceId, coverageSnapshot(provider, coverage, tileUrl));
       }
+    }
+    for (const sourceId of retained.keys()) {
+      if (!wanted.has(sourceId)) retained.delete(sourceId);
+    }
+  }, [currentMap, coverageSources]);
+
+  const group = useMemo<MapLayerGroup | null>(() => {
+    if (!layerVisible) return null;
+    const sources: MapLayerGroup["sources"] = {};
+    const layers: SlottedLayer[] = [];
+    for (const { provider, coverage, sourceId, tileUrl } of coverageSources) {
       sources[sourceId] = {
         type: "vector",
         tiles: [tileUrl],
@@ -211,11 +235,8 @@ export function StreetLevelCoverageLayer() {
       };
       layers.push(...coverageLayers(provider, coverage));
     }
-    for (const sourceId of retained?.keys() ?? []) {
-      if (!(sourceId in sources)) retained?.delete(sourceId);
-    }
     return { sources, layers };
-  }, [currentMap, layerVisible, providers, apiUrl]);
+  }, [layerVisible, coverageSources]);
   useMapLayerGroup(group);
 
   const layerIds = providers.flatMap((provider) => Object.values(coverageLayerIds(provider.id)));

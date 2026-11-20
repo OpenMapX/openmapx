@@ -224,6 +224,27 @@ it("offers the shared accessible hover pin and pointer cursor", () => {
   expect(fake.map.getCanvasContainer().style.cursor).toBe("");
 });
 
+it("keeps the hover pin on its place while the pointer is on the pin over a neighbour", () => {
+  places = [
+    ...originalPlaces,
+    { ...originalPlaces[0], id: "neighbour", name: "Neighbour", lat: 50.0001 },
+  ];
+  render(<SavedPlacesLayer />);
+  const data = fake.state.sources.get("saved-places-source")?.data as GeoJSON.FeatureCollection;
+  const [first, neighbour] = renderedFeatures(data, "saved-places-layer");
+  fake.setRenderedFeatures("saved-places-layer", [first]);
+  act(() => fake.emit("mousemove", { point: { x: 20, y: 20 } }));
+  expect(pin.mock.calls.at(-1)?.[1]).toBe("Saved point");
+
+  const pinElement = document.createElement("div");
+  pinElement.dataset.openmapxPinMarker = "";
+  const head = document.createElement("span");
+  pinElement.appendChild(head);
+  fake.setRenderedFeatures("saved-places-layer", [neighbour]);
+  act(() => fake.emit("mousemove", { point: { x: 20, y: 0 }, originalEvent: { target: head } }));
+  expect(pin.mock.calls.at(-1)?.[1]).toBe("Saved point");
+});
+
 it("registers both hit layers against background clicks and respects owned tool clicks", async () => {
   const { INTERACTIVE_LAYER_IDS } = await import("@/integration-api/map/interactiveLayers");
   const view = render(<SavedPlacesLayer />);

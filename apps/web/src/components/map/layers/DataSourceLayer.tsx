@@ -156,7 +156,10 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string, fi
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(createMarkerSvg(iconPath, fill))}`;
 }
 
-/** Results the user asked for win over ambient overlays drawn beneath them. */
+/**
+ * Results the user asked for win over ambient overlays drawn beneath them.
+ * Data-source results draw below the other host results, so they rank lowest.
+ */
 const RESULT_INTERACTION_PRIORITY = 200;
 /** Context zones are areas beneath the results; a result on top of one wins. */
 const CONTEXT_INTERACTION_PRIORITY = 15;
@@ -453,6 +456,9 @@ export function DataSourceLayer() {
     };
   }, []);
 
+  /** The images the current descriptor asks for; a load for any other is stale. */
+  const wantedImages = useRef(new Set<string>());
+
   const group = useMemo<MapLayerGroup | null>(() => {
     if (!activeSource || !activeMeta || viewportZoom < activeMeta.minZoom) return null;
     void styleVersion;
@@ -461,14 +467,12 @@ export function DataSourceLayer() {
     const images: NonNullable<MapLayerGroup["images"]> = {};
     for (const url of logoUrls) {
       images[dataSourceBrandImageId(url)] = (map) => {
-        // The load belongs to the source generation it first sees: a style
-        // change replaces the source, and a logo for the old one is dropped.
-        let generation: unknown;
-        const isCurrent = () => {
-          const current = map.getSource(sid);
-          generation ??= current;
-          return mounted.current && mapRef.current === map && current === generation;
-        };
+        // A logo the current results no longer ask for (another source, or
+        // results without that brand) is dropped. One that outlives a style
+        // switch still lands in the style now shown, which wants it too.
+        const imageId = dataSourceBrandImageId(url);
+        const isCurrent = () =>
+          mounted.current && mapRef.current === map && wantedImages.current.has(imageId);
         // This URL's first retained owner initiated the acquisition. Other rows
         // keep their selector receipts; they do not retroactively supply its bytes.
         const acquisitionReceipts = snapshotContributors(
@@ -665,6 +669,9 @@ export function DataSourceLayer() {
     mapContext,
     mapRef,
   ]);
+  useEffect(() => {
+    wantedImages.current = new Set(Object.keys(group?.images ?? {}));
+  }, [group]);
   useMapLayerGroup(group);
 
   useEffect(() => {
@@ -745,7 +752,6 @@ export function DataSourceLayer() {
     onClick: ({ features }) => {
       if (!activeSource) return;
       const action = pickDataSourceContextAction(
-        0,
         features[0]?.properties as Record<string, unknown> | undefined,
       );
       if (action.type === "select-station") {

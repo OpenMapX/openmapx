@@ -25,7 +25,7 @@ import { useRenderedMapAttributions } from "@/integration-api/overlay/useRendere
 import { listMarkerIcon } from "@/lib/listIcon";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { openSavedPlace, savedPlaceToPlace } from "@/lib/openSavedPlace";
-import { overHoverPin } from "../hoverPin";
+import { onHoverPinElement, withinHoverPinBox } from "../hoverPin";
 import { resultMarkerLayers } from "../resultMarkerLayers";
 
 const SOURCE_ID = "saved-places-source";
@@ -186,6 +186,7 @@ export function SavedPlacesLayer() {
       if (place) openSavedPlace(place, flyTo);
     },
     onHover: (features, event) => {
+      if (onHoverPinElement(event)) return;
       const place = features
         ? places?.find((candidate) => candidate.id === features[0]?.properties?.id)
         : undefined;
@@ -198,7 +199,9 @@ export function SavedPlacesLayer() {
         return;
       }
       const map = mapRef.current;
-      if (map && overHoverPin(map, event, hoverPin ? [hoverPin.lng, hoverPin.lat] : null)) return;
+      if (map && withinHoverPinBox(map, event, hoverPin ? [hoverPin.lng, hoverPin.lat] : null)) {
+        return;
+      }
       setHovered(null);
     },
   });

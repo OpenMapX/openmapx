@@ -27,8 +27,11 @@ import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 const SOURCE = "route-search-source";
 const LAYER = "route-search-layer";
 const LABEL_LAYER = "route-search-labels";
-/** Results the user asked for win over ambient overlays drawn beneath them. */
-const HOST_RESULT_PRIORITY = 200;
+/**
+ * Results the user asked for win over ambient overlays drawn beneath them.
+ * Along-route results draw above the category and data-source results.
+ */
+const HOST_RESULT_PRIORITY = 203;
 
 function ensurePinImage(
   map: maplibregl.Map,
@@ -82,13 +85,18 @@ export function RouteSearchResultsLayer({
     },
   });
   const fallbackImageId = `route-search-pin-${categoryKey}`;
-  const [loadedBrand, setLoadedBrand] = useState<{ qid: string; styleVersion: number } | null>(
-    null,
-  );
-  const imageId =
-    loadedBrand?.qid === brandQid && loadedBrand?.styleVersion === styleVersion
-      ? brandImageId(loadedBrand.qid)
+  // The brand logo loads asynchronously, and a style switch drops it with every
+  // other image. Each finished load re-renders, and the pins use the logo
+  // whenever the current style holds it.
+  const [brandLoads, setBrandLoads] = useState(0);
+  const imageId = useMemo(() => {
+    void brandLoads;
+    void styleVersion;
+    const map = mapRef.current;
+    return brandQid && map?.hasImage(brandImageId(brandQid))
+      ? brandImageId(brandQid)
       : fallbackImageId;
+  }, [brandLoads, styleVersion, mapRef, brandQid, fallbackImageId]);
   const data = useMemo<GeoJSON.FeatureCollection>(
     () => ({
       type: "FeatureCollection",
@@ -117,8 +125,12 @@ export function RouteSearchResultsLayer({
   );
 
   // A brand logo that finishes loading after the layer unmounted, or for a
-  // brand the search no longer shows, must not switch the pins over to it.
+  // brand the search no longer shows, must not reach the map.
   const mounted = useRef(true);
+  const currentBrand = useRef(brandQid);
+  useEffect(() => {
+    currentBrand.current = brandQid;
+  }, [brandQid]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -140,15 +152,10 @@ export function RouteSearchResultsLayer({
         ...(brandQid
           ? {
               [brandImageId(brandQid)]: (map: maplibregl.Map) => {
-                const loadedFor = styleVersion;
-                void loadBrandMarkerImage(
-                  map,
-                  brandQid,
-                  () => mounted.current && mapRef.current === map,
-                ).then((loaded) => {
-                  if (loaded && mounted.current && mapRef.current === map) {
-                    setLoadedBrand({ qid: brandQid, styleVersion: loadedFor });
-                  }
+                const isCurrent = () =>
+                  mounted.current && mapRef.current === map && currentBrand.current === brandQid;
+                void loadBrandMarkerImage(map, brandQid, isCurrent).then((loaded) => {
+                  if (loaded && isCurrent()) setBrandLoads((count) => count + 1);
                 });
               },
             }
@@ -187,7 +194,7 @@ export function RouteSearchResultsLayer({
         },
       ],
     }),
-    [data, fallbackImageId, iconPath, brandQid, mapRef, styleVersion],
+    [data, fallbackImageId, iconPath, brandQid, mapRef],
   );
   useMapLayerGroup(group);
 

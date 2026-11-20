@@ -264,7 +264,7 @@ it("adds a supplied logo pin while retaining live availability styling and fallb
   results[0].availability = undefined;
 });
 
-it("ignores late logos after source changes and reloads logos after style replacement", async () => {
+it("drops late logos after leaving the source and reloads logos after style replacement", async () => {
   results[0].branding = { logoUrl: "https://provider.example/race.png" };
   const pending: { current: () => boolean; resolve: (loaded: boolean) => void }[] = [];
   logoLoad.mockImplementation(
@@ -282,10 +282,13 @@ it("ignores late logos after source changes and reloads logos after style replac
   fake.state.styleLoaded = true;
   act(() => fake.map.setStyle({} as never));
   expect(pending).toHaveLength(2);
-  expect(pending[0].current()).toBe(false);
+  // A load that outlives the switch lands in the style now shown, which wants it.
+  expect(pending[0].current()).toBe(true);
   expect(pending[1].current()).toBe(true);
   await act(async () => pending[0].resolve(false));
+  // Leaving the source drops every logo still loading for it, whenever it started.
   act(() => useDataSourceStore.setState({ activeSource: null }));
+  expect(pending[0].current()).toBe(false);
   expect(pending[1].current()).toBe(false);
   await act(async () => pending[1].resolve(false));
   expect(fake.map.getSource("ds-sample")).toBeUndefined();
@@ -344,6 +347,49 @@ it("selects a branded result once when overlapping layers receive the same click
   view.unmount();
   select.mockRestore();
   fake.state.renderedFeatures.clear();
+});
+
+it("gives a click on a result drawn over a context zone to the result", () => {
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const zone = {
+    type: "Feature" as const,
+    properties: { contextKind: "station_area", stationId: "zone-station" },
+    geometry: {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [8, 50],
+          [9, 50],
+          [9, 51],
+          [8, 50],
+        ],
+      ],
+    },
+  };
+  context = { geojson: { type: "FeatureCollection", features: [zone] } };
+  const select = vi.spyOn(useDataSourceStore.getState(), "selectItem");
+  const view = render(<DataSourceLayer />);
+  fake.state.renderedFeatures.set("ds-sample-map-context-fill", [zone as never]);
+  fake.state.renderedFeatures.set("ds-sample-markers", [
+    {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [8, 50] },
+      properties: { id: "one", name: "One" },
+    } as never,
+  ]);
+  act(() => {
+    fake.emit("click", {
+      originalEvent: new MouseEvent("click"),
+      point: { x: 1, y: 2 },
+      lngLat: { lng: 8, lat: 50 },
+    });
+  });
+  expect(select).toHaveBeenCalledTimes(1);
+  expect(select).toHaveBeenCalledWith("sample", "one");
+  view.unmount();
+  select.mockRestore();
+  fake.state.renderedFeatures.clear();
+  context = undefined;
 });
 
 it("credits only rendered markers and context polygons and retains captured visible credits during refresh", () => {

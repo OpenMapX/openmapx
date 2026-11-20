@@ -40,7 +40,7 @@ import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInt
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
-import { overHoverPin } from "./hoverPin";
+import { onHoverPinElement, withinHoverPinBox } from "./hoverPin";
 import { resultMarkerLayers } from "./resultMarkerLayers";
 
 const SOURCE_ID = "category-results-source";
@@ -348,8 +348,13 @@ function buildTransitGeoJson(stops: TransitStop[]) {
   };
 }
 
-/** Results the user asked for win over ambient overlays drawn beneath them. */
-const RESULT_INTERACTION_PRIORITY = 200;
+/**
+ * Results the user asked for win over ambient overlays drawn beneath them.
+ * Category results draw above data-source results and their transit stops
+ * above the category pins, so each ranks one step above the one beneath.
+ */
+const RESULT_INTERACTION_PRIORITY = 201;
+const TRANSIT_INTERACTION_PRIORITY = 202;
 
 export function CategoryResultMarkers() {
   const { mapRef, styleVersion, flyTo } = useMap();
@@ -478,24 +483,14 @@ export function CategoryResultMarkers() {
   /** The images the current descriptor asks for; a load for any other is stale. */
   const wantedImages = useRef(new Set<string>());
   /**
-   * An image load belongs to the source generation it first sees and to the
-   * results that asked for it: a style change replaces the source, a new
-   * search replaces the images, and a load for either old one is dropped.
+   * An image load belongs to the results that asked for it: a new search
+   * replaces the images, and a load for the old ones is dropped. One that
+   * outlives a style switch still lands in the style now shown, which wants
+   * the same image.
    */
-  const ownsSource = useCallback(
-    (map: MaplibreMap, sourceId: string, imageId: string) => {
-      let generation: unknown;
-      return () => {
-        const current = map.getSource(sourceId);
-        generation ??= current;
-        return (
-          mounted.current &&
-          mapRef.current === map &&
-          current === generation &&
-          wantedImages.current.has(imageId)
-        );
-      };
-    },
+  const wantsImage = useCallback(
+    (map: MaplibreMap, imageId: string) => () =>
+      mounted.current && mapRef.current === map && wantedImages.current.has(imageId),
     [mapRef],
   );
 
@@ -512,7 +507,7 @@ export function CategoryResultMarkers() {
               void loadTransitMarkerImage(
                 map,
                 transitMode,
-                ownsSource(map, TRANSIT_SOURCE_ID, `transit-marker-${transitMode}`),
+                wantsImage(map, `transit-marker-${transitMode}`),
               ),
           ]),
         ),
@@ -556,16 +551,11 @@ export function CategoryResultMarkers() {
     const images: NonNullable<MapLayerGroup["images"]> = {};
     for (const imageId of markerImageIds) {
       images[imageId] = (map) =>
-        void loadMarkerImage(
-          map,
-          imageId,
-          markerIconPath(imageId),
-          ownsSource(map, SOURCE_ID, imageId),
-        );
+        void loadMarkerImage(map, imageId, markerIconPath(imageId), wantsImage(map, imageId));
     }
     for (const qid of qids) {
       images[brandImageId(qid)] = (map) => {
-        const isCurrent = ownsSource(map, SOURCE_ID, brandImageId(qid));
+        const isCurrent = wantsImage(map, brandImageId(qid));
         void loadBrandMarkerImage(map, qid, isCurrent).then((loaded) => {
           if (loaded && isCurrent()) setBrandLoads((count) => count + 1);
         });
@@ -599,7 +589,7 @@ export function CategoryResultMarkers() {
     focusFilter,
     hoverLabelOpacity,
     categoryData,
-    ownsSource,
+    wantsImage,
   ]);
   useEffect(() => {
     wantedImages.current = new Set(Object.keys(group?.images ?? {}));
@@ -616,13 +606,14 @@ export function CategoryResultMarkers() {
       if (place) selectResult(place);
     },
     onHover: (features, event) => {
+      if (onHoverPinElement(event)) return;
       const id = features?.find((feature) => feature.properties?.id)?.properties?.id;
       if (typeof id === "string") {
         setHoveredCategoryPlaceId(id);
         return;
       }
       const map = mapRef.current;
-      if (map && overHoverPin(map, event, hoveredPlace?.coordinates ?? null)) return;
+      if (map && withinHoverPinBox(map, event, hoveredPlace?.coordinates ?? null)) return;
       setHoveredCategoryPlaceId(null);
     },
   });
@@ -630,7 +621,7 @@ export function CategoryResultMarkers() {
   useMapOverlayInteraction({
     id: "category-transit-stops",
     layerIds: [TRANSIT_LAYER_ID],
-    priority: RESULT_INTERACTION_PRIORITY,
+    priority: TRANSIT_INTERACTION_PRIORITY,
     onClick: ({ features }) => {
       const props = features[0].properties as {
         id: string;

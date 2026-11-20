@@ -1316,23 +1316,26 @@ useMapOverlayInteraction({
 All registrations on a map share one click listener and one pointer listener.
 Where layers of several overlays overlap, the registration with the highest
 `priority` that has a rendered feature under the pointer gets the click, the
-hover and the pointer cursor. `onHover` runs on every pointer move, with the
-features when its overlay owns the hover and with `null` otherwise. The arbiter checks click ownership, adds the layers to the
-interactive registry that the plain-map click handler skips, and looks layers up
-at event time, so a registration survives style changes and may start before
-its layers exist. Without `onClick` an overlay only shows the pointer cursor, for
-features that another handler opens, and its layers stay out of the registry.
-`useMapOverlayPopup(open)` from the same module opens an overlay's popup in place
-of any other overlay's popup and closes it when `open` turns false or the overlay
-unmounts.
+hover and the pointer cursor; between equal priorities, the registration made
+first wins. `onHover` runs on every pointer move, with the features when its
+overlay owns the hover and with `null` otherwise. The arbiter checks click
+ownership, adds the layers to the interactive registry that the plain-map click
+handler skips, and looks layers up at event time, so a registration survives
+style changes and may start before its layers exist. Without `onClick` an
+overlay only shows the pointer cursor, for features that another handler opens,
+and its layers stay out of the registry. `useMapOverlayPopup(open)` from the
+same module opens an overlay's popup in place of any other overlay's popup and
+closes it when `open` turns false or the overlay unmounts.
 
 Priorities in use: area and line overlays 10 to 20, point overlays 50, moving
-live-transit vehicles 60, road-condition incidents and markers 100 to 110, and
-results the user asked for (route search results, data-source and category
-results) 200, and the open saved list 210. A static test rejects pointer listeners and cursor writes in
-integrations and shared integration components outside this pipeline; the
-measurement and travel-time tools, which own the map while active, are its only
-exceptions.
+live-transit vehicles 60, and road-condition incidents and markers 100 to 110.
+Results the user asked for take 200 to 203 in the order they are drawn:
+data-source results, category results, the transit stops of a transit
+category, and route search results. The open saved list takes 210. Give a new
+overlay a priority of its own rather than relying on registration order. A
+static test rejects pointer listeners and cursor writes in integrations and
+shared integration components outside this pipeline; the measurement and
+travel-time tools, which own the map while active, are its only exceptions.
 
 MapLibre mounts DOM markers inside the map's event container, so a click on a
 marker is also a map click at that point. Unclaimed, the plain-map handler drops

@@ -65,6 +65,19 @@ function lastOptions() {
   if (!options) throw new Error("Expected rendered receipt registration");
   return options;
 }
+/**
+ * Stands in for the logo fetch: a successful load installs the image in the
+ * map's current style unless the caller has moved on, as the real loader does.
+ */
+function loadLogo(result: Promise<boolean> | boolean = true) {
+  return async (...args: unknown[]) => {
+    const [map, qid, isCurrent] = args as [FakeMap["map"], string, () => boolean];
+    const loaded = await result;
+    if (!loaded || !isCurrent()) return false;
+    map.addImage(`brand-marker-${qid}`, {} as never);
+    return true;
+  };
+}
 function lastImage() {
   return drawnFeatures()[0]?.properties.imageId;
 }
@@ -88,7 +101,7 @@ beforeEach(() => {
 });
 describe("RouteSearchResultsLayer brand pins", () => {
   it("separates rendered pin coordinate/logo receipts from detour text receipts", async () => {
-    fixtures.loadBrand.mockResolvedValue(true);
+    fixtures.loadBrand.mockImplementation(loadLogo());
     const coordinate = { sourceId: "poi", name: "Coordinate supplier" };
     const seconds = { sourceId: "routing", name: "Detour duration" };
     const hidden = { sourceId: "hidden", name: "Hidden name/metres" };
@@ -148,7 +161,7 @@ describe("RouteSearchResultsLayer brand pins", () => {
     expect(JSON.parse(properties._mapLabelAttributions)).toEqual([]);
   });
   it("follows the captured receipt of a same-QID image replaced after feature publication", async () => {
-    fixtures.loadBrand.mockResolvedValue(true);
+    fixtures.loadBrand.mockImplementation(loadLogo());
     render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
     await waitFor(() => expect(lastImage()).toBe("brand-marker-Q151954"));
     const properties = lastProperties();
@@ -195,49 +208,54 @@ describe("RouteSearchResultsLayer brand pins", () => {
   });
   it("publishes a loaded logo while the current style is still loading tiles", async () => {
     fake.state.styleLoaded = false;
-    fixtures.loadBrand.mockResolvedValue(true);
+    fixtures.loadBrand.mockImplementation(loadLogo());
     render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
     await waitFor(() => expect(lastImage()).toBe("brand-marker-Q151954"));
   });
   it("keeps the category fallback when the logo fails", async () => {
-    fixtures.loadBrand.mockResolvedValue(false);
+    fixtures.loadBrand.mockImplementation(loadLogo(false));
     render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
     await act(async () => {});
     expect(lastImage()).toBe("route-search-pin-brand:Q151954");
   });
   it("ignores a logo finishing after a new brand selection", async () => {
     let finish!: (loaded: boolean) => void;
-    let calls = 0;
-    fixtures.loadBrand.mockImplementation(() => {
-      if (calls++ > 0) return Promise.resolve(false);
-      return new Promise<boolean>((resolve) => {
-        finish = resolve;
-      });
+    const first = new Promise<boolean>((resolve) => {
+      finish = resolve;
     });
+    fixtures.loadBrand.mockImplementationOnce(loadLogo(first)).mockImplementation(loadLogo(false));
     const { rerender } = render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
     rerender(<RouteSearchResultsLayer {...props} categoryKey="brand:Q110" brandQid="Q110" />);
     await act(async () => {
       finish(true);
     });
     expect(lastImage()).toBe("route-search-pin-brand:Q110");
+    expect(fake.map.hasImage("brand-marker-Q151954")).toBe(false);
   });
 
-  it("ignores a logo finishing after a style replacement", async () => {
-    let finish!: (loaded: boolean) => void;
-    let calls = 0;
-    fixtures.loadBrand.mockImplementation(() => {
-      if (calls++ > 0) return Promise.resolve(false);
-      return new Promise<boolean>((resolve) => {
-        finish = resolve;
-      });
-    });
+  it("shows the brand logo again after a style switch", async () => {
+    fixtures.loadBrand.mockImplementation(loadLogo());
     const { rerender } = render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
+    await waitFor(() => expect(lastImage()).toBe("brand-marker-Q151954"));
+
+    // The style switch drops every image and rebuilds the group before React
+    // learns the new style version; the reload must still reach the pins.
+    let finish!: (loaded: boolean) => void;
+    fixtures.loadBrand.mockImplementationOnce(
+      loadLogo(
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+      ),
+    );
+    act(() => fake.map.setStyle({} as never));
     fixtures.styleVersion = 2;
     rerender(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
+    expect(lastImage()).toBe("route-search-pin-brand:Q151954");
     await act(async () => {
       finish(true);
     });
-    expect(lastImage()).toBe("route-search-pin-brand:Q151954");
+    expect(lastImage()).toBe("brand-marker-Q151954");
   });
 });
 

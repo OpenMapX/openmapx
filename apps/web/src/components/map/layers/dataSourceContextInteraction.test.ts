@@ -2,18 +2,13 @@ import { describe, expect, it } from "vitest";
 import { pickDataSourceContextAction } from "./dataSourceContextInteraction";
 
 describe("pickDataSourceContextAction", () => {
-  it("lets an overlapping marker win", () => {
-    expect(
-      pickDataSourceContextAction(1, {
-        contextKind: "restriction_zone",
-        contextId: "zone:one",
-      }),
-    ).toEqual({ type: "none" });
+  it("does nothing without a zone", () => {
+    expect(pickDataSourceContextAction(undefined)).toEqual({ type: "none" });
   });
 
   it("selects resolvable station areas", () => {
     expect(
-      pickDataSourceContextAction(0, {
+      pickDataSourceContextAction({
         contextKind: "station_area",
         stationId: "s:central",
       }),
@@ -22,6 +17,6 @@ describe("pickDataSourceContextAction", () => {
 
   it("opens semantic restrictions for inspection", () => {
     const properties = { contextKind: "restriction_zone", zoneClass: "no_parking" };
-    expect(pickDataSourceContextAction(0, properties)).toEqual({ type: "inspect", properties });
+    expect(pickDataSourceContextAction(properties)).toEqual({ type: "inspect", properties });
   });
 });
