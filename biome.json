@@ -291,6 +291,7 @@
       "includes": [
         "packages/air-quality/**",
         "packages/command-palette/**",
+        "packages/core/**",
         "packages/db-schema/**",
         "packages/extension-contracts/**",
         "packages/hardlinks/**",

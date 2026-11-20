@@ -30,8 +30,9 @@ export function downloadMediaTypes(
   const selector = contract.mediaTypeQuery;
   if (!selector) return contract.mediaTypes;
   const key = query[selector.name] ?? selector.default;
-  if (typeof key !== "string" || !Object.hasOwn(selector.values, key)) return [];
-  return [selector.values[key]];
+  const mediaType = typeof key === "string" ? selector.values[key] : undefined;
+  if (typeof key !== "string" || !Object.hasOwn(selector.values, key) || !mediaType) return [];
+  return [mediaType];
 }
 
 /** Reject malformed first-party descriptors before registration or SDK acquisition. */

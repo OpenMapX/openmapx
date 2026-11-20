@@ -125,8 +125,10 @@ describe("fetchTransitPlan", () => {
   it("uses the supplied client's origin and omits credentials", async () => {
     mockFetch();
     await fetchTransitPlan(BASE, client());
-    expect(calls[0].url.startsWith("https://api.example/api/integrations/transit/plan")).toBe(true);
-    expect(calls[0].init.credentials).toBe("omit");
+    expect(calls[0]?.url.startsWith("https://api.example/api/integrations/transit/plan")).toBe(
+      true,
+    );
+    expect(calls[0]?.init.credentials).toBe("omit");
   });
 
   it("passes request options through to the client", async () => {
@@ -163,8 +165,8 @@ describe("refreshTransitItinerary", () => {
   it("sends exactly the one supplied token", async () => {
     mockFetch({ data: { itinerary: {}, fallbackOccurred: false } });
     await refreshTransitItinerary("token-1", client());
-    expect(JSON.parse(String(calls[0].init.body))).toEqual({ token: "token-1" });
-    expect(calls[0].url).not.toContain("token-1");
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ token: "token-1" });
+    expect(calls[0]?.url).not.toContain("token-1");
   });
 
   it("returns the replacement itinerary without retaining anything globally", async () => {
@@ -183,19 +185,19 @@ describe("fetchVehicleJourney", () => {
   it("substitutes the trip id into the path", async () => {
     mockFetch();
     await fetchVehicleJourney({ tripId: "trip/1" }, client());
-    expect(calls[0].url).toContain("/vehicles/trip%2F1");
+    expect(calls[0]?.url).toContain("/vehicles/trip%2F1");
   });
 
   it("sends each fallback id as its own repeated parameter, verbatim", async () => {
     mockFetch();
     const fallbackIds = ["a", "b,c", " lead", "q?x=1&y"];
     await fetchVehicleJourney({ tripId: "t1", fallbackIds }, client());
-    expect(new URL(calls[0].url).searchParams.getAll("fallback_ids")).toEqual(fallbackIds);
+    expect(new URL(calls[0]?.url ?? "").searchParams.getAll("fallback_ids")).toEqual(fallbackIds);
   });
 
   it("omits the parameter when there are no fallbacks", async () => {
     mockFetch();
     await fetchVehicleJourney({ tripId: "t1" }, client());
-    expect(calls[0].url).not.toContain("fallback_ids");
+    expect(calls[0]?.url).not.toContain("fallback_ids");
   });
 });

@@ -388,7 +388,7 @@ describe("safeFetchStatus", () => {
     expect(undiciLifecycle.close).toHaveBeenCalledOnce();
     expect(undiciLifecycle.destroy).not.toHaveBeenCalled();
     expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
-      undiciLifecycle.close.mock.invocationCallOrder[0],
+      undiciLifecycle.close.mock.invocationCallOrder[0] ?? Number.NEGATIVE_INFINITY,
     );
   });
 

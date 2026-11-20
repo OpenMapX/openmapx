@@ -67,7 +67,7 @@ describe("erasure journal", () => {
     const path = join(directory, "journal.jsonl");
     initializeErasureJournal(path, KEY);
     await appendErasureRequest(path, KEY, "subject");
-    const [coverage, requested] = readFileSync(path, "utf8").trim().split("\n");
+    const [coverage = "", requested = ""] = readFileSync(path, "utf8").trim().split("\n");
     writeFileSync(path, requested + "\n", { mode: 0o600 });
     expect(() => readErasureJournal(path, KEY)).toThrow(/coverage/i);
     const malformed = { ...JSON.parse(requested), subjectDigest: "bad" };

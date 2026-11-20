@@ -45,7 +45,7 @@ beforeEach(() => {
 describe("localGarage", () => {
   it("round-trips a vehicle", () => {
     const [saved] = writeLocalVehicles([VEHICLE]);
-    expect(saved.name).toBe("Blue Golf");
+    expect(saved?.name).toBe("Blue Golf");
     expect(readLocalVehicles()).toEqual([saved]);
   });
 
@@ -69,7 +69,7 @@ describe("localGarage", () => {
       { ...VEHICLE, id: "b", name: "B", isDefault: true },
     ]);
     expect(rows.filter((r) => r.isDefault)).toHaveLength(1);
-    expect(rows[0].isDefault).toBe(true);
+    expect(rows[0]?.isDefault).toBe(true);
   });
 
   it("keeps one parked record per vehicle", () => {
@@ -102,7 +102,7 @@ describe("localGarage", () => {
       },
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe("p2");
+    expect(rows[0]?.id).toBe("p2");
   });
 
   it("takes and clears the whole garage", () => {

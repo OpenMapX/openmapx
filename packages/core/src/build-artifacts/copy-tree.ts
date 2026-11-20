@@ -114,6 +114,8 @@ export function inspectArtifactTree(
 function parent(root: AnchoredDirectory, path: string, create: boolean) {
   const parts = path.split("/"),
     opened: AnchoredDirectory[] = [];
+  const name = parts.at(-1);
+  if (name === undefined) throw Error(`Copy path has no name: ${path}`);
   let directory = root;
   try {
     for (const name of parts.slice(0, -1)) {
@@ -122,7 +124,7 @@ function parent(root: AnchoredDirectory, path: string, create: boolean) {
     }
     return {
       directory,
-      name: parts.at(-1)!,
+      name,
       close: () => {
         for (const dir of opened.reverse()) dir.close();
       },

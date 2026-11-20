@@ -37,7 +37,7 @@ describe("ApiClient success paths", () => {
     await expect(client.get<{ ok: boolean }>("/api/x", { a: "1" })).resolves.toEqual({
       ok: true,
     });
-    const url = fetchMock.mock.calls[0][0] as string;
+    const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toBe("http://api.test/api/x?a=1");
   });
 
@@ -56,7 +56,7 @@ describe("ApiClient success paths", () => {
     await expect(client.post("/api/x", { name: "a" })).resolves.toEqual({
       created: true,
     });
-    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
     expect(init.body).toBe(JSON.stringify({ name: "a" }));
   });

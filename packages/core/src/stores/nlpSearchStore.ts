@@ -36,7 +36,7 @@ function applyTimeConstraint(intent: SearchIntent): void {
     oh.setOpeningHoursFilter("open_24h");
   } else if (tc.type === "open_at") {
     const dayIndex = DAY_INDEX[tc.day] ?? null;
-    const hour = parseInt(tc.time.split(":")[0], 10);
+    const hour = parseInt(tc.time.split(":")[0] ?? "", 10);
     oh.setOpenAtFilter(dayIndex, Number.isNaN(hour) ? null : hour);
   }
 }

@@ -36,7 +36,7 @@ describe("address request and ownership behavior", () => {
   it("skips reverse for a resolved fixed provider address and city", () => {
     renderHook(() => useMergedPlace(place));
     expect(mocks.reverse).toHaveBeenCalledWith(null);
-    expect(mocks.details.mock.calls[0][4]).toBe(true);
+    expect(mocks.details.mock.calls[0]?.[4]).toBe(true);
   });
   it("reuses cached resolver address and city before starting another reverse lookup", () => {
     const selected = { ...place, address: "", city: undefined, addressEvidence: undefined };
@@ -233,7 +233,7 @@ describe("address request and ownership behavior", () => {
       isLoading: false,
     });
     const { result } = renderHook(() => useMergedPlace(selected));
-    expect(mocks.details.mock.calls[0][0]).toBe("osm:way/1");
+    expect(mocks.details.mock.calls[0]?.[0]).toBe("osm:way/1");
     expect(result.current.place?.id).toBe("maptiler:poi.1");
     expect(result.current.place?.ids).toEqual(selected.ids);
     expect(result.current.place?.directOsmReference).toEqual(selected.directOsmReference);

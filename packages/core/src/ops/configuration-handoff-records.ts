@@ -1,5 +1,6 @@
 /** Fixed handoff data. A matching DTO never supplies target authority. */
 import { z } from "zod";
+import { strictlyAscending } from "../utils/strictlyAscending";
 
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -18,7 +19,7 @@ export const protectedConfigurationReconcileIdsSchema = z
   .array(protectedConfigurationServiceIdSchema)
   .min(1)
   .max(6)
-  .refine((ids) => ids.every((id, index) => index === 0 || ids[index - 1]! < id));
+  .refine(strictlyAscending);
 export const configurationHandoffModeSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("configuration") }),
   z.strictObject({
@@ -35,11 +36,7 @@ export const configurationHandoffIntentSchema = z
   .strictObject({
     handoffId: z.uuid(),
     previewFingerprint: digest,
-    serviceIds: z
-      .array(id)
-      .min(1)
-      .max(64)
-      .refine((ids) => ids.every((v, i) => i === 0 || ids[i - 1]! < v)),
+    serviceIds: z.array(id).min(1).max(64).refine(strictlyAscending),
     expectedImageIdentities: z.record(id, z.string().regex(/^sha256:[a-f0-9]{64}$/)),
     mode: configurationHandoffModeSchema,
   })

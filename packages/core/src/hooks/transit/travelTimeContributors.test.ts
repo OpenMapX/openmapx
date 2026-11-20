@@ -35,7 +35,7 @@ describe("travel time acquisition receipts", () => {
     const captured = captureIsochroneContributors(envelope);
     a.name = "changed registry";
     expect(
-      JSON.parse(captured.data.featureCollection.features[0]?.properties?._mapAttributions),
+      JSON.parse(String(captured.data.featureCollection.features[0]?.properties?._mapAttributions)),
     ).toEqual([{ ...a, name: "A" }]);
     expect(polygon.properties).toEqual({});
     a.name = "A";
@@ -59,7 +59,7 @@ describe("travel time acquisition receipts", () => {
       attributions: [b],
     });
     expect(
-      JSON.parse(result.data.featureCollection.features[0]?.properties?._mapAttributions),
+      JSON.parse(String(result.data.featureCollection.features[0]?.properties?._mapAttributions)),
     ).toEqual([a]);
   });
   it("captures the independent estimated surface receipt with its response before caching", () => {

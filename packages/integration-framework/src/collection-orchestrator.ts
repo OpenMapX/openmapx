@@ -132,13 +132,16 @@ export function createCollectionOrchestrator<
       const items: TItem[] = [];
       const reasons = new Set<DataSourcePartialReason>();
       settled.forEach((res, i) => {
+        // One settled result per covering provider, in the same order.
+        const provider = covering[i];
+        if (!provider) return;
         if (res.status === "fulfilled") {
-          outages.succeeded(covering[i].id);
+          outages.succeeded(provider.id);
           items.push(...res.value.items);
           if (res.value.partial) reasons.add(res.value.partial);
         } else {
           reasons.add("unavailable");
-          outages.failed(covering[i].id, options.name, res.reason);
+          outages.failed(provider.id, options.name, res.reason);
         }
       });
 

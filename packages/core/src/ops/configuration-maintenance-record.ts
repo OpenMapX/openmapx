@@ -6,6 +6,7 @@ import {
   type DataConfigurationFenceReceipt,
   dataConfigurationFenceReceiptSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
+import { strictlyAscending } from "../utils/strictlyAscending";
 import {
   type ConfigurationMaintenanceEffect,
   configurationMaintenanceBindingSchema,
@@ -18,7 +19,7 @@ const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 const ids = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
   .max(256)
-  .refine((ids) => ids.every((id, index) => index === 0 || ids[index - 1]! < id));
+  .refine(strictlyAscending);
 const time = z.iso.datetime();
 
 export const maintenanceStepOutcomeSchema = z.enum([
@@ -354,9 +355,10 @@ export function transitionMaintenance(
     case "helper_exited": {
       const handoff = handoffStep(record);
       if (handoff?.state === "terminal" && handoff.outcome === event.outcome) return unchanged();
-      if (record.state !== "applying" || handoff?.state !== "attempted") refuse("conflict");
-      handoff!.state = "terminal";
-      handoff!.outcome = event.outcome;
+      if (!handoff || record.state !== "applying" || handoff.state !== "attempted")
+        refuse("conflict");
+      handoff.state = "terminal";
+      handoff.outcome = event.outcome;
       record.followUp =
         event.outcome === "committed"
           ? "complete"
@@ -380,7 +382,10 @@ export function transitionMaintenance(
     case "settle_complete":
       if (record.state === "settled") return unchanged();
       if (record.state === "settling") {
-        effects.push({ type: "settle_fence", outcome: record.fenceOutcome! });
+        // Entering settling chooses the outcome; a settling record without one is inconsistent.
+        const outcome = record.fenceOutcome;
+        if (outcome === null) refuse("conflict");
+        effects.push({ type: "settle_fence", outcome });
         return { record: input, effects, changed: false };
       }
       if (record.state === "recovery_required") refuse("recovery_required");

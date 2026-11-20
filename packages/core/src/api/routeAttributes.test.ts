@@ -4,7 +4,7 @@ import type { MatchResult } from "../types/routing";
 import { configureApiClient } from "./client";
 import { fetchRouteMatchWindow } from "./routeAttributes";
 
-const trace: LngLat[] = [
+const trace: [LngLat, LngLat, LngLat] = [
   [6.086047, 50.776993],
   [6.086282, 50.777161],
   [6.088038, 50.778025],
@@ -76,7 +76,7 @@ describe("fetchRouteMatchWindow", () => {
     });
   });
 
-  it.each([[], matched.points.slice(0, 2), [...matched.points, matched.points[0]]])(
+  it.each([[], matched.points.slice(0, 2), [...matched.points, ...matched.points.slice(0, 1)]])(
     "rejects misaligned point attributes while retaining traffic signals (%j)",
     async (points) => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ ...matched, points })));
@@ -139,7 +139,7 @@ describe("fetchRouteMatchWindow", () => {
     await vi.advanceTimersByTimeAsync(4000);
     expect((await pending).speedLimitsByPoint).toEqual([30, null, 50]);
     expect(attempts.map(({ at }) => at)).toEqual([0, 1000, 4000]);
-    expect(attempts.map(({ body }) => body)).toEqual(new Array(3).fill(attempts[0].body));
+    expect(attempts.map(({ body }) => body)).toEqual(new Array(3).fill(attempts[0]?.body));
   });
 
   it.each([400, 401, 403, 404, 422, 501])(

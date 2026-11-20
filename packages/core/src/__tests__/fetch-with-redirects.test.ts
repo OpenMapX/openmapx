@@ -84,7 +84,9 @@ describe("fetchWithRedirects", () => {
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(fetchMock.mock.invocationCallOrder[1]);
+    expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
+      fetchMock.mock.invocationCallOrder[1] ?? Number.NEGATIVE_INFINITY,
+    );
     expect(await response.json()).toEqual({ ok: true });
   });
 

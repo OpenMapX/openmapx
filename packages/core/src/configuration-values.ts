@@ -44,14 +44,14 @@ export function validOperatorString(value: string, format: string): boolean {
       /^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*$/.test(value)
     );
   if (format === "ollama-duration" && value === "0") return true;
-  const match = /^(\d+(?:\.\d+)?)(s|m|h)$/.exec(value);
-  if (!match) return false;
-  const seconds = Number(match[1]) * { s: 1, m: 60, h: 3600 }[match[2] as "s" | "m" | "h"];
+  const [, amount, unit] = /^(\d+(?:\.\d+)?)(s|m|h)$/.exec(value) ?? [];
+  if (amount === undefined || unit === undefined) return false;
+  const seconds = Number(amount) * { s: 1, m: 60, h: 3600 }[unit as "s" | "m" | "h"];
   if (!Number.isFinite(seconds)) return false;
   if (format === "ollama-duration") return seconds > 0 && seconds <= 86400;
   // The pinned Photon parser accepts integer units, not fractional durations.
   if (format === "photon-duration")
-    return !match[1].includes(".") && seconds >= 3600 && seconds <= 8760 * 3600;
+    return !amount.includes(".") && seconds >= 3600 && seconds <= 8760 * 3600;
   return false;
 }
 

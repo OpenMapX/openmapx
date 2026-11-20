@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import type { BuiltInServiceManifestSource } from "../built-in-service-source";
 import { embeddedBuiltInServiceManifests } from "../embedded-built-in-services";
 import { embeddedBuiltInServiceManifests as bundledBuiltInServiceManifests } from "../embedded-built-in-services.bundle";
@@ -165,8 +165,10 @@ describe("fixed release service authority", () => {
     expect(
       captured.services.find((service) => service.manifest.id === id)?.manifest.container.image,
     ).toBe(`ghcr.io/openmapx/${id}`);
+    const [first] = captured.services;
+    assert.isDefined(first);
     expect(() => {
-      (captured.services[0].manifest.container as { image: string }).image = "mutated.invalid";
+      (first.manifest.container as { image: string }).image = "mutated.invalid";
     }).toThrow();
   });
 

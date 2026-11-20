@@ -66,7 +66,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
         if (response.status === 200) {
           const id: string = response.data.manifest.id;
           const domains: string[] = response.data.manifest.domains;
-          const source: "default" | "database" | "vault" | "config.json" | "env" = response.data.resolvedConfig.field.source;
+          for (const field of Object.values(response.data.resolvedConfig)) { const source: "default" | "database" | "vault" | "config.json" | "env" = field.source; }
         }
       });
       setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic",expectedRevision:"cfg1_synthetic"}, {"idempotency-key":"synthetic-intent-0001"}, finiteOptions);
@@ -79,13 +79,13 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       getAdminIntegrationHealthHistory("sample", {hours: "24"});
       getAdminOverview(finiteOptions).then(response => {
         if (response.status === 200) {
-          const email: string | undefined = response.data.activeJobs[0].actor?.email;
-          const createdAt: string = response.data.recentActivity[0].createdAt;
+          for (const job of response.data.activeJobs) { const email: string | undefined = job.actor?.email; }
+          for (const activity of response.data.recentActivity) { const createdAt: string = activity.createdAt; }
         }
       });
       getAdminIntegrationCredentials("sample", finiteOptions).then(response => {
         if (response.status === 200) {
-          const source: "default" | "database" | "vault" | "config.json" | "env" | "missing" = response.data.credentials[0].source;
+          for (const credential of response.data.credentials) { const source: "default" | "database" | "vault" | "config.json" | "env" | "missing" = credential.source; }
         }
       });
     `,
@@ -106,7 +106,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       uploadAdminArtifactTransferContent("stage",new Blob([new Uint8Array([0,255])]),{client:undefined});
       // @ts-expect-error Uploads accept opaque Blob bodies, not JSON.
       uploadAdminArtifactTransferContent("stage",{body:"invalid"});
-      downloadAdminArtifactTransferContent("stage",{onByteChunk:async(chunk,signal)=>{const byte:number=chunk[0];signal.throwIfAborted();}}).then(response=>{if(response.status===200){const data:undefined=response.data;}});
+      downloadAdminArtifactTransferContent("stage",{onByteChunk:async(chunk,signal)=>{for(const value of chunk){const byte:number=value;}signal.throwIfAborted();}}).then(response=>{if(response.status===200){const data:undefined=response.data;}});
       // @ts-expect-error Byte downloads require an explicit owned consumer.
       downloadAdminArtifactTransferContent("stage");
       // @ts-expect-error Signal alone cannot consume a byte response.
@@ -153,17 +153,19 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       import type { AdminExtensionInstallPreview, AdminInstalledExtension, AdminExtensionSource } from "../../contracts/extension-admin";
       listAdminExtensionCatalog({q: "a & b", type: "fallback", sort: "fallback"}).then(response => {
         if (response.status === 200) {
-          const version: string | undefined = response.data.entries[0].version;
-          const state: "verified" | "community" | "revoked" | "stale-revocation-data" = response.data.entries[0].status;
-          const retained: unknown = response.data.entries[0].unfamiliar;
+          for (const entry of response.data.entries) {
+            const version: string | undefined = entry.version;
+            const state: "verified" | "community" | "revoked" | "stale-revocation-data" = entry.status;
+            const retained: unknown = entry.unfamiliar;
+          }
         }
       });
       getAdminExtensionCatalogEntry("a/b?#").then(response => {
-        if (response.status === 200) { const kind: "service" | "integration" = response.data.componentList[0].kind; }
+        if (response.status === 200) { for (const component of response.data.componentList) { const kind: "service" | "integration" = component.kind; } }
         if (response.status === 404) { const error: string = response.data.error; }
       });
       listAdminInstalledExtensions().then(response => {
-        if (response.status === 200) { const item: AdminInstalledExtension = response.data.extensions[0]; }
+        if (response.status === 200) { for (const extension of response.data.extensions) { const item: AdminInstalledExtension = extension; } }
       });
       previewAdminExtensionInstall({id: "a", manifestUrl: "https://example.test"}).then(response => {
         if (response.status === 200) { const preview: AdminExtensionInstallPreview = response.data; }
@@ -180,7 +182,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       updateAdminExtension("id", undefined); updateAdminExtension("id", {hostPortConfirmation: "opaque"});
       removeAdminExtension("id", undefined); removeAdminExtension("id", {});
       refreshAdminExtensionCatalog(undefined); refreshAdminExtensionCatalog({});
-      listAdminExtensionSources().then(response => { if (response.status === 200) { const source: AdminExtensionSource = response.data.sources[0]; } });
+      listAdminExtensionSources().then(response => { if (response.status === 200) { for (const entry of response.data.sources) { const source: AdminExtensionSource = entry; } } });
       addAdminExtensionSource({url: "https://example.test", label: "Synthetic"});
       removeAdminExtensionSource({url: "https://example.test"});
       // @ts-expect-error Selector fields are strings.
@@ -231,7 +233,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           created.data.userId;
         }
         const read = await listGarageVehicles();
-        if (read.status === 200) { const at: string = read.data.vehicles[0].createdAt; }
+        if (read.status === 200) { for (const vehicle of read.data.vehicles) { const at: string = vehicle.createdAt; } }
         await updateGarageVehicle("car / café", { isDefault: false });
         await saveGarageParking({ lat: 52, lng: 13, source: "manual" });
         await updateGarageParking("parked", { expiresAt: null });
@@ -255,7 +257,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           created.data.share.tokenHash;
         }
         const resolved = await resolvePublicShare("A".repeat(43));
-        if (resolved.status === 200 && resolved.data.type === "list") { const lat: number = resolved.data.places[0].lat; }
+        if (resolved.status === 200 && resolved.data.type === "list") { for (const place of resolved.data.places) { const lat: number = place.lat; } }
         await listOwnerShares(); await rotateShareToken("share / café"); await revokeShare("share");
         // @ts-expect-error List creation requires a mode.
         createShare({ targetType: "list", targetId: "list" });

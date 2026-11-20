@@ -47,7 +47,7 @@ export async function readAmbientManifest(sql: postgres.Sql): Promise<AmbientMan
   const [exists] = await sql.unsafe<{ exists: boolean }[]>(
     `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
   );
-  if (!exists.exists) return null;
+  if (!exists?.exists) return null;
   const [row] = await sql.unsafe<{ manifest: AmbientManifest; enabled: boolean }[]>(
     `SELECT g.manifest,s.enabled FROM ambient_places.state s JOIN ambient_places.generations g ON g.id=s.active WHERE s.singleton=1 AND g.publication_status='published'`,
   );
@@ -69,7 +69,7 @@ export async function readAmbientPlaceByGers(
     const [exists] = await tx.unsafe<{ exists: boolean }[]>(
       `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
     );
-    if (!exists.exists) return null;
+    if (!exists?.exists) return null;
     const candidates = await tx.unsafe<{ generation: string; manifest: AmbientManifest }[]>(
       `SELECT g.id AS generation,g.manifest FROM ambient_places.generations g
        CROSS JOIN ambient_places.state s WHERE s.singleton=1 AND g.publication_status='published'
@@ -94,7 +94,7 @@ export async function readAmbientPlaceByGers(
     const place = row
       ? ambientPlaceFromTile({ ...row, format_version: AMBIENT_FORMAT_VERSION }, [row.lng, row.lat])
       : null;
-    return place ? { generation: row.generation, place } : null;
+    return place && row ? { generation: row.generation, place } : null;
   });
 }
 export async function readAmbientTile(
@@ -110,7 +110,7 @@ export async function readAmbientTile(
     const [exists] = await tx.unsafe<{ exists: boolean }[]>(
       `SELECT to_regclass('ambient_places.generations') IS NOT NULL AS exists`,
     );
-    if (!exists.exists) return null;
+    if (!exists?.exists) return null;
     const [known] = await tx.unsafe<{ version: number }[]>(
       `SELECT (manifest->>'version')::INT AS version FROM ambient_places.generations g WHERE id=$1 AND g.publication_status='published'`,
       [generation],
@@ -154,6 +154,8 @@ export async function readAmbientTile(
       ) SELECT ST_AsMVT(bounded,'ambient_places',4096,'geom') AS tile FROM bounded`,
       [generation, z, x, y, shift],
     );
+    // ST_AsMVT is an aggregate, so the query always returns its one row.
+    if (!result) throw new Error("Ambient tile query returned no row");
     if (result.tile.length > AMBIENT_LIMITS.tileBytes)
       throw new Error("Ambient tile byte budget exceeded");
     return result.tile;

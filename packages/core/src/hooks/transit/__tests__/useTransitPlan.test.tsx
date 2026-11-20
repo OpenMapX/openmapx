@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { apiClient } from "../../../api/client";
 import { createQueryWrapper, createTestQueryClient } from "../../../test/queryWrapper";
 import type { LngLat } from "../../../types/geometry";
@@ -20,7 +20,7 @@ function wireTimes(): (string | undefined)[] {
   return get.mock.calls.map((call) => (call[1] as Record<string, string>).time);
 }
 function wireParams(index: number): Record<string, string> {
-  return get.mock.calls[index][1] as Record<string, string>;
+  return get.mock.calls[index]?.[1] as Record<string, string>;
 }
 /** The shared canonical request in every cached search key carries its wire time. */
 function cachedKeyTimes(): unknown[] {
@@ -242,10 +242,12 @@ it.each(["substitution", "stale", "partial", "requirements"])(
       selection.plan,
     );
     const changed = structuredClone(selection.plan);
-    if (kind === "substitution") changed.data.itineraries[0].legs[0].tripId = "ms:another";
+    const changedLeg = changed.data.itineraries[0]?.legs[0];
+    assert.isDefined(changedLeg);
+    if (kind === "substitution") changedLeg.tripId = "ms:another";
     if (kind === "stale") changed.freshness.isStale = true;
     if (kind === "partial") changed.freshness.isPartial = true;
-    if (kind === "requirements") changed.data.itineraries[0].legs[0].wheelchairAccessible = false;
+    if (kind === "requirements") changedLeg.wheelchairAccessible = false;
     vi.spyOn(apiClient, "post").mockResolvedValue(changed as never);
     const view = setup({ origin: ORIGIN, destination: DESTINATION, reference });
     await act(async () => {

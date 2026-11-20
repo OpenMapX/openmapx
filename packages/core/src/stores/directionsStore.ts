@@ -338,7 +338,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         result.query.kind === "search"
           ? result.query.params.time
           : new Date(
-              Date.parse(result.query.params.reference.legs[0].scheduledDeparture) - 120000,
+              Date.parse(result.query.params.reference.legs[0]?.scheduledDeparture ?? "") - 120000,
             ).toISOString();
       const time = new Date(anchor);
       if (!Number.isFinite(time.getTime())) return false;
@@ -423,8 +423,9 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
 
     setWaypoint: (index, coords, label) => {
       const wps = [...get().waypoints];
-      if (index < 0 || index >= wps.length) return;
-      wps[index] = { ...wps[index], coords, label };
+      const current = wps[index];
+      if (!current) return;
+      wps[index] = { ...current, coords, label };
       update({ waypoints: wps, activeRouteIndex: 0 });
     },
 
@@ -457,6 +458,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     reorderWaypoints: (fromIndex, toIndex) => {
       const wps = [...get().waypoints];
       const [moved] = wps.splice(fromIndex, 1);
+      if (!moved) return;
       wps.splice(toIndex, 0, moved);
       const typed = deriveTypes(wps);
       update({ waypoints: typed, activeRouteIndex: 0 });
@@ -477,8 +479,10 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       // EV re-routing only supports origin + destination (see ev-plan.ts) —
       // drop any intermediate waypoints picked up before switching into EV mode.
       const wps = get().waypoints;
-      const last = wps.length - 1;
-      const trimmed = last > 1 ? deriveTypes([wps[0], wps[last]]) : wps;
+      const origin = wps[0];
+      const destination = wps.at(-1);
+      const trimmed =
+        wps.length > 2 && origin && destination ? deriveTypes([origin, destination]) : wps;
       update({
         waypoints: trimmed,
         isEvMode,
@@ -495,10 +499,10 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setTripTime: (tripTime) => update({ tripTime }),
 
     setWaypointSchedule: (index, schedule) => {
-      const wps = get().waypoints;
-      if (index < 0 || index >= wps.length) return;
-      const next = [...wps];
-      const { schedule: _previous, ...rest } = next[index];
+      const next = [...get().waypoints];
+      const current = next[index];
+      if (!current) return;
+      const { schedule: _previous, ...rest } = current;
       next[index] = schedule === null ? rest : { ...rest, schedule };
       update({ waypoints: next, activeRouteIndex: 0 });
     },
@@ -507,8 +511,11 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const wps = get().waypoints;
       if (order.length !== wps.length) return false;
       if (wps.some((wp) => hasWindow(wp.schedule))) return false;
-      const reordered = order.map((index) => wps[index]);
-      if (reordered.some((wp) => wp === undefined)) return false;
+      const reordered = order.flatMap((index) => {
+        const waypoint = wps[index];
+        return waypoint ? [waypoint] : [];
+      });
+      if (reordered.length !== order.length) return false;
       update({ waypoints: deriveTypes(reordered), activeRouteIndex: 0 });
       return true;
     },

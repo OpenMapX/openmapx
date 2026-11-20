@@ -13,8 +13,8 @@ import { DEFAULT_ARTIFACT_ARCHIVE_LIMITS, validateBuildBundle, writeBuildBundle 
 import { acquireArtifactTargetLease } from "../target-lease";
 import * as control from "./control";
 
-const root = process.argv[2]!,
-  point = process.argv[3]!;
+const root = process.argv[2] ?? "",
+  point = process.argv[3] ?? "";
 if (!root || !["old-directory", "build-record"].includes(point))
   throw Error("Native fixture input required");
 const dataRoot = join(root, "data"),

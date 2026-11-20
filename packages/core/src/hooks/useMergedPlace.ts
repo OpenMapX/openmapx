@@ -191,7 +191,7 @@ function mergePlaceFields(
       transfer("addressEvidence", reverseGeo, "address");
     }
     if (!base.city && reverseGeo?.city) {
-      base.city = reverseGeo.city.split(",")[0].trim();
+      base.city = (reverseGeo.city.split(",")[0] ?? "").trim();
       transfer("city", reverseGeo);
     }
   }
@@ -216,7 +216,7 @@ function mergePlaceFields(
     transfer("addressEvidence", reverseGeo, "address");
   }
   if (!base.city && reverseGeo?.city) {
-    base.city = reverseGeo.city.split(",")[0].trim();
+    base.city = (reverseGeo.city.split(",")[0] ?? "").trim();
     transfer("city", reverseGeo);
   }
 
@@ -260,7 +260,7 @@ function mergePlaceFields(
   }
 
   for (const key of Object.keys(fields)) {
-    const root = key.split(".")[0];
+    const [root = key] = key.split(".");
     if ((base as unknown as Record<string, unknown>)[root] === undefined) delete fields[key];
   }
   base.fieldContributors = fields;

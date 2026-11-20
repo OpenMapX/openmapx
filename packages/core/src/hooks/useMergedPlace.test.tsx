@@ -92,7 +92,9 @@ it("preserves each retained identity and nested winner independently", () => {
   expect(contributorsForField(result.current.place ?? {}, "brand.wikidata")).toEqual([]);
   a.name = "Mutated";
   b.name = "Mutated";
-  expect(contributorsForField(result.current.place ?? {}, "ids.wikidata")[0].name).toBe("Selected");
+  expect(contributorsForField(result.current.place ?? {}, "ids.wikidata")[0]?.name).toBe(
+    "Selected",
+  );
 });
 
 it("uses captured reverse address and matched schedule ownership with neutral computed hours", () => {

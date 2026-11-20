@@ -25,7 +25,7 @@ function validLongitude(value: number): boolean {
  */
 export function isValidWgs84Bounds(bounds: readonly number[]): bounds is Wgs84Bounds {
   if (bounds.length !== 4) return false;
-  const [west, south, east, north] = bounds;
+  const [west = Number.NaN, south = Number.NaN, east = Number.NaN, north = Number.NaN] = bounds;
   return (
     validLongitude(west) &&
     validLongitude(east) &&

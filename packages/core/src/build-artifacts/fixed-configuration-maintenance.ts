@@ -26,6 +26,7 @@ import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { servicePullResultSchema } from "../ops/service-operation-records";
 import { dataConfigurationFencePrepareSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import { generationHardlinksPlanSchema } from "../services/data-manager/contracts/executions";
+import { strictlyAscending } from "../utils/strictlyAscending";
 import {
   type ConfigurationReleaseSnapshot,
   configurationReleaseSnapshotSchema,
@@ -41,7 +42,7 @@ const ids = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
   .min(1)
   .max(256)
-  .refine((values) => values.every((value, i) => i === 0 || values[i - 1]! < value));
+  .refine(strictlyAscending);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const coordinatorImageSchema = z.strictObject({
   action: z.enum(["apply", "update"]),
@@ -100,8 +101,8 @@ function address(
       ? `job1_${bytes.toString("base64url").slice(0, 32)}`
       : (() => {
           const value = Buffer.from(bytes.subarray(0, 16));
-          value[6] = (value[6]! & 15) | 64;
-          value[8] = (value[8]! & 63) | 128;
+          value[6] = (value.readUInt8(6) & 15) | 64;
+          value[8] = (value.readUInt8(8) & 63) | 128;
           const h = value.toString("hex");
           return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
         })();

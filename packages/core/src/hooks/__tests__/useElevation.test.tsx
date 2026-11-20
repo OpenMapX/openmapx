@@ -96,7 +96,7 @@ it("keeps geometry and inline height snapshots on a non-driving computed profile
   const { result } = renderHook(() => useElevation({ route }), { wrapper: createQueryWrapper() });
   expect(result.current.data?.contributors).toEqual([geometry, height]);
   height.attributionText = "Changed";
-  expect(result.current.data?.contributors?.[1].attributionText).toBe("Height notice");
+  expect(result.current.data?.contributors?.[1]?.attributionText).toBe("Height notice");
 });
 
 it("fetches driving height receipts and preserves the exact requested geometry before await", async () => {

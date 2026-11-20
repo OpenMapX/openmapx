@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   expandServiceSelection,
   type LoadedService,
@@ -133,13 +133,16 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
     const document = parseYaml(result.composeYaml) as {
       services: Record<string, { labels: Record<string, string> }>;
     };
-    const labels = document.services["app-api"].labels;
+    const labels = document.services["app-api"]?.labels;
+    assert.isDefined(labels);
     expect(labels["traefik.http.routers.app-api.rule"]).toContain("PathPrefix(`/api`)");
     const internal = Object.entries(labels).filter(
       ([key, value]) => key.endsWith(".rule") && value.includes("PathPrefix(`/api/internal`)"),
     );
     expect(internal).toHaveLength(1);
-    expect(labels[internal[0][0].replace(/\.rule$/, ".middlewares")].split(",")).toContain(
+    const [internalRule] = internal;
+    assert.isDefined(internalRule);
+    expect(labels[internalRule[0].replace(/\.rule$/, ".middlewares")]?.split(",")).toContain(
       "internal-deny@file",
     );
   });
@@ -598,15 +601,17 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
         "traefik",
       ]);
       for (const id of ["dawarich-postgis", "dawarich-redis", "dawarich-app", "dawarich-sidekiq"]) {
-        const container = registry.get(id)!.manifest.container;
+        const service = registry.get(id);
+        assert.isDefined(service, id);
+        const container = service.manifest.container;
         expect(container.digest, id).toMatch(/^sha256:[a-f0-9]{64}$/);
         expect(compose.services[id]?.image).toBe(
           `${container.image}:${container.tag}@${container.digest}`,
         );
       }
-      expect(compose.services["dawarich-app"].image).toBe(
-        compose.services["dawarich-sidekiq"].image,
-      );
+      const appImage = compose.services["dawarich-app"]?.image;
+      assert.isDefined(appImage);
+      expect(appImage).toBe(compose.services["dawarich-sidekiq"]?.image);
       expect(compose.services["dawarich-postgis"]?.ports).toBeUndefined();
       expect(compose.services["dawarich-redis"]?.ports).toBeUndefined();
       expect(compose.services["dawarich-app"]?.depends_on).not.toHaveProperty("dawarich-sidekiq");

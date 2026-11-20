@@ -207,7 +207,7 @@ describe("personal timeline API", () => {
     );
     const result = await getPersonalTimelineDay("2026-01-02");
     expect(result.map.tracks.features).toHaveLength(4);
-    expect(result.map.tracks.features[3].geometry.coordinates).toHaveLength(80_000);
+    expect(result.map.tracks.features[3]?.geometry.coordinates).toHaveLength(80_000);
   });
 
   it("validates actual transport JSON and preserves request credentials", async () => {

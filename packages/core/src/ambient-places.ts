@@ -144,7 +144,7 @@ const aliases: Record<string, string> = {
   townhall: "townhall",
 };
 export function ambientCategory(value: string): string {
-  const raw = value.split("/").at(-1)!;
+  const raw = value.split("/").at(-1) ?? value;
   return aliases[raw] ?? raw;
 }
 const essential = new Set([
@@ -201,7 +201,7 @@ function landmarkZoom(category: string, tags: Record<string, string>): 14 | 15 |
   const designated =
     tags.building === "cathedral" ||
     tags["church:type"] === "cathedral" ||
-    ["yes", "minor", "major"].includes(tags.basilica);
+    ["yes", "minor", "major"].includes(tags.basilica ?? "");
   if (!heritage && !designated) return null;
   return designated || /^[1-3]$/.test(tags.heritage ?? "") ? 14 : 15;
 }
@@ -256,7 +256,7 @@ export function ambientPlaceFromOsm(row: AmbientOsmRow): AmbientPlace | null {
   const wholeBuilding =
     landmark !== null &&
     row.osm_type !== "node" &&
-    ["cathedral", "church", "castle", "museum"].includes(tags.building) &&
+    ["cathedral", "church", "castle", "museum"].includes(tags.building ?? "") &&
     !tags.indoor &&
     !tags["building:part"];
   const tenant =
@@ -428,11 +428,16 @@ function overtureCatalogue(row: Pick<AmbientOvertureRow, "gers_id" | "sources_ca
     );
   return catalogue;
 }
+/** The language subtag of a locale such as `de-CH`. */
+function localeLanguage(locale: string): string {
+  return locale.split("-")[0] ?? locale;
+}
+
 export function ambientPlaceToCategoryPlace(place: AmbientPlace, locale: string): CategoryPlace {
   return {
     id: place.id,
     gersId: place.gersId,
-    name: place.names[locale.split("-")[0]] || place.name,
+    name: place.names[localeLanguage(locale)] || place.name,
     names: place.names,
     coordinates: place.coordinates,
     category: place.category,
@@ -444,7 +449,7 @@ export function ambientPlaceToCategoryPlace(place: AmbientPlace, locale: string)
             ...place.fieldContributors,
             name:
               place.fieldContributors[
-                place.names[locale.split("-")[0]] ? `names.${locale.split("-")[0]}` : "name"
+                place.names[localeLanguage(locale)] ? `names.${localeLanguage(locale)}` : "name"
               ] ?? [],
           },
   };
@@ -453,7 +458,7 @@ export function ambientPlaceToCategoryPlace(place: AmbientPlace, locale: string)
 export function ambientPlaceContributors(place: AmbientPlace, locale: string): Attribution[] {
   if (place.contributors !== undefined || place.fieldContributors !== undefined)
     return contributorsForRecordFields(place, [
-      place.names[locale.split("-")[0]] ? `names.${locale.split("-")[0]}` : "name",
+      place.names[localeLanguage(locale)] ? `names.${localeLanguage(locale)}` : "name",
       "coordinates",
       "category",
       "id",
@@ -506,7 +511,8 @@ export function matchAmbientBasemap(
         // OSM outlines and vector-tile points can use slightly different representatives.
         haversineDistance(p.coordinates, l.coordinates) <= 10,
     );
-    if (candidates.length === 1) matches.set(l.key, candidates[0]);
+    const [only] = candidates;
+    if (candidates.length === 1 && only) matches.set(l.key, only);
   }
   return matches;
 }
@@ -517,14 +523,16 @@ export function ambientPlaceFromTile(
 ): AmbientPlace | null {
   // MapLibre projects buffered seam features into the neighbouring world copy.
   // Normalize at this decoding boundary; source ingestion keeps strict bounds.
-  let longitude = coordinates[0];
+  let [longitude] = coordinates;
+  const latitude = coordinates[1];
+  if (longitude === undefined || latitude === undefined) return null;
   if (Number.isFinite(longitude) && (longitude < -180 || longitude > 180))
     longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
   if (
     typeof properties.id !== "string" ||
     !/^(osm:(node|way|relation)\/\d+|overture:.+)$/.test(properties.id) ||
     typeof properties.name !== "string" ||
-    !point(longitude, coordinates[1])
+    !point(longitude, latitude)
   )
     return null;
   return {
@@ -536,7 +544,7 @@ export function ambientPlaceFromTile(
       ...(properties.name_de ? { de: String(properties.name_de) } : {}),
       ...(properties.name_en ? { en: String(properties.name_en) } : {}),
     },
-    coordinates: [longitude, coordinates[1]],
+    coordinates: [longitude, latitude],
     category: String(properties.category ?? "place"),
     rank: Number(properties.rank),
     minZoom: Number(properties.min_zoom),

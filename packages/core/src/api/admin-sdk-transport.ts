@@ -132,7 +132,7 @@ export function bindAdminDownloadTarget(operationId: ByteOperationId) {
       segments = parsedUrl.pathname.split("/");
     const params = Object.fromEntries(
       template.flatMap((part, index) =>
-        part.startsWith(":") ? [[part.slice(1), decodeURIComponent(segments[index])]] : [],
+        part.startsWith(":") ? [[part.slice(1), decodeURIComponent(segments[index] ?? "")]] : [],
       ),
     );
     if (operation.request?.params && !operation.request.params.safeParse(params).success)

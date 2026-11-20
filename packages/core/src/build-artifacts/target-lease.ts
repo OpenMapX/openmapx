@@ -520,8 +520,8 @@ function childSettlementOf(
   const entries = leaseChildrenOf(record, node).filter((child) =>
     sameExecution(child.execution, execution),
   );
-  if (entries.length !== 1) throw Error("Exact retained child grant required");
-  const child = entries[0]!;
+  const [child] = entries;
+  if (entries.length !== 1 || !child) throw Error("Exact retained child grant required");
   return settledKnown(child) ? (child.settlement as ChildSettlement) : null;
 }
 /** The settlement of the exact child `execution` issued by this lease node, if it is known. */

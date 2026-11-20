@@ -138,7 +138,7 @@ describe("complete extension administration contracts", () => {
     expect(parsed).toEqual(entry);
     expect(parsed).not.toHaveProperty("version");
     expect(parsed.services?.[0]).not.toHaveProperty("default");
-    expectTypeOf(parsed.services?.[0].repo).toEqualTypeOf<string | undefined>();
+    expectTypeOf(parsed.services?.[0]?.repo).toEqualTypeOf<string | undefined>();
     expectTypeOf(parsed.version).toEqualTypeOf<string | undefined>();
     const sparse = {
       id: "unknown",
@@ -270,7 +270,7 @@ describe("complete extension administration contracts", () => {
         components: [
           { kind: "service", componentId: "example", enabled: true, securityRating: rating },
         ],
-      }).components[0].securityRating,
+      }).components[0]?.securityRating,
     ).toEqual(rating);
     for (const patch of [
       { sourceTrust: "other" },
@@ -325,7 +325,7 @@ describe("complete extension administration contracts", () => {
         { protocol: "sctp" },
         { protocol: undefined },
         { bindAddress: undefined },
-      ].map((port) => ({ hostPorts: [{ ...preview.services[0].hostPorts[0], ...port }] })),
+      ].map((port) => ({ hostPorts: [{ ...preview.services[0]?.hostPorts[0], ...port }] })),
     ])
       expect(
         contracts.adminExtensionInstallPreviewSchema.safeParse({

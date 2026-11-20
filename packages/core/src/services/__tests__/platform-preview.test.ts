@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { renderServiceSnippet } from "../compose-renderer";
 import { buildPlatformConfigurationPreview } from "../platform-preview";
 import type { LoadedService } from "../types";
@@ -214,8 +214,11 @@ it("materializes the adopted origin in every actual built-in origin consumer", (
     existsSync: () => true,
     allServices: services,
   };
-  const byId = (id: string) =>
-    renderServiceSnippet(services.find((s) => s.manifest.id === id)!, context);
+  const byId = (id: string) => {
+    const service = services.find((s) => s.manifest.id === id);
+    assert.isDefined(service, id);
+    return renderServiceSnippet(service, context);
+  };
   expect(byId("app-api").environment).toMatchObject({
     DOMAIN: "new.example.test",
     CORS_ORIGIN: "https://new.example.test",

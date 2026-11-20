@@ -24,7 +24,8 @@ export function scopeCatalogRuntimeInputs(
     ...inputs,
     requiredKeys: inputs.requiredKeys.filter(
       (key) =>
-        !countries.length || countries.includes(key.split("/")[0]!.split("-")[0]!.toLowerCase()),
+        !countries.length ||
+        countries.includes((key.split("/")[0] ?? key).split("-")[0]?.toLowerCase() ?? ""),
     ),
   };
 }

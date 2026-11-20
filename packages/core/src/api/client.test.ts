@@ -56,7 +56,7 @@ describe("generated request boundary", () => {
       headerInterceptor: () => ({ "x-auth": "interceptor" }),
     });
     await client.get("/headers", undefined, { headers });
-    const sent = new Headers(calls[0].init.headers);
+    const sent = new Headers(calls[0]?.init.headers);
     expect(sent.get("x-request")).toBe("headers");
     expect(sent.get("x-auth")).toBe("interceptor");
     expect(sent.get("accept")).toBe("application/json");
@@ -71,9 +71,9 @@ describe("instance isolation", () => {
     config.baseUrl = "https://evil.example/";
     configureApiClient({ baseUrl: "https://changed.example/", credentials: "include" });
     await native.get("/api/x");
-    expect(calls[0].url).toBe("https://api.example/api/x");
-    expect(calls[0].init.credentials).toBe("omit");
-    const headers = new Headers(calls[0].init.headers);
+    expect(calls[0]?.url).toBe("https://api.example/api/x");
+    expect(calls[0]?.init.credentials).toBe("omit");
+    const headers = new Headers(calls[0]?.init.headers);
     expect(headers.has("cookie")).toBe(false);
     expect(headers.has("authorization")).toBe(false);
   });
@@ -93,8 +93,8 @@ describe("instance isolation", () => {
   it("leaves the singleton following the global configuration", async () => {
     mockFetch(() => jsonResponse({ ok: true }));
     await apiClient.get("/api/y");
-    expect(calls[0].url).toBe("https://web.example/api/y");
-    expect(calls[0].init.credentials).toBe("include");
+    expect(calls[0]?.url).toBe("https://web.example/api/y");
+    expect(calls[0]?.init.credentials).toBe("include");
   });
 });
 
@@ -323,7 +323,7 @@ describe("requests", () => {
     mockFetch(() => jsonResponse({ ok: true }));
     const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
     await client.get("/search", { q: "frankfurt hbf" });
-    expect(calls[0].url).toContain("q=frankfurt+hbf");
+    expect(calls[0]?.url).toContain("q=frankfurt+hbf");
   });
 
   it("returns null for a 204 from getOptional", async () => {
@@ -336,8 +336,8 @@ describe("requests", () => {
     mockFetch(() => jsonResponse({ ok: true }));
     const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
     await client.post("/thing", { a: 1 });
-    expect(calls[0].init.method).toBe("POST");
-    expect(calls[0].init.body).toBe('{"a":1}');
+    expect(calls[0]?.init.method).toBe("POST");
+    expect(calls[0]?.init.body).toBe('{"a":1}');
   });
 
   it.each([
@@ -364,7 +364,7 @@ describe("requests", () => {
   it("accepts a bare client that falls back to the global configuration", async () => {
     mockFetch(() => jsonResponse({ ok: true }));
     await new ApiClient().get("/fallback");
-    expect(calls[0].url).toBe("https://web.example/fallback");
+    expect(calls[0]?.url).toBe("https://web.example/fallback");
   });
 });
 
