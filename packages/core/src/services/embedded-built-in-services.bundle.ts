@@ -164,6 +164,10 @@ export function embeddedBuiltInIntegrationManifests(): BuiltInManifestSource | n
       "../../../../integrations/knowledge-wikipedia/manifest.json",
       import.meta.url,
     ),
+    "landmark-models": new URL(
+      "../../../../integrations/landmark-models/manifest.json",
+      import.meta.url,
+    ),
     "landmark-models-barrelman": new URL(
       "../../../../integrations/landmark-models-barrelman/manifest.json",
       import.meta.url,

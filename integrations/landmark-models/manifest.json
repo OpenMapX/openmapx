@@ -1,0 +1,32 @@
+{
+  "id": "landmark-models",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "domains": ["landmark-models", "map-overlay"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "hiddenAssets": {
+        "type": "string",
+        "default": "",
+        "title": "Hidden models",
+        "description": "One provider-id:asset-id per line, for models you do not want shown."
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Map Overlays"
+}

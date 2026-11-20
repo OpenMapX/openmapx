@@ -118977,6 +118977,58 @@
         "x-openmapx-source": "packages/integration-framework/src/tides-integration-factory.ts"
       }
     },
+    "/api/integrations/landmark-models/cells/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsLandmarkModelsCellsXY",
+        "parameters": [
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /cells/:x/:y (landmark-models)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "landmark-models",
+        "x-openmapx-source": "integrations/landmark-models/index.ts"
+      }
+    },
+    "/api/integrations/landmark-models/coverage": {
+      "get": {
+        "operationId": "getApiIntegrationsLandmarkModelsCoverage",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /coverage (landmark-models)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "landmark-models",
+        "x-openmapx-source": "integrations/landmark-models/index.ts"
+      }
+    },
     "/api/integrations/overlay-earthquakes/earthquakes": {
       "get": {
         "operationId": "getApiIntegrationsOverlayEarthquakesEarthquakes",
