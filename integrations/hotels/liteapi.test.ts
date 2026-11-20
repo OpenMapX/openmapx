@@ -133,3 +133,41 @@ describe("fetchLiteApiOffer", () => {
     expect(http.calls).toHaveLength(1);
   });
 });
+
+describe("LiteAPI payload validation", () => {
+  it("ignores rates without a positive amount in an ISO currency", () => {
+    const rate = (amount: unknown, currency: unknown) => ({
+      retailRate: { total: [{ amount, currency }] },
+    });
+    const response = {
+      data: [
+        {
+          hotelId: "lp1",
+          roomTypes: [
+            {
+              rates: [rate(0, "EUR"), rate(Number.NaN, "EUR"), rate(80, "euro"), rate(120, "EUR")],
+            },
+          ],
+        },
+      ],
+    } as Parameters<typeof normalizeRatesResponse>[0];
+    expect(normalizeRatesResponse(response, 1)).toMatchObject({ total: 120, currency: "EUR" });
+  });
+
+  it("never matches a candidate without a usable id or coordinates", async () => {
+    const http = fakeHttpClient((req) =>
+      req.method === "get"
+        ? {
+            data: [
+              { id: "", name: "Motel One Berlin", latitude: 52.5, longitude: 13.33 },
+              { id: "lp2", name: "Motel One Berlin", latitude: 152.5, longitude: 13.33 },
+            ],
+          }
+        : sample,
+    );
+    expect(
+      await fetchLiteApiOffer(http, "secret", { currency: "EUR", guestNationality: "de" }, q),
+    ).toBeNull();
+    expect(http.calls).toHaveLength(1);
+  });
+});

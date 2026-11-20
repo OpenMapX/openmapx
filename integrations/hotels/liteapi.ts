@@ -133,7 +133,9 @@ export function normalizeRatesResponse(
       for (const rate of rt.rates ?? []) {
         const total = rate.retailRate?.total?.[0]?.amount;
         const currency = rate.retailRate?.total?.[0]?.currency;
-        if (typeof total !== "number" || !currency) continue;
+        // A price must be a positive amount in an ISO 4217 currency to be shown.
+        if (typeof total !== "number" || !Number.isFinite(total) || total <= 0) continue;
+        if (typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency)) continue;
         if (rate.cancellationPolicies?.refundableTag === "RFN") anyRefundable = true;
         if (total < bestTotal) {
           bestTotal = total;
@@ -183,9 +185,14 @@ async function fetchNearbyHotels(
     .filter(
       (h): h is { id: string; name: string; latitude: number; longitude: number } =>
         typeof h.id === "string" &&
+        h.id.length > 0 &&
         typeof h.name === "string" &&
         typeof h.latitude === "number" &&
-        typeof h.longitude === "number",
+        typeof h.longitude === "number" &&
+        Number.isFinite(h.latitude) &&
+        Number.isFinite(h.longitude) &&
+        Math.abs(h.latitude) <= 90 &&
+        Math.abs(h.longitude) <= 180,
     )
     .map((h) => ({ id: h.id, name: h.name, lat: h.latitude, lng: h.longitude }));
 }
