@@ -20,50 +20,31 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type {
-  AutocompleteResult,
-  DirectionsResult,
-  LngLat,
-  TravelMode,
-  Waypoint,
-} from "@openmapx/core";
+import type { AutocompleteResult, LngLat, TravelMode, Waypoint } from "@openmapx/core";
 import {
   CALLER_SHOWS_ERRORS,
-  directionsQueryKey,
   formatDuration,
-  formatOverviewDistance,
-  isApiClientError,
   timeZoneAt,
   tzDiffMinutes,
   tzOffsetLabel,
   useAutocomplete,
   useCapabilities,
   useDebounce,
-  useDirections,
   useDirectionsStore,
-  useEvDirections,
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
-  useScheduledDirections,
   useSession,
   useSettingsStore,
   useSidebarStore,
-  useVehicles,
   viewerTimeZone,
 } from "@openmapx/core";
 import { transitItineraryFingerprint } from "@openmapx/core/navigation";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
-import {
-  contributorsForField,
-  contributorsForNestedRecordFields,
-  snapshotContributors,
-} from "@openmapx/mobility-core/contributors";
-import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { useQueryClient } from "@tanstack/react-query";
+import { contributorsForField, snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
 import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
 import { EvVehiclePanel } from "@/components/panels/directions/EvVehiclePanel";
@@ -74,13 +55,8 @@ import { RidePanel } from "@/components/panels/directions/RidePanel";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
 import { RouteStopSearch } from "@/components/panels/directions/RouteStopSearch";
-import type { RouteArrivalContext } from "@/components/panels/directions/routeArrival";
 import { ShareRouteDialog } from "@/components/panels/directions/ShareRouteDialog";
-import {
-  type TimeMode,
-  TimeModePicker,
-  toDateTimeLocalString,
-} from "@/components/panels/directions/TimeModePicker";
+import { type TimeMode, TimeModePicker } from "@/components/panels/directions/TimeModePicker";
 import { TransitChainView } from "@/components/panels/directions/TransitChainView";
 import { TransitDetailsView } from "@/components/panels/directions/TransitDetailsView";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
@@ -97,23 +73,25 @@ import Menu from "@/components/ui/Menu";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
-import {
-  buildEvDirectionsRequest,
-  GARAGE_VEHICLE_PREFIX,
-  isGarageVehicleId,
-} from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
-import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { servedAttributions } from "@/lib/servedAttributions";
 import { useStopSearchStore } from "@/stores/stopSearchStore";
+import { isTimedGroundMode } from "./directionsRequests";
+import { MultiStopRouteSummary } from "./MultiStopRouteSummary";
+import {
+  GROUND_FALLBACK_MODES,
+  type GroundFallbackMode,
+  NoRoutesFound,
+  planState,
+  type RouteRecoveryActions,
+  RouteResultStates,
+} from "./RouteResultStates";
 import { findTransitItinerary } from "./transitPlanPages";
-import { useRouteImpacts } from "./useRouteImpacts";
+import { useDirectionsDetailsNavigation } from "./useDirectionsDetailsNavigation";
+import { useGroundDirectionsPlan } from "./useGroundDirectionsPlan";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
-
-const GROUND_FALLBACK_MODES = ["walking", "cycling", "driving", "motorcycle"] as const;
-type GroundFallbackMode = (typeof GROUND_FALLBACK_MODES)[number];
 
 /** Whether two itineraries hold the same stops, at the same places, in the same order. */
 function sameStops(a: readonly Waypoint[], b: readonly Waypoint[]): boolean {
@@ -128,60 +106,6 @@ function sameStops(a: readonly Waypoint[], b: readonly Waypoint[]): boolean {
   );
 }
 
-function RouteRecovery({
-  failed,
-  error,
-  onRetry,
-  onEditOrigin,
-  onEditDestination,
-  modes = [],
-  onSelectMode,
-}: {
-  failed: boolean;
-  error?: unknown;
-  onRetry?: () => void;
-  onEditOrigin: () => void;
-  onEditDestination: () => void;
-  modes?: GroundFallbackMode[];
-  onSelectMode: (mode: GroundFallbackMode) => void;
-}) {
-  const t = useTranslations("directions");
-  const tc = useTranslations("common");
-  const unavailable = isApiClientError(error) && [502, 503, 504].includes(error.status);
-  return (
-    <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-      <Typography variant="body2" color={failed ? "error.main" : "text.secondary"}>
-        {t(
-          failed
-            ? unavailable
-              ? "routeServiceUnavailable"
-              : "routeRequestFailed"
-            : "noRoutesFound",
-        )}
-      </Typography>
-      {failed ? (
-        <Button size="small" onClick={onRetry} sx={{ mt: 1 }}>
-          {tc("retry")}
-        </Button>
-      ) : (
-        <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, mt: 1 }}>
-          <Button size="small" onClick={onEditOrigin}>
-            {t("changeOrigin")}
-          </Button>
-          <Button size="small" onClick={onEditDestination}>
-            {t("changeDestination")}
-          </Button>
-          {modes.map((mode) => (
-            <Button key={mode} size="small" onClick={() => onSelectMode(mode)}>
-              {t("tryMode", { mode: t(mode) })}
-            </Button>
-          ))}
-        </Box>
-      )}
-    </Box>
-  );
-}
-
 export function DirectionsPanelContent() {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
@@ -191,38 +115,50 @@ export function DirectionsPanelContent() {
   const fmt = useDateTimeFormat();
   const { snapTo, inSheet } = useMobileSheet();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
+  const { isOpen, waypoints, mode, isEvMode, activeRouteIndex, activeItineraryIndex } =
+    useDirectionsStore(
+      useShallow((s) => ({
+        isOpen: s.isOpen,
+        waypoints: s.waypoints,
+        mode: s.mode,
+        isEvMode: s.isEvMode,
+        activeRouteIndex: s.activeRouteIndex,
+        activeItineraryIndex: s.activeItineraryIndex,
+      })),
+    );
+  const transitOptions = useDirectionsStore(
+    useShallow((s) => ({
+      timeMode: s.transitTimeMode,
+      transitDepartureTime: s.transitDepartureTime,
+      transitArrivalTime: s.transitArrivalTime,
+      transitPreferredModes: s.transitPreferredModes,
+      transitRoutePreference: s.transitRoutePreference,
+      transitAccessMode: s.transitAccessMode,
+      wheelchairRequired: s.wheelchairRequired,
+      maxTransfers: s.maxTransfers,
+      transferBuffer: s.transferBuffer,
+      requireBikeTransport: s.requireBikeTransport,
+      bikeHillPreference: s.bikeHillPreference,
+      deutschlandticketOnly: s.deutschlandticketOnly,
+    })),
+  );
+  const routeOptions = useDirectionsStore(
+    useShallow((s) => ({
+      avoidHighways: s.avoidHighways,
+      avoidTolls: s.avoidTolls,
+      avoidFerries: s.avoidFerries,
+      bikeProfile: s.bikeProfile,
+      bikeHillPreference: s.bikeHillPreference,
+      bikePreferQuietRoads: s.bikePreferQuietRoads,
+      bikePreferSmoothSurfaces: s.bikePreferSmoothSurfaces,
+      bikeSpeedKmh: s.bikeSpeedKmh,
+    })),
+  );
+  const { timeMode, tripTime } = useDirectionsStore(
+    useShallow((s) => ({ timeMode: s.timeMode, tripTime: s.tripTime })),
+  );
   const {
-    isOpen,
-    transitTimeMode,
     setTransitTimeMode,
-    waypoints,
-    mode,
-    isEvMode,
-    evSocStartPct,
-    evSocArrivalMinPct,
-    evForceNonExclusive,
-    activeRouteIndex,
-    avoidHighways,
-    avoidTolls,
-    avoidFerries,
-    bikeProfile,
-    bikeHillPreference,
-    bikePreferQuietRoads,
-    bikePreferSmoothSurfaces,
-    bikeSpeedKmh,
-    activeItineraryIndex,
-    transitDepartureTime,
-    transitArrivalTime,
-    transitPreferredModes,
-    transitRoutePreference,
-    transitAccessMode,
-    wheelchairRequired,
-    maxTransfers,
-    transferBuffer,
-    requireBikeTransport,
-    deutschlandticketOnly,
-    timeMode,
-    tripTime,
     setTimeMode,
     setTripTime,
     setWaypointSchedule,
@@ -240,7 +176,30 @@ export function DirectionsPanelContent() {
     setActiveItineraryIndex,
     setTransitDepartureTime,
     setTransitArrivalTime,
-  } = useDirectionsStore();
+  } = useDirectionsStore(
+    useShallow((s) => ({
+      setTransitTimeMode: s.setTransitTimeMode,
+      setTimeMode: s.setTimeMode,
+      setTripTime: s.setTripTime,
+      setWaypointSchedule: s.setWaypointSchedule,
+      applyWaypointOrder: s.applyWaypointOrder,
+      setWaypoint: s.setWaypoint,
+      addWaypoint: s.addWaypoint,
+      removeWaypoint: s.removeWaypoint,
+      reorderWaypoints: s.reorderWaypoints,
+      reverseWaypoints: s.reverseWaypoints,
+      setMode: s.setMode,
+      setEvMode: s.setEvMode,
+      setEvForceNonExclusive: s.setEvForceNonExclusive,
+      setActiveRouteIndex: s.setActiveRouteIndex,
+      setTransitItineraries: s.setTransitItineraries,
+      setActiveItineraryIndex: s.setActiveItineraryIndex,
+      setTransitDepartureTime: s.setTransitDepartureTime,
+      setTransitArrivalTime: s.setTransitArrivalTime,
+    })),
+  );
+  const transitTimeMode = transitOptions.timeMode;
+  const { transitDepartureTime, transitArrivalTime } = transitOptions;
   const origin = waypoints[0]?.coords ?? null;
   const originLabel = waypoints[0]?.label ?? "";
   const destination = waypoints.at(-1)?.coords ?? null;
@@ -282,33 +241,17 @@ export function DirectionsPanelContent() {
   }, [origin, viewerZone]);
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
-  const evVehicleId = useSettingsStore((s) => s.evVehicleId);
-  const { data: garageVehicles } = useVehicles();
-  const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
-  const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
-  const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
-  const evExclusiveNetworks = useSettingsStore((s) => s.evExclusiveNetworks);
-  const evPreferCheaper = useSettingsStore((s) => s.evPreferCheaper);
-  const evHomePricePerKwh = useSettingsStore((s) => s.evHomePricePerKwh);
-  const evHomeCurrency = useSettingsStore((s) => s.evHomeCurrency);
 
-  const { userLocation } = useMapStore();
+  const userLocation = useMapStore((s) => s.userLocation);
   const mapContext = useMapOptional();
   const registry = useIntegrationRegistry();
   const { services: caps } = useCapabilities();
-  const queryClient = useQueryClient();
   const optimizeMutation = useOptimizeRoute(CALLER_SHOWS_ERRORS);
+  const ground = useGroundDirectionsPlan();
+  const details = useDirectionsDetailsNavigation();
 
   const [showOptions, setShowOptions] = useState(false);
-  const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
-  const [transitDetailsSelection, setTransitDetailsSelection] = useState<{
-    identity: string;
-    itinerary: TripItinerary;
-  } | null>(null);
-
   const [timePickerOpen, setTimePickerOpen] = useState(false);
-  // Driving depart/arrive is kept independent of the transit time state so the
-  // two flows never interfere.
   const [scheduleEditIndex, setScheduleEditIndex] = useState<number | null>(null);
   const [focusedField, setFocusedField] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
@@ -377,159 +320,17 @@ export function DirectionsPanelContent() {
 
   const isTransitMode = mode === "transit";
   const isFlightMode = mode === "flying";
-  // Ride mode still needs the real road route — it draws on the map and gives
-  // the panel its trip summary — so it fetches like driving rather than being
-  // excluded the way flight mode is. Only the results area differs.
+  // Ride mode plans the road route like driving; only its results area differs.
   const isRideMode = mode === "ride";
-  const routeMode: TravelMode = isRideMode ? "driving" : mode;
   // Rows that describe driving the route yourself (time picker, avoid options,
   // share, optimize) do not apply when someone else is doing the driving.
   const hidesRouteControls = isFlightMode || isRideMode;
-  // Time-aware road modes — Valhalla honors depart/arrive on these; OSRM ignores it.
-  const isDrivingTimeMode = mode === "driving" || mode === "motorcycle";
+  const { routeWaypoints, allWaypointsFilled, scheduleRequest, directionsQuery } = ground;
+  const data = ground.directions.data;
+  const scheduledData = ground.scheduled.data;
 
-  // Collect all non-null coords for the route query
-  const routeWaypoints = useMemo(
-    () =>
-      waypoints.reduce<LngLat[]>((acc, wp) => {
-        if (wp.coords) acc.push(wp.coords);
-        return acc;
-      }, []),
-    [waypoints],
-  );
-  const allWaypointsFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
-
-  // Road-mode depart/arrive → wall-clock strings for the time-aware engine
-  // (Valhalla; OSRM ignores them). Debounced so dragging the picker doesn't
-  // refetch per change. Driving + motorcycle only (transit has its own query).
-  const debouncedDrivingTime = useDebounce(tripTime, 500);
-  const drivingDepartAtStr =
-    isDrivingTimeMode && timeMode === "depart" && debouncedDrivingTime instanceof Date
-      ? toDateTimeLocalString(debouncedDrivingTime)
-      : undefined;
-  const drivingArriveByStr =
-    isDrivingTimeMode && timeMode === "arrive" && debouncedDrivingTime instanceof Date
-      ? toDateTimeLocalString(debouncedDrivingTime)
-      : undefined;
-  const arrivalContext: RouteArrivalContext | undefined =
-    isDrivingTimeMode && timeMode === "now"
-      ? {
-          kind: "now",
-          destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
-        }
-      : drivingDepartAtStr
-        ? {
-            kind: "departAt",
-            wallClock: drivingDepartAtStr,
-            originTimeZone: origin ? timeZoneAt(origin[1], origin[0]) : null,
-            destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
-          }
-        : drivingArriveByStr
-          ? {
-              kind: "arriveBy",
-              wallClock: drivingArriveByStr,
-              destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
-            }
-          : undefined;
-
-  // One of the two ground queries runs at a time: the scheduled endpoint takes
-  // over the moment any waypoint carries a constraint, so the two can never
-  // split the cache or draw different routes.
-  const scheduleRequest = useMemo(
-    () =>
-      isTransitMode || isFlightMode || isEvMode
-        ? null
-        : buildScheduleRequest({
-            waypoints,
-            mode: routeMode,
-            timeMode,
-            tripTime: debouncedDrivingTime,
-            avoidHighways,
-            avoidTolls,
-            avoidFerries,
-            bikeProfile,
-            bikeHillPreference,
-            bikePreferQuietRoads,
-            bikePreferSmoothSurfaces,
-            bikeSpeedKmh,
-            avoidClosures: avoidIncidents,
-            units,
-            lang: locale,
-          }),
-    [
-      isTransitMode,
-      isFlightMode,
-      isEvMode,
-      waypoints,
-      routeMode,
-      timeMode,
-      debouncedDrivingTime,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      bikeProfile,
-      bikeHillPreference,
-      bikePreferQuietRoads,
-      bikePreferSmoothSurfaces,
-      bikeSpeedKmh,
-      avoidIncidents,
-      units,
-      locale,
-    ],
-  );
-  const scheduledQuery = useScheduledDirections(scheduleRequest);
-  const { data: scheduledData } = scheduledQuery;
-
-  // The displayed route's request without its waypoints; a stop detour along
-  // it is compared with exactly these options.
-  const groundRequest = useMemo(
-    () => ({
-      mode: routeMode,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      bikeProfile,
-      bikeHillPreference,
-      bikePreferQuietRoads,
-      bikePreferSmoothSurfaces,
-      bikeSpeedKmh,
-      avoidClosures: avoidIncidents,
-      units,
-      lang: locale,
-      departAt: drivingDepartAtStr,
-      arriveBy: drivingArriveByStr,
-    }),
-    [
-      routeMode,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      bikeProfile,
-      bikeHillPreference,
-      bikePreferQuietRoads,
-      bikePreferSmoothSurfaces,
-      bikeSpeedKmh,
-      avoidIncidents,
-      units,
-      locale,
-      drivingDepartAtStr,
-      drivingArriveByStr,
-    ],
-  );
-  const directionsQuery = useDirections({
-    ...groundRequest,
-    waypoints:
-      isTransitMode || isFlightMode || isEvMode || scheduleRequest
-        ? []
-        : allWaypointsFilled
-          ? routeWaypoints
-          : [],
-  });
-  const { data, isLoading, isError } = directionsQuery;
   const stopSearchRoute =
-    (mode === "driving" || mode === "motorcycle") && data
-      ? (data.routes[activeRouteIndex] ?? data.routes[0])
-      : undefined;
+    isTimedGroundMode(mode) && data ? (data.routes[activeRouteIndex] ?? data.routes[0]) : undefined;
   // Under the route cards of a plain driving or motorcycle trip, with or
   // without stops; the EV, scheduled and ride branches never render it.
   const stopSearch =
@@ -539,94 +340,11 @@ export function DirectionsPanelContent() {
         <RouteStopSearch
           route={stopSearchRoute}
           provider={data.provider}
-          request={groundRequest}
+          request={ground.groundRequest}
           units={units}
         />
       </>
     ) : null;
-
-  const routesForImpact = (scheduleRequest ? scheduledData?.routes : data?.routes) ?? [];
-  const fastestRouteIndex = useMemo(() => {
-    if (routesForImpact.length === 0) return -1;
-    return routesForImpact.reduce(
-      (fastestIndex, route, index) =>
-        route.duration < routesForImpact[fastestIndex].duration ? index : fastestIndex,
-      0,
-    );
-  }, [routesForImpact]);
-  const {
-    impacts: routeImpacts,
-    unavailableReason: routeImpactUnavailableReason,
-    compatibleVehicles: impactVehicles,
-    updateAssumptions: handleUpdateAssumptions,
-  } = useRouteImpacts({
-    routes: routesForImpact,
-    destination,
-    vehicles: garageVehicles,
-    homeElectricityPrice: evHomePricePerKwh,
-    homeElectricityCurrency: evHomeCurrency,
-  });
-
-  // EV plan query — built identically to RouteLayer's independent request
-  // (via the shared `buildEvDirectionsRequest`) so both hit the same cache
-  // entry instead of firing two network requests.
-  const evRequest = useMemo(
-    () =>
-      buildEvDirectionsRequest({
-        isEvMode,
-        waypoints: routeWaypoints,
-        allWaypointsFilled,
-        vehicleId: evVehicleId,
-        garageVehicle:
-          evVehicleId && isGarageVehicleId(evVehicleId)
-            ? (garageVehicles?.find((v) => v.id === evVehicleId.slice(GARAGE_VEHICLE_PREFIX.length))
-                ?.ev ?? null)
-            : null,
-        socStartPct: evSocStartPct,
-        socArrivalMinPct: evSocArrivalMinPct,
-        socTargetPct: evSocTargetPct,
-        departAt: drivingDepartAtStr,
-        avoidHighways,
-        avoidTolls,
-        avoidFerries,
-        avoidClosures: avoidIncidents,
-        preferredNetworks: evPreferredNetworks,
-        avoidedNetworks: evAvoidedNetworks,
-        exclusiveNetworks: evExclusiveNetworks,
-        forceNonExclusive: evForceNonExclusive,
-        preferCheaper: evPreferCheaper,
-        homePricePerKwh: evHomePricePerKwh,
-        homeCurrency: evHomeCurrency,
-        units,
-        lang: locale,
-      }),
-    [
-      isEvMode,
-      routeWaypoints,
-      allWaypointsFilled,
-      evVehicleId,
-      garageVehicles,
-      evSocStartPct,
-      evSocArrivalMinPct,
-      evSocTargetPct,
-      drivingDepartAtStr,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      avoidIncidents,
-      evPreferredNetworks,
-      evAvoidedNetworks,
-      evExclusiveNetworks,
-      evForceNonExclusive,
-      evPreferCheaper,
-      evHomePricePerKwh,
-      evHomeCurrency,
-      units,
-      locale,
-    ],
-  );
-  const evQuery = useEvDirections(evRequest);
-  const { data: evData, isLoading: evLoading, isError: evIsError } = evQuery;
 
   const {
     queryIdentity: transitQueryIdentity,
@@ -639,35 +357,23 @@ export function DirectionsPanelContent() {
     attributions: transitPlanAttributions,
     paging: transitPaging,
     selectionToOpen: transitSelectionToOpen,
-  } = useTransitDirectionsPlan({
-    enabled: isTransitMode,
-    timeMode: transitTimeMode,
-    waypoints,
-    transitDepartureTime,
-    transitArrivalTime,
-    transitPreferredModes,
-    transitRoutePreference,
-    transitAccessMode,
-    wheelchairRequired,
-    maxTransfers,
-    transferBuffer,
-    requireBikeTransport,
-    bikeHillPreference,
-    deutschlandticketOnly,
-  });
+  } = useTransitDirectionsPlan({ enabled: isTransitMode, waypoints, ...transitOptions });
+  const { openTransit } = details;
   useEffect(() => {
     if (transitSelectionToOpen)
-      setTransitDetailsSelection({
+      openTransit({
         identity: transitSelectionToOpen.queryIdentity,
         itinerary: transitSelectionToOpen.itinerary,
       });
-  }, [transitSelectionToOpen]);
-  const { data: transitChainData } = transitChainQuery;
-  const {
-    data: transitPlanData,
-    isLoading: transitLoading,
-    isError: transitError,
-  } = transitPlanQuery;
+  }, [transitSelectionToOpen, openTransit]);
+  const transitPlanData = transitPlanQuery.data;
+  const transitLoading = transitPlanQuery.isLoading;
+  const transitPlan = planState(
+    transitPlanQuery,
+    (plan) =>
+      transitItineraries.length === 0 || (plan.itineraries.length === 0 && !transitPaging.isPage),
+  );
+  const transitChain = planState(transitChainQuery, () => false);
 
   // Autocomplete for the currently focused waypoint input
   const activeQuery = focusedField !== null ? (inputValues[focusedField] ?? "") : "";
@@ -689,75 +395,14 @@ export function DirectionsPanelContent() {
     ? servedAttributions(registry, wsSuggestions ?? [])
     : [];
 
-  const displayedGroundResult = scheduleRequest ? scheduledData : data;
   const detailsRoute =
-    detailsRouteIndex !== null ? (displayedGroundResult?.routes[detailsRouteIndex] ?? null) : null;
-  const routingAttributions = useMemo<Attribution[]>(() => {
-    const routes = displayedGroundResult?.routes ?? [];
-    const displayed = !scheduleRequest && waypoints.length > 2 ? routes.slice(0, 1) : routes;
-    return snapshotContributors(
-      ...displayed.map((route) =>
-        snapshotContributors(
-          routeAttributions(registry, displayedGroundResult?.provider, route, [
-            "distance",
-            "duration",
-            "mode",
-            ...(route.summary ? ["summary"] : []),
-            ...(route.usesLocalAccessRoad ? ["usesLocalAccessRoad"] : []),
-            ...((route.mode === "walking" || route.mode === "cycling") && route.elevation?.length
-              ? ["geometry", "elevation"]
-              : []),
-          ]),
-          ...(!scheduleRequest && waypoints.length > 2 && route.legs.length > 1
-            ? route.legs.map((leg, index) =>
-                contributorsForNestedRecordFields(
-                  route,
-                  [{ field: `legs.${index}`, record: leg }],
-                  ["duration", "distance"],
-                ),
-              )
-            : []),
-        ),
-      ),
-    );
-  }, [registry, displayedGroundResult, scheduleRequest, waypoints.length]);
+    details.routeIndex !== null ? (ground.displayed?.routes[details.routeIndex] ?? null) : null;
 
-  const getCachedDuration = (m: TravelMode) => {
-    if (!allWaypointsFilled) return undefined;
-    // Build the key with the shared builder so it always matches what
-    // useDirections stored — driving carries the time pickers, other modes don't.
-    const cached = queryClient.getQueryData<DirectionsResult>(
-      directionsQueryKey({
-        waypoints: routeWaypoints,
-        mode: m,
-        avoidHighways,
-        avoidTolls,
-        avoidFerries,
-        bikeProfile,
-        bikeHillPreference,
-        bikePreferQuietRoads,
-        bikePreferSmoothSurfaces,
-        bikeSpeedKmh,
-        avoidClosures: avoidIncidents,
-        units,
-        lang: locale,
-        departAt: m === "driving" ? drivingDepartAtStr : undefined,
-        arriveBy: m === "driving" ? drivingArriveByStr : undefined,
-      }),
-    );
-    const route = cached?.routes[0];
-    return route?.duration !== undefined
-      ? {
-          time: formatDuration(route.duration, locale),
-          contributors: contributorsForField(route, "duration"),
-        }
-      : undefined;
-  };
   // Derive the visible text and its captured ownership together, once per button.
   const modeButtons = MODES.map((button) => {
     const isActive = mode === button.mode;
     const isTransit = button.mode === "transit";
-    const cached = isTransit || button.disabled ? undefined : getCachedDuration(button.mode);
+    const cached = isTransit || button.disabled ? undefined : ground.cachedDuration(button.mode);
     const record = isTransit
       ? isActive
         ? transitItineraries[0]
@@ -773,7 +418,7 @@ export function DirectionsPanelContent() {
             contributors: contributorsForField(record, "duration"),
           }
         : cached;
-    const loading = isActive && (isTransit ? transitLoading : isLoading && !cached);
+    const loading = isActive && (isTransit ? transitLoading : directionsQuery.isLoading && !cached);
     return {
       ...button,
       isActive,
@@ -868,35 +513,22 @@ export function DirectionsPanelContent() {
       candidate !== mode &&
       (candidate === "driving" ? valhallaAvailable || osrmAvailable : valhallaAvailable),
   );
-  const selectFallbackMode = (nextMode: GroundFallbackMode) => {
+  const switchMode = (nextMode: TravelMode) => {
     setMode(nextMode);
-    setDetailsRouteIndex(null);
-    setTransitDetailsSelection(null);
+    details.leave();
   };
-  const recoveryActions = {
+  const recovery: RouteRecoveryActions = {
     onEditOrigin: () => focusWaypoint(0),
     onEditDestination: () => focusWaypoint(waypoints.length - 1),
     modes: fallbackModes,
-    onSelectMode: selectFallbackMode,
+    onSelectMode: (nextMode: GroundFallbackMode) => switchMode(nextMode),
   };
 
   const handleOptimize = useCallback(() => {
     if (routeWaypoints.length < 3) return;
     const requestedStops = waypoints;
     optimizeMutation.mutate(
-      {
-        waypoints: routeWaypoints,
-        mode,
-        avoidHighways,
-        avoidTolls,
-        avoidFerries,
-        bikeProfile,
-        bikeHillPreference,
-        bikePreferQuietRoads,
-        bikePreferSmoothSurfaces,
-        bikeSpeedKmh,
-        units,
-      },
+      { waypoints: routeWaypoints, mode, ...routeOptions, units },
       {
         onSuccess: (result) => {
           if (!result.optimizedOrder) return;
@@ -919,14 +551,7 @@ export function DirectionsPanelContent() {
     waypoints,
     routeWaypoints,
     mode,
-    avoidHighways,
-    avoidTolls,
-    avoidFerries,
-    bikeProfile,
-    bikeHillPreference,
-    bikePreferQuietRoads,
-    bikePreferSmoothSurfaces,
-    bikeSpeedKmh,
+    routeOptions,
     units,
     optimizeMutation,
     applyWaypointOrder,
@@ -953,32 +578,29 @@ export function DirectionsPanelContent() {
   }, [transitItineraries]);
 
   const transitDetailsIndex =
-    transitDetailsSelection?.identity === transitQueryIdentity
-      ? findTransitItinerary(transitItineraries, transitDetailsSelection.itinerary)
+    details.transit?.identity === transitQueryIdentity
+      ? findTransitItinerary(transitItineraries, details.transit.itinerary)
       : -1;
-  if (transitDetailsIndex >= 0 && transitItineraries[transitDetailsIndex]) {
+  const transitDetailsItinerary = transitItineraries[transitDetailsIndex];
+  if (transitDetailsIndex >= 0 && transitDetailsItinerary) {
     return (
       <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
         <TransitDetailsView
-          itinerary={transitItineraries[transitDetailsIndex]}
+          itinerary={transitDetailsItinerary}
           isLowestCo2={
-            lowestCo2Grams !== null &&
-            transitItineraries[transitDetailsIndex]?.co2Grams === lowestCo2Grams
+            lowestCo2Grams !== null && transitDetailsItinerary.co2Grams === lowestCo2Grams
           }
           originLabel={originLabel}
           destinationLabel={destinationLabel}
           provider={transitPlanData?.provider}
-          attributions={snapshotContributors(
-            transitItineraries[transitDetailsIndex]?.contributors ?? [],
-          )}
+          attributions={snapshotContributors(transitDetailsItinerary.contributors ?? [])}
           originTimeZone={originTimeZone}
           destinationTimeZone={destinationTimeZone}
           onSelectItinerary={(parent, candidate) => {
             const selected = selectTransitAlternative(parent, candidate);
-            if (selected)
-              setTransitDetailsSelection({ identity: transitQueryIdentity, itinerary: selected });
+            if (selected) openTransit({ identity: transitQueryIdentity, itinerary: selected });
           }}
-          onBack={() => setTransitDetailsSelection(null)}
+          onBack={details.closeTransit}
         />
       </AttributionDetailsGroup>
     );
@@ -988,12 +610,12 @@ export function DirectionsPanelContent() {
     return (
       <DetailsView
         route={detailsRoute}
-        attributions={routeAttributions(registry, displayedGroundResult?.provider, detailsRoute)}
+        attributions={routeAttributions(registry, ground.displayed?.provider, detailsRoute)}
         originLabel={originLabel}
         destinationLabel={destinationLabel}
         waypointLabels={waypoints.map((wp) => wp.label)}
         units={units}
-        onBack={() => setDetailsRouteIndex(null)}
+        onBack={details.closeRoute}
       />
     );
   }
@@ -1001,7 +623,7 @@ export function DirectionsPanelContent() {
   // The depart/arrive picker is shared by transit and driving (driving uses
   // local state; transit uses the store). `activeTime*` adapt the shared
   // controlled picker to whichever flow is active.
-  const showTimePicker = isTransitMode || isDrivingTimeMode;
+  const showTimePicker = isTransitMode || isTimedGroundMode(mode);
   const activeTimeMode: TimeMode = isTransitMode ? transitTimeMode : timeMode;
   const activeTimeValue: Date | null = isTransitMode
     ? activeTimeMode === "depart"
@@ -1095,6 +717,7 @@ export function DirectionsPanelContent() {
 
   // In a phone's sheet the driving switch and the departure time share a row.
   const timeInModeRow = inSheet && mode === "driving" && showTimePicker && !hidesRouteControls;
+  const timed = activeTimeMode !== "now";
   // Leave now / depart at / arrive by, for transit and timed driving.
   const timeChip = (
     <ClickableRow
@@ -1106,33 +729,243 @@ export function DirectionsPanelContent() {
         px: 1.75,
         py: 0.75,
         borderRadius: "12px",
-        bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
-        "&:hover": {
-          bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
-        },
+        bgcolor: timed ? `${BRAND}18` : "action.hover",
+        "&:hover": { bgcolor: timed ? `${BRAND}28` : "action.selected" },
         transition: "background-color 0.15s",
       }}
     >
-      <ScheduleIcon
-        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-      />
-      <Typography
-        variant="body2"
-        color={activeTimeMode !== "now" ? BRAND : "text.primary"}
-        sx={{
-          fontWeight: 500,
-        }}
-      >
+      <ScheduleIcon sx={{ fontSize: 18, color: timed ? BRAND : "text.primary" }} />
+      <Typography variant="body2" color={timed ? BRAND : "text.primary"} sx={{ fontWeight: 500 }}>
         {activeTimeMode === "now"
           ? t("departNow")
           : activeTimeMode === "depart"
             ? `${t("departAt")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`
             : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
       </Typography>
-      <ExpandMoreIcon
-        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-      />
+      <ExpandMoreIcon sx={{ fontSize: 18, color: timed ? BRAND : "text.primary" }} />
     </ClickableRow>
+  );
+
+  const routingCredits = (
+    <AttributionStrip
+      attributions={ground.routingAttributions}
+      variant="panel-header"
+      label={tc("dataSources")}
+    />
+  );
+  const routeCardImpact = (i: number) => ({
+    impact: ground.impacts.impacts[i],
+    impactUnavailableReason: ground.impacts.unavailableReason,
+    vehicles: ground.impacts.compatibleVehicles,
+    onUpdateAssumptions: ground.impacts.updateAssumptions,
+  });
+
+  const groundResults = scheduleRequest ? (
+    <RouteResultStates state={ground.scheduled} recovery={recovery}>
+      {scheduledData && (
+        <>
+          {scheduledData.routes.map((route, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
+            <Box key={i}>
+              <RouteCard
+                route={route}
+                index={i}
+                active
+                selectionKind="peek"
+                isFastest={i === ground.fastestRouteIndex}
+                onSelect={() => snapTo("peek")}
+                onDetails={() => details.openRoute(i)}
+                units={units}
+                arrivalContext={{
+                  kind: "scheduled",
+                  arrival: scheduledData.schedule.arrival,
+                  destinationTimeZone: destination
+                    ? timeZoneAt(destination[1], destination[0])
+                    : null,
+                }}
+                provider={scheduledData.provider}
+                roadConditionImpact={scheduledData.roadConditionImpact}
+                {...routeCardImpact(i)}
+              />
+            </Box>
+          ))}
+          <Divider />
+          <TripScheduleCard
+            schedule={scheduledData.schedule}
+            fidelity={scheduledData.fidelity}
+            warnings={scheduledData.warnings}
+            waypointLabels={waypoints.map((wp) => wp.label)}
+          />
+          {routingCredits}
+        </>
+      )}
+    </RouteResultStates>
+  ) : (
+    <RouteResultStates state={ground.directions} recovery={recovery}>
+      {data?.routes[0] &&
+        (hasMultipleStops ? (
+          <>
+            <MultiStopRouteSummary
+              route={data.routes[0]}
+              waypoints={waypoints}
+              units={units}
+              onDetails={() => details.openRoute(0)}
+            />
+            {stopSearch}
+            {routingCredits}
+          </>
+        ) : (
+          <>
+            <Box role="radiogroup" aria-label={t("routes")}>
+              {data.routes.map((route, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
+                <Box key={i}>
+                  <RouteCard
+                    route={route}
+                    index={i}
+                    active={i === activeRouteIndex}
+                    isFastest={i === ground.fastestRouteIndex}
+                    onSelect={() => {
+                      setActiveRouteIndex(i);
+                      snapTo("peek");
+                    }}
+                    onDetails={() => details.openRoute(i)}
+                    units={units}
+                    arrivalContext={ground.arrivalContext}
+                    alternatives={data.routes.filter((_, idx) => idx !== i)}
+                    provider={data.provider}
+                    roadConditionImpact={data.roadConditionImpact}
+                    {...routeCardImpact(i)}
+                  />
+                  {i < data.routes.length - 1 && <Divider />}
+                </Box>
+              ))}
+            </Box>
+            {stopSearch}
+            {routingCredits}
+          </>
+        ))}
+    </RouteResultStates>
+  );
+
+  const transitResults = (
+    <RouteResultStates state={transitPlan} recovery={recovery}>
+      {transitItineraries.map((itin, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: itineraries have no stable id
+        <Box key={i}>
+          <TransitItineraryCard
+            itinerary={itin}
+            active={i === activeItineraryIndex}
+            isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
+            replanOptions={transitReplanOptions}
+            originTimeZone={originTimeZone}
+            destinationTimeZone={destinationTimeZone}
+            onSelect={() => {
+              setActiveItineraryIndex(i);
+              snapTo("peek");
+            }}
+            onDetails={() => openTransit({ identity: transitQueryIdentity, itinerary: itin })}
+            onRefreshed={(updated, changed, fallbackOccurred) => {
+              const current = useDirectionsStore.getState().transitItineraries;
+              if (!current.includes(itin)) return;
+              const retained =
+                !fallbackOccurred &&
+                transitItineraryFingerprint(updated) === transitItineraryFingerprint(itin)
+                  ? { ...updated, regionalOnly: itin.regionalOnly }
+                  : updated;
+              setTransitItineraries(
+                current.map((candidate) => (candidate === itin ? retained : candidate)),
+              );
+              if (changed || fallbackOccurred) {
+                setSnackbar(fallbackOccurred ? t("connectionReplanned") : t("connectionUpdated"));
+              }
+            }}
+          />
+          {i < transitItineraries.length - 1 && <Divider />}
+        </Box>
+      ))}
+      {destinationOffsetLabel && (
+        <Typography sx={{ fontSize: 11, color: "text.secondary", px: 2, pb: 1 }}>
+          {t("arrivalInDestinationTime")}
+        </Typography>
+      )}
+      {(transitPaging.previousToken || transitPaging.nextToken) && (
+        <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+            <Button
+              size="small"
+              disabled={!transitPaging.previousToken || transitLoading}
+              onClick={transitPaging.loadPrevious}
+            >
+              {t("earlierConnections")}
+            </Button>
+            <Button
+              size="small"
+              disabled={!transitPaging.nextToken || transitLoading}
+              onClick={transitPaging.loadNext}
+            >
+              {t("laterConnections")}
+            </Button>
+          </Box>
+        </Box>
+      )}
+      <AttributionStrip
+        attributions={transitPlanAttributions}
+        variant="panel-header"
+        label={tc("dataSources")}
+      />
+    </RouteResultStates>
+  );
+
+  const results = isFlightMode ? (
+    <FlightPanel />
+  ) : isRideMode ? (
+    <>
+      {allWaypointsFilled && <RouteResultStates state={ground.directions} recovery={recovery} />}
+      <RidePanel
+        route={
+          !directionsQuery.isError && data?.routes[0]
+            ? { distanceMeters: data.routes[0].distance, durationSeconds: data.routes[0].duration }
+            : undefined
+        }
+      />
+    </>
+  ) : !allWaypointsFilled ? (
+    <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+        {t("chooseOrigin")}
+      </Typography>
+    </Box>
+  ) : isEvMode ? (
+    <>
+      <EvVehiclePanel />
+      {ground.evRequest && (
+        <RouteResultStates state={ground.ev} recovery={recovery}>
+          {ground.ev.data && (
+            <EvPlanCard
+              result={ground.ev.data}
+              onRetryWithoutNetworkRestriction={() => setEvForceNonExclusive(true)}
+            />
+          )}
+        </RouteResultStates>
+      )}
+    </>
+  ) : transitIsChained ? (
+    <RouteResultStates state={transitChain} recovery={recovery}>
+      {transitChain.data && (
+        <>
+          {transitChain.data.segments.length === 0 && <NoRoutesFound actions={recovery} />}
+          <TransitChainView
+            plan={transitChain.data}
+            waypointLabels={waypoints.map((wp) => wp.label)}
+          />
+        </>
+      )}
+    </RouteResultStates>
+  ) : isTransitMode ? (
+    transitResults
+  ) : (
+    groundResults
   );
 
   return (
@@ -1141,14 +974,7 @@ export function DirectionsPanelContent() {
     // biome-ignore lint/plugin/noClickableLayoutElement: background tap, not an action
     <Box onClick={expandOnBackgroundTap}>
       {/* Keep panel actions separate so every travel mode gets the full panel width. */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          px: 1,
-          pt: 0.5,
-        }}
-      >
+      <Box sx={{ display: "flex", alignItems: "center", px: 1, pt: 0.5 }}>
         <IconButton
           size="small"
           aria-label={t("menu")}
@@ -1214,26 +1040,20 @@ export function DirectionsPanelContent() {
           flexWrap: "wrap",
         }}
       >
-        {modeButtons.map(({ mode: m, icon, labelKey, disabled, isActive, time, loading }) => {
-          return (
-            <ModeButton
-              key={m}
-              mode={m}
-              name="travel-mode"
-              icon={icon}
-              label={t(labelKey)}
-              time={time}
-              active={isActive}
-              disabled={disabled}
-              loading={loading}
-              onClick={() => {
-                setMode(m);
-                setDetailsRouteIndex(null);
-                setTransitDetailsSelection(null);
-              }}
-            />
-          );
-        })}
+        {modeButtons.map(({ mode: m, icon, labelKey, disabled, isActive, time, loading }) => (
+          <ModeButton
+            key={m}
+            mode={m}
+            name="travel-mode"
+            icon={icon}
+            label={t(labelKey)}
+            time={time}
+            active={isActive}
+            disabled={disabled}
+            loading={loading}
+            onClick={() => switchMode(m)}
+          />
+        ))}
       </Box>
       {/* Driving sub-mode: normal route vs. EV charge planning. EV is a subtype
           of driving, not its own top-level mode, so it lives here rather than in
@@ -1258,8 +1078,7 @@ export function DirectionsPanelContent() {
             onChange={(_, value) => {
               if (!value) return;
               setEvMode(value === "ev");
-              setDetailsRouteIndex(null);
-              setTransitDetailsSelection(null);
+              details.leave();
             }}
             aria-label={t("driving")}
             sx={{ "& .MuiToggleButton-root": { textTransform: "none", py: 0.3, px: 1.2 } }}
@@ -1277,11 +1096,9 @@ export function DirectionsPanelContent() {
       )}
       {/* Waypoint list with drag-and-drop: in the panel, or above the map on a phone. */}
       {inSheet ? <PhoneWaypointCard>{waypointList}</PhoneWaypointCard> : waypointList}
-      {/* Divider + content below */}
       <Box sx={{ position: "relative" }}>
         <Divider />
 
-        {/* Optimize button */}
         {showOptimize && (
           <Box
             sx={{
@@ -1333,8 +1150,7 @@ export function DirectionsPanelContent() {
           </Box>
         )}
 
-        {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit).
-            Flight mode renders its own form below, so this row is hidden. */}
+        {/* Flight and ride modes render their own forms below, so this row is hidden. */}
         {!hidesRouteControls && showTimePicker && !timeInModeRow && (
           <Box sx={{ display: "flex", alignItems: "center", px: 2, py: 1 }}>{timeChip}</Box>
         )}
@@ -1353,410 +1169,11 @@ export function DirectionsPanelContent() {
 
         <Divider />
 
-        {/* Plain-route energy/cost + vehicle chip, driving mode only (EV mode
-            gets its own vehicle inputs via EvVehiclePanel above). */}
-
-        {/* Route results */}
         <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
           <AttributionStrip attributions={modeDurationAttributions} provenanceDisplay="details" />
-          {isFlightMode ? (
-            <FlightPanel />
-          ) : isRideMode ? (
-            <>
-              {allWaypointsFilled &&
-                (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError) ? (
-                  <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                    <CircularProgress size={28} sx={{ color: BRAND }} />
-                  </Box>
-                ) : isError ? (
-                  <RouteRecovery
-                    failed
-                    error={directionsQuery.error}
-                    onRetry={() => void directionsQuery.refetch()}
-                    {...recoveryActions}
-                  />
-                ) : data?.routes.length === 0 ? (
-                  <RouteRecovery failed={false} {...recoveryActions} />
-                ) : null)}
-              <RidePanel
-                route={
-                  !isError && data?.routes[0]
-                    ? {
-                        distanceMeters: data.routes[0].distance,
-                        durationSeconds: data.routes[0].duration,
-                      }
-                    : undefined
-                }
-              />
-            </>
-          ) : !allWaypointsFilled ? (
-            <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                {t("chooseOrigin")}
-              </Typography>
-            </Box>
-          ) : isEvMode ? (
-            <>
-              <EvVehiclePanel />
-              {!evRequest ? null : evLoading ||
-                (evIsError && evQuery.isFetching) ||
-                (!evData && !evIsError) ? (
-                <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                  <CircularProgress size={28} sx={{ color: BRAND }} />
-                </Box>
-              ) : evIsError ? (
-                <RouteRecovery
-                  failed
-                  error={evQuery.error}
-                  onRetry={() => void evQuery.refetch()}
-                  {...recoveryActions}
-                />
-              ) : evData?.routes.length === 0 ? (
-                <RouteRecovery failed={false} {...recoveryActions} />
-              ) : evData ? (
-                <EvPlanCard
-                  result={evData}
-                  onRetryWithoutNetworkRestriction={() => setEvForceNonExclusive(true)}
-                />
-              ) : null}
-            </>
-          ) : transitIsChained ? (
-            transitChainQuery.isLoading ||
-            (transitChainQuery.isError && transitChainQuery.isFetching) ||
-            (!transitChainData && !transitChainQuery.isError) ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={28} sx={{ color: BRAND }} />
-              </Box>
-            ) : transitChainQuery.isError ? (
-              <RouteRecovery
-                failed
-                error={transitChainQuery.error}
-                onRetry={() => void transitChainQuery.refetch()}
-                {...recoveryActions}
-              />
-            ) : transitChainData ? (
-              <>
-                {transitChainData.segments.length === 0 && (
-                  <RouteRecovery failed={false} {...recoveryActions} />
-                )}
-                <TransitChainView
-                  plan={transitChainData}
-                  waypointLabels={waypoints.map((wp) => wp.label)}
-                />
-              </>
-            ) : null
-          ) : isTransitMode ? (
-            transitLoading ||
-            (transitError && transitPlanQuery.isFetching) ||
-            (!transitPlanData && !transitError) ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={28} sx={{ color: BRAND }} />
-              </Box>
-            ) : transitError ? (
-              <RouteRecovery
-                failed
-                error={transitPlanQuery.error}
-                onRetry={() => void transitPlanQuery.refetch()}
-                {...recoveryActions}
-              />
-            ) : transitPlanData?.itineraries.length === 0 && !transitPaging.isPage ? (
-              <RouteRecovery failed={false} {...recoveryActions} />
-            ) : transitItineraries.length === 0 ? (
-              <RouteRecovery failed={false} {...recoveryActions} />
-            ) : (
-              <>
-                {transitItineraries.map((itin, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: itineraries have no stable id
-                  <Box key={i}>
-                    <TransitItineraryCard
-                      itinerary={itin}
-                      active={i === activeItineraryIndex}
-                      isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
-                      replanOptions={transitReplanOptions}
-                      originTimeZone={originTimeZone}
-                      destinationTimeZone={destinationTimeZone}
-                      onSelect={() => {
-                        setActiveItineraryIndex(i);
-                        snapTo("peek");
-                      }}
-                      onDetails={() =>
-                        setTransitDetailsSelection({
-                          identity: transitQueryIdentity,
-                          itinerary: itin,
-                        })
-                      }
-                      onRefreshed={(updated, changed, fallbackOccurred) => {
-                        const current = useDirectionsStore.getState().transitItineraries;
-                        if (!current.includes(itin)) return;
-                        const retained =
-                          !fallbackOccurred &&
-                          transitItineraryFingerprint(updated) === transitItineraryFingerprint(itin)
-                            ? { ...updated, regionalOnly: itin.regionalOnly }
-                            : updated;
-                        setTransitItineraries(
-                          current.map((candidate) => (candidate === itin ? retained : candidate)),
-                        );
-                        if (changed || fallbackOccurred) {
-                          setSnackbar(
-                            fallbackOccurred ? t("connectionReplanned") : t("connectionUpdated"),
-                          );
-                        }
-                      }}
-                    />
-                    {i < transitItineraries.length - 1 && <Divider />}
-                  </Box>
-                ))}
-                {destinationOffsetLabel && (
-                  <Typography sx={{ fontSize: 11, color: "text.secondary", px: 2, pb: 1 }}>
-                    {t("arrivalInDestinationTime")}
-                  </Typography>
-                )}
-                {(transitPaging.previousToken || transitPaging.nextToken) && (
-                  <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                      <Button
-                        size="small"
-                        disabled={!transitPaging.previousToken || transitLoading}
-                        onClick={transitPaging.loadPrevious}
-                      >
-                        {t("earlierConnections")}
-                      </Button>
-                      <Button
-                        size="small"
-                        disabled={!transitPaging.nextToken || transitLoading}
-                        onClick={transitPaging.loadNext}
-                      >
-                        {t("laterConnections")}
-                      </Button>
-                    </Box>
-                  </Box>
-                )}
-                <AttributionStrip
-                  attributions={transitPlanAttributions}
-                  variant="panel-header"
-                  label={tc("dataSources")}
-                />
-              </>
-            )
-          ) : scheduleRequest &&
-            (scheduledQuery.isLoading || (scheduledQuery.isError && scheduledQuery.isFetching)) ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : scheduleRequest && scheduledQuery.isError ? (
-            <RouteRecovery
-              failed
-              error={scheduledQuery.error}
-              onRetry={() => void scheduledQuery.refetch()}
-              {...recoveryActions}
-            />
-          ) : scheduleRequest && scheduledData?.routes.length === 0 ? (
-            <RouteRecovery failed={false} {...recoveryActions} />
-          ) : scheduleRequest && !scheduledData ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : !scheduleRequest &&
-            (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError)) ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : !scheduleRequest && isError ? (
-            <RouteRecovery
-              failed
-              error={directionsQuery.error}
-              onRetry={() => void directionsQuery.refetch()}
-              {...recoveryActions}
-            />
-          ) : !scheduleRequest && hasMultipleStops && data?.routes[0] ? (
-            // Multi-stop: single route with leg summary
-            <>
-              <Box>
-                {/* Pointer shortcut for the Details button below, the keyboard path. */}
-                {/* biome-ignore lint/plugin/noClickableLayoutElement: duplicates the Details button */}
-                <Box
-                  sx={{
-                    px: 2,
-                    py: 1.5,
-                    cursor: "pointer",
-                    borderLeft: `4px solid ${BRAND}`,
-                    bgcolor: "rgba(0,123,139,0.04)",
-                    "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
-                  }}
-                  onClick={() => setDetailsRouteIndex(0)}
-                >
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "baseline",
-                    }}
-                  >
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                        color: "text.primary",
-                      }}
-                    >
-                      {formatDuration(data.routes[0].duration, locale)}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "text.secondary",
-                      }}
-                    >
-                      {formatOverviewDistance(data.routes[0].distance, units)}
-                    </Typography>
-                  </Box>
-                  {data.routes[0].legs.length > 1 && (
-                    <Box sx={{ mt: 1 }}>
-                      {data.routes[0].legs.map((leg, i) => {
-                        const fromLabel = waypoints[i]?.label || t("origin");
-                        const toLabel = waypoints[i + 1]?.label || t("destination");
-                        return (
-                          <Typography
-                            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-                            key={i}
-                            variant="caption"
-                            sx={{
-                              color: "text.secondary",
-                              display: "block",
-                              lineHeight: 1.6,
-                            }}
-                          >
-                            {fromLabel}→ {toLabel}
-                            {" · "}
-                            {formatDuration(leg.duration, locale)}
-                            {" · "}
-                            {formatOverviewDistance(leg.distance, units)}
-                          </Typography>
-                        );
-                      })}
-                    </Box>
-                  )}
-                  <Box sx={{ mt: 0.5, ml: -1.5 }}>
-                    <ClickableRow
-                      sx={{
-                        width: "auto",
-                        typography: "caption",
-                        color: BRAND,
-                        fontWeight: 500,
-                        px: 1.5,
-                        py: 0.75,
-                        borderRadius: 99,
-                        "&:hover": { bgcolor: `${BRAND}18` },
-                        transition: "background-color 0.15s",
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDetailsRouteIndex(0);
-                      }}
-                    >
-                      {tc("details")}
-                    </ClickableRow>
-                  </Box>
-                </Box>
-              </Box>
-              {stopSearch}
-              <AttributionStrip
-                attributions={routingAttributions}
-                variant="panel-header"
-                label={tc("dataSources")}
-              />
-            </>
-          ) : scheduledData ? (
-            <>
-              {scheduledData.routes.map((route, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
-                <Box key={i}>
-                  <RouteCard
-                    route={route}
-                    index={i}
-                    active
-                    selectionKind="peek"
-                    isFastest={i === fastestRouteIndex}
-                    onSelect={() => snapTo("peek")}
-                    onDetails={() => setDetailsRouteIndex(i)}
-                    units={units}
-                    arrivalContext={{
-                      kind: "scheduled",
-                      arrival: scheduledData.schedule.arrival,
-                      destinationTimeZone: destination
-                        ? timeZoneAt(destination[1], destination[0])
-                        : null,
-                    }}
-                    provider={scheduledData.provider}
-                    roadConditionImpact={scheduledData.roadConditionImpact}
-                    impact={routeImpacts[i]}
-                    impactUnavailableReason={routeImpactUnavailableReason}
-                    vehicles={impactVehicles}
-                    onUpdateAssumptions={handleUpdateAssumptions}
-                  />
-                </Box>
-              ))}
-              <Divider />
-              <TripScheduleCard
-                schedule={scheduledData.schedule}
-                fidelity={scheduledData.fidelity}
-                warnings={scheduledData.warnings}
-                waypointLabels={waypoints.map((wp) => wp.label)}
-              />
-              <AttributionStrip
-                attributions={routingAttributions}
-                variant="panel-header"
-                label={tc("dataSources")}
-              />
-            </>
-          ) : !scheduleRequest && data?.routes.length ? (
-            <>
-              <Box role="radiogroup" aria-label={t("routes")}>
-                {data.routes.map((route, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
-                  <Box key={i}>
-                    <RouteCard
-                      route={route}
-                      index={i}
-                      active={i === activeRouteIndex}
-                      isFastest={i === fastestRouteIndex}
-                      onSelect={() => {
-                        setActiveRouteIndex(i);
-                        snapTo("peek");
-                      }}
-                      onDetails={() => setDetailsRouteIndex(i)}
-                      units={units}
-                      arrivalContext={arrivalContext}
-                      alternatives={data.routes.filter((_, idx) => idx !== i)}
-                      provider={data.provider}
-                      roadConditionImpact={data.roadConditionImpact}
-                      impact={routeImpacts[i]}
-                      impactUnavailableReason={routeImpactUnavailableReason}
-                      vehicles={impactVehicles}
-                      onUpdateAssumptions={handleUpdateAssumptions}
-                    />
-                    {i < data.routes.length - 1 && <Divider />}
-                  </Box>
-                ))}
-              </Box>
-              {stopSearch}
-              <AttributionStrip
-                attributions={routingAttributions}
-                variant="panel-header"
-                label={tc("dataSources")}
-              />
-            </>
-          ) : !scheduleRequest && data ? (
-            <RouteRecovery failed={false} {...recoveryActions} />
-          ) : null}
+          {results}
         </AttributionDetailsGroup>
 
-        {/* Suggestions overlay */}
         {showSuggestions && !inSheet && (
           <Box
             sx={{
