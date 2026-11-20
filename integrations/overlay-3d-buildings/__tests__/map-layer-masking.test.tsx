@@ -121,29 +121,31 @@ describe("BuildingExtrusionLayer masking", () => {
     expect(fake.state.counts.addLayer.get(LAYER_ID)).toBe(adds);
   });
 
-  it("refreshes only touched tiles after replacements change", () => {
+  it("reloads the masked source under a new revision after replacements change", () => {
     vi.useFakeTimers();
     useView({ west: 2.28, south: 48.85, east: 2.31, north: 48.87 });
     addBaseStyle(TILES);
     render(<BuildingExtrusionLayer />);
     act(() => useBuildingReplacementStore.getState().setReplacements("landmarks", []));
     act(() => useBuildingReplacementStore.getState().setReplacements("landmarks", [eiffel]));
-    expect(fake.state.refreshedTiles).toEqual([]);
+    const source = () => fake.state.sources.get(MASKED_SOURCE_ID) as Record<string, unknown>;
+    expect(source().setTilesCalls).toBeUndefined();
     act(() => vi.advanceTimersByTime(150));
-    expect(fake.state.refreshedTiles).toEqual([
-      { sourceId: MASKED_SOURCE_ID, tileIds: [{ z: 14, x: 8296, y: 5636 }] },
-    ]);
+    expect(source().setTilesCalls).toBe(1);
+    const revision = useBuildingReplacementStore.getState().revision;
+    expect(source().tiles).toEqual([`openmapx-buildings://{z}/{x}/{y}?r=${revision}`]);
+    // MapLibre's refreshTiles answers overzoomed tiles without calling the protocol again.
+    expect(fake.state.refreshedTiles).toEqual([]);
   });
 
-  it("reloads the whole masked source when a touched tile is out of view", () => {
+  it("does not reload when the replacements are unchanged", () => {
     vi.useFakeTimers();
-    useView({ west: 13.3, south: 52.5, east: 13.4, north: 52.55 });
     addBaseStyle(TILES);
     render(<BuildingExtrusionLayer />);
-    act(() => useBuildingReplacementStore.getState().setReplacements("landmarks", []));
     act(() => useBuildingReplacementStore.getState().setReplacements("landmarks", [eiffel]));
     act(() => vi.advanceTimersByTime(150));
-    expect(fake.state.refreshedTiles).toEqual([]);
+    act(() => useBuildingReplacementStore.getState().setReplacements("landmarks", [eiffel]));
+    act(() => vi.advanceTimersByTime(150));
     expect(fake.state.sources.get(MASKED_SOURCE_ID)?.setTilesCalls).toBe(1);
   });
 });

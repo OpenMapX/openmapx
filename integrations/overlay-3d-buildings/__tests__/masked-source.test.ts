@@ -2,12 +2,7 @@ import { fromVectorTileJs, GeoJSONWrapper } from "@maplibre/vt-pbf";
 import type { BuildingReplacement } from "@openmapx/core";
 import { AJAXError } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
-import {
-  createMaskProtocolHandler,
-  isMaskable,
-  type LiveBuildingSource,
-  tilesTouchedBy,
-} from "../masked-source";
+import { createMaskProtocolHandler, isMaskable, type LiveBuildingSource } from "../masked-source";
 
 const BASE = "https://maps.example/";
 
@@ -58,18 +53,6 @@ describe("isMaskable", () => {
   it("is false while the source has only a TileJSON url", () => {
     expect(isMaskable(null, BASE)).toBe(false);
     expect(isMaskable(source({ templates: [] }), BASE)).toBe(false);
-  });
-});
-
-describe("tilesTouchedBy", () => {
-  it("returns the z14 tiles intersecting changed bboxes", () => {
-    const replacement: BuildingReplacement = {
-      id: "r",
-      featureIds: [],
-      // A tiny box around the Eiffel Tower.
-      bbox: [2.2944, 48.8582, 2.2946, 48.8586],
-    };
-    expect(tilesTouchedBy([replacement], 14)).toEqual([{ z: 14, x: 8296, y: 5636 }]);
   });
 });
 

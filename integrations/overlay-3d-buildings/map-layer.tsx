@@ -30,8 +30,6 @@ import {
   MASKED_SOURCE_ID,
   MASKED_TEMPLATE,
   readLiveBuildingSource,
-  tileLngLatBounds,
-  tilesTouchedBy,
 } from "./masked-source";
 import { BUILDING_TILT_THRESHOLD as TILT_THRESHOLD, useBuildingsStore } from "./store";
 
@@ -91,12 +89,6 @@ function extrusionLayer(
     },
   } as maplibregl.FillExtrusionLayerSpecification;
 }
-
-const overlapsBounds = (a: readonly number[], b: readonly number[]) =>
-  (a[0] as number) <= (b[2] as number) &&
-  (a[2] as number) >= (b[0] as number) &&
-  (a[1] as number) <= (b[3] as number) &&
-  (a[3] as number) >= (b[1] as number);
 
 const replacementKey = (replacement: BuildingReplacement) =>
   `${replacement.id}|${replacement.bbox.join(",")}`;
@@ -182,7 +174,7 @@ export function BuildingExtrusionLayer() {
     const store = useBuildingReplacementStore;
     let live: LiveBuildingSource | null = null;
     let basemap: BuildingSourceReference | null = null;
-    let previous = new Map<string, BuildingReplacement>();
+    let previous = new Set<string>();
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
     const refreshAvailability = () => {
@@ -211,32 +203,20 @@ export function BuildingExtrusionLayer() {
       );
     };
 
-    const refreshTouchedTiles = () => {
-      const current = new Map(
-        allReplacements(store.getState()).map((replacement) => [
-          replacementKey(replacement),
-          replacement,
-        ]),
-      );
-      const changed = [
-        ...[...current].filter(([key]) => !previous.has(key)).map(([, r]) => r),
-        ...[...previous].filter(([key]) => !current.has(key)).map(([, r]) => r),
-      ];
+    const reloadMaskedTiles = () => {
+      const current = new Set(allReplacements(store.getState()).map(replacementKey));
+      const changed =
+        current.size !== previous.size || [...current].some((key) => !previous.has(key));
       previous = current;
       const source = map.getSource(MASKED_SOURCE_ID) as
         | { setTiles?: (tiles: string[]) => void }
         | undefined;
-      if (!source || changed.length === 0) return;
-      const tiles = tilesTouchedBy(changed, live?.maxzoom ?? 14);
-      const view = map.getBounds();
-      const viewBox = [view.getWest(), view.getSouth(), view.getEast(), view.getNorth()];
-      // refreshTiles reloads only tiles in view, and MapLibre reuses its
-      // off-screen cache without reloading; a whole-source reload clears it.
-      if (tiles.every((tile) => overlapsBounds(tileLngLatBounds(tile), viewBox))) {
-        map.refreshTiles(MASKED_SOURCE_ID, tiles);
-      } else {
-        source.setTiles?.([MASKED_TEMPLATE]);
-      }
+      if (!source || !changed) return;
+      // A new template makes MapLibre fetch every masked tile through the
+      // protocol again; `refreshTiles` answers overzoomed tiles from data it
+      // already holds. Tiles no replacement touches come back unchanged from
+      // the protocol's raw-tile cache, so the reload is cheap.
+      source.setTiles?.([`${MASKED_TEMPLATE}?r=${store.getState().revision}`]);
     };
 
     const onSourceData = (event: { sourceId?: string; sourceDataType?: string }) => {
@@ -254,7 +234,7 @@ export function BuildingExtrusionLayer() {
         ensureMasked();
       if (state.revision !== before.revision) {
         clearTimeout(refreshTimer);
-        refreshTimer = setTimeout(refreshTouchedTiles, 150);
+        refreshTimer = setTimeout(reloadMaskedTiles, 150);
       }
     });
     map.on("sourcedata", onSourceData);

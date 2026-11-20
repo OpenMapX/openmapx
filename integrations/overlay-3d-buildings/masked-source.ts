@@ -29,7 +29,6 @@ export interface MaskState {
 }
 
 const RAW_TILE_CACHE_SIZE = 64;
-const MAX_LATITUDE = 85.0511287798;
 
 /** Read the live building source, or null while it has no resolved tile templates. */
 export function readLiveBuildingSource(
@@ -65,54 +64,6 @@ export function isMaskable(source: LiveBuildingSource | null, baseUri: string): 
       return false;
     }
   });
-}
-
-function tileRange(bbox: readonly number[], z: number) {
-  const n = 2 ** z;
-  const x = (lng: number) => Math.min(n - 1, Math.max(0, Math.floor(((lng + 180) / 360) * n)));
-  const y = (lat: number) => {
-    const rad = (Math.max(-MAX_LATITUDE, Math.min(MAX_LATITUDE, lat)) * Math.PI) / 180;
-    return Math.min(
-      n - 1,
-      Math.max(0, Math.floor(((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2) * n)),
-    );
-  };
-  return {
-    x0: x(bbox[0] as number),
-    x1: x(bbox[2] as number),
-    y0: y(bbox[3] as number),
-    y1: y(bbox[1] as number),
-  };
-}
-
-/** West, south, east, north of a tile in WGS84. */
-export function tileLngLatBounds({ z, x, y }: { z: number; x: number; y: number }) {
-  const n = 2 ** z;
-  const lat = (row: number) =>
-    (Math.atan(Math.sinh(Math.PI * (1 - (2 * row) / n))) * 180) / Math.PI;
-  return [(x / n) * 360 - 180, lat(y + 1), ((x + 1) / n) * 360 - 180, lat(y)] as const;
-}
-
-/** The tiles at the masked source's highest zoom that changed replacements touch. */
-export function tilesTouchedBy(
-  changed: readonly BuildingReplacement[],
-  maxzoom: number,
-): { z: number; x: number; y: number }[] {
-  const z = Math.min(maxzoom, 14);
-  const seen = new Set<string>();
-  const tiles: { z: number; x: number; y: number }[] = [];
-  for (const replacement of changed) {
-    const { x0, x1, y0, y1 } = tileRange(replacement.bbox, z);
-    for (let x = x0; x <= x1; x += 1) {
-      for (let y = y0; y <= y1; y += 1) {
-        const key = `${x}/${y}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        tiles.push({ z, x, y });
-      }
-    }
-  }
-  return tiles;
 }
 
 interface RawTile {
