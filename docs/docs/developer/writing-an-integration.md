@@ -428,6 +428,13 @@ services:
   server-side integration code; `pnpm check-provider-http` refuses it. See
   [Choosing the HTTP path](./integration-system.md#choosing-the-http-path).
 - **`ctx.log`** is a structured logger already tagged with the integration id.
+- **Errors** answer the one API error envelope, `{ error, code? }`. Throw
+  `httpError(status, "Invalid coordinates")` and the host replies with that text
+  in `error`, or send the body yourself with
+  `reply.status(400).send({ error: "Invalid coordinates", code: "INVALID_QUERY" })`
+  when the reply needs a stable `code`. Keep `error` safe to show to users and
+  never put an upstream body in it. See
+  [Error responses](./api-surface.md#error-responses).
 
 `ctx` also exposes `secrets`, an optional `db` (present only when the manifest
 requires `postgis`), and an event bus,

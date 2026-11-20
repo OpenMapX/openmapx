@@ -39,6 +39,37 @@ policy suite. `apps/api/scripts/openapi/__tests__/openapi-freshness.test.ts`
 checks the committed document, authentication classification and admin-route
 classification.
 
+## Error responses
+
+Every API error reply, from a core route or an integration route, has one
+shape:
+
+```json
+{ "error": "Invalid coordinates", "code": "INVALID_QUERY" }
+```
+
+- `error` is a short description that is safe to show to a user. It never
+  carries an upstream body, a URL with a key or a stack trace. Clients read the
+  text from `error` only.
+- `code` is optional: a stable, machine-readable reason for clients that branch
+  on it. A family with closed codes documents them, as the air-quality,
+  OpenStreetMap contribution, saved-places and garage contracts do.
+- A family may add fields beside these, such as `retryAfter`, `details`, an
+  `errors` list of validation messages or a `hint`.
+
+A handler throws `httpError(status, text)` or sends
+`reply.status(status).send({ error, code })`. The host's error handler answers
+`{ error }` for a thrown error and a fixed `{ "error": "Internal Server Error" }`
+for any status of 500 or above. The schema is `apiErrorSchema` in
+`@openmapx/core/api-contracts`; contract families extend it.
+
+`apps/api/src/__tests__/error-envelope.test.ts` scans the API, the built-in
+integrations and the integration framework and refuses an error reply whose
+literal body has no `error`. Its only exception is offline package preparation,
+which answers data-manager's typed `{ ok, errorCode, errorMessage }` result.
+Error bodies of internal data-manager routes that the API passes through
+unchanged keep their own documented shapes.
+
 ## What gets collected, and how
 
 The document has two halves, gathered two different ways.
@@ -358,7 +389,7 @@ browser-cache entries.
 | `GET /api/integrations/air-quality/stations` | `south`, `west`, `north`, `east` | `zoom`, `pollutant`, `limit`, `cursor`                 | viewport at most 20° latitude × 30° longitude; antimeridian supported; zoom 0 to 22; limit 1 to 500 |
 
 Every scalar key may occur once. Invalid/repeated values return HTTP 400 with
-`{ code: "INVALID_QUERY", message, details? }`. A valid request with no evidence
+`{ error, code: "INVALID_QUERY", details? }`. A valid request with no evidence
 is HTTP 200 with `status: "unavailable"`, never 204. `partial` means useful
 evidence was returned while a provider, comparison, freshness, policy, or size
 condition degraded the result.
