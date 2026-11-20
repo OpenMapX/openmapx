@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { build, type Metafile } from "esbuild";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -8,8 +8,16 @@ import { analyzeModule } from "./module-specifiers.mjs";
 const root = resolve(import.meta.dirname, "..");
 const coreDir = join(root, "packages/core");
 const coreManifest = JSON.parse(readFileSync(join(coreDir, "package.json"), "utf8")) as {
-  exports: Record<string, { default: string }>;
+  exports: Record<string, string | { default: string }>;
 };
+
+/** The source file an export key points at, in either `exports` form. */
+function exportTarget(key: string): string {
+  const target = coreManifest.exports[key];
+  const path = typeof target === "string" ? target : target?.default;
+  if (path === undefined) throw new Error(`@openmapx/core has no export ${key}`);
+  return join(coreDir, path);
+}
 
 /** Exports that browser code (web client components, the mobile app, integration UI) imports. */
 const BROWSER = [
@@ -88,7 +96,7 @@ const FORBIDDEN_IN_BROWSER =
 const FORBIDDEN_IN_MOBILE_NAVIGATION =
   /node_modules\/(?:react|react-dom|zustand|@tanstack\/[^/]+|@mui\/[^/]+|better-auth)\//;
 
-/** Every module an entry statically imports, directly or through other modules. */
+/** Every module an entry imports, statically or dynamically, directly or through other modules. */
 function reachable(metafile: Metafile, entry: string): string[] {
   const seen = new Set<string>();
   const pending = [entry];
@@ -110,11 +118,54 @@ function productionSources(dir: string): string[] {
       if (!/^(?:__tests__|__fixtures__|test-fixtures|test|node_modules)$/.test(entry.name)) {
         files.push(...productionSources(path));
       }
-    } else if (/\.(?:mts|tsx?)$/.test(entry.name) && !/\.(?:test|d)\.[mt]sx?$/.test(entry.name)) {
+    } else if (
+      /\.(?:mts|tsx?)$/.test(entry.name) &&
+      !/\.(?:test|spec|d)\.(?:mts|tsx?)$/.test(entry.name)
+    ) {
       files.push(path);
     }
   }
   return files;
+}
+
+/**
+ * Web modules that end up in the browser: every `"use client"` module and
+ * every web or integration module those import, the way Next builds its client
+ * graph. Imports through other workspace packages are not followed.
+ */
+function webClientModules(): string[] {
+  const webSrc = join(root, "apps/web/src");
+  const known = new Set([
+    ...productionSources(webSrc),
+    ...productionSources(join(root, "integrations")),
+  ]);
+  const resolveLocal = (from: string, specifier: string): string | undefined => {
+    const base = specifier.startsWith("@/")
+      ? join(webSrc, specifier.slice(2))
+      : specifier.startsWith("@integrations/")
+        ? join(root, "integrations", specifier.slice("@integrations/".length))
+        : specifier.startsWith(".")
+          ? resolve(dirname(from), specifier)
+          : undefined;
+    if (base === undefined) return undefined;
+    return [
+      base,
+      ...[".ts", ".tsx", ".mts", "/index.ts", "/index.tsx"].map((ext) => base + ext),
+    ].find((candidate) => known.has(candidate));
+  };
+  const pending = [...known].filter(
+    (file) => file.startsWith(webSrc) && /^\s*["']use client["']/.test(readFileSync(file, "utf8")),
+  );
+  const seen = new Set<string>();
+  for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+    for (const specifier of analyzeModule(file, readFileSync(file, "utf8")).specifiers) {
+      const target = resolveLocal(file, specifier);
+      if (target !== undefined) pending.push(target);
+    }
+  }
+  return [...seen];
 }
 
 /**
@@ -158,9 +209,7 @@ describe("core export classification", () => {
 
 describe("browser-facing core exports", () => {
   it("bundle for the browser without server-only modules", async () => {
-    const entryPoints = Object.fromEntries(
-      BROWSER.map((key) => [key, join(coreDir, coreManifest.exports[key]?.default ?? "")]),
-    );
+    const entryPoints = Object.fromEntries(BROWSER.map((key) => [key, exportTarget(key)]));
     const result = await build({
       absWorkingDir: root,
       bundle: true,
@@ -177,8 +226,8 @@ describe("browser-facing core exports", () => {
     const leaks: Record<string, string[]> = {};
     for (const key of BROWSER) {
       const entry = relative(root, entryPoints[key] ?? "");
+      expect(result.metafile.inputs[entry], key).toBeDefined();
       const modules = reachable(result.metafile, entry);
-      expect(modules.length, key).toBeGreaterThan(0);
       const forbidden = modules.filter(
         (path) =>
           FORBIDDEN_IN_BROWSER.test(path) ||
@@ -191,23 +240,18 @@ describe("browser-facing core exports", () => {
 
   it("are imported by mobile and web client modules instead of server exports", () => {
     const browser = new Set<string>(BROWSER);
-    const coreImport =
-      /^\s*import\s+(type\s+)?[^;]*?\bfrom\s+["']@openmapx\/core(\/[^"']*)?["']/gms;
     const violations: string[] = [];
-    const scan = (dir: string, clientOnly: boolean) => {
-      for (const file of productionSources(dir)) {
-        const text = readFileSync(file, "utf8");
-        if (!clientOnly && !/^\s*["']use client["']/.test(text)) continue;
-        for (const match of text.matchAll(coreImport)) {
-          const key = `.${match[2] ?? ""}`;
-          if (match[1] === undefined && !browser.has(key)) {
-            violations.push(`${relative(root, file)} imports @openmapx/core${match[2] ?? ""}`);
-          }
+    for (const file of [
+      ...productionSources(join(root, "apps/mobile/src")),
+      ...webClientModules(),
+    ]) {
+      for (const specifier of analyzeModule(file, readFileSync(file, "utf8")).specifiers) {
+        const match = /^@openmapx\/core(\/.*)?$/.exec(specifier);
+        if (match && !browser.has(`.${match[1] ?? ""}`)) {
+          violations.push(`${relative(root, file)} imports ${specifier}`);
         }
       }
-    };
-    scan(join(root, "apps/mobile/src"), true);
-    scan(join(root, "apps/web/src"), false);
+    }
     expect(violations).toEqual([]);
   });
 
