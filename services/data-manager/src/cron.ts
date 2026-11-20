@@ -810,10 +810,18 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         : "traffic-predicted: disabled (OPENCONDITIONS_URL not configured)",
     },
   };
-  const crons = {} as CronJobs;
-  for (const key of Object.keys(schedule) as Array<keyof CronJobs>) {
-    crons[key] = startJob(schedule[key], log);
-  }
+  // Started, and their schedules logged, in this order.
+  const crons: CronJobs = {
+    syncCron: startJob(schedule.syncCron, log),
+    feedProxyReloadCron: startJob(schedule.feedProxyReloadCron, log),
+    stalenessCheckCron: startJob(schedule.stalenessCheckCron, log),
+    autoBumpCron: startJob(schedule.autoBumpCron, log),
+    overtureCron: startJob(schedule.overtureCron, log),
+    overtureConflationRetryCron: startJob(schedule.overtureConflationRetryCron, log),
+    trafficExtractCron: startJob(schedule.trafficExtractCron, log),
+    trafficLiveCron: startJob(schedule.trafficLiveCron, log),
+    trafficPredictedCron: startJob(schedule.trafficPredictedCron, log),
+  };
 
   function stop(): void {
     void trafficLive

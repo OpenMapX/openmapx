@@ -118,13 +118,17 @@ export interface TrafficLiveOptions {
    */
   loadWaysToEdges?: () => Promise<Map<number, WayEdge[]>>;
   /**
-   * Test seam: invoked instead of the real `writeLiveTraffic` (which opens
-   * `trafficTarPath` for in-place writes).
+   * Whether road-event overrides are written (`active`) or only computed
+   * (`shadow`). Defaults to `TRAFFIC_ROAD_CONDITIONS_MODE`, then `shadow`.
    */
   roadConditionsMode?: "shadow" | "active";
   readTrafficGraphState?: () => Promise<{ generation: string; engineBootId: string }>;
   /** Fatal worker lifecycle notification; production exits for supervisor recovery. */
   onTrafficWriterFailure?: (error: Error) => void;
+  /**
+   * Test seam: invoked instead of the real `writeLiveTraffic` (which opens
+   * `trafficTarPath` for in-place writes).
+   */
   writeLiveTraffic?: (deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>;
 }
 
