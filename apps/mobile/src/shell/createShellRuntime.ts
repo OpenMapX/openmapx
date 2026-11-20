@@ -55,6 +55,7 @@ export interface ShellRuntime {
   intakePort: NativeIntakePort;
   /** Stops listening, cancels voice input and disposes the navigation graph. */
   dispose(): void;
+  isDisposed(): boolean;
 }
 
 /**
@@ -202,5 +203,6 @@ export function createShellRuntime(options: ShellRuntimeOptions): ShellRuntime {
       voice.cancel();
       void navigation.then((composed) => composed?.dispose());
     },
+    isDisposed: () => disposed,
   };
 }

@@ -18,7 +18,6 @@ import type { DeepLinkIntent } from "./links/deepLinkIntent";
 import { useIncomingLinks } from "./links/useIncomingLinks";
 import { surfaceCopy } from "./navigation/surfaces/surfaceModel";
 import { PermissionPrompts } from "./permissions/PermissionPrompts";
-import { createShellRuntime } from "./shell/createShellRuntime";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
 import { type NativePalette, useNativePalette } from "./shell/nativeTheme";
@@ -28,6 +27,7 @@ import type { ShellAction } from "./shell/ShellState";
 import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
 import { useHardwareBack } from "./shell/useHardwareBack";
+import { useShellRuntime } from "./shell/useShellRuntime";
 
 /**
  * The entire visible product is the web UI inside one WebView pointed at the
@@ -74,11 +74,11 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   useEffect(() => {
     webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibility));
   }, [visibility]);
-  // Composed once per shell: the compiled configuration and the device locale
-  // do not change while the process runs. Shell states follow the composition,
-  // which reports each guidance change once and every end once, whoever caused it.
-  const [runtime] = useState(() =>
-    createShellRuntime({
+  // Shell states follow the composition, which reports each guidance change
+  // once and every end once, whoever caused it. A recomposed runtime reloads
+  // the page so that it handshakes with the fresh bridge.
+  const { shell, navigation, voice, voiceIntent, prompter, intakePort } = useShellRuntime(
+    {
       config,
       locale,
       inject: (script) => webViewRef.current?.injectJavaScript(script),
@@ -86,10 +86,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       onNavigatingChanged: (navigating) =>
         dispatchShell({ type: navigating ? "session-started" : "session-ended" }),
       onSessionEnded: () => dispatchShell({ type: "session-ended" }),
-    }),
+    },
+    () => setLoadAttempt((attempt) => attempt + 1),
   );
-  useEffect(() => () => runtime.dispose(), [runtime]);
-  const { shell, navigation, voice, voiceIntent, prompter, intakePort } = runtime;
   useEffect(() => {
     if (visibility !== "active") voice.suspend();
   }, [visibility, voice]);

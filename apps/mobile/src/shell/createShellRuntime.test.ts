@@ -53,8 +53,10 @@ describe("createShellRuntime", () => {
       .mockImplementation(() => {});
     const runtime = compose();
     await runtime.navigation;
+    expect(runtime.isDisposed()).toBe(false);
 
     runtime.dispose();
+    expect(runtime.isDisposed()).toBe(true);
     runtime.dispose();
     await runtime.navigation;
 
