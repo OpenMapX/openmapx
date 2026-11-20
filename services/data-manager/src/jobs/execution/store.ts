@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  assertExecutionRowCapacity,
   type ContainedDataExecution,
   type ControlAdmissionInput,
   type ControlTransportPrincipal,
@@ -406,9 +407,11 @@ export function createPostgresDataExecutionStore(
     );
     if (canonicalJson(composed) !== canonicalJson(child))
       throw new DataExecutionConflict("Child differs from its original body, binding or grant");
+    const serialized = canonicalJson(progress);
+    assertExecutionRowCapacity(serialized);
     const rows = await tx<
       Row[]
-    >`UPDATE data_manager.jobs SET ownership_version=ownership_version+1,execution_progress=${canonicalJson(progress)}::text::jsonb
+    >`UPDATE data_manager.jobs SET ownership_version=ownership_version+1,execution_progress=${serialized}::text::jsonb
       WHERE id=${record.status.id} AND ownership_version=${record.version} RETURNING *`;
     return rows[0] ? decode(rows[0]) : null;
   }

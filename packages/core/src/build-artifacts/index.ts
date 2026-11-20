@@ -87,6 +87,7 @@ export {
   verifyMaintenanceCoordinatorPrerequisite,
 } from "./execution-record";
 export {
+  assertExecutionRowCapacity,
   type ExecutionRow,
   executionProgressSchema,
   type JournalExecution,

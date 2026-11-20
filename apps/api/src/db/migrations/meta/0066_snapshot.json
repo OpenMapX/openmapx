@@ -1,5 +1,5 @@
 {
-  "id": "559e7f16-af31-4df6-b953-cb30df751010",
+  "id": "abeea10b-661a-4939-8804-6896eb3a25cb",
   "prevId": "639ebc86-b820-431f-bc9d-2e96a698ed89",
   "version": "7",
   "dialect": "postgresql",
@@ -2102,7 +2102,7 @@
       "checkConstraints": {
         "data_manager_jobs_execution_bounds": {
           "name": "data_manager_jobs_execution_bounds",
-          "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL OR octet_length(\"data_manager\".\"jobs\".\"execution_progress\"::text) <= 262144)"
+          "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL OR octet_length(\"data_manager\".\"jobs\".\"execution_progress\"::text) <= 524288)"
         },
         "data_manager_jobs_execution_row": {
           "name": "data_manager_jobs_execution_row",

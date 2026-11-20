@@ -80,9 +80,11 @@ export const jobs = dataManager.table(
     uniqueIndex("data_manager_jobs_execution_key_uq")
       .on(table.operationKey)
       .where(sql`${table.operationKey} IS NOT NULL`),
+    // The code bounds the progress's compact JSON at 256 KiB; jsonb's text form
+    // adds a space after each separator, so it stays under twice that.
     check(
       "data_manager_jobs_execution_bounds",
-      sql`${table.ownershipVersion} >= 0 AND (${table.executionProgress} IS NULL OR octet_length(${table.executionProgress}::text) <= 262144)`,
+      sql`${table.ownershipVersion} >= 0 AND (${table.executionProgress} IS NULL OR octet_length(${table.executionProgress}::text) <= 524288)`,
     ),
     check(
       "data_manager_jobs_execution_row",

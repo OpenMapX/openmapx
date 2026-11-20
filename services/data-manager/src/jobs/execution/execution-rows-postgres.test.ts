@@ -7,6 +7,7 @@ import { createControlRootOperationKey } from "@openmapx/core/ops";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { dataJobExecutionRows } from "../../../../../packages/core/src/build-artifacts/execution-rows";
 import { installationState } from "../../../../../packages/core/src/build-artifacts/private-records";
 import { createDataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore, dataControlAdmission } from "./store.js";
@@ -224,6 +225,58 @@ describe.skipIf(
       if (created.length) await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${created}::uuid[])`;
       control.closeControlInstallation(dm.installation);
       control.closeControlInstallation(foreign.installation);
+      await sql.end();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("stores every progress within the code's bound, whose jsonb text form is longer", async () => {
+    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+    if (!url) throw Error("Owned PostgreSQL required");
+    const sql = postgres(url, { max: 4 }),
+      root = mkdtempSync(join(tmpdir(), "omx-dm-rows-bound-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlDirectories(root);
+    const dm = dataManagerProcess(sql, root, async () => ({
+      kind: "download-fonts",
+      completed: true,
+    }));
+    let id: string | undefined;
+    try {
+      const deadline = Date.now() + 60000,
+        key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+        { record } = await dm.store.admit(
+          { kind: "download-fonts" },
+          { operationKey: key, requestedDeadlineAt: deadline },
+        );
+      id = record.status.id;
+      const rows = dataJobExecutionRows(sql);
+      // Cells whose records are long lists of small numbers: jsonb's text form
+      // adds a space after every comma.
+      const cells = (count: number) =>
+        Array.from({ length: count }, (_, ordinal) => ({
+          ordinal,
+          evidence: null,
+          binding: null,
+          delegation: null,
+          owner: { values: Array<number>(5400).fill(0) },
+        }));
+      await rows.update(key, (progress) => {
+        progress.children = cells(22);
+      });
+      const [stored] =
+        await sql`SELECT octet_length(execution_progress::text) AS text, execution_progress FROM data_manager.jobs WHERE id=${id}`;
+      expect(Buffer.byteLength(JSON.stringify(stored?.execution_progress))).toBeLessThan(262144);
+      expect(Number(stored?.text)).toBeGreaterThan(262144);
+      await expect(
+        rows.update(key, (progress) => {
+          progress.children = cells(30);
+        }),
+      ).rejects.toThrow(/Execution row capacity/);
+    } finally {
+      await dm.runtime.close();
+      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      control.closeControlInstallation(dm.installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
     }

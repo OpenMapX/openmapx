@@ -156,6 +156,14 @@ export function sameAdmission(a: ExecutionAdmission, b: ExecutionAdmission): boo
 }
 
 const ROW_BYTES = 256 * 1024;
+/**
+ * Refuses a row, or the progress kept as its own column, whose compact JSON is
+ * over 256 KiB. Every writer checks this one bound; data-manager's table allows
+ * twice that for jsonb's text form, which only adds a space after separators.
+ */
+export function assertExecutionRowCapacity(serialized: string): void {
+  if (Buffer.byteLength(serialized) > ROW_BYTES) throw Error("Execution row capacity");
+}
 const ROW_NAME = /^opk1_[A-Za-z0-9_-]{16,64}$/;
 
 /**
@@ -210,7 +218,7 @@ export function fileExecutionRows(privateRoot: AnchoredDirectory): ExecutionRows
   };
   const write = (row: ExecutionRow, exclusive: boolean) => {
     const bytes = canonicalJson(executionRowSchema.parse(row));
-    if (Buffer.byteLength(bytes) > ROW_BYTES) throw Error("Execution row capacity");
+    assertExecutionRowCapacity(bytes);
     const dir = privateRoot.directory("executions", true, true);
     try {
       dir.write(name(row.admission.execution.operationKey), bytes, exclusive);
@@ -499,7 +507,7 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
           result = change(progress),
           after = canonicalJson(executionProgressSchema.parse(progress));
         if (after === before) return result;
-        if (Buffer.byteLength(after) > ROW_BYTES) throw Error("Execution row capacity");
+        assertExecutionRowCapacity(after);
         const written = await database.unsafe(
           "UPDATE data_manager.jobs SET execution_progress=$3::text::jsonb WHERE execution_version=2 AND operation_key=$1 AND execution_progress=$2::text::jsonb RETURNING id",
           [key, before, after],
