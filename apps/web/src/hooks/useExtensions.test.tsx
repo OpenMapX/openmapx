@@ -145,7 +145,10 @@ describe("extension browser acquisition through the real generated SDK", () => {
     vi.stubGlobal("fetch", fetch);
     const { result } = mount(useRemoveExtension);
     await act(async () => {
-      await expect(result.current.mutateAsync("x/y")).rejects.toThrow("Extension request failed");
+      await expect(result.current.mutateAsync("x/y")).rejects.toMatchObject({
+        unconfirmed: false,
+        detail: null,
+      });
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0][0]).toBe("http://admin.test/api/admin/extensions/x%2Fy");
@@ -200,7 +203,7 @@ describe("extension browser acquisition through the real generated SDK", () => {
       expect(signal?.aborted).toBe(false);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(150_000);
-        await expect(work).rejects.toThrow(/may still|unknown|not cancel/);
+        await expect(work).rejects.toMatchObject({ unconfirmed: true, detail: null });
       });
       expect(attempts).toBe(1);
     },
@@ -518,9 +521,7 @@ describe("removal execution ownership beyond a view observer", () => {
       });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(180_001);
-        await expect(work).rejects.toThrow(
-          "Extension request ended without a confirmed result. Work may still be running; this does not cancel a host job. Check Activity before deliberately retrying.",
-        );
+        await expect(work).rejects.toMatchObject({ unconfirmed: true, detail: null });
       });
       expect(attempts).toBe(1);
       await act(async () => {

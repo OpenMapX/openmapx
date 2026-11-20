@@ -1,11 +1,13 @@
 "use client";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { completeStoredAdminReauthentication } from "@/lib/admin/adminReauthentication";
 export default function AdminSignInPage() {
+  const t = useTranslations("auth");
   const { apiUrl, actorId } = useAccountAdmin(),
     [error, setError] = useState(false),
     [busy, setBusy] = useState(false),
@@ -51,8 +53,7 @@ export default function AdminSignInPage() {
           severity="error"
           sx={{ position: "fixed", top: 16, left: 16, right: 16, zIndex: 2000 }}
         >
-          This sign-in could not authorize the action. Sign in with the same administrator account,
-          or cancel and start a new confirmation.
+          {t("adminReauthenticationFailed")}
         </Alert>
       )}
       {!busy && (

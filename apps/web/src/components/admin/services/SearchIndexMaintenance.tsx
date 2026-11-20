@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -100,8 +101,7 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
           setConfirmOpen(false);
         }
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : t("operationFailed"), "error");
+        if (execution.active) showToast(adminErrorText(error, t("operationFailed")), "error");
         throw error;
       }
     },
@@ -156,10 +156,7 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {sdk.adminErrorMessage(
-            statusQuery.error,
-            statusQuery.error instanceof Error ? statusQuery.error.message : t("statusUnavailable"),
-          )}
+          {adminErrorText(statusQuery.error, t("statusUnavailable"))}
         </Alert>
       )}
       {status === null && (

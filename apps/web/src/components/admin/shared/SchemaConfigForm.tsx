@@ -21,6 +21,7 @@ import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/con
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
 import { useTranslations } from "next-intl";
 import { useCallback, useId, useMemo, useState } from "react";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
@@ -290,7 +291,7 @@ export function SchemaConfigForm({
             : t("applyUnconfirmed"),
         );
       } else {
-        setError(err instanceof Error ? err.message : t("saveFailed"));
+        setError(adminErrorText(err, t("saveFailed")));
       }
     } finally {
       setPending(null);

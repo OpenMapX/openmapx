@@ -20,6 +20,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { invalidateExtensionAdministration } from "@/lib/admin/extensionAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import {
@@ -212,7 +213,7 @@ function StandaloneInstallDialogContent() {
       );
       accept(result.jobId, "preview", current, source);
     } catch (error) {
-      if (current()) setError(error instanceof Error ? error.message : t("inspectionFailed"));
+      if (current()) setError(adminErrorText(error, t("inspectionFailed")));
     } finally {
       upload.current = null;
       running.current = false;
@@ -238,7 +239,7 @@ function StandaloneInstallDialogContent() {
       );
       accept(result.jobId, "install", current);
     } catch (error) {
-      if (current()) setError(error instanceof Error ? error.message : t("installationFailed"));
+      if (current()) setError(adminErrorText(error, t("installationFailed")));
     } finally {
       running.current = false;
       if (owner.active) setBusy(false);

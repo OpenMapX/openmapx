@@ -41,6 +41,7 @@ import { useEffect, useRef, useState } from "react";
 import Menu from "@/components/ui/Menu";
 import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -82,8 +83,9 @@ function UserRoleSelect({
 }) {
   const t = useTranslations("adminUsers");
   const showToast = useAdminToast();
+  const errorText = useAccountErrorText();
   const mutation = useAccountAction(userId, {
-    onError: (error) => showToast(error.message, "error"),
+    onError: (error) => showToast(errorText(error), "error"),
   });
 
   return (
@@ -126,13 +128,14 @@ function ActionsMenu({
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const showToast = useAdminToast();
+  const errorText = useAccountErrorText();
 
   const unban = useAccountAction(user.id, {
     onSuccess: () => {
       setAnchor(null);
       showToast(t("nameUnbanned", { name: user.name }));
     },
-    onError: (error) => showToast(error.message, "error"),
+    onError: (error) => showToast(errorText(error), "error"),
   });
   const deleteUser = useAccountAction(user.id, {
     onSuccess: () => {
@@ -140,7 +143,7 @@ function ActionsMenu({
       setAnchor(null);
       showToast(t("nameDeleted", { name: user.name }));
     },
-    onError: (error) => showToast(error.message, "error"),
+    onError: (error) => showToast(errorText(error), "error"),
   });
 
   return (
@@ -561,7 +564,8 @@ function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: (
   const t = useTranslations("adminUsers");
   const requestExit = useAdminDraftExit();
   const router = useRouter(),
-    showToast = useAdminToast();
+    showToast = useAdminToast(),
+    errorText = useAccountErrorText();
   const action = useAccountAction(targetId, {
     impersonation: true,
     onSuccess: () => {
@@ -570,7 +574,7 @@ function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: (
       onDone();
     },
     onError: (error) => {
-      showToast(error.message, "error");
+      showToast(errorText(error), "error");
       onDone();
     },
   });

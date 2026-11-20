@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
@@ -201,8 +202,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         if (scope.active)
           setPrepared({ name, region: selectedRegion, input: request.input, preview });
       } catch (error) {
-        if (scope.active)
-          showToast(error instanceof Error ? error.message : t("previewFailed"), "error");
+        if (scope.active) showToast(adminErrorText(error, t("previewFailed")), "error");
       }
     },
   });
@@ -226,8 +226,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
           setPrepared(null);
         }
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : t("operationFailed"), "error");
+        if (execution.active) showToast(adminErrorText(error, t("operationFailed")), "error");
         throw error;
       }
     },
@@ -301,10 +300,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {sdk.adminErrorMessage(
-            statusQuery.error,
-            statusQuery.error instanceof Error ? statusQuery.error.message : t("statusUnavailable"),
-          )}
+          {adminErrorText(statusQuery.error, t("statusUnavailable"))}
         </Alert>
       )}
       {status === null && (

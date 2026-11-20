@@ -15,6 +15,7 @@ import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useComposePreview } from "@/hooks/useComposePreview";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { invalidateServiceAdministration, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -60,10 +61,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         }
       } catch (error) {
         if (execution.active)
-          showToast(
-            error instanceof Error ? error.message : t("configurationGenerationFailed"),
-            "error",
-          );
+          showToast(adminErrorText(error, t("configurationGenerationFailed")), "error");
         throw error;
       }
     },
@@ -86,8 +84,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         if (execution.active) showToast(t("stackStartedUseGuardedApply"));
         return result;
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : t("composeUpFailed"), "error");
+        if (execution.active) showToast(adminErrorText(error, t("composeUpFailed")), "error");
         throw error;
       }
     },
@@ -107,7 +104,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
   }
 
   if (error) {
-    return <Alert severity="error">{error.message}</Alert>;
+    return <Alert severity="error">{adminErrorText(error, t("serviceRequestFailed"))}</Alert>;
   }
 
   return (

@@ -19,6 +19,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
@@ -95,8 +96,7 @@ export function SetCredentialDialog({
         if (applied.runtime === "applied") onClose();
         else setReceipt(applied);
       } catch (err) {
-        if (owner.active)
-          setError(err instanceof Error ? err.message : t("failedToSaveCredential"));
+        if (owner.active) setError(adminErrorText(err, t("failedToSaveCredential")));
         throw err;
       }
     },

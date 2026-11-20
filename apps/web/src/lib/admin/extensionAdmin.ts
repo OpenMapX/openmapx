@@ -12,6 +12,7 @@ import {
   queryOptions,
 } from "@tanstack/react-query";
 import { integrationRuntimeQueryKey } from "@/lib/integrationRuntimeQuery";
+import { AdminRequestError } from "./adminRequestError";
 
 export const EXTENSION_READ_TIMEOUT_MS = 30_000;
 export const EXTENSION_RESOLUTION_TIMEOUT_MS = 180_000;
@@ -26,10 +27,9 @@ export async function extensionOrThrow<
   try {
     return sdk.unwrapAdminResponse(await pending);
   } catch (error) {
-    const fallback = isApiRequestAbortedError(error)
-      ? "Extension request ended without a confirmed result. Work may still be running; this does not cancel a host job. Check Activity before deliberately retrying."
-      : "Extension request failed";
-    throw new Error(sdk.adminErrorMessage(error, fallback), { cause: error });
+    if (isApiRequestAbortedError(error))
+      throw new AdminRequestError(null, { unconfirmed: true, cause: error });
+    throw new AdminRequestError(sdk.adminErrorMessage(error, "") || null, { cause: error });
   }
 }
 

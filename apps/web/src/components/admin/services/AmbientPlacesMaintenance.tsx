@@ -24,6 +24,7 @@ import type { AmbientPlacesStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
@@ -84,7 +85,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
       setConfirm(null);
       void client.invalidateQueries({ queryKey });
     },
-    onError: (error: Error) => toast(sdk.adminErrorMessage(error, error.message), "error"),
+    onError: (error: Error) => toast(adminErrorText(error, t("serviceRequestFailed")), "error"),
   });
   const status = query.data;
   const active = status?.active;
@@ -101,7 +102,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
         </Box>
         {(query.isLoading || busy) && <LinearProgress />}
         {query.error && (
-          <Alert severity="error">{sdk.adminErrorMessage(query.error, query.error.message)}</Alert>
+          <Alert severity="error">{adminErrorText(query.error, t("serviceRequestFailed"))}</Alert>
         )}
         {status?.lastError && <Alert severity="error">{status.lastError}</Alert>}
         {status?.building && status.progress && (

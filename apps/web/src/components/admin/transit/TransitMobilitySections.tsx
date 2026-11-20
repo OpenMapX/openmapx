@@ -16,6 +16,10 @@ type MotisTransitousStatus = AdminServiceData["motisTransitous"];
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString();
 }
+/** ICU select keys cannot hold hyphens, so `self-hosted` is selected as `self_hosted`. */
+function selectKey(value: string): string {
+  return value.replaceAll("-", "_");
+}
 function motisProxyModeColor(
   mode: MotisTransitousStatus["feedProxyMode"],
 ): "default" | "success" | "warning" | "error" {
@@ -59,54 +63,38 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
               flexWrap: "wrap",
             }}
           >
+            <Chip label={t("scheduleDatasets", { count: status.datasetCount })} size="small" />
+            <Chip label={t("realtimeFeeds", { count: status.realtimeFeedCount })} size="small" />
+            <Chip label={t("gbfsFeeds", { count: status.gbfsFeedCount })} size="small" />
+            <Chip label={t("proxiedUrls", { count: status.feedProxyUrlCount })} size="small" />
             <Chip
-              label={t("datasetcountScheduleDatasetS", { datasetCount: status.datasetCount })}
-              size="small"
-            />
-            <Chip
-              label={t("realtimefeedcountRealtimeFeedS", {
-                realtimeFeedCount: status.realtimeFeedCount,
-              })}
-              size="small"
-            />
-            <Chip
-              label={t("gbfsfeedcountGbfsFeedS", { gbfsFeedCount: status.gbfsFeedCount })}
-              size="small"
-            />
-            <Chip
-              label={t("feedproxyurlcountProxiedUrlS", {
-                feedProxyUrlCount: status.feedProxyUrlCount,
-              })}
-              size="small"
-            />
-            <Chip
-              label={t("feedProxyFeedproxymode", { feedProxyMode: status.feedProxyMode })}
+              label={t("feedProxyMode", { mode: selectKey(status.feedProxyMode) })}
               color={motisProxyModeColor(status.feedProxyMode)}
               size="small"
             />
             <Chip
-              label={t("capabilitiesCapabilitystate", { capabilityState: status.capabilityState })}
+              label={t("capabilityState", { state: status.capabilityState })}
               color={status.capabilityState === "healthy" ? "success" : "error"}
               size="small"
             />
             <Chip
-              label={t("rentalprovidercountRentalProviderS", {
-                rentalProviderCount: status.rentalProviderCount,
-              })}
+              label={t("rentalProviders", { count: status.rentalProviderCount })}
               size="small"
             />
             <Chip
-              label={t("profileOperationsprofile", { operationsProfile: status.operationsProfile })}
+              label={t("operationsProfile", { profile: selectKey(status.operationsProfile) })}
               color={status.operationsProfile === "planet" ? "warning" : "default"}
               size="small"
             />
             <Chip
-              label={t("slotValue", { value: status.activeSlot ?? "legacy" })}
+              label={
+                status.activeSlot ? t("activeSlot", { slot: status.activeSlot }) : t("legacySlot")
+              }
               color={status.activeSlot ? "success" : "default"}
               size="small"
             />
             <Chip
-              label={t("preflightPreflightstate", { preflightState: status.preflightState })}
+              label={t("preflightState", { state: status.preflightState })}
               color={status.preflightState === "passed" ? "success" : "warning"}
               size="small"
             />
@@ -122,19 +110,18 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
               color: "text.secondary",
             }}
           >
-            {t("proxyArtifactsConfig")}
-            {status.feedProxyConfigFound ? "present" : "missing"} {t("vars")}
-            {status.feedProxyVarsFound ? "present" : "missing"}{" "}
-            {t("feedproxyfeedcountMappedFeedEndpointS", {
-              feedProxyFeedCount: status.feedProxyFeedCount,
+            {t("proxyArtifacts", {
+              config: String(status.feedProxyConfigFound),
+              vars: String(status.feedProxyVarsFound),
+              count: status.feedProxyFeedCount,
+              gbfsProxy: status.gbfsProxyUrl ?? t("notConfigured"),
             })}
-            {status.gbfsProxyUrl ?? t("notConfigured")}
           </Typography>
           {status.gbfsCatalog.state === "active" && (
             <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              {t("registryCommitRegistryaddedAddedTransitouspreferred", {
+              {t("gbfsRegistry", {
                 commit: status.gbfsCatalog.commit?.slice(0, 12) ?? "",
-                registryAdded: status.gbfsCatalog.registryAdded,
+                added: status.gbfsCatalog.registryAdded,
                 transitousPreferred: status.gbfsCatalog.transitousPreferred,
                 quarantined: status.gbfsCatalog.quarantined,
                 validationFailed: status.gbfsCatalog.validationFailed,
@@ -142,36 +129,36 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
             </Typography>
           )}
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            {t("activeEpoch")}
-            {status.activeEpoch ?? "unknown"} {t("candidate")}
-            {status.candidateEpoch ?? "none"} {t("tested")}
-            {status.testedAt ? formatDate(status.testedAt) : "never"} {t("rollback")}
-            {status.rollbackAvailable ? "available" : "unavailable"}
+            {t("epochs", {
+              active: status.activeEpoch ?? t("unknownValue"),
+              candidate: status.candidateEpoch ?? t("noneValue"),
+              tested: status.testedAt ? formatDate(status.testedAt) : t("neverTested"),
+              rollback: String(status.rollbackAvailable),
+            })}
           </Typography>
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            {t("capacity")}
-            {status.preflightRequiredDiskBytes != null
-              ? t("preflightrequireddiskbytesRequired", {
-                  preflightRequiredDiskBytes: formatBytes(status.preflightRequiredDiskBytes),
-                })
-              : t("notEstimated")}{" "}
-            ·{" "}
-            {status.preflightFreeDiskBytes != null
-              ? t("preflightfreediskbytesFree", {
-                  preflightFreeDiskBytes: formatBytes(status.preflightFreeDiskBytes),
-                })
-              : t("freeDiskUnknown")}
-            {t("previousHealthySlot")}
-            {status.previousHealthySlot ?? "none"}
-            {status.pinProposalPending ? t("pinProposalAwaitingReview") : ""}
+            {t("capacity", {
+              required:
+                status.preflightRequiredDiskBytes != null
+                  ? t("diskRequired", { bytes: formatBytes(status.preflightRequiredDiskBytes) })
+                  : t("notEstimated"),
+              free:
+                status.preflightFreeDiskBytes != null
+                  ? t("diskFree", { bytes: formatBytes(status.preflightFreeDiskBytes) })
+                  : t("freeDiskUnknown"),
+              previousSlot: status.previousHealthySlot ?? t("noneValue"),
+            })}
+            {status.pinProposalPending ? ` · ${t("pinProposalAwaitingReview")}` : ""}
           </Typography>
           <Alert severity="info">{t("crowdsourceSidecarsAreDisabledPending")}</Alert>
           {status.capabilityState !== "healthy" && (
             <Alert severity="error">
-              {t("promotedMotisCapabilityEvidenceIs", { capabilityState: status.capabilityState })}
               {status.capabilityError
-                ? t("capabilityerror", { capabilityError: status.capabilityError })
-                : t("reRunTheTransactionalImport")}
+                ? t("capabilityEvidenceError", {
+                    state: status.capabilityState,
+                    error: status.capabilityError,
+                  })
+                : t("capabilityEvidenceRerun", { state: status.capabilityState })}
             </Alert>
           )}
           {(status.feedProxyMode === "transitous-cloud" || status.feedProxyMode === "mixed") && (
@@ -213,7 +200,7 @@ export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
               spacing={1}
               sx={{ alignItems: { sm: "center" } }}
             >
-              <Typography sx={{ minWidth: 80, textTransform: "capitalize" }}>{category}</Typography>
+              <Typography sx={{ minWidth: 80 }}>{t("mobilityCategory", { category })}</Typography>
               <Chip
                 size="small"
                 label={record ? t("motisLocal", { local: record.decision.local }) : t("noData")}
@@ -221,8 +208,9 @@ export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
               />
               {record && (
                 <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                  {t("queried")}
-                  {record.decision.calledAdapters.join(", ") || t("motisOnly")}
+                  {record.decision.calledAdapters.length
+                    ? t("queriedAdapters", { adapters: record.decision.calledAdapters.join(", ") })
+                    : t("queriedMotisOnly")}
                 </Typography>
               )}
             </Stack>

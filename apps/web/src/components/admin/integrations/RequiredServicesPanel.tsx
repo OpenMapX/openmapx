@@ -11,6 +11,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useRef } from "react";
 import { useServicesList } from "@/hooks/useServices";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { CapabilityBindingPicker } from "./CapabilityBindingPicker";
 
@@ -246,7 +247,7 @@ export function RequiredServicesPanel({
         >
           {((owned && setBinding.error) || bindingsError) && (
             <Alert severity="error">
-              {((owned && setBinding.error) || bindingsError)?.message}
+              {adminErrorText((owned && setBinding.error) || bindingsError, t("operationFailed"))}
             </Alert>
           )}
           {receipt && (

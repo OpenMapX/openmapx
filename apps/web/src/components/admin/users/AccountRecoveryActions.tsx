@@ -18,6 +18,7 @@ import {
   useAccountAction,
   useAccountAdmin,
 } from "@/lib/admin/accountAdmin";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { AccountMailStatus } from "./AccountMailStatus";
 import { AdminReauthenticationDialog } from "./AdminReauthenticationDialog";
 
@@ -33,6 +34,7 @@ export function AccountRecoveryActions({ user }: { user: User }) {
 }
 function RecoveryForm({ user }: { user: User }) {
   const t = useTranslations("adminUsers");
+  const errorText = useAccountErrorText();
   const labels: Record<AccountRecoveryAction, string> = {
     invitation: t("recoveryInvitation"),
     "verification-email": t("recoveryVerificationEmail"),
@@ -165,7 +167,7 @@ function RecoveryForm({ user }: { user: User }) {
               }
               label={t("iConfirmThisActionFor", { email: user.email })}
             />
-            {mutation.error && <Alert severity="error">{mutation.error.message}</Alert>}
+            {mutation.error && <Alert severity="error">{errorText(mutation.error)}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>

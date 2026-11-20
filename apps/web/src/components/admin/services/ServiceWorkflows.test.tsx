@@ -961,7 +961,7 @@ describe("wire intent, validation, polling and policy", () => {
       return undefined;
     });
     const { qc } = mount(<TransitMobilityView />);
-    await screen.findByText("1 schedule dataset(s)");
+    await screen.findByText("1 schedule dataset");
     expect(qc.getQueryData(["admin", "services", apiUrl, "data", "50", "0"])).toEqual(inventory);
     expect(await screen.findByText("queried motis, direct")).toBeInTheDocument();
     expect(screen.getByText("MOTIS partial")).toBeInTheDocument();

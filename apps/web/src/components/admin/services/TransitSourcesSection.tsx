@@ -29,6 +29,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -205,7 +206,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
         ),
       ),
     onSuccess: ({ jobId }) => {
-      reportJob(jobId, `Source change queued as ${jobId}.`);
+      reportJob(jobId, t("sourceChangeQueued", { jobId }));
       setDialogOpen(false);
       setUrl("");
       setName("");
@@ -214,7 +215,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
       setLicenseUrl("");
       setAttribution("");
     },
-    onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
+    onError: (error) => setToast(adminErrorText(error, t("serviceRequestFailed"))),
   });
   const sourceMutation = useMutation({
     retry: false,
@@ -241,9 +242,9 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
     },
     onSuccess: ({ jobId, sourceId }) => {
       setRemoving(null);
-      reportJob(jobId, `${sourceId} queued as ${jobId}.`);
+      reportJob(jobId, t("sourceActionQueued", { sourceId, jobId }));
     },
-    onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
+    onError: (error) => setToast(adminErrorText(error, t("serviceRequestFailed"))),
   });
 
   const sources = sourcesQuery.data?.sources ?? [];
@@ -334,7 +335,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
           onClose={() => setSyncDialogOpen(false)}
           onQueued={(jobId) => {
             setSyncDialogOpen(false);
-            reportJob(jobId, `Transit sync queued as ${jobId}.`);
+            reportJob(jobId, t("transitSyncQueued", { jobId }));
           }}
         />
       )}
@@ -413,7 +414,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             />
             {catalogQuery.error && (
               <Alert severity="error">
-                {sdk.adminErrorMessage(catalogQuery.error, catalogQuery.error.message)}
+                {adminErrorText(catalogQuery.error, t("serviceRequestFailed"))}
               </Alert>
             )}
             {catalogQuery.data?.sources.map((source) => (

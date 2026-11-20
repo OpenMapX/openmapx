@@ -16,29 +16,13 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { browserAdminApiBase } from "./browserAdminApiBase";
 
-const messages: Record<string, string> = {
-  ACCOUNT_MAIL_RATE_LIMITED: "Too many mail requests. Wait an hour before requesting another.",
-  ACCOUNT_EMAIL_CHANGED: "This account's email changed. Refresh and confirm its current address.",
-  ACCOUNT_ACTION_CONFLICT: "This request changed. Refresh before trying again.",
-  REAUTHENTICATION_REQUIRED: "Confirm a fresh administrator sign-in for this action.",
-  AUTH_POLICY_CONFLICT: "The active policy changed. Reload before applying your changes.",
-  ADMIN_OPERATION_IN_PROGRESS:
-    "Finish or cancel this administrator’s instance operations in Activity before deleting the account.",
-  LAST_ADMIN_REQUIRED: "At least one active administrator must remain.",
-  ROLE_VERSION_CONFLICT: "This account changed. Refresh before changing its role.",
-  INVALID_PASSWORD: "The password does not meet the instance policy.",
-  PASSWORD_TOO_SHORT: "The password does not meet the instance policy.",
-  PASSWORD_TOO_LONG: "The password exceeds the instance limit.",
-  UNAUTHORIZED: "Sign in again before managing accounts.",
-  FORBIDDEN: "You do not have permission to perform this account action.",
-  USER_ALREADY_EXISTS: "An account with this email already exists.",
-};
 export class AccountAdminError extends Error {
   readonly code: string;
   constructor(code: unknown) {
     const safe =
       typeof code === "string" && /^[A-Z0-9_]{1,80}$/.test(code) ? code : "ACCOUNT_REQUEST_FAILED";
-    super(messages[safe] ?? "The account request failed. Please try again.");
+    // The code is the message; the admin UI words it through useAccountErrorText.
+    super(safe);
     this.name = "AccountAdminError";
     this.code = safe;
   }

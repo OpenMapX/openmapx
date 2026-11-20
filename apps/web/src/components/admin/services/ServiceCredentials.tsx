@@ -26,6 +26,7 @@ import {
   useServiceCredentials,
   useSetServiceCredential,
 } from "@/hooks/useServices";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
@@ -105,7 +106,7 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
       setValue("");
     } catch (err) {
       if (!execution.active) return;
-      showToast(err instanceof Error ? err.message : t("failedToSaveCredential"), "error");
+      showToast(adminErrorText(err, t("failedToSaveCredential")), "error");
     }
   }
 
@@ -118,7 +119,7 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
       showToast(message, severity);
     } catch (err) {
       if (!execution.active) return;
-      showToast(err instanceof Error ? err.message : t("failedToRemoveCredential"), "error");
+      showToast(adminErrorText(err, t("failedToRemoveCredential")), "error");
     }
   }
 

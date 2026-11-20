@@ -221,16 +221,22 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
                 : t("batchCompleted")}
           </Typography>
           <Typography variant="body2">
-            {t("completed2")}
-            {batch.data.completedServiceIds.join(", ") || "none"}
+            {t("completedServices", {
+              count: batch.data.completedServiceIds.length,
+              services: batch.data.completedServiceIds.join(", "),
+            })}
           </Typography>
           <Typography variant="body2">
-            {t("failed2")}
-            {batch.data.failedServiceIds.join(", ") || "none"}
+            {t("failedServices", {
+              count: batch.data.failedServiceIds.length,
+              services: batch.data.failedServiceIds.join(", "),
+            })}
           </Typography>
           <Typography variant="body2">
-            {t("skipped")}
-            {batch.data.skippedServiceIds.join(", ") || "none"}
+            {t("skippedServices", {
+              count: batch.data.skippedServiceIds.length,
+              services: batch.data.skippedServiceIds.join(", "),
+            })}
           </Typography>
         </Box>
       )}

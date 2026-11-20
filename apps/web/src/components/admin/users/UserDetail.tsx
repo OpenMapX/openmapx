@@ -37,6 +37,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -69,6 +70,7 @@ function ProfileTab({
   impersonate: { mutate: () => void; isPending: boolean; error: Error | null };
 }) {
   const t = useTranslations("adminUsers");
+  const errorText = useAccountErrorText();
   const router = useRouter();
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
@@ -91,7 +93,7 @@ function ProfileTab({
     >
       {(updateUser.error || impersonate.error || unban.error || deleteUser.error) && (
         <Alert severity="error">
-          {(updateUser.error || impersonate.error || unban.error || deleteUser.error)?.message}
+          {errorText(updateUser.error || impersonate.error || unban.error || deleteUser.error)}
         </Alert>
       )}
       <Stack
@@ -301,6 +303,7 @@ function ProfileTab({
 
 function SessionsTab({ userId }: { userId: string }) {
   const t = useTranslations("adminUsers");
+  const errorText = useAccountErrorText();
   const account = useAccountAdmin();
   const { data, isLoading, error } = useQuery({
     queryKey: account.keys.sessions(userId),
@@ -324,7 +327,7 @@ function SessionsTab({ userId }: { userId: string }) {
     >
       {(error || revoke.error || revokeAll.error) && (
         <Alert severity="error">
-          {error ? t("couldNotLoadSessions") : (revoke.error || revokeAll.error)?.message}
+          {error ? t("couldNotLoadSessions") : errorText(revoke.error || revokeAll.error)}
         </Alert>
       )}
       <Stack

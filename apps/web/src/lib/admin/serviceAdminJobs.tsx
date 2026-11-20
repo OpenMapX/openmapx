@@ -3,6 +3,7 @@
 import type { ApiClient } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useCallback } from "react";
 import { useAdminJobRegistration } from "./adminJobEffects";
 import { safeAdminJobReturn } from "./adminJobNavigation";
@@ -18,6 +19,7 @@ export type RegisterServiceJob = (accepted: AcceptedServiceJob) => void;
 
 /** Services own their invalidation graph; the layout owns accepted-job observation. */
 export function useServiceJobRegistration(): RegisterServiceJob {
+  const t = useTranslations("adminShared.jobLabels");
   const register = useAdminJobRegistration();
   const qc = useQueryClient();
   const pathname = usePathname(),
@@ -33,10 +35,13 @@ export function useServiceJobRegistration(): RegisterServiceJob {
         client,
         apiUrl,
         jobId,
-        label: "serviceId" in effect ? `${effect.serviceId} · ${effect.kind}` : effect.kind,
+        label:
+          "serviceId" in effect
+            ? t("serviceEffect", { kind: effect.kind, service: effect.serviceId })
+            : t("areaEffect", { kind: effect.kind }),
         returnTo,
         onSettled: () => invalidateServiceAdministration(qc, apiUrl, effect),
       }),
-    [register, qc, returnTo],
+    [register, qc, returnTo, t],
   );
 }

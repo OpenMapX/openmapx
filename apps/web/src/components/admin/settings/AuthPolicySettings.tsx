@@ -11,6 +11,7 @@ import { authPolicySettingsSchema, type authPolicyViewSchema } from "@openmapx/c
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminFieldFocus } from "@/lib/admin/useAdminFieldFocus";
 export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
@@ -45,6 +46,7 @@ export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
   );
 }
 function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.parse> }) {
+  const errorText = useAccountErrorText();
   const { active, pending, ownership } = view;
   const draft = useAdminDraft({
     id: "authentication-policy",
@@ -249,7 +251,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
           Discard policy edits
         </Button>
       )}
-      {mutation.error && <Alert severity="error">{mutation.error.message}</Alert>}
+      {mutation.error && <Alert severity="error">{errorText(mutation.error)}</Alert>}
       {saved && (
         <Alert severity="success">
           Authentication policy applied to new authentication operations.

@@ -27,6 +27,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { hasVaultCredential, useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -315,8 +316,7 @@ function CredentialsTable({
             applied.runtime === "applied" ? "success" : "info",
           );
       } catch (err) {
-        if (owner.active)
-          showToast(err instanceof Error ? err.message : t("deleteFailed"), "error");
+        if (owner.active) showToast(adminErrorText(err, t("deleteFailed")), "error");
         throw err;
       }
     },
@@ -525,7 +525,7 @@ function EnvVarReferenceSection({
           size="small"
           variant="outlined"
           startIcon={<ContentCopyIcon />}
-          onClick={() => copy(configBlock, "config env vars")}
+          onClick={() => copy(configBlock, t("configEnvVars"))}
           disabled={loading || error || !hasConfigVars}
         >
           {t("copyConfig")}
@@ -534,7 +534,7 @@ function EnvVarReferenceSection({
           size="small"
           variant="outlined"
           startIcon={<ContentCopyIcon />}
-          onClick={() => copy(credentialBlock, "credential env vars")}
+          onClick={() => copy(credentialBlock, t("credentialEnvVars"))}
           disabled={loading || error || !hasCredentialVars}
         >
           {t("copyCredentials")}
@@ -543,7 +543,7 @@ function EnvVarReferenceSection({
           size="small"
           variant="outlined"
           startIcon={<ContentCopyIcon />}
-          onClick={() => copy(allBlock, "env-var catalogue")}
+          onClick={() => copy(allBlock, t("envVarCatalogue"))}
           disabled={loading || error || integrations.length === 0}
         >
           {t("copyAll")}

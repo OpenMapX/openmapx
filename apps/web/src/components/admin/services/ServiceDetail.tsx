@@ -35,6 +35,7 @@ import {
   useServiceConfigSave,
   useServiceDetail,
 } from "@/hooks/useServices";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
@@ -281,7 +282,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                     )}
                   </Stack>
                   <Chip
-                    label={v.required ? "required" : "optional"}
+                    label={v.required ? t("variableRequired") : t("variableOptional")}
                     size="small"
                     color={v.required ? "default" : "info"}
                     variant="outlined"
@@ -568,7 +569,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
       showToast(t("serviceActionQueuedJobJobid", { action, jobId: result.jobId }));
     } catch (err) {
       if (!execution.active) return;
-      showToast(err instanceof Error ? err.message : t("actionActionFailed", { action }), "error");
+      showToast(adminErrorText(err, t("actionActionFailed", { action })), "error");
       throw err;
     }
   }

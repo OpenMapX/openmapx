@@ -60,6 +60,7 @@ import {
   useRemoveExtensionSource,
   useUpdateExtension,
 } from "@/hooks/useExtensions";
+import { AdminRequestError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -202,16 +203,18 @@ function ExtensionSecurityPreviewDialog({
                     {t("commitRepositorycommit", { repositoryCommit: service.repositoryCommit })}
                   </Typography>
                   <Typography variant="body2">
-                    {t("builtInRequired")}
-                    {service.securityRating.requiresBuiltIn ? "yes" : "no"}
-                    {t("hostPortsHostportsSecretsSecretcount", {
+                    {t("securityFacts", {
+                      builtIn: String(service.securityRating.requiresBuiltIn),
                       hostPorts: service.securityRating.hostPorts,
                       secretCount: service.securityRating.secretCount,
                     })}
                   </Typography>
                   <Typography variant="body2">
-                    {t("deploymentVariables")}
-                    {service.securityRating.deploymentVariables.join(", ") || "none"}
+                    {service.securityRating.deploymentVariables.length
+                      ? t("deploymentVariables", {
+                          variables: service.securityRating.deploymentVariables.join(", "),
+                        })
+                      : t("noDeploymentVariables")}
                   </Typography>
                   <Typography variant="body2">
                     {service.securityRating.factors.join(" · ") || t("noSpecialPrivileges")}
@@ -242,6 +245,7 @@ function ExtensionSecurityPreviewDialog({
  * Domain effects are intentionally owned by mutationFn/the layout, not these callbacks.
  */
 function useExtensionUiSession() {
+  const t = useTranslations("adminExtensions");
   const binding = useActivityClient();
   const owner = useAdminMutationOwner(binding.client, binding.apiUrl);
   const generation = useRef(0);
@@ -252,7 +256,18 @@ function useExtensionUiSession() {
     const session = generation.current;
     return () => owner.active && generation.current === session;
   }, [owner]);
-  return { binding, owner, retire, capture };
+  /** The server's own message when it sent one, otherwise the catalogue's wording. */
+  const errorText = useCallback(
+    (error: unknown, fallback?: string) =>
+      adminErrorText(
+        error,
+        error instanceof AdminRequestError && error.unconfirmed
+          ? t("requestUnconfirmed")
+          : (fallback ?? t("extensionRequestFailed")),
+      ),
+    [t],
+  );
+  return { binding, owner, retire, capture, errorText };
 }
 
 function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
@@ -299,8 +314,7 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
         throw new Error(t("thePreviewDoesNotMatch"));
       setBundle(Object.freeze({ request, preview: result, owner: ui.owner, action, current }));
     } catch (error) {
-      if (current())
-        showToast(error instanceof Error ? error.message : t("extensionPreviewFailed"), "error");
+      if (current()) showToast(ui.errorText(error, t("extensionPreviewFailed")), "error");
     } finally {
       if (current()) setPreparing(false);
     }
@@ -326,17 +340,13 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
       }
       if (!captured.current()) return;
       showToast(
-        t("valueQueuedForNameCheck", {
-          value: captured.action === "update" ? "Update" : "Install",
-          name: captured.preview.extension.name,
-        }),
+        t("actionQueued", { action: captured.action, name: captured.preview.extension.name }),
         "info",
       );
       retire();
       onAccepted?.();
     } catch (error) {
-      if (captured.current())
-        showToast(error instanceof Error ? error.message : t("extensionRequestFailed"), "error");
+      if (captured.current()) showToast(ui.errorText(error), "error");
     } finally {
       executing.current = false;
       if (captured.current()) setBusy(false);
@@ -350,6 +360,7 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
     busy,
     preview: bundle?.owner === ui.owner ? bundle.preview : null,
     capture: ui.capture,
+    errorText: ui.errorText,
   };
 }
 
@@ -440,7 +451,7 @@ function BrowseTab() {
                       showToast(t("catalogRefreshedEntriesEntries", { entries: r.entries }));
                   },
                   (error) => {
-                    if (current()) showToast(error.message, "error");
+                    if (current()) showToast(flow.errorText(error), "error");
                   },
                 );
               }}
@@ -728,7 +739,7 @@ function InstalledTab() {
                                   );
                               },
                               (error) => {
-                                if (current()) showToast(error.message, "error");
+                                if (current()) showToast(flow.errorText(error), "error");
                               },
                             );
                           }}
@@ -838,7 +849,7 @@ function SourcesTab() {
                                   if (current()) showToast(t("sourceRemoved"));
                                 },
                                 (error) => {
-                                  if (current()) showToast(error.message, "error");
+                                  if (current()) showToast(ui.errorText(error), "error");
                                 },
                               );
                             }}
@@ -922,7 +933,7 @@ function SourcesTab() {
                     setLabel("");
                   },
                   (error) => {
-                    if (current()) showToast(error.message, "error");
+                    if (current()) showToast(ui.errorText(error), "error");
                   },
                 )
                 .finally(() => {

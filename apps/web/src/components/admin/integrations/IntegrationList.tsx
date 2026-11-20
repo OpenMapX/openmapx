@@ -118,8 +118,7 @@ export function IntegrationList() {
     try {
       await admin.toggle(integrationId, enable);
       void admin.refresh();
-      if (owner.active)
-        showToast(t("integrationValue", { value: enable ? "enabled" : "disabled" }));
+      if (owner.active) showToast(enable ? t("integrationEnabled") : t("integrationDisabled"));
     } catch {
       if (owner.active) showToast(t("operationFailed"), "error");
     } finally {

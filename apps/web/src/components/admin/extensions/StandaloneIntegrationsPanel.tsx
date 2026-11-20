@@ -20,6 +20,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { invalidateExtensionAdministration } from "@/lib/admin/extensionAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import {
@@ -146,7 +147,7 @@ function LocalInstallations() {
       });
       if (owner.active) setAccepted(result);
     } catch (error) {
-      if (owner.active) setError(sdk.adminErrorMessage(error, t("submissionWasNotConfirmedRetry")));
+      if (owner.active) setError(adminErrorText(error, t("submissionWasNotConfirmedRetry")));
     } finally {
       if (owner.active) setBusy(false);
     }

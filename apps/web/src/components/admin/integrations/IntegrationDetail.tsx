@@ -38,6 +38,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   hasVaultCredential,
   useIntegrationAdmin,
@@ -225,7 +226,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                       ? dep.enabled
                         ? t("loadedEnabled")
                         : t("loadedDisabled")
-                      : "missing"}
+                      : t("dependencyMissing")}
                   </Typography>
                 </Stack>
               ))}
@@ -1082,11 +1083,9 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
       try {
         await admin.toggle(id, enable);
         void admin.refresh();
-        if (owner.active)
-          showToast(t("integrationValue", { value: enable ? "enabled" : "disabled" }));
+        if (owner.active) showToast(enable ? t("integrationEnabled") : t("integrationDisabled"));
       } catch (err) {
-        if (owner.active)
-          showToast(err instanceof Error ? err.message : t("operationFailed"), "error");
+        if (owner.active) showToast(adminErrorText(err, t("operationFailed")), "error");
         throw err;
       }
     },

@@ -34,6 +34,7 @@ import {
   useServicesList,
 } from "@/hooks/useServices";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
@@ -235,8 +236,7 @@ function ServiceCatalogView() {
         showToast(t("queuedImageStagingJobid", { jobId: result.jobId }));
       }
     } catch (error) {
-      if (execution.active)
-        showToast(error instanceof Error ? error.message : t("imageStagingFailed"), "error");
+      if (execution.active) showToast(adminErrorText(error, t("imageStagingFailed")), "error");
     }
   }
 
@@ -247,8 +247,7 @@ function ServiceCatalogView() {
       if (execution.active)
         showToast(t("checkedLengthServiceS", { length: result.statuses.length }));
     } catch (error) {
-      if (execution.active)
-        showToast(error instanceof Error ? error.message : t("checkFailed"), "error");
+      if (execution.active) showToast(adminErrorText(error, t("checkFailed")), "error");
     }
   }
   const selectPreset = (id: string) => {
@@ -274,8 +273,7 @@ function ServiceCatalogView() {
         showToast(t("queuedActionJobid", { action: payload.action, jobId: result.jobId }));
       return execution.active;
     } catch (error) {
-      if (execution.active)
-        showToast(error instanceof Error ? error.message : t("bulkActionFailed"), "error");
+      if (execution.active) showToast(adminErrorText(error, t("bulkActionFailed")), "error");
       return false;
     }
   }

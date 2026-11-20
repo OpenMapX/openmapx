@@ -109,7 +109,7 @@ it.each<[string, (c: ReturnType<typeof createAccountAdminClient>) => Promise<unk
   );
 });
 it("does not include raw provider errors and rejects missing data", () => {
-  expect(() => unwrapAuthResult({ data: null, error: null })).toThrow("The account request failed");
+  expect(() => unwrapAuthResult({ data: null, error: null })).toThrow("ACCOUNT_REQUEST_FAILED");
   expect(() => unwrapAuthResult({ data: null, error: { message: "secret" } })).not.toThrow(
     "secret",
   );

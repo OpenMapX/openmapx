@@ -10,12 +10,12 @@ import type { AdminServiceData } from "@openmapx/core/api-contracts";
 import { useTranslations } from "next-intl";
 import { formatBytes } from "@/lib/storageFormat";
 
-const targetLabels: Record<string, string> = {
+/** Product names, which read the same in every language. */
+const PRODUCT_NAMES: Record<string, string> = {
   valhalla: "Valhalla",
   osrm: "OSRM",
   otp: "OpenTripPlanner",
   motis: "MOTIS",
-  motisFeedProxy: "MOTIS feed proxy",
   pelias: "Pelias",
   nominatim: "Nominatim",
   photon: "Photon",
@@ -117,11 +117,13 @@ export function DataInventorySection({
               <Typography sx={{ fontWeight: 600 }}>
                 {build.target === "tiles"
                   ? t("targetTileServer")
-                  : (targetLabels[build.target] ?? build.target)}
+                  : build.target === "motisFeedProxy"
+                    ? t("targetMotisFeedProxy")
+                    : (PRODUCT_NAMES[build.target] ?? build.target)}
               </Typography>
               <Chip
                 size="small"
-                label={build.readiness}
+                label={t("buildReadiness", { readiness: build.readiness })}
                 color={
                   build.readiness === "ready"
                     ? "success"

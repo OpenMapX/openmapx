@@ -15,6 +15,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 
 type Preview = Extract<
@@ -83,7 +84,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
       setError(null);
       key.current = null;
     },
-    onError: (e) => setError(sdk.adminErrorMessage(e, e.message)),
+    onError: (e) => setError(adminErrorText(e, t("serviceRequestFailed"))),
   });
   const submit = useMutation({
     retry: false,
@@ -112,7 +113,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
     onSuccess: ({ jobId }) => {
       if (alive.current) onQueued(jobId);
     },
-    onError: (e) => setError(sdk.adminErrorMessage(e, e.message)),
+    onError: (e) => setError(adminErrorText(e, t("serviceRequestFailed"))),
   });
   const busy = inspect.isPending || submit.isPending;
   return (
@@ -131,7 +132,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
           {profile.isPending && <Typography>{t("loadingInstanceScope")}</Typography>}
           {profile.error && (
             <Alert severity="error">
-              {sdk.adminErrorMessage(profile.error, profile.error.message)}
+              {adminErrorText(profile.error, t("serviceRequestFailed"))}
             </Alert>
           )}
           <Stack direction="row" sx={{ flexWrap: "wrap" }}>

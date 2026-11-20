@@ -23,7 +23,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
 import type { AdminNavigationAccess } from "@/lib/admin/adminNavigation";
-import { buildAdminSearchEntries, searchAdminEntries } from "@/lib/admin/adminSearch";
+import {
+  adminSearchCopy,
+  buildAdminSearchEntries,
+  searchAdminEntries,
+} from "@/lib/admin/adminSearch";
 import { useSettingText } from "@/lib/admin/useSettingText";
 import { useActivityClient } from "./activity/activityQueries";
 
@@ -127,6 +131,7 @@ export function AdminSearch({
     () =>
       buildAdminSearchEntries(
         { role, selfHosted },
+        adminSearchCopy(t, ts),
         metadata.data && {
           ...metadata.data,
           settings: metadata.data.settings.map((setting) => ({
@@ -134,33 +139,7 @@ export function AdminSearch({
             ...settingText(setting),
           })),
         },
-      ).map((entry) => {
-        if (entry.id.startsWith("integration:"))
-          return { ...entry, description: ts("searchIntegration") };
-        if (entry.id.startsWith("service:")) return { ...entry, description: ts("searchService") };
-        if (entry.id === "email-smtp")
-          return { ...entry, description: ts("searchEmailSmtpDescription") };
-        if (entry.id === "transit-sources")
-          return { ...entry, description: ts("searchTransitSourcesDescription") };
-        if (entry.id === "backup-retention")
-          return {
-            ...entry,
-            title: ts("searchBackupRetention"),
-            description: ts("searchBackupRetentionDescription"),
-          };
-        if (entry.id === "release-selector")
-          return {
-            ...entry,
-            title: ts("searchReleaseChannel"),
-            description: ts("searchReleaseChannelDescription"),
-          };
-        if (entry.id.includes(":")) return entry;
-        return {
-          ...entry,
-          title: t(`destinations.${entry.id}.label`),
-          description: t(`destinations.${entry.id}.description`),
-        };
-      }),
+      ),
     [role, selfHosted, metadata.data, t, ts, settingText],
   );
   const results = searchAdminEntries(entries, query);

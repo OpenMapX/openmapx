@@ -15,6 +15,7 @@ import { streamAdminServiceLogs } from "@openmapx/core/api-admin-sdk";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 
 import { BoundedServiceLogBuffer } from "./service-log-buffer";
@@ -136,8 +137,7 @@ function ServiceLogsSession({
           setOutput(buffer.snapshot());
         }
       } catch (error) {
-        if (!controller.signal.aborted)
-          setError(error instanceof Error ? error.message : t("serviceRequestFailed"));
+        if (!controller.signal.aborted) setError(adminErrorText(error, t("serviceRequestFailed")));
       } finally {
         if (!controller.signal.aborted) setStreaming(false);
       }
@@ -204,7 +204,7 @@ function ServiceLogsSession({
           </Typography>
           {streaming && (
             <Chip
-              label={follow ? "following" : t("loadingSnapshot")}
+              label={follow ? t("following") : t("loadingSnapshot")}
               size="small"
               color="success"
               variant="outlined"

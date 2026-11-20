@@ -48,6 +48,7 @@ import Dialog from "@/components/ui/Dialog";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
 import { useAdminObservedJobs, useOptionalAdminJobRegistration } from "@/lib/admin/adminJobEffects";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import {
   activityJobQueryOptions,
@@ -349,7 +350,7 @@ export function SystemMaintenance({
       showToast(`${job.label} queued`);
     },
     onError: (error, { path, label }) => {
-      const message = error instanceof Error ? error.message : "Request failed";
+      const message = adminErrorText(error, "Request failed");
       const submission = error instanceof SubmissionError ? error : null;
       const retrySeconds = submission?.retrySeconds ?? null;
       setRejections((current) => ({
@@ -400,8 +401,7 @@ export function SystemMaintenance({
       setClearConfirmation("");
       showToast("Release pin clear queued");
     },
-    onError: (error) =>
-      showToast(error instanceof Error ? error.message : "Unable to clear release pin", "error"),
+    onError: (error) => showToast(adminErrorText(error, "Unable to clear release pin"), "error"),
   });
   const status = statusQuery.data;
   const active = Boolean(trackedJob || pending || queueJob.isPending || clearPin.isPending);

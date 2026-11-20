@@ -22,6 +22,7 @@ import Dialog from "@/components/ui/Dialog";
 import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   artifactFileSinkSupported,
   createArtifactFileSink,
@@ -90,10 +91,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
     try {
       await action();
     } catch (failure) {
-      if (owner.active)
-        setError(
-          failure instanceof Error ? failure.message : t("artifactOperationFailedInspectThe"),
-        );
+      if (owner.active) setError(adminErrorText(failure, t("artifactOperationFailedInspectThe")));
     } finally {
       if (owner.active) setBusy(false);
     }
@@ -180,13 +178,14 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         <Typography variant="body2">{t("movePreparedDataBetweenInstances")}</Typography>
         {capabilities.data && (
           <Typography variant="body2">
-            {t("uploadLimitMaxuploadbytesExpandedLimit", {
+            {t("transferLimits", {
               maxUploadBytes: formatBytes(capabilities.data.limits.maxUploadBytes),
               maxExpandedBytes: formatBytes(capabilities.data.limits.maxExpandedBytes),
+              freeBytes:
+                capabilities.data.freeBytes === null
+                  ? t("freeSpaceUnavailable")
+                  : formatBytes(capabilities.data.freeBytes),
             })}
-            {capabilities.data.freeBytes === null
-              ? "unavailable"
-              : formatBytes(capabilities.data.freeBytes)}
           </Typography>
         )}
         {(capabilities.error || stages.error) && (
@@ -412,18 +411,21 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         <DialogContent>
           <Stack spacing={1}>
             <Typography>
-              {t("targetServiceidRegion", { serviceId: preview?.serviceId ?? "" })}
-              {preview?.region ?? t("regionUnspecified")}
+              {t("transferTarget", {
+                serviceId: preview?.serviceId ?? "",
+                region: preview?.region ?? t("regionUnspecified"),
+              })}
             </Typography>
             <Typography>
-              {t("archiveFormatbytesAdditionalSpaceFormatbytes2", {
-                formatBytes: formatBytes(preview?.bytes ?? 0),
-                formatBytes2: formatBytes(preview?.requiredFreeBytes ?? 0),
+              {t("transferArchiveSize", {
+                archiveBytes: formatBytes(preview?.bytes ?? 0),
+                additionalBytes: formatBytes(preview?.requiredFreeBytes ?? 0),
               })}
             </Typography>
             <Typography variant="body2">
-              {t("credentialsRequired")}
-              {preview?.requiredCredentials.join(", ") || "none"}
+              {preview?.requiredCredentials.length
+                ? t("credentialsRequired", { credentials: preview.requiredCredentials.join(", ") })
+                : t("noCredentialsRequired")}
             </Typography>
             {preview?.blockers.map((blocker) => (
               <Alert key={blocker} severity="warning">

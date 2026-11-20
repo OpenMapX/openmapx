@@ -12,12 +12,13 @@ import {
   queryOptions,
 } from "@tanstack/react-query";
 import { integrationRuntimeQueryKey } from "@/lib/integrationRuntimeQuery";
+import { AdminRequestError } from "./adminRequestError";
 import type { AdminTranslator } from "./adminTranslator";
 
 export const SERVICE_READ_TIMEOUT_MS = 30_000;
 
 /** Only declared diagnostics enter UI text. Never stringify submitted values or evidence. */
-export function serviceErrorMessage(error: unknown, fallback = "Service request failed"): string {
+export function serviceErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof ApiClientError)) return fallback;
   const validation = sdk.adminServiceValidationErrorSchema.safeParse(error.payload);
   if (validation.success)
@@ -35,8 +36,12 @@ export async function serviceOrThrow<R extends { status: number; headers: Header
   try {
     return sdk.unwrapAdminResponse(await pending);
   } catch (error) {
-    throw new Error(serviceErrorMessage(error), { cause: error });
+    throw serviceRequestError(error);
   }
+}
+/** Keeps the server's declared diagnostics; the component words a failure without them. */
+export function serviceRequestError(error: unknown): AdminRequestError {
+  return new AdminRequestError(serviceErrorMessage(error, "") || null, { cause: error });
 }
 
 /** Transport and wire validation stay in the generated SDK and canonical schemas. */
@@ -113,7 +118,7 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
               : undefined;
             return { yaml, expectedCurrentRevisionId: revision === "none" ? null : revision };
           } catch (error) {
-            throw new Error(serviceErrorMessage(error), { cause: error });
+            throw error instanceof AdminRequestError ? error : serviceRequestError(error);
           }
         },
       }),

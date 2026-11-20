@@ -12,208 +12,50 @@ export type AdminWorkspace =
   | "system";
 export interface AdminDestination {
   id: string;
-  label: string;
-  description: string;
   href: string;
   workspace: AdminWorkspace;
   hostOnly?: boolean;
-  keywords?: readonly string[];
 }
 export interface AdminNavigationAccess {
   role?: string;
   selfHosted?: boolean | null;
 }
+/** Labels and descriptions live in the `adminNavigation.destinations` catalogue under the id. */
 const destination = (
   id: string,
-  label: string,
-  description: string,
   href: string,
   workspace: AdminWorkspace,
   hostOnly = false,
-): AdminDestination => ({ id, label, description, href, workspace, hostOnly });
+): AdminDestination => ({ id, href, workspace, hostOnly });
 /** Literal destinations are also the allowlist for privileged return navigation. */
 export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
-  destination("overview", "Overview", "Attention, health and current work", "/admin", "overview"),
-  destination(
-    "integrations",
-    "Integrations",
-    "Providers, configuration and credentials",
-    "/admin/integrations",
-    "integrations",
-  ),
-  destination(
-    "extensions",
-    "Extensions",
-    "Discover and manage installed extensions",
-    "/admin/extensions",
-    "extensions",
-  ),
-  destination("data", "Data", "Acquire, build and maintain map data", "/admin/data", "data"),
-  destination(
-    "osm",
-    "OSM",
-    "Extracts, builds and OpenStreetMap acquisition",
-    "/admin/data/osm",
-    "data",
-    true,
-  ),
-  destination(
-    "overture",
-    "Overture",
-    "Places release, conflation and recovery",
-    "/admin/data/overture",
-    "data",
-    true,
-  ),
-  destination(
-    "search",
-    "Search & places",
-    "Search index, ambient and notable places",
-    "/admin/data/search",
-    "data",
-    true,
-  ),
-  destination(
-    "transit",
-    "Transit",
-    "Pipeline, catalog and feed credentials",
-    "/admin/data/transit",
-    "data",
-  ),
-  destination(
-    "coverage",
-    "Coverage & freshness",
-    "Inspect available data and its evidence",
-    "/admin/data/coverage",
-    "data",
-  ),
-  destination(
-    "transfers",
-    "Prepared transfers",
-    "Review, stage and transfer data artifacts",
-    "/admin/data/transfers",
-    "data",
-    true,
-  ),
-  destination(
-    "operations",
-    "Advanced operations",
-    "Full updates, hardlink sync and destructive cleanup",
-    "/admin/data/operations",
-    "data",
-    true,
-  ),
-  destination("users", "Users", "Accounts, sessions and recovery", "/admin/users", "users"),
-  destination(
-    "privacy",
-    "Privacy requests",
-    "Review and fulfil privacy cases",
-    "/admin/privacy",
-    "privacy",
-  ),
-  destination(
-    "privacy-setup",
-    "Privacy setup",
-    "Operator, notifications and retention",
-    "/admin/privacy-setup",
-    "privacy",
-  ),
-  destination(
-    "activity",
-    "Activity",
-    "Jobs, audit events and application logs",
-    "/admin/activity",
-    "activity",
-  ),
-  destination(
-    "general",
-    "General",
-    "Application identity and public instance URL",
-    "/admin/settings/general",
-    "settings",
-  ),
-  destination(
-    "authentication",
-    "Authentication",
-    "Sign-in, sessions and effective access policy",
-    "/admin/settings/authentication",
-    "settings",
-  ),
-  destination(
-    "email",
-    "Email",
-    "Senders, delivery providers and a test message",
-    "/admin/settings/email",
-    "settings",
-  ),
-  destination(
-    "map",
-    "Map",
-    "Map presentation and provider settings",
-    "/admin/settings/map",
-    "settings",
-  ),
-  destination(
-    "data-use",
-    "Data use",
-    "Application data-use policy",
-    "/admin/settings/data-use",
-    "settings",
-  ),
-  destination(
-    "services",
-    "Services",
-    "Inspect and operate application services",
-    "/admin/system/services",
-    "system",
-    true,
-  ),
-  destination(
-    "deployment",
-    "Deployment",
-    "Persistent service selection, origin and host configuration",
-    "/admin/system/deployment",
-    "system",
-    true,
-  ),
-  destination(
-    "updates",
-    "Updates",
-    "Check and update the OpenMapX release",
-    "/admin/system/updates",
-    "system",
-    true,
-  ),
-  destination(
-    "backups",
-    "Backups",
-    "Create, inspect and restore backups",
-    "/admin/system/backups",
-    "system",
-    true,
-  ),
-  destination(
-    "diagnostics",
-    "Diagnostics",
-    "Inspect host readiness and run deep checks",
-    "/admin/system/diagnostics",
-    "system",
-    true,
-  ),
-  destination(
-    "cache",
-    "Cache",
-    "Inspect and clear application caches",
-    "/admin/system/cache",
-    "system",
-  ),
-  destination(
-    "configuration-transfer",
-    "Configuration transfer",
-    "Export, import and migrate configuration",
-    "/admin/system/configuration-transfer",
-    "system",
-  ),
+  destination("overview", "/admin", "overview"),
+  destination("integrations", "/admin/integrations", "integrations"),
+  destination("extensions", "/admin/extensions", "extensions"),
+  destination("data", "/admin/data", "data"),
+  destination("osm", "/admin/data/osm", "data", true),
+  destination("overture", "/admin/data/overture", "data", true),
+  destination("search", "/admin/data/search", "data", true),
+  destination("transit", "/admin/data/transit", "data"),
+  destination("coverage", "/admin/data/coverage", "data"),
+  destination("transfers", "/admin/data/transfers", "data", true),
+  destination("operations", "/admin/data/operations", "data", true),
+  destination("users", "/admin/users", "users"),
+  destination("privacy", "/admin/privacy", "privacy"),
+  destination("privacy-setup", "/admin/privacy-setup", "privacy"),
+  destination("activity", "/admin/activity", "activity"),
+  destination("general", "/admin/settings/general", "settings"),
+  destination("authentication", "/admin/settings/authentication", "settings"),
+  destination("email", "/admin/settings/email", "settings"),
+  destination("map", "/admin/settings/map", "settings"),
+  destination("data-use", "/admin/settings/data-use", "settings"),
+  destination("services", "/admin/system/services", "system", true),
+  destination("deployment", "/admin/system/deployment", "system", true),
+  destination("updates", "/admin/system/updates", "system", true),
+  destination("backups", "/admin/system/backups", "system", true),
+  destination("diagnostics", "/admin/system/diagnostics", "system", true),
+  destination("cache", "/admin/system/cache", "system"),
+  destination("configuration-transfer", "/admin/system/configuration-transfer", "system"),
 ];
 export function adminDestinations({ role = "admin", selfHosted = null }: AdminNavigationAccess) {
   return ADMIN_DESTINATIONS.filter(
@@ -236,9 +78,7 @@ export function adminPrimaryNavigation(access: AdminNavigationAccess) {
     ] as const
   ).flatMap((workspace) => {
     const entry = visible.find((item) => item.workspace === workspace);
-    return entry
-      ? [{ ...entry, id: workspace, label: workspace[0].toUpperCase() + workspace.slice(1) }]
-      : [];
+    return entry ? [{ ...entry, id: workspace }] : [];
   });
 }
 export function adminWorkspaceForPath(path: string): AdminWorkspace | null {

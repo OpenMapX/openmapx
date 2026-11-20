@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAccountAction } from "@/lib/admin/accountAdmin";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { useAdminToast } from "../shared/AdminToast";
 
 interface BanUserDialogProps {
@@ -20,6 +21,7 @@ interface BanUserDialogProps {
 export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
   const t = useTranslations("adminUsers");
   const showToast = useAdminToast();
+  const errorText = useAccountErrorText();
   const [reason, setReason] = useState("");
 
   const ban = useAccountAction(user.id, {
@@ -27,7 +29,7 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
       showToast(t("nameHasBeenBanned", { name: user.name }));
       onClose();
     },
-    onError: (error) => showToast(error.message, "error"),
+    onError: (error) => showToast(errorText(error), "error"),
   });
   const close = () => {
     ban.invalidateOwner();
@@ -57,7 +59,7 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
         />
         {ban.error && (
           <span style={{ color: "red", fontSize: 13, display: "block", marginTop: 8 }}>
-            {(ban.error as Error).message}
+            {errorText(ban.error)}
           </span>
         )}
       </DialogContent>

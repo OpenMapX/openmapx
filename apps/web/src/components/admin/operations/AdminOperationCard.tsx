@@ -21,6 +21,7 @@ import { type QueryKey, useMutation } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import {
@@ -139,7 +140,7 @@ function OperationView({
         if (execution.active) setPreview(result);
       } catch (error) {
         if (execution.active && !(error instanceof AdminOperationInputError))
-          onError(error instanceof Error ? error.message : t("previewFailed"));
+          onError(adminErrorText(error, t("previewFailed")));
         throw error;
       }
     },
@@ -158,7 +159,7 @@ function OperationView({
         }
       } catch (error) {
         if (execution.active) {
-          onError(error instanceof Error ? error.message : t("operationFailed"));
+          onError(adminErrorText(error, t("operationFailed")));
         }
         throw error;
       }
@@ -215,7 +216,11 @@ function OperationView({
           {operation.confirmation?.title ?? t("queueTitle", { title: operation.title })}
         </DialogTitle>
         <DialogContent>
-          {runMutation.isError && <Alert severity="error">{runMutation.error.message}</Alert>}
+          {runMutation.isError && (
+            <Alert severity="error">
+              {adminErrorText(runMutation.error, t("operationFailed"))}
+            </Alert>
+          )}
           <Stack sx={{ gap: 1.5, pt: 0.5 }}>
             {destructive && operation.confirmation && (
               <Alert severity="warning">{operation.confirmation.message}</Alert>

@@ -14,12 +14,12 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useTranslations } from "next-intl";
 import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { useClientPagination } from "@/components/admin/shared/tableHooks";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   type ProviderHealthEntry,
   useProviderHealth,
@@ -62,7 +62,7 @@ function StateChip({ provider }: { provider: ProviderHealthEntry }) {
           <Chip
             size="small"
             color="error"
-            label={retryAt ? t("openUntilRetryat", { retryAt }) : "open"}
+            label={retryAt ? t("openUntilRetryat", { retryAt }) : t("circuitOpen")}
           />
         </Tooltip>
       );
@@ -87,13 +87,7 @@ export function ProviderHealthTable() {
     resetMutation.mutate(providerId, {
       onSuccess: () => showToast(t("providerProvideridReset", { providerId }), "success"),
       onError: (err) =>
-        showToast(
-          adminErrorMessage(
-            err,
-            err instanceof Error ? err.message : t("failedToResetProviderid", { providerId }),
-          ),
-          "error",
-        ),
+        showToast(adminErrorText(err, t("failedToResetProviderid", { providerId })), "error"),
     });
   };
 

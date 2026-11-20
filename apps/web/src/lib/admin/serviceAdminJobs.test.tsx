@@ -338,7 +338,7 @@ it("records the committed Next tab rather than the previous browser URL", async 
   act(() => adminTestHistory.push("/admin/system/services/demo?tab=configuration"));
   fireEvent.click(screen.getByText("Queue"));
   fireEvent.click(await screen.findByRole("button", { name: "Administration jobs, 1 active" }));
-  const link = await screen.findByRole("link", { name: "demo · service" });
+  const link = await screen.findByRole("link", { name: "demo service action" });
   expect(new URL(link.getAttribute("href") ?? "", "http://test").searchParams.get("returnTo")).toBe(
     "/admin/system/services/demo?tab=configuration",
   );

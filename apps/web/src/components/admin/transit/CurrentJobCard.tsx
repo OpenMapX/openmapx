@@ -12,7 +12,6 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
@@ -22,6 +21,7 @@ import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   type TransitStateSummary,
   useRestartMotis,
@@ -117,11 +117,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
   const onRestart = () => {
     restartMutation.mutate(undefined, {
       onSuccess: () => showToast(t("motisRestartTriggered"), "success"),
-      onError: (err) =>
-        showToast(
-          adminErrorMessage(err, err instanceof Error ? err.message : t("failedToRestartMotis")),
-          "error",
-        ),
+      onError: (err) => showToast(adminErrorText(err, t("failedToRestartMotis")), "error"),
     });
   };
 

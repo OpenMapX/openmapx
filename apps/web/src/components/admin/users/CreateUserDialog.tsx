@@ -18,6 +18,7 @@ import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { useAdminToast } from "../shared/AdminToast";
 import { AccountMailStatus } from "./AccountMailStatus";
 
@@ -33,6 +34,7 @@ export function CreateUserDialog(props: Props) {
 }
 function CreateUserForm({ open, onClose }: Props) {
   const t = useTranslations("adminUsers");
+  const errorText = useAccountErrorText();
   const toast = useAdminToast(),
     [name, setName] = useState(""),
     [email, setEmail] = useState(""),
@@ -48,7 +50,7 @@ function CreateUserForm({ open, onClose }: Props) {
         setPassword("");
         toast(t("accountCreated"));
       },
-      onError: (error) => toast(error.message, "error"),
+      onError: (error) => toast(errorText(error), "error"),
     }),
     edit = (run: () => void) => {
       key.current = null;
@@ -131,7 +133,7 @@ function CreateUserForm({ open, onClose }: Props) {
               label={t("sendWelcomeEmail")}
             />
             {!password && <Alert severity="info">{t("withoutAnInitialPasswordA")}</Alert>}
-            {create.error && <Alert severity="error">{create.error.message}</Alert>}
+            {create.error && <Alert severity="error">{errorText(create.error)}</Alert>}
           </Stack>
         )}
       </DialogContent>

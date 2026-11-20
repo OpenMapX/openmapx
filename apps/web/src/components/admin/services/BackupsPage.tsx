@@ -36,6 +36,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { serviceAdminQueries, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationKey, useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -116,8 +117,7 @@ function BackupsView() {
         }
         createIntent.complete(key);
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : t("backupCreateFailed"), "error");
+        if (execution.active) showToast(adminErrorText(error, t("backupCreateFailed")), "error");
         throw error;
       }
     },
@@ -147,8 +147,7 @@ function BackupsView() {
         }
         restoreIntent.complete(key);
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : t("restoreFailed"), "error");
+        if (execution.active) showToast(adminErrorText(error, t("restoreFailed")), "error");
         throw error;
       }
     },
@@ -171,8 +170,7 @@ function BackupsView() {
         }
         deleteIntent.complete(key);
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : t("deleteFailed"), "error");
+        if (execution.active) showToast(adminErrorText(error, t("deleteFailed")), "error");
         throw error;
       }
     },

@@ -39,49 +39,95 @@ export function adminSettingHref(setting: { group: string; subgroup?: string; ke
   const owner = SETTINGS_OWNERS[setting.group];
   return owner ? `/admin/settings/${owner}?field=${encodeURIComponent(setting.key)}` : null;
 }
+/** Controls inside a page that search offers directly; keys name their `adminShared.search` copy. */
+const SHORTCUTS = [
+  {
+    id: "email-smtp",
+    href: "/admin/settings/email?field=smtpHost",
+    hostOnly: false,
+    titleKey: "emailSmtpTitle",
+    descriptionKey: "emailSmtpDescription",
+    keywordsKey: "emailSmtpKeywords",
+  },
+  {
+    id: "transit-sources",
+    href: "/admin/data/transit?tab=sources",
+    hostOnly: false,
+    titleKey: "transitSourcesTitle",
+    descriptionKey: "transitSourcesDescription",
+    keywordsKey: "transitSourcesKeywords",
+  },
+  {
+    id: "backup-retention",
+    href: "/admin/system/backups#backup-retention",
+    hostOnly: true,
+    titleKey: "backupRetentionTitle",
+    descriptionKey: "backupRetentionDescription",
+    keywordsKey: "backupRetentionKeywords",
+  },
+  {
+    id: "release-selector",
+    href: "/admin/system/updates#release-selector",
+    hostOnly: true,
+    titleKey: "releaseSelectorTitle",
+    descriptionKey: "releaseSelectorDescription",
+    keywordsKey: "releaseSelectorKeywords",
+  },
+] as const;
+type AdminSearchShortcut = (typeof SHORTCUTS)[number];
+
+/** Search copy in the reader's language. */
+export interface AdminSearchCopy {
+  destination(id: string): { title: string; description: string };
+  shortcut(shortcut: AdminSearchShortcut): {
+    title: string;
+    description: string;
+    keywords: readonly string[];
+  };
+  integration: string;
+  service: string;
+}
+
+/**
+ * Builds search copy from the `adminNavigation` and `adminShared` catalogues.
+ * Shortcut keywords are one comma-separated message per locale.
+ */
+export function adminSearchCopy(
+  navigation: (key: string) => string,
+  shared: (key: string) => string,
+): AdminSearchCopy {
+  return {
+    destination: (id) => ({
+      title: navigation(`destinations.${id}.label`),
+      description: navigation(`destinations.${id}.description`),
+    }),
+    shortcut: (shortcut) => ({
+      title: shared(`search.${shortcut.titleKey}`),
+      description: shared(`search.${shortcut.descriptionKey}`),
+      keywords: shared(`search.${shortcut.keywordsKey}`)
+        .split(",")
+        .map((keyword) => keyword.trim())
+        .filter(Boolean),
+    }),
+    integration: shared("search.integration"),
+    service: shared("search.service"),
+  };
+}
+
 export function buildAdminSearchEntries(
   access: AdminNavigationAccess,
+  copy: AdminSearchCopy,
   metadata: AdminSearchMetadata = {},
 ): AdminSearchEntry[] {
   const entries: AdminSearchEntry[] = adminDestinations(access).map((entry) => ({
     id: entry.id,
-    title: entry.label,
-    description: entry.description,
+    ...copy.destination(entry.id),
     href: entry.href,
-    keywords: entry.keywords,
   }));
   if (access.role !== "admin") return entries;
-  entries.push({
-    id: "email-smtp",
-    title: "SMTP",
-    description: "Email delivery provider",
-    href: "/admin/settings/email?field=smtpHost",
-    keywords: ["mail server", "email", "E-Mail"],
-  });
-  entries.push({
-    id: "transit-sources",
-    title: "GTFS",
-    description: "Transit source acquisition",
-    href: "/admin/data/transit?tab=sources",
-    keywords: ["transit feeds", "sources", "Fahrplandaten"],
-  });
-  if (access.selfHosted !== false)
-    entries.push(
-      {
-        id: "backup-retention",
-        title: "Backup retention",
-        description: "Backup expiry and retention days",
-        href: "/admin/system/backups#backup-retention",
-        keywords: ["backup expiry", "Aufbewahrung", "Sicherung"],
-      },
-      {
-        id: "release-selector",
-        title: "Release channel",
-        description: "Release selector and update channel",
-        href: "/admin/system/updates#release-selector",
-        keywords: ["release channel", "Version", "Kanal"],
-      },
-    );
+  for (const shortcut of SHORTCUTS)
+    if (!shortcut.hostOnly || access.selfHosted !== false)
+      entries.push({ id: shortcut.id, ...copy.shortcut(shortcut), href: shortcut.href });
   for (const setting of metadata.settings ?? []) {
     const href = adminSettingHref(setting);
     if (href)
@@ -97,7 +143,7 @@ export function buildAdminSearchEntries(
     entries.push({
       id: `integration:${entry.id}`,
       title: entry.name,
-      description: "Integration",
+      description: copy.integration,
       href: `/admin/integrations/${encodeURIComponent(entry.id)}`,
       keywords: [entry.id],
     });
@@ -106,7 +152,7 @@ export function buildAdminSearchEntries(
       entries.push({
         id: `service:${entry.id}`,
         title: entry.name,
-        description: "Service",
+        description: copy.service,
         href: `/admin/system/services/${encodeURIComponent(entry.id)}`,
         keywords: [entry.id],
       });

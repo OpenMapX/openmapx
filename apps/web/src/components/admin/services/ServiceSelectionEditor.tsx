@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useServiceSelection, useServiceSelectionSave, useServicesList } from "@/hooks/useServices";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminJobLink } from "../activity/AdminJobLink";
@@ -65,7 +66,7 @@ function SelectionEditor() {
           : t("serviceSelectionSaved"),
       );
     } catch (error) {
-      if (owner.active) toast(error instanceof Error ? error.message : t("saveFailed"), "error");
+      if (owner.active) toast(adminErrorText(error, t("saveFailed")), "error");
     }
   }
   return (

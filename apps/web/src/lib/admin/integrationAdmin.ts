@@ -11,6 +11,7 @@ import {
   useQueries,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import {
   activityJobQueryOptions,
@@ -19,6 +20,7 @@ import {
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 
 import { useOptionalAdminJobRegistration } from "./adminJobEffects";
+import { AdminRequestError } from "./adminRequestError";
 import { integrationErrorMessage } from "./integrationErrors";
 
 export { integrationErrorMessage } from "./integrationErrors";
@@ -32,7 +34,7 @@ export async function integrationOrThrow<
   try {
     return sdk.unwrapAdminResponse(await pending);
   } catch (error) {
-    throw new Error(integrationErrorMessage(error, "Integration request failed"), { cause: error });
+    throw new AdminRequestError(integrationErrorMessage(error, "") || null, { cause: error });
   }
 }
 
@@ -205,6 +207,7 @@ export function hasVaultCredential(credential: AdminIntegrationCredential): bool
 
 /** Poll the existing Activity SDK; aborting observation never cancels the host job. */
 export function useIntegrationReload(id?: string) {
+  const t = useTranslations("adminShared.jobLabels");
   const { apiUrl, client } = useActivityClient();
   const qc = useQueryClient();
   const register = useOptionalAdminJobRegistration();
@@ -253,7 +256,7 @@ export function useIntegrationReload(id?: string) {
           client,
           apiUrl,
           jobId: acceptance.jobId,
-          label: id ? `${id} · reload` : "Reload integrations",
+          label: id ? t("integrationReload", { integration: id }) : t("integrationsReload"),
           returnTo: id ? `/admin/integrations/${encodeURIComponent(id)}` : "/admin/integrations",
           onSettled: async () => {
             await invalidateIntegrationAdmin(qc, apiUrl);

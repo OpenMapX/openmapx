@@ -13,7 +13,6 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -23,6 +22,7 @@ import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { ConfirmDialog } from "@/components/admin/shared/ConfirmDialog";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import type { TransitStateSummary } from "@/lib/admin/transitHooks";
 import {
   transitPinExecutionPending,
@@ -298,13 +298,15 @@ function CatalogPinView() {
                           component="summary"
                           sx={{ cursor: "pointer", overflowWrap: "anywhere" }}
                         >
-                          {t("changeRegionSourceFieldsLicense", {
+                          {t("catalogDiffRow", {
                             change: row.change,
                             region: row.region,
                             source: row.source,
-                            fields: row.fields.join(", "),
+                            fields: row.fields
+                              .map((field) => t("catalogField", { field }))
+                              .join(", "),
+                            licenseStatus: row.licenseStatus,
                           })}
-                          {row.licenseStatus === "unknown" ? "unknown" : "declared"}
                         </Box>
                         <Typography
                           component="pre"
@@ -410,13 +412,15 @@ function CatalogPinView() {
                     }
                   >
                     {data.validation.status === "passed"
-                      ? t("validationValueCountriesValue2Valid", {
-                          value: data.validationEligible
-                            ? "passed"
-                            : "is no longer eligible for activation",
-                          value2: data.validation.countries.join(", ") || "planet",
-                          expiresAt: formatTransitAdminTimestamp(data.validation.expiresAt),
-                        })
+                      ? t(
+                          data.validationEligible
+                            ? "validationPassed"
+                            : "validationNoLongerEligible",
+                          {
+                            countries: data.validation.countries.join(", ") || t("wholePlanet"),
+                            expiresAt: formatTransitAdminTimestamp(data.validation.expiresAt),
+                          },
+                        )
                       : data.validation.reason}
                   </Alert>
                 )}
@@ -523,7 +527,7 @@ function CatalogPinView() {
         {own.isError && <Alert severity="warning">{t("theJobObserverDisconnectedIts")}</Alert>}
         {errors.map(([kind, error]) => (
           <Alert key={kind} severity="error">
-            {adminErrorMessage(error, t("catalogRequestFailedInspectIts"))}
+            {adminErrorText(error, t("catalogRequestFailedInspectIts"))}
           </Alert>
         ))}
       </Stack>
