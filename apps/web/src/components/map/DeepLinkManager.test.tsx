@@ -23,16 +23,25 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: null }, mapReady: true }),
+  useMapOptional: () => null,
 }));
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+
+vi.mock("../../../../../packages/core/src/auth/useSession", () => ({
+  useSession: () => ({ data: null, isPending: false, error: null }),
+}));
+
+import { DirectionsPanelContent } from "@/components/panels/directions/DirectionsPanelContent";
 import { resetBackNavigationForTests } from "@/lib/backNavigation";
 import { DEEPLINK_OPEN_EVENT, DEEPLINK_UPDATE_EVENT } from "@/lib/deepLink";
 import { settleHistory } from "@/test/history";
+import { createQueryWrapper } from "@/test/query";
 import { ContextualOverlays } from "./ContextualOverlays";
 import { DeepLinkManager } from "./DeepLinkManager";
 
@@ -390,6 +399,7 @@ describe("DeepLinkManager directions waypoints", () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     useDirectionsStore.getState().close();
   });
 
@@ -508,6 +518,59 @@ describe("DeepLinkManager directions waypoints", () => {
     expect(slots()[0]).toMatchObject({ coords: aachen, label: "Aachen" });
     expect(slots()[1]).toMatchObject({ coords: berlin, label: "Berlin" });
     expect(wp()).toEqual(["50.78,6.08,Aachen", "52.52,13.405,Berlin"]);
+  });
+
+  it("reads a three-stop cycling link with a stop schedule into the store and the panel", () => {
+    // The panel's own requests are not under test; every one of them fails.
+    vi.stubGlobal("fetch", async () => Response.json({ error: "unavailable" }, { status: 503 }));
+    const link =
+      "/?panel=directions&mode=cycling&bikeProfile=road&avoid=ferries" +
+      "&wp=50.78%2C6.08%2CAachen&wp=50.94%2C6.96%2CKoeln&wp=52.52%2C13.405%2CBerlin" +
+      "&sched=1%7C1%2Ca%3D2026-09-02T14%3A00%2Cw%3D30";
+    window.history.replaceState(null, "", link);
+
+    render(
+      <>
+        <DeepLinkManager />
+        <DirectionsPanelContent />
+      </>,
+      { wrapper: createQueryWrapper() },
+    );
+
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
+    expect(useDirectionsStore.getState()).toMatchObject({
+      isOpen: true,
+      mode: "cycling",
+      bikeProfile: "road",
+      avoidFerries: true,
+      avoidHighways: false,
+      avoidTolls: false,
+    });
+    expect(slots()).toEqual([
+      { coords: aachen, label: "Aachen", schedule: undefined },
+      {
+        coords: koeln,
+        label: "Koeln",
+        schedule: { arriveBy: "2026-09-02T14:00", dwellSeconds: 1800 },
+      },
+      { coords: berlin, label: "Berlin", schedule: undefined },
+    ]);
+    expect(
+      screen.getAllByRole("textbox").map((input) => (input as HTMLInputElement).value),
+    ).toEqual(["Aachen", "Koeln", "Berlin"]);
+    expect(
+      (screen.getByRole("radio", { name: "directions.cycling" }) as HTMLInputElement).checked,
+    ).toBe(true);
+
+    writeNow();
+    const written = new URLSearchParams(window.location.search);
+    expect(written.getAll("wp")).toEqual([
+      "50.78,6.08,Aachen",
+      "50.94,6.96,Koeln",
+      "52.52,13.405,Berlin",
+    ]);
+    expect(written.get("sched")).toBe("1|1,a=2026-09-02T14:00,w=30");
+    expect(written.get("mode")).toBe("cycling");
   });
 
   it("still reads an existing single-waypoint link as the origin", () => {
