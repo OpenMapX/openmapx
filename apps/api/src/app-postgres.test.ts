@@ -34,16 +34,21 @@ interface TrackedTimer {
   settled: boolean;
 }
 
-/** The first application frame that created a timer, or null for library and test timers. */
+/**
+ * The first application frame that created a timer, or null for library and
+ * test timers. The database driver's idle timers belong to the pools, which
+ * the server ends at shutdown rather than `stop()`.
+ */
 function applicationOrigin(): string | null {
-  const frame = (new Error().stack ?? "")
-    .split("\n")
-    .find(
-      (line) =>
-        /\/(apps\/api\/src|integrations|packages)\//.test(line) &&
-        !line.includes("node_modules") &&
-        !line.includes("app-postgres.test"),
-    );
+  const frames = (new Error().stack ?? "").split("\n").slice(2);
+  const creator = frames.find((line) => !line.includes("app-postgres.test"));
+  if (creator?.includes("node_modules/postgres/")) return null;
+  const frame = frames.find(
+    (line) =>
+      /\/(apps\/api\/src|integrations|packages)\//.test(line) &&
+      !line.includes("node_modules") &&
+      !line.includes("app-postgres.test"),
+  );
   return frame ? frame.trim() : null;
 }
 
@@ -157,8 +162,8 @@ describeDatabase("the real application from createApp()", () => {
   afterAll(async () => {
     try {
       await app?.stop();
-      const { sql } = await import("./db/index");
-      await sql.end({ timeout: 5 });
+      const { integrationSql, sql } = await import("./db/index");
+      await Promise.all([sql.end({ timeout: 5 }), integrationSql.end({ timeout: 5 })]);
     } finally {
       Error.stackTraceLimit = originalStackTraceLimit;
       vi.restoreAllMocks();
@@ -188,6 +193,22 @@ describeDatabase("the real application from createApp()", () => {
     expect(processHandlers).toEqual([]);
     expect(app.server.server.listening).toBe(false);
   });
+
+  it("ends a slow integration statement at the integration pool's timeout", async () => {
+    const { ProviderTimeoutError } = await import("@openmapx/integration-framework");
+    const { integrationSql } = await import("./db/index");
+    const { createIntegrationDb } = await import("./integration-db");
+    const [settings] = await integrationSql<{ timeout: string; name: string }[]>`
+      SELECT current_setting('statement_timeout') AS timeout,
+             current_setting('application_name') AS name`;
+    expect(settings).toEqual({ timeout: "5s", name: "openmapx-api-integrations" });
+
+    const started = Date.now();
+    await expect(
+      createIntegrationDb(integrationSql).execute("SELECT pg_sleep(6)"),
+    ).rejects.toBeInstanceOf(ProviderTimeoutError);
+    expect(Date.now() - started).toBeLessThan(5_900);
+  }, 20_000);
 
   it("serves a real core route through the registered hooks", async () => {
     const response = await app.server.inject({ method: "GET", url: "/health" });

@@ -14,8 +14,8 @@ export interface ProviderDeadlineOptions {
 }
 
 export class ProviderTimeoutError extends Error {
-  constructor() {
-    super("provider deadline exceeded");
+  constructor(options?: ErrorOptions) {
+    super("provider deadline exceeded", options);
     this.name = "ProviderTimeoutError";
   }
 }

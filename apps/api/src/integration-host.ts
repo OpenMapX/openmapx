@@ -35,7 +35,7 @@ import {
   rollbackPlaceResolverStaging,
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
-import { sql as pgClient } from "./db";
+import { integrationSql } from "./db";
 import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
 import {
   type ConfigSource,
@@ -45,6 +45,7 @@ import {
   resolveIntegrationConfigWithSourcesStrict,
   warnInvalidConfig,
 } from "./integration-config";
+import { createIntegrationDb } from "./integration-db";
 import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
 import {
   beginIntegrationRouteStaging,
@@ -447,26 +448,10 @@ function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
  * postgis (via `requires: [{ service: "postgis" }]`); returns `undefined`
  * otherwise. Shared by cold start and reload.
  */
+/** `ctx.db` for integrations that require PostGIS, on the integration pool. */
 function buildIntegrationDb(manifest: IntegrationManifest): IntegrationContext["db"] {
   const needsDb = manifest.requires?.some((r) => r.service === "postgis");
-  if (!needsDb) return undefined;
-  return {
-    async execute<T = unknown>(
-      query: string,
-      params?: unknown[],
-      options?: { signal?: AbortSignal },
-    ): Promise<T> {
-      options?.signal?.throwIfAborted();
-      const pending = params ? pgClient.unsafe(query, params as never[]) : pgClient.unsafe(query);
-      const onAbort = () => pending.cancel();
-      options?.signal?.addEventListener("abort", onAbort, { once: true });
-      try {
-        return (await pending) as T;
-      } finally {
-        options?.signal?.removeEventListener("abort", onAbort);
-      }
-    },
-  };
+  return needsDb ? createIntegrationDb(integrationSql) : undefined;
 }
 
 /**
