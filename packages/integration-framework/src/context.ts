@@ -85,14 +85,25 @@ export interface ResponseOptions extends HttpClientOptions {
   fallbackContentType?: string;
   /** Response headers to expose. Names are matched case-insensitively and returned lowercase. */
   responseHeaders?: readonly string[];
-  /** Reject redirects, or follow only the explicitly allowlisted target hosts. */
+  /**
+   * Reject redirects, or follow only the explicitly allowlisted target hosts.
+   * Left unset, redirects are followed unless a caller header may carry a credential.
+   */
   redirect?:
     | "error"
     | { allowedHosts: readonly string[]; follow203?: boolean; maxRedirects?: number };
 }
 
 export interface HttpClient {
+  /**
+   * GET bounded JSON. A non-2xx answer rejects with `FetchJsonHttpError` from
+   * `@openmapx/core`, carrying `status` and the `Retry-After` delay but never the
+   * URL. A caller header outside the representation headers (Accept,
+   * Accept-Language, Content-Type, conditional request headers) may carry a
+   * credential, so such a request refuses every redirect.
+   */
   get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
+  /** POST a JSON body with `params` in the query string. Errors and redirects as for `get`. */
   post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T>;
   getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>>;
   /** POST a JSON body and return any status with its bounded JSON body; `post` throws on non-2xx. */

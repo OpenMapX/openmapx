@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { FetchJsonHttpError, parseRetryAfterMs } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
   MobilityHttpRequestOptions,
@@ -127,8 +128,47 @@ export interface FakeHttpClient extends HttpClient {
   readonly calls: FakeHttpRequest[];
 }
 
+/** A canned upstream status with no body. Create it with {@link httpStatus}. */
+class FakeHttpStatus {
+  readonly headers: Readonly<Record<string, string>>;
+
+  constructor(
+    readonly status: number,
+    headers: Record<string, string> = {},
+  ) {
+    this.headers = Object.fromEntries(
+      Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]),
+    );
+  }
+}
+
+/**
+ * Canned upstream status for {@link fakeHttpClient}. `get` and `post` reject
+ * with the host's `FetchJsonHttpError` (status and `Retry-After` delay) when it
+ * is not 2xx; the response methods return it with an empty body. Header names
+ * are lowercased, as the host returns them.
+ */
+export function httpStatus(status: number, headers?: Record<string, string>): FakeHttpStatus {
+  return new FakeHttpStatus(status, headers);
+}
+
+function jsonBody<T>(value: unknown): T {
+  if (value instanceof FakeHttpStatus) {
+    if (value.status >= 200 && value.status < 300) return undefined as T;
+    throw new FetchJsonHttpError(
+      `HTTP ${value.status}`,
+      value.status,
+      parseRetryAfterMs(value.headers["retry-after"] ?? null),
+    );
+  }
+  return value as T;
+}
+
 /** A canned `{ status, headers, body }` passes through; any other value is a 200 body. */
 function asHttpResponse<T>(value: unknown): HttpResponse<T> {
+  if (value instanceof FakeHttpStatus) {
+    return { status: value.status, headers: value.headers, body: "" as T };
+  }
   if (
     value &&
     typeof value === "object" &&
@@ -159,34 +199,40 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
   };
   return {
     calls,
-    get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T> {
+    async get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T> {
       const req: FakeHttpRequest = { method: "get", url, options };
       calls.push(req);
-      return Promise.resolve(resolve(req) as T);
+      return jsonBody<T>(await resolve(req));
     },
-    post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T> {
+    async post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T> {
       const req: FakeHttpRequest = { method: "post", url, body, options };
       calls.push(req);
-      return Promise.resolve(resolve(req) as T);
+      return jsonBody<T>(await resolve(req));
     },
-    getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>> {
+    async getResponse<T = unknown>(
+      url: string,
+      options: ResponseOptions,
+    ): Promise<HttpResponse<T>> {
       const req: FakeHttpRequest = { method: "getResponse", url, options };
       calls.push(req);
-      return Promise.resolve(asHttpResponse<T>(resolve(req)));
+      return asHttpResponse<T>(await resolve(req));
     },
-    postResponse<T = unknown>(
+    async postResponse<T = unknown>(
       url: string,
       body: unknown,
       options: ResponseOptions,
     ): Promise<HttpResponse<T>> {
       const req: FakeHttpRequest = { method: "postResponse", url, body, options };
       calls.push(req);
-      return Promise.resolve(asHttpResponse<T>(resolve(req)));
+      return asHttpResponse<T>(await resolve(req));
     },
-    getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse> {
+    async getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse> {
       const req: FakeHttpRequest = { method: "getBytes", url, options };
       calls.push(req);
-      const value = resolve(req);
+      const value = await resolve(req);
+      if (value instanceof FakeHttpStatus) {
+        return { status: value.status, headers: value.headers, bytes: new Uint8Array() };
+      }
       if (
         value &&
         typeof value === "object" &&
@@ -194,14 +240,14 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
         "headers" in value &&
         "bytes" in value
       ) {
-        return Promise.resolve(value as BinaryHttpResponse);
+        return value as BinaryHttpResponse;
       }
       if (!(value instanceof Uint8Array)) {
         throw new TypeError(
           "fakeHttpClient: getBytes response must be Uint8Array or BinaryHttpResponse",
         );
       }
-      return Promise.resolve({ status: 200, headers: {}, bytes: value });
+      return { status: 200, headers: {}, bytes: value };
     },
     async getText(url: string, options: ResponseOptions): Promise<HttpResponse<string>> {
       const req: FakeHttpRequest = { method: "getText", url, options };
@@ -221,6 +267,13 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
       const req: FakeHttpRequest = { method: "getStream", url, options };
       calls.push(req);
       const value = await resolve(req);
+      if (value instanceof FakeHttpStatus) {
+        return {
+          status: value.status,
+          headers: value.headers,
+          stream: new ReadableStream({ start: (controller) => controller.close() }),
+        };
+      }
       if (
         value &&
         typeof value === "object" &&

@@ -272,7 +272,8 @@ const REDIRECT_SAFE_CALLER_HEADERS = new Set([
   "if-modified-since",
 ]);
 
-function hasPotentiallyCredentialBearingHeaders(
+/** True when a caller header may carry a credential, so redirects must fail closed. */
+export function hasPotentiallyCredentialBearingHeaders(
   headers: Record<string, string> | undefined,
 ): boolean {
   return Boolean(

@@ -102,6 +102,7 @@ export {
   FetchJsonHttpError,
   type FetchJsonOptions,
   fetchJson,
+  hasPotentiallyCredentialBearingHeaders,
   isJsonMediaType,
   parseRetryAfterMs,
   readBoundedJsonResponse,

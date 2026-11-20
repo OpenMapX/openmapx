@@ -1,3 +1,6 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { FetchJsonHttpError } from "@openmapx/core";
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHttpClient } from "../integration-clients";
@@ -294,23 +297,109 @@ describe("createHttpClient", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("GET throws the preserved HTTP <status> <statusText> message on non-2xx", async () => {
+  it("GET rejects a non-2xx answer with its status and Retry-After but without the URL", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => jsonResponse({}, 503, "Service Unavailable")),
+      vi.fn(() => jsonResponse({}, 429, "Too Many Requests", { "Retry-After": "120" })),
     );
     const client = createHttpClient(createNoopLogger());
-    await expect(client.get("https://x.test/data")).rejects.toThrow("HTTP 503 Service Unavailable");
+
+    const error = await client
+      .get("https://x.test/data", { params: { appid: "secret-key" } })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(FetchJsonHttpError);
+    expect(error).toMatchObject({
+      message: "HTTP 429 Too Many Requests",
+      status: 429,
+      retryAfterMs: 120_000,
+    });
+    expect((error as Error).message).not.toContain("secret-key");
+    expect((error as Error).message).not.toContain("x.test");
   });
 
-  it("POST throws the preserved HTTP <status> <statusText> message on non-2xx", async () => {
+  it("POST rejects a non-2xx answer with its status", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => jsonResponse({}, 500, "Internal Server Error")),
     );
     const client = createHttpClient(createNoopLogger());
-    await expect(client.post("https://x.test/data", { a: 1 })).rejects.toThrow(
-      "HTTP 500 Internal Server Error",
+    await expect(client.post("https://x.test/data", { a: 1 })).rejects.toMatchObject({
+      name: "FetchJsonHttpError",
+      message: "HTTP 500 Internal Server Error",
+      status: 500,
+    });
+  });
+
+  it("POST appends params to the request URL", async () => {
+    const fn = vi.fn((_url: string, _init?: RequestInit) => jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fn);
+
+    await createHttpClient(createNoopLogger()).post(
+      "https://x.test/data?fixed=1",
+      { a: 1 },
+      { params: { key: "k", skipped: undefined, limit: 5 } },
     );
+
+    expect(fn.mock.calls[0]?.[0]).toBe("https://x.test/data?fixed=1&key=k&limit=5");
+  });
+
+  it("refuses redirects for GET and POST when a header may carry a credential", async () => {
+    const fn = vi.fn((_url: string, _init?: RequestInit) => jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fn);
+    const client = createHttpClient(createNoopLogger());
+
+    await client.get("https://x.test/a", { headers: { "x-api-key": "secret" } });
+    await client.post("https://x.test/b", {}, { headers: { Authorization: "Bearer secret" } });
+    await client.get("https://x.test/c", { headers: { Accept: "application/json" } });
+    await client.post("https://x.test/d", {});
+
+    expect(fn.mock.calls.map((call) => call[1]?.redirect)).toEqual([
+      "error",
+      "error",
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("does not forward a key header to another origin through a real redirect", async () => {
+    const seen: string[] = [];
+    const listen = async (handler: Parameters<typeof createServer>[1]) => {
+      const server = createServer(handler);
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      return { server, port: (server.address() as AddressInfo).port };
+    };
+    const other = await listen((req, res) => {
+      seen.push(`other ${req.headers["x-api-key"] ?? "-"}`);
+      res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+    });
+    const origin = await listen((req, res) => {
+      seen.push(`origin ${req.headers["x-api-key"] ?? "-"}`);
+      res.writeHead(302, { Location: `http://127.0.0.1:${other.port}/elsewhere` }).end();
+    });
+    try {
+      await expect(
+        createHttpClient(createNoopLogger()).get(`http://127.0.0.1:${origin.port}/start`, {
+          headers: { "x-api-key": "secret" },
+        }),
+      ).rejects.toThrow();
+      expect(seen).toEqual(["origin secret"]);
+    } finally {
+      for (const { server } of [origin, other]) {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    }
+  });
+
+  it("refuses an unconfigured redirect on the response methods when a header may carry a credential", async () => {
+    const fn = vi.fn((_url: string, _init?: RequestInit) => jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fn);
+    const client = createHttpClient(createNoopLogger());
+    const options = { maxBytes: 1_024, contentTypes: ["application/json"] } as const;
+
+    await client.getResponse("https://x.test/a", { ...options, headers: { "x-api-key": "k" } });
+    await client.getResponse("https://x.test/b", options);
+
+    expect(fn.mock.calls.map((call) => call[1]?.redirect)).toEqual(["error", undefined]);
   });
 });
