@@ -42,7 +42,7 @@ export function setup(ctx: IntegrationContext): void {
     searchDbBikes: createDbBikeClient({
       clientId: ctx.config["db-bike-client-id"] as string | undefined,
       apiKey: ctx.config["db-bike-api-key"] as string | undefined,
-      transport: runtime.transport,
+      http: ctx.http,
       contributors: resolveContributors(["db-bike"]),
     }),
     searchDonkey,

@@ -7,8 +7,8 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
  * https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de
  */
 
-import { type BoundingBox, bboxContains, type LngLat } from "@openmapx/core";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
+import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import type { HttpClient } from "@openmapx/integration-framework";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
@@ -38,18 +38,21 @@ interface CachedData {
 }
 const CACHE_TTL_MS = 120_000; // 2 min
 
-async function fetchJson<T>(
+/**
+ * The key headers make the host client refuse redirects, so they never reach
+ * another origin. Any failure leaves the feed out of this answer.
+ */
+async function fetchFeed<T>(
   url: string,
   creds: { clientId: string; apiKey: string },
-  transport: MobilityHttpTransport,
+  http: HttpClient,
 ): Promise<T | null> {
   try {
-    return await transport.fetchJson<T>(url, {
+    return await http.get<T>(url, {
       timeoutMs: FETCH_TIMEOUT_MS,
-      maxBytes: 8 * 1024 * 1024,
-      allowedRedirectOrigin: "https://apis.deutschebahn.com",
+      maxResponseBytes: 8 * 1024 * 1024,
       headers: {
-        "User-Agent": transport.userAgent,
+        "User-Agent": USER_AGENT,
         Accept: "application/json",
         "DB-Client-ID": creds.clientId,
         "DB-Api-Key": creds.apiKey,
@@ -67,7 +70,7 @@ async function fetchProvider(
   providerId: string,
   bbox: BoundingBox,
   creds: { clientId: string; apiKey: string },
-  transport: MobilityHttpTransport,
+  http: HttpClient,
   cache: Map<string, CachedData>,
   contributors?: readonly Attribution[],
 ): Promise<{
@@ -91,11 +94,11 @@ async function fetchProvider(
 
   // Fetch all feeds in parallel
   const [sysInfoRes, stInfoRes, stStatusRes, freeBikeRes, vTypesRes] = await Promise.all([
-    fetchJson<GbfsV23SystemInformation>(`${base}/system_information`, creds, transport),
-    fetchJson<GbfsV23StationInformation>(`${base}/station_information`, creds, transport),
-    fetchJson<GbfsV23StationStatus>(`${base}/station_status`, creds, transport),
-    fetchJson<GbfsV23FreeBikeStatus>(`${base}/free_bike_status`, creds, transport),
-    fetchJson<GbfsV23VehicleTypes>(`${base}/vehicle_types`, creds, transport),
+    fetchFeed<GbfsV23SystemInformation>(`${base}/system_information`, creds, http),
+    fetchFeed<GbfsV23StationInformation>(`${base}/station_information`, creds, http),
+    fetchFeed<GbfsV23StationStatus>(`${base}/station_status`, creds, http),
+    fetchFeed<GbfsV23FreeBikeStatus>(`${base}/free_bike_status`, creds, http),
+    fetchFeed<GbfsV23VehicleTypes>(`${base}/vehicle_types`, creds, http),
   ]);
 
   const operator = sysInfoRes?.data?.operator ?? sysInfoRes?.data?.name ?? providerId;
@@ -185,7 +188,7 @@ async function fetchProvider(
 export function createDbBikeClient(options: {
   clientId?: string;
   apiKey?: string;
-  transport: MobilityHttpTransport;
+  http: HttpClient;
   contributors?: readonly Attribution[];
 }): (bbox: BoundingBox) => Promise<{
   stations: SharedMobilityStation[];
@@ -200,7 +203,7 @@ export function createDbBikeClient(options: {
     if (!credentials) return { stations: [], vehicles: [] };
     const results = await Promise.allSettled(
       PROVIDER_IDS.map((id) =>
-        fetchProvider(id, bbox, credentials, options.transport, cache, options.contributors),
+        fetchProvider(id, bbox, credentials, options.http, cache, options.contributors),
       ),
     );
     const stations: SharedMobilityStation[] = [];
