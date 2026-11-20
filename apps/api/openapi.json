@@ -119029,6 +119029,41 @@
         "x-openmapx-source": "integrations/landmark-models/index.ts"
       }
     },
+    "/api/integrations/landmark-models/models/{provider}/{sha256}.glb": {
+      "get": {
+        "operationId": "getApiIntegrationsLandmarkModelsModelsProviderSha256Glb",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /models/:provider/:sha256.glb (landmark-models)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "landmark-models",
+        "x-openmapx-source": "integrations/landmark-models/index.ts"
+      }
+    },
     "/api/integrations/overlay-earthquakes/earthquakes": {
       "get": {
         "operationId": "getApiIntegrationsOverlayEarthquakesEarthquakes",
