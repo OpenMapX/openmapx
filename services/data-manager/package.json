@@ -34,7 +34,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@fastify/swagger": "9.9.3",
+    "@fastify/swagger": "9.9.4",
     "@mapbox/vector-tile": "3.0.0",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
