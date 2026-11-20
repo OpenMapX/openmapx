@@ -111,27 +111,20 @@ it.each(["promotion", "reload"] as const)(
       deadlineAt,
       fingerprint: executionFingerprint({ kind: input.kind, operationFingerprint, deadlineAt }),
     };
-    const child: ExecutionRef = {
-      executor: "ops-agent",
-      principal: "data-manager",
-      executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-      operationKey: control.controlChildOperationKey(owner.operationKey, phase, 0),
-      operationFingerprint: opsOperationFingerprint(operation),
-      deadlineAt,
-      fingerprint: executionFingerprint({
-        kind: operation.kind,
-        operationFingerprint: opsOperationFingerprint(operation),
-        deadlineAt,
-        parent: control.retainedControlParent(owner),
-      }),
-    };
-    const plan = {
+    const reservation: control.ControlChildReservation = {
+      version: 1,
       phase,
       ordinal: 0,
       kind: operation.kind,
-      execution: child,
+      recipient: "ops-agent",
       serviceIds,
-      recipient: "ops-agent" as const,
+      operationFingerprint: opsOperationFingerprint(operation),
+      execution: {
+        executor: "ops-agent",
+        principal: "data-manager",
+        executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+        operationKey: control.controlChildOperationKey(owner.operationKey, phase, 0),
+      },
     };
     const authority = await control.retainAdmittedControlExecution(dm, {
       execution: owner,
@@ -140,7 +133,7 @@ it.each(["promotion", "reload"] as const)(
       admittedAt: deadlineAt - 60000,
       requestedDeadlineAt: deadlineAt,
       serviceIds,
-      plan: [plan],
+      reservations: [reservation],
     });
     const lease = await control.acquireArtifactTargetLease({
       serviceIds,
@@ -163,9 +156,10 @@ it.each(["promotion", "reload"] as const)(
       linkProxyFixture(join(root, "data"));
       await control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
     }
-    const delegation = await control.delegateArtifactTargetLease(lease, {
-      ...plan,
-      evidence: control.publishedDataTransitCandidate(authority, { phase, ordinal: 0 }),
+    const child = (await control.bindControlChildPhase(authority, reservation)).execution;
+    const { delegation } = await control.issueControlChildPhase(authority, {
+      ...reservation,
+      lease,
     });
     const token = "b".repeat(43),
       tokenFile = join(root, "token");
@@ -222,14 +216,14 @@ it.each(["promotion", "reload"] as const)(
       await expect(
         client.execute(operation, {
           operationKey: child.operationKey,
-          execution: { requestedDeadlineAt: deadlineAt },
+          execution: { requestedDeadlineAt: child.deadlineAt },
           leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
         }),
       ).rejects.toThrow();
       expect((await next()).type).toBe("effect");
       const adopted = await client.lookup(operation, child.operationKey, {
         fingerprint: child.fingerprint,
-        execution: { requestedDeadlineAt: deadlineAt },
+        execution: { requestedDeadlineAt: child.deadlineAt },
       });
       expect(adopted.operationId).toBe(child.executionId);
       const cancellation = client
@@ -1061,11 +1055,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
     });
     await control.retainOwnedDataTransitCandidate(authority, reservation);
     const bound = await control.bindControlChildPhase(authority, reservation),
-      issued = await control.issueControlChildPhase(authority, {
-        ...reservation,
-        lease,
-        evidence: control.publishedDataTransitCandidate(authority, reservation),
-      });
+      issued = await control.issueControlChildPhase(authority, { ...reservation, lease });
     const token = "e".repeat(43),
       tokenFile = join(root, "token");
     writeFileSync(tokenFile, token, { mode: 0o600 });

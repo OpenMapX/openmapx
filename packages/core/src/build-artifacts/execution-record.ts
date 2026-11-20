@@ -225,6 +225,7 @@ function newRow(
       settledAt: null,
       children: requested.reservations.map((r) => ({
         ordinal: r.ordinal,
+        evidence: null,
         binding: null,
         delegation: null,
       })),
@@ -1620,12 +1621,38 @@ export function prepareControlChildPublication(
     throw Error("Reserved phase publication requires observation");
   cell.delegation = delegation;
 }
+/**
+ * Records what a reserved child will act on, before it is bound. The same
+ * evidence again is kept; different evidence, or evidence for a child that is
+ * already bound, is refused.
+ */
+export async function retainControlChildEvidence(
+  handle: ExecutionHandle,
+  input: { phase: ControlChildPhase; ordinal: number },
+  evidence: Record<string, unknown>,
+): Promise<void> {
+  const same = (cell: ChildCell) => {
+    if (canonicalJson(cell.evidence) !== canonicalJson(evidence))
+      throw Error("Original child evidence changed");
+  };
+  const prior = cellOf(handle, await progressOf(handle), input);
+  if (prior.evidence !== null) return same(prior);
+  await assertControlExecutionForward(handle);
+  await updateProgress(handle, (progress) => {
+    const cell = cellOf(handle, progress, input);
+    if (cell.evidence !== null) return same(cell);
+    if (cell.binding || cell.delegation) throw Error("A bound child's evidence cannot be added");
+    assertOwnForward(handle, progress);
+    cell.evidence = structuredClone(evidence);
+  });
+}
 export async function inspectControlChildPublication(
   handle: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ) {
   const cell = cellOf(handle, await progressOf(handle), input);
   return {
+    evidence: cell.evidence,
     binding: cell.binding,
     publication: cell.delegation
       ? { state: "grant_prepared" as const, delegation: cell.delegation }

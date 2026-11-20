@@ -403,7 +403,6 @@ import {
   issueControlChildPhase,
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
-  publishedDataTransitCandidate,
 } from "@openmapx/core/build-artifacts";
 import { type OpsJobStatus, type OpsResultFor, parseOpsResult } from "@openmapx/core/ops";
 import { opsClient } from "../../ops-client.js";
@@ -569,7 +568,7 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
   );
   if (!child || (child.state === "reserved" && options.reservedContinuation)) {
     await context.assertForward();
-    const candidateDigest = assertOwnedDataTransitCandidate(context.authority, slot);
+    const candidateDigest = await assertOwnedDataTransitCandidate(context.authority, slot);
     if (!child && slot.phase === "proxy-restore")
       throw Error("Restore must reserve before filesystem writes");
     const reserved = options.reservedContinuation
@@ -598,13 +597,12 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
       await context.assertForward();
       if (operation.kind === "transitousLock.approve")
         await retainCatalogActivationRecord(context, exact.execution);
-      if (assertOwnedDataTransitCandidate(context.authority, slot) !== candidateDigest)
+      if ((await assertOwnedDataTransitCandidate(context.authority, slot)) !== candidateDigest)
         throw Error("Owned candidate changed before grant");
       const issued = await issueControlChildPhase(context.authority, {
         phase: slot.phase,
         ordinal: slot.ordinal,
         lease: ownedLease(context),
-        evidence: publishedDataTransitCandidate(context.authority, slot),
       });
       const reference = await lookupControlChildPhaseAttempt(context.authority, slot);
       if (!reference?.leaseId) throw new DataOpsObservationPending(slot.operationKey);
@@ -715,7 +713,7 @@ export async function cancelAndSettleOwnedDataOpsChildren(
           candidateDigest:
             child.state === "bound"
               ? child.candidateDigest
-              : assertOwnedDataTransitCandidate(context.authority, slot),
+              : await assertOwnedDataTransitCandidate(context.authority, slot),
         };
         if (child.state === "reserved") await context.checkpointChild(bound);
         child = {

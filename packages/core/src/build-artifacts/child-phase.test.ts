@@ -271,6 +271,48 @@ it("observes one same-slot binding under concurrent binds", async () => {
     f.close();
   }
 });
+it("records a child's evidence on its cell before the binding, and its grant carries it", async () => {
+  const f = await fixture(),
+    agent = control.openControlInstallation({
+      infraDir: f.root,
+      role: "ops-agent",
+      serviceIds: ["motis", "motis-staging"],
+    }),
+    lease = await control.acquireArtifactTargetLease({
+      serviceIds: ["motis", "motis-staging"],
+      owner: f.authority,
+    });
+  try {
+    const first = { phase: "stop-primary" as const, ordinal: 0 },
+      second = { phase: "stop-staging" as const, ordinal: 1 },
+      evidence = { candidate: { id: "a" } };
+    await control.retainControlChildEvidence(f.authority, first, evidence);
+    await control.retainControlChildEvidence(f.authority, first, structuredClone(evidence));
+    await expect(
+      control.retainControlChildEvidence(f.authority, first, { candidate: { id: "b" } }),
+    ).rejects.toThrow("Original child evidence changed");
+    expect((await inspectControlChildPublication(f.authority, first)).evidence).toEqual(evidence);
+    expect(JSON.parse(readFileSync(f.cell, "utf8")).progress.children[0].evidence).toEqual(
+      evidence,
+    );
+
+    await control.bindControlChildPhase(f.authority, first);
+    const issued = await control.issueControlChildPhase(f.authority, { ...first, lease });
+    const grant = heldLeases(f.root)
+      .flatMap((held) => held.children)
+      .find((child) => child.key === issued.delegation.childKey);
+    expect(grant?.evidence).toEqual(evidence);
+
+    // Evidence is recorded before the binding, never added to a bound child.
+    await control.bindControlChildPhase(f.authority, second);
+    await expect(control.retainControlChildEvidence(f.authority, second, evidence)).rejects.toThrow(
+      "A bound child's evidence cannot be added",
+    );
+  } finally {
+    control.closeControlInstallation(agent);
+    f.close();
+  }
+});
 it("keeps an exact admission's row when a duplicate supplies empty reservations", async () => {
   const f = await fixture(true);
   try {

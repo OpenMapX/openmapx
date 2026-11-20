@@ -28,6 +28,7 @@ import {
   assertControlExecutionForward,
   type ExecutionHandle,
   inspectControlChildPublication,
+  retainControlChildEvidence,
   retainedControlParent,
   withControlExecutionForward,
 } from "./execution-record";
@@ -354,78 +355,35 @@ function snapshot(
     directory.close();
   }
 }
-const name = (authority: ExecutionHandle, ordinal: number) =>
-  `candidate-${authority.execution.operationKey}-${ordinal}.json`;
+/** The candidate as the child's cell records it and its grant carries it. */
+const publishedSchema = z.strictObject({ candidate: schema });
+/**
+ * Records the candidate a transit phase acts on, on the child's cell before
+ * the child is bound. The same files again keep it; changed files are refused.
+ */
 export async function retainOwnedDataTransitCandidate(
   authority: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
 ): Promise<string | null> {
   const value = snapshot(authority, input.phase, input.ordinal, input.phase === "promote-primary");
   if (!value) return null;
-  const s = authority,
-    reserved = s.reservations.some(
-      (slot) => slot.phase === input.phase && slot.ordinal === input.ordinal,
-    ),
-    publication = reserved ? await inspectControlChildPublication(authority, input) : undefined;
-  let saved: unknown;
-  try {
-    saved = readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  if (saved !== null && saved !== undefined) {
-    const prior = schema.parse(saved);
-    if (canonicalJson(prior) !== canonicalJson(value))
-      throw Error("Original candidate bytes/owner changed");
-    return controlDigest(prior);
-  }
-  if (publication && (publication.binding || publication.publication.state !== "unissued"))
-    throw Error("Attempted candidate cannot be reconstructed");
-  await assertControlExecutionForward(authority);
-  const parsed = schema.parse(value);
-  writePrivateRecord(s.installation, "observations", name(authority, input.ordinal), parsed, true);
-  return controlDigest(parsed);
+  const candidate = schema.parse(value);
+  await retainControlChildEvidence(authority, input, publishedSchema.parse({ candidate }));
+  return controlDigest(candidate);
 }
-export function assertOwnedDataTransitCandidate(
+/** The digest of the candidate the cell recorded, once the files still match it. */
+export async function assertOwnedDataTransitCandidate(
   authority: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
-): string | null {
+): Promise<string | null> {
   const value = snapshot(authority, input.phase, input.ordinal);
   if (!value) return null;
-  const s = authority,
-    saved = schema.parse(
-      readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192),
-    );
-  if (canonicalJson(saved) !== canonicalJson(value))
+  const evidence = (await inspectControlChildPublication(authority, input)).evidence;
+  if (!evidence) throw Error("Transit candidate was not recorded before the phase");
+  const { candidate } = publishedSchema.parse(evidence);
+  if (canonicalJson(candidate) !== canonicalJson(value))
     throw Error("Foreign or changed owned transit candidate");
-  return controlDigest(saved);
-}
-
-/** The candidate on the child's row; the row itself names the child, its body and targets. */
-const publishedSchema = z.strictObject({ candidate: schema });
-/**
- * The candidate a transit phase acts on, as the agent receives it with the
- * child's grant. Null when the phase has no retained candidate.
- */
-export function publishedDataTransitCandidate(
-  authority: ExecutionHandle,
-  input: { phase: ControlChildPhase; ordinal: number },
-): Record<string, unknown> | undefined {
-  const s = authority;
-  let saved: unknown;
-  try {
-    saved = readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-  const candidate = schema.parse(saved);
-  const slot =
-    s.reservations.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal) ??
-    s.plan.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal);
-  if (!slot || candidate.phase !== input.phase)
-    throw Error("Dated original candidate slot required");
-  return publishedSchema.parse({ candidate });
+  return controlDigest(candidate);
 }
 /**
  * Fixed registry resource input: the candidate data-manager recorded with the

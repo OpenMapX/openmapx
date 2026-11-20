@@ -108,11 +108,7 @@ async function fixture(
     });
   await control.retainOwnedDataTransitCandidate(authority, slot);
   const bound = await control.bindControlChildPhase(authority, slot),
-    issued = await control.issueControlChildPhase(authority, {
-      ...slot,
-      lease,
-      evidence: control.publishedDataTransitCandidate(authority, slot),
-    });
+    issued = await control.issueControlChildPhase(authority, { ...slot, lease });
   const claimer = createProductionRegistryResourceClaimer({
     services: [{ serviceId: "motis-feed-proxy", isBuiltIn: true, enabled: true }],
     integrationIds: [],

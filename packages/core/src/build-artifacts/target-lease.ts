@@ -680,8 +680,6 @@ export async function issueControlChildPhase(
     /** A fixed CLI child's key, chosen with its spawn record. */
     childKey?: string;
     lease?: TargetLeaseAuthority;
-    /** What the child acts on, recorded with its grant for the recipient. */
-    evidence?: Record<string, unknown>;
   },
 ) {
   const child = await lookupControlChildPhase(authority, input);
@@ -698,7 +696,8 @@ export async function issueControlChildPhase(
     ? await delegateArtifactTargetLease(input.lease, {
         ...child,
         ...(input.childKey ? { childKey: input.childKey } : {}),
-        ...(input.evidence ? { evidence: input.evidence } : {}),
+        // What the child acts on, as its cell recorded it before the binding.
+        ...(before.evidence ? { evidence: before.evidence } : {}),
       })
     : await attestParentExecution(authority, {
         ...child,

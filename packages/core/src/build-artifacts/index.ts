@@ -23,7 +23,6 @@ export {
   assertOwnedDataTransitCandidate,
   inspectDataTransitCandidate,
   markFeedProxyReloadAttempted,
-  publishedDataTransitCandidate,
   retainOwnedDataTransitCandidate,
 } from "./data-execution-candidate";
 export {
@@ -71,6 +70,7 @@ export {
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
+  retainControlChildEvidence,
   retainControlEffectReceipt,
   retainedControlParent,
   retainFixedCliSpawnIntent,

@@ -24,6 +24,7 @@ import {
   restoreArtifactTargetLeaseForSettlement,
   restoreConfigurationMaintenancePhaseIssuer,
   retainAdmittedControlExecution,
+  retainControlChildEvidence,
   retainControlEffectReceipt,
   settleArtifactTargetLeaseChild,
   settleIssuedLeaseChild,
@@ -249,17 +250,17 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       // The preparation's own lease handle issues the fence child.
       const lease = preparing.get(file.record.maintenanceId);
       if (!lease) throw Error("Preparation lease unavailable");
+      // What an operator's `openmapx control resolve` needs to settle the fence.
+      await retainControlChildEvidence(authority, reserved, {
+        maintenanceId: file.plan.dmPrepare.maintenanceId,
+        candidateId: file.plan.dmPrepare.candidateId,
+        planDigest: file.plan.dmPrepare.planDigest,
+      });
       const child = await bindControlChildPhase(authority, reserved);
       const issued = await issueControlChildPhase(authority, {
         phase: reserved.phase,
         ordinal: reserved.ordinal,
         lease,
-        // What an operator's `openmapx control resolve` needs to settle the fence.
-        evidence: {
-          maintenanceId: file.plan.dmPrepare.maintenanceId,
-          candidateId: file.plan.dmPrepare.candidateId,
-          planDigest: file.plan.dmPrepare.planDigest,
-        },
       });
       await consumeControlChildDispatch(issued.dispatchTicket);
       let receipt: Awaited<ReturnType<typeof prepareDataConfigurationFence>>;

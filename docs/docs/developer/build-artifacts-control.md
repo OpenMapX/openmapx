@@ -89,7 +89,10 @@ as a known failure.
 - **Execution row.** One durable record per execution: its admission (operation,
   identity, origin, targets, reserved children), fixed when it is recorded, and its
   progress (held, cancel pending or settled; when the effect started; the
-  settlement and its receipt; each reserved child's binding and grant). The agent
+  settlement and its receipt; each reserved child's evidence, binding and grant).
+  A child's evidence is what it acts on (a transit candidate's files, the fence a
+  maintenance prepares), recorded before the child is bound; its grant in the lease
+  store carries it to the recipient. The agent
   keeps the rows of its operations on their journal rows and data-manager keeps
   each execution's row on its `data_manager.jobs` row; every other execution (a
   maintenance step, a fixed CLI child, a host CLI root) has a row file in its

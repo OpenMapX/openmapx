@@ -68,6 +68,11 @@ export type ExecutionAdmission = Omit<
 /** A reserved child: its exact identity once bound, and its grant once attempted. */
 export const childCellSchema = z.strictObject({
   ordinal: z.number().int().min(0).max(63),
+  /** What the child acts on, recorded before it is bound; its grant carries it to the recipient. */
+  evidence: z
+    .record(z.string(), z.unknown())
+    .refine((value) => JSON.stringify(value).length <= 16384, "Child evidence too large")
+    .nullable(),
   binding: z
     .strictObject({
       child: plannedChildSchema,
