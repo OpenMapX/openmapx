@@ -24,59 +24,24 @@ import type {
   DistanceReference,
   LabeledPlace,
   LngLat,
-  Place,
 } from "@openmapx/core";
 import {
-  API_ENDPOINTS,
-  apiClient,
-  brandSuggestionRows,
   brandToFilter,
-  CATEGORY_DEFINITIONS,
-  coordinateId,
-  createPlace,
-  decodeShortPlusCode,
-  detectShortPlusCodeCity,
-  idsFromPrimaryOrCoords,
-  isTransitRawCategory,
   makeSyntheticStopPlace,
-  matchCategorySuggestions,
-  matchRecentSearches,
   PANEL,
-  parseCoordinateInput,
-  parseDMSCoordinateInput,
-  parsePlusCodeInput,
-  presetSuggestionRows,
-  rankAutocompleteRows,
   resolveStopAsPlace,
   useActiveSidePanel,
-  useAdaptiveDebounce,
-  useAutocomplete,
-  useBrandSuggest,
   useCategorySearchStore,
-  useChipTranslations,
-  useCountryFromCoordinates,
   useDataSourceStore,
-  useDataSources,
-  useDebounce,
   useDirectionsStore,
-  useGeocoding,
-  useLabeledPlaces,
   useMapStore,
   useMenuStore,
   usePlaceStore,
-  usePresetSuggest,
   useSavedPlacesStore,
   useSearchStore,
-  useSearchSuggestions,
   useSidebarStore,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
-import {
-  captureFieldContributors,
-  contributorsForRecords,
-} from "@openmapx/mobility-core/contributors";
-import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatarButton } from "@/components/auth/AccountAvatarButton";
@@ -110,11 +75,19 @@ import {
 import { NlpSearchCard } from "./NlpSearchCard";
 import { SearchEmptyState } from "./SearchEmptyState";
 import {
+  findTransitStopPlace,
+  resolveGeocodeAction,
+  resolveLabeledPlaceAction,
+  resolveSearchAction,
+  type SearchAction,
+} from "./searchAction";
+import {
   decideSearchSubmission,
   type NlpSubmissionContext,
   type SearchBarSurface,
 } from "./searchSubmission";
 import { useSearchSubmission } from "./useSearchSubmission";
+import { useSuggestionRows } from "./useSuggestionRows";
 import { VoiceSearchButton } from "./VoiceSearchButton";
 
 export type { SearchBarSurface } from "./searchSubmission";
@@ -138,54 +111,23 @@ function rowKey(row: AutocompleteResult): string {
   return `${row.type}:${row.id}`;
 }
 
-/** Carry displayed search fields into the selected place without blending hidden ranking metadata. */
-function searchSelectionContributors(
-  result: ContributingRecord & {
-    fieldContributors?: FieldContributors;
-    ids?: Record<string, string | undefined>;
-  },
-  nameField = "label",
-  addressField = "label",
-) {
-  const fieldContributors = Object.fromEntries(
-    Object.entries({
-      name: nameField,
-      address: addressField,
-      addressEvidence: "addressEvidence",
-      directOsmReference: "directOsmReference",
-      coordinates: "coordinates",
-      category: "type",
-      rawCategory: "rawCategory",
-    }).flatMap(([target, source]) =>
-      Object.entries(captureFieldContributors(result, source, target)),
-    ),
-  );
-  for (const scheme of Object.keys(result.ids ?? {}))
-    Object.assign(fieldContributors, captureFieldContributors(result, `ids.${scheme}`));
-  // Primary identity is retained even when the suggestion has no secondary IDs.
-  Object.assign(fieldContributors, captureFieldContributors(result, "id", "ids"));
-  return {
-    fieldContributors,
-    contributors: contributorsForRecords(
-      Object.values(fieldContributors).map((contributors) => ({ contributors })),
-    ),
-  };
-}
-
 export function SearchBar({ surface = "map" }: SearchBarProps) {
   const t = useTranslations("search");
-  const tSaved = useTranslations("saved");
   const tCommon = useTranslations("common");
   const locale = useLocale();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
-  const { query, isFocused, setQuery, setIsFocused, setSuggestions, setResults } = useSearchStore();
-  const { setSelectedPlace } = usePlaceStore();
+  const query = useSearchStore((s) => s.query);
+  const isFocused = useSearchStore((s) => s.isFocused);
+  const setQuery = useSearchStore((s) => s.setQuery);
+  const setIsFocused = useSearchStore((s) => s.setIsFocused);
+  const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
   const { selectWithEnrichment, cancelEnrichment } = usePlaceEnrichment();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const docked = !isMobile && hasSidePanel && !sidebarCollapsed && !isFocused;
-  const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
+  const directionsOpen = useDirectionsStore((s) => s.isOpen);
+  const openDirections = useDirectionsStore((s) => s.open);
   // Phone directions borrow this search to choose a trip stop.
   const stopSearch = useStopSearchStore((s) => s.request);
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
@@ -200,9 +142,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
   const openMenu = useMenuStore((s) => s.open);
-  const { selectedListId, clearSelectedList } = useSavedPlacesStore();
+  const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
+  const clearSelectedList = useSavedPlacesStore((s) => s.clearSelectedList);
   const { flyTo, mapRef } = useMap();
   const userLocation = useMapStore((s) => s.userLocation);
+  const registry = useIntegrationRegistry();
   const inputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -210,8 +154,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // different place under the highlight.
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
-  const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
-  const debouncedGeoQuery = useDebounce(query, 400);
   const {
     beginSubmission,
     runSubmission,
@@ -247,13 +189,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     blurInput: () => inputRef.current?.blur(),
     searchText: (text) => launchTextSearch(mapRef.current, text),
   });
-  // Suggestions are only fetched while someone can see them or an Enter waits
-  // on them. The text stays in the box after a place opens, and the map then
-  // flies there; following the moving centre would request a fresh batch for
-  // nobody at every step of the flight.
-  const suggesting = isFocused || pending;
-  const suggestQuery = suggesting ? debouncedQuery : "";
-  const geocodeQuery = suggesting ? debouncedGeoQuery : "";
 
   // Snapshot of the viewport, read from the map on each render (cheap ref
   // reads). Suggestions are biased towards it and ranked by distance from it;
@@ -269,46 +204,32 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         : null,
     [mapCenterLng, mapCenterLat],
   );
-  const suggestionBias = useMemo(
-    () => (mapCenter ? { proximity: mapCenter, zoom: mapZoom } : null),
-    [mapCenter, mapZoom],
-  );
-
   const {
-    data: autocompleteData,
-    isFetching,
-    isPlaceholderData: autocompletePlaceholder,
-  } = useAutocomplete(suggestQuery, locale, suggestionBias);
-  const { data: geocodeData } = useGeocoding(geocodeQuery, locale, mapCenter);
-  const { data: presetData } = usePresetSuggest(suggestQuery, locale);
-  // One country lookup per ~1° cell: the value only steers brand ranking, so a
-  // coarse cell is plenty and keeps the query cache from churning while panning.
-  const countryProbe = useMemo<[number, number] | null>(
-    () =>
-      suggesting && mapCenterLng !== undefined && mapCenterLat !== undefined
-        ? [Math.round(mapCenterLng), Math.round(mapCenterLat)]
-        : null,
-    [suggesting, mapCenterLng, mapCenterLat],
-  );
-  const { data: viewportCountry } = useCountryFromCoordinates(countryProbe);
-  // Chains only: operators such as police forces or transit authorities are
-  // catalogued too, but nobody types their name to find a shop.
-  const { data: brandData } = useBrandSuggest(suggestQuery, viewportCountry ?? undefined, {
-    kind: "brand",
+    rows: effectiveSuggestions,
+    rankedSuggestions,
+    syntheticResult,
+    dataSourceCategories,
+    fetching: suggestionsFetching,
+    settled: suggestionsSettled,
+    geocodeQuery,
+    geocodeResults,
+  } = useSuggestionRows({
+    query,
+    locale,
+    // Rows are asked for only while someone can see them or an Enter waits on them.
+    suggesting: isFocused || pending,
+    mapCenter,
+    mapZoom,
+    nearbyMode,
+    stopSearch: stopSearch !== null,
   });
-  const { data: chipTranslations = {} } = useChipTranslations(locale);
-  const recentSearches = useRecentSearchStore((s) => s.entries);
+  const q = query.trim();
 
   const suggestionDistanceReference: DistanceReference | null = userLocation
     ? { kind: "user_location", coordinates: userLocation }
     : mapCenter
       ? { kind: "search_area_center", coordinates: mapCenter }
       : null;
-  const {
-    data: aggregateSearchData,
-    isFetching: aggregateSearchFetching,
-    isPlaceholderData: aggregateSearchPlaceholder,
-  } = useSearchSuggestions(suggestQuery, locale, mapCenter, 8);
   // Voice dictation and recent-search rows fill the input and then run through
   // the normal submit path, so they behave exactly like typing and Enter.
   const [submitAfterFlush, setSubmitAfterFlush] = useState(false);
@@ -331,30 +252,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   const addRecentSearch = useRecentSearchStore((s) => s.add);
   const clearRecentSearches = useRecentSearchStore((s) => s.clear);
-
-  // Labeled places (Home, Work, custom) for search suggestions
-  const { data: labeledPlaces } = useLabeledPlaces();
-
-  // Data source categories from integration manifests, offered only while the
-  // API lists the source: an unlisted one would answer every search empty.
-  // Until the list arrives, or when it cannot be read, every one is offered.
-  const registry = useIntegrationRegistry();
-  const { data: listedDataSources } = useDataSources();
-  const dataSourceCategories = useMemo(() => {
-    const listed = listedDataSources && new Set(listedDataSources.sources.map((s) => s.id));
-    const withSearchCat = registry
-      .getWithSearchCategory()
-      .filter((i) => listed === undefined || listed.has(i.id));
-    return withSearchCat
-      .map((i) => {
-        const sc = i.frontend?.searchCategory as
-          | { id: string; label?: string; iconPath?: string }
-          | undefined;
-        if (!sc) return null;
-        return { id: sc.id, label: sc.label ?? sc.id, iconPath: sc.iconPath, integrationId: i.id };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [registry, listedDataSources]);
 
   // Clean up blur timeout on unmount
   useEffect(() => {
@@ -386,169 +283,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     }, 150);
   }, [cancelPendingSubmit, cancelBlur, setIsFocused]);
 
-  // When user types a short plus code with city, geocode the city name to get
-  // the reference coordinates for decoding.
-  const shortPlusCity = detectShortPlusCodeCity(query.trim());
-  const debouncedCity = useDebounce(shortPlusCity?.city ?? "", 400);
-  const { data: cityRefData } = useGeocoding(debouncedCity, locale);
-
-  useEffect(() => {
-    setSuggestions(query.trim().length < 2 ? [] : (autocompleteData ?? []));
-  }, [autocompleteData, query, setSuggestions]);
-
-  useEffect(() => {
-    setResults(geocodeData ?? []);
-  }, [geocodeData, setResults]);
-
-  // Detect coordinate / plus-code input and create a synthetic suggestion
-  const q = query.trim();
-  let syntheticResult: AutocompleteResult | null = null;
-  if (q.length >= 2) {
-    let parsed = parseCoordinateInput(q) ?? parseDMSCoordinateInput(q);
-
-    if (!parsed) {
-      // Short plus code with city: use geocoded city coordinates as reference
-      if (shortPlusCity && cityRefData?.[0]) {
-        const lngLat = decodeShortPlusCode(shortPlusCity.code, cityRefData[0].coordinates);
-        if (lngLat) parsed = { lngLat, label: `${shortPlusCity.code} ${shortPlusCity.city}` };
-      }
-
-      // Full plus code or short code without city: use map center as reference
-      if (!parsed) parsed = parsePlusCodeInput(q, mapCenter ?? undefined);
-    }
-
-    if (parsed) {
-      syntheticResult = {
-        id: `coordinate:${coordinateId(parsed.lngLat)}`,
-        label: parsed.label,
-        coordinates: parsed.lngLat,
-        type: "address",
-      };
-    }
-  }
-
-  // Built-in POI categories plus the ones integrations register for search.
-  const categorySuggestions = useMemo<AutocompleteResult[]>(
-    () =>
-      matchCategorySuggestions({
-        query: q,
-        categories: CATEGORY_DEFINITIONS,
-        integrationCategories: dataSourceCategories,
-        chipTranslations,
-        sublabel: t("searchCategory"),
-      }),
-    [q, t, dataSourceCategories, chipTranslations],
-  );
-
-  const brandSuggestions = useMemo(
-    () => brandSuggestionRows(brandData?.matches ?? [], t("searchBrand")),
-    [brandData, t],
-  );
-
-  const recentSuggestions = useMemo(
-    () => matchRecentSearches(recentSearches, q),
-    [recentSearches, q],
-  );
-
-  const presetSuggestions = useMemo(
-    () => presetSuggestionRows(presetData?.matches ?? [], t("searchCategory")),
-    [presetData, t],
-  );
-
-  // Labeled places — match against translated label name, place name, and address
-  const labeledSuggestions = useMemo<AutocompleteResult[]>(
-    () =>
-      (labeledPlaces ?? [])
-        .filter((lp) => {
-          if (q.length === 0) return false;
-          const ql = q.toLowerCase();
-          const translatedLabel =
-            lp.label === "home" || lp.label === "work" ? tSaved(lp.label) : lp.label;
-          return (
-            translatedLabel.toLowerCase().includes(ql) ||
-            lp.name.toLowerCase().includes(ql) ||
-            (lp.address?.toLowerCase().includes(ql) ?? false)
-          );
-        })
-        .map((lp): AutocompleteResult => {
-          const translatedLabel =
-            lp.label === "home" || lp.label === "work" ? tSaved(lp.label) : lp.label;
-          return {
-            id: `labeled-${lp.id}`,
-            label: translatedLabel,
-            sublabel: lp.name + (lp.address ? ` — ${lp.address}` : ""),
-            coordinates: [lp.lng, lp.lat],
-            type: "labeled_place",
-            labelKey: lp.label,
-          };
-        }),
-    [q, labeledPlaces, tSaved],
-  );
-
-  const rankedSuggestions = useMemo(
-    () =>
-      rankAutocompleteRows(
-        {
-          saved: labeledSuggestions,
-          recents: recentSuggestions,
-          categories: categorySuggestions,
-          presets: presetSuggestions,
-          brands: brandSuggestions,
-          // Straight from the query, not the store copy an effect writes a
-          // render later: Enter must act on the rows for the text as typed.
-          places: [
-            ...(aggregateSearchData?.suggestions ?? []),
-            ...(q.length >= 2 ? (autocompleteData ?? []) : []),
-          ],
-        },
-        { query: q, proximity: mapCenter ?? undefined, zoom: mapZoom },
-      ),
-    [
-      q,
-      labeledSuggestions,
-      recentSuggestions,
-      categorySuggestions,
-      presetSuggestions,
-      brandSuggestions,
-      aggregateSearchData,
-      autocompleteData,
-      mapCenter,
-      mapZoom,
-    ],
-  );
-  // Coordinates and plus codes name one point; nothing else is worth listing.
-  // Otherwise the plain search of the visible area comes last, for a word that
-  // names a kind of place rather than one of the rows above.
-  const displaySuggestions: AutocompleteResult[] = syntheticResult
-    ? [syntheticResult]
-    : q.length >= 2 && mapCenter
-      ? [
-          ...rankedSuggestions,
-          { id: "text-search", label: t("searchQueryInArea", { query: q }), type: "text_search" },
-        ]
-      : rankedSuggestions;
-
-  // Nearby mode: the dropdown shows category suggestions (+ a free-text item)
-  // anchored to the place, mirroring the old ExploreSearchBox picker.
-  const nearbySuggestions = useMemo<AutocompleteResult[]>(() => {
-    if (!nearbyMode) return [];
-    const lower = q.toLowerCase();
-    const cats = CATEGORY_DEFINITIONS.filter(
-      (cat) => cat.showInChipBar && (q === "" || cat.label.toLowerCase().includes(lower)),
-    ).map((cat) => ({
-      id: `nearby-cat-${cat.id}`,
-      label: cat.label,
-      type: "category" as const,
-      iconPath: cat.iconPath,
-      rawCategory: cat.id,
-    }));
-    if (q === "") return cats;
-    return [
-      { id: "nearby-freetext", label: t("searchFreeText", { query: q }), type: "poi" as const },
-      ...cats,
-    ];
-  }, [nearbyMode, q, t]);
-
   // Mobile: when the search is focused, the bar takes over the full viewport
   // Pure CSS transition — same component,same focus/dropdown state,
   // just a different layout.
@@ -579,27 +313,12 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     surface === "map" && isMobile && !fullScreen ? barEl : null,
   );
 
-  // A stop needs a position: category, brand and AI rows have none to give.
-  const effectiveSuggestions = nearbyMode
-    ? nearbySuggestions
-    : stopSearch
-      ? displaySuggestions.filter((row) => row.coordinates)
-      : displaySuggestions;
   const listIdPrefix = OBSTRUCTION_ID[surface];
   const highlightedIndex =
     highlightedKey === null
       ? -1
       : effectiveSuggestions.findIndex((row) => rowKey(row) === highlightedKey);
 
-  // Suggestions describe the text as typed only once the debounce has caught
-  // up and no request for it is still in flight or standing in as a placeholder.
-  const suggestionsSettled =
-    suggesting &&
-    debouncedQuery === query &&
-    !isFetching &&
-    !autocompletePlaceholder &&
-    !aggregateSearchFetching &&
-    !aggregateSearchPlaceholder;
   useEffect(() => {
     if (suggestionsSettled) settlePending();
   }, [suggestionsSettled, settlePending]);
@@ -655,51 +374,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // While the first results load, the area-search row alone would stand in
   // for a list; the loading skeleton shows instead until real rows arrive.
   const awaitingFirstRows =
-    (isFetching || aggregateSearchFetching) &&
-    effectiveSuggestions.every((row) => row.type === "text_search");
+    suggestionsFetching && effectiveSuggestions.every((row) => row.type === "text_search");
   const showDropdown =
     isFocused &&
     ((effectiveSuggestions.length > 0 && !awaitingFirstRows) || showNlpCard || nlpPending);
   const showEmptySearch = isFocused && !nearbyMode && q.length === 0;
-
-  const resolveTransitStop = async (
-    coords: LngLat,
-    name: string,
-    isCurrent: () => boolean,
-  ): Promise<Place | null> => {
-    try {
-      const delta = 0.005; // ~500m
-      const stops = await apiClient.get<TransitStop[]>(API_ENDPOINTS.transitStops, {
-        sw_lat: String(coords[1] - delta),
-        sw_lng: String(coords[0] - delta),
-        ne_lat: String(coords[1] + delta),
-        ne_lng: String(coords[0] + delta),
-      });
-      if (!isCurrent()) return null;
-      // Require every query token to appear as a token in the stop name and
-      // then pick the closest one. The previous 10-char-prefix substring
-      // match was far too loose — it routed "Frankfurt Airport" to a random
-      // stop containing "Frankfurt " (e.g. "Frankfurt am Main, Tor 31").
-      const queryTokens = name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? ([] as string[]);
-      const match = queryTokens.length
-        ? stops
-            .filter((s) => {
-              const stopTokens = s.name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? ([] as string[]);
-              return queryTokens.every((t) => stopTokens.includes(t));
-            })
-            .sort(
-              (a, b) =>
-                (a.lng - coords[0]) ** 2 +
-                (a.lat - coords[1]) ** 2 -
-                ((b.lng - coords[0]) ** 2 + (b.lat - coords[1]) ** 2),
-            )[0]
-        : undefined;
-      if (match) return await resolveStopAsPlace(match);
-    } catch {
-      // Silently fall back to place panel
-    }
-    return null;
-  };
 
   const highlightAt = (index: number) => {
     const row = effectiveSuggestions[index];
@@ -775,6 +454,98 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     inputRef.current?.focus();
   };
 
+  /** Carries out what a selection resolved to: the box, the history, the map and the panel. */
+  const applySearchAction = (action: SearchAction) => {
+    switch (action.kind) {
+      case "none":
+        return;
+      case "pick-stop":
+        stopSearch?.onPick({ coordinates: action.coordinates, label: action.label });
+        finishStopSearch();
+        return;
+      case "run-recent":
+        handleSelectRecent(action.text);
+        return;
+      case "search-area":
+        addRecentSearch(action.text);
+        setIsFocused(false);
+        inputRef.current?.blur();
+        launchTextSearch(mapRef.current, action.text);
+        return;
+      case "select":
+        break;
+    }
+    if (action.history) {
+      addRecentSearch(action.history.search);
+      useRecentSearchStore.getState().addDestination(action.history.destination);
+    }
+    const closeWith = (text: string | null) => {
+      if (text === null) return;
+      setQuery(text);
+      setIsFocused(false);
+    };
+    const { target } = action;
+    switch (target.kind) {
+      case "place":
+      case "stop":
+      case "none":
+        closeWith(action.query);
+        if (action.query === null) inputRef.current?.blur();
+        break;
+    }
+    switch (target.kind) {
+      case "place":
+        if (target.flyTo) flyTo(target.flyTo, 15);
+        if (target.transitLookup) {
+          const { coordinates, name } = target.transitLookup;
+          selectWithEnrichment(target.place, (isCurrent) =>
+            findTransitStopPlace(coordinates, name, isCurrent),
+          );
+        } else {
+          setSelectedPlace(target.place);
+        }
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+        return;
+      case "stop": {
+        const { stop } = target;
+        if (target.flyTo) flyTo(target.flyTo, 15);
+        selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+        return;
+      }
+      case "brand":
+        setBrandFilter(target.brand, brandToFilter(target.brand));
+        useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+        closeWith(action.query);
+        return;
+      case "data-source":
+        clearCategory();
+        setActiveSource(target.sourceId);
+        useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
+        closeWith(action.query);
+        return;
+      case "category":
+        setActiveCategory(target.categoryId);
+        useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+        closeWith(action.query);
+        return;
+      case "none":
+        return;
+    }
+  };
+
+  const handleSelect = (result: AutocompleteResult, recordHistory = true) => {
+    cancelSubmission();
+    applySearchAction(
+      resolveSearchAction(result, {
+        query: q,
+        stopSearch: stopSearch !== null,
+        recordHistory,
+        dataSourceCategoryIds: dataSourceCategories.map((category) => category.id),
+      }),
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     // AuthDialog is portaled from the mobile account avatar inside this form.
     // React portal events follow the component tree, so its inner form's submit
@@ -815,8 +586,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       rankedSuggestions,
       proximity: mapCenter ?? undefined,
       zoom: mapZoom,
-      geocodeQuery: debouncedGeoQuery,
-      geocodeResults: geocodeData,
+      geocodeQuery,
+      geocodeResults,
     });
     if (action.kind === "open-row") {
       inputRef.current?.blur();
@@ -829,33 +600,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       return;
     }
     if (action.kind === "open-geocode") {
-      const { result: first, address, isTransit } = action;
-      inputRef.current?.blur();
-      // Area results (cities/regions/countries) are framed by PlaceBoundaryLayer,
-      // which fits the map to the admin boundary — flying to a fixed zoom first
-      // would just cause a zoom-in-then-out jump.
-      if (first.type !== "region") flyTo(first.coordinates, 15);
-      const firstPlace = createPlace({
-        ...idsFromPrimaryOrCoords(first.id, first.coordinates),
-        ids: { ...first.ids, ...idsFromPrimaryOrCoords(first.id, first.coordinates).ids },
-        ...searchSelectionContributors(first, "label", first.address ? "address" : "label"),
-        name: address ?? first.label,
-        address: first.address ?? first.label,
-        addressEvidence: first.addressEvidence,
-        directOsmReference: first.directOsmReference,
-        coordinates: first.coordinates,
-        category: first.type,
-        rawCategory: first.rawCategory,
-      });
-      if (isTransit) {
-        selectWithEnrichment(firstPlace, (isCurrent) =>
-          resolveTransitStop(first.coordinates, first.label, isCurrent),
-        );
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      } else {
-        setSelectedPlace(firstPlace);
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      }
+      applySearchAction(resolveGeocodeAction(action.result, action.address, action.isTransit));
       return;
     }
     // Not a confident place match → run the NL parse and keep the dropdown open
@@ -868,130 +613,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     inputRef.current?.blur();
     launchTextSearch(mapRef.current, q);
   }
-
-  const handleSelect = (result: AutocompleteResult, recordHistory = true) => {
-    cancelSubmission();
-    if (stopSearch) {
-      if (result.type === "recent_search") {
-        handleSelectRecent(result.label);
-      } else if (result.coordinates) {
-        stopSearch.onPick({ coordinates: result.coordinates, label: result.label });
-        finishStopSearch();
-      }
-      return;
-    }
-    if (result.type === "recent_search") {
-      handleSelectRecent(result.label);
-      return;
-    }
-    if (result.type === "text_search") {
-      addRecentSearch(q);
-      setIsFocused(false);
-      inputRef.current?.blur();
-      launchTextSearch(mapRef.current, q);
-      return;
-    }
-    if (recordHistory) {
-      addRecentSearch(result.label);
-      useRecentSearchStore.getState().addDestination({
-        id: result.id,
-        label: result.label.slice(0, 160),
-        coordinates: result.coordinates,
-      });
-    }
-    if (result.type === "labeled_place" && result.coordinates) {
-      setQuery(result.label);
-      setIsFocused(false);
-      flyTo(result.coordinates, 15);
-      setSelectedPlace(
-        createPlace({
-          ...idsFromPrimaryOrCoords(result.id, result.coordinates),
-          ...searchSelectionContributors(
-            result,
-            result.sublabel ? "sublabel" : "label",
-            result.sublabel ? "sublabel" : "label",
-          ),
-          name: result.sublabel?.split(" — ")[0] ?? result.label,
-          address: result.sublabel?.split(" — ")[1] ?? result.sublabel ?? result.label,
-          coordinates: result.coordinates,
-        }),
-      );
-      useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      return;
-    }
-
-    if (result.type === "transit_stop" && result.transitStop) {
-      setQuery(result.label);
-      setIsFocused(false);
-      if (result.coordinates) flyTo(result.coordinates, 15);
-      const stop = result.transitStop;
-      selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));
-      useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      return;
-    }
-
-    if (result.type === "brand" && result.brand) {
-      setBrandFilter(result.brand, brandToFilter(result.brand));
-      useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
-      setQuery(result.label);
-      setIsFocused(false);
-      return;
-    }
-
-    if (result.type === "category") {
-      // Extract category id from the synthetic id ("category-restaurants" → "restaurants")
-      const catId = result.id.replace("category-", "");
-      const dsMatch = dataSourceCategories.find((ds) => ds.id === catId);
-      if (dsMatch) {
-        // Route to data source system (manifest-driven)
-        clearCategory();
-        setActiveSource(dsMatch.id);
-        useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
-      } else {
-        setActiveCategory(catId as Parameters<typeof setActiveCategory>[0]);
-        useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
-      }
-      setQuery(result.label);
-      setIsFocused(false);
-      return;
-    }
-
-    setQuery(result.label);
-    setIsFocused(false);
-    if (result.coordinates) {
-      const coords = result.coordinates;
-      // Area results are framed by PlaceBoundaryLayer (fit to admin boundary);
-      // skip the fixed-zoom fly to avoid a zoom-in-then-out jump.
-      if (result.type !== "region") flyTo(coords, 15);
-      const suggestionPlace = createPlace({
-        ...idsFromPrimaryOrCoords(result.id, coords),
-        ids: { ...result.ids, ...idsFromPrimaryOrCoords(result.id, coords).ids },
-        ...searchSelectionContributors(
-          result,
-          "label",
-          result.address ? "address" : result.sublabel ? "sublabel" : "label",
-        ),
-        name: result.label,
-        address: result.address ?? result.sublabel ?? result.label,
-        addressEvidence: result.addressEvidence,
-        directOsmReference: result.directOsmReference,
-        coordinates: coords,
-        category: result.type,
-        rawCategory: result.rawCategory,
-      });
-      // Route to a transit-stop lookup only when the geocoder itself classified
-      // the result as transit infrastructure — never on a label-keyword match.
-      if (result.rawCategory && isTransitRawCategory(result.rawCategory)) {
-        selectWithEnrichment(suggestionPlace, (isCurrent) =>
-          resolveTransitStop(coords, result.label, isCurrent),
-        );
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      } else {
-        setSelectedPlace(suggestionPlace);
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      }
-    }
-  };
 
   // Nearby mode: route a category pick / free-text to the place-anchored search.
   const handleNearbySelect = (result: AutocompleteResult) => {
@@ -1029,30 +650,14 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const showSkeleton =
     !nearbyMode &&
     isFocused &&
-    query.trim().length >= 2 &&
-    (isFetching || aggregateSearchFetching) &&
+    q.length >= 2 &&
+    suggestionsFetching &&
     !showDropdown &&
     !syntheticResult;
 
   const handleSelectLabeledPlace = (place: LabeledPlace) => {
     cancelSubmission();
-    if (stopSearch) {
-      stopSearch.onPick({ coordinates: [place.lng, place.lat], label: place.name });
-      finishStopSearch();
-      return;
-    }
-    setQuery(place.label);
-    setIsFocused(false);
-    flyTo([place.lng, place.lat], 15);
-    setSelectedPlace(
-      createPlace({
-        ...idsFromPrimaryOrCoords(place.placeId ?? place.id, [place.lng, place.lat]),
-        name: place.name,
-        address: place.address ?? place.name,
-        coordinates: [place.lng, place.lat],
-      }),
-    );
-    useSidebarStore.getState().openSidebar(PANEL.PLACE);
+    applySearchAction(resolveLabeledPlaceAction(place, stopSearch !== null));
   };
 
   return (

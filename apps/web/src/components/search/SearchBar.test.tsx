@@ -229,6 +229,25 @@ const renderBar = (disclosures: Disclosure[] = [], queryClient?: QueryClient) =>
     { wrapper: createQueryWrapper(queryClient) },
   );
 
+/**
+ * Waits past the search's 150 ms blur delay, for checks that the delay did not
+ * close it. These tests drive real dialogs with user-event on real timers.
+ */
+const waitPastBlurDelay = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  });
+
+/** Renders the bar again, so it reads hook mocks whose answers changed. */
+const rerenderBar = (view: ReturnType<typeof renderBar>) =>
+  act(() =>
+    view.rerender(
+      <IntegrationDisclosuresProvider value={[]}>
+        <SearchBar />
+      </IntegrationDisclosuresProvider>,
+    ),
+  );
+
 describe("SearchBar", () => {
   it("does not render again when a category result is hovered", async () => {
     useCategorySearchStore.setState({ hoveredCategoryPlaceId: null });
@@ -252,18 +271,26 @@ describe("SearchBar", () => {
   it("asks for no suggestions while the box is not in use, then for the text once focused", async () => {
     // The opened place's name stays in the box while the map flies to it.
     useSearchStore.setState({ query: "Louvre Museum", isFocused: false });
-    renderBar();
-    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+    vi.useFakeTimers();
+    try {
+      renderBar();
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
 
-    for (const hook of [useAutocompleteMock, useSearchSuggestionsMock, useGeocodingMock]) {
-      expect(hook.mock.calls.every((call) => call[0] === "")).toBe(true);
-    }
+      for (const hook of [useAutocompleteMock, useSearchSuggestionsMock, useGeocodingMock]) {
+        expect(hook.mock.calls.every((call) => call[0] === "")).toBe(true);
+      }
 
-    fireEvent.focus(screen.getByLabelText("search.ariaLabel"));
-    await waitFor(() => {
+      fireEvent.focus(screen.getByLabelText("search.ariaLabel"));
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
       expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe("Louvre Museum");
       expect(useSearchSuggestionsMock.mock.calls.at(-1)?.[0]).toBe("Louvre Museum");
-    });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows a shared integration and POI category only once", async () => {
@@ -316,11 +343,19 @@ describe("SearchBar", () => {
       { wrapper: createQueryWrapper() },
     );
     const input = screen.getByLabelText("search.ariaLabel");
-    fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: "gas stations" } });
-
-    await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
-    expect(screen.queryByRole("option", { name: "Gas Stations search.searchCategory" })).toBeNull();
+    vi.useFakeTimers();
+    try {
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: "gas stations" } });
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(
+        screen.queryByRole("option", { name: "Gas Stations search.searchCategory" }),
+      ).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each<[string, Record<string, unknown>]>([
@@ -460,10 +495,16 @@ describe("SearchBar", () => {
 
     expect(useRecentSearchStore.getState().entries).toEqual([]);
     expect(screen.queryByRole("button", { name: "Berlin cafes" })).toBeNull();
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 180));
-    });
-    expect(useSearchStore.getState().isFocused).toBe(true);
+    vi.useFakeTimers();
+    try {
+      // Past the 150 ms blur delay, the search is still the focused screen.
+      act(() => {
+        vi.advanceTimersByTime(180);
+      });
+      expect(useSearchStore.getState().isFocused).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not display or record searches while history is disabled", () => {
@@ -497,19 +538,21 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     expect(screen.getByText("search.emptyStateSignedOut")).toBeInTheDocument();
     expect(screen.queryByText("search.searchCategory")).toBeNull();
-    expect(useSearchStore.getState().suggestions).toEqual([]);
-    fireEvent.change(input, { target: { value: "berlin" } });
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(input, { target: { value: "berlin" } });
 
-    // Debounce hasn't fired yet — only the empty-input mount call has landed.
-    expect(useAutocompleteMock).not.toHaveBeenCalledWith("berlin", "en");
+      // Debounce hasn't fired yet — only the empty-input mount call has landed.
+      expect(useAutocompleteMock).not.toHaveBeenCalledWith("berlin", "en");
 
-    // Real timers (not `vi.useFakeTimers`/`advanceTimersByTime`): this repo's
-    // local `vitest.d.ts` type shim (apps/web/src/vitest.d.ts) does not declare
-    // the timer-control APIs, so the 150ms debounce is awaited for real here.
-    await waitFor(() => {
-      const lastCall = useAutocompleteMock.mock.calls.at(-1);
-      expect(lastCall?.slice(0, 2)).toEqual(["berlin", "en"]);
-    });
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(useAutocompleteMock.mock.calls.at(-1)?.slice(0, 2)).toEqual(["berlin", "en"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("biases place suggestions and the Enter geocode towards the map view", async () => {
@@ -736,7 +779,7 @@ describe("SearchBar", () => {
         ];
         useSearchStore.setState({ query: "Berlin", isFocused: true });
         useAutocompleteMock.mockReturnValue({ data: suggestions, isFetching: true });
-        renderBar();
+        const view = renderBar();
         const input = screen.getByLabelText("search.ariaLabel");
         fireEvent.submit(input.closest("form") as HTMLFormElement);
         fireEvent.click(screen.getByRole("option", { name: /Chosen address/ }));
@@ -744,7 +787,7 @@ describe("SearchBar", () => {
 
         if (completion === "settlement") {
           useAutocompleteMock.mockReturnValue({ data: suggestions, isFetching: false });
-          await act(async () => useSearchStore.getState().setResults([]));
+          rerenderBar(view);
         }
         await act(async () => vi.advanceTimersByTime(3_000));
 
@@ -765,7 +808,7 @@ describe("SearchBar", () => {
         useSearchStore.setState({ query: "Unknown place", isFocused: true });
         useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
         useMediaQueryMock.mockReturnValue(dismissal === "mobile back");
-        renderBar();
+        const view = renderBar();
         const input = screen.getByLabelText("search.ariaLabel");
         fireEvent.submit(input.closest("form") as HTMLFormElement);
         if (dismissal === "Escape") fireEvent.keyDown(input, { key: "Escape" });
@@ -776,7 +819,7 @@ describe("SearchBar", () => {
           fireEvent.click(screen.getByRole("button", { name: "search.getDirectionsAriaLabel" }));
         }
         useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
-        await act(async () => useSearchStore.getState().setResults([]));
+        rerenderBar(view);
         expect(launchTextSearch).not.toHaveBeenCalled();
         await act(async () => vi.advanceTimersByTime(3_000));
         expect(launchTextSearch).not.toHaveBeenCalled();
@@ -1932,7 +1975,10 @@ describe("SearchBar", () => {
     await waitFor(() => expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe("berlin"));
 
     expect(screen.queryByText("search.searchCategory")).toBeNull();
-    expect(useSearchStore.getState().suggestions).toEqual([]);
+    // No place rows: only the plain search of the visible area is offered.
+    expect(screen.queryAllByRole("option").map((o) => o.textContent)).toEqual([
+      "search.searchQueryInArea",
+    ]);
   });
 
   it("shows skeleton rows while autocomplete is loading", async () => {
@@ -1962,10 +2008,7 @@ describe("SearchBar", () => {
     screen.getByText("Restaurants");
 
     fireEvent.click(screen.getByText("Restaurants"));
-    // "restaurants" is the real CATEGORY_DEFINITIONS id for the "Restaurants"
-    // chip (integrations/poi-search/types.ts) — asserted exactly rather than
-    // via `expect.any(String)`, which this repo's local vitest.d.ts type shim
-    // (apps/web/src/vitest.d.ts) does not declare.
+    // "restaurants" is the CATEGORY_DEFINITIONS id of the "Restaurants" chip.
     expect(launchExploreFromPlace).toHaveBeenCalledWith(
       fakeMap.map,
       expect.objectContaining({ name: "Alexanderplatz" }),
@@ -3008,40 +3051,26 @@ describe("SearchBar credit focus ownership", () => {
           for (let step = 0; step < 20 && document.activeElement !== trigger; step++)
             await user.tab();
           expect(trigger).toHaveFocus();
-          await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 200));
-          });
+          await waitPastBlurDelay();
           expect(useSearchStore.getState().isFocused).toBe(true);
           await user.keyboard("{Enter}");
         } else await user.click(trigger);
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        });
-        expect(screen.getByRole("dialog", { name: "photoGallery.credits" })).toBeVisible();
+        const dialog = await screen.findByRole("dialog", { name: "photoGallery.credits" });
+        await waitPastBlurDelay();
+        expect(dialog).toBeVisible();
         expect(useSearchStore.getState().isFocused).toBe(true);
         expect(usePlaceStore.getState().selectedPlace).toBeNull();
         await user.tab();
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        });
-        expect(
-          screen
-            .getByRole("dialog", { name: "photoGallery.credits" })
-            .contains(document.activeElement),
-        ).toBe(true);
+        await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
         if (interaction === "keyboard") await user.keyboard("{Escape}");
         else await user.click(screen.getByRole("button", { name: "common.close" }));
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 300));
+        await waitFor(() => {
+          expect(screen.queryByRole("dialog")).toBeNull();
+          expect(trigger).toHaveFocus();
         });
-        expect(screen.queryByRole("dialog")).toBeNull();
-        expect(trigger).toHaveFocus();
         expect(screen.getByRole("listbox")).toBeVisible();
         act(() => outside.focus());
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        });
-        expect(useSearchStore.getState().isFocused).toBe(false);
+        await waitFor(() => expect(useSearchStore.getState().isFocused).toBe(false));
         expect(screen.queryByRole("listbox")).toBeNull();
       } finally {
         outside.remove();
