@@ -20,6 +20,20 @@ export interface ResolvedStopConstraint {
   dwellIgnored: boolean;
 }
 
+/**
+ * The resolved stop at `index`. Schedule code indexes the list it was given
+ * and the legs between neighbours in it, so a missing stop is a programming
+ * error and throws, as reading a property of the missing stop did.
+ */
+export function stopAt(
+  stops: readonly ResolvedStopConstraint[],
+  index: number,
+): ResolvedStopConstraint {
+  const stop = stops[index];
+  if (!stop) throw new RangeError(`No resolved stop at index ${index}`);
+  return stop;
+}
+
 export type ScheduleAnchor =
   | { kind: "now" }
   | { kind: "departAt"; wallClock: string }
@@ -172,8 +186,8 @@ function scanOrder(
 ): ScheduleViolation[] {
   const violations: ScheduleViolation[] = [];
   const last = stops.length - 1;
-  for (let from = 0; from < stops.length; from += 1) {
-    const own = stops[from].earliestDepartureMs;
+  for (const [from, fromStop] of stops.entries()) {
+    const own = fromStop.earliestDepartureMs;
     // The origin cannot be left before a pinned departure either, so it takes
     // part in the scan even when the user set no window there.
     const pinned = from === 0 ? pinnedDepartureMs : null;
@@ -181,8 +195,9 @@ function scanOrder(
     if (departure === null) continue;
     const boundByAnchor = from === 0 && pinned !== null && departure === pinned;
     let dwellBetween = 0;
-    for (let to = from + 1; to < stops.length; to += 1) {
-      const ownDeadline = stops[to].latestArrivalMs;
+    for (const [offset, toStop] of stops.slice(from + 1).entries()) {
+      const to = from + 1 + offset;
+      const ownDeadline = toStop.latestArrivalMs;
       const pinnedDeadline = to === last ? pinnedArrivalMs : null;
       const deadline =
         ownDeadline === null
@@ -195,20 +210,20 @@ function scanOrder(
           boundByAnchor
             ? {
                 kind: "anchor-conflict",
-                waypointIndex: stops[to].index,
-                anchor: isoWithOffsetInZone(new Date(departure), stops[from].timeZone),
-                latestArrival: isoWithOffsetInZone(new Date(deadline), stops[to].timeZone),
+                waypointIndex: toStop.index,
+                anchor: isoWithOffsetInZone(new Date(departure), fromStop.timeZone),
+                latestArrival: isoWithOffsetInZone(new Date(deadline), toStop.timeZone),
               }
             : {
                 kind: "inverted-order",
-                fromIndex: stops[from].index,
-                toIndex: stops[to].index,
-                earliestDeparture: isoWithOffsetInZone(new Date(departure), stops[from].timeZone),
-                latestArrival: isoWithOffsetInZone(new Date(deadline), stops[to].timeZone),
+                fromIndex: fromStop.index,
+                toIndex: toStop.index,
+                earliestDeparture: isoWithOffsetInZone(new Date(departure), fromStop.timeZone),
+                latestArrival: isoWithOffsetInZone(new Date(deadline), toStop.timeZone),
               },
         );
       }
-      dwellBetween += stops[to].dwellSeconds * 1000;
+      dwellBetween += toStop.dwellSeconds * 1000;
     }
   }
   return violations;

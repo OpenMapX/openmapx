@@ -1,5 +1,5 @@
 import type { ScheduleViolation, TripSchedule } from "../types/routing";
-import type { ResolvedSchedule } from "./scheduleConstraints";
+import { type ResolvedSchedule, stopAt } from "./scheduleConstraints";
 import { arrivalBefore, composeSchedule, departureAfter } from "./tripSchedule";
 
 export interface LegTravelResult {
@@ -57,7 +57,7 @@ export async function planScheduledTrip(args: {
 
   if (direction === "forward") {
     if (!forward) throw new UnsupportedScheduleDirectionError("forward", providerId);
-    let departure = departureAfter({ ...stops[0], dwellSeconds: 0 }, anchorMs);
+    let departure = departureAfter({ ...stopAt(stops, 0), dwellSeconds: 0 }, anchorMs);
     for (let leg = 0; leg < legCount; leg += 1) {
       let travel: LegTravelResult;
       try {
@@ -65,22 +65,20 @@ export async function planScheduledTrip(args: {
       } catch {
         violations.push({
           kind: "unreachable",
-          fromIndex: stops[leg].index,
-          toIndex: stops[leg + 1].index,
+          fromIndex: stopAt(stops, leg).index,
+          toIndex: stopAt(stops, leg + 1).index,
         });
         break;
       }
       legSeconds[leg] = travel.seconds;
       legPayloads[leg] = travel.payload;
-      departure = departureAfter(stops[leg + 1], departure + travel.seconds * 1000);
+      departure = departureAfter(stopAt(stops, leg + 1), departure + travel.seconds * 1000);
     }
   } else {
     if (!backward) throw new UnsupportedScheduleDirectionError("backward", providerId);
     const last = stops.length - 1;
-    let arrival =
-      stops[last].latestArrivalMs === null
-        ? anchorMs
-        : Math.min(anchorMs, stops[last].latestArrivalMs);
+    const lastDeadline = stopAt(stops, last).latestArrivalMs;
+    let arrival = lastDeadline === null ? anchorMs : Math.min(anchorMs, lastDeadline);
     for (let leg = legCount - 1; leg >= 0; leg -= 1) {
       let travel: LegTravelResult;
       try {
@@ -88,14 +86,14 @@ export async function planScheduledTrip(args: {
       } catch {
         violations.push({
           kind: "unreachable",
-          fromIndex: stops[leg].index,
-          toIndex: stops[leg + 1].index,
+          fromIndex: stopAt(stops, leg).index,
+          toIndex: stopAt(stops, leg + 1).index,
         });
         break;
       }
       legSeconds[leg] = travel.seconds;
       legPayloads[leg] = travel.payload;
-      arrival = arrivalBefore(stops[leg], arrival - travel.seconds * 1000);
+      arrival = arrivalBefore(stopAt(stops, leg), arrival - travel.seconds * 1000);
     }
   }
 

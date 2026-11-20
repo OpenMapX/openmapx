@@ -14,12 +14,12 @@ describe("DB Navigator share adapter", () => {
     const parsed = plan(text);
     expect(parsed.sourceId).toBe("db-navigator");
     expect(classifySharedText(text, config).kind).toBe("travel-plan");
-    expect(parsed.legs[0].departure).toMatch(/^2026-11-0[67]T/);
+    expect(parsed.legs[0]?.departure).toMatch(/^2026-11-0[67]T/);
     expect(parsed.legs.at(-1)?.to).toBe(parsed.destination);
     expect(JSON.stringify(parsed)).not.toContain("vbid");
   });
   it("advances dates across night trains and the next transfer", () => {
-    expect(plan(dbNavigatorExamples[2]).legs[1].arrival).toBe("2026-11-07T06:04");
+    expect(plan(dbNavigatorExamples[2]).legs[1]?.arrival).toBe("2026-11-07T06:04");
     expect(plan(dbNavigatorExamples[3]).legs[1]).toMatchObject({
       departure: "2026-11-08T07:15",
       arrival: "2026-11-08T08:07",

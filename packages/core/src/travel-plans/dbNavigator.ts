@@ -10,11 +10,11 @@ const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const servicePattern =
   /^(?:([A-Za-zÄÖÜäöü][A-Za-zÄÖÜäöü\d -]{0,30})\s*\((\d{1,8})\)|(ICE|IC|EC|NJ|EN|RJ|RJX|TGV|THA|ECE)\s+(\d{1,8}))$/;
 function event(line: string, prefix: string) {
-  const m = new RegExp(`^${prefix} ([0-2]\\d:[0-5]\\d) (.+)$`).exec(line);
-  if (!m || Number(m[1].slice(0, 2)) > 23) return null;
-  const station = /^(.*?)(?:,\s*Gleis\s+(.+))?$/.exec(m[2]);
-  if (!station?.[1].trim()) return null;
-  return { time: m[1], name: station[1].trim(), platform: station[2] };
+  const [, time, rest] = new RegExp(`^${prefix} ([0-2]\\d:[0-5]\\d) (.+)$`).exec(line) ?? [];
+  if (time === undefined || rest === undefined || Number(time.slice(0, 2)) > 23) return null;
+  const [, name, platform] = /^(.*?)(?:,\s*Gleis\s+(.+))?$/.exec(rest) ?? [];
+  if (!name?.trim()) return null;
+  return { time, name: name.trim(), platform };
 }
 export const dbNavigatorAdapter: TravelPlanAdapter = {
   parse(text) {
@@ -32,15 +32,16 @@ export const dbNavigatorAdapter: TravelPlanAdapter = {
     if (!hasLink && !hasBlock) return { kind: "unrecognized" };
     if (!hasBlock) return { kind: "invalid-travel-plan", reason: "missing-text" };
     let cursor = 0;
-    const header = /^(.+?)\s*→\s*(.+)$/.exec(lines[0]);
-    if (header) cursor++;
-    const date = /^(So|Mo|Di|Mi|Do|Fr|Sa)\. (\d{2})\.(\d{2})\.(\d{4})$/.exec(lines[cursor++] ?? "");
-    if (!date) return invalid;
-    let calendar = Date.UTC(Number(date[4]), Number(date[3]) - 1, Number(date[2]));
-    const isoDate = `${date[4]}-${date[3]}-${date[2]}`;
+    const [, headerOrigin, headerDestination] = /^(.+?)\s*→\s*(.+)$/.exec(lines[0] ?? "") ?? [];
+    if (headerOrigin !== undefined) cursor++;
+    const [, weekday, day, month, year] =
+      /^(So|Mo|Di|Mi|Do|Fr|Sa)\. (\d{2})\.(\d{2})\.(\d{4})$/.exec(lines[cursor++] ?? "") ?? [];
+    if (!weekday || !day || !month || !year) return invalid;
+    let calendar = Date.UTC(Number(year), Number(month) - 1, Number(day));
+    const isoDate = `${year}-${month}-${day}`;
     if (
       new Date(calendar).toISOString().slice(0, 10) !== isoDate ||
-      dayNames[new Date(calendar).getUTCDay()] !== date[1]
+      dayNames[new Date(calendar).getUTCDay()] !== weekday
     )
       return invalid;
     let previousTime = "00:00";
@@ -53,15 +54,20 @@ export const dbNavigatorAdapter: TravelPlanAdapter = {
     while (cursor < lines.length) {
       if (
         /^Verbindung ansehen: https:\/\/(?:www\.)?bahn\.de\/buchung\/start\?[^\s]+$/.test(
-          lines[cursor],
+          lines[cursor] ?? "",
         )
       ) {
         cursor++;
         break;
       }
-      const service = servicePattern.exec(lines[cursor++]);
+      const service = servicePattern.exec(lines[cursor++] ?? "");
       if (!service || legs.length === 8) return invalid;
-      const headsign = lines[cursor]?.startsWith("Nach ") ? lines[cursor++].slice(5) : undefined;
+      let headsign: string | undefined;
+      const headsignLine = lines[cursor];
+      if (headsignLine?.startsWith("Nach ")) {
+        headsign = headsignLine.slice(5);
+        cursor++;
+      }
       const from = event(lines[cursor++] ?? "", "Ab");
       const to = event(lines[cursor++] ?? "", "An");
       if (!from || !to) return invalid;
@@ -77,25 +83,27 @@ export const dbNavigatorAdapter: TravelPlanAdapter = {
         to: to.name,
         departure,
         arrival,
-        service: (service[1] ?? service[3]).trim(),
-        trainNumber: service[2] ?? service[4],
+        // The pattern's two alternatives each capture a name and a number.
+        service: (service[1] ?? service[3] ?? "").trim(),
+        trainNumber: service[2] ?? service[4] ?? "",
         headsign,
         departurePlatform: from.platform,
         arrivalPlatform: to.platform,
       });
     }
+    const [firstLeg] = legs;
     if (
-      !legs.length ||
+      !firstLeg ||
       cursor !== lines.length ||
-      Date.parse(legs.at(-1)?.arrival ?? "") - Date.parse(legs[0].departure) > 72 * 3600000
+      Date.parse(legs.at(-1)?.arrival ?? "") - Date.parse(firstLeg.departure) > 72 * 3600000
     )
       return invalid;
-    const origin = legs[0].from,
+    const origin = firstLeg.from,
       destination = legs.at(-1)?.to ?? "";
     if (
-      header &&
-      (travelStationKey(header[1]) !== travelStationKey(origin) ||
-        travelStationKey(header[2]) !== travelStationKey(destination))
+      headerOrigin !== undefined &&
+      (travelStationKey(headerOrigin) !== travelStationKey(origin) ||
+        travelStationKey(headerDestination ?? "") !== travelStationKey(destination))
     )
       return invalid;
     return {

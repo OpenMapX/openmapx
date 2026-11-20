@@ -102,6 +102,6 @@ it.each([{ modes: ["rail"] }, { modes: [] }])(
       new AbortController().signal,
     );
     expect(stops.map((s) => s.id)).toEqual(["ir:A", "mo:B"]);
-    expect(get.mock.calls[1][1]).toMatchObject({ radius: "1500", modes: "rail" });
+    expect(get.mock.calls[1]?.[1]).toMatchObject({ radius: "1500", modes: "rail" });
   },
 );
