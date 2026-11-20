@@ -253,18 +253,18 @@ export function RouteSearchControl() {
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
               {selected.place.name}
             </Typography>
-            <Typography variant="body2" color="text.secondary" aria-live="polite">
+            <Typography variant="body2" sx={{ color: "text.secondary" }} aria-live="polite">
               {copy && t(copy.key, copy.values)}
             </Typography>
             {selected.detour?.kind === "network" && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
                 {t("rsDetourDistance", {
                   kilometers: (selected.detour.meters / 1000).toFixed(1),
                 })}
               </Typography>
             )}
             {priceText && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
                 {priceText}
               </Typography>
             )}
@@ -352,7 +352,7 @@ export function RouteSearchControl() {
           </Box>
 
           <Divider sx={{ my: 1.5 }} />
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>
             {t("rsBrandLabel")}
           </Typography>
           <TextField
@@ -449,7 +449,7 @@ export function RouteSearchControl() {
           ) : (
             renderSelectedHeading(<Glyph path={activeIconPath} size={22} />)
           )}
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 1.5 }}>
             {t(
               selected.detour?.access.kind === "entrance" || selected.place.routingEntrance
                 ? "rsDetourEntrance"

@@ -473,14 +473,13 @@ export function AdminOverview() {
           <StatCard title={t("systemHealth")} icon={<CheckCircleOutlineIcon />} href="/status">
             <Typography
               variant="h5"
-              color={
-                data.systemHealth.status === "pass"
-                  ? "success.main"
-                  : data.systemHealth.status === "degraded"
-                    ? "warning.main"
-                    : "error.main"
-              }
               sx={{
+                color:
+                  data.systemHealth.status === "pass"
+                    ? "success.main"
+                    : data.systemHealth.status === "degraded"
+                      ? "warning.main"
+                      : "error.main",
                 fontWeight: 700,
               }}
             >
@@ -648,8 +647,8 @@ export function AdminOverview() {
           <StatCard title={t("credentials")} icon={<KeyIcon />} href="/admin/integrations">
             <Typography
               variant="h5"
-              color={totalMissingCredentials > 0 ? "warning.main" : "success.main"}
               sx={{
+                color: totalMissingCredentials > 0 ? "warning.main" : "success.main",
                 fontWeight: 700,
               }}
             >

@@ -679,7 +679,11 @@ function InstalledTab() {
                   <TableCell>
                     {ext.installedVersion}
                     {(isError || ext.hasUpdate === null) && (
-                      <Typography variant="caption" component="div" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        component="div"
+                        sx={{ color: "text.secondary" }}
+                      >
                         {t("updateStatusUnavailable")}
                       </Typography>
                     )}

@@ -400,8 +400,8 @@ export function TransitItineraryCard({
           {occupancy && <OccupancyIndicator level={occupancy} size={16} />}
           <Typography
             variant="body2"
-            color={active ? BRAND : "text.primary"}
             sx={{
+              color: active ? BRAND : "text.primary",
               fontWeight: 600,
             }}
           >

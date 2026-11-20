@@ -187,7 +187,7 @@ export function ParkingPanelContent() {
         <Typography variant="h6" sx={{ fontWeight: 600 }}>
           {t("title")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("savedWhen", { when: formatRelativeTime(Date.parse(record.savedAt), { locale }) })}
         </Typography>
         {vehicle && (
@@ -223,9 +223,8 @@ export function ParkingPanelContent() {
         {picking && (
           <Typography
             variant="caption"
-            color="text.secondary"
             role="status"
-            sx={{ display: "block" }}
+            sx={{ color: "text.secondary", display: "block" }}
           >
             {t("pickOnMap")}
           </Typography>

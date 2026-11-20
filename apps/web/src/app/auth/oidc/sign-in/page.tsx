@@ -79,7 +79,7 @@ export default function OidcSignInPage() {
         <Typography component="h1" variant="h4" sx={{ fontWeight: 650, mb: 1 }}>
           {t("signInTitle")}
         </Typography>
-        <Typography color="text.secondary">{t("signInBody")}</Typography>
+        <Typography sx={{ color: "text.secondary" }}>{t("signInBody")}</Typography>
       </Box>
       <AuthDialog open dismissible={false} onClose={() => {}} />
     </Box>

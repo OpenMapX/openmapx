@@ -107,8 +107,7 @@ function ProviderChip({
     >
       <Typography
         variant="caption"
-        sx={{ fontWeight: 500 }}
-        color={selected ? BRAND : "text.primary"}
+        sx={{ color: selected ? BRAND : "text.primary", fontWeight: 500 }}
       >
         {provider.name}
       </Typography>
@@ -253,7 +252,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   if (!origin || !destination) {
     return (
       <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("chooseRidePoints")}
         </Typography>
       </Box>
@@ -271,7 +270,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   if (providers.length === 0) {
     return (
       <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("rideNoProviders")}
         </Typography>
       </Box>
@@ -307,7 +306,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
         </Typography>
       )}
 
-      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", lineHeight: 1.4 }}>
         {t("rideDisclaimer")}
       </Typography>
 
@@ -391,7 +390,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
             variant="inline"
           />
           {bookingRules?.priorNoticeMinutesMin !== undefined && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
               {t("ridePrebookNotice", { minutes: bookingRules.priorNoticeMinutesMin })}
             </Typography>
           )}
@@ -402,7 +401,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
         <>
           {!detailProvider.availability.coverageChecked && (
             <>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {t("rideCoverageUnknown", { provider: detailProvider.name })}
               </Typography>
               {!allowsPrebook && (
@@ -415,7 +414,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
           )}
 
           {!detailProvider.handoffCarriesCoordinates && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
               {t("rideNoCoordinates", { provider: detailProvider.name })}
             </Typography>
           )}
@@ -489,7 +488,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
             {t("rideRefreshQuotes")}
           </Box>
         ) : (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("rideQuoteExpiresIn", { seconds: secondsLeft ?? 0 })}
           </Typography>
         ))}

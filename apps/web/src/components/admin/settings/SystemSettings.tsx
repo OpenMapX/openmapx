@@ -535,7 +535,7 @@ function SettingsGroupPanel({
           </Alert>
         )}
         {emailGroup && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("savedEmailProvider", { provider: EMAIL_PROVIDER_NAMES[emailProvider] })}
           </Typography>
         )}
@@ -721,7 +721,7 @@ function SettingsGroupPanel({
           <Stack sx={{ gap: 0.25 }}>
             <Typography sx={{ fontWeight: 600 }}>{group.label}</Typography>
             {description && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {description}
               </Typography>
             )}

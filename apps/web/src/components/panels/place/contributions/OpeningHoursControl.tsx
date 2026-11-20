@@ -398,7 +398,7 @@ export function OpeningHoursControl({
 
           {/* Live OSM Tag Syntax Preview */}
           <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "action.hover" }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
               {t("ohLiveSyntaxPreview")}
             </Typography>
             <Typography
@@ -412,8 +412,7 @@ export function OpeningHoursControl({
             </Typography>
             <Typography
               variant="caption"
-              color={error ? "error" : "text.secondary"}
-              sx={{ display: "block", mt: 0.5 }}
+              sx={{ color: error ? "error.main" : "text.secondary", display: "block", mt: 0.5 }}
             >
               {helperText}
             </Typography>
@@ -611,7 +610,10 @@ function RuleEditorCard({
           <>
             {/* Days & Holidays Section */}
             <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", display: "block", mb: 1 }}
+              >
                 {t("ohDaysAndHolidays")}
               </Typography>
 
@@ -684,7 +686,7 @@ function RuleEditorCard({
                 direction="row"
                 sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}
               >
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
                   {t("ohTimeSpans")}
                 </Typography>
                 <Button
@@ -698,7 +700,7 @@ function RuleEditorCard({
               </Stack>
 
               {rule.times.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
                   {t("ohAllDay")}
                 </Typography>
               ) : (
@@ -724,7 +726,7 @@ function RuleEditorCard({
 
         {/* Rule Modifier & Comment */}
         <Box>
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 1 }}>
             {t("ohStateAndComments")}
           </Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
@@ -1219,7 +1221,7 @@ function AdvancedRuleConstraints({ rule, disabled, onChange }: AdvancedRuleConst
           direction="row"
           sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}
         >
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("ohYearsTitle")}
           </Typography>
           <Button size="small" onClick={addYear} disabled={disabled} sx={{ minHeight: 36 }}>
@@ -1331,7 +1333,7 @@ function AdvancedRuleConstraints({ rule, disabled, onChange }: AdvancedRuleConst
             gap: 1,
           }}
         >
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("ohMonthsTitle")}
           </Typography>
           <Stack direction="row" spacing={1}>
@@ -1365,7 +1367,7 @@ function AdvancedRuleConstraints({ rule, disabled, onChange }: AdvancedRuleConst
           direction="row"
           sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}
         >
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("ohWeeksTitle")}
           </Typography>
           <Button size="small" onClick={addWeek} disabled={disabled} sx={{ minHeight: 36 }}>
@@ -1457,7 +1459,7 @@ function AdvancedRuleConstraints({ rule, disabled, onChange }: AdvancedRuleConst
           direction="row"
           sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}
         >
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("ohDaysAndHolidays")}
           </Typography>
           <Button size="small" onClick={addWeekdayItem} disabled={disabled} sx={{ minHeight: 36 }}>

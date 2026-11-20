@@ -124,7 +124,7 @@ function AirportField({
         ) : loading ? (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.75 }}>
             <CircularProgress size={14} sx={{ color: "text.disabled" }} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("nearestAirport")}…
             </Typography>
           </Box>
@@ -145,8 +145,8 @@ function AirportField({
               </Typography>
               <Typography
                 variant="caption"
-                color="text.secondary"
                 sx={{
+                  color: "text.secondary",
                   display: "block",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -179,7 +179,7 @@ function AirportField({
             </Box>
           </Box>
         ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 0.75 }}>
+          <Typography variant="body2" sx={{ color: "text.secondary", py: 0.75 }}>
             {t("noAirportNearby")}
           </Typography>
         )}
@@ -224,8 +224,12 @@ function AirportField({
               </Typography>
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                sx={{
+                  color: "text.secondary",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
               >
                 {m.name}
                 {m.municipality ? ` · ${m.municipality}` : ""}
@@ -386,7 +390,7 @@ export function FlightPanel() {
   if (!origin || !destination) {
     return (
       <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("chooseFlightPoints")}
         </Typography>
       </Box>
@@ -395,7 +399,7 @@ export function FlightPanel() {
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.75 }}>
-      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", lineHeight: 1.4 }}>
         {t("flightDisclaimer")}
       </Typography>
 
@@ -453,8 +457,7 @@ export function FlightPanel() {
           >
             <Typography
               variant="caption"
-              sx={{ fontWeight: 500 }}
-              color={roundTrip === val ? BRAND : "text.primary"}
+              sx={{ color: roundTrip === val ? BRAND : "text.primary", fontWeight: 500 }}
             >
               {t(key)}
             </Typography>
@@ -595,8 +598,7 @@ export function FlightPanel() {
               >
                 <Typography
                   variant="caption"
-                  sx={{ fontWeight: 500 }}
-                  color={selected ? BRAND : "text.primary"}
+                  sx={{ color: selected ? BRAND : "text.primary", fontWeight: 500 }}
                 >
                   {p.name}
                 </Typography>
@@ -605,7 +607,7 @@ export function FlightPanel() {
           })}
         </Box>
         {ignoredFields.length > 0 && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("flightIgnores", {
               provider: provider?.name ?? "",
               fields: ignoredFields.join(", "),

@@ -422,7 +422,7 @@ function CyclingRouteOptions() {
           checked={bikePreferQuietRoads}
           onChange={setBikePreferQuietRoads}
         />
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("bikePreferencesHint")}
         </Typography>
       </Box>

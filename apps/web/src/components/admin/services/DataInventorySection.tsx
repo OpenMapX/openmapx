@@ -38,7 +38,7 @@ export function DataInventorySection({
         <Typography component="h2" variant="h6">
           {t("osmExtracts")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("downloadAndBuildWorkflowsRecord")}
         </Typography>
         {osm.unavailable ? (
@@ -113,7 +113,7 @@ export function DataInventorySection({
         <Typography component="h2" variant="h6">
           {t("preparedServiceData")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("readyRequiresRecordedSourceAnd")}
         </Typography>
         {builds.map((build) => (

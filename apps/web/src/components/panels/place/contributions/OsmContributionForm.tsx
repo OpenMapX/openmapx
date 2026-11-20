@@ -79,7 +79,7 @@ export function OsmContributionForm({ context, draft, locale, dispatch }: Props)
 
       <Alert severity="info" icon={false}>
         <Typography variant="body2">{t("evidenceTitle")}</Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("evidenceSurvey")} · {t("evidenceSignage")} · {t("evidenceOfficialWebsite")}
         </Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
@@ -288,7 +288,7 @@ function RemoveToggle({
       <Button size="small" color="warning" onClick={onRemove} sx={{ minHeight: 44 }}>
         {t("removeValue")}
       </Button>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
         {t("removeValueHelp")}
       </Typography>
     </Box>

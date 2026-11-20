@@ -241,7 +241,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
       </DialogTitle>
       <DialogContent dividers>
         {rows.length === 0 && !draft && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("empty")}
           </Typography>
         )}
@@ -312,7 +312,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
         )}
 
         {atCap ? (
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 1 }}>
             {t("limitReached", { count: MAX_VEHICLES_PER_USER })}
           </Typography>
         ) : (

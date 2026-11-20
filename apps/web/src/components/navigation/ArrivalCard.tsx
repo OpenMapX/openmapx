@@ -68,7 +68,7 @@ export function ArrivalCard({ onClose, destinationName }: ArrivalCardProps) {
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, width: "100%" }}>
         <PlaceIcon color="primary" sx={{ fontSize: 28, mt: 0.25 }} />
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("arrived")}
           </Typography>
           {resolvedDestinationName && (

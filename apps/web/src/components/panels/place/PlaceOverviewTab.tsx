@@ -719,13 +719,13 @@ export function PlaceOverviewTab({
                 <ExpandableSection
                   icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}
                   label={
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 500 }}>
                       {ohText.state(hours)}
                     </Typography>
                   }
                 >
                   <Box sx={{ mt: 1, mb: 1 }}>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {tHours("reportedHours")}
                     </Typography>
                     <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
@@ -736,7 +736,7 @@ export function PlaceOverviewTab({
                 </ExpandableSection>
               ) : (
                 <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
                     {ohText.state(hours)}
                   </Typography>
                 </DetailRow>
@@ -776,8 +776,8 @@ export function PlaceOverviewTab({
                     <Box key={entry.weekday} sx={{ display: "flex", gap: 2, py: 0.4 }}>
                       <Typography
                         variant="body2"
-                        color={entry.isToday ? "text.primary" : "text.secondary"}
                         sx={{
+                          color: entry.isToday ? "text.primary" : "text.secondary",
                           fontWeight: entry.isToday ? 600 : 400,
                           width: 96,
                           flexShrink: 0,
@@ -787,8 +787,8 @@ export function PlaceOverviewTab({
                       </Typography>
                       <Typography
                         variant="body2"
-                        color={entry.isToday ? "text.primary" : "text.secondary"}
                         sx={{
+                          color: entry.isToday ? "text.primary" : "text.secondary",
                           fontWeight: entry.isToday ? 600 : 400,
                         }}
                       >

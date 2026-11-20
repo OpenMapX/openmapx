@@ -246,7 +246,7 @@ export function AdminSearch({
             ))}
           </List>
           {!results.length && (
-            <Typography color="text.secondary">{t("noSearchResults")}</Typography>
+            <Typography sx={{ color: "text.secondary" }}>{t("noSearchResults")}</Typography>
           )}
         </DialogContent>
       </Dialog>

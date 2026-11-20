@@ -96,7 +96,7 @@ export function TripScheduleCard({
       <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
         {t("scheduleTimeline")}
       </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 1 }}>
         {clockOf(schedule.departure)} – {clockOf(schedule.arrival)}
         {" · "}
         {t("scheduleTotals", {
@@ -130,7 +130,7 @@ export function TripScheduleCard({
                 {labelFor(stop.waypointIndex)}
               </Typography>
               {stop.timeZone !== localZone && (
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
                   {offsetLabel(stop.utcOffsetMinutes)}
                 </Typography>
               )}
@@ -141,7 +141,10 @@ export function TripScheduleCard({
               </Typography>
             </Box>
             {(stop.dwellSeconds > 0 || stop.waitSeconds > 0) && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", pl: 1 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", display: "block", pl: 1 }}
+              >
                 {stop.dwellSeconds > 0 &&
                   t("scheduleStay", { duration: formatDuration(stop.dwellSeconds, locale) })}
                 {stop.dwellSeconds > 0 && stop.waitSeconds > 0 ? " · " : ""}
@@ -170,7 +173,7 @@ export function TripScheduleCard({
 
       {(fidelity === "approximate" ||
         warnings.some((warning) => warning.kind === "approximate-travel-times")) && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 1 }}>
           {t("scheduleApproximate")}
         </Typography>
       )}

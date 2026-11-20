@@ -231,7 +231,7 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
             <Typography component="h2" variant="h6">
               {t("managedDawarichSetup")}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("provisioningIsIdempotentItPrepares")}
             </Typography>
           </Box>
@@ -280,7 +280,7 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
             </Alert>
           )}
 
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("browserSsoAndTimelineApi")}
           </Typography>
 

@@ -49,7 +49,7 @@ export function RegionCoverageMatrix({
         <Typography id="coverage-matrix-heading" component="h2" variant="subtitle1">
           {t("matrix.title")}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("matrix.description")}
         </Typography>
       </Stack>
@@ -95,7 +95,7 @@ export function RegionCoverageMatrix({
                         <Typography variant="body2" sx={{ fontWeight: 650 }} noWrap>
                           {row.region.label}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>
+                        <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
                           {row.region.key}
                         </Typography>
                       </Box>
@@ -128,7 +128,7 @@ export function RegionCoverageMatrix({
                           }}
                         >
                           <CoverageStatus status={summary.status} />
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{ color: "text.secondary" }}>
                             {t("matrix.operationCount", {
                               count: summary.operational,
                               total:
@@ -147,7 +147,7 @@ export function RegionCoverageMatrix({
                     <Typography
                       component="span"
                       variant="body2"
-                      color={row.attentionCount > 0 ? "warning.main" : "text.secondary"}
+                      sx={{ color: row.attentionCount > 0 ? "warning.main" : "text.secondary" }}
                       aria-label={t("matrix.attentionCount", { count: row.attentionCount })}
                     >
                       {format.number(row.attentionCount)}
@@ -187,7 +187,7 @@ export function RegionCoverageMatrix({
                   <Typography variant="body2" sx={{ fontWeight: 650 }} noWrap>
                     {row.region.label}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
+                  <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
                     {row.region.key}
                   </Typography>
                 </Box>
@@ -228,7 +228,7 @@ export function RegionCoverageMatrix({
                         <Typography variant="caption" sx={{ fontWeight: 650 }} noWrap>
                           {t(`domain.${domain}`)}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>
+                        <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
                           {t("matrix.operationCount", {
                             count: summary.operational,
                             total:
@@ -244,12 +244,12 @@ export function RegionCoverageMatrix({
                 })}
               </Box>
               <Stack direction="row" spacing={2} sx={{ mt: 0.75, px: 0.5 }}>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
                   {t("matrix.sources")}: {row.sourceCount}
                 </Typography>
                 <Typography
                   variant="caption"
-                  color={row.attentionCount > 0 ? "warning.main" : "text.secondary"}
+                  sx={{ color: row.attentionCount > 0 ? "warning.main" : "text.secondary" }}
                 >
                   {t("matrix.attention")}: {row.attentionCount}
                 </Typography>
@@ -271,8 +271,7 @@ export function RegionCoverageMatrix({
       {data.unassignedSourceCount > 0 && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ display: "block", px: 1.5, py: 1 }}
+          sx={{ color: "text.secondary", display: "block", px: 1.5, py: 1 }}
         >
           {t("matrix.unassigned", { count: data.unassignedSourceCount })}
         </Typography>

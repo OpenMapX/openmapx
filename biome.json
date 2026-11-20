@@ -160,7 +160,10 @@
     },
     {
       "includes": ["apps/web/src/**", "integrations/**", "!**/*.test.tsx"],
-      "plugins": ["./scripts/biome-plugins/noClickableLayoutElement.grit"]
+      "plugins": [
+        "./scripts/biome-plugins/noClickableLayoutElement.grit",
+        "./scripts/biome-plugins/noTypographyColorProp.grit"
+      ]
     },
     {
       "includes": [

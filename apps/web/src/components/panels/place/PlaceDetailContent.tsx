@@ -469,8 +469,8 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
             {addressLocality && (
               <Typography
                 variant="body2"
-                color="text.secondary"
                 sx={{
+                  color: "text.secondary",
                   mb: 0.75,
                   pr: onClose && !showHeaderWeather ? 4 : 0,
                   overflowWrap: "anywhere",

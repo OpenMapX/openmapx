@@ -79,7 +79,7 @@ export function NavBottomBar({
         <Typography sx={{ fontSize: 24, fontWeight: 600, lineHeight: 1.2 }}>
           {formatDuration(durationRemaining, locale)}
         </Typography>
-        <Typography variant="body2" color="text.secondary" noWrap>
+        <Typography variant="body2" sx={{ color: "text.secondary" }} noWrap>
           {secondaryLine}
         </Typography>
       </Box>

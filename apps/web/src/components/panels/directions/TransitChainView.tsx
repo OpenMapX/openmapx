@@ -83,7 +83,7 @@ export function TransitChainView({
       {plan.segments.map((segment, index) => (
         <Fragment key={`${segment.fromIndex}-${segment.toIndex}`}>
           <Box sx={{ px: 2, pt: 1.5 }}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
               {t("chainSegment", {
                 index: String(index + 1),
                 total: String(plan.segments.length),
@@ -92,7 +92,7 @@ export function TransitChainView({
               {labelFor(segment.fromIndex)} – {labelFor(segment.toIndex)}
             </Typography>
             {segment.boardingWaitSeconds > 0 && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+              <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
                 {t("chainBoardingWait", {
                   duration: formatDuration(segment.boardingWaitSeconds, locale),
                 })}

@@ -394,7 +394,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                 size="small"
               />
             </Stack>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
               {t("provideAnSpdxIdentifierOr")}
             </Typography>
             <TextField
@@ -505,7 +505,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                   <TableCell>
                     <Stack spacing={0.25}>
                       <Typography variant="body2">{source.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
                         {source.id} · {source.region}
                       </Typography>
                     </Stack>
@@ -525,8 +525,12 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                             target="_blank"
                             rel="noreferrer noopener"
                             variant="caption"
-                            color="text.secondary"
-                            sx={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}
+                            sx={{
+                              color: "text.secondary",
+                              maxWidth: 180,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
                           >
                             {source.originUrl}
                           </Typography>

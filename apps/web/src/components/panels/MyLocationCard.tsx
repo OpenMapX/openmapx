@@ -63,7 +63,7 @@ export function MyLocationCard({ coords, onClose }: { coords: LngLat; onClose: (
             <Typography sx={{ fontSize: 16, fontWeight: 600, lineHeight: 1.4 }}>
               {t("yourLocation")}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-word" }}>
+            <Typography variant="body2" sx={{ color: "text.secondary", wordBreak: "break-word" }}>
               {label}
             </Typography>
           </>

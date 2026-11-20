@@ -234,8 +234,8 @@ export function LineDetail({
                   />
                   <Typography
                     variant="body2"
-                    color={isCurrent ? "text.primary" : "text.secondary"}
                     sx={{
+                      color: isCurrent ? "text.primary" : "text.secondary",
                       fontWeight: isCurrent ? 700 : 400,
                       // Muted but still readable; the ring and caption carry the cue.
                       ...(placed ? {} : { color: "text.secondary" }),

@@ -37,7 +37,7 @@ export function NavStatusSlot() {
         py: 0.5,
       }}
     >
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {coasting ? t("estimatedPosition") : weakGps ? t("weakGps") : t("waitingForGps")}
       </Typography>
     </Box>

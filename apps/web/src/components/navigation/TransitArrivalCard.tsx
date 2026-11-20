@@ -35,7 +35,7 @@ export function TransitArrivalCard({
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
         <PlaceIcon color="primary" sx={{ fontSize: 28, mt: 0.25 }} />
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("arrived")}
           </Typography>
           {destination && (
@@ -43,7 +43,7 @@ export function TransitArrivalCard({
               {destination}
             </Typography>
           )}
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {formatDuration(itinerary.duration, locale)} · {fmt.time(itinerary.endTime)}
           </Typography>
         </Box>

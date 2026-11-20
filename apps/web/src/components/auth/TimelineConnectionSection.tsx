@@ -285,7 +285,7 @@ export const TimelineConnectionSection = forwardRef<
         {t("heading")}
       </Typography>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.55 }}>
+      <Typography variant="body2" sx={{ color: "text.secondary", mb: 2, lineHeight: 1.55 }}>
         {t("description")}
       </Typography>
 
@@ -330,20 +330,20 @@ export const TimelineConnectionSection = forwardRef<
             </Typography>
             <Chip size="small" label={t(`status.${current.status}`)} />
           </Stack>
-          <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+          <Typography variant="body2" sx={{ color: "text.secondary", overflowWrap: "anywhere" }}>
             {current.publicOrigin}
           </Typography>
           <Box
             component="dl"
             sx={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "4px 12px", m: 0 }}
           >
-            <Typography component="dt" variant="caption" color="text.secondary">
+            <Typography component="dt" variant="caption" sx={{ color: "text.secondary" }}>
               {t("modeLabel")}
             </Typography>
             <Typography component="dd" variant="caption" sx={{ m: 0 }}>
               {t(current.mode === "managed" ? "modeManaged" : "modeExternal")}
             </Typography>
-            <Typography component="dt" variant="caption" color="text.secondary">
+            <Typography component="dt" variant="caption" sx={{ color: "text.secondary" }}>
               {t("timezone")}
             </Typography>
             <Typography component="dd" variant="caption" sx={{ m: 0 }}>
@@ -351,7 +351,7 @@ export const TimelineConnectionSection = forwardRef<
             </Typography>
             {current.upstreamEmail && (
               <>
-                <Typography component="dt" variant="caption" color="text.secondary">
+                <Typography component="dt" variant="caption" sx={{ color: "text.secondary" }}>
                   {t("upstreamAccount")}
                 </Typography>
                 <Typography
@@ -363,7 +363,7 @@ export const TimelineConnectionSection = forwardRef<
                 </Typography>
               </>
             )}
-            <Typography component="dt" variant="caption" color="text.secondary">
+            <Typography component="dt" variant="caption" sx={{ color: "text.secondary" }}>
               {t("validatedAt")}
             </Typography>
             <Typography component="dd" variant="caption" sx={{ m: 0 }}>

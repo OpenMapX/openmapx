@@ -184,7 +184,7 @@ export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
       <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
         {t("sharedMobilitySources")}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
         {t("everyRequestQueriesMotisAnd")}
       </Typography>
       {sources.isError && <Alert severity="error">{t("failedToLoadSharedMobility")}</Alert>}
@@ -205,7 +205,7 @@ export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
                 color={record ? (record.decision.partial ? "warning" : "success") : "default"}
               />
               {record && (
-                <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                <Typography variant="caption" sx={{ color: "text.secondary", flex: 1 }}>
                   {record.decision.calledAdapters.length
                     ? t("queriedAdapters", { adapters: record.decision.calledAdapters.join(", ") })
                     : t("queriedMotisOnly")}

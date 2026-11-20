@@ -909,13 +909,14 @@ const TAG_SPECS: readonly TagSpec[] = [
               <Typography
                 component="span"
                 variant="body2"
-                color={
-                  wheelchair === "no"
-                    ? "text.secondary"
-                    : wheelchair === "limited"
-                      ? "warning.main"
-                      : "success.main"
-                }
+                sx={{
+                  color:
+                    wheelchair === "no"
+                      ? "text.secondary"
+                      : wheelchair === "limited"
+                        ? "warning.main"
+                        : "success.main",
+                }}
               >
                 {" · "}
                 {t(wheelchairKey)}

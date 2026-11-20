@@ -216,7 +216,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
         <Box role="status">
           <Typography
             variant="subtitle2"
-            color={batch.data.outcome === "success" ? "success.main" : "warning.main"}
+            sx={{ color: batch.data.outcome === "success" ? "success.main" : "warning.main" }}
           >
             {batch.data.outcome === "partial"
               ? t("partiallyCompleted")
@@ -245,7 +245,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
         </Box>
       )}
       {observation.success && (
-        <Typography role="status" variant="body2" color="warning.main">
+        <Typography role="status" variant="body2" sx={{ color: "warning.main" }}>
           {t("outcomeUnknownCheckingRetainedOperation")}
         </Typography>
       )}

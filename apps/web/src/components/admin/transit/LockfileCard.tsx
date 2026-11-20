@@ -176,7 +176,7 @@ function CatalogPinView() {
               <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
                 {t("gbfsCommit", { commit: data.active?.gbfs.commit ?? "—" })}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {t("activePinsStaySelectedWhile")}
               </Typography>
             </Box>
@@ -291,8 +291,7 @@ function CatalogPinView() {
                     </Typography>
                     <Typography
                       variant="caption"
-                      color="text.secondary"
-                      sx={{ overflowWrap: "anywhere" }}
+                      sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
                     >
                       {t("exactDiffDigest", { digest: data.diff.digest })}
                     </Typography>

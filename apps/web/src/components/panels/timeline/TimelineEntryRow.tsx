@@ -111,11 +111,11 @@ export function TimelineEntryRow({
         <Typography sx={{ fontWeight: 500, lineHeight: 1.5 }}>
           {entry.name ?? t("visitFallback")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {`${start}–${end} · ${minutes.format(entry.durationMinutes)}`}
         </Typography>
         {entry.tags.length > 0 && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {entry.tags.join(" · ")}
           </Typography>
         )}
@@ -142,7 +142,7 @@ export function TimelineEntryRow({
           </Box>
         }
       >
-        <Typography variant="body2" color="text.secondary" sx={{ py: 0.5 }}>
+        <Typography variant="body2" sx={{ color: "text.secondary", py: 0.5 }}>
           {parts.join(" · ")}
           {climb.length > 0 && ` · ${climb.join(" · ")}`}
         </Typography>

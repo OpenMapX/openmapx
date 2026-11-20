@@ -1,0 +1,17 @@
+language js
+
+// MUI 9's Typography maps its `color` prop only to its own variants (`primary`,
+// `secondary`, `success`, `error`, `info`, `warning`, `textPrimary`,
+// `textSecondary`, `textDisabled`). Any other value, such as the palette path
+// `text.secondary`, a hex colour or an expression, matches no variant and is
+// dropped silently, and the prop's type accepts any string. Put the colour in
+// `sx={{ color: … }}`, where palette paths resolve.
+or {
+  jsx_opening_element(name=`Typography`, attributes=$attrs),
+  jsx_self_closing_element(name=`Typography`, attributes=$attrs)
+} where {
+  $attrs <: some JsxAttribute(name=`color`, initializer=$init) as $attr where {
+    not $init <: r"=\"(?:primary|secondary|success|error|info|warning|textPrimary|textSecondary|textDisabled|inherit)\""
+  },
+  register_diagnostic(span=$attr, message="Typography ignores this color. Use sx={{ color: … }}, where palette paths such as text.secondary resolve.")
+}

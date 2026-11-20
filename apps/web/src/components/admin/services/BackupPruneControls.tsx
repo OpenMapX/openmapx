@@ -93,7 +93,7 @@ export function BackupPruneControls() {
           {t("editBackupRetentionPolicy")}
         </Button>
       </Stack>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
         {t("aLongerPolicyAppliesTo")}
       </Typography>
       {previewMutation.isError && (

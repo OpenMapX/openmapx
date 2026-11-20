@@ -408,7 +408,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         {t("restartLinksFromScratch")}
       </Button>
       {regionValid && !busy && recovery?.actions?.["overture-conflate"]?.reason && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+        <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
           {recovery.actions["overture-conflate"].reason}
         </Typography>
       )}

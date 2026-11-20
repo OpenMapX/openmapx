@@ -82,9 +82,8 @@ export function EmailSettingsSection({
       {description && (
         <Typography
           variant="caption"
-          color="text.secondary"
           component="p"
-          sx={{ mt: 0.75, mb: 1.5 }}
+          sx={{ color: "text.secondary", mt: 0.75, mb: 1.5 }}
         >
           {description}
         </Typography>

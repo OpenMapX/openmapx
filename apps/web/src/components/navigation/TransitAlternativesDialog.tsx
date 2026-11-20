@@ -241,11 +241,11 @@ export function TransitAlternativesDialog({
                 sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 1 }}
               >
                 <TransitLegChain legs={trip.legs} />
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
                   {t("alternativeTransfers", { count: trip.transfers })}
                 </Typography>
                 {trip.walkDistance > 0 && (
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
                     ·{" "}
                     {td("walkDistance", {
                       distance: formatOverviewDistance(trip.walkDistance, units),
@@ -257,7 +257,7 @@ export function TransitAlternativesDialog({
                 <Box
                   sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 1 }}
                 >
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
                     {boarding.from.name}
                   </Typography>
                   {boarding.from.platformCode && (
@@ -267,7 +267,7 @@ export function TransitAlternativesDialog({
                     />
                   )}
                   {boarding.headsign && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {t("towards", { headsign: boarding.headsign })}
                     </Typography>
                   )}

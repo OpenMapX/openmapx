@@ -55,7 +55,7 @@ export function RouteTrafficStatus({
       <Typography variant="body2" sx={{ mb: 1 }}>
         {t(`application.${status.application}`)}
       </Typography>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t("provider", { source: t(`source.${status.source}`) })}
       </Typography>
     </TrafficInfo>

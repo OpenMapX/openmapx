@@ -98,7 +98,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
       <Stack spacing={2}>
         <Box>
           <Typography variant="h6">{t("nearbyPlacesOnTheMap")}</Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("publishPlanetGermanyOrA")}
           </Typography>
         </Box>
@@ -181,7 +181,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
                 })}
               </Typography>
             )}
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
               {t("snapshotDatesDescribeImportedData")}
             </Typography>
           </Box>
@@ -245,7 +245,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             ))}
           </Stack>
         )}
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {planet
             ? t("planetPresetInstalledSourceCoverage")
             : country

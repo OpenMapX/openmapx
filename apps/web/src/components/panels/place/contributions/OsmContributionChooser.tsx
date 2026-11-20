@@ -68,7 +68,7 @@ export function OsmContributionChooser({ context, selected, onToggleField, onOpe
       <Typography variant="subtitle1" gutterBottom>
         {t("chooserTitle")}
       </Typography>
-      <Typography variant="body2" color="text.secondary" gutterBottom>
+      <Typography variant="body2" sx={{ color: "text.secondary" }} gutterBottom>
         {t("chooserHint")}
       </Typography>
 

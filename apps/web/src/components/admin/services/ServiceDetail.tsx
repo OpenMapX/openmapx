@@ -635,7 +635,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
         }
       />
       {manifest.description && (
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {manifest.description}
         </Typography>
       )}
@@ -668,7 +668,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
           [reason(startAction), reason("stop"), reason("restart"), reason("logs")].filter(Boolean),
         ),
       ].length > 0 && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {[
             ...new Set(
               [reason(startAction), reason("stop"), reason("restart"), reason("logs")].filter(

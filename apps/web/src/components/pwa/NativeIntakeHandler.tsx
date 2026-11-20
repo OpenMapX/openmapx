@@ -563,7 +563,7 @@ export function NativeIntakeHandler() {
             {geometry && imported && (
               <Alert severity="warning">{t("replace", { name: imported.name })}</Alert>
             )}
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("retention")}
             </Typography>
           </Stack>

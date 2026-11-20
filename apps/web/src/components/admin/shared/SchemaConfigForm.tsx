@@ -408,7 +408,7 @@ export function SchemaConfigForm({
               </Typography>
             )}
             {isEnvOverridden && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {source === "config.json"
                   ? t("controlledByTheHostConfig")
                   : envVar
@@ -434,7 +434,10 @@ export function SchemaConfigForm({
                   />
                 }
                 label={
-                  <Typography variant="body2" color={isEnvOverridden ? "text.disabled" : undefined}>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: isEnvOverridden ? "text.disabled" : undefined }}
+                  >
                     {String(displayValue ?? false)}
                   </Typography>
                 }

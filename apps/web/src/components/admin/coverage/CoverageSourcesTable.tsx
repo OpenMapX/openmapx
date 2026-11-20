@@ -70,7 +70,7 @@ export function CoverageSourcesTable({
             {report.sources.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9}>
-                  <Typography color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                  <Typography sx={{ color: "text.secondary", py: 2, textAlign: "center" }}>
                     {t("sources.empty")}
                   </Typography>
                 </TableCell>
@@ -116,8 +116,7 @@ function SourceRow({
             <Typography
               component="span"
               variant="caption"
-              color="text.secondary"
-              sx={{ display: "block" }}
+              sx={{ color: "text.secondary", display: "block" }}
             >
               {source.owner.id} · {source.sourceId}
             </Typography>
@@ -126,7 +125,7 @@ function SourceRow({
       </TableCell>
       <TableCell>
         <Typography variant="body2">{source.stream}</Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t(`domain.${source.domain}`)}
         </Typography>
       </TableCell>
@@ -134,7 +133,7 @@ function SourceRow({
         <Stack sx={{ gap: 0.5 }}>
           <CoverageStatus status={source.presence} />
           <CoverageStatus status={source.freshness} />
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {source.active === true
               ? t("sources.active")
               : source.active === false
@@ -148,7 +147,7 @@ function SourceRow({
           status={source.region.relation}
           label={t(`relation.${source.region.relation}`)}
         />
-        <Typography variant="caption" color="text.secondary" component="div">
+        <Typography variant="caption" sx={{ color: "text.secondary" }} component="div">
           {source.region.keys.length > 0
             ? source.region.keys.join(", ")
             : t("sources.regionUnknown")}
@@ -158,7 +157,7 @@ function SourceRow({
         <Typography variant="body2" title={source.lastSuccessfulCheckAt ?? undefined}>
           {format.timestamp(source.lastSuccessfulCheckAt)}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t(`attempt.${source.latestAttempt.outcome}`)}
         </Typography>
       </TableCell>
@@ -171,8 +170,7 @@ function SourceRow({
         {reasons.length > 0 ? (
           <Typography
             variant="caption"
-            color="warning.main"
-            sx={{ maxWidth: 180, display: "block" }}
+            sx={{ color: "warning.main", maxWidth: 180, display: "block" }}
           >
             {reasons
               .slice(0, 3)
@@ -181,7 +179,7 @@ function SourceRow({
             {reasons.length > 3 ? ` (+${reasons.length - 3})` : ""}
           </Typography>
         ) : (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             —
           </Typography>
         )}

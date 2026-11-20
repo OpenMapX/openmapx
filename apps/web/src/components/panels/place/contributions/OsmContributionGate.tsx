@@ -72,7 +72,7 @@ export function OsmContributionGate({
     return (
       <Stack spacing={2} sx={{ py: 4, alignItems: "center" }}>
         <CircularProgress size={28} />
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("loading")}
         </Typography>
       </Stack>
@@ -208,7 +208,7 @@ function Panel({ title, body, children }: { title: string; body: string; childre
         <Typography variant="subtitle1" gutterBottom>
           {title}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {body}
         </Typography>
       </Box>

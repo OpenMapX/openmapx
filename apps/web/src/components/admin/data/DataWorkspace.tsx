@@ -115,11 +115,11 @@ function DataDirectory() {
                 <Typography component={Link} href={entry.href} sx={{ fontWeight: 650 }}>
                   {t(`destinations.${entry.id}.label`)}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
                   {t(`destinations.${entry.id}.description`)}
                 </Typography>
               </Stack>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {entry.id === "osm" && query.data
                   ? query.data.osm.unavailable
                     ? ta("inventoryUnavailable")

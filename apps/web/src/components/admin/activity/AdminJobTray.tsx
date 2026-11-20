@@ -46,7 +46,7 @@ export function AdminJobTray() {
             {t("administrationJobsHeading", { count: active })}
           </Typography>
           {recent.length === 0 && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("acceptedJobsAppearHereDuring")}
             </Typography>
           )}
@@ -67,7 +67,7 @@ export function AdminJobTray() {
                 {job.label}
               </Button>
               {job.unresolved ? (
-                <Typography variant="caption" color="warning.main">
+                <Typography variant="caption" sx={{ color: "warning.main" }}>
                   {t("outcomeUnknown")}
                 </Typography>
               ) : (
@@ -83,7 +83,7 @@ export function AdminJobTray() {
           >
             {t("allJobs")}
           </Button>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("refreshClearsThisSessionTray")}
           </Typography>
         </Stack>

@@ -128,8 +128,7 @@ function TagItem({ tagKey, value }: { tagKey: string; value: string }) {
       )}
       <Typography
         variant="body2"
-        color={isNo ? "text.disabled" : "text.primary"}
-        sx={{ wordBreak: "break-word" }}
+        sx={{ color: isNo ? "text.disabled" : "text.primary", wordBreak: "break-word" }}
       >
         {label}
         {!isYes && !isNo && (

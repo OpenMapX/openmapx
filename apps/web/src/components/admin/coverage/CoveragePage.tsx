@@ -330,7 +330,7 @@ export function CoveragePage() {
             spacing={1}
             sx={{ alignItems: { sm: "center" } }}
           >
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("collection.status")}
             </Typography>
             <CoverageStatus
@@ -344,7 +344,7 @@ export function CoveragePage() {
               label={t(`collection.${collectionStatus}`)}
             />
             {report && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {t("collection.collectedAt", { date: format.timestamp(report.generatedAt) })}
               </Typography>
             )}
@@ -353,7 +353,11 @@ export function CoveragePage() {
 
         <Stack component="section" aria-label={t("collection.authorities")} spacing={0.25}>
           {(report?.authorities ?? regionsQuery.data?.authorities ?? []).map((authority) => (
-            <Typography key={authority.authority} variant="caption" color="text.secondary">
+            <Typography
+              key={authority.authority}
+              variant="caption"
+              sx={{ color: "text.secondary" }}
+            >
               {authority.authority}: {t(`collection.${authority.status}`)}
               {authority.message ? ` · ${authority.message}` : ""}
             </Typography>

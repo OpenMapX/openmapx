@@ -77,8 +77,7 @@ export function SourceEvidenceDrawer({
             {displayedSource && (
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ overflowWrap: "anywhere" }}
+                sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
               >
                 {displayedSource.key}
               </Typography>
@@ -89,7 +88,9 @@ export function SourceEvidenceDrawer({
           </IconButton>
         </Stack>
 
-        {query.isLoading && <Typography color="text.secondary">{t("common.loading")}</Typography>}
+        {query.isLoading && (
+          <Typography sx={{ color: "text.secondary" }}>{t("common.loading")}</Typography>
+        )}
         {query.isError && (
           <CompactAlert severity="error">
             {snapshotExpired ? t("snapshot.expired") : t("sourceDrawer.loadError")}
@@ -317,7 +318,7 @@ function SourceEvidenceBody({
           }
         />
         {data.rights.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("rights.missing")}
           </Typography>
         )}
@@ -430,7 +431,7 @@ function BindingReasons({
   const road = useTranslations("roadConditions");
   return (
     <Stack spacing={0.5}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t("roadConditions.bindingReasons")}
       </Typography>
       {reasons.length === 0 ? (
@@ -468,7 +469,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: "baseline" }}>
-      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 125, flexShrink: 0 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", minWidth: 125, flexShrink: 0 }}>
         {label}
       </Typography>
       <Typography component="div" variant="body2" sx={{ overflowWrap: "anywhere" }}>

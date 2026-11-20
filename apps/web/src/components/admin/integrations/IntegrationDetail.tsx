@@ -394,8 +394,8 @@ function ConfigTab({
                       <TableCell>
                         <Typography
                           variant="body2"
-                          color={value === "***" ? "text.disabled" : "text.primary"}
                           sx={{
+                            color: value === "***" ? "text.disabled" : "text.primary",
                             fontFamily: "monospace",
                           }}
                         >

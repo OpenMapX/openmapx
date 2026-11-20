@@ -50,7 +50,7 @@ function needsConnectionRecovery(error: PersonalTimelineApiError | null): boolea
 function TimelineLoading({ label }: { label: string }) {
   return (
     <Stack role="status" aria-label={label} spacing={1.25} sx={{ py: 1 }}>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
         {label}
       </Typography>
       <Skeleton variant="rounded" height={72} />
@@ -156,7 +156,7 @@ function ConnectedTimeline({
           <Typography variant="subtitle1" sx={{ fontWeight: 650 }}>
             {t("emptyDay")}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.75 }}>
             {t("emptyDayHint")}
           </Typography>
         </Box>
@@ -216,8 +216,7 @@ function AuthenticatedTimeline({ ownerId }: { ownerId: string }) {
         </Typography>
         <Typography
           variant="body2"
-          color="text.secondary"
-          sx={{ mt: 1, mb: 2.5, lineHeight: 1.55 }}
+          sx={{ color: "text.secondary", mt: 1, mb: 2.5, lineHeight: 1.55 }}
         >
           {t("onboardingReadOnly")}
         </Typography>

@@ -266,6 +266,11 @@ Tooling notes:
   `Button` or `ButtonBase` instead. For a background tap or a pointer shortcut
   that has another keyboard path, suppress it with
   `biome-ignore lint/plugin/noClickableLayoutElement:` and the reason.
+  A second plugin (`scripts/biome-plugins/noTypographyColorProp.grit`)
+  rejects a `color` prop on `Typography` other than its own variants
+  (`primary`, `error`, `textSecondary` and the like): MUI 9 drops palette
+  paths such as `text.secondary`, hex colours and expressions there without a
+  warning. Write `sx={{ color: "text.secondary" }}` instead.
 - **Vitest** runs the tests from a single root config (`vitest.config.ts`),
   split into two projects: `node` (API, integrations, packages, services) and
   `web` (the Next.js app and React-bound packages, in jsdom). All test commands

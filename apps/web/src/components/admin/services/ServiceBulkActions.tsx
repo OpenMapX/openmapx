@@ -141,7 +141,7 @@ export function ServiceBulkActions({
         )}
         <Typography
           variant="caption"
-          color={reason ? "warning.main" : "text.secondary"}
+          sx={{ color: reason ? "warning.main" : "text.secondary" }}
           role="status"
         >
           {reason ?? ta("targetsIdsTheseAreAction", { ids: ids.join(", ") })}

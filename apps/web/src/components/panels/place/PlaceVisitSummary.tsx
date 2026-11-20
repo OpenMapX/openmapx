@@ -36,8 +36,8 @@ export function PlaceVisitSummary({
       data-testid={compact ? "place-peek-summary" : "place-visit-summary"}
       variant="body2"
       noWrap={compact}
-      color="text.secondary"
       sx={{
+        color: "text.secondary",
         display: "flex",
         flexWrap: compact ? "nowrap" : "wrap",
         columnGap: "0.25em",

@@ -76,7 +76,7 @@ function SelectionEditor() {
         <Typography component="h2" variant="subtitle1" sx={{ fontWeight: 650 }}>
           {t("serviceSelection")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("persistentRootsDetermineEnabledServices")}
         </Typography>
         {locked && (
@@ -187,8 +187,7 @@ function SelectionEditor() {
                           </Button>
                           <Typography
                             variant="caption"
-                            color="text.secondary"
-                            sx={{ display: "block" }}
+                            sx={{ color: "text.secondary", display: "block" }}
                           >
                             {service.id}
                           </Typography>
