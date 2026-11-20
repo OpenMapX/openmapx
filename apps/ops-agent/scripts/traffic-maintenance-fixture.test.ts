@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "vitest";
-import { withPrivateFixture } from "./traffic-maintenance-fixture.ts";
+import { withPrivateFixture } from "./traffic-maintenance-fixture";
 
 let workspace: string;
 let root: string;

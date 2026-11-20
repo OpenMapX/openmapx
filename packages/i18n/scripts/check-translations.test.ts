@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import de from "../locales/de.json";
 import en from "../locales/en.json";
-import { extractICUVariables, flattenKeys } from "./check-translations.ts";
+import { extractICUVariables, flattenKeys } from "./check-translations";
 
 // Pure helpers from the translation health checker. flattenKeys + extractICUVariables
 // are the primitives every other check composes from (key parity, ICU placeholder

@@ -9,5 +9,5 @@
     "allowArbitraryExtensions": true,
     "outDir": "./dist"
   },
-  "include": ["src", "scripts", "../../integrations/*/index.ts"]
+  "include": ["src", "scripts", "drizzle.config.ts", "../../integrations/*/index.ts"]
 }

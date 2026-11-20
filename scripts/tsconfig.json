@@ -15,7 +15,18 @@
     // reporting each import as implicitly `any`. The JavaScript is not checked.
     "allowJs": true
   },
-  "include": ["**/*.ts", "**/*.mts"],
+  // Also the repository's root Vitest configuration and the service tests that
+  // sit beside service files rather than in a workspace package.
+  "include": [
+    "**/*.ts",
+    "**/*.mts",
+    "../vitest.aliases.ts",
+    "../vitest.config.ts",
+    "../vitest.setup.node.ts",
+    "../services/brouter/tests/**/*.ts",
+    "../services/valhalla/tests/**/*.ts",
+    "../services/dawarich-*/*.ts"
+  ],
   // The discovery evaluation keeps its own project. The build contract test
   // imports the web app's Next configuration, whose global types make
   // `NODE_ENV` a required environment variable in every program that contains
