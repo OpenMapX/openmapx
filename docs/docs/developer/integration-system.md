@@ -1329,9 +1329,9 @@ closes it when `open` turns false or the overlay unmounts.
 
 Priorities in use: area and line overlays 10 to 20, point overlays 50, moving
 live-transit vehicles 60, and road-condition incidents and markers 100 to 110.
-Results the user asked for take 200 to 203 in the order they are drawn:
-data-source results, category results, the transit stops of a transit
-category, and route search results. The open saved list takes 210. Give a new
+Results the user asked for take 200 to 203: data-source results 200, category
+results 201, the stops a transit category draws in place of its pins 202, and
+route search results 203. The open saved list takes 210. Give a new
 overlay a priority of its own rather than relying on registration order. A
 static test rejects pointer listeners and cursor writes in integrations and
 shared integration components outside this pipeline; the measurement and

@@ -349,9 +349,10 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 }
 
 /**
- * Results the user asked for win over ambient overlays drawn beneath them.
- * Category results draw above data-source results and their transit stops
- * above the category pins, so each ranks one step above the one beneath.
+ * Results the user asked for win over ambient overlays drawn beneath them, and
+ * category results rank above data-source results. A transit category draws
+ * its stops in place of category pins, so the two never compete; the stops
+ * still take a priority of their own.
  */
 const RESULT_INTERACTION_PRIORITY = 201;
 const TRANSIT_INTERACTION_PRIORITY = 202;
