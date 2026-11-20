@@ -1,6 +1,6 @@
 import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { createFlickrPhotoProvider } from "./provider.js";
 
 // Flickr's photos.search returns size-variant URLs (url_l/url_z/url_m/url_sq)
@@ -33,12 +33,12 @@ function flickrPhoto(overrides: Record<string, unknown> = {}) {
 }
 
 /** Called with each request URL, query included; answers the response body. */
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(input: unknown) => unknown>;
 let apiKey: string | undefined;
 let flickrPhotoProvider: ReturnType<typeof createFlickrPhotoProvider>;
 
 beforeEach(() => {
-  mockFetch = vi.fn();
+  mockFetch = vi.fn<(input: unknown) => unknown>();
   apiKey = "test-flickr-key";
   const http = fakeHttpClient(({ url, options }) => {
     const requestUrl = new URL(url);

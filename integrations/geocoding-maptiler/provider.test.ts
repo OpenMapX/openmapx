@@ -5,7 +5,7 @@ import {
   fakeHttpClient,
   httpStatus,
 } from "@openmapx/integration-framework/testing";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   createMaptilerGeocodingService,
   MaptilerBudgetSpentError,
@@ -13,7 +13,7 @@ import {
 } from "./provider.js";
 
 /** Called with each request URL, query included; answers the response body. */
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(input: unknown) => unknown>;
 let http: FakeHttpClient;
 let apiKey: string | undefined;
 let budget: ProviderDailyBudget | null;
@@ -24,7 +24,7 @@ function mockOk(data: unknown) {
 }
 
 beforeEach(() => {
-  mockFetch = vi.fn();
+  mockFetch = vi.fn<(input: unknown) => unknown>();
   http = fakeHttpClient(({ url, options }) => {
     const requestUrl = new URL(url);
     for (const [name, value] of Object.entries(options?.params ?? {})) {

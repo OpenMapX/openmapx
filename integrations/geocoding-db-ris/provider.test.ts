@@ -2,17 +2,21 @@ import {
   createGeocoderSuggestionProvider,
   runWithProviderDeadline,
 } from "@openmapx/integration-framework";
-import { type FakeHttpClient, fakeHttpClient } from "@openmapx/integration-framework/testing";
+import {
+  type FakeHttpClient,
+  type FakeHttpRequest,
+  fakeHttpClient,
+} from "@openmapx/integration-framework/testing";
 import {
   createRisClient,
   type RisClient,
   type RisCredentials,
 } from "@openmapx/mobility-core/ris-client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { createDbRisGeocodingService, lookupDbStation } from "./provider.js";
 import type { RisStopPlace } from "./stations-types.js";
 
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(input: FakeHttpRequest) => unknown>;
 let transport: FakeHttpClient;
 let risClient: RisClient;
 let dbRisGeocodingService: ReturnType<typeof createDbRisGeocodingService>;
@@ -35,7 +39,7 @@ const KOELN_HBF: RisStopPlace = {
 };
 
 beforeEach(() => {
-  mockFetch = vi.fn();
+  mockFetch = vi.fn<(input: FakeHttpRequest) => unknown>();
   transport = fakeHttpClient((request) => mockFetch(request));
   useCredentials({ clientId: "cid", apiKey: "key" });
 });

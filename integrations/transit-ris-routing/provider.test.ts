@@ -1,6 +1,10 @@
-import { type FakeHttpClient, fakeHttpClient } from "@openmapx/integration-framework/testing";
+import {
+  type FakeHttpClient,
+  type FakeHttpRequest,
+  fakeHttpClient,
+} from "@openmapx/integration-framework/testing";
 import { createRisClient, type RisClient } from "@openmapx/mobility-core/ris-client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   germanWallClock,
   mapLang,
@@ -187,12 +191,12 @@ describe("mapTrip", () => {
 });
 
 describe("planJourney", () => {
-  let mockFetch: ReturnType<typeof vi.fn>;
+  let mockFetch: Mock<(input: FakeHttpRequest) => unknown>;
   let transport: FakeHttpClient;
   let risClient: RisClient;
 
   beforeEach(() => {
-    mockFetch = vi.fn();
+    mockFetch = vi.fn<(input: FakeHttpRequest) => unknown>();
     transport = fakeHttpClient((request) => mockFetch(request));
     risClient = createRisClient({ clientId: "cid", apiKey: "key" }, transport);
   });

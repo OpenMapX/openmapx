@@ -1,9 +1,10 @@
 import {
   createMockIntegrationContext,
   type FakeHttpClient,
+  type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "./index.js";
 
 const GERMANY_CENTER = { lat: 52.52, lng: 13.405 };
@@ -44,11 +45,11 @@ function liveEntry(overrides: Record<string, unknown> = {}) {
   };
 }
 
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(input: FakeHttpRequest) => unknown>;
 let transport: FakeHttpClient;
 
 beforeEach(() => {
-  mockFetch = vi.fn();
+  mockFetch = vi.fn<(input: FakeHttpRequest) => unknown>();
   transport = fakeHttpClient((request) => mockFetch(request));
 });
 

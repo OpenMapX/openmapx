@@ -1,12 +1,12 @@
 import { classifyProviderFailure, ProviderPayloadError } from "@openmapx/integration-framework";
 import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import departuresFixture from "./__fixtures__/departures.json";
 import stopsFixture from "./__fixtures__/stops.json";
 import { getDepartures, getRoute, getStop, getStops, type TransitlandAccess } from "./provider.js";
 
 /** Called with each request URL, query included; answers like fetch. */
-let mockFetch: ReturnType<typeof vi.fn>;
+let mockFetch: Mock<(input: unknown) => unknown>;
 let access: TransitlandAccess;
 
 function mockOk(data: unknown) {
@@ -14,7 +14,7 @@ function mockOk(data: unknown) {
 }
 
 beforeEach(() => {
-  mockFetch = vi.fn();
+  mockFetch = vi.fn<(input: unknown) => unknown>();
   const http = fakeHttpClient(async ({ url, options }) => {
     const requestUrl = new URL(url);
     for (const [name, value] of Object.entries(options?.params ?? {})) {

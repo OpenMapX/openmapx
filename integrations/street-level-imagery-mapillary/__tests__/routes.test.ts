@@ -1,6 +1,6 @@
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
 
@@ -96,10 +96,10 @@ describe("street-level-imagery-mapillary setup", () => {
 });
 
 describe("street-level-imagery-mapillary /nearest", () => {
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: Mock<(url: string) => Promise<Response>>;
 
   beforeEach(() => {
-    fetchMock = vi.fn();
+    fetchMock = vi.fn<(url: string) => Promise<Response>>();
     activeFetch = fetchMock;
   });
 
@@ -193,10 +193,10 @@ describe("street-level-imagery-mapillary /nearest", () => {
 });
 
 describe("street-level-imagery-mapillary /search", () => {
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: Mock<(url: string) => Promise<Response>>;
 
   beforeEach(() => {
-    fetchMock = vi.fn();
+    fetchMock = vi.fn<(url: string) => Promise<Response>>();
     activeFetch = fetchMock;
   });
 
@@ -319,7 +319,7 @@ describe("street-level-imagery-mapillary /images/:id", () => {
     setup(ctx);
     const reply = makeReply();
     await findRoute(routes, "/images/:id").handler(
-      { query: {}, params: { id: "123" }, body: undefined } as RequestMock,
+      { query: {}, params: { id: "123" }, body: undefined, clientKey: "c", headers: {} },
       reply,
     );
     expect(reply.status).toHaveBeenCalledWith(502);

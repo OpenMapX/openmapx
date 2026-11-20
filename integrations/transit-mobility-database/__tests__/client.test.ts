@@ -1,4 +1,4 @@
-import { SafeFetchHttpError } from "@openmapx/core/server";
+import { SafeFetchHttpError, type SafeFetchJsonOptions } from "@openmapx/core/server";
 import type { CacheClient } from "@openmapx/integration-framework";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MdbClient, type MdbJsonRequest } from "../client.js";
@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 function requestMock(answer: (url: string) => unknown) {
-  const request = vi.fn(async (url: string) => {
+  const request = vi.fn(async (url: string, _options?: SafeFetchJsonOptions) => {
     const value = answer(url);
     if (value instanceof Error) throw value;
     return value;
