@@ -28,8 +28,8 @@ try {
     const chunks=[];await control.writeBuildBundle({dataRoot:root+'/source',serviceId:'osrm',record:{schemaVersion:1,service:'osrm',builtAt:new Date().toISOString(),runtimeImages:{osrm:'example/osrm:1'},toolImages:{}},target:new Writable({write(chunk,e,done){chunks.push(Buffer.from(chunk));done();}}),limits:control.DEFAULT_ARTIFACT_ARCHIVE_LIMITS,signal:new AbortController().signal});
     const bytes=Buffer.concat(chunks),stage=await store.createStage({ownerId:'native-admin',purpose:'prepared-artifact',direction:'upload',declaredBytes:bytes.length,operationKey:'opk1_'+randomUUID().replaceAll('-','')});
     await store.upload({stageId:stage.stageId,ownerId:'native-admin',purpose:stage.purpose,attemptId:randomUUID(),deadlineAt:Date.now()+60000,body:new ReadableStream({start(c){c.enqueue(bytes);c.close();}})});
-    const operation={kind:'artifactTransfer.validate',stageId:stage.stageId,ownerId:'native-admin',purpose:'prepared-artifact'},operationFingerprint=ops.opsOperationFingerprint(operation),admittedAt=Date.now(),requestedDeadlineAt=admittedAt+600000,operationKey=ops.createControlRootOperationKey({notAfter:requestedDeadlineAt,nonce:randomBytes(16)}),admission=ops.normalizeExecutionAdmission({operationFingerprint,operationKey,kind:operation.kind,admittedAt,requestedDeadlineAt}),execution={executor:'ops-agent',principal:'api',executionId:'job1_'+randomUUID().replaceAll('-',''),operationKey,operationFingerprint,deadlineAt:admission.deadlineAt,fingerprint:admission.fingerprint},authority=control.retainAdmittedControlExecution(installation,{execution,kind:operation.kind,operation,admittedAt,requestedDeadlineAt,serviceIds:['osrm']});
-    control.beginControlEffect(authority);
+    const operation={kind:'artifactTransfer.validate',stageId:stage.stageId,ownerId:'native-admin',purpose:'prepared-artifact'},operationFingerprint=ops.opsOperationFingerprint(operation),admittedAt=Date.now(),requestedDeadlineAt=admittedAt+600000,operationKey=ops.createControlRootOperationKey({notAfter:requestedDeadlineAt,nonce:randomBytes(16)}),admission=ops.normalizeExecutionAdmission({operationFingerprint,operationKey,kind:operation.kind,admittedAt,requestedDeadlineAt}),execution={executor:'ops-agent',principal:'api',executionId:'job1_'+randomUUID().replaceAll('-',''),operationKey,operationFingerprint,deadlineAt:admission.deadlineAt,fingerprint:admission.fingerprint},authority=await control.retainAdmittedControlExecution(installation,{execution,kind:operation.kind,operation,admittedAt,requestedDeadlineAt,serviceIds:['osrm']});
+    await control.beginControlEffect(authority);
     const native=fs.writeSync;let stopped=false;
     fs.writeSync=function(fd,...args){const value=native.call(fs,fd,...args);if(!stopped && fs.readlinkSync('/proc/self/fd/'+fd).includes('/prepared-')){stopped=true;native.call(fs,1,Buffer.from(JSON.stringify({stage,execution,operation,admittedAt})+'\\n'));process.kill(process.pid,'SIGSTOP');}return value;};syncBuiltinESMExports();
     await store.validatePreparedArtifact({execution,controlAuthority:authority,signal:new AbortController().signal,emitLog(){},claim:{source:'registry',operation,fingerprint:operationFingerprint,capability:{revisionId:'fixture',values:{}}}});
@@ -85,15 +85,15 @@ try {
     role: "ops-agent",
     serviceIds: ["osrm"],
   });
-  const authority = control.restoreAdmittedControlExecution(installation, original.execution);
-  control.retainControlEffectReceipt(authority, {
+  const authority = await control.restoreAdmittedControlExecution(installation, original.execution);
+  await control.retainControlEffectReceipt(authority, {
     outcome: "unknown",
     publication: "unknown",
     receipt: { kind: "unresolved" },
   });
   const contained = await store.recoverPreparedValidation(authority);
-  control.cancelControlExecution(authority);
-  control.retainControlEffectReceipt(authority, {
+  await control.cancelControlExecution(authority);
+  await control.retainControlEffectReceipt(authority, {
     outcome: "committed",
     publication: "committed",
     receipt: { kind: "ops-result", result: contained },
