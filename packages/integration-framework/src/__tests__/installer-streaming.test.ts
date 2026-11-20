@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 import { afterEach, expect, it, vi } from "vitest";
 import { createDeterministicTarGz } from "../deterministic-tar";
 import { extractIntegrationArchive, installIntegration } from "../installer";
@@ -140,6 +141,25 @@ it("extracts an archive file within its byte bounds and refuses one beyond them"
     expect(existsSync(join(root, left))).toBe(false);
     expect(existsSync(join(root, `${left}-unwrapped`))).toBe(false);
   }
+});
+it("refuses an uncompressed tar and keeps nothing", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-integration-raw-"));
+  roots.push(root);
+  const archive = join(root, "raw.tar");
+  writeFileSync(
+    archive,
+    gunzipSync(createDeterministicTarGz([{ path: "manifest.json", contents: Buffer.from("{}") }])),
+  );
+  await expect(
+    extractIntegrationArchive({
+      archivePath: archive,
+      extractRoot: join(root, "extract"),
+      promoted: join(root, "unwrapped"),
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow("Artifact is not gzip-compressed");
+  expect(existsSync(join(root, "extract"))).toBe(false);
+  expect(existsSync(join(root, "unwrapped"))).toBe(false);
 });
 it("returns ownership of an unopened byte source when cancellation precedes extraction", async () => {
   const { extractIntegrationArtifactStream } = await import("../artifact-stream");

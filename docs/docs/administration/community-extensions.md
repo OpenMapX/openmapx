@@ -305,7 +305,8 @@ their companion services use the service rating instead.
 
 Integration artifacts are guarded on several fronts: only HTTPS artifact URLs are
 accepted; a SHA-256 pin is mandatory and checked before extraction; artifacts
-and their extracted contents are each capped at 200 MiB; tar extraction accepts
+and their extracted contents are each capped at 200 MiB; an artifact must be a
+gzip-compressed tar; tar extraction accepts
 only regular files and directories, so it refuses path escapes (zip-slip),
 absolute paths and every symbolic or hard link; and an artifact shipping a
 `node_modules/` directory is rejected. Backend and frontend runtime

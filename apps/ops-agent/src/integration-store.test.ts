@@ -665,6 +665,13 @@ describe("integration store", () => {
     await expectRefusedArchive(tarGz(entries), message);
   });
 
+  it("refuses an uncompressed tar and keeps nothing", async () => {
+    await expectRefusedArchive(
+      gunzipSync(tarGz([manifestEntry])),
+      "Artifact is not gzip-compressed",
+    );
+  });
+
   it("refuses an archive that ends inside a payload", async () => {
     const tar = gunzipSync(tarGz([manifestEntry], { endBlocks: false }));
     await expectRefusedArchive(gzipSync(tar.subarray(0, 512 + 10)), "tar payload is truncated");

@@ -185,6 +185,7 @@ export async function extractIntegrationArtifactStream(options: {
   try {
     const prefix = await wire.exact(2);
     if (!prefix) throw Error("Artifact is empty");
+    if (prefix[0] !== 0x1f || prefix[1] !== 0x8b) throw Error("Artifact is not gzip-compressed");
     magic = prefix;
   } catch (error) {
     try {
@@ -201,17 +202,13 @@ export async function extractIntegrationArtifactStream(options: {
     })(),
     { objectMode: false, highWaterMark: 64 * 1024 },
   );
-  const gzip =
-    magic[0] === 0x1f && magic[1] === 0x8b ? createGunzip({ chunkSize: 64 * 1024 }) : undefined;
-  if (gzip) {
-    supplied.on("error", (error) => {
-      gzip.destroy(error);
-    });
-    supplied.pipe(gzip);
-  }
-  const expanded = gzip ?? supplied;
+  const gzip = createGunzip({ chunkSize: 64 * 1024 });
+  supplied.on("error", (error) => {
+    gzip.destroy(error);
+  });
+  supplied.pipe(gzip);
   const bounded = async function* () {
-    for await (const part of expanded) {
+    for await (const part of gzip) {
       const bytes = part as Buffer;
       expandedBytes += bytes.byteLength;
       if (!Number.isSafeInteger(expandedBytes) || expandedBytes > options.maxExpandedBytes)
@@ -225,7 +222,7 @@ export async function extractIntegrationArtifactStream(options: {
     root = new AnchoredDirectory(options.destination, undefined, true);
   } catch (error) {
     supplied.destroy();
-    gzip?.destroy();
+    gzip.destroy();
     try {
       await reader.close();
       await wire.close();
@@ -244,7 +241,7 @@ export async function extractIntegrationArtifactStream(options: {
         ? options.signal.reason
         : Error("Artifact extraction aborted"),
     );
-    gzip?.destroy();
+    gzip.destroy();
   };
   options.signal.addEventListener("abort", abort, { once: true });
   try {
@@ -363,7 +360,7 @@ export async function extractIntegrationArtifactStream(options: {
   } finally {
     options.signal.removeEventListener("abort", abort);
     supplied.destroy();
-    gzip?.destroy();
+    gzip.destroy();
     try {
       await reader.close();
       await wire.close();
