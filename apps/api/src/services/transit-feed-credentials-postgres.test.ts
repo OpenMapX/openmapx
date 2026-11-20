@@ -804,7 +804,12 @@ describe.skipIf(!enabled)(
       scenario({ hardlinks: false });
       it("refuses an empty-plan credential follow-up when the original DM is stopped, before proof consumption or admission", async () => {
         // No service produces or consumes a hardlinked input, so the plan is empty.
-        expect(host.loaded.flatMap((s) => [...(s.manifest.produces ?? [])])).toEqual([]);
+        expect(
+          host.loaded.flatMap((s) => [
+            ...(s.manifest.produces ?? []),
+            ...(s.manifest.consumes ?? []),
+          ]),
+        ).toEqual([]);
         const { input, challenge } = await authorizedInput();
         stopCoordinator();
         const [before] = await state.fixture.db.select().from(schema.serviceSecret);

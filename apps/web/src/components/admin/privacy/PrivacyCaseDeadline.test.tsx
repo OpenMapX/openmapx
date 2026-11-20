@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { PrivacyCaseDecisionForms } from "./PrivacyCaseDecisionForms";
 import { privacyDetail } from "./privacyFixtures.test-support";
 import { privacyJson, renderPrivacyComponent } from "./privacyTestClient.test-support";
@@ -35,6 +35,9 @@ describe("case deadlines", () => {
     const base = privacyDetail();
     const detail = { ...base, request: { ...base.request, timeZone: "Pacific/Kiritimati" } };
     const writes: unknown[] = [];
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_url: unknown, init: unknown) => {
@@ -62,6 +65,5 @@ describe("case deadlines", () => {
       extendedUntil: "2026-10-31T20:00:00.000Z",
       extensionNotifiedAt: "2026-09-30T10:30:00.000Z",
     });
-    vi.unstubAllGlobals();
   });
 });

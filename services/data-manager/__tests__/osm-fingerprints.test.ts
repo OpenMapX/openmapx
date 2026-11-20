@@ -68,24 +68,34 @@ it("does not bind a 304 checksum to a replacement inode at publication", async (
   mkdirSync(join(root, "osm"), { mode: 0o700 });
   const target = join(root, "osm/europe-germany.osm.pbf");
   writeFileSync(target, "old bytes", { mode: 0o600 });
+  // curl sends the existing target's mtime as If-Modified-Since; a fixed time
+  // makes the conditional request checkable.
   utimesSync(target, new Date(0), new Date(0));
+  let ifModifiedSince: string | undefined;
+  const notModified = serve("new bytes", { notModified: true });
   try {
     await expect(
-      withLoopbackServer(serve("new bytes", { notModified: true }), (url) =>
-        downloadOsm({
-          region: "europe/germany",
-          dataDir: root,
-          store: new StateStore(root),
-          verifyChecksum: false,
-          downloadImpl: fromLoopback(url),
-          withPublishLock: async (publish) => {
-            writeFileSync(`${target}.replacement`, "new bytes", { mode: 0o600 });
-            renameSync(`${target}.replacement`, target);
-            publish();
-          },
-        }),
+      withLoopbackServer(
+        (request, response) => {
+          ifModifiedSince = request.headers["if-modified-since"];
+          notModified(request, response);
+        },
+        (url) =>
+          downloadOsm({
+            region: "europe/germany",
+            dataDir: root,
+            store: new StateStore(root),
+            verifyChecksum: false,
+            downloadImpl: fromLoopback(url),
+            withPublishLock: async (publish) => {
+              writeFileSync(`${target}.replacement`, "new bytes", { mode: 0o600 });
+              renameSync(`${target}.replacement`, target);
+              publish();
+            },
+          }),
       ),
     ).rejects.toThrow(/source changed/);
+    expect(ifModifiedSince).toBe(new Date(0).toUTCString());
     expect(existsSync(`${target}.openmapx.json`)).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
