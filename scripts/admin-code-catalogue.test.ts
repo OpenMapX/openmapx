@@ -333,11 +333,27 @@ function literalText(node: ts.Node): string | undefined {
   return undefined;
 }
 
+/** The audit table in SQL, optionally schema-qualified and quoted. */
+const AUDIT_TABLE_SQL = String.raw`(?:"?\w+"?\s*\.\s*)?"?admin_audit_log\b"?`;
+const AUDIT_INSERT_SQL = new RegExp(String.raw`\binsert\s+into\s+${AUDIT_TABLE_SQL}`, "i");
+// The table may carry an alias, with or without AS; the SET clause ends at the
+// first FROM, WHERE or RETURNING.
+const AUDIT_UPDATE_SQL = new RegExp(
+  String.raw`\bupdate\s+(?:only\s+)?${AUDIT_TABLE_SQL}(?:\s+(?:as\s+)?(?!set\b)"?\w+"?)?\s+set\b([\s\S]*?)(?:\b(?:from|where|returning)\b|$)`,
+  "i",
+);
+const AUDIT_CODE_COLUMN = /^\s*"?(?:action|target_type)"?\s*$/i;
+
 /** Raw SQL that inserts audit rows or sets their action or target type. */
 function writesAuditCodesInSql(text: string): boolean {
-  if (/\binsert\s+into\s+"?admin_audit_log\b/i.test(text)) return true;
-  const set = /\bupdate\s+"?admin_audit_log"?\s+set\b([\s\S]*?)(?:\bwhere\b|$)/i.exec(text);
-  return set !== null && /\b(action|target_type)"?\s*=/i.test(set[1]);
+  if (AUDIT_INSERT_SQL.test(text)) return true;
+  const assignments = AUDIT_UPDATE_SQL.exec(text)?.[1];
+  if (assignments === undefined) return false;
+  if (/\b(?:action|target_type)"?\s*=/i.test(assignments)) return true;
+  // `SET (column, …) = (…)` assigns a whole column list at once.
+  return [...assignments.matchAll(/\(([^()]*)\)\s*=/g)].some(([, columns = ""]) =>
+    columns.split(",").some((column) => AUDIT_CODE_COLUMN.test(column)),
+  );
 }
 
 const isPrivate = (node: ts.Node) =>
@@ -753,6 +769,30 @@ describe("audit code collector", () => {
     ],
     ["a raw SQL insert", "tx.execute(sql`INSERT INTO admin_audit_log (action) VALUES ('a.b')`);"],
     ["a raw SQL action update", `tx.execute(sql${actionUpdate});`],
+    [
+      "a schema-qualified raw SQL insert",
+      "tx.execute(sql`INSERT INTO public.admin_audit_log (action) VALUES ('a.b')`);",
+    ],
+    [
+      "a quoted schema-qualified raw SQL insert",
+      `tx.execute(sql\`INSERT INTO "public"."admin_audit_log" (action) VALUES ('a.b')\`);`,
+    ],
+    [
+      "a schema-qualified raw SQL update",
+      "tx.execute(sql`UPDATE public.admin_audit_log SET action = 'a.b'`);",
+    ],
+    [
+      "an aliased raw SQL update",
+      "tx.execute(sql`UPDATE admin_audit_log AS a SET action = 'a.b' WHERE a.id = 1`);",
+    ],
+    [
+      "a raw SQL update aliased without AS",
+      "tx.execute(sql`UPDATE admin_audit_log a SET target_type = 'user'`);",
+    ],
+    [
+      "a raw SQL update of a column list",
+      "tx.execute(sql`UPDATE admin_audit_log SET (target_id, action) = (NULL, 'a.b')`);",
+    ],
   ])("fails on %s", (_shape, text) => {
     expect(collect(text).unreadable).toHaveLength(1);
   });
