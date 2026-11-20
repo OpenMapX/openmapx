@@ -60,7 +60,11 @@ import {
   useRemoveExtensionSource,
   useUpdateExtension,
 } from "@/hooks/useExtensions";
-import { AdminRequestError, adminErrorText } from "@/lib/admin/adminRequestError";
+import {
+  AdminDisplayError,
+  AdminRequestError,
+  adminErrorText,
+} from "@/lib/admin/adminRequestError";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -312,7 +316,7 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
       const result = await preview.mutateAsync(request);
       if (!current()) return;
       if (request.id && result.extension.id !== request.id)
-        throw new Error(t("thePreviewDoesNotMatch"));
+        throw new AdminDisplayError(t("thePreviewDoesNotMatch"));
       setBundle(Object.freeze({ request, preview: result, owner: ui.owner, action, current }));
     } catch (error) {
       if (current()) showToast(ui.errorText(error, t("extensionPreviewFailed")), "error");
@@ -328,7 +332,7 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
     setBusy(true);
     try {
       if (captured.action === "update") {
-        if (!captured.request.id) throw new Error(t("noExtensionSelectedForUpdate"));
+        if (!captured.request.id) throw new AdminDisplayError(t("noExtensionSelectedForUpdate"));
         await update.mutateAsync({
           id: captured.request.id,
           hostPortConfirmation: captured.preview.confirmation,

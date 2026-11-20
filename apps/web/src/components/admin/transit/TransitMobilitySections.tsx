@@ -145,8 +145,8 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
                   ? t("diskFree", { bytes: format.bytes(status.preflightFreeDiskBytes) })
                   : t("freeDiskUnknown"),
               previousSlot: status.previousHealthySlot ?? t("noneValue"),
+              pinProposal: String(status.pinProposalPending === true),
             })}
-            {status.pinProposalPending ? ` · ${t("pinProposalAwaitingReview")}` : ""}
           </Typography>
           <Alert severity="info">{t("crowdsourceSidecarsAreDisabledPending")}</Alert>
           {status.capabilityState !== "healthy" && (

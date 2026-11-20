@@ -434,7 +434,7 @@ function CatalogPinView() {
                 )}
                 {data.validation?.status === "passed" && (
                   <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-                    {t("testedSlotSlotEpochEpoch", {
+                    {t("testedSlot", {
                       slot: data.validation.slot,
                       epoch: data.validation.epoch,
                       imageDigest: data.validation.imageDigest,

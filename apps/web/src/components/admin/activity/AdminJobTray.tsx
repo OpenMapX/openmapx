@@ -43,7 +43,7 @@ export function AdminJobTray() {
       >
         <Stack sx={{ p: 2, gap: 1, width: 360, maxWidth: "calc(100vw - 24px)" }}>
           <Typography variant="subtitle2">
-            {t("administrationJobsActiveActive", { active })}
+            {t("administrationJobsHeading", { count: active })}
           </Typography>
           {recent.length === 0 && (
             <Typography variant="body2" color="text.secondary">

@@ -178,6 +178,26 @@ const shapes: { shape: string; literal: string; translated: string }[] = [
     literal: `export const metadata = { title: "Bulk Configure" };\n`,
     translated: `export const metadata = { title: titleFor("bulkConfigure") };\n`,
   },
+  {
+    shape: "an error a component raises for the reader",
+    literal: statement(`throw new AdminDisplayError("Preview expired");`),
+    translated: statement(`throw new AdminDisplayError(t("previewExpired"));`),
+  },
+  {
+    shape: "an error handed to a callback prop",
+    literal: statement(`onError("Preview failed");`),
+    translated: statement(`onError(t("previewFailed"));`),
+  },
+  {
+    shape: "a children prop",
+    literal: component(`<Typography children="Not configured" />`),
+    translated: component(`<Typography children={t("notConfigured")} />`),
+  },
+  {
+    shape: "an unlisted capitalized phrase",
+    literal: component(`{"PRUNE_EXPIRED_BACKUPS"}`),
+    translated: component(`{t("pruneExpiredBackups")}`),
+  },
 ];
 
 describe("noLiteralCopy", () => {

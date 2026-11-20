@@ -6,6 +6,7 @@ import type {
   AdminOperationFormValue,
   AdminOperationInputError as InputErrorBody,
 } from "@openmapx/core/api-contracts";
+import { AdminRequestError } from "@/lib/admin/adminRequestError";
 import { SERVICE_READ_TIMEOUT_MS, serviceRequestError } from "@/lib/admin/serviceAdmin";
 
 export type {
@@ -16,7 +17,7 @@ export type {
 export type AdminOperationFormValues = Record<string, AdminOperationFormValue>;
 
 /** Keeps validated field paths available to the form without a second wire DTO. */
-export class AdminOperationInputError extends Error {
+export class AdminOperationInputError extends AdminRequestError {
   constructor(
     message: string,
     readonly issues: InputErrorBody["issues"],

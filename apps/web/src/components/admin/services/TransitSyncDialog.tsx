@@ -16,7 +16,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 
 type Preview = Extract<
@@ -99,7 +99,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
         !preview.result.ok ||
         JSON.stringify(preview.countries) !== current.current
       )
-        throw Error(t("previewTheCurrentCountrySelection"));
+        throw new AdminDisplayError(t("previewTheCurrentCountrySelection"));
       key.current ??= crypto.randomUUID();
       return sdk.unwrapAdminResponse(
         await sdk.postApiDataManagerTransitSync(

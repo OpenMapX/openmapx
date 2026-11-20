@@ -93,8 +93,9 @@ alongside `useTranslations` and `createTranslator`. In admin directories, Biome
 rejects literal text between JSX tags (`noJsxLiterals`), and
 `scripts/biome-plugins/noLiteralCopy.grit` rejects string literals with words
 wherever else they reach the screen: expression children, props and object
-keys that show text, label maps, values handed to a translator, and toast,
-snackbar, error-setter and job-report messages. It follows ternary branches,
+keys that show text, label maps, values handed to a translator, toast,
+snackbar, error-setter and job-report messages, `on…Error` callbacks and
+`new AdminDisplayError(…)`. It follows ternary branches,
 `??`, `||` and `&&` operands, `+` concatenation and template literals.
 Strings that read the same in every language, such as the product name,
 environment variable names, commands, file names, licence identifiers and
@@ -107,3 +108,11 @@ rather than a code takes a `biome-ignore lint/plugin/noRawCodeCopy` comment
 that says so. The override in `biome.json` lists the
 sections not yet localized: cache, settings, system maintenance, the
 application log and the audit log; `lib/admin` is checked by the plugin only.
+
+The plugins read syntax, not data flow, so some shapes stay out of their
+reach and are left to review: copy held in a variable before it is shown
+(`const s = on ? "Running" : "Stopped"`), copy returned from a helper or a
+`switch`, setters whose name does not say they hold a message (`setStatus`),
+and a code read through a renamed variable. A plain `throw new Error("…")`
+is not reported because `adminErrorText` never shows its message; only an
+`AdminDisplayError` reaches the screen.

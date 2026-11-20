@@ -15,7 +15,7 @@ import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useComposePreview } from "@/hooks/useComposePreview";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { invalidateServiceAdministration, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -43,7 +43,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
   const renderOnly = useMutation({
     retry: false,
     mutationFn: async () => {
-      if (!renderIntent) throw Error(t("refreshAndConfirmTheConfiguration"));
+      if (!renderIntent) throw new AdminDisplayError(t("refreshAndConfirmTheConfiguration"));
       const execution = owner;
       try {
         const result = await serviceOrThrow(
@@ -78,7 +78,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         const result = await serviceOrThrow(
           sdk.startAdminCompose({ "idempotency-key": idempotencyKey }, undefined, { client }),
         );
-        if (!result.ok) throw new Error(t("composeUpFailed"));
+        if (!result.ok) throw new AdminDisplayError(t("composeUpFailed"));
         composeUpIntent.current = null;
         void invalidateServiceAdministration(queryClient, apiUrl, effect);
         if (execution.active) showToast(t("stackStartedUseGuardedApply"));
@@ -187,7 +187,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
             size="small"
             onClick={async () => {
               try {
-                if (!navigator.clipboard) throw Error(t("clipboardUnavailable"));
+                if (!navigator.clipboard) throw new AdminDisplayError(t("clipboardUnavailable"));
                 await navigator.clipboard.writeText("pnpm openmapx compose down");
                 if (owner.active) showToast(t("copiedHostShutdownCommand"));
               } catch {

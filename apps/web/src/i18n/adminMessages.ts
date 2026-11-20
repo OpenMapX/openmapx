@@ -2,9 +2,10 @@ import type { AbstractIntlMessages } from "next-intl";
 
 /**
  * Catalogue namespaces only admin pages read. The root layout leaves them out
- * of every page's payload, and the admin layout provides the full catalogue
- * to its own pages. Admin code rendered on public pages, such as the
- * impersonation banner and the unsaved-draft guard, reads public namespaces.
+ * of every page's payload; the admin layout sends only these namespaces, and
+ * `AdminMessagesProvider` merges them with the public catalogue already on
+ * the page. Admin code rendered on public pages, such as the impersonation
+ * banner and the unsaved-draft guard, reads public namespaces.
  */
 export const ADMIN_NAMESPACES: ReadonlySet<string> = new Set([
   "adminActivity",

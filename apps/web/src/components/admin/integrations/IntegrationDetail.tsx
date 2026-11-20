@@ -39,7 +39,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   hasVaultCredential,
   useIntegrationAdmin,
@@ -742,7 +742,7 @@ function HealthTab({
         const result = await healthQuery.refetch({ throwOnError: true });
         // Cancellation may resolve with a previous cached success rather than rejecting.
         if (!owner.active) return;
-        if (!result.data) throw new Error(t("healthCheckWasInterrupted"));
+        if (!result.data) throw new AdminDisplayError(t("healthCheckWasInterrupted"));
         void admin.refresh();
         showToast(t("healthCheckCompleted"));
       } catch (error) {

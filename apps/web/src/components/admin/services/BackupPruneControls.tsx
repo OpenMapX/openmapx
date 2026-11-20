@@ -14,6 +14,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { AdminDisplayError } from "@/lib/admin/adminRequestError";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
@@ -58,7 +59,7 @@ export function BackupPruneControls() {
     retry: false,
     mutationFn: async () => {
       if (!intent || Date.parse(intent.preview.proof.expiresAt) <= Date.now())
-        throw Error(t("previewExpiredRequestAFresh"));
+        throw new AdminDisplayError(t("previewExpiredRequestAFresh"));
       const execution = owner;
       const result = sdk.unwrapAdminResponse(
         await sdk.pruneAdminServiceBackups(

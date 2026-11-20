@@ -48,7 +48,7 @@ import Dialog from "@/components/ui/Dialog";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
 import { useAdminObservedJobs, useOptionalAdminJobRegistration } from "@/lib/admin/adminJobEffects";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import {
   activityJobQueryOptions,
@@ -95,7 +95,7 @@ interface SubmissionRejection {
 
 const MAX_RETRY_SECONDS = 3_600;
 
-class SubmissionError extends Error {
+class SubmissionError extends AdminDisplayError {
   constructor(
     message: string,
     readonly status: number | null,

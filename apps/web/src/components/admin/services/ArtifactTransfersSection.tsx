@@ -23,7 +23,7 @@ import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   artifactFileSinkSupported,
   createArtifactFileSink,
@@ -149,7 +149,8 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
       } catch (failure) {
         if (!(failure instanceof ApiNativeDownloadUnavailableError)) throw failure;
       }
-      if (!artifactFileSinkSupported()) throw Error(t("thisConnectionRequiresABrowser"));
+      if (!artifactFileSinkSupported())
+        throw new AdminDisplayError(t("thisConnectionRequiresABrowser"));
       if (!owner.active) return;
       const controller = new AbortController();
       byteRequest.current = { owner, controller };
@@ -441,7 +442,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             ))}
             {preview?.runtimeImageMismatches.map((item) => (
               <Alert key={item.service} severity="warning">
-                {t("serviceBundleBundleLocalLocal", {
+                {t("serviceVersions", {
                   service: item.service,
                   bundle: item.bundle,
                   local: item.local,

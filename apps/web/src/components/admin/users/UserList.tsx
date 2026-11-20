@@ -230,7 +230,7 @@ function ActionsMenu({
       <ConfirmDialog
         open={confirmDelete}
         title={t("deleteUser")}
-        message={t("permanentlyDeleteNameEmailThis", { name: user.name, email: user.email })}
+        message={t("deleteUserConfirm", { name: user.name, email: user.email })}
         confirmLabel={t("delete")}
         confirmColor="error"
         loading={deleteUser.isPending}
@@ -504,7 +504,7 @@ export function UserList() {
                         </TableCell>
                         <TableCell>
                           {user.twoFactorEnabled && (
-                            <Tooltip title={t("n2faEnabled")}>
+                            <Tooltip title={t("twoFactorEnabled")}>
                               <SecurityIcon sx={{ fontSize: 16, color: "primary.main" }} />
                             </Tooltip>
                           )}

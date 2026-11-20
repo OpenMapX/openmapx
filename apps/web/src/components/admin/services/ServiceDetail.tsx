@@ -213,16 +213,12 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                   >
                     {t.rich("mountedAt", {
                       path: c.mountAt,
+                      hasFile: String(Boolean(c.targetFilename)),
+                      file: c.targetFilename ?? "",
+                      readOnly: String(c.readOnly === true),
+                      optional: String(c.required === false),
                       code: (chunks) => <code style={{ fontFamily: "monospace" }}>{chunks}</code>,
                     })}
-                    {[
-                      c.targetFilename ? t("mountedAs", { file: c.targetFilename }) : null,
-                      c.readOnly ? t("readOnly") : null,
-                      c.required === false ? t("optional") : null,
-                    ]
-                      .filter(Boolean)
-                      .map((part) => ` · ${part}`)
-                      .join("")}
                   </Typography>
                 </Stack>
               ))}

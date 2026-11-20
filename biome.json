@@ -218,6 +218,7 @@
         "apps/web/src/lib/admin/**",
         "!**/*.test.ts",
         "!**/*.test.tsx",
+        "!**/__tests__/**",
         "!**/*.test-support.ts",
         "!**/*.test-support.tsx"
       ],

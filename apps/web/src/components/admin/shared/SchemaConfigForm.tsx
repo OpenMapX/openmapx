@@ -20,7 +20,7 @@ import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
 import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
 import { useCallback, useId, useMemo, useState } from "react";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
@@ -105,12 +105,12 @@ export function buildConfigDiff(
       (OPERATOR_STRING_FORMATS as readonly string[]).includes(field.format) &&
       (typeof value !== "string" || !validOperatorString(value, field.format))
     )
-      throw Error(t("fieldInvalidFormat", { field: field.title }));
+      throw new AdminDisplayError(t("fieldInvalidFormat", { field: field.title }));
     if (field && isStructuredField(field)) {
       try {
         diff[key] = JSON.parse(String(value));
       } catch {
-        throw new Error(t("fieldInvalidJson", { field: field.title }));
+        throw new AdminDisplayError(t("fieldInvalidJson", { field: field.title }));
       }
     } else {
       diff[key] = value;
@@ -155,7 +155,7 @@ export function extractConfigFields(
     }));
 }
 
-export class AdminActionNotStartedError extends Error {}
+export class AdminActionNotStartedError extends AdminDisplayError {}
 /**
  * The configuration was saved, but applying it to the service did not start or
  * could not be confirmed. The form that shows it explains which, in the

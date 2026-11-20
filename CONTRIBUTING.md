@@ -124,7 +124,10 @@ pull requests.
 
 The fixture server also answers the administration pages from
 `apps/web/e2e/admin-fixtures.json`, and a test checks each answer against its
-admin contract. A browser that sends the cookie `openmapx-fixture-admin=1` is
+admin contract. Better Auth's session and user-list answers have no contract
+in this repository, so the test checks only the administrator's identity in
+them; a change to Better Auth's shapes would not fail it. A browser that sends
+the cookie `openmapx-fixture-admin=1` is
 signed in as an administrator, so admin pages render populated, for example when
 taking screenshots; journeys without the cookie stay signed out.
 

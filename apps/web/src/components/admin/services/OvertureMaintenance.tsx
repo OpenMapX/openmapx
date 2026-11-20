@@ -24,7 +24,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
@@ -217,7 +217,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
       } as const;
       try {
         if (!prepared || prepared.name !== operationName || prepared.region !== region.trim())
-          throw Error(t("theOperationPreviewChangedReview"));
+          throw new AdminDisplayError(t("theOperationPreviewChangedReview"));
         const request = operationRequest(operationName, prepared.region);
         const jobId = await runAdminOperation(client, request.id, prepared.input);
         register({ client, apiUrl, jobId, effect });

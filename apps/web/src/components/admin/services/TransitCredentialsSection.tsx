@@ -416,7 +416,9 @@ function TransitCredentialView({
               onRowsPerPageChange={() => {}}
               hideSinglePage={false}
             />
-            {changes.length > 100 && <Alert severity="warning">{t("reviewAtMost100Key")}</Alert>}
+            {changes.length > 100 && (
+              <Alert severity="warning">{t("reviewKeyLimit", { limit: 100 })}</Alert>
+            )}
             {data.editable && (
               <Button
                 variant="contained"
@@ -436,7 +438,7 @@ function TransitCredentialView({
             <Stack spacing={1} sx={{ mt: 1 }}>
               {reviewed.preview.changes.map((change) => (
                 <Typography variant="body2" key={change.key}>
-                  {change.action === "delete" ? t("delete") : t("set")}: {change.key}
+                  {t("credentialChange", { action: change.action, key: change.key })}
                 </Typography>
               ))}
               <Stack direction="row" spacing={1}>

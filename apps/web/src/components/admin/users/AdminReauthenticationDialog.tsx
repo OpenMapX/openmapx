@@ -20,6 +20,7 @@ import {
   type StoredAdminReauth,
   startStoredAdminReauthentication,
 } from "@/lib/admin/adminReauthentication";
+import { AdminDisplayError } from "@/lib/admin/adminRequestError";
 
 type Props = (
   | {
@@ -110,7 +111,7 @@ export function AdminReauthenticationDialog(props: Props) {
                   intentKey(current.requests) !== identity ||
                   JSON.stringify(current.challengeIds) !== JSON.stringify(stored.challengeIds)
                 )
-                  throw Error(t("administratorActionChanged"));
+                  throw new AdminDisplayError(t("administratorActionChanged"));
                 await completeStoredAdminReauthentication(apiUrl);
                 return stored.challengeIds.map((challengeId) => ({ challengeId }));
               })

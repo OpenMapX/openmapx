@@ -338,7 +338,7 @@ function ServiceLogsSession({
               mb: 1,
             }}
           >
-            {t("errorError", { error })}
+            {t("errorDetail", { error })}
           </Typography>
         )}
 

@@ -217,7 +217,7 @@ function ProfileTab({
             )}
           </Typography>
           <Typography variant="body2" component="div">
-            <strong>{t("n2fa")}</strong>{" "}
+            <strong>{t("twoFactorLabel")}</strong>{" "}
             {user.twoFactorEnabled ? (
               <Chip label={t("enabled")} size="small" color="primary" />
             ) : (

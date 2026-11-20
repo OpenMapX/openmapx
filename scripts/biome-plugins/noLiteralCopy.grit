@@ -11,15 +11,14 @@ language js
 // `??`, `||` or `&&`, or a `+` operand, because those values are shown as they
 // are. Literals inside a call, such as translator keys, are not followed.
 
-// Strings that read the same in every language. Each one is listed, apart
-// from environment variable names, which are recognized by their shape.
+// Strings that read the same in every language. Each one is listed.
 pattern non_copy() {
   or {
     // The product name.
     r"[\"'`]OpenMapX[\"'`]",
-    // Environment variable names and patterns, such as OPENMAPX_SECRETS_KEY
-    // or INTEGRATION_<ID>_<KEY>.
-    r"[\"'`][A-Z][A-Z0-9]*(?:_(?:[A-Z0-9]+|<[A-Z]+>))+[\"'`]",
+    // Environment variable names the admin screens show, and the
+    // INTEGRATION_<ID>_<KEY> and SERVICE_<ID>_<KEY> name patterns.
+    r"[\"'`](?:OPENMAPX_[A-Z0-9_]+|(?:INTEGRATION|SERVICE)_<ID>_<KEY>|TRANSITOUS_API_KEYS|PUBLIC_URL|EMAIL_FROM)[\"'`]",
     // Commands, file names and protocol names.
     r"[\"'`](?:openssl rand -hex 32|pnpm openmapx compose down|infra/docker/\.env|extension\.json|tcp)[\"'`]",
     // Licence identifiers.
@@ -65,13 +64,13 @@ pattern copy_value() {
 // Props and object keys whose value is shown: label, title, helperText,
 // aria-label, noOptionsText, confirmLabel and the like.
 pattern copy_name() {
-  r"(?:(?:[\w-]*[a-z0-9])?(?:Label|Title|Text|Placeholder|Description|Message|Caption|Heading|Tooltip|Hint)|label|title|subtitle|text|placeholder|description|message|caption|heading|tooltip|hint|aria-(?:label|description|valuetext|roledescription)|alt|primary|secondary|headerName)"
+  r"(?:(?:[\w-]*[a-z0-9])?(?:Label|Title|Text|Placeholder|Description|Message|Caption|Heading|Tooltip|Hint)|label|title|subtitle|text|placeholder|description|message|caption|heading|tooltip|hint|aria-(?:label|description|valuetext|roledescription)|alt|primary|secondary|headerName|children)"
 }
 
 // Calls that show their first argument: toasts, snackbars and setters that
 // hold a message. Later arguments, such as a severity, are not copy.
 pattern copy_sink() {
-  r"(?:toast(?:\.\w+)?|showToast|setToast|enqueueSnackbar|showSnackbar|setSnackbar|notify\w*|set\w*(?:Error|Message|Notice|Toast|Snackbar|Feedback|Success|Warning|Info|Hint|Label|Title|Text|Copy|Alert)s?)"
+  r"(?:toast(?:\.\w+)?|showToast|setToast|enqueueSnackbar|showSnackbar|setSnackbar|notify\w*|on\w*(?:Error|Message)|set\w*(?:Error|Message|Notice|Toast|Snackbar|Feedback|Success|Warning|Info|Hint|Label|Title|Text|Copy|Alert)s?)"
 }
 
 pattern translator() { r"(?:t|t[a-z]|t[A-Z]\w*)(?:\.(?:rich|markup))?" }
@@ -92,6 +91,7 @@ or {
   },
   JsPropertyObjectMember(name=$name, value=copy_value()) where { $name <: copy_name() },
   JsCallExpression(callee=copy_sink(), arguments=JsCallArguments(args=[copy_value(), ...])),
+  JsNewExpression(callee=`AdminDisplayError`, arguments=JsCallArguments(args=[copy_value(), ...])),
   JsCallExpression(callee=`reportJob`, arguments=JsCallArguments(args=[$_, copy_value(), ...])),
   JsCallExpression(callee=$callee, arguments=JsCallArguments(args=$arguments)) where {
     $callee <: translator(),

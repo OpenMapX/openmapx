@@ -20,7 +20,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { invalidateExtensionAdministration } from "@/lib/admin/extensionAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import {
@@ -180,7 +180,7 @@ function StandaloneInstallDialogContent() {
         source = standaloneInstallSourceSchema.parse({ kind, url, sha256: sha });
       else {
         if (!file || file.size === 0 || file.size > 200 * 1024 ** 2)
-          throw Error(t("selectANonemptyIntegrationArchive"));
+          throw new AdminDisplayError(t("selectANonemptyIntegrationArchive"));
         if (uploadedSource.current?.file === file) source = uploadedSource.current.source;
         else {
           const controller = new AbortController();
@@ -200,7 +200,8 @@ function StandaloneInstallDialogContent() {
           );
           upload.current = null;
           if (!current()) return;
-          if (!uploaded.sha256) throw Error(t("uploadedArchiveDigestIsUnavailable"));
+          if (!uploaded.sha256)
+            throw new AdminDisplayError(t("uploadedArchiveDigestIsUnavailable"));
           source = { kind, stageId: stage.stageId, expectedSha256: uploaded.sha256 };
           uploadedSource.current = { file, source };
         }
@@ -333,7 +334,7 @@ function StandaloneInstallDialogContent() {
                 </Typography>
                 {inspection.commit && (
                   <Typography sx={{ overflowWrap: "anywhere" }} variant="body2">
-                    {t("resolvedCommitCommit", { commit: inspection.commit })}
+                    {t("resolvedCommit", { commit: inspection.commit })}
                   </Typography>
                 )}
                 <Typography sx={{ overflowWrap: "anywhere" }} variant="body2">

@@ -19,7 +19,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
@@ -77,7 +77,8 @@ export function SetCredentialDialog({
     retry: false,
     mutationFn: async () => {
       try {
-        if (!draft.current?.revision) throw Error(t("refreshCredentialMetadataBeforeSaving"));
+        if (!draft.current?.revision)
+          throw new AdminDisplayError(t("refreshCredentialMetadataBeforeSaving"));
         const revision = draft.current.revision;
         if (draft.current.value !== value)
           draft.current = { ...draft.current, value, key: crypto.randomUUID() };

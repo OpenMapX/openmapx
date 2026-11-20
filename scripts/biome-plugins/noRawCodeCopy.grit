@@ -16,7 +16,9 @@ pattern code_field() {
 pattern raw_code() {
   or {
     JsStaticMemberExpression(member=$member) where { $member <: code_field() },
-    JsComputedMemberExpression(member=$member) where { $member <: r"[\"'](?:status|state|action|source)[\"']" }
+    JsComputedMemberExpression(member=$member) where {
+      $member <: r"[\"'](?:status|state|action|source)[\"']"
+    }
   }
 }
 
