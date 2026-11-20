@@ -83,21 +83,22 @@ it.each([true, false])(
       coordinates: [8, 50],
     });
     usePlaceStore.getState().setSelectedPlace(selected);
+    const callsBefore = fake.state.listenerCalls.length;
     const view = render(
       <>
         <DataSourceLayer />
         <MapClickHandler />
       </>,
     );
-    const delegated = fake.state.listenerCalls.findLast(
-      (call) =>
-        call.method === "on" && call.event === "click" && call.layerId?.endsWith("-markers"),
-    )?.handler;
-    const picker = fake.state.listenerCalls.findLast(
-      (call) => call.method === "on" && call.event === "click" && !call.layerId,
-    )?.handler;
+    // The overlay pipeline registers its map click before the plain-map handler does.
+    const mapClicks = fake.state.listenerCalls
+      .slice(callsBefore)
+      .filter((call) => call.method === "on" && call.event === "click" && !call.layerId);
+    const delegated = mapClicks[0]?.handler;
+    const picker = mapClicks.at(-1)?.handler;
     expect(delegated).toBeDefined();
     expect(picker).toBeDefined();
+    expect(picker).not.toBe(delegated);
     fake.state.renderedFeatures.set("ds-sample-markers", [
       {
         type: "Feature",
@@ -230,7 +231,13 @@ it("adds a supplied logo pin while retaining live availability styling and fallb
   });
   useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
   const view = render(<DataSourceLayer />);
-  await waitFor(() => expect(fake.map.getLayer("ds-sample-brand-logos")).toBeDefined());
+  await waitFor(() =>
+    expect(
+      (fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection | undefined)
+        ?.features[0].properties?.brandImageId,
+    ).toBeDefined(),
+  );
+  expect(fake.map.getLayer("ds-sample-brand-logos")).toBeDefined();
   expect(logoLoad).toHaveBeenCalledWith(
     fake.map,
     results[0].branding.logoUrl,
@@ -317,16 +324,21 @@ it("selects a branded result once when overlapping layers receive the same click
       properties: { id: "one", name: "One" },
     } as never,
   ]);
-  const originalEvent = new MouseEvent("click");
-  const handlers = ["ds-sample-markers", "ds-sample-brand-halos", "ds-sample-brand-logos"].map(
-    (layerId) =>
-      fake.state.listenerCalls.findLast(
-        (call) => call.method === "on" && call.event === "click" && call.layerId === layerId,
-      )?.handler,
-  );
+  for (const layerId of ["ds-sample-brand-halos", "ds-sample-brand-logos"]) {
+    fake.state.renderedFeatures.set(layerId, [
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [8, 50] },
+        properties: { id: "one", name: "One" },
+      } as never,
+    ]);
+  }
   act(() => {
-    for (const handler of handlers)
-      handler?.({ originalEvent, point: { x: 1, y: 2 }, lngLat: { lng: 8, lat: 50 } });
+    fake.emit("click", {
+      originalEvent: new MouseEvent("click"),
+      point: { x: 1, y: 2 },
+      lngLat: { lng: 8, lat: 50 },
+    });
   });
   expect(select).toHaveBeenCalledTimes(1);
   view.unmount();

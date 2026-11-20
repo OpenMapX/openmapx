@@ -27,7 +27,7 @@ import {
   withFeatureContributors,
 } from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
-import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import type { Map as MaplibreMap } from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
@@ -41,12 +41,10 @@ import {
   dataSourceTrackPaint,
 } from "@/integration-api/map/dataSourceFeatures";
 import { openDataSourceItem } from "@/integration-api/map/dataSourceOverlay";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
-import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
-import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { dataSourceRecordContributors } from "@/lib/attributionForProviders";
 import { dataSourceBrandImageId, loadDataSourceBrandMarker } from "@/lib/dataSourceBrandMarker";
@@ -158,24 +156,12 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string, fi
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(createMarkerSvg(iconPath, fill))}`;
 }
 
-function removeLayers(map: maplibregl.Map, dsId: string) {
-  removeSlottedLayers(
-    map,
-    [
-      tracksLayerId(dsId),
-      mapContextOutlineLayerId(dsId),
-      mapContextFillLayerId(dsId),
-      brandLogosLayerId(dsId),
-      brandHalosLayerId(dsId),
-      labelsLayerId(dsId),
-      markersLayerId(dsId),
-    ],
-    [tracksSourceId(dsId), mapContextSourceId(dsId), sourceId(dsId)],
-  );
-}
+/** Results the user asked for win over ambient overlays drawn beneath them. */
+const RESULT_INTERACTION_PRIORITY = 200;
+/** Context zones are areas beneath the results; a result on top of one wins. */
+const CONTEXT_INTERACTION_PRIORITY = 15;
 
 export function DataSourceLayer() {
-  const publish = useRef(createGeoJsonSourcePublisher()).current;
   const t = useTranslations("dataSources");
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const activeSource = useDataSourceStore((s) => s.activeSource);
@@ -191,34 +177,9 @@ export function DataSourceLayer() {
   const setHoveredItemId = useDataSourceStore((s) => s.setHoveredItemId);
   const [inspectedContext, setInspectedContext] = useState<Record<string, unknown> | null>(null);
 
-  // Register this source's layers in the shared interactive-layer registry so
-  // MapStylePoiClickHandler (and MapClickHandler) know to defer to our own handlers.
-  useEffect(() => {
-    if (!activeSource) return;
-    const markersLid = markersLayerId(activeSource);
-    const labelsLid = labelsLayerId(activeSource);
-    const contextFillLid = mapContextFillLayerId(activeSource);
-    const contextOutlineLid = mapContextOutlineLayerId(activeSource);
-    INTERACTIVE_LAYER_IDS.add(brandLogosLayerId(activeSource));
-    INTERACTIVE_LAYER_IDS.add(brandHalosLayerId(activeSource));
-    INTERACTIVE_LAYER_IDS.add(markersLid);
-    INTERACTIVE_LAYER_IDS.add(labelsLid);
-    INTERACTIVE_LAYER_IDS.add(contextFillLid);
-    INTERACTIVE_LAYER_IDS.add(contextOutlineLid);
-    return () => {
-      INTERACTIVE_LAYER_IDS.delete(brandLogosLayerId(activeSource));
-      INTERACTIVE_LAYER_IDS.delete(brandHalosLayerId(activeSource));
-      INTERACTIVE_LAYER_IDS.delete(markersLid);
-      INTERACTIVE_LAYER_IDS.delete(labelsLid);
-      INTERACTIVE_LAYER_IDS.delete(contextFillLid);
-      INTERACTIVE_LAYER_IDS.delete(contextOutlineLid);
-    };
-  }, [activeSource]);
-
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
 
   const { data: sourcesData } = useDataSources();
-  const prevSourceRef = useRef<string | null>(null);
 
   // Find meta for the active source
   const activeMeta = useMemo(() => {
@@ -390,13 +351,9 @@ export function DataSourceLayer() {
       : [],
   );
 
-  // Track whether we've set the initial searchBbox
-  const initialBboxSetRef = useRef(false);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: activeSource is an intentional trigger
-  useEffect(() => {
-    initialBboxSetRef.current = false;
-  }, [activeSource]);
+  // The source whose search area the first camera report set. Every later
+  // move only marks the map as moved, so the search waits for the reader.
+  const searchBboxSourceRef = useRef<string | null>(null);
 
   // Viewport tracking
   const handleMoveEnd = useCallback(() => {
@@ -414,16 +371,15 @@ export function DataSourceLayer() {
 
     setViewport(bbox, zoom);
 
-    if (!initialBboxSetRef.current) {
-      initialBboxSetRef.current = true;
+    if (searchBboxSourceRef.current !== activeSource) {
+      searchBboxSourceRef.current = activeSource;
       setSearchBbox(bbox);
     } else {
       setMapMoved(true);
     }
-  }, [mapRef, setViewport, setSearchBbox, setMapMoved]);
+  }, [activeSource, mapRef, setViewport, setSearchBbox, setMapMoved]);
 
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !activeSource) return;
 
@@ -432,20 +388,9 @@ export function DataSourceLayer() {
     map.on("moveend", handleMoveEnd);
     return () => {
       map.off("moveend", handleMoveEnd);
+      searchBboxSourceRef.current = null;
     };
-  }, [mapReady, mapRef, styleVersion, activeSource, handleMoveEnd]);
-
-  // Clean up layers when activeSource changes
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const prevSource = prevSourceRef.current;
-    if (prevSource && prevSource !== activeSource) {
-      removeLayers(map, prevSource);
-    }
-    prevSourceRef.current = activeSource;
-  }, [activeSource, mapReady, mapRef]);
+  }, [mapReady, mapRef, activeSource, handleMoveEnd]);
 
   const geojson = useMemo(
     () =>
@@ -464,74 +409,66 @@ export function DataSourceLayer() {
   );
   const trackGeojson = useMemo(() => buildTrackGeoJson(filteredResults), [filteredResults]);
 
-  // Sync GeoJSON source + layers
-  useEffect(() => {
+  // Brand logos load asynchronously. Each finished load re-renders, so the
+  // results that carry that logo switch to it with the receipts of its file.
+  const [brandLoads, setBrandLoads] = useState(0);
+  const logoUrls = useMemo(
+    () => [...new Set(geojson.features.map((f) => f.properties.logoUrl).filter(Boolean))],
+    [geojson],
+  );
+  const brandedData = useMemo(() => {
+    void brandLoads;
     void styleVersion;
     const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    let cancelled = false;
-    const attempted = new WeakMap<object, Set<string>>();
-    let brandedData = geojson;
-    let brandedKey = "";
-    const syncLayer = () => {
-      if (cancelled) return;
-      if (!activeSource || !activeMeta) {
-        if (activeSource) removeLayers(map, activeSource);
-        return;
-      }
-
-      const sid = sourceId(activeSource);
-      const markersLid = markersLayerId(activeSource);
-      const mapContextSid = mapContextSourceId(activeSource);
-      const mapContextFillLid = mapContextFillLayerId(activeSource);
-      const mapContextOutlineLid = mapContextOutlineLayerId(activeSource);
-
-      if (viewportZoom < activeMeta.minZoom) {
-        removeLayers(map, activeSource);
-        return;
-      }
-
-      const useIconMarkers = activeMeta.markerStyle.type === "icon";
-      const imageId = useIconMarkers ? `ds-marker-${activeSource}` : undefined;
-
-      const urls = [...new Set(geojson.features.map((f) => f.properties.logoUrl).filter(Boolean))];
-      const ready = urls.filter((url) => map.hasImage(dataSourceBrandImageId(url)));
-      const key = JSON.stringify(ready.map((url) => [url, loadedBrandAssets.get(map)?.get(url)]));
-      if (key !== brandedKey) {
-        brandedKey = key;
-        brandedData = ready.length
+    const ready = map ? logoUrls.filter((url) => map.hasImage(dataSourceBrandImageId(url))) : [];
+    if (!map || ready.length === 0) return geojson;
+    return {
+      ...geojson,
+      features: geojson.features.map((feature) =>
+        ready.includes(feature.properties.logoUrl)
           ? {
-              ...geojson,
-              features: geojson.features.map((feature) => ({
-                ...feature,
-                properties: {
-                  ...feature.properties,
-                  ...(ready.includes(feature.properties.logoUrl)
-                    ? {
-                        brandImageId: dataSourceBrandImageId(feature.properties.logoUrl),
-                        _mapBrandAttributions: serializeContributors(
-                          snapshotContributors(
-                            readCapturedContributors(
-                              feature.properties._mapLogoSelectionAttributions,
-                            ) ?? [],
-                            loadedBrandAssets.get(map)?.get(feature.properties.logoUrl) ?? [],
-                          ),
-                        ),
-                      }
-                    : {}),
-                },
-              })),
+              ...feature,
+              properties: {
+                ...feature.properties,
+                brandImageId: dataSourceBrandImageId(feature.properties.logoUrl),
+                _mapBrandAttributions: serializeContributors(
+                  snapshotContributors(
+                    readCapturedContributors(feature.properties._mapLogoSelectionAttributions) ??
+                      [],
+                    loadedBrandAssets.get(map)?.get(feature.properties.logoUrl) ?? [],
+                  ),
+                ),
+              },
             }
-          : geojson;
-      }
-      const source = publish(map, sid, brandedData);
-      const sourceAttempts = attempted.get(source) ?? new Set<string>();
-      attempted.set(source, sourceAttempts);
-      for (const url of urls) {
-        if (map.hasImage(dataSourceBrandImageId(url)) || sourceAttempts.has(url)) continue;
-        sourceAttempts.add(url);
-        const isCurrent = () => !cancelled && map.getSource(sid) === source;
+          : feature,
+      ),
+    };
+  }, [geojson, logoUrls, brandLoads, styleVersion, mapRef]);
+
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const group = useMemo<MapLayerGroup | null>(() => {
+    if (!activeSource || !activeMeta || viewportZoom < activeMeta.minZoom) return null;
+    void styleVersion;
+    const style = activeMeta.markerStyle;
+    const sid = sourceId(activeSource);
+    const images: NonNullable<MapLayerGroup["images"]> = {};
+    for (const url of logoUrls) {
+      images[dataSourceBrandImageId(url)] = (map) => {
+        // The load belongs to the source generation it first sees: a style
+        // change replaces the source, and a logo for the old one is dropped.
+        let generation: unknown;
+        const isCurrent = () => {
+          const current = map.getSource(sid);
+          generation ??= current;
+          return mounted.current && mapRef.current === map && current === generation;
+        };
         // This URL's first retained owner initiated the acquisition. Other rows
         // keep their selector receipts; they do not retroactively supply its bytes.
         const acquisitionReceipts = snapshotContributors(
@@ -541,248 +478,194 @@ export function DataSourceLayer() {
           ) ?? [],
         );
         void loadDataSourceBrandMarker(map, url, isCurrent).then((loaded) => {
-          if (loaded && isCurrent()) {
-            let assets = loadedBrandAssets.get(map);
-            if (!assets) {
-              assets = new Map();
-              loadedBrandAssets.set(map, assets);
-            }
-            assets.set(url, acquisitionReceipts);
-            syncLayer();
-          } else if (!isCurrent()) sourceAttempts.delete(url);
+          if (!loaded || !isCurrent()) return;
+          let assets = loadedBrandAssets.get(map);
+          if (!assets) {
+            assets = new Map();
+            loadedBrandAssets.set(map, assets);
+          }
+          assets.set(url, acquisitionReceipts);
+          setBrandLoads((count) => count + 1);
         });
-      }
-      if (urls.length) {
-        const haloId = brandHalosLayerId(activeSource);
-        const logoId = brandLogosLayerId(activeSource);
-        const filter: maplibregl.FilterSpecification = ["has", "brandImageId"];
-        const opacity: maplibregl.ExpressionSpecification = [
-          "case",
-          ["==", ["get", "status"], "non-operational"],
-          activeMeta.markerStyle.inactiveOpacity,
-          1,
-        ];
-        if (!map.getLayer(haloId))
-          addLayerInSlot(
-            map,
-            {
-              id: haloId,
-              type: "circle",
-              source: sid,
-              filter,
-              paint: {
-                "circle-radius": 18,
-                "circle-color": [
-                  "match",
-                  ["get", "availState"],
-                  "available",
-                  "#2E7D32",
-                  "busy",
-                  "#F9A825",
-                  buildVariantColorExpression(activeMeta.markerStyle),
-                ],
-                "circle-opacity": opacity,
-                "circle-stroke-color": "white",
-                "circle-stroke-width": 1.5,
-                "circle-stroke-opacity": opacity,
-              },
-            },
-            "overlay-markers",
-            17,
-          );
-        if (!map.getLayer(logoId))
-          addLayerInSlot(
-            map,
-            {
-              id: logoId,
-              type: "symbol",
-              source: sid,
-              filter,
-              layout: {
-                "icon-image": ["get", "brandImageId"],
-                "icon-allow-overlap": true,
-                "icon-ignore-placement": true,
-              },
-              paint: { "icon-opacity": opacity },
-            },
-            "overlay-markers",
-            18,
-          );
-      }
+      };
+    }
+    const layers: SlottedLayer[] = [];
+    const sources: MapLayerGroup["sources"] = { [sid]: { type: "geojson", data: brandedData } };
 
+    if (logoUrls.length) {
+      const filter: maplibregl.FilterSpecification = ["has", "brandImageId"];
+      const opacity: maplibregl.ExpressionSpecification = [
+        "case",
+        ["==", ["get", "status"], "non-operational"],
+        style.inactiveOpacity,
+        1,
+      ];
+      layers.push(
+        {
+          id: brandHalosLayerId(activeSource),
+          type: "circle",
+          source: sid,
+          filter,
+          paint: {
+            "circle-radius": 18,
+            "circle-color": [
+              "match",
+              ["get", "availState"],
+              "available",
+              "#2E7D32",
+              "busy",
+              "#F9A825",
+              buildVariantColorExpression(style),
+            ],
+            "circle-opacity": opacity,
+            "circle-stroke-color": "white",
+            "circle-stroke-width": 1.5,
+            "circle-stroke-opacity": opacity,
+          },
+          slot: "overlay-markers",
+          order: 17,
+        },
+        {
+          id: brandLogosLayerId(activeSource),
+          type: "symbol",
+          source: sid,
+          filter,
+          layout: {
+            "icon-image": ["get", "brandImageId"],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint: { "icon-opacity": opacity },
+          slot: "overlay-markers",
+          order: 18,
+        },
+      );
+    }
+
+    if (trackGeojson.features.length > 0) {
       const tracksSid = tracksSourceId(activeSource);
-      const tracksLid = tracksLayerId(activeSource);
-      if (trackGeojson.features.length > 0) {
-        publish(map, tracksSid, trackGeojson);
-        if (!map.getLayer(tracksLid)) {
-          addLayerInSlot(
-            map,
-            {
-              id: tracksLid,
-              type: "line",
-              source: tracksSid,
-              layout: DATA_SOURCE_TRACK_LAYOUT,
-              paint: dataSourceTrackPaint(activeMeta.markerStyle),
-            },
-            "overlay-lines",
-            17,
-          );
-        }
-      } else {
-        removeSlottedLayers(map, [tracksLid], [tracksSid]);
-      }
+      sources[tracksSid] = { type: "geojson", data: trackGeojson };
+      layers.push({
+        id: tracksLayerId(activeSource),
+        type: "line",
+        source: tracksSid,
+        layout: DATA_SOURCE_TRACK_LAYOUT,
+        paint: dataSourceTrackPaint(style),
+        slot: "overlay-lines",
+        order: 17,
+      });
+    }
 
-      const mapContextData = mapContext?.geojson;
-      if (mapContextData && mapContextData.features.length > 0) {
-        publish(map, mapContextSid, mapContextData);
+    const mapContextData = mapContext?.geojson;
+    if (mapContextData && mapContextData.features.length > 0) {
+      const contextSid = mapContextSourceId(activeSource);
+      const isDark = document.documentElement.classList.contains("dark");
+      sources[contextSid] = { type: "geojson", data: mapContextData };
+      layers.push(
+        {
+          id: mapContextFillLayerId(activeSource),
+          type: "fill",
+          source: contextSid,
+          layout: { "fill-sort-key": contextSortKeyExpression },
+          paint: {
+            "fill-color": contextColorExpression(isDark),
+            "fill-opacity": contextFillOpacityExpression,
+          },
+          slot: "area-overlays",
+          order: 6,
+        },
+        {
+          id: mapContextOutlineLayerId(activeSource),
+          type: "line",
+          source: contextSid,
+          paint: {
+            "line-color": contextColorExpression(isDark),
+            "line-width": contextLineWidthExpression,
+            "line-opacity": 0.85,
+          },
+          slot: "overlay-lines",
+          order: 12,
+        },
+      );
+    }
 
-        if (!map.getLayer(mapContextFillLid)) {
-          const isDark = document.documentElement.classList.contains("dark");
-          addLayerInSlot(
-            map,
-            {
-              id: mapContextFillLid,
-              type: "fill",
-              source: mapContextSid,
-              layout: {
-                "fill-sort-key": contextSortKeyExpression,
-              },
-              paint: {
-                "fill-color": contextColorExpression(isDark),
-                "fill-opacity": contextFillOpacityExpression,
-              },
-            },
-            "area-overlays",
-            6,
-          );
-        }
-
-        if (!map.getLayer(mapContextOutlineLid)) {
-          const isDark = document.documentElement.classList.contains("dark");
-          addLayerInSlot(
-            map,
-            {
-              id: mapContextOutlineLid,
-              type: "line",
-              source: mapContextSid,
-              paint: {
-                "line-color": contextColorExpression(isDark),
-                "line-width": contextLineWidthExpression,
-                "line-opacity": 0.85,
-              },
-            },
-            "overlay-lines",
-            12,
-          );
-        }
-      } else {
-        removeSlottedLayers(map, [mapContextOutlineLid, mapContextFillLid], [mapContextSid]);
-      }
-
-      if (useIconMarkers && imageId) {
-        // Icon marker mode: symbol layer with SVG icon + text label layer
-        loadMarkerImage(
-          map,
-          imageId,
-          activeMeta.markerStyle.iconPath,
-          activeMeta.markerStyle.defaultColor,
-        );
-
-        if (!map.getLayer(markersLid)) {
-          addLayerInSlot(
-            map,
-            {
-              id: markersLid,
-              type: "symbol",
-              source: sid,
-              layout: {
-                "icon-image": ["literal", imageId],
-                "icon-allow-overlap": true,
-                "icon-ignore-placement": true,
-              },
-            },
-            "overlay-markers",
-            11,
-          );
-        }
-
-        const labelsLid = labelsLayerId(activeSource);
-        if (!map.getLayer(labelsLid)) {
-          // Label zoom thresholds scale with minZoom to avoid clutter on dense layers
-          const nameZoom = Math.max(11, activeMeta.minZoom + 2);
-          const summaryZoom = nameZoom + 2;
-
-          addLayerInSlot(
-            map,
-            {
-              id: labelsLid,
-              type: "symbol",
-              source: sid,
-              minzoom: nameZoom,
-              layout: {
-                "text-field": [
-                  "step",
-                  ["zoom"],
-                  ["get", "name"],
-                  summaryZoom,
-                  [
-                    "case",
-                    ["!=", ["get", "summary"], ""],
-                    ["concat", ["get", "name"], "\n", ["get", "summary"]],
-                    ["get", "name"],
-                  ],
-                ] as unknown as maplibregl.ExpressionSpecification,
-                "text-size": 11,
-                "text-offset": [0, 2.0] as [number, number],
-                "text-anchor": "top",
-                "text-max-width": 8,
-                "text-optional": true,
-              },
-              paint: {
-                "text-color": "#333333",
-                "text-halo-color": "#FFFFFF",
-                "text-halo-width": 1.5,
-              },
-            },
-            "overlay-markers",
-            12,
-          );
-        }
-      } else {
-        // Circle marker mode (default, e.g. EV charging)
-        if (!map.getLayer(markersLid)) {
-          addLayerInSlot(
-            map,
-            {
-              id: markersLid,
-              type: "circle",
-              source: sid,
-              paint: dataSourceCirclePaint(activeMeta.markerStyle),
-            },
-            "overlay-points",
-            15,
-          );
-        }
-      }
-    };
-
-    const unsubscribe = subscribeStyleLoaded(map, syncLayer);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
+    if (style.type === "icon") {
+      const imageId = `ds-marker-${activeSource}`;
+      images[imageId] = (map) => loadMarkerImage(map, imageId, style.iconPath, style.defaultColor);
+      // Label zoom thresholds scale with minZoom to avoid clutter on dense layers
+      const nameZoom = Math.max(11, activeMeta.minZoom + 2);
+      const summaryZoom = nameZoom + 2;
+      layers.push(
+        {
+          id: markersLayerId(activeSource),
+          type: "symbol",
+          source: sid,
+          layout: {
+            "icon-image": ["literal", imageId],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          slot: "overlay-markers",
+          order: 11,
+        },
+        {
+          id: labelsLayerId(activeSource),
+          type: "symbol",
+          source: sid,
+          minzoom: nameZoom,
+          layout: {
+            "text-field": [
+              "step",
+              ["zoom"],
+              ["get", "name"],
+              summaryZoom,
+              [
+                "case",
+                ["!=", ["get", "summary"], ""],
+                ["concat", ["get", "name"], "\n", ["get", "summary"]],
+                ["get", "name"],
+              ],
+            ] as unknown as maplibregl.ExpressionSpecification,
+            "text-size": 11,
+            "text-offset": [0, 2.0] as [number, number],
+            "text-anchor": "top",
+            "text-max-width": 8,
+            "text-optional": true,
+          },
+          paint: {
+            "text-color": "#333333",
+            "text-halo-color": "#FFFFFF",
+            "text-halo-width": 1.5,
+          },
+          slot: "overlay-markers",
+          order: 12,
+        },
+      );
+    } else {
+      // Circle marker mode (default, e.g. EV charging)
+      layers.push({
+        id: markersLayerId(activeSource),
+        type: "circle",
+        source: sid,
+        paint: dataSourceCirclePaint(style),
+        slot: "overlay-points",
+        order: 15,
+      });
+    }
+    return { sources, layers, images };
   }, [
     activeSource,
     activeMeta,
-    geojson,
-    trackGeojson,
-    publish,
     viewportZoom,
-    mapReady,
     styleVersion,
-    mapRef,
+    logoUrls,
+    geojson,
+    brandedData,
+    trackGeojson,
     mapContext,
+    mapRef,
   ]);
+  useMapLayerGroup(group);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -824,32 +707,21 @@ export function DataSourceLayer() {
     return () => window.removeEventListener("openmapx:focus-data-source-context", onFocusContext);
   }, [mapContext, mapRef, fitBounds]);
 
-  // Click + cursor handlers — bind to both markers and labels layers
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !activeSource) return;
-
-    const markersLid = markersLayerId(activeSource);
-    const labelsLid = labelsLayerId(activeSource);
-    const contextFillLid = mapContextFillLayerId(activeSource);
-    const currentSource = activeSource;
-
-    const handledClicks = new WeakSet<object>();
-    const onClick = (e: MapMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const event = e.originalEvent ?? e;
-      if (handledClicks.has(event)) return;
-      // Query both markers and labels layers
-      const layers = [
-        brandLogosLayerId(activeSource),
-        brandHalosLayerId(activeSource),
-        markersLid,
-        labelsLid,
-      ].filter((l) => map.getLayer(l));
-      const features = map.queryRenderedFeatures(e.point, { layers });
-      if (!features.length) return;
-      handledClicks.add(event);
+  const markersLid = activeSource ? markersLayerId(activeSource) : "";
+  useMapOverlayInteraction({
+    id: "data-source-results",
+    layerIds: activeSource
+      ? [
+          brandLogosLayerId(activeSource),
+          brandHalosLayerId(activeSource),
+          markersLid,
+          labelsLayerId(activeSource),
+        ]
+      : [],
+    priority: RESULT_INTERACTION_PRIORITY,
+    enabled: activeSource !== null,
+    onClick: ({ features }) => {
+      if (!activeSource) return;
       const props = features[0].properties as {
         id: string;
         name: string;
@@ -857,82 +729,38 @@ export function DataSourceLayer() {
         kind?: string;
       };
       const coords = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
-      openDataSourceItem(currentSource, props, coords, activeMeta);
-    };
-
-    const onMouseMove = (e: MapMouseEvent) => {
-      const layers = [
-        brandLogosLayerId(activeSource),
-        brandHalosLayerId(activeSource),
-        markersLid,
-        labelsLid,
-      ].filter((id) => !!map.getLayer(id));
-      if (layers.length === 0) return;
-      const features = map.queryRenderedFeatures(e.point, { layers });
-      if (features.length > 0) {
-        map.getCanvasContainer().style.cursor = "pointer";
-        setHoveredItemId(pickHoveredDataSourceItemId(features, markersLid));
-      } else {
-        map.getCanvasContainer().style.cursor = "";
-        setHoveredItemId(null);
-      }
-    };
-
-    const onContextClick = (e: MapMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const markerLayers = [
-        brandLogosLayerId(activeSource),
-        brandHalosLayerId(activeSource),
-        markersLid,
-        labelsLid,
-      ].filter((id) => !!map.getLayer(id));
-      const markerHitCount = map.queryRenderedFeatures(e.point, { layers: markerLayers }).length;
-      if (!map.getLayer(contextFillLid)) return;
-      const feature = map.queryRenderedFeatures(e.point, { layers: [contextFillLid] })[0];
+      openDataSourceItem(activeSource, props, coords, activeMeta);
+    },
+    onHover: (features) =>
+      setHoveredItemId(features ? pickHoveredDataSourceItemId(features, markersLid) : null),
+  });
+  // A result drawn over a zone takes the click, so a zone click never has a result under it.
+  useMapOverlayInteraction({
+    id: "data-source-context",
+    layerIds: activeSource
+      ? [mapContextFillLayerId(activeSource), mapContextOutlineLayerId(activeSource)]
+      : [],
+    priority: CONTEXT_INTERACTION_PRIORITY,
+    enabled: activeSource !== null,
+    onClick: ({ features }) => {
+      if (!activeSource) return;
       const action = pickDataSourceContextAction(
-        markerHitCount,
-        feature?.properties as Record<string, unknown> | undefined,
+        0,
+        features[0]?.properties as Record<string, unknown> | undefined,
       );
       if (action.type === "select-station") {
-        selectItem(currentSource, action.stationId);
+        selectItem(activeSource, action.stationId);
         useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
         return;
       }
       if (action.type === "inspect") setInspectedContext(action.properties);
-    };
-
-    // Bind to markers layer
-    map.on("click", brandLogosLayerId(activeSource), onClick);
-    map.on("click", brandHalosLayerId(activeSource), onClick);
-    map.on("click", markersLid, onClick);
-
-    // Also bind to labels layer (for icon mode) — MapLibre no-ops on nonexistent layers
-    map.on("click", labelsLid, onClick);
-    map.on("click", contextFillLid, onContextClick);
-
-    map.on("mousemove", onMouseMove);
-
-    return () => {
-      map.off("click", brandLogosLayerId(activeSource), onClick);
-      map.off("click", brandHalosLayerId(activeSource), onClick);
-      map.off("click", markersLid, onClick);
-      map.off("click", labelsLid, onClick);
-      map.off("click", contextFillLid, onContextClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      setHoveredItemId(null);
-    };
-  }, [activeSource, activeMeta, mapReady, styleVersion, mapRef, selectItem, setHoveredItemId]);
-
-  // Cleanup on unmount
+    },
+  });
+  // A hover that outlives its source would pin a marker for a result no longer drawn.
   useEffect(() => {
-    return () => {
-      const map = mapRef.current;
-      if (!map) return;
-      const src = prevSourceRef.current;
-      if (src) removeLayers(map, src);
-    };
-  }, [mapRef]);
+    if (!activeSource) setHoveredItemId(null);
+    return () => setHoveredItemId(null);
+  }, [activeSource, setHoveredItemId]);
 
   const contextFeatures = mapContext?.geojson.features ?? [];
   if (contextFeatures.length === 0) return null;
