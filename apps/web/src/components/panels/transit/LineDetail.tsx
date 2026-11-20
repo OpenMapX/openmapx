@@ -171,10 +171,10 @@ export function LineDetail({
             {stops.map((s, idx) => {
               const isCurrent = currentStop ? s.id === currentStop.id : false;
               const { lat, lng } = s;
-              // A stop the source cannot place is listed but cannot be opened as a place.
-              const selectable = Boolean(
-                onSelectStop && currentStop && lat !== undefined && lng !== undefined,
-              );
+              // A stop the source cannot place is listed, marked as unplaced, and
+              // cannot be opened as a place.
+              const placed = lat !== undefined && lng !== undefined;
+              const selectable = Boolean(onSelectStop && currentStop && placed);
               return (
                 <ClickableRow
                   disabled={!selectable}
@@ -214,11 +214,11 @@ export function LineDetail({
                     py: 0.75,
                     cursor: selectable ? "pointer" : "default",
                     position: "relative",
-                    "&:hover": { bgcolor: "action.hover" },
+                    ...(selectable ? { "&:hover": { bgcolor: "action.hover" } } : {}),
                     borderRadius: 1,
                   }}
                 >
-                  {/* Stop dot */}
+                  {/* Stop dot; an unplaced stop gets a grey ring instead of the line colour. */}
                   <Box
                     sx={{
                       position: "absolute",
@@ -227,7 +227,8 @@ export function LineDetail({
                       height: isCurrent ? 14 : 10,
                       borderRadius: "50%",
                       bgcolor: isCurrent ? lineColor : "background.paper",
-                      border: `3px solid ${lineColor}`,
+                      border: "3px solid",
+                      borderColor: placed ? lineColor : "action.disabled",
                       zIndex: 1,
                     }}
                   />
@@ -236,10 +237,22 @@ export function LineDetail({
                     color={isCurrent ? "text.primary" : "text.secondary"}
                     sx={{
                       fontWeight: isCurrent ? 700 : 400,
+                      ...(placed ? {} : { color: "text.disabled" }),
                     }}
                   >
                     {s.name}
                   </Typography>
+                  {!placed && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.disabled",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      {t("stopNotPlaced")}
+                    </Typography>
+                  )}
                   {s.platformCode && (
                     <Typography
                       variant="caption"

@@ -1,5 +1,5 @@
 import type { TransitStop } from "@openmapx/mobility-core/transit";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { LineDetail } from "./LineDetail";
 
@@ -45,13 +45,21 @@ describe("LineDetail stop list", () => {
     );
 
     const rows = screen.getAllByRole("button", { name: /Bern|Thun|Spiez/ });
-    expect(rows.map((row) => row.textContent)).toEqual(["Bern", "Thun", "Spiez"]);
-    expect(screen.getByRole("button", { name: "Thun" })).toBeDisabled();
+    expect(rows.map((row) => within(row).getAllByText(/Bern|Thun|Spiez/)[0]?.textContent)).toEqual([
+      "Bern",
+      "Thun",
+      "Spiez",
+    ]);
+    const thun = screen.getByRole("button", { name: /Thun/ });
+    expect(thun).toBeDisabled();
+    // The unplaced row says why it cannot be opened; placed rows do not.
+    expect(within(thun).getByText("stopNotPlaced")).toBeInTheDocument();
+    expect(screen.getAllByText("stopNotPlaced")).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Thun" }));
+    fireEvent.click(thun);
     expect(onSelectStop).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Spiez" }));
+    fireEvent.click(screen.getByRole("button", { name: /Spiez/ }));
     expect(onSelectStop).toHaveBeenCalledWith(
       expect.objectContaining({ id: "otdch:spiez", lat: 46.686, lng: 7.68 }),
     );

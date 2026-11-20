@@ -1772,6 +1772,7 @@
     "stopDetailsLater": "Haltestellendetails werden näher zur Abfahrt verfügbar sein.",
     "stopSequenceNotAvailable": "Haltestellenfolge für diese Verbindung nicht verfügbar.",
     "stopDataNotAvailable": "Haltestellendaten nicht verfügbar.",
+    "stopNotPlaced": "Nicht auf der Karte",
     "viewDepartures": "{mode}-Abfahrten anzeigen",
     "noDeparturesMode": "Keine {mode}-{tab} in den nächsten 60 Minuten gefunden.",
     "noDeparturesGeneric": "Keine {tab} in den nächsten 60 Minuten gefunden.",
