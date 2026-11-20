@@ -10,8 +10,9 @@
  * it doesn't, `searchOffer` correctly returns null (we never show a neighbour's
  * price), which is common in the sparse sandbox but rare in production.
  */
-import { fetchJson } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
 import { type HotelOffer, haversineKm } from "@openmapx/core/server";
+import type { HttpClient } from "@openmapx/integration-framework";
 import { nameMatches, normalizeName } from "./match.js";
 import type { HotelQuery } from "./types.js";
 
@@ -153,24 +154,31 @@ export function normalizeRatesResponse(
   };
 }
 
+/** The key header makes the host client refuse redirects, so it never reaches another origin. */
+function liteApiHeaders(apiKey: string): Record<string, string> {
+  return { "User-Agent": USER_AGENT, Accept: "application/json", "X-API-Key": apiKey };
+}
+
 /** GET /data/hotels near the place → normalised candidates. */
-async function fetchNearbyHotels(apiKey: string, q: HotelQuery): Promise<LiteHotelCandidate[]> {
-  const params = new URLSearchParams({
-    latitude: String(q.lat),
-    longitude: String(q.lng),
-    radius: String(SEARCH_RADIUS_M),
-    limit: "30",
-  });
+async function fetchNearbyHotels(
+  http: HttpClient,
+  apiKey: string,
+  q: HotelQuery,
+): Promise<LiteHotelCandidate[]> {
   // Verified against the live sandbox (2026-05-31): candidates carry flat
   // `latitude`/`longitude` (not a nested `geoCode`).
-  const json = await fetchJson<{
+  const json = await http.get<{
     data?: Array<{ id?: string; name?: string; latitude?: number; longitude?: number }>;
-  }>(`${LITEAPI_BASE}/data/hotels?${params.toString()}`, {
+  }>(`${LITEAPI_BASE}/data/hotels`, {
+    params: {
+      latitude: String(q.lat),
+      longitude: String(q.lng),
+      radius: String(SEARCH_RADIUS_M),
+      limit: "30",
+    },
     timeoutMs: TIMEOUT_MS,
-    headers: { "X-API-Key": apiKey },
-    nullOnError: true,
+    headers: liteApiHeaders(apiKey),
   });
-  if (!json) return [];
   return (json.data ?? [])
     .filter(
       (h): h is { id: string; name: string; latitude: number; longitude: number } =>
@@ -192,28 +200,24 @@ export interface RateOptions {
 
 /** POST /hotels/rates for a single resolved hotel. */
 async function fetchRatesForHotel(
+  http: HttpClient,
   apiKey: string,
   opts: RateOptions,
   hotelId: string,
   q: HotelQuery,
 ): Promise<LiteRatesResponse> {
-  const json = await fetchJson<LiteRatesResponse>(`${LITEAPI_BASE}/hotels/rates`, {
-    timeoutMs: TIMEOUT_MS,
-    headers: { "content-type": "application/json", "X-API-Key": apiKey },
-    nullOnError: true,
-    init: {
-      method: "POST",
-      body: JSON.stringify({
-        hotelIds: [hotelId],
-        checkin: q.checkIn,
-        checkout: q.checkOut,
-        currency: opts.currency,
-        guestNationality: opts.guestNationality.toUpperCase(),
-        occupancies: buildOccupancies(q.adults ?? 2, q.rooms ?? 1),
-      }),
+  return http.post<LiteRatesResponse>(
+    `${LITEAPI_BASE}/hotels/rates`,
+    {
+      hotelIds: [hotelId],
+      checkin: q.checkIn,
+      checkout: q.checkOut,
+      currency: opts.currency,
+      guestNationality: opts.guestNationality.toUpperCase(),
+      occupancies: buildOccupancies(q.adults ?? 2, q.rooms ?? 1),
     },
-  });
-  return json ?? { data: [] };
+    { timeoutMs: TIMEOUT_MS, headers: liteApiHeaders(apiKey) },
+  );
 }
 
 /**
@@ -223,6 +227,7 @@ async function fetchRatesForHotel(
  * back to the deep-link experience silently. Two cached server-side calls to a fixed host.
  */
 export async function fetchLiteApiOffer(
+  http: HttpClient,
   apiKey: string,
   opts: RateOptions,
   q: HotelQuery,
@@ -230,9 +235,9 @@ export async function fetchLiteApiOffer(
   if (typeof q.lat !== "number" || typeof q.lng !== "number") return null;
   if (!q.checkIn || !q.checkOut) return null;
   try {
-    const hotel = pickBestHotel(await fetchNearbyHotels(apiKey, q), q);
+    const hotel = pickBestHotel(await fetchNearbyHotels(http, apiKey, q), q);
     if (!hotel) return null;
-    const rates = await fetchRatesForHotel(apiKey, opts, hotel.id, q);
+    const rates = await fetchRatesForHotel(http, apiKey, opts, hotel.id, q);
     return normalizeRatesResponse(rates, nights(q.checkIn, q.checkOut));
   } catch {
     return null;

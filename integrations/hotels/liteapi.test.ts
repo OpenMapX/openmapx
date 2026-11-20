@@ -1,5 +1,11 @@
+import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
-import { buildOccupancies, normalizeRatesResponse, pickBestHotel } from "./liteapi.js";
+import {
+  buildOccupancies,
+  fetchLiteApiOffer,
+  normalizeRatesResponse,
+  pickBestHotel,
+} from "./liteapi.js";
 import type { HotelQuery } from "./types.js";
 
 const q: HotelQuery = {
@@ -96,5 +102,34 @@ describe("normalizeRatesResponse", () => {
 
   it("returns null for an empty response", () => {
     expect(normalizeRatesResponse({ data: [] }, 1)).toBeNull();
+  });
+});
+
+describe("fetchLiteApiOffer", () => {
+  const options = { currency: "EUR", guestNationality: "de" };
+  const nearby = {
+    data: [{ id: "lp1", name: "Motel One Berlin", latitude: 52.5, longitude: 13.33 }],
+  };
+
+  it("finds the hotel and prices it with the key in a header", async () => {
+    const http = fakeHttpClient((req) => (req.method === "get" ? nearby : sample));
+
+    const offer = await fetchLiteApiOffer(http, "secret", options, q);
+
+    expect(offer?.total).toBe(150);
+    const [lookup, rates] = http.calls;
+    expect(lookup?.url).toBe("https://api.liteapi.travel/v3.0/data/hotels");
+    expect(lookup?.options?.params).toMatchObject({ latitude: "52.5", longitude: "13.33" });
+    expect(lookup?.options?.headers?.["X-API-Key"]).toBe("secret");
+    expect(rates?.method).toBe("post");
+    expect(rates?.url).toBe("https://api.liteapi.travel/v3.0/hotels/rates");
+    expect(rates?.body).toMatchObject({ hotelIds: ["lp1"], guestNationality: "DE" });
+    expect(rates?.options?.headers?.["X-API-Key"]).toBe("secret");
+  });
+
+  it("answers no offer when LiteAPI refuses the key", async () => {
+    const http = fakeHttpClient(() => httpStatus(401));
+    expect(await fetchLiteApiOffer(http, "rejected", options, q)).toBeNull();
+    expect(http.calls).toHaveLength(1);
   });
 });
