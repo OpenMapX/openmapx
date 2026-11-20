@@ -1,8 +1,10 @@
 import {
+  accountAdminOperations,
   activityAdminOperations,
   dataManagerAdminOperations,
   extensionAdminOperations,
   integrationAdminOperations,
+  privacyAdminOperations,
   serviceAdminOperations,
 } from "@openmapx/core/api-contracts";
 import { describe, expect, it } from "vitest";
@@ -14,6 +16,8 @@ type Operation = {
   responses: Partial<Record<number, { schema?: { parse(value: unknown): unknown } }>>;
 };
 const operations = Object.values({
+  ...accountAdminOperations,
+  ...privacyAdminOperations,
   ...activityAdminOperations,
   ...dataManagerAdminOperations,
   ...extensionAdminOperations,
@@ -28,7 +32,13 @@ describe("admin journey fixtures", () => {
   it.each(Object.entries(fixtures).filter(([path]) => !AUTH_ROUTES.has(path)))(
     "answers %s with a body its admin contract accepts",
     (path, body) => {
-      const operation = operations.find((entry) => entry.method === "GET" && entry.path === path);
+      const gets = operations.filter((entry) => entry.method === "GET");
+      // A fixture for one record answers its templated path, such as `/requests/:id`.
+      const operation =
+        gets.find((entry) => entry.path === path) ??
+        gets.find((entry) =>
+          new RegExp(`^${entry.path.replace(/:[A-Za-z]+/g, "[^/]+")}$`).test(path),
+        );
       expect(operation?.responses[200]?.schema).toBeDefined();
       expect(() => operation?.responses[200]?.schema?.parse(body)).not.toThrow();
     },

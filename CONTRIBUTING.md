@@ -123,8 +123,9 @@ the journeys nightly and on manual dispatch (`browser-journeys.yml`), not on
 pull requests.
 
 The fixture server also answers the administration pages from
-`apps/web/e2e/admin-fixtures.json`, and a test checks each answer against its
-admin contract. Better Auth's session and user-list answers have no contract
+`apps/web/e2e/admin-fixtures.json`, at least one populated page per admin
+section, and a test checks each answer against its admin contract (a record
+such as one privacy case answers its templated path). Better Auth's session and user-list answers have no contract
 in this repository, so the test checks only the administrator's identity in
 them; a change to Better Auth's shapes would not fail it. A browser that sends
 the cookie `openmapx-fixture-admin=1` is

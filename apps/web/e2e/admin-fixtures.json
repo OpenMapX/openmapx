@@ -1161,5 +1161,782 @@
         "lifecycle": "disabled"
       }
     ]
+  },
+  "/api/admin/cache": {
+    "namespaces": [
+      {
+        "namespace": "int:geocoding",
+        "keyCount": 12840
+      },
+      {
+        "namespace": "int:weather",
+        "keyCount": 3215
+      },
+      {
+        "namespace": "int:transit-departures",
+        "keyCount": 1048
+      },
+      {
+        "namespace": "cache:geocode",
+        "keyCount": 96
+      }
+    ]
+  },
+  "/api/admin/audit": {
+    "entries": [
+      {
+        "id": "audit-11",
+        "actorId": "admin-ada",
+        "targetId": "valhalla",
+        "targetType": "service",
+        "action": "service.restart",
+        "details": {},
+        "ipAddress": "192.0.2.10",
+        "userAgent": "Mozilla/5.0",
+        "createdAt": "2026-11-19T08:12:00.000Z",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "audit-10",
+        "actorId": "admin-ada",
+        "targetId": "general",
+        "targetType": "settings",
+        "action": "settings.update",
+        "details": {
+          "keys": ["instanceName"]
+        },
+        "ipAddress": "192.0.2.10",
+        "userAgent": "Mozilla/5.0",
+        "createdAt": "2026-11-19T07:40:00.000Z",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "audit-9",
+        "actorId": "admin-ada",
+        "targetId": null,
+        "targetType": null,
+        "action": "integration.reload.all",
+        "details": {},
+        "ipAddress": "192.0.2.10",
+        "userAgent": "Mozilla/5.0",
+        "createdAt": "2026-11-18T17:40:00.000Z",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "audit-8",
+        "actorId": "admin-ada",
+        "targetId": "user-bo",
+        "targetType": "user",
+        "action": "user.ban",
+        "details": {
+          "reason": "Spam"
+        },
+        "ipAddress": "192.0.2.10",
+        "userAgent": "Mozilla/5.0",
+        "createdAt": "2026-11-18T16:02:00.000Z",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "audit-7",
+        "actorId": "admin-ada",
+        "targetId": "backup-2026-11-18",
+        "targetType": "backup",
+        "action": "backup.create",
+        "details": {
+          "services": 6
+        },
+        "ipAddress": "192.0.2.10",
+        "userAgent": "Mozilla/5.0",
+        "createdAt": "2026-11-18T03:00:00.000Z",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      },
+      {
+        "id": "audit-6",
+        "actorId": "admin-ada",
+        "targetId": "download-osm",
+        "targetType": "data",
+        "action": "data.download-osm",
+        "details": {
+          "region": "europe/germany/berlin"
+        },
+        "ipAddress": "192.0.2.10",
+        "userAgent": "Mozilla/5.0",
+        "createdAt": "2026-11-17T21:15:00.000Z",
+        "actor": {
+          "id": "admin-ada",
+          "name": "Ada Admin",
+          "email": "ada@example.test"
+        }
+      }
+    ],
+    "total": 6
+  },
+  "/api/admin/logs": {
+    "entries": [
+      {
+        "id": 1206,
+        "level": "info",
+        "source": "api",
+        "msg": "Integration reload finished",
+        "time": 1795076043120,
+        "metadata": {
+          "integrations": 42
+        }
+      },
+      {
+        "id": 1205,
+        "level": "warn",
+        "source": "data-manager",
+        "msg": "Transit feed returned 304 for three days",
+        "time": 1795076021004,
+        "metadata": {
+          "feed": "de-vbb"
+        }
+      },
+      {
+        "id": 1204,
+        "level": "info",
+        "source": "ops-agent",
+        "msg": "Service valhalla restarted",
+        "time": 1795075930551
+      },
+      {
+        "id": 1203,
+        "level": "error",
+        "source": "api",
+        "msg": "Health check failed for weather-dwd",
+        "time": 1795075800000,
+        "metadata": {
+          "status": 503
+        }
+      },
+      {
+        "id": 1202,
+        "level": "info",
+        "source": "api",
+        "msg": "Settings saved",
+        "time": 1795074002300
+      },
+      {
+        "id": 1201,
+        "level": "debug",
+        "source": "data-manager",
+        "msg": "Search index epoch 41 published",
+        "time": 1795071731000
+      }
+    ],
+    "total": 6,
+    "sources": ["api", "data-manager", "ops-agent"]
+  },
+  "/api/admin/system": {
+    "deployment": {
+      "dockerAvailable": true,
+      "composeRendered": true,
+      "hostControlConfigured": true,
+      "maintenanceReady": true
+    },
+    "images": [
+      {
+        "id": "app-api",
+        "name": "API",
+        "image": "ghcr.io/openmapx/app-api:2026.11.1",
+        "containerState": "running",
+        "runningImageId": "sha256:1a2b3c4d5e6f",
+        "localImageId": "sha256:1a2b3c4d5e6f",
+        "updateAvailable": false,
+        "releaseMember": true,
+        "status": "up-to-date"
+      },
+      {
+        "id": "web",
+        "name": "Web",
+        "image": "ghcr.io/openmapx/web:2026.11.1",
+        "containerState": "running",
+        "runningImageId": "sha256:2b3c4d5e6f7a",
+        "localImageId": "sha256:9f8e7d6c5b4a",
+        "updateAvailable": true,
+        "releaseMember": true,
+        "status": "update-available"
+      },
+      {
+        "id": "data-manager",
+        "name": "Data manager",
+        "image": "ghcr.io/openmapx/data-manager:2026.11.1",
+        "containerState": "running",
+        "runningImageId": "sha256:3c4d5e6f7a8b",
+        "localImageId": "sha256:3c4d5e6f7a8b",
+        "updateAvailable": false,
+        "releaseMember": true,
+        "status": "up-to-date"
+      },
+      {
+        "id": "ops-agent",
+        "name": "Operations agent",
+        "image": "ghcr.io/openmapx/ops-agent:2026.11.1",
+        "containerState": "running",
+        "runningImageId": "sha256:4d5e6f7a8b9c",
+        "localImageId": "sha256:4d5e6f7a8b9c",
+        "updateAvailable": false,
+        "releaseMember": true,
+        "status": "up-to-date"
+      }
+    ],
+    "release": {
+      "configuredSelector": "stable",
+      "currentReleaseId": "2026.11.1",
+      "availableReleaseId": "2026.11.2",
+      "currentVersion": "2026.11.1",
+      "availableVersion": "2026.11.2",
+      "availableDigest": "ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12"
+    }
+  },
+  "/api/admin/settings": {
+    "groups": [
+      {
+        "id": "general",
+        "label": "General",
+        "settings": [
+          {
+            "group": "general",
+            "key": "instanceName",
+            "label": "Instance Name",
+            "description": "Display name for this OpenMapX instance",
+            "type": "string",
+            "secret": false,
+            "value": "OpenMapX Berlin",
+            "source": "database",
+            "envOverride": false
+          },
+          {
+            "group": "general",
+            "key": "instanceUrl",
+            "label": "Instance URL",
+            "description": "Public URL of this instance",
+            "type": "string",
+            "secret": false,
+            "value": "https://maps.example.test",
+            "source": "env",
+            "envVar": "PUBLIC_URL",
+            "envOverride": true
+          },
+          {
+            "group": "general",
+            "key": "defaultLocale",
+            "label": "Default Locale",
+            "description": "Default language for new users",
+            "type": "select",
+            "options": ["en", "de"],
+            "secret": false,
+            "value": "de",
+            "source": "database",
+            "envOverride": false
+          }
+        ]
+      },
+      {
+        "id": "auth",
+        "label": "Authentication",
+        "settings": [
+          {
+            "group": "auth",
+            "key": "emailVerificationRequired",
+            "label": "Require Email Verification",
+            "type": "boolean",
+            "secret": false,
+            "value": true,
+            "source": "database",
+            "envOverride": false
+          },
+          {
+            "group": "auth",
+            "key": "sessionDurationHours",
+            "label": "Session Duration (hours)",
+            "type": "number",
+            "secret": false,
+            "value": 720,
+            "source": "database",
+            "envOverride": false
+          },
+          {
+            "group": "auth",
+            "key": "twoFaEnabled",
+            "label": "Enable Two-Factor Authentication",
+            "type": "boolean",
+            "secret": false,
+            "value": true,
+            "source": "database",
+            "envOverride": false
+          },
+          {
+            "group": "auth",
+            "key": "passwordMinLength",
+            "label": "Minimum Password Length",
+            "type": "number",
+            "secret": false,
+            "value": 12,
+            "source": "database",
+            "envOverride": false
+          }
+        ]
+      },
+      {
+        "id": "email",
+        "label": "Email",
+        "settings": [
+          {
+            "group": "email",
+            "subgroup": "common",
+            "key": "smtpFromAddress",
+            "label": "From Address",
+            "type": "string",
+            "secret": false,
+            "value": "maps@example.test",
+            "source": "database",
+            "envOverride": false
+          },
+          {
+            "group": "email",
+            "subgroup": "emaillabs",
+            "key": "emailLabsAppKey",
+            "label": "App Key",
+            "type": "string",
+            "secret": true,
+            "value": "***",
+            "source": "database",
+            "envOverride": false
+          },
+          {
+            "group": "email",
+            "subgroup": "lettermint",
+            "key": "lettermintApiToken",
+            "label": "API Token",
+            "type": "string",
+            "secret": true,
+            "value": "",
+            "source": "default",
+            "envOverride": false
+          },
+          {
+            "group": "email",
+            "subgroup": "smtp",
+            "key": "smtpHost",
+            "label": "Host",
+            "type": "string",
+            "secret": false,
+            "value": "",
+            "source": "default",
+            "envOverride": false
+          },
+          {
+            "group": "email",
+            "subgroup": "smtp",
+            "key": "smtpPort",
+            "label": "Port",
+            "type": "number",
+            "secret": false,
+            "value": 587,
+            "source": "default",
+            "envOverride": false
+          }
+        ]
+      }
+    ]
+  },
+  "/api/admin/accounts/policy": {
+    "active": {
+      "emailVerificationRequired": true,
+      "sessionDurationHours": 720,
+      "twoFaEnabled": true,
+      "passwordMinLength": 12,
+      "activationVersion": 1,
+      "revision": "c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4c3d4"
+    },
+    "pending": {},
+    "ownership": {
+      "emailVerificationRequired": "database",
+      "sessionDurationHours": "database",
+      "twoFaEnabled": "database",
+      "passwordMinLength": "database"
+    }
+  },
+  "/api/admin/coverage/regions": {
+    "schemaVersion": 1,
+    "snapshotId": "snapshot-fixture",
+    "generatedAt": "2026-11-19T08:00:00.000Z",
+    "evaluatedAt": "2026-11-19T08:00:00.000Z",
+    "collectionStatus": "complete",
+    "collectionAgeSeconds": 840,
+    "warnings": [],
+    "authorities": [],
+    "regions": [
+      {
+        "region": {
+          "key": "extract:berlin",
+          "label": "Berlin",
+          "kind": "extract"
+        },
+        "domains": {
+          "addresses": {
+            "domain": "addresses",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          },
+          "pois": {
+            "domain": "pois",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          },
+          "transit": {
+            "domain": "transit",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          },
+          "ev": {
+            "domain": "ev",
+            "status": "limited",
+            "operational": 1,
+            "limited": 1,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 1,
+            "reasons": ["source_partial"]
+          },
+          "parking": {
+            "domain": "parking",
+            "status": "unknown",
+            "operational": 0,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 1,
+            "attention": 1,
+            "reasons": []
+          },
+          "fuel": {
+            "domain": "fuel",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          },
+          "cameras": {
+            "domain": "cameras",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          },
+          "traffic": {
+            "domain": "traffic",
+            "status": "limited",
+            "operational": 1,
+            "limited": 1,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 1,
+            "reasons": ["source_partial"]
+          }
+        },
+        "sourceCount": 14,
+        "attentionCount": 3
+      },
+      {
+        "region": {
+          "key": "extract:brandenburg",
+          "label": "Brandenburg",
+          "kind": "extract"
+        },
+        "domains": {
+          "addresses": {
+            "domain": "addresses",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          },
+          "pois": {
+            "domain": "pois",
+            "status": "limited",
+            "operational": 1,
+            "limited": 1,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 1,
+            "reasons": ["source_partial"]
+          },
+          "transit": {
+            "domain": "transit",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          },
+          "ev": {
+            "domain": "ev",
+            "status": "unavailable",
+            "operational": 0,
+            "limited": 0,
+            "unavailable": 1,
+            "unknown": 0,
+            "attention": 1,
+            "reasons": []
+          },
+          "parking": {
+            "domain": "parking",
+            "status": "unknown",
+            "operational": 0,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 1,
+            "attention": 1,
+            "reasons": []
+          },
+          "fuel": {
+            "domain": "fuel",
+            "status": "limited",
+            "operational": 1,
+            "limited": 1,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 1,
+            "reasons": ["source_partial"]
+          },
+          "cameras": {
+            "domain": "cameras",
+            "status": "unknown",
+            "operational": 0,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 1,
+            "attention": 1,
+            "reasons": []
+          },
+          "traffic": {
+            "domain": "traffic",
+            "status": "operational",
+            "operational": 2,
+            "limited": 0,
+            "unavailable": 0,
+            "unknown": 0,
+            "attention": 0,
+            "reasons": []
+          }
+        },
+        "sourceCount": 14,
+        "attentionCount": 5
+      }
+    ],
+    "total": 2,
+    "unassignedSourceCount": 1,
+    "pagination": {
+      "offset": 0,
+      "limit": 50,
+      "total": 2,
+      "hasMore": false,
+      "snapshotId": "snapshot-fixture"
+    }
+  },
+  "/api/privacy/admin/queue": {
+    "requests": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "kind": "access_and_portability",
+        "channel": "email",
+        "state": "open",
+        "userId": null,
+        "locale": "de",
+        "timeZone": "Europe/Berlin",
+        "receivedAt": "2026-11-01T09:00:00.000Z",
+        "registeredAt": "2026-11-01T09:05:00.000Z",
+        "dueAt": "2026-12-01T09:00:00.000Z",
+        "originalDueAt": "2026-12-01T09:00:00.000Z",
+        "extension": null,
+        "identityMethod": null,
+        "identityVerifiedAt": null,
+        "locatorType": "email",
+        "accountState": "current",
+        "refusalCode": null,
+        "completedAt": null,
+        "closedAt": null,
+        "version": 2,
+        "createdAt": "2026-11-01T09:05:00.000Z",
+        "updatedAt": "2026-11-02T10:00:00.000Z"
+      },
+      {
+        "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "kind": "access_and_portability",
+        "channel": "email",
+        "state": "in_progress",
+        "userId": null,
+        "locale": "de",
+        "timeZone": "Europe/Berlin",
+        "receivedAt": "2026-11-01T09:00:00.000Z",
+        "registeredAt": "2026-11-01T09:05:00.000Z",
+        "dueAt": "2026-11-28T09:00:00.000Z",
+        "originalDueAt": "2026-11-28T09:00:00.000Z",
+        "extension": null,
+        "identityMethod": "manual",
+        "identityVerifiedAt": "2026-11-02T10:00:00.000Z",
+        "locatorType": "email",
+        "accountState": "current",
+        "refusalCode": null,
+        "completedAt": null,
+        "closedAt": null,
+        "version": 2,
+        "createdAt": "2026-11-01T09:05:00.000Z",
+        "updatedAt": "2026-11-02T10:00:00.000Z"
+      },
+      {
+        "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "kind": "access_and_portability",
+        "channel": "email",
+        "state": "waiting_on_requester",
+        "userId": null,
+        "locale": "de",
+        "timeZone": "Europe/Berlin",
+        "receivedAt": "2026-11-01T09:00:00.000Z",
+        "registeredAt": "2026-11-01T09:05:00.000Z",
+        "dueAt": "2026-11-24T09:00:00.000Z",
+        "originalDueAt": "2026-11-24T09:00:00.000Z",
+        "extension": null,
+        "identityMethod": "manual",
+        "identityVerifiedAt": "2026-11-02T10:00:00.000Z",
+        "locatorType": "email",
+        "accountState": "current",
+        "refusalCode": null,
+        "completedAt": null,
+        "closedAt": null,
+        "version": 2,
+        "createdAt": "2026-11-01T09:05:00.000Z",
+        "updatedAt": "2026-11-02T10:00:00.000Z"
+      }
+    ]
+  },
+  "/api/admin/services/backups": {
+    "backups": [
+      {
+        "name": "backup-2026-11-19T03-00-00",
+        "createdAt": "2026-11-19T03:00:00.000Z",
+        "expiresAt": "2026-12-19T03:00:00.000Z",
+        "openmapxVersion": "2026.11.1",
+        "serviceCount": 6,
+        "volumeCount": 9,
+        "totalBytes": 18734219264
+      },
+      {
+        "name": "backup-2026-11-12T03-00-00",
+        "createdAt": "2026-11-12T03:00:00.000Z",
+        "expiresAt": "2026-12-12T03:00:00.000Z",
+        "openmapxVersion": "2026.10.3",
+        "serviceCount": 6,
+        "volumeCount": 9,
+        "totalBytes": 17982101504
+      },
+      {
+        "name": "backup-2026-11-05T03-00-00",
+        "createdAt": "2026-11-05T03:00:00.000Z",
+        "serviceCount": 0,
+        "volumeCount": 0,
+        "totalBytes": 0,
+        "corrupt": true,
+        "corruptReason": "invalid_manifest"
+      }
+    ],
+    "warnings": [],
+    "root": "ops-agent-managed"
+  },
+  "/api/privacy/admin/requests/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa": {
+    "request": {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "kind": "access_and_portability",
+      "channel": "email",
+      "state": "open",
+      "userId": null,
+      "locale": "de",
+      "timeZone": "Europe/Berlin",
+      "receivedAt": "2026-11-01T09:00:00.000Z",
+      "registeredAt": "2026-11-01T09:05:00.000Z",
+      "dueAt": "2026-12-01T09:00:00.000Z",
+      "originalDueAt": "2026-12-01T09:00:00.000Z",
+      "extension": null,
+      "identityMethod": null,
+      "identityVerifiedAt": null,
+      "locatorType": "email",
+      "accountState": "current",
+      "refusalCode": null,
+      "completedAt": null,
+      "closedAt": null,
+      "version": 2,
+      "createdAt": "2026-11-01T09:05:00.000Z",
+      "updatedAt": "2026-11-02T10:00:00.000Z"
+    },
+    "tasks": [
+      {
+        "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "registrationId": "registration-operator",
+        "source": "operator",
+        "status": "open",
+        "publicCode": "operator-preservation-action-required",
+        "resolutionCode": null,
+        "resolvedAt": null
+      }
+    ],
+    "events": [],
+    "capabilities": {
+      "verifyIdentity": true,
+      "resolveTasks": true,
+      "extendDeadline": true,
+      "caseDecision": true,
+      "export": false,
+      "reasons": {
+        "export": "identity-required"
+      }
+    }
   }
 }
