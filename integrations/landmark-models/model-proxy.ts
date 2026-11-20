@@ -4,7 +4,8 @@ import type {
   LandmarkModelProvider,
   RouteHandler,
 } from "@openmapx/integration-framework";
-import { landmarkProviders } from "./routes";
+import type { MergedIndex } from "./merge";
+import { type LandmarkIndexSource, landmarkProviders } from "./routes";
 
 export interface ModelProxyOptions {
   /** Verified gzip bytes kept per API replica. */
@@ -35,7 +36,25 @@ const FETCH_TIMEOUT_MS = 30_000;
 const ADMISSION_WINDOW_MS = 10 * MINUTE;
 const ADMIT_FREELY_BELOW = 0.75;
 const STATS_INTERVAL_MS = 10 * MINUTE;
-const OSM_SOURCE = "openstreetmap";
+
+/** `<provider-id>:<sha256>` of every model a shown asset uses, per merged index. */
+const servedModelsByIndex = new WeakMap<MergedIndex, ReadonlySet<string>>();
+
+function servedModels(index: MergedIndex): ReadonlySet<string> {
+  let served = servedModelsByIndex.get(index);
+  if (!served) {
+    const keys = new Set<string>();
+    for (const assets of index.cells.values()) {
+      for (const { providerId, asset } of assets) {
+        keys.add(`${providerId}:${asset.lods.low.sha256}`);
+        if (asset.lods.detail) keys.add(`${providerId}:${asset.lods.detail.sha256}`);
+      }
+    }
+    served = keys;
+    servedModelsByIndex.set(index, served);
+  }
+  return served;
+}
 
 type Reply = Parameters<RouteHandler>[1];
 type Outcome = { kind: "ok"; gzip: Uint8Array } | { kind: "missing" } | { kind: "failed" };
@@ -50,12 +69,14 @@ function sendError(reply: Reply, status: number, error: string, code: string, re
 
 /**
  * Serves landmark GLBs to browsers so they never contact a provider's host.
- * Only sha256s a provider lists can be requested, bodies are verified by the
- * provider, and process-wide limits keep one client from turning the proxy
- * into an upstream traffic amplifier.
+ * Only models of assets the merged index shows can be requested, so hidden
+ * assets and disallowed sources stay unreachable here too. Bodies are
+ * verified by the provider, and process-wide limits keep one client from
+ * turning the proxy into an upstream traffic amplifier.
  */
 export function createModelProxy(
   ctx: IntegrationContext,
+  source: LandmarkIndexSource,
   options: ModelProxyOptions = {},
 ): { handle: RouteHandler; stats(): ModelProxyStats; stop(): void } {
   const now = options.now ?? Date.now;
@@ -178,16 +199,16 @@ export function createModelProxy(
       return;
     }
     const provider = landmarkProviders(ctx).find((candidate) => candidate.id === providerId);
-    const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
-    if (
-      !provider ||
-      provider.sourceIds.some((source) => source !== OSM_SOURCE && disallowed.has(source))
-    ) {
+    if (!provider) {
       sendError(reply, 404, "Unknown landmark model", "UNKNOWN_MODEL");
       return;
     }
     if (!provider.snapshot()) {
       sendError(reply, 503, "Landmark catalogue is loading", "CATALOGUE_LOADING", 30);
+      return;
+    }
+    if (!servedModels(await source.current()).has(`${provider.id}:${sha256}`)) {
+      sendError(reply, 404, "Unknown landmark model", "UNKNOWN_MODEL");
       return;
     }
     const encoding = req.headers["accept-encoding"];

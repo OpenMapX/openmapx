@@ -3,6 +3,7 @@ import type { RouteHandler } from "@openmapx/integration-framework";
 import { createRecordingReply } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createModelProxy, type ModelProxyOptions } from "../model-proxy";
+import { createLandmarkIndexSource } from "../routes";
 import {
   BARRELMAN,
   contextWith,
@@ -16,13 +17,24 @@ const RAW = new TextEncoder().encode("glTF-binary-model-bytes");
 const GZIP = new Uint8Array(gzipSync(RAW));
 const MIB = 1024 * 1024;
 
+/** Assets whose low models are SHA(1)…SHA(6). */
+function listedAssets() {
+  return [1, 2, 3, 4, 5, 6].map((n) =>
+    testAsset({ lods: { low: { sha256: SHA(n), bytes: 10, gzipBytes: 10 } } }),
+  );
+}
+
 function setup(
   options: ModelProxyOptions = {},
-  provider: FakeProvider = fakeProvider(BARRELMAN, [testAsset()]),
+  provider: FakeProvider = fakeProvider(BARRELMAN, listedAssets()),
+  context: { config?: Record<string, unknown>; disallowed?: string[] } = {},
 ) {
-  const ctx = contextWith([provider]);
+  const ctx = contextWith([provider], context);
   let clock = 0;
-  const proxy = createModelProxy(ctx, { now: () => clock, ...options });
+  const proxy = createModelProxy(ctx, createLandmarkIndexSource(ctx), {
+    now: () => clock,
+    ...options,
+  });
   return {
     provider,
     proxy,
@@ -106,10 +118,44 @@ describe("landmark model proxy", () => {
   });
 
   it("404 when the provider's model source is disallowed", async () => {
-    const provider = fakeProvider(BARRELMAN, [testAsset()]);
+    const { provider, proxy } = setup({}, undefined, { disallowed: ["src"] });
     provider.fetch = async () => ({ status: "ok", gzip: GZIP });
-    const proxy = createModelProxy(contextWith([provider], { disallowed: ["src"] }));
     expect((await request(proxy.handle, model())).status).toBe(404);
+  });
+
+  it("404 for a model the operator hid", async () => {
+    const assets = listedAssets();
+    const hidden = assets[0]?.providerAssetId as string;
+    const { provider, proxy } = setup({}, fakeProvider(BARRELMAN, assets), {
+      config: { hiddenAssets: `${BARRELMAN}:${hidden}` },
+    });
+    const fetch = vi.fn(async () => ({ status: "ok" as const, gzip: GZIP }));
+    provider.fetch = fetch;
+    const result = await request(proxy.handle, model(1));
+    expect(result.status).toBe(404);
+    expect(result.headers["cache-control"]).toBe("no-store");
+    expect(fetch).not.toHaveBeenCalled();
+    expect((await request(proxy.handle, model(2))).status).toBe(200);
+  });
+
+  it("404 for a model whose placement source is disallowed", async () => {
+    const assets = listedAssets().map((asset) => ({
+      ...asset,
+      contributors: [...asset.contributors, { sourceId: "openstreetmap", name: "OpenStreetMap" }],
+    }));
+    const { provider, proxy } = setup({}, fakeProvider(BARRELMAN, assets), {
+      disallowed: ["openstreetmap"],
+    });
+    provider.fetch = async () => ({ status: "ok", gzip: GZIP });
+    expect((await request(proxy.handle, model(1))).status).toBe(404);
+  });
+
+  it("404 without contacting the provider for a sha256 no shown asset uses", async () => {
+    const { provider, proxy } = setup();
+    const fetch = vi.fn(async () => ({ status: "ok" as const, gzip: GZIP }));
+    provider.fetch = fetch;
+    expect((await request(proxy.handle, model(77))).status).toBe(404);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("503 CATALOGUE_LOADING with Retry-After while the provider has no snapshot", async () => {

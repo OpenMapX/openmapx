@@ -8,8 +8,9 @@ import { createLandmarkIndexSource, createRoutes, landmarkProviders } from "./ro
  * looked up per request, so enabling or disabling one needs no change here.
  */
 export async function setup(ctx: IntegrationContext): Promise<void> {
-  const routes = createRoutes(createLandmarkIndexSource(ctx));
-  const models = createModelProxy(ctx);
+  const source = createLandmarkIndexSource(ctx);
+  const routes = createRoutes(source);
+  const models = createModelProxy(ctx, source);
   ctx.onShutdown(async () => models.stop());
   ctx.registerRoute("GET", "/coverage", routes.coverage, { rateLimitTier: "public" });
   ctx.registerRoute("GET", "/cells/:x/:y", routes.cell, { rateLimitTier: "public" });

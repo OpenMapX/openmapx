@@ -1324,15 +1324,9 @@ importers:
 
   integrations/landmark-models:
     dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/mobility-core':
-        specifier: workspace:^
-        version: link:../../packages/mobility-core
     devDependencies:
       '@types/geojson':
         specifier: ^7946.0.16
@@ -3428,9 +3422,6 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@types/geojson':
-        specifier: ^7946.0.16
-        version: 7946.0.16
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6

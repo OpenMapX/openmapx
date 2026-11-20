@@ -5,9 +5,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openmapx/core": "workspace:^",
-    "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/mobility-core": "workspace:^"
+    "@openmapx/integration-framework": "workspace:^"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16"
