@@ -51,7 +51,8 @@ describe("overture place resolver", () => {
     const { setup } = await import("../index.js");
     const { getPlaceResolver } = await import("@openmapx/place-ids");
     setup(createMockIntegrationContext({ db }));
-    const resolver = getPlaceResolver<Place>("overture")!;
+    const resolver = getPlaceResolver<Place>("overture");
+    if (!resolver) throw new Error("The Overture place resolver is not registered");
     const de = await resolver(GERS_ID, { lang: "de-DE" });
     expect(de?.brand?.name).toBe("Deutsche Marke");
     expect(de?.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
