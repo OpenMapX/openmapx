@@ -5,13 +5,8 @@ import type {
   LandmarkCatalogueSnapshot,
   LandmarkReviewTier,
 } from "@openmapx/integration-framework";
-import {
-  CELL_ZOOM,
-  type CellResponse,
-  type CoverageResponse,
-  modelPath,
-  type WireAsset,
-} from "./wire";
+import { cellsForBounds as cellsForBox } from "./cells";
+import { type CellResponse, type CoverageResponse, modelPath, type WireAsset } from "./wire";
 
 /**
  * Bump when normalization, ranking or the wire format changes, so cached cells
@@ -37,7 +32,6 @@ export interface MergedIndex {
 }
 
 const TIER_RANK: Record<LandmarkReviewTier, number> = { approved: 0, unreviewed: 1, draft: 2 };
-const MAX_LATITUDE = 85.0511287798;
 
 /** Operator-configured `<provider-id>:<asset-id>` entries, one per line or comma. */
 export function parseHiddenAssets(value: unknown): ReadonlySet<string> {
@@ -50,35 +44,15 @@ export function parseHiddenAssets(value: unknown): ReadonlySet<string> {
   );
 }
 
-function tileX(lng: number, n: number): number {
-  return Math.min(n - 1, Math.max(0, Math.floor(((lng + 180) / 360) * n)));
-}
-
-function tileY(lat: number, n: number): number {
-  const clamped = Math.max(-MAX_LATITUDE, Math.min(MAX_LATITUDE, lat));
-  const rad = (clamped * Math.PI) / 180;
-  return Math.min(
-    n - 1,
-    Math.max(0, Math.floor(((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2) * n)),
-  );
-}
-
 /** No landmark spans more cells than this; larger extents are rejected as bad data. */
 const MAX_CELLS_PER_ASSET = 16;
 
 /**
- * The z12 cells (`x/y`) a west/south/east/north box touches, or none when the
- * box is not finite, inverted or larger than any landmark.
+ * The z12 cells (`x/y`) an asset's west/south/east/north box touches, or none
+ * when the box is not finite, inverted or larger than any landmark.
  */
 export function cellsForBounds(bounds: readonly [number, number, number, number]): string[] {
-  const n = 2 ** CELL_ZOOM;
-  const [west, south, east, north] = bounds;
-  if (![west, south, east, north].every(Number.isFinite) || west > east || south > north) return [];
-  const [x0, x1, y0, y1] = [tileX(west, n), tileX(east, n), tileY(north, n), tileY(south, n)];
-  if ((x1 - x0 + 1) * (y1 - y0 + 1) > MAX_CELLS_PER_ASSET) return [];
-  const cells: string[] = [];
-  for (let x = x0; x <= x1; x += 1) for (let y = y0; y <= y1; y += 1) cells.push(`${x}/${y}`);
-  return cells;
+  return cellsForBox(bounds, MAX_CELLS_PER_ASSET);
 }
 
 function isAllowed(asset: LandmarkAsset, disallowed: ReadonlySet<string>): boolean {
