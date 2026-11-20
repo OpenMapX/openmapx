@@ -180,6 +180,9 @@ describe("admin system routes", () => {
     ["/admin/system/diagnostics", { argv: ["--host", "/"] }],
     ["/admin/system/updates/apply", {}],
   ])("answers an unauthenticated %s with 401 before validating its body", async (url, payload) => {
+    const signedIn = await app.inject({ method: "POST", url, payload });
+    expect(signedIn.statusCode).toBe(400);
+
     requireAdmin.mockRejectedValueOnce(
       Object.assign(new Error("Authentication required"), { statusCode: 401 }),
     );
