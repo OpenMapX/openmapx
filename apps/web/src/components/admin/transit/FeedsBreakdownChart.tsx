@@ -85,6 +85,7 @@ function Bar({
 
 export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
   const t = useTranslations("adminTransit");
+  const tShared = useTranslations("adminShared");
   const regionEntries = Object.entries(state.feeds.byRegion).sort((a, b) => b[1] - a[1]);
   const remainingRegionCount = regionEntries
     .slice(MAX_REGION_BARS)
@@ -174,7 +175,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
               {statusEntries.map(([status, count]) => (
                 <Bar
                   key={status}
-                  label={status}
+                  label={tShared("jobStatusLabel", { status })}
                   value={count}
                   max={maxStatus}
                   color={colorFor(status)}

@@ -117,6 +117,7 @@ function attentionHref(item: AttentionItem): string {
 
 export function AdminOverview() {
   const t = useTranslations("adminOverview");
+  const tShared = useTranslations("adminShared");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client);
   const showToast = useAdminToast();
@@ -414,7 +415,7 @@ export function AdminOverview() {
                   }}
                 >
                   <Chip
-                    label={job.status}
+                    label={tShared("jobStatusLabel", { status: job.status })}
                     size="small"
                     color={jobStatusColor(job.status)}
                     variant="outlined"

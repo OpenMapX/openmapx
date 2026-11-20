@@ -6478,6 +6478,7 @@
     "noFeedsMatchTheCurrent": "No feeds match the current filter.",
     "name": "Name",
     "validation": "Validation",
+    "validationStatus": "{status, select, passed {passed} warning {warning} failed {failed} other {{status}}}",
     "lastFetched": "Last fetched",
     "lastImported": "Last imported",
     "jobLabel": "Job {jobId}",

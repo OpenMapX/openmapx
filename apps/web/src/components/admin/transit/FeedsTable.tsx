@@ -41,6 +41,7 @@ function validationColor(v: string | null): "default" | "success" | "warning" | 
 
 export function FeedsTable({ state }: { state: TransitStateSummary }) {
   const t = useTranslations("adminTransit");
+  const tShared = useTranslations("adminShared");
   const [region, setRegion] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [page, setPage] = useState(0);
@@ -185,7 +186,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                   <TableCell>
                     <Chip
                       size="small"
-                      label={feed.status}
+                      label={tShared("jobStatusLabel", { status: feed.status })}
                       color={statusColor(feed.status)}
                       variant="outlined"
                     />
@@ -195,7 +196,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                       <Tooltip title={feed.validationMessage ?? ""}>
                         <Chip
                           size="small"
-                          label={feed.validationStatus}
+                          label={t("validationStatus", { status: feed.validationStatus })}
                           color={validationColor(feed.validationStatus)}
                           variant="outlined"
                         />

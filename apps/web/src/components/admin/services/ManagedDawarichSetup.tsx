@@ -72,6 +72,10 @@ function stateLabel(value: boolean, t: AdminTranslator<"adminServices">): string
   return value ? t("checklistReady") : t("checklistPending");
 }
 
+function secretConflict(state: ProvisioningSecretState): boolean {
+  return state !== "consistent" && state !== "missing";
+}
+
 function secretLabel(state: ProvisioningSecretState, t: AdminTranslator<"adminServices">): string {
   return state === "consistent"
     ? t("checklistReady")
@@ -80,14 +84,24 @@ function secretLabel(state: ProvisioningSecretState, t: AdminTranslator<"adminSe
       : t("checklistConflict");
 }
 
-function ChecklistRow({ label, status, ready }: { label: string; status: string; ready: boolean }) {
+function ChecklistRow({
+  label,
+  status,
+  ready,
+  conflict = false,
+}: {
+  label: string;
+  status: string;
+  ready: boolean;
+  conflict?: boolean;
+}) {
   return (
     <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 2 }}>
       <Typography variant="body2">{label}</Typography>
       <Chip
         size="small"
         label={status}
-        color={ready ? "success" : status === "Conflict" ? "error" : "default"}
+        color={ready ? "success" : conflict ? "error" : "default"}
         variant={ready ? "filled" : "outlined"}
       />
     </Stack>
@@ -121,16 +135,19 @@ function SetupChecklist({ status }: { status: ManagedDawarichProvisioningStatus 
         label={t("databaseSecret")}
         status={secretLabel(status.secrets.databasePassword, t)}
         ready={status.secrets.databasePassword === "consistent"}
+        conflict={secretConflict(status.secrets.databasePassword)}
       />
       <ChecklistRow
         label={t("railsSecret")}
         status={secretLabel(status.secrets.secretKeyBase, t)}
         ready={status.secrets.secretKeyBase === "consistent"}
+        conflict={secretConflict(status.secrets.secretKeyBase)}
       />
       <ChecklistRow
         label={t("oidcSecret")}
         status={secretLabel(status.secrets.oidcClientSecret, t)}
         ready={status.secrets.oidcClientSecret === "consistent"}
+        conflict={secretConflict(status.secrets.oidcClientSecret)}
       />
       <ChecklistRow
         label={t("configurationReady")}
