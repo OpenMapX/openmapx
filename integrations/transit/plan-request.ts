@@ -1,6 +1,6 @@
 import { parseWgs84Point, type TripPlanRequest } from "@openmapx/integration-framework";
 import { transitRequestFingerprint, verifyTransitPageToken } from "./page-token.js";
-import { parseModes } from "./routes/shared.js";
+import { parseModes } from "./route-helpers.js";
 
 const RENTAL_FORM_FACTORS = new Set([
   "BICYCLE",

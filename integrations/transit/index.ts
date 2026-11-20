@@ -23,6 +23,7 @@ import { createPlaceHandlers } from "./routes/place.js";
 import { createPlanHandlers } from "./routes/plan.js";
 import { createReachabilityHandlers } from "./routes/reachability.js";
 import { createStopHandlers } from "./routes/stops.js";
+import { sessionSecret } from "./session-secret.js";
 
 interface TransitSearchOrchestrator {
   searchByName(
@@ -96,11 +97,7 @@ export function setup(ctx: IntegrationContext): void {
       return resolve ? ((await resolve(osmRef, {}))?.localName ?? undefined) : undefined;
     },
   });
-  const refreshSession = createRefreshSession(
-    ctx,
-    orchestrator,
-    process.env.BETTER_AUTH_SECRET ?? "",
-  );
+  const refreshSession = createRefreshSession(ctx, orchestrator, sessionSecret());
   const stops = createStopHandlers(ctx, orchestrator);
   const network = createNetworkHandlers(ctx, orchestrator);
   const place = createPlaceHandlers(placeTransit);

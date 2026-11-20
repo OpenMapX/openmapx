@@ -9,6 +9,8 @@ import {
 import { signTransitPageToken } from "../page-token.js";
 import { parsePlanEndpoints, parsePlanOptions } from "../plan-request.js";
 import type { RefreshSession } from "../refresh-session.js";
+import { toEnvelope } from "../route-helpers.js";
+import { sessionSecret } from "../session-secret.js";
 import {
   parseTripReferenceRequest,
   TripReferenceEpochError,
@@ -16,12 +18,6 @@ import {
   TripReferenceUnsupportedError,
   TripReferenceValidationError,
 } from "../trip-reference.js";
-import { toEnvelope } from "./shared.js";
-
-/** The page-token secret, read per request like the host's session secret. */
-function pageSecret(): string {
-  return process.env.BETTER_AUTH_SECRET ?? "";
-}
 
 /** Handlers for planning: capabilities, search, exact trips, chains and refresh. */
 export function createPlanHandlers(orchestrator: TransitOrchestrator, session: RefreshSession) {
@@ -47,7 +43,8 @@ export function createPlanHandlers(orchestrator: TransitOrchestrator, session: R
         return;
       }
       reply.header("Cache-Control", "private, max-age=60");
-      const parsed = parsePlanOptions(q, endpoints.value, pageSecret());
+      // Read per request, like the host reads its session secret.
+      const parsed = parsePlanOptions(q, endpoints.value, sessionSecret());
       if (!parsed.ok) {
         reply.status(400).send({ error: parsed.error });
         return;
@@ -73,7 +70,7 @@ export function createPlanHandlers(orchestrator: TransitOrchestrator, session: R
         });
         return;
       }
-      const secret = pageSecret();
+      const secret = sessionSecret();
       const tokenBase = {
         source: plan.source ?? plan.provider ?? "transit-motis-local",
         instance: plan.instance ?? plan.provider ?? "local",

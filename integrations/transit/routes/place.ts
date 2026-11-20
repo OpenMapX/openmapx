@@ -1,6 +1,6 @@
 import { parseWgs84Point, type RouteHandler, scalarQueries } from "@openmapx/integration-framework";
 import type { PlaceQuery, PlaceTransit } from "../place-transit.js";
-import { cacheControl, parseMinutes, toEnvelope } from "./shared.js";
+import { cacheControl, parseMinutes, toEnvelope } from "../route-helpers.js";
 
 function parsePlaceQuery(q: Record<string, string>): PlaceQuery | null {
   const name = q.name?.trim();

@@ -8,7 +8,7 @@ import type { TransitTripResolveRequest, TripItinerary } from "@openmapx/mobilit
 import type { TransitOrchestrator } from "./orchestrator.js";
 import { createRefreshReplay } from "./refresh-replay.js";
 import { signRefreshHandle, verifyRefreshHandle } from "./refresh-token.js";
-import { envelope } from "./routes/shared.js";
+import { envelope } from "./route-helpers.js";
 import {
   TripReferenceEpochError,
   TripReferenceUnavailableError,

@@ -23,7 +23,7 @@ import {
   transitCheckCacheKey,
   transitSurfaceCacheKey,
 } from "../reachability.js";
-import { toEnvelope } from "./shared.js";
+import { toEnvelope } from "../route-helpers.js";
 
 function reachabilityFailure(error: unknown, signal?: AbortSignal) {
   const raw = (error as { code?: unknown }).code;

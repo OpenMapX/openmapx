@@ -9,7 +9,7 @@ import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityEnvelope, MobilityResult } from "@openmapx/mobility-core/result";
 import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
 import type { TransitOrchestrator } from "../orchestrator.js";
-import { envelope, parseBBox, toEnvelope } from "./shared.js";
+import { envelope, parseBBox, toEnvelope } from "../route-helpers.js";
 
 export function routeZoomBucket(raw: string | undefined): number {
   const parsed = Number(raw ?? 12);
