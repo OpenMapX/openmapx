@@ -126,7 +126,7 @@ describe("matchesMediaHost", () => {
       ["https://d111111abcdef8.cloudfront.net/a.jpg", "*.cloudfront.net"],
       ["https://attacker.github.io/a.jpg", "*.github.io"],
       ["https://attacker.co.uk/a.jpg", "*.co.uk"],
-    ]) {
+    ] as const) {
       expect(matchesMediaHost(url, [entry]), entry).toBe(false);
     }
   });

@@ -128,8 +128,9 @@ export function buildSemanticCategoryCatalog(): readonly SemanticCategoryDocumen
   const ownerBySelector = new Map<string, string>();
   for (const [selector, owners] of ownersBySelector) {
     owners.sort();
-    if (owners.length === 1) {
-      ownerBySelector.set(selector, owners[0]);
+    const [onlyOwner, ...otherOwners] = owners;
+    if (onlyOwner !== undefined && otherOwners.length === 0) {
+      ownerBySelector.set(selector, onlyOwner);
       continue;
     }
     const explicit = SHARED_SELECTOR_OWNER[selector];

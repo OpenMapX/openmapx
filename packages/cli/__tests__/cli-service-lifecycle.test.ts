@@ -13,7 +13,7 @@ import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { heldTargets } from "../../core/src/build-artifacts/__fixtures__/held-targets";
 import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { renderComposeForRepo } from "../src/commands/compose";
@@ -130,7 +130,14 @@ function retainedReceipts() {
 async function retainedReceipt() {
   const receipts = await retainedReceipts();
   expect(receipts).toHaveLength(1);
-  return receipts[0]!;
+  const [receipt] = receipts;
+  assert.isDefined(receipt);
+  return receipt;
+}
+function firstEnvelopeName(directory: string): string {
+  const [name] = readdirSync(directory);
+  assert.isDefined(name, `no lifecycle envelope in ${directory}`);
+  return name;
 }
 function targetLocks() {
   return heldTargets(join(root, "infra/docker"));
@@ -235,7 +242,9 @@ describe("actual CLI service lifecycle preparation", () => {
     const order: string[] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       expectConfigurationWriterFree();
-      order.push(args[0]!);
+      const [action] = args;
+      assert.isDefined(action);
+      order.push(action);
       return 0;
     });
     vi.mocked(migrateBeforeApiUpdate).mockImplementation(async () => {
@@ -437,7 +446,7 @@ describe("actual CLI service lifecycle preparation", () => {
       const control = await import("@openmapx/core/build-artifacts"),
         dataRoot = join(root, "infra/docker/data"),
         directory = join(dataRoot, "ops-agent/lifecycle"),
-        envelope = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8")),
+        envelope = JSON.parse(readFileSync(join(directory, firstEnvelopeName(directory)), "utf8")),
         installation = control.openControlInstallation({
           infraDir: join(root, "infra/docker"),
           role: "host-cli",
@@ -472,7 +481,7 @@ describe("actual CLI service lifecycle preparation", () => {
   it("records failure when the execution deadline passes during pull", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
       const directory = join(root, "infra/docker/state/ops-agent/lifecycle"),
-        envelope = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
+        envelope = JSON.parse(readFileSync(join(directory, firstEnvelopeName(directory)), "utf8"));
       vi.spyOn(Date, "now").mockReturnValue(envelope.seed.execution.deadlineAt + 1);
       return 0;
     });
@@ -619,7 +628,9 @@ describe("actual CLI service lifecycle preparation", () => {
     let refusal: unknown;
     let holder = "";
     vi.mocked(dockerComposeStream).mockImplementationOnce(async () => {
-      holder = lifecycleOperationKeys()[0]!;
+      const [key] = lifecycleOperationKeys();
+      assert.isDefined(key);
+      holder = key;
       refusal = await command("start").catch((error) => error);
       expect(targetLocks()).toEqual(["alpha", "beta"]);
       return 0;

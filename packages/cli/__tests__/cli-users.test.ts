@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
 
@@ -68,6 +68,7 @@ describe("user mutation commands", () => {
 
     expect(mockExeca).toHaveBeenCalledTimes(1);
     const call = mockExeca.mock.calls[0];
+    assert.isDefined(call);
     expect(call[0]).toBe("docker");
     const args = call[1] as string[];
     for (const token of [

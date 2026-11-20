@@ -109,7 +109,8 @@ export async function runCliServiceLifecycle(options: {
     .list()
     .map((service) => service.manifest.id)
     .sort();
-  if (!ids.length || ids.some((id) => !targets.includes(id)))
+  const [firstId] = ids;
+  if (firstId === undefined || ids.some((id) => !targets.includes(id)))
     throw Error("Unknown lifecycle target");
   if (
     !ids.includes("data-manager") &&
@@ -156,13 +157,13 @@ export async function runCliServiceLifecycle(options: {
     options.action === "update"
       ? {
           kind: "service.update" as const,
-          serviceId: ids[0]!,
+          serviceId: firstId,
           expectedConfigurationRevisionId: expected,
           ...(options.noDeps ? { noDeps: true } : {}),
         }
       : {
           kind: "service.start" as const,
-          serviceId: ids[0]!,
+          serviceId: firstId,
           expectedConfigurationRevisionId: expected,
         };
   const installation =

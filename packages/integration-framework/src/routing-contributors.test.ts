@@ -1,6 +1,6 @@
 import type { DirectionsResult, Route } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { withRoutingContributors } from "./routing-contributors";
 
 const route: Route = {
@@ -46,7 +46,7 @@ it("captures actual supplier metadata before an asynchronous routing call", asyn
   receipt.attributionText = "notice after";
   receipt.publisher.name = "After";
   resolve(result([{ ...route, sourceIds: ["a"] }]));
-  expect((await pending).routes[0].contributors).toEqual([
+  expect((await pending).routes[0]?.contributors).toEqual([
     { sourceId: "a", name: "A", attributionText: "notice before", publisher: { name: "Before" } },
   ]);
 });
@@ -99,9 +99,9 @@ it("captures matrix cell receipts before acquisition and preserves explicit empt
   receipt.attributionText = "After";
   resolve([[{ seconds: 1, km: 1 }, { seconds: 2, km: 2, contributors: [] }, null]]);
   const rows = await pending;
-  expect(rows?.[0][0]?.contributors).toEqual([{ ...receipt, attributionText: "Before" }]);
-  expect(rows?.[0][1]?.contributors).toEqual([]);
-  expect(rows?.[0][2]).toBeNull();
+  expect(rows?.[0]?.[0]?.contributors).toEqual([{ ...receipt, attributionText: "Before" }]);
+  expect(rows?.[0]?.[1]?.contributors).toEqual([]);
+  expect(rows?.[0]?.[2]).toBeNull();
 });
 
 it("keeps a malformed field map authoritative instead of inheriting a record grant", async () => {
@@ -123,7 +123,8 @@ it("keeps a malformed field map authoritative instead of inheriting a record gra
     },
     () => [receipt],
   );
-  const captured = (await provider.getRoute([], "driving")).routes[0];
+  const [captured] = (await provider.getRoute([], "driving")).routes;
+  assert.isDefined(captured);
   expect(captured.fieldContributors).toEqual({});
   const { contributorsForField } = await import("@openmapx/mobility-core/contributors");
   expect(contributorsForField(captured, "geometry")).toEqual([]);

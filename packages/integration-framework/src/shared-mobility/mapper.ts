@@ -196,6 +196,13 @@ function mapContextSelection(
   };
 }
 
+/** The first contributing source; every shared-mobility provider names at least one. */
+function primarySource(record: { id: string; sources: readonly string[] }): string {
+  const [source] = record.sources;
+  if (source === undefined) throw new Error(`Shared-mobility record ${record.id} has no source`);
+  return source;
+}
+
 /**
  * ID prefix that flows from the result through the click handler back to the
  * place resolver, so it can branch on station vs free-floating vehicle
@@ -208,7 +215,7 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     kind: "station",
     name: station.name,
     coordinates: station.coordinates,
-    source: station.sources[0],
+    source: primarySource(station),
     sources: [...station.sources],
     ...(station.contributors === undefined
       ? {}
@@ -535,7 +542,7 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     kind: "vehicle",
     name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,
-    source: vehicle.sources[0],
+    source: primarySource(vehicle),
     sources: [...vehicle.sources],
     ...(vehicle.contributors === undefined
       ? {}

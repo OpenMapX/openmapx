@@ -290,7 +290,7 @@ it("a delayed enrichment cannot replace a newer acquisition's availability or re
   h.disableEnrichment();
   const fresh = h.provider();
   const detail = await fresh.getDetail("s:gbfs/entur-system/one");
-  expect(detail.data?.sections[0].rows?.[0]?.[1]).toBe(7);
+  expect(detail.data?.sections[0]?.rows?.[0]?.[1]).toBe(7);
   expect(detail.data?.contributors).toEqual(newer.contributors);
   expect(detail.freshness.fetchedAt).toBe(new Date(450_000).toISOString());
   expect(h.loadInventory).toHaveBeenCalledTimes(2);

@@ -7,7 +7,7 @@ import { settleDataConfigurationFence } from "@openmapx/core/data-manager-sdk";
 import type { ExecutionRef } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerControlCommands } from "../src/commands/control";
 import { dockerCompose } from "../src/lib/docker";
 
@@ -221,10 +221,10 @@ describe("openmapx control", () => {
             .catch((error: Error) => error.message),
       );
       const name = String(busy).match(/control clear --lock ([^`]+)`/)?.[1];
-      expect(name).toBeDefined();
+      assert.isDefined(name);
       writeFileSync(path, "");
       writeFileSync(`${path}.reclaim`, "");
-      await run("clear", "--lock", name!);
+      await run("clear", "--lock", name);
       expect(services.readLockHolder(path)).toBeUndefined();
       await run("clear", "--lock", `${name}.reclaim`);
     }

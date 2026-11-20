@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { leaseStoreDirectory, openLeaseStore } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { renderComposeForRepo } from "../src/commands/compose";
 import { registerControlCommands } from "../src/commands/control";
@@ -225,10 +225,11 @@ describe("openmapx control rollback", () => {
     await expect(rollback("--yes")).rejects.toThrow("exit:0");
     const applied = services.currentConfigurationGeneration(infraDir);
     expect(applied).not.toBe(current);
+    assert.isNotNull(applied);
     // A second rollback goes forward again.
-    expect(services.readPreviousReleaseGeneration(infraDir, applied!)).toBe(current);
+    expect(services.readPreviousReleaseGeneration(infraDir, applied)).toBe(current);
     expect(services.readAppliedRelease(infraDir)?.manifest.release).toBe("release-1");
-    expect(services.readGenerationConfiguration(infraDir, applied!).selectedRoots).toEqual(
+    expect(services.readGenerationConfiguration(infraDir, applied).selectedRoots).toEqual(
       services.readGenerationConfiguration(infraDir, previous).selectedRoots,
     );
     expect(services.readDesiredSelection(infraDir).roots).toEqual(["alpha", "data-manager"]);
@@ -243,7 +244,9 @@ describe("openmapx control rollback", () => {
       ["up", "-d", "--no-deps", "data-manager"],
     ]);
     const audit = readFileSync(join(infraDir, "state/ops-agent/control-audit.jsonl"), "utf8");
-    expect(JSON.parse(audit.trim().split("\n").at(-1)!)).toMatchObject({
+    const lastAudit = audit.trim().split("\n").at(-1);
+    assert.isDefined(lastAudit);
+    expect(JSON.parse(lastAudit)).toMatchObject({
       action: "rollback",
       from: current,
       to: previous,

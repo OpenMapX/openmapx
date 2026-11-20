@@ -27,7 +27,7 @@ describe("bounded optional OTP transport hooks", () => {
     await c.sdk.OtpReadiness();
     expect(f.beforeRequest).toHaveBeenCalledTimes(1);
     expect(f.afterResponse).toHaveBeenCalledTimes(1);
-    expect(f.http.calls[0].options?.headers).toMatchObject({ "subscription-key": "original" });
+    expect(f.http.calls[0]?.options?.headers).toMatchObject({ "subscription-key": "original" });
   });
   it("fails before network when admission rejects and sanitizes store errors", async () => {
     const f = fixture();

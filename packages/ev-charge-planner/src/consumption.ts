@@ -52,9 +52,13 @@ export function routeEnergyKwh(
 
   if (route.elevation && route.elevation.length >= 2 && route.elevationInterval) {
     const segKm = route.elevationInterval / 1000;
-    for (let i = 1; i < route.elevation.length; i++) {
+    let previousEle: number | undefined;
+    for (const ele of route.elevation) {
+      const fromEle = previousEle;
+      previousEle = ele;
+      if (fromEle === undefined) continue;
       const flatWh = segKm * vehicle.baseWhPerKm;
-      const dEle = route.elevation[i] - route.elevation[i - 1];
+      const dEle = ele - fromEle;
       const gravWh =
         dEle >= 0
           ? dEle * GRAVITY_WH_PER_M_PER_TONNE * vehicle.massTonnes
@@ -67,10 +71,14 @@ export function routeEnergyKwh(
   }
 
   const derate = opts.elevationAbsentDerate ?? 1;
-  for (let i = 1; i < route.geometry.length; i++) {
-    const km = haversineKm(route.geometry[i - 1], route.geometry[i]);
-    total += km * vehicle.baseWhPerKm * temp * derate;
-    cumulative.push(total / 1000);
+  let previous: (typeof route.geometry)[number] | undefined;
+  for (const point of route.geometry) {
+    if (previous) {
+      const km = haversineKm(previous, point);
+      total += km * vehicle.baseWhPerKm * temp * derate;
+      cumulative.push(total / 1000);
+    }
+    previous = point;
   }
   return { totalKwh: total / 1000, cumulativeKwh: cumulative };
 }

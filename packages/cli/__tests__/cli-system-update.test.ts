@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { runSystemUpdate } from "../src/lib/system-update";
 import { SystemUpdateReceiptStore } from "../src/lib/system-update-receipt";
@@ -82,9 +82,12 @@ async function fixture(mode = "success") {
     let raw = "";
     for await (const chunk of req) raw += String(chunk);
     const body = raw ? JSON.parse(raw) : {};
+    const { method, url } = req;
+    assert.isDefined(method);
+    assert.isDefined(url);
     requests.push({
-      method: req.method!,
-      url: req.url!,
+      method,
+      url,
       key: req.headers["idempotency-key"] as string | undefined,
       body,
       local: req.headers["x-openmapx-local-admin"] as string | undefined,

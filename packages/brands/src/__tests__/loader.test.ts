@@ -47,12 +47,14 @@ it("hydrates the selected artifact field origins into independent portable snaps
   const { loadBrandIndex } = await import("../loader");
   const index = loadBrandIndex();
   expect(index.source).toBe("fixture");
-  expect(index.entries[0].fieldContributors?.name).toEqual([nsi, wd]);
-  expect(index.entries[0].fieldContributors?.kind).toEqual([]);
-  const capturedName = index.entries[0].fieldContributors?.name[0];
+  const [entry] = index.entries;
+  if (!entry) throw new Error("missing brand entry");
+  expect(entry.fieldContributors?.name).toEqual([nsi, wd]);
+  expect(entry.fieldContributors?.kind).toEqual([]);
+  const capturedName = entry.fieldContributors?.name?.[0];
   if (!capturedName) throw new Error("missing captured name receipt");
   capturedName.name = "Mutated field receipt";
-  expect(index.entries[0].fieldContributors?.qid[0].name).toBe("Captured NSI");
+  expect(entry.fieldContributors?.qid?.[0]?.name).toBe("Captured NSI");
   vi.doUnmock("node:fs");
   vi.resetModules();
 });

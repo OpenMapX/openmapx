@@ -57,6 +57,19 @@ type Component = TariffElement["components"][number];
 /** Weekdays in `Date.getUTCDay()` order. */
 const WEEK: readonly Day[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
+/** The weekday at a position of {@link WEEK}; an invalid date has none. */
+function weekday(index: number): Day {
+  const day = WEEK[index];
+  if (day === undefined) throw new RangeError(`No weekday at index ${index}`);
+  return day;
+}
+
+/** Midnight UTC of a `YYYY-MM-DD` date, moved by whole days. */
+function utcDate(date: string, plusDays = 0): Date {
+  const [y = Number.NaN, m = Number.NaN, d = Number.NaN] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + plusDays));
+}
+
 /**
  * Standards that carry direct current when the source does not say. NACS and
  * the Tesla plug are taken as Superchargers, the case a route planner meets.
@@ -195,8 +208,7 @@ function localArrival(site: ChargingSite, atMs: number): LocalArrival {
   const zone = site.timeZone ?? timeZoneAt(lat, lng) ?? "UTC";
   const iso = isoWithOffsetInZone(new Date(atMs), zone);
   const date = iso.slice(0, 10);
-  const [y, m, d] = date.split("-").map(Number);
-  return { date, time: iso.slice(11, 16), day: WEEK[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] };
+  return { date, time: iso.slice(11, 16), day: weekday(utcDate(date).getUTCDay()) };
 }
 
 /** `min` inclusive, `max` exclusive, as tariff restrictions bound a value. */
@@ -211,7 +223,7 @@ function withinWindow(time: string, start: string | undefined, end: string | und
 }
 
 function dayBefore(day: Day): Day {
-  return WEEK[(WEEK.indexOf(day) + 6) % 7];
+  return weekday((WEEK.indexOf(day) + 6) % 7);
 }
 
 /**
@@ -321,14 +333,13 @@ function localAfter(start: LocalArrival, seconds: number): LocalArrival {
   const total = minutesOf(start.time) + Math.floor(seconds / 60);
   const days = Math.floor(total / MINUTES_PER_DAY);
   const minute = total - days * MINUTES_PER_DAY;
-  const [y, m, d] = start.date.split("-").map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d + days));
+  const date = utcDate(start.date, days);
   const hh = String(Math.floor(minute / 60)).padStart(2, "0");
   const mm = String(minute % 60).padStart(2, "0");
   return {
     date: date.toISOString().slice(0, 10),
     time: `${hh}:${mm}`,
-    day: WEEK[date.getUTCDay()],
+    day: weekday(date.getUTCDay()),
   };
 }
 
@@ -413,8 +424,12 @@ function costOn(
     }
     const shares = new Map<Component, number>();
     let uncovered = false;
-    for (let i = 1; i < cuts.length; i++) {
-      const middle = (cuts[i - 1] + cuts[i]) / 2;
+    let previousCut: number | undefined;
+    for (const cut of cuts) {
+      const from = previousCut;
+      previousCut = cut;
+      if (from === undefined) continue;
+      const middle = (from + cut) / 2;
       const component = elements
         .filter(
           ({ element, span: [from, until] }) =>
@@ -422,7 +437,7 @@ function costOn(
         )
         .flatMap(({ element }) => element.components)
         .find((c) => c.type === type);
-      if (component) shares.set(component, (shares.get(component) ?? 0) + cuts[i] - cuts[i - 1]);
+      if (component) shares.set(component, (shares.get(component) ?? 0) + cut - from);
       else uncovered = true;
     }
     // A tariff whose base price covers only part of the session (a night
@@ -435,7 +450,8 @@ function costOn(
       charged.push({ component, amount });
     }
   }
-  if (charged.length === 0) return null;
+  const [firstCharged] = charged;
+  if (!firstCharged) return null;
 
   // Price bounds are quoted without VAT unless the tariff says otherwise; the
   // VAT that grosses them up is that of the component the session pays most for.
@@ -445,7 +461,7 @@ function costOn(
   if (tariff.minPrice !== undefined) amount = Math.max(amount, bound(tariff.minPrice));
   if (tariff.maxPrice !== undefined) amount = Math.min(amount, bound(tariff.maxPrice));
 
-  const main = charged[0].component;
+  const main = firstCharged.component;
   return {
     amount,
     currency: tariff.currency,
@@ -528,26 +544,48 @@ function buildSampleDistances(route: Route, sampleCount: number): number[] {
     return route.elevation.map((_, i) => i * (route.elevationInterval as number));
   }
   const dist: number[] = [0];
-  for (let i = 1; i < route.geometry.length; i++)
-    dist.push(dist[i - 1] + haversineM(route.geometry[i - 1], route.geometry[i]));
+  let total = 0;
+  let previous: LngLat | undefined;
+  for (const point of route.geometry) {
+    if (previous) {
+      total += haversineM(previous, point);
+      dist.push(total);
+    }
+    previous = point;
+  }
   return dist;
 }
 
-/** Coordinate at `targetM` metres along the geometry (walk + linear interp). */
-function coordAtDistanceM(geometry: LngLat[], targetM: number): LngLat {
+/** Coordinate at `targetM` metres along the geometry (walk + linear interp); none for no geometry. */
+function coordAtDistanceM(geometry: LngLat[], targetM: number): LngLat | undefined {
   let acc = 0;
-  for (let i = 1; i < geometry.length; i++) {
-    const seg = haversineM(geometry[i - 1], geometry[i]);
-    if (acc + seg >= targetM) {
-      const t = seg === 0 ? 0 : (targetM - acc) / seg;
-      return [
-        geometry[i - 1][0] + t * (geometry[i][0] - geometry[i - 1][0]),
-        geometry[i - 1][1] + t * (geometry[i][1] - geometry[i - 1][1]),
-      ];
+  let previous: LngLat | undefined;
+  for (const point of geometry) {
+    if (previous) {
+      const seg = haversineM(previous, point);
+      if (acc + seg >= targetM) {
+        const t = seg === 0 ? 0 : (targetM - acc) / seg;
+        return [
+          previous[0] + t * (point[0] - previous[0]),
+          previous[1] + t * (point[1] - previous[1]),
+        ];
+      }
+      acc += seg;
     }
-    acc += seg;
+    previous = point;
   }
-  return geometry[geometry.length - 1];
+  return geometry.at(-1);
+}
+
+/**
+ * A sample of the energy or distance axis. Both axes have one value per
+ * sample and the planner only indexes samples it has counted, so a missing
+ * value is a broken invariant rather than a gap to skip.
+ */
+function sampleAt(values: readonly number[], index: number): number {
+  const value = values[index];
+  if (value === undefined) throw new RangeError(`No route sample at index ${index}`);
+  return value;
 }
 
 /** Last sample index reachable from `startIdx` while keeping `>= floorKwh`. */
@@ -558,9 +596,10 @@ function reachOffset(
   floorKwh: number,
 ): number {
   const budget = socKwh - floorKwh;
+  const startKwh = sampleAt(cumulativeKwh, startIdx);
   let last = 0;
   for (let i = startIdx + 1; i < cumulativeKwh.length; i++) {
-    if (cumulativeKwh[i] - cumulativeKwh[startIdx] <= budget) last = i - startIdx;
+    if (sampleAt(cumulativeKwh, i) - startKwh <= budget) last = i - startIdx;
     else break;
   }
   return last;
@@ -579,22 +618,26 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
     ambientTempC: input.ambientTempC,
     elevationAbsentDerate: input.hasElevation ? 1 : 1.1,
   });
-  const destKwh = cumulativeKwh[cumulativeKwh.length - 1];
+  const destKwh = sampleAt(cumulativeKwh, cumulativeKwh.length - 1);
   const sampleCount = cumulativeKwh.length;
   const sampleDistM = buildSampleDistances(route, sampleCount);
-  const onwardTarget = route.geometry[route.geometry.length - 1];
+  const onwardTarget = route.geometry.at(-1);
   const windowKm = Math.min(
     MAX_WINDOW_KM,
     Math.max(15, (vehicle.batteryKwh / vehicle.baseWhPerKm) * 1000 * 0.15),
   );
-  const totalDistM = sampleDistM[sampleDistM.length - 1] || 1;
+  const totalDistM = sampleDistM.at(-1) || 1;
 
   let startIdx = 0;
   let matrixContributors: Attribution[] = [];
   let elapsedSec = 0; // wall-clock into the trip (drive so far + prior charge times)
   for (let iter = 0; iter < MAX_STOPS; iter++) {
     // reachable (REACH_EPS_KWH absorbs float error when a prior charge was exactly enough)
-    if (soc - (destKwh - cumulativeKwh[startIdx]) >= input.socArrivalMinKwh - REACH_EPS_KWH) break;
+    if (
+      soc - (destKwh - sampleAt(cumulativeKwh, startIdx)) >=
+      input.socArrivalMinKwh - REACH_EPS_KWH
+    )
+      break;
 
     const divertIdx =
       startIdx + reachOffset(cumulativeKwh, startIdx, soc, input.socArrivalMinKwh + detourReserve);
@@ -603,12 +646,18 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
       warnings.push({ kind: "unreachable", afterStopIndex: stops.length - 1 });
       break;
     }
-    const divertPoint = coordAtDistanceM(route.geometry, sampleDistM[divertIdx]);
-    const socAtDivert = soc - (cumulativeKwh[divertIdx] - cumulativeKwh[startIdx]);
+    const divertPoint = coordAtDistanceM(route.geometry, sampleAt(sampleDistM, divertIdx));
+    if (!divertPoint || !onwardTarget) {
+      warnings.push({ kind: "unreachable", afterStopIndex: stops.length - 1 });
+      break;
+    }
+    const socAtDivert =
+      soc - (sampleAt(cumulativeKwh, divertIdx) - sampleAt(cumulativeKwh, startIdx));
     // Approx drive time from the current start to the divert point (proportional
     // to distance along the route). Used to time the arrival at each candidate.
     const driveToDivertSec =
-      route.duration * ((sampleDistM[divertIdx] - sampleDistM[startIdx]) / totalDistM);
+      route.duration *
+      ((sampleAt(sampleDistM, divertIdx) - sampleAt(sampleDistM, startIdx)) / totalDistM);
     const etaBaseSec = elapsedSec + driveToDivertSec;
     const arrivalAt = (site: ChargingSite, toSeconds: number) =>
       localArrival(site, input.tripStartMs + (etaBaseSec + toSeconds) * 1000);
@@ -666,6 +715,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
     const costWeight = input.costWeight ?? 1;
     interface Scored {
       i: number;
+      candidate: { s: ChargingSite; pick: EvsePick };
       toSeconds: number;
       detourSec: number;
       reachKwh: number;
@@ -673,14 +723,14 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
       cost: SessionCost | null;
     }
     const scored: Scored[] = [];
-    for (let i = 0; i < compatible.length; i++) {
+    for (const [i, candidate] of compatible.entries()) {
       const toCand = matrix[0]?.[i]; // divertPoint -> candidate i
       const fromCand = matrix[i + 1]?.[compatible.length]; // candidate i -> onwardTarget
       if (!toCand || !fromCand) continue;
       const divertEnergy = (toCand.km * vehicle.baseWhPerKm * DETOUR_UPLIFT) / 1000;
       const reachKwh = socAtDivert - divertEnergy;
       if (reachKwh < 0) continue; // can't reach this charger
-      const { s, pick } = compatible[i];
+      const { s, pick } = candidate;
       const caps = powerCaps(pick, vehicle);
       const toSoc = Math.min(input.socTargetKwh, vehicle.batteryKwh);
       const approxCharge = chargeSecondsFor({
@@ -701,6 +751,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
           : null;
       scored.push({
         i,
+        candidate,
         toSeconds: toCand.seconds,
         detourSec: toCand.seconds + fromCand.seconds,
         reachKwh,
@@ -720,9 +771,15 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
       if (cur === undefined || s.cost.amount < cur)
         minCostByCcy.set(s.cost.currency, s.cost.amount);
     }
-    let best: { idx: number; score: number; reachKwh: number; toSeconds: number } | null = null;
+    let best: {
+      idx: number;
+      candidate: Scored["candidate"];
+      score: number;
+      reachKwh: number;
+      toSeconds: number;
+    } | null = null;
     for (const s of scored) {
-      const cand = compatible[s.i];
+      const cand = s.candidate;
       const availPenalty = availabilityPenaltySec(cand.s, startsInSec + etaBaseSec + s.toSeconds);
       const opKey = normalizeOperator(cand.s.operator?.name);
       const networkBias = matchesAnyOperator(opKey, input.preferredNetworkKeys)
@@ -740,7 +797,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
       }
       const score = s.detourSec + s.approxCharge + availPenalty + networkBias + costPenalty;
       if (!best || score < best.score)
-        best = { idx: s.i, score, reachKwh: s.reachKwh, toSeconds: s.toSeconds };
+        best = { idx: s.i, candidate: cand, score, reachKwh: s.reachKwh, toSeconds: s.toSeconds };
     }
 
     if (!best) {
@@ -749,11 +806,11 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
       break;
     }
 
-    const chosen = compatible[best.idx];
+    const chosen = best.candidate;
     const caps = powerCaps(chosen.pick, vehicle);
     const arriveKwh = Math.max(0, best.reachKwh);
     const taperKwh = (vehicle.vehicleTaperSocPct / 100) * vehicle.batteryKwh;
-    const needForRest = destKwh - cumulativeKwh[divertIdx] + input.socArrivalMinKwh; // pack level to finish
+    const needForRest = destKwh - sampleAt(cumulativeKwh, divertIdx) + input.socArrivalMinKwh; // pack level to finish
     const userCapKwh = Math.min(input.socTargetKwh, vehicle.batteryKwh);
     // Charge target: if the remaining trip fits on one charge this is the
     // FINAL leg — charge enough to finish, ABOVE taper if required (the final-leg
@@ -810,7 +867,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
 
   if (
     stops.length >= MAX_STOPS &&
-    soc - (destKwh - cumulativeKwh[startIdx]) < input.socArrivalMinKwh
+    soc - (destKwh - sampleAt(cumulativeKwh, startIdx)) < input.socArrivalMinKwh
   ) {
     warnings.push({ kind: "unreachable", afterStopIndex: stops.length - 1 });
   }

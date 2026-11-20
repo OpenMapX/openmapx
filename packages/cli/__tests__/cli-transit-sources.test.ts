@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { registerDataCommands } from "../src/commands/data";
 
 afterEach(() => vi.restoreAllMocks());
@@ -25,10 +25,13 @@ it.each(["enable", "remove", "disable"])(
     registerDataCommands(program);
     await program.parseAsync(["data", "source", action, "operator:de:demo"], { from: "user" });
     expect(requests).toHaveLength(2);
-    expect(requests[0].url).not.toContain("transport=");
-    expect(requests[1].body).toEqual({ expectedSourceRevision: revision });
-    expect(requests[1].method).toBe(action === "remove" ? "DELETE" : "POST");
-    if (action !== "remove") expect(requests[1].url).toContain(`/${action}`);
+    const [list, change] = requests;
+    assert.isDefined(list);
+    assert.isDefined(change);
+    expect(list.url).not.toContain("transport=");
+    expect(change.body).toEqual({ expectedSourceRevision: revision });
+    expect(change.method).toBe(action === "remove" ? "DELETE" : "POST");
+    if (action !== "remove") expect(change.url).toContain(`/${action}`);
   },
 );
 

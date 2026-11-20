@@ -301,8 +301,9 @@ export async function generateTransitousApiKeys(
   const sha = pins.transitous.ref.split("@").at(-1),
     atlas = pins.transitous.submodules["transitland-atlas"];
   if (!sha || !atlas) throw Error("Exact Transitous and atlas pins are required");
-  const keysFile = options.outputPath ? undefined : ensureTransitousApiKeysFile(paths.root);
-  const outputPath = options.outputPath ? resolve(paths.root, options.outputPath) : keysFile!.path;
+  const outputPath = options.outputPath
+    ? resolve(paths.root, options.outputPath)
+    : ensureTransitousApiKeysFile(paths.root).path;
   const outputRelative = outputInsideRoot(paths.root, outputPath);
   const before = existingSnapshot(outputPath);
   const existing = before ? parseFeedCredentialMapJson(before.contents) : {};

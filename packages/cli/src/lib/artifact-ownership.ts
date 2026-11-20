@@ -58,9 +58,10 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
           deadlineAt,
         }),
       };
+    const cliSignal = cliAcquisitionOptions().signal;
     const signal = AbortSignal.any([
       AbortSignal.timeout(budget),
-      ...(cliAcquisitionOptions().signal ? [cliAcquisitionOptions().signal!] : []),
+      ...(cliSignal ? [cliSignal] : []),
     ]);
     // An import into the current generation applies that generation's plan
     // once its files are committed.

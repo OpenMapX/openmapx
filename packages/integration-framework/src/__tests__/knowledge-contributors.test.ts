@@ -21,7 +21,7 @@ it("captures acquisition metadata before an asynchronous lookup settles", async 
     facts: [{ label: "Founded", value: "1900" }],
   });
   const result = await pending;
-  expect(result?.fieldContributors?.description[0]?.publisher?.name).toBe("Original publisher");
+  expect(result?.fieldContributors?.description?.[0]?.publisher?.name).toBe("Original publisher");
   expect(result?.fieldContributors?.wikipediaExtract).toEqual([secondary]);
   expect(result?.facts?.[0]?.contributors?.[0]?.publisher?.name).toBe("Original publisher");
 });

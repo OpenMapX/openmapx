@@ -67,7 +67,7 @@ describe("collection orchestrator", () => {
     const answer = await items.read(BBOX, { hint: "h", excludedSourceIds: ["src-y"] });
 
     expect(answer.items.map((i) => i.id)).toEqual(["ok"]);
-    expect(vi.mocked(a.list).mock.calls[0][1]).toEqual({
+    expect(vi.mocked(a.list).mock.calls[0]?.[1]).toEqual({
       hint: "h",
       excludedSourceIds: ["src-y", "src-x"],
     });

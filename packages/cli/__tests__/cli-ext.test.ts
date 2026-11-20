@@ -12,22 +12,21 @@ const rating = {
   deploymentVariables: ["PUBLIC_URL", "CALLBACK_URL"],
   factors: ["host ports", "deployment configuration"],
 };
+const previewService: AdminExtensionInstallPreview["services"][number] = {
+  id: "synthetic-service",
+  name: "Synthetic service",
+  version: "2",
+  repositoryCommit: "a".repeat(40),
+  hostPorts: [
+    { host: 8080, container: 80, protocol: "tcp", bindAddress: "::" },
+    { host: 5353, container: 53, protocol: "udp", bindAddress: "127.0.0.1" },
+  ],
+  securityRating: rating,
+};
 const preview: AdminExtensionInstallPreview = {
   extension: { id: "synthetic", name: "Synthetic bundle", version: "2" },
   sourceTrust: "community",
-  services: [
-    {
-      id: "synthetic-service",
-      name: "Synthetic service",
-      version: "2",
-      repositoryCommit: "a".repeat(40),
-      hostPorts: [
-        { host: 8080, container: 80, protocol: "tcp", bindAddress: "::" },
-        { host: 5353, container: 53, protocol: "udp", bindAddress: "127.0.0.1" },
-      ],
-      securityRating: rating,
-    },
-  ],
+  services: [previewService],
   requiresHostPortConfirmation: true,
   confirmation: fingerprint,
 };
@@ -292,7 +291,7 @@ describe("extension CLI through the final generated SDK", () => {
       respond({
         ...preview,
         confirmation: "c".repeat(64),
-        services: [{ ...preview.services[0], repositoryCommit: "d".repeat(40) }],
+        services: [{ ...previewService, repositoryCommit: "d".repeat(40) }],
       }),
     );
     await expectFailure(["install", url, "--host-port-confirmation", fingerprint], 2);
@@ -327,9 +326,7 @@ describe("extension CLI through the final generated SDK", () => {
   it("permits a service with no effective ports without inventing confirmation", async () => {
     acceptedAfter({
       ...noPorts,
-      services: [
-        { ...preview.services[0], hostPorts: [], securityRating: { ...rating, hostPorts: 0 } },
-      ],
+      services: [{ ...previewService, hostPorts: [], securityRating: { ...rating, hostPorts: 0 } }],
     });
     await run("install", "synthetic");
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -496,7 +493,7 @@ describe("safe finite CLI failures without retry", () => {
     fetchMock.mockResolvedValueOnce(
       respond({
         ...preview,
-        services: [{ ...preview.services[0], securityRating: incompleteRating }],
+        services: [{ ...previewService, securityRating: incompleteRating }],
       }),
     );
     await expectFailure(["install", "synthetic", "--host-port-confirmation", fingerprint]);

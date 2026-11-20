@@ -6,7 +6,7 @@ import {
   canonicalizeOfflinePackageRequest,
   type OfflinePackageSourceDescriptor,
 } from "@openmapx/core";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   extractPmtilesPackage,
   inspectPmtiles,
@@ -99,6 +99,8 @@ function createLargeMbtiles(path: string): void {
   coordinates.add("8647:8191");
   for (const coordinate of coordinates) {
     const [x, y] = coordinate.split(":").map(Number);
+    assert.isDefined(x);
+    assert.isDefined(y);
     const tmsY = 2 ** 14 - 1 - y;
     const length = ((x * 31 + y * 17) % 31) + 1;
     tile.run(14, x, tmsY, Buffer.alloc(length, x % 256));

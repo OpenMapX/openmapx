@@ -1,5 +1,5 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import type { EnturClient } from "../client";
 import type { EnturGeocoderFeature } from "./client";
 import { createEnturGeocoder, type EnturGeocoderSource } from "./client";
@@ -45,15 +45,17 @@ describe("captured geocoder supplier policy", () => {
   ] as const)("captures API and exact %s supplier only", (source) => {
     const contributors = all();
     const sources = createEnturGeocoderSources({ contributors, isSourceAllowed: async () => true });
-    const publisher = contributors[ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS[source]][0].publisher;
+    const publisher = contributors[ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS[source]]?.[0]?.publisher;
     if (!publisher) throw new Error("Expected publisher");
     publisher.name = "Changed";
     expect(sources.contributorsFor(feature({ source })).map((r) => r.sourceId)).toEqual([
       "entur-geocoder",
       ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS[source],
     ]);
-    expect(sources.contributorsFor(feature({ source }))[1].publisher?.name).toBe("Original");
-    expect(Object.isFrozen(sources.contributorsFor(feature({ source }))[1].publisher)).toBe(true);
+    const supplier = sources.contributorsFor(feature({ source }))[1];
+    assert.isDefined(supplier);
+    expect(supplier.publisher?.name).toBe("Original");
+    expect(Object.isFrozen(supplier.publisher)).toBe(true);
   });
   it("uses own authoritative empty declarations, excluding absent and inherited supplier keys", async () => {
     const contributors = Object.assign(Object.create({ "entur-geocoder-osm": [] }), {

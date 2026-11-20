@@ -148,6 +148,7 @@ export function buildArtifact(inputs?: BrandArtifactInputs): BrandArtifact {
       const hit = QID_KEYS.find(({ key }) => item.tags[key]);
       if (!hit) continue;
       const qid = item.tags[hit.key];
+      if (!qid) continue;
 
       let entry = acc.get(qid);
       if (!entry) {

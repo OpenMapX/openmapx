@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { BrandIndex } from "../loader";
 import { searchBrands } from "../matcher";
 import type { BrandEntry } from "../types";
@@ -109,7 +109,7 @@ describe("searchBrands", () => {
       ]),
       { q: "star", country: "de", limit: 10 },
     );
-    expect(result[0].qid).toBe("Q2");
+    expect(result[0]?.qid).toBe("Q2");
   });
 
   it("breaks ties by itemCount when both entries mismatch the country", () => {
@@ -120,7 +120,7 @@ describe("searchBrands", () => {
       ]),
       { q: "star", country: "fr", limit: 10 },
     );
-    expect(result[0].qid).toBe("Q2");
+    expect(result[0]?.qid).toBe("Q2");
   });
 
   it("ranks a country-less (global) brand below a country match but above a mismatch", () => {
@@ -141,7 +141,7 @@ describe("searchBrands", () => {
       index([entry({ qid: "Q1", name: "McDonald's", matchNames: ["mcd", "mcdonalds"] })]),
       { q: "mcd", limit: 10 },
     );
-    expect(result[0].matchedOn).toBe("alias");
+    expect(result[0]?.matchedOn).toBe("alias");
   });
 
   it("reports matchedOn: name for the display name even when an alias sorts first alphabetically", () => {
@@ -151,7 +151,7 @@ describe("searchBrands", () => {
       index([entry({ qid: "Q1", name: "Star Market", matchNames: ["star", "star market"] })]),
       { q: "star market", limit: 10 },
     );
-    expect(result[0].matchedOn).toBe("name");
+    expect(result[0]?.matchedOn).toBe("name");
   });
 
   it("reports matchedOn: alias for an alias hit even when it sorts before the display name", () => {
@@ -159,7 +159,7 @@ describe("searchBrands", () => {
       index([entry({ qid: "Q1", name: "Star Market", matchNames: ["star", "star market"] })]),
       { q: "star", limit: 10 },
     );
-    expect(result[0].matchedOn).toBe("alias");
+    expect(result[0]?.matchedOn).toBe("alias");
   });
 
   it("returns an empty array for a blank query", () => {
@@ -197,7 +197,7 @@ describe("searchBrands", () => {
       { q: "star market", limit: 10 },
     );
     expect(result.map((r) => r.qid)).toEqual(["Q1"]);
-    expect(result[0].matchedOn).toBe("name");
+    expect(result[0]?.matchedOn).toBe("name");
   });
 });
 
@@ -215,9 +215,10 @@ it("projects canonical and alias matches from their actual selected artifact fie
       fieldContributors: { name: [wd], matchNames: [nsi], website: [hidden] },
     }),
   ]);
-  const canonical = searchBrands(catalogue, { q: "canonical", limit: 1 })[0];
-  expect(canonical.fieldContributors?.matchedValue).toEqual([wd]);
-  const alias = searchBrands(catalogue, { q: "alias", limit: 1 })[0];
+  const [canonical] = searchBrands(catalogue, { q: "canonical", limit: 1 });
+  expect(canonical?.fieldContributors?.matchedValue).toEqual([wd]);
+  const [alias] = searchBrands(catalogue, { q: "alias", limit: 1 });
+  assert.isDefined(alias);
   expect(alias.fieldContributors?.matchedValue).toEqual([nsi]);
   expect(alias.fieldContributors?.name).toEqual([wd]);
   expect(alias.contributors).not.toContainEqual(hidden);
