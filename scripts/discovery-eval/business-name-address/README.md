@@ -24,7 +24,7 @@ This directory implements no search provider or ingestion process.
 ```sh
 pnpm exec vitest run scripts/discovery-eval/business-name-address/evidence.test.ts
 pnpm exec tsc -p scripts/discovery-eval/business-name-address/tsconfig.json
-pnpm -C packages/cli exec tsx ../../scripts/discovery-eval/business-name-address/replay.ts \
+pnpm -C scripts exec tsx discovery-eval/business-name-address/replay.ts \
   --out /tmp/business-retrieval-replay.json
 ```
 

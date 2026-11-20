@@ -33,8 +33,8 @@ command performs the workload:
 pnpm exec vitest run --config scripts/self-hosting-replay-vitest.config.ts --maxWorkers=1
 pnpm exec tsc --noEmit --strict --target esnext --module esnext \
   --moduleResolution bundler --skipLibCheck \
-  --typeRoots packages/cli/node_modules/@types --types node scripts/self-hosting-replay.ts
-pnpm -C packages/cli exec tsx ../../scripts/self-hosting-replay.ts \
+  --typeRoots scripts/node_modules/@types --types node scripts/self-hosting-replay.ts
+pnpm -C scripts exec tsx self-hosting-replay.ts \
   --baseline-oc-root /absolute/isolated/oc-baseline \
   --candidate-oc-root /absolute/isolated/oc-candidate \
   --scenario all --postgres-major all --runs 5 \
