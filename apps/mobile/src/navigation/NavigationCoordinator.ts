@@ -25,7 +25,7 @@ import { locationReleaseAtMs } from "./arrival";
 import type { DiagnosticSink, EffectRunner } from "./effects";
 import { type CoastOrigin, canCoast } from "./ground/GroundCoastingScheduler";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
-import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
+import type { ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
 import { profileForSession } from "./sessionProfile";
 import { applySettingsPatch } from "./sessionSettings";
@@ -398,9 +398,8 @@ export class NavigationCoordinator {
     now: number,
   ): Promise<CommandResponse> {
     const { repository, processors, newSessionId } = this.deps;
-    const kind = command.payload.startPackage.kind;
-    const processor = processors.get(kind);
-    if (!processor) return errorResponse("mode-unsupported");
+    const { startPackage } = command.payload;
+    if (!processors.supports(startPackage.kind)) return errorResponse("mode-unsupported");
 
     const existing = await repository.loadActive(now);
     if (existing && !this.isTerminal(existing) && !isMobileSessionExpired(existing, now)) {
@@ -411,12 +410,17 @@ export class NavigationCoordinator {
       await this.endSession(existing, "stopped", now, "command");
     }
 
-    const prepared = processor.prepare(command.payload.startPackage as never, {
+    const context = {
       sessionId: newSessionId(),
       nowMs: now,
       // Upgraded to `background` only once the user has actually granted it.
       permissionMode: "foreground-only",
-    });
+    } as const;
+    const prepared =
+      startPackage.kind === "ground"
+        ? processors.get("ground")?.prepare(startPackage, context)
+        : processors.get("transit")?.prepare(startPackage, context);
+    if (!prepared) return errorResponse("mode-unsupported");
     if (!prepared.ok) return errorResponse(prepared.code);
 
     const created = await repository.createPreparing(prepared.session);
@@ -529,17 +533,19 @@ export class NavigationCoordinator {
       return errorResponse("revision-conflict");
     if (current.status !== "active") return errorResponse("invalid-state");
 
-    const processor = this.deps.processors.get(current.kind);
-    if (!processor) return errorResponse("mode-unsupported");
+    if (!this.deps.processors.supports(current.kind)) return errorResponse("mode-unsupported");
     if (command.payload.startPackage.kind !== current.kind) {
       // Switching mode mid-session is a new session, not a replacement.
       return errorResponse("mode-mismatch");
     }
 
-    const outcome = processor.replace(current as never, command.payload.startPackage, now);
-    if ("ok" in outcome && outcome.ok === false) return errorResponse(outcome.code);
+    const outcome = this.deps.processors.withProcessor(current, (processor, session) =>
+      processor.replace(session, command.payload.startPackage, now),
+    );
+    if (!outcome) return errorResponse("mode-unsupported");
+    if ("ok" in outcome) return errorResponse(outcome.code);
 
-    const committed = await this.commit(current, outcome as ProcessorMutation, now);
+    const committed = await this.commit(current, outcome, now);
     if (!committed.ok) return errorResponse(committed.code);
     await this.deps.effects.run(committed.effects);
 
@@ -566,9 +572,9 @@ export class NavigationCoordinator {
     const processor = this.deps.processors.get("transit");
     if (!processor?.repairTransitWalk) return errorResponse("mode-unsupported");
     const result = processor.repairTransitWalk(
-      current as never,
+      current,
       command.payload.legIndex,
-      command.payload.route as never,
+      command.payload.route,
       now,
     );
     if ("ok" in result) return errorResponse(result.code);
@@ -605,7 +611,7 @@ export class NavigationCoordinator {
     const processor = this.deps.processors.get("transit");
     if (!processor?.transitAction) return errorResponse("mode-unsupported");
     const outcome = processor.transitAction(
-      current as never,
+      current,
       { type: action.type, legIndex: action.legIndex },
       now,
     );
@@ -817,7 +823,7 @@ export class NavigationCoordinator {
         if (!processor) return;
         const committed = await this.commit(
           session,
-          (processor as AnyNavigationProcessor).processFixes(session as never, [fix], now),
+          processor.processFixes(session, [fix], now),
           now,
         );
         if (committed.ok) await this.deps.effects.run(committed.effects);
@@ -861,8 +867,7 @@ export class NavigationCoordinator {
       return;
     }
 
-    const processor = processors.get(session.kind);
-    if (!processor) return;
+    if (!processors.supports(session.kind)) return;
     // A batch is the one input a backgrounded Android app still receives, so it
     // also carries a connectivity change no timer could deliver.
     const current = await this.applyConnectivity(session, now);
@@ -885,13 +890,12 @@ export class NavigationCoordinator {
     // transit rider underground produces no fix for twenty minutes, and the
     // engine still has to update freshness without inferring movement. Ground has no such tick, so
     // an empty batch there really is nothing.
-    if (accepted.length === 0 && !processor.needsScheduleTicks) return;
-
-    const mutation = (processor as AnyNavigationProcessor).processFixes(
-      current as never,
-      accepted,
-      now,
+    const mutation = processors.withProcessor(current, (processor, active) =>
+      accepted.length === 0 && !processor.needsScheduleTicks
+        ? null
+        : processor.processFixes(active, accepted, now),
     );
+    if (!mutation) return;
     const committed = await this.commit(current, mutation, now);
     if (committed.ok) {
       await this.deps.effects.run(committed.effects);
@@ -941,17 +945,19 @@ export class NavigationCoordinator {
       session.status !== "active"
     )
       return session;
-    const processor = this.deps.processors.get(session.kind);
-    if (!processor) return session;
+    const { processors } = this.deps;
+    if (!processors.supports(session.kind)) return session;
     this.deps.diagnostics.record("network.transition", {
       from: session.connectivity,
       to: confirmed,
       confirmed: true,
     });
-    const marked = { ...session, connectivity: confirmed } as MobileNavigationSession;
+    const marked: MobileNavigationSession = { ...session, connectivity: confirmed };
     const restored =
       confirmed === "online"
-        ? await (processor as AnyNavigationProcessor).onConnectivityRestored(marked as never, now)
+        ? await processors.withProcessor(marked, (processor, restoring) =>
+            processor.onConnectivityRestored(restoring, now),
+          )
         : null;
     const mutation: ProcessorMutation = restored ?? {
       session: { ...marked, revision: session.revision + 1, updatedAtMs: now },
@@ -1005,9 +1011,8 @@ export class NavigationCoordinator {
     let mutation: ProcessorMutation | null = null;
     if (outcome.ok) {
       const processor = processors.get("ground");
-      const replaced = processor?.replace(session as never, outcome.route, now);
-      if (replaced && !("ok" in replaced && replaced.ok === false)) {
-        const applied = replaced as ProcessorMutation;
+      const applied = processor?.replace(session, outcome.route, now);
+      if (applied && !("ok" in applied)) {
         const next = applied.session;
         mutation =
           next.kind === "ground"

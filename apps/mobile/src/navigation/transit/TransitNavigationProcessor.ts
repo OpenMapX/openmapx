@@ -9,7 +9,12 @@ import {
   type TransitRiderAction,
   transitProgressFromTick,
 } from "@openmapx/core/navigation";
-import type { NavigationProcessor, ProcessorMutation, ProcessorPreparation } from "../processor";
+import type {
+  NavigationProcessor,
+  ProcessorMutation,
+  ProcessorPreparation,
+  WalkRepairRoute,
+} from "../processor";
 import {
   onRefreshFailed,
   onRefreshRequested,
@@ -111,7 +116,7 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
   repairTransitWalk(
     session: TransitMobileSession,
     legIndex: number,
-    route: Route,
+    walkRoute: WalkRepairRoute,
     nowMs: number,
   ): ProcessorMutation | { ok: false; code: string } {
     if (
@@ -119,6 +124,11 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
       session.payload.tickState.phase !== "walking"
     )
       return { ok: false, code: "invalid-state" };
+    // The bridge validated the fields the repair reads (geometry, distance,
+    // duration, steps, receipts). Engine extras such as step maneuvers pass
+    // through its schema untyped, and its legs are optional, so the wire type
+    // is not a `Route` to TypeScript even though the page sent one.
+    const route = walkRoute as unknown as Route;
     const itinerary = repairTransitWalk(
       session.payload.startPackage.itinerary as never,
       legIndex,
