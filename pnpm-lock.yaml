@@ -1330,6 +1330,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       three:
         specifier: 0.185.1
         version: 0.185.1
@@ -1501,9 +1504,6 @@ importers:
         specifier: ^0.16.8
         version: 0.16.8
     devDependencies:
-      '@types/geojson':
-        specifier: ^7946.0.16
-        version: 7946.0.16
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0

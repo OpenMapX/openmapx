@@ -16,7 +16,6 @@
     "react": ">=19"
   },
   "devDependencies": {
-    "@types/geojson": "^7946.0.16",
     "@types/react": "^19.3.0",
     "maplibre-gl": "^6.16.0",
     "react": "19.3.1"

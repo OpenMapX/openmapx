@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "domains": ["landmark-models", "map-overlay"],
   "frontend": {
-    "mapLayer": false,
+    "mapLayer": true,
     "legend": false,
     "panel": false
   },
