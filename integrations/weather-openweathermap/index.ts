@@ -1,14 +1,15 @@
-import type {
-  DailyForecastPoint,
-  HourlyForecastPoint,
-  LngLat,
-  WeatherForecastResponse,
-  WeatherOptions,
-  WeatherResponse,
-} from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
 import {
-  fetchJsonWithTimeout,
+  type DailyForecastPoint,
+  type HourlyForecastPoint,
+  type LngLat,
+  USER_AGENT,
+  type WeatherForecastResponse,
+  type WeatherOptions,
+  type WeatherResponse,
+} from "@openmapx/core";
+import type { HttpClient, IntegrationContext } from "@openmapx/integration-framework";
+import {
+  DEFAULT_FETCH_TIMEOUT_MS,
   forecastTimeZone,
   groupByLocalDay,
   round4,
@@ -89,8 +90,17 @@ function toIso(unix: number): string {
   return new Date(unix * 1000).toISOString();
 }
 
-function fetchJson<T>(url: string): Promise<T> {
-  return fetchJsonWithTimeout<T>(url, { label: "OWM" });
+/** The key travels as the `appid` query parameter, as OpenWeatherMap requires. */
+function owmGet<T>(
+  http: HttpClient,
+  path: string,
+  params: Record<string, string | number>,
+): Promise<T> {
+  return http.get<T>(`${BASE}${path}`, {
+    params,
+    headers: { "User-Agent": USER_AGENT },
+    timeoutMs: DEFAULT_FETCH_TIMEOUT_MS,
+  });
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -104,11 +114,13 @@ export function setup(ctx: IntegrationContext): void {
     async getCurrentWeather(coords: LngLat, options?: WeatherOptions): Promise<WeatherResponse> {
       const units = options?.units === "imperial" ? "imperial" : "metric";
       const lang = options?.lang ?? "en";
-      const url =
-        `${BASE}/weather?lat=${round4(coords[1])}&lon=${round4(coords[0])}` +
-        `&appid=${apiKey}&units=${units}&lang=${lang}`;
-
-      const data = await fetchJson<OWM25Current>(url);
+      const data = await owmGet<OWM25Current>(ctx.http, "/weather", {
+        lat: round4(coords[1]),
+        lon: round4(coords[0]),
+        appid: apiKey,
+        units,
+        lang,
+      });
       const precip = (data.rain?.["1h"] ?? 0) + (data.snow?.["1h"] ?? 0);
       const wmoCode = owmIdToWmo(data.weather[0]?.id ?? 800);
 
@@ -148,11 +160,13 @@ export function setup(ctx: IntegrationContext): void {
       const units = options?.units === "imperial" ? "imperial" : "metric";
       // 2.5 forecast returns 3-hour steps, max 40 entries (5 days)
       const cnt = Math.min(Math.ceil(hours / 3), 40);
-      const url =
-        `${BASE}/forecast?lat=${round4(coords[1])}&lon=${round4(coords[0])}` +
-        `&appid=${apiKey}&units=${units}&cnt=${cnt}`;
-
-      const data = await fetchJson<OWM25ForecastResponse>(url);
+      const data = await owmGet<OWM25ForecastResponse>(ctx.http, "/forecast", {
+        lat: round4(coords[1]),
+        lon: round4(coords[0]),
+        appid: apiKey,
+        units,
+        cnt,
+      });
       const windMul = units === "metric" ? 3.6 : 1;
 
       const points = data.list.map((e) => ({
@@ -176,11 +190,13 @@ export function setup(ctx: IntegrationContext): void {
     ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
       const units = options?.units === "imperial" ? "imperial" : "metric";
       // Fetch full 5-day forecast and aggregate into daily summaries
-      const url =
-        `${BASE}/forecast?lat=${round4(coords[1])}&lon=${round4(coords[0])}` +
-        `&appid=${apiKey}&units=${units}&cnt=40`;
-
-      const data = await fetchJson<OWM25ForecastResponse>(url);
+      const data = await owmGet<OWM25ForecastResponse>(ctx.http, "/forecast", {
+        lat: round4(coords[1]),
+        lon: round4(coords[0]),
+        appid: apiKey,
+        units,
+        cnt: 40,
+      });
       const windMul = units === "metric" ? 3.6 : 1;
 
       // OWM's 3-hour steps are UTC instants; days are the location's calendar days.

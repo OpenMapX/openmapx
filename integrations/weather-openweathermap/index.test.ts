@@ -1,7 +1,11 @@
 import type { LngLat } from "@openmapx/core";
 import type { WeatherProvider } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createMockIntegrationContext,
+  fakeHttpClient,
+  httpStatus,
+} from "@openmapx/integration-framework/testing";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { owmIdToWmo, setup } from "./index.js";
 
 const COORDS: LngLat = [13.405, 52.52];
@@ -16,7 +20,7 @@ type LoadedWeatherProvider = WeatherProvider &
 function getProvider(
   config: Record<string, unknown> = { apiKey: "test-owm-key" },
 ): LoadedWeatherProvider {
-  const ctx = createMockIntegrationContext({ config });
+  const ctx = createMockIntegrationContext({ config, http });
   setup(ctx);
   const provider = ctx.registered.weather[0];
   if (!provider?.getHourlyForecast || !provider.getDailyForecast) {
@@ -73,16 +77,19 @@ function forecastResponse() {
   };
 }
 
+/** Called with each request URL, query included; answers like fetch. */
 let mockFetch: ReturnType<typeof vi.fn>;
+const http = fakeHttpClient(async ({ url, options }) => {
+  const requestUrl = new URL(url);
+  for (const [name, value] of Object.entries(options?.params ?? {})) {
+    if (value !== undefined) requestUrl.searchParams.set(name, String(value));
+  }
+  const response = (await mockFetch(requestUrl.toString())) as Response;
+  return response.ok ? response.json() : httpStatus(response.status);
+});
 
 beforeEach(() => {
   mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
 describe("owmIdToWmo condition mapping", () => {

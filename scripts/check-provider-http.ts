@@ -86,9 +86,7 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
       reason: MOVES_TO_HOST_CLIENT,
     },
   },
-  "credentialed-fetch-json": {
-    "integrations/weather-openweathermap/index.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },
-  },
+  "credentialed-fetch-json": {},
   "null-island": {
     "integrations/overlay-air-quality/station-demand.ts": { count: 2, reason: NULL_ISLAND_PENDING },
     "integrations/routing-valhalla/provider.ts": { count: 2, reason: NULL_ISLAND_PENDING },
