@@ -1,32 +1,43 @@
 import type { CacheWriter } from "./cache-writer.js";
 import { TTL as TTL_POLICY } from "./policy.js";
 
-// Local structural type that mirrors `CacheClient` from
-// `@openmapx/integration-framework`. Inlined here to break a workspace
-// dependency cycle: integration-framework now imports types from
-// mobility-core (Attribution, MobilityResult) for the canonical provider
-// contracts, so mobility-core can no longer depend on integration-framework.
-// Any cache instance that satisfies this shape - including the one the host
-// passes to integrations via `IntegrationContext.cache` - can be supplied
-// directly to the runtime that owns the operation.
+/**
+ * The cache an integration receives as `IntegrationContext.cache`, and the one
+ * every runtime that caches provider data takes. The integration framework
+ * re-exports this type; it lives here because the framework depends on
+ * mobility-core, not the other way round.
+ */
 export interface CacheClient {
-  /** Host administration capability; CLI and test caches may omit it. */
+  /**
+   * Host administration events; immediately reports current availability.
+   * Clear local copies on every event and bypass them while unavailable.
+   * Absent in clients without host administration (for example CLI fixtures).
+   */
   onInvalidate?(listener: (event: { available: boolean }) => void): () => void;
   /**
-   * Managed hosts capture the administrative write fence before acquisition;
-   * the returned writer refuses a write once an admin clear has intervened.
-   * CLI and test caches may omit it.
+   * Managed shared caches can capture an administrative write fence before
+   * acquisition. Use this writer for additional derived entries after awaits;
+   * late writes are rejected when the captured Redis invalidation epoch changes.
+   * Also guard local state/lifetime with onInvalidate and disposal; this writer
+   * is not a subscriber-availability or linearizable cross-worker read barrier.
+   * Hosts without shared cache administration omit this capability.
    */
   captureWriter?(): Promise<CacheWriter>;
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
-  /** Loader signal belongs to the shared cache fill, not any one request. */
+  /**
+   * Coalesce equal cache misses. The loader receives the shared operation
+   * signal; `callerSignal` cancels only that caller, and shared work is aborted
+   * once no callers remain. `shouldCache` can keep a useful but degraded
+   * fulfilled value out of the shared cache.
+   */
   withCache<T>(
     key: string,
     ttlSeconds: number,
     fn: (operationSignal: AbortSignal) => Promise<T>,
     callerSignal?: AbortSignal,
+    shouldCache?: (value: T) => boolean,
   ): Promise<T>;
 }
 
@@ -42,9 +53,10 @@ export async function withCache<T>(
   ttlSeconds: number,
   fn: (operationSignal: AbortSignal) => Promise<T>,
   callerSignal?: AbortSignal,
+  shouldCache?: (value: T) => boolean,
 ): Promise<T> {
   if (callerSignal?.aborted) throw callerSignal.reason;
-  return cache.withCache(key, ttlSeconds, fn, callerSignal);
+  return cache.withCache(key, ttlSeconds, fn, callerSignal, shouldCache);
 }
 
 export const TTL = {

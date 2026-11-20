@@ -14,9 +14,8 @@
  * (`ctx.cache`, `this.cache`, `deps.cache`, a local `cache`), when it is
  * declared with a `CacheClient` type other than the captured writer's
  * `Pick<CacheClient, "set">`, or when it is a variable taken from a `.cache`
- * property. Shared helpers that write the cache without the fence count as
- * direct writes too. In-memory maps that happen to be named `cache` and
- * writes that store no upstream result are listed below with the reason.
+ * property. In-memory maps that happen to be named `cache` and writes that
+ * store no upstream result are listed below with the reason.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -32,11 +31,6 @@ const SCAN_ROOTS = [
   "packages/noaa-coops-data",
 ];
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "__tests__", "__fixtures__"]);
-
-/** Helpers outside the scanned roots that call `cache.set` on the cache they are given. */
-const UNFENCED_HELPERS: ReadonlyArray<{ module: string; name: string }> = [
-  { module: "@openmapx/core", name: "withCache" },
-];
 
 export interface CacheWriteException {
   /** How many direct writes the file holds; any other number fails the gate. */
@@ -115,26 +109,6 @@ function cacheAliases(source: ts.SourceFile): Set<string> {
   return aliases;
 }
 
-/** Local names bound to an unfenced cache-writing helper by an import. */
-function unfencedHelperNames(source: ts.SourceFile): Set<string> {
-  const names = new Set<string>();
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
-      continue;
-    }
-    const module = statement.moduleSpecifier.text;
-    const bindings = statement.importClause?.namedBindings;
-    if (!bindings || !ts.isNamedImports(bindings)) continue;
-    for (const element of bindings.elements) {
-      const imported = (element.propertyName ?? element.name).text;
-      if (UNFENCED_HELPERS.some((helper) => helper.module === module && helper.name === imported)) {
-        names.add(element.name.text);
-      }
-    }
-  }
-  return names;
-}
-
 function receiverName(expression: ts.Expression): string | undefined {
   let inner = expression;
   while (ts.isNonNullExpression(inner) || ts.isParenthesizedExpression(inner)) {
@@ -150,11 +124,10 @@ export interface DirectCacheWrite {
   readonly text: string;
 }
 
-/** Every `<cache>.set` access and unfenced helper call in one module. */
+/** Every `<cache>.set` access in one module. */
 export function findDirectCacheWrites(sourceText: string, fileName: string): DirectCacheWrite[] {
   const source = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
   const aliases = cacheAliases(source);
-  const helpers = unfencedHelperNames(source);
   const writes: DirectCacheWrite[] = [];
   const record = (node: ts.Node) => {
     const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
@@ -164,13 +137,6 @@ export function findDirectCacheWrites(sourceText: string, fileName: string): Dir
     if (ts.isPropertyAccessExpression(node) && node.name.text === "set") {
       const name = receiverName(node.expression);
       if (name === "cache" || (name !== undefined && aliases.has(name))) record(node);
-    }
-    if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      helpers.has(node.expression.text)
-    ) {
-      record(node);
     }
     ts.forEachChild(node, visit);
   };

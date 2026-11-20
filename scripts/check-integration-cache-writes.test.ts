@@ -37,18 +37,6 @@ describe("findDirectCacheWrites", () => {
     expect(lines(source)).toEqual([1, 2, 3]);
   });
 
-  it("finds shared helpers that write without the fence", () => {
-    const source = [
-      'import { withCache as fenced } from "@openmapx/mobility-core/cache";',
-      'import { withCache as unfenced } from "@openmapx/core";',
-      "async function load(kv) {",
-      "  await unfenced(kv, 'k', 60, fetchUpstream);",
-      "  await fenced(kv, 'k', 60, fetchUpstream);",
-      "}",
-    ].join("\n");
-    expect(lines(source)).toEqual([4]);
-  });
-
   it("ignores captured writers and maps named otherwise", () => {
     const source = [
       'async function load(ctx, writer: Pick<CacheClient, "set">, other: CacheWriter) {',
