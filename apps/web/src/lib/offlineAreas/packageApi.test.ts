@@ -254,7 +254,12 @@ describe("offline package API client", () => {
     },
   );
 
-  it("surfaces a bounded 429 retry delay", async () => {
+  it.each([
+    { label: "the body over the header", body: 599, header: "30", expected: 599 },
+    { label: "the header without a body delay", body: undefined, header: "30", expected: 30 },
+    { label: "the header over an out-of-range body", body: 900, header: "30", expected: 30 },
+    { label: "the body without a header", body: 45, header: undefined, expected: 45 },
+  ])("surfaces a bounded 429 retry delay from $label", async ({ body, header, expected }) => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -262,9 +267,9 @@ describe("offline package API client", () => {
           {
             error: "Offline package preparation quota exceeded",
             code: "prepare-rate-limit",
-            retryAfterSeconds: 599,
+            ...(body === undefined ? {} : { retryAfterSeconds: body }),
           },
-          { status: 429, headers: { "Retry-After": "599" } },
+          { status: 429, headers: header === undefined ? {} : { "Retry-After": header } },
         ),
       ),
     );
@@ -280,7 +285,7 @@ describe("offline package API client", () => {
       code: "prepare-rate-limit",
       status: 429,
       message: "Offline package preparation quota exceeded",
-      retryAfterSeconds: 599,
+      retryAfterSeconds: expected,
     });
   });
 
