@@ -87,7 +87,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
     },
   },
   "credentialed-fetch-json": {
-    "integrations/photos-flickr/provider.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },
     "integrations/routing-valhalla/provider.ts": { count: 6, reason: MOVES_TO_HOST_CLIENT },
     "integrations/street-level-imagery-mapillary/provider.ts": {
       count: 4,

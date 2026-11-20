@@ -1,4 +1,5 @@
-import { fetchJson, type PlacePhoto, withPhotoContributors } from "@openmapx/core";
+import { type PlacePhoto, withPhotoContributors } from "@openmapx/core";
+import type { HttpClient } from "@openmapx/integration-framework";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
@@ -52,76 +53,82 @@ function buildFlickrUrl(photo: FlickrPhoto, size: string): string {
   return `https://live.staticflickr.com/${photo.server}/${photo.id}_${photo.secret}_${size}.jpg`;
 }
 
-// Populated by setup(ctx) from the resolved integration config (default →
-// database → vault → env cascade). Read lazily at request time so a late
-// secret rotation shows up without re-registering the provider.
-let apiKey: string | undefined;
-export function setFlickrApiKey(key: string | undefined): void {
-  apiKey = key && key.length > 0 ? key : undefined;
+/**
+ * Flickr photos near a place. `apiKey` reads the current generation's key at
+ * request time; without one the provider answers nothing. Any upstream failure
+ * leaves Flickr out of the answer.
+ */
+export function createFlickrPhotoProvider(options: {
+  http: HttpClient;
+  apiKey: () => string | undefined;
+}): PhotoProvider {
+  return {
+    id: "flickr",
+    name: "Flickr",
+
+    async search(query: PhotoQuery): Promise<PlacePhoto[]> {
+      const apiKey = options.apiKey();
+      if (!apiKey) return [];
+
+      const limit = query.limit ?? 6;
+
+      let data: FlickrResponse;
+      try {
+        data = await options.http.get<FlickrResponse>("https://api.flickr.com/services/rest/", {
+          params: {
+            method: "flickr.photos.search",
+            api_key: apiKey,
+            lat: String(query.lat),
+            lon: String(query.lng),
+            radius: "0.5",
+            radius_units: "km",
+            license: COMMERCIAL_LICENSES,
+            sort: "interestingness-desc",
+            extras: "url_sq,url_m,url_z,url_l,owner_name,license,date_taken",
+            per_page: String(limit),
+            format: "json",
+            nojsoncallback: "1",
+            content_types: "0",
+            media: "photos",
+          },
+          timeoutMs: 5000,
+        });
+      } catch {
+        return [];
+      }
+      const photos = data.photos?.photo;
+      if (!photos?.length) return [];
+
+      return photos.map((photo): PlacePhoto => {
+        const imageUrl = photo.url_l ?? photo.url_z ?? photo.url_m ?? buildFlickrUrl(photo, "b");
+        const thumbUrl = photo.url_sq ?? buildFlickrUrl(photo, "q");
+        const license = LICENSE_NAMES[photo.license] ?? `License ${photo.license}`;
+        const author = photo.ownername ?? photo.owner;
+
+        // Flickr datetaken: "2023-04-15 14:30:00"
+        const capturedAt = photo.datetaken
+          ? new Date(photo.datetaken.replace(" ", "T")).toISOString()
+          : undefined;
+
+        return withPhotoContributors(
+          {
+            url: imageUrl,
+            thumbnailUrl: thumbUrl,
+            source: "flickr",
+            author,
+            authorUrl: `https://www.flickr.com/photos/${photo.owner}`,
+            licensing: licensingFromDeclaration(
+              license,
+              LICENSE_URLS[photo.license],
+              "Flickr photo",
+              "imagery",
+            ),
+            pageUrl: `https://www.flickr.com/photos/${photo.owner}/${photo.id}`,
+            capturedAt,
+          },
+          "Flickr",
+        );
+      });
+    },
+  };
 }
-
-export const flickrPhotoProvider: PhotoProvider = {
-  id: "flickr",
-  name: "Flickr",
-
-  async search(query: PhotoQuery): Promise<PlacePhoto[]> {
-    if (!apiKey) return [];
-
-    const limit = query.limit ?? 6;
-
-    const url = new URL("https://api.flickr.com/services/rest/");
-    url.searchParams.set("method", "flickr.photos.search");
-    url.searchParams.set("api_key", apiKey);
-    url.searchParams.set("lat", String(query.lat));
-    url.searchParams.set("lon", String(query.lng));
-    url.searchParams.set("radius", "0.5");
-    url.searchParams.set("radius_units", "km");
-    url.searchParams.set("license", COMMERCIAL_LICENSES);
-    url.searchParams.set("sort", "interestingness-desc");
-    url.searchParams.set("extras", "url_sq,url_m,url_z,url_l,owner_name,license,date_taken");
-    url.searchParams.set("per_page", String(limit));
-    url.searchParams.set("format", "json");
-    url.searchParams.set("nojsoncallback", "1");
-    url.searchParams.set("content_types", "0");
-    url.searchParams.set("media", "photos");
-
-    const data = await fetchJson<FlickrResponse>(url.toString(), {
-      timeoutMs: 5000,
-      nullOnError: true,
-    });
-    if (!data) return [];
-    const photos = data.photos?.photo;
-    if (!photos?.length) return [];
-
-    return photos.map((photo): PlacePhoto => {
-      const imageUrl = photo.url_l ?? photo.url_z ?? photo.url_m ?? buildFlickrUrl(photo, "b");
-      const thumbUrl = photo.url_sq ?? buildFlickrUrl(photo, "q");
-      const license = LICENSE_NAMES[photo.license] ?? `License ${photo.license}`;
-      const author = photo.ownername ?? photo.owner;
-
-      // Flickr datetaken: "2023-04-15 14:30:00"
-      const capturedAt = photo.datetaken
-        ? new Date(photo.datetaken.replace(" ", "T")).toISOString()
-        : undefined;
-
-      return withPhotoContributors(
-        {
-          url: imageUrl,
-          thumbnailUrl: thumbUrl,
-          source: "flickr",
-          author,
-          authorUrl: `https://www.flickr.com/photos/${photo.owner}`,
-          licensing: licensingFromDeclaration(
-            license,
-            LICENSE_URLS[photo.license],
-            "Flickr photo",
-            "imagery",
-          ),
-          pageUrl: `https://www.flickr.com/photos/${photo.owner}/${photo.id}`,
-          capturedAt,
-        },
-        "Flickr",
-      );
-    });
-  },
-};
