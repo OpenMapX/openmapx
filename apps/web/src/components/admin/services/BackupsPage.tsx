@@ -64,6 +64,7 @@ export function BackupsPage() {
 }
 function BackupsView() {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient();
   const register = useServiceJobRegistration();
   const showToast = useAdminToast();
@@ -112,7 +113,7 @@ function BackupsView() {
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
-          showToast(t("backupCreateQueuedJobid", { jobId: result.jobId }));
+          showToast(t("backupCreateQueued", { jobId: result.jobId }));
           setCreateName("");
         }
         createIntent.complete(key);
@@ -140,7 +141,7 @@ function BackupsView() {
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
-          showToast(t("restoreQueuedForNameJobid", { name: payload.name, jobId: result.jobId }));
+          showToast(t("restoreQueued", { name: payload.name, jobId: result.jobId }));
           setRestoreTarget(null);
           setRestoreServiceIds("");
           setRestoreStopRunning(false);
@@ -165,7 +166,7 @@ function BackupsView() {
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
-          showToast(t("deleteQueuedForNameJobid", { name, jobId: result.jobId }));
+          showToast(t("deleteQueued", { name, jobId: result.jobId }));
           setDeleteTarget(null);
         }
         deleteIntent.complete(key);
@@ -221,7 +222,7 @@ function BackupsView() {
             size="small"
             value={createName}
             onChange={(e) => setCreateName(e.target.value)}
-            placeholder={t("eGPreUpgrade2026")}
+            placeholder={t("backupLabelExample")}
             sx={{ minWidth: { xs: "100%", sm: 320 } }}
           />
           <Button
@@ -242,7 +243,7 @@ function BackupsView() {
             size="small"
             variant="outlined"
           >
-            {t("openActivity2")}
+            {t("openActivityLink")}
           </Button>
         </Stack>
         <Typography
@@ -256,9 +257,7 @@ function BackupsView() {
           {t("allowedLettersNumbersDotDash")}
         </Typography>
       </Paper>
-      {data && (
-        <Typography variant="caption">{t("backupStorageRoot", { root: data.root })}</Typography>
-      )}
+      {data && <Typography variant="caption">{t("backupStorage", { path: data.root })}</Typography>}
       <BackupPruneControls />
       {isLoading && (
         <Box
@@ -352,12 +351,12 @@ function BackupsView() {
                           </Typography>
                           {backup.corrupt && (
                             <Tooltip
-                              title={t("cannotBeRestoredValue", {
-                                value: backup.corruptReason ?? t("manifestMissing"),
+                              title={t("cannotBeRestored", {
+                                reason: backup.corruptReason ?? t("manifestMissing"),
                               })}
                             >
                               <Chip
-                                label={t("corrupt2")}
+                                label={t("corruptChip")}
                                 size="small"
                                 color="warning"
                                 variant="outlined"
@@ -370,7 +369,7 @@ function BackupsView() {
                         {new Date(backup.createdAt).toLocaleString()}
                         {backup.expiresAt && (
                           <Typography variant="caption" sx={{ display: "block" }}>
-                            {t("expiresExpiresat", {
+                            {t("expiresAt", {
                               expiresAt: new Date(backup.expiresAt).toLocaleString(),
                             })}
                           </Typography>
@@ -447,7 +446,7 @@ function BackupsView() {
         </AdminTableSurface>
       )}
       <Dialog open={!!restoreTarget} onClose={() => setRestoreTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>{t("restoreBackup2")}</DialogTitle>
+        <DialogTitle>{t("restoreBackupTitle")}</DialogTitle>
         <DialogContent>
           <Stack
             sx={{
@@ -457,12 +456,14 @@ function BackupsView() {
           >
             <Alert severity="warning">{t("restoringOverwritesCurrentServiceData")}</Alert>
             <Typography variant="body2">
-              {t("backup")}
-              <strong>{restoreTarget?.name}</strong>
+              {t.rich("restoreTarget", {
+                name: restoreTarget?.name ?? "",
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })}
             </Typography>
             <TextField
               label={t("serviceIdsOptional")}
-              placeholder={t("valhallaOsrmMotis")}
+              placeholder="valhalla, osrm, motis"
               size="small"
               value={restoreServiceIds}
               onChange={(e) => setRestoreServiceIds(e.target.value)}
@@ -489,7 +490,7 @@ function BackupsView() {
             }}
             disabled={restoreMutation.isPending}
           >
-            {t("cancel")}
+            {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"
@@ -509,7 +510,7 @@ function BackupsView() {
         </DialogActions>
       </Dialog>
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{t("deleteBackup2")}</DialogTitle>
+        <DialogTitle>{t("deleteBackupTitle")}</DialogTitle>
         <DialogContent>
           <Alert severity="error" variant="outlined" sx={{ mb: 1.5 }}>
             {t("thisCannotBeUndone")}
@@ -523,7 +524,7 @@ function BackupsView() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
-            {t("cancel")}
+            {tCommon("cancel")}
           </Button>
           <Button
             color="error"

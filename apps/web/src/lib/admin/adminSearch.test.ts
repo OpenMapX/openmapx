@@ -8,6 +8,7 @@ import {
   buildAdminSearchEntries,
   searchAdminEntries,
 } from "./adminSearch";
+import type { AdminTranslator } from "./adminTranslator";
 
 const access = { role: "admin", selfHosted: true };
 const copy = adminSearchCopy(
@@ -31,10 +32,12 @@ it.each([
   expect(searchAdminEntries(buildAdminSearchEntries(access, copy), query)[0]?.href).toBe(href);
 });
 it("titles, describes and keys entries in the reader's language", () => {
-  const german = (namespace: string) => {
-    const t = createTranslator({ locale: "de", messages: de, namespace: namespace as never });
-    return (key: string) => t(key as never);
-  };
+  const german = <Namespace extends string>(namespace: Namespace) =>
+    createTranslator({
+      locale: "de",
+      messages: de,
+      namespace: namespace as never,
+    }) as unknown as AdminTranslator<Namespace>;
   const entries = buildAdminSearchEntries(
     access,
     adminSearchCopy(german("adminNavigation"), german("adminShared")),

@@ -35,6 +35,7 @@ export function StandaloneIntegrationsPanel() {
 }
 function LocalInstallations() {
   const t = useTranslations("adminExtensions");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient(),
     owner = useAdminMutationOwner(client, apiUrl),
     register = useAdminJobRegistration(),
@@ -174,18 +175,19 @@ function LocalInstallations() {
                 {entry.integrationId}
               </Typography>
               <Typography variant="body2">
-                {t("version")}
-                {entry.version ?? t("unknownVersion")}{" "}
-                {t("ownershipOwnership", { ownership: entry.ownership })}
+                {t("versionAndOwnership", {
+                  version: entry.version ?? t("unknownVersion"),
+                  ownership: entry.ownership,
+                })}
               </Typography>
               <Typography variant="body2">
                 {entry.provenance === "legacy_unknown"
                   ? t("sourceUnknownReviewANew")
-                  : t("sourceProvenance", { provenance: entry.provenance })}
+                  : t("sourceProvenance", { provenance: entry.provenance.replaceAll("-", "_") })}
               </Typography>
               {entry.contentDigest && (
                 <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-                  {t("contentSha256Contentdigest", { contentDigest: entry.contentDigest })}
+                  {t("contentDigest", { digest: entry.contentDigest })}
                 </Typography>
               )}
               {entry.denialReason && <Alert severity="warning">{entry.denialReason}</Alert>}
@@ -197,7 +199,7 @@ function LocalInstallations() {
               <Stack direction="row" spacing={1}>
                 {entry.adoptable && (
                   <Button
-                    aria-label={t("adoptIntegrationid", { integrationId: entry.integrationId })}
+                    aria-label={t("adoptIntegration", { integrationId: entry.integrationId })}
                     onClick={() => open(entry, "adopt")}
                   >
                     {t("adopt")}
@@ -206,7 +208,7 @@ function LocalInstallations() {
                 {entry.removable && (
                   <Button
                     color="error"
-                    aria-label={t("removeIntegrationid", { integrationId: entry.integrationId })}
+                    aria-label={t("removeIntegration", { integrationId: entry.integrationId })}
                     onClick={() => open(entry, "remove")}
                   >
                     {t("remove")}
@@ -239,8 +241,8 @@ function LocalInstallations() {
                 : t("quarantineTheReviewedDirectoryReload")}
             </Typography>
             <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-              {t("contentSha256Contentdigest", {
-                contentDigest: selected?.entry.contentDigest ?? "",
+              {t("contentDigest", {
+                digest: selected?.entry.contentDigest ?? "",
               })}
             </Typography>
             {(busy || pending) && (
@@ -257,7 +259,7 @@ function LocalInstallations() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSelected(null)} disabled={busy}>
-            {t("close")}
+            {tCommon("close")}
           </Button>
           {!accepted && (
             <Button

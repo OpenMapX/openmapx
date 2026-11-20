@@ -89,12 +89,12 @@ export function BulkConfigure() {
         actions={
           <>
             <Chip
-              label={t("lengthTotal", { length: sortedIntegrations.length })}
+              label={t("totalCount", { count: sortedIntegrations.length })}
               variant="outlined"
             />
             {unconfiguredCount > 0 && (
               <Chip
-                label={t("unconfiguredcountUnconfigured", { unconfiguredCount })}
+                label={t("unconfiguredCount", { count: unconfiguredCount })}
                 color="warning"
                 variant="outlined"
               />
@@ -108,13 +108,15 @@ export function BulkConfigure() {
           color: "text.secondary",
         }}
       >
-        {t("configureAllIntegrationsOnA")}
-        <code>{t("infraDockerEnv")}</code>.
+        {t.rich("bulkConfigureIntro", {
+          file: "infra/docker/.env",
+          code: (chunks) => <code>{chunks}</code>,
+        })}
       </Typography>
       {integrationsQuery.isLoading && <Skeleton variant="rounded" height={200} />}
       {integrationsQuery.isError && (
         <Alert severity="error" variant="outlined">
-          {t("failedToLoadIntegrations2")}
+          {t("integrationsLoadFailed")}
         </Alert>
       )}
       {sortedIntegrations.map((entry) => (
@@ -182,10 +184,10 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
             {entry.id}
           </Typography>
           {!entry.configured && (
-            <Chip label={t("unconfigured2")} size="small" color="warning" variant="outlined" />
+            <Chip label={t("unconfiguredChip")} size="small" color="warning" variant="outlined" />
           )}
           {!entry.enabled && (
-            <Chip label={t("disabled2")} size="small" color="default" variant="outlined" />
+            <Chip label={t("disabledChip")} size="small" color="default" variant="outlined" />
           )}
         </Stack>
       </AccordionSummary>
@@ -326,8 +328,10 @@ function CredentialsTable({
     <>
       {!secretsConfigured && (
         <Alert severity="warning" variant="outlined" sx={{ mb: 1 }}>
-          {t("vaultNotConfiguredSet")}
-          <code>{t("openmapxSecretsKey")}</code> {t("toEnableStoringCredentialsIn")}
+          {t.rich("vaultNotConfiguredEnvFallback", {
+            variable: "OPENMAPX_SECRETS_KEY",
+            code: (chunks) => <code>{chunks}</code>,
+          })}
         </Alert>
       )}
       <TableContainer>
@@ -393,10 +397,14 @@ function CredentialsTable({
                   />
                   {cred.updatedAt && (
                     <Typography variant="caption" sx={{ display: "block" }}>
-                      {t("vaultUpdatedUpdatedat", {
-                        updatedAt: new Date(cred.updatedAt).toLocaleDateString(),
-                      })}
-                      {cred.updatedBy ? t("byUpdatedby2", { updatedBy: cred.updatedBy }) : ""}
+                      {cred.updatedBy
+                        ? t("vaultUpdatedBy", {
+                            updatedAt: new Date(cred.updatedAt).toLocaleDateString(),
+                            updatedBy: cred.updatedBy,
+                          })
+                        : t("vaultUpdated", {
+                            updatedAt: new Date(cred.updatedAt).toLocaleDateString(),
+                          })}
                     </Typography>
                   )}
                 </TableCell>
@@ -556,10 +564,11 @@ function EnvVarReferenceSection({
           color: "text.secondary",
         }}
       >
-        {t("everyIntegrationFieldCanBe")}
-        <code>{t("integrationLtIdGtLt")}</code>
-        {t("envAlwaysWinsOverAdmin")}
-        <code>{t("infraDockerEnv")}</code> {t("andFillInTheRight")}
+        {t.rich("envVarCatalogueIntro", {
+          pattern: "INTEGRATION_<ID>_<KEY>",
+          file: "infra/docker/.env",
+          code: (chunks) => <code>{chunks}</code>,
+        })}
       </Typography>
       {loading && <Skeleton variant="rounded" height={200} sx={{ mt: 1 }} />}
       {error && (
@@ -601,7 +610,9 @@ function EnvVarReferenceSection({
                 >
                   {entry.id}
                 </Typography>
-                {!entry.enabled && <Chip label={t("disabled2")} size="small" variant="outlined" />}
+                {!entry.enabled && (
+                  <Chip label={t("disabledChip")} size="small" variant="outlined" />
+                )}
               </Stack>
               <Stack
                 component="pre"
@@ -633,7 +644,12 @@ function EnvVarReferenceSection({
                         {line}
                       </Box>
                       {v.present && (
-                        <Chip label={t("set2")} size="small" color="success" variant="outlined" />
+                        <Chip
+                          label={t("setChip")}
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                        />
                       )}
                       <Tooltip title={t("copyLine")}>
                         <IconButton size="small" onClick={() => copyOne(line)}>

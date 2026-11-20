@@ -113,39 +113,33 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
                 ? t("preparingOvertureGaps")
                 : t("validatingSnapshot")}
             {" · "}
-            {t("processedSourceRowsProcessed", {
-              processed: status.progress.processed.toLocaleString(),
+            {t("processedSourceRows", {
+              count: status.progress.processed,
             })}
             {" · "}
-            {t("placecountStagedPlacesThePrevious", {
-              placeCount: status.progress.placeCount.toLocaleString(),
+            {t("stagedPlaces", {
+              count: status.progress.placeCount,
             })}
           </Alert>
         )}
         {status?.candidate && !status.building && (
           <Alert severity="warning">
-            {t("interruptedPlanetCandidateProcessedSource", {
-              processed: status.candidate.checkpoint.processed.toLocaleString(),
-              placeCount: status.candidate.checkpoint.placeCount.toLocaleString(),
+            {t("interruptedPlanetCandidate", {
+              processed: status.candidate.checkpoint.processed,
+              places: status.candidate.checkpoint.placeCount,
             })}
           </Alert>
         )}
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Chip
-            label={
-              active
-                ? t("placecountPlaces", { placeCount: active.placeCount.toLocaleString() })
-                : t("notPublished")
-            }
+            label={active ? t("placeCount", { count: active.placeCount }) : t("notPublished")}
           />
           <Chip
             color={active?.enabled ? "success" : "default"}
             label={active?.enabled ? t("visible") : t("disabledOrOutOfDate")}
           />
           <Chip label={active?.sources.overture ? t("osmOverture") : t("osmOnly")} />
-          {active && (
-            <Chip label={t("policyPolicyversion", { policyVersion: active.policyVersion })} />
-          )}
+          {active && <Chip label={t("policyVersion", { version: active.policyVersion })} />}
           {active && (
             <Chip
               label={
@@ -161,7 +155,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
         {active && (
           <Box>
             <Typography variant="body2">
-              {t("namePublishedPublishedat", {
+              {t("publishedSnapshot", {
                 name: active.region.name,
                 publishedAt: new Date(active.publishedAt).toLocaleString(),
               })}
@@ -170,17 +164,17 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
               {t("generationGeneration", { generation: active.generation })}
             </Typography>
             <Typography variant="caption" sx={{ display: "block" }}>
-              {t("osmEpochCountEligiblePlaces", {
+              {t("osmSnapshot", {
                 epoch: active.sources.osm.epoch,
-                count: active.sources.osm.count.toLocaleString(),
+                count: active.sources.osm.count,
                 publishedAt: active.sources.osm.publishedAt,
               })}
             </Typography>
             {active.sources.overture && (
               <Typography variant="caption" sx={{ display: "block" }}>
-                {t("overtureReleaseCountEligiblePlaces", {
+                {t("overtureSnapshot", {
                   release: active.sources.overture.release,
-                  count: active.sources.overture.count.toLocaleString(),
+                  count: active.sources.overture.count,
                   publishedAt: active.sources.overture.publishedAt,
                 })}
               </Typography>
@@ -254,8 +248,8 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             ? t("planetPresetInstalledSourceCoverage")
             : country
               ? t("germanyPresetInstalledSourceCoverage")
-              : t("customRegionMaximum05")}
-          {t("sourcesMustBeReadyAnd")}
+              : t("customRegionLimits")}{" "}
+          {t("ambientSourceRequirements")}
         </Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Button

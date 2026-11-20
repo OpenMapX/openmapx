@@ -118,11 +118,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
           {t("feedsBreakdown")}
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Chip
-          size="small"
-          variant="outlined"
-          label={t("feedcountTotal", { feedCount: state.feedCount })}
-        />
+        <Chip size="small" variant="outlined" label={t("feedTotal", { count: state.feedCount })} />
       </Stack>
       <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -134,7 +130,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
               mb: 1,
             }}
           >
-            {t("byRegionLengthTotal", { length: regionEntries.length })}
+            {t("byRegionTotal", { count: regionEntries.length })}
           </Typography>
           {regionEntries.length === 0 ? (
             <Typography

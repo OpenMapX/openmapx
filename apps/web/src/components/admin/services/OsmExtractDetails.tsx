@@ -4,8 +4,8 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceData } from "@openmapx/core/api-contracts";
-import { useLocale, useTranslations } from "next-intl";
-import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+import { useLocale } from "next-intl";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 
 type OsmExtract = NonNullable<AdminServiceData["osmExtract"]>;
 
@@ -20,7 +20,7 @@ export function extractAge(
   timestamp: string,
   now: number,
   locale: string,
-  t: AdminTranslator,
+  t: AdminTranslator<"adminServices">,
 ): string {
   const elapsed = Math.max(0, now - Date.parse(timestamp));
   const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
@@ -51,7 +51,7 @@ export function OsmExtractDetails({
   extract: OsmExtract | undefined;
   now?: number;
 }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
   const locale = useLocale();
   if (!extract) {
     return (
@@ -77,7 +77,7 @@ export function OsmExtractDetails({
         </Typography>
         {stale && (
           <Chip
-            label={t("olderThanStaleExtractDays", { STALE_EXTRACT_DAYS })}
+            label={t("olderThanDays", { days: STALE_EXTRACT_DAYS })}
             color="warning"
             size="small"
             sx={{ mt: 0.5 }}

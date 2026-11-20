@@ -25,7 +25,7 @@ export function AdminPageHeader({
   backHref,
   backLabel,
 }: AdminPageHeaderProps) {
-  const t = useTranslations("adminShared");
+  const tCommon = useTranslations("common");
   return (
     <Stack
       component="header"
@@ -39,7 +39,7 @@ export function AdminPageHeader({
     >
       <Stack direction="row" sx={{ gap: 1, alignItems: "center", minWidth: 0 }}>
         {backHref && (
-          <IconButton component={Link} href={backHref} aria-label={backLabel ?? t("back")}>
+          <IconButton component={Link} href={backHref} aria-label={backLabel ?? tCommon("back")}>
             <ArrowBackIcon fontSize="small" />
           </IconButton>
         )}

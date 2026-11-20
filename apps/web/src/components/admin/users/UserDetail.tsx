@@ -508,12 +508,12 @@ export function UserDetail({ userId }: { userId: string }) {
         gap: 2,
       }}
     >
-      {readError && <Alert severity="error">{t("couldNotLoadThisAccount2")}</Alert>}
+      {readError && <Alert severity="error">{t("accountLoadFailedShowingLast")}</Alert>}
       <AdminPageHeader
         title={t("userDetails")}
         subtitle={t("nameEmail", { name: userData.name, email: userData.email })}
         backHref="/admin/users"
-        backLabel={t("backToUsers2")}
+        backLabel={t("backToUsersLabel")}
       />
       <Box>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label={t("userDetailSections")}>

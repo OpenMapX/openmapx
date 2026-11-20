@@ -72,8 +72,9 @@ export function DataInventorySection({
                     {formatBytes(item.sizeBytes)} · {new Date(item.modifiedAt).toLocaleString()}
                   </Typography>
                   <Typography variant="caption" component="p">
-                    {t("sha256")}
-                    {item.sourceFingerprint ?? t("noCurrentFingerprintEvidence")}
+                    {item.sourceFingerprint
+                      ? t("sourceFingerprint", { digest: item.sourceFingerprint })
+                      : t("noCurrentFingerprintEvidence")}
                   </Typography>
                 </Box>
               ))
@@ -87,9 +88,9 @@ export function DataInventorySection({
               </Button>
               <Typography variant="caption">
                 {osm.items.length
-                  ? t("valueMinOfTotal", {
-                      value: osm.offset + 1,
-                      min: Math.min(osm.offset + osm.items.length, osm.total),
+                  ? t("pageRange", {
+                      from: osm.offset + 1,
+                      to: Math.min(osm.offset + osm.items.length, osm.total),
                       total: osm.total,
                     })
                   : t("n0OnThisPageTotal", { total: osm.total })}
@@ -141,8 +142,8 @@ export function DataInventorySection({
               {build.sizeBytes === null ? t("sizeUnknown") : formatBytes(build.sizeBytes)} ·{" "}
               {build.buildRecordVersion === null
                 ? t("noBuildRecord")
-                : t("buildRecordVBuildrecordversion", {
-                    buildRecordVersion: build.buildRecordVersion,
+                : t("buildRecordVersion", {
+                    version: build.buildRecordVersion,
                   })}
             </Typography>
             {Object.entries(build.runtimeImages).map(([id, image]) => (
@@ -152,7 +153,7 @@ export function DataInventorySection({
             ))}
             {build.sourceFingerprints.map((source) => (
               <Typography key={source.id} variant="caption" component="p">
-                {t("sourceIdSha256", { id: source.id, sha256: source.sha256 })}
+                {t("sourceDigest", { id: source.id, digest: source.sha256 })}
               </Typography>
             ))}
           </Box>

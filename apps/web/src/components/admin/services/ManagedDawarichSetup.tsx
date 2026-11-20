@@ -14,7 +14,6 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import {
@@ -23,7 +22,7 @@ import {
   type ProvisioningSecretState,
   useDawarichProvisioning,
 } from "@/hooks/useDawarichProvisioning";
-import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 
 const ROTATION_CONFIRMATION = "ROTATE DAWARICH OIDC SECRET";
@@ -48,7 +47,7 @@ function normalizeHostname(value: string): string | null {
   return normalized;
 }
 
-function errorMessage(error: Error | null, t: AdminTranslator): string | null {
+function errorMessage(error: Error | null, t: AdminTranslator<"adminServices">): string | null {
   if (!error) return null;
   const code = (error as DawarichProvisioningApiError).code ?? error.message;
   switch (code) {
@@ -69,11 +68,11 @@ function errorMessage(error: Error | null, t: AdminTranslator): string | null {
   }
 }
 
-function stateLabel(value: boolean, t: AdminTranslator): string {
+function stateLabel(value: boolean, t: AdminTranslator<"adminServices">): string {
   return value ? t("checklistReady") : t("checklistPending");
 }
 
-function secretLabel(state: ProvisioningSecretState, t: AdminTranslator): string {
+function secretLabel(state: ProvisioningSecretState, t: AdminTranslator<"adminServices">): string {
   return state === "consistent"
     ? t("checklistReady")
     : state === "missing"
@@ -96,7 +95,7 @@ function ChecklistRow({ label, status, ready }: { label: string; status: string;
 }
 
 function SetupChecklist({ status }: { status: ManagedDawarichProvisioningStatus }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
   return (
     <Stack spacing={1}>
       <ChecklistRow
@@ -163,7 +162,7 @@ export function ManagedDawarichSetup() {
 }
 
 function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActivityClient>) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
   const { statusQuery, provision, rotate } = useDawarichProvisioning();
   const [hostname, setHostname] = useState("");
   const [hostnameError, setHostnameError] = useState<string | null>(null);
@@ -241,7 +240,7 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
               size="small"
               fullWidth
               label={t("publicHostnameOptional")}
-              placeholder={t("timelineExampleCom")}
+              placeholder="timeline.example.com"
               value={hostname}
               error={Boolean(hostnameError)}
               helperText={hostnameError ?? t("firstRunDefaultsToTimeline")}

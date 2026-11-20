@@ -50,6 +50,7 @@ function isActive(status: string) {
 
 export function JobDetail({ jobId, source }: { jobId: string; source: AdminActivityJobSource }) {
   const t = useTranslations("adminActivity");
+  const tCommon = useTranslations("common");
   const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -193,7 +194,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
             color: "text.secondary",
           }}
         >
-          {t("durationStartedat", { startedAt: formatDuration(data.startedAt, data.finishedAt) })}
+          {t("duration", { duration: formatDuration(data.startedAt, data.finishedAt) })}
         </Typography>
         {data.cancelable && data.status !== "cancel_pending" && (
           <Button
@@ -204,7 +205,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
             onClick={() => cancel.mutate()}
             disabled={cancel.isPending}
           >
-            {t("cancel")}
+            {tCommon("cancel")}
           </Button>
         )}
       </Stack>

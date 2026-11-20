@@ -200,7 +200,7 @@ function ServiceLogsSession({
               fontWeight: 700,
             }}
           >
-            {t("logsServicename", { serviceName })}
+            {t("logsTitle", { serviceName })}
           </Typography>
           {streaming && (
             <Chip
@@ -213,7 +213,7 @@ function ServiceLogsSession({
           )}
           {!streaming && lines.length > 0 && (
             <Chip
-              label={t("lengthLines", { length: lines.length })}
+              label={t("lineCount", { count: lines.length })}
               size="small"
               variant="outlined"
               sx={{ fontSize: "0.65rem" }}
@@ -277,7 +277,7 @@ function ServiceLogsSession({
         >
           {[30, 60, 300, 900].map((seconds) => (
             <MenuItem key={seconds} value={seconds}>
-              {t("secondsSeconds", { seconds })}
+              {t("durationSeconds", { count: seconds })}
             </MenuItem>
           ))}
         </TextField>

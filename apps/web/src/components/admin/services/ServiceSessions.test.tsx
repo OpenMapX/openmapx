@@ -267,7 +267,7 @@ describe("generated log sessions", () => {
         }),
     );
     view.replace(logs("large"));
-    await screen.findByText("1000 lines");
+    await screen.findByText("1,000 lines");
     const lines = document.querySelector("pre")?.textContent?.split("\n");
     expect(lines).toHaveLength(1000);
     expect(lines?.[0]).toBe("line-5");

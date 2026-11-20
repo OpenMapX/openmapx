@@ -6,8 +6,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { useTranslations } from "next-intl";
-import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { JobStatusChip } from "./JobStatusChip";
 import { formatStageError } from "./jobStatus";
 
@@ -30,7 +29,10 @@ function durationLabel(durationMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-function validationDetails(stage: DataManagerJobStage, t: AdminTranslator): string | null {
+function validationDetails(
+  stage: DataManagerJobStage,
+  t: AdminTranslator<"adminShared">,
+): string | null {
   if (stage.stage !== "validate" || !stage.artifacts || typeof stage.artifacts !== "object") {
     return null;
   }
@@ -58,11 +60,11 @@ export function DataManagerJobStages({
   stages: DataManagerJobStage[];
   emptyMessage?: string;
 }) {
-  const t = useTranslations("adminShared");
+  const t = useAdminTranslations("adminShared");
   return (
     <Stack sx={{ gap: 0.75 }}>
       <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
-        {t("stagesLength", { length: stages.length })}
+        {t("stagesCount", { count: stages.length })}
       </Typography>
       {stages.length === 0 ? (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>

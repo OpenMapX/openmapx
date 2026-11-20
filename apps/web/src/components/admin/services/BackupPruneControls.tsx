@@ -25,6 +25,7 @@ type Preview = Extract<
 >["data"];
 export function BackupPruneControls() {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient(),
     owner = useAdminMutationOwner(client),
     register = useServiceJobRegistration(),
@@ -68,7 +69,7 @@ export function BackupPruneControls() {
       register({ client, apiUrl, jobId: result.jobId, effect: { kind: "backups" } });
       if (execution.active) {
         setIntent(null);
-        showToast(t("backupPruneQueuedJobid", { jobId: result.jobId }));
+        showToast(t("backupPruneQueued", { jobId: result.jobId }));
       }
     },
   });
@@ -106,32 +107,33 @@ export function BackupPruneControls() {
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 1 }}>
             <Typography>
-              {t("retentiondaysDaysPolicysourcePolicy", {
-                retentionDays: intent?.preview.retentionDays ?? "",
-                policySource: intent?.preview.policySource ?? "",
+              {t("retentionPolicy", {
+                days: intent?.preview.retentionDays ?? "",
+                source: intent?.preview.policySource ?? "",
               })}
             </Typography>
             <Typography>
-              {t("eligibleBackupsLengthFormatbytesRetained", {
-                length: intent?.preview.candidates.length ?? "",
-                formatBytes: formatBytes(
+              {t("pruneSummary", {
+                eligible: intent?.preview.candidates.length ?? "",
+                size: formatBytes(
                   intent?.preview.candidates.reduce((sum, item) => sum + item.totalBytes, 0) ?? 0,
                 ),
-                retainedCount: intent?.preview.retainedCount ?? "",
+                retained: intent?.preview.retainedCount ?? "",
               })}
             </Typography>
             <Stack sx={{ maxHeight: 240, overflowY: "auto" }}>
               {intent?.preview.candidates.map((entry) => (
                 <Typography key={entry.backupId} variant="body2">
-                  {entry.backupId}
-                  {entry.corrupt ? t("unreadableExpiryMetadataDirectoryAge") : ""}
+                  {entry.corrupt
+                    ? t("pruneCandidateUnreadable", { backupId: entry.backupId })
+                    : entry.backupId}
                 </Typography>
               ))}
             </Stack>
             {!!intent?.preview.corruptBackups.length && (
               <Alert severity="warning">
-                {t("unreadableExpiryMetadataCorruptbackupsReview", {
-                  corruptBackups: intent.preview.corruptBackups.join(", "),
+                {t("unreadableExpiryMetadata", {
+                  backups: intent.preview.corruptBackups.join(", "),
                 })}
               </Alert>
             )}
@@ -150,7 +152,7 @@ export function BackupPruneControls() {
         </DialogContent>
         <DialogActions>
           <Button disabled={pruneMutation.isPending} onClick={() => setIntent(null)}>
-            {t("cancel")}
+            {tCommon("cancel")}
           </Button>
           <Button
             color="error"

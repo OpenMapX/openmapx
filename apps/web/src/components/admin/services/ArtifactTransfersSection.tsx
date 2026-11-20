@@ -39,6 +39,7 @@ export function ArtifactTransfersSection({ apiUrl }: { apiUrl: string }) {
 }
 function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const { client } = useActivityClient(),
     qc = useQueryClient(),
     register = useAdminJobRegistration();
@@ -249,8 +250,8 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
           <>
             {progress.state === "uploading" && <LinearProgress variant="indeterminate" />}
             <Typography variant="body2">
-              {t("receivedbytesReceivedState", {
-                receivedBytes: formatBytes(progress.receivedBytes),
+              {t("uploadProgress", {
+                received: formatBytes(progress.receivedBytes),
                 state: progress.state,
               })}
             </Typography>
@@ -313,11 +314,11 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             </Typography>
             {stage.sha256 && (
               <Typography variant="caption" sx={{ display: "block", overflowWrap: "anywhere" }}>
-                {t("sha256Sha256", { sha256: stage.sha256 })}
+                {t("stageDigest", { digest: stage.sha256 })}
               </Typography>
             )}
             <Typography variant="caption">
-              {t("expiresExpiresatCleanupCleanup", {
+              {t("expiryAndCleanup", {
                 expiresAt: new Date(stage.expiresAt).toLocaleString(),
                 cleanup: stage.cleanup,
               })}
@@ -446,7 +447,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         </DialogContent>
         <DialogActions>
           <Button disabled={busy} onClick={() => setPreview(null)}>
-            {t("close")}
+            {tCommon("close")}
           </Button>
           <Button
             disabled={busy || !preview || preview.blockers.length > 0}

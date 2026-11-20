@@ -20,6 +20,7 @@ interface BanUserDialogProps {
 
 export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
   const t = useTranslations("adminUsers");
+  const tCommon = useTranslations("common");
   const showToast = useAdminToast();
   const errorText = useAccountErrorText();
   const [reason, setReason] = useState("");
@@ -65,7 +66,7 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
       </DialogContent>
       <DialogActions>
         <Button onClick={close} disabled={ban.isPending}>
-          {t("cancel")}
+          {tCommon("cancel")}
         </Button>
         <Button
           variant="contained"

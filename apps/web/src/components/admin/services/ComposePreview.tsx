@@ -57,7 +57,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
           setRenderIntent(null);
-          showToast(t("configurationGenerationQueuedJobidContainer", { jobId: result.jobId }));
+          showToast(t("configurationGenerationQueued", { jobId: result.jobId }));
         }
       } catch (error) {
         if (execution.active)
@@ -174,11 +174,14 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         {t("composeUpStartsTheSelected")}
       </Alert>
       <Alert severity="info" sx={{ mb: 2 }}>
-        {t("fullShutdownStopsThisPanel")}
-        <Typography component="code" sx={{ userSelect: "all" }}>
-          {t("pnpmOpenmapxComposeDown")}
-        </Typography>
-        {t("volumesAreRetainedUseIndividual")}
+        {t.rich("fullShutdown", {
+          command: "pnpm openmapx compose down",
+          code: (chunks) => (
+            <Typography component="code" sx={{ userSelect: "all" }}>
+              {chunks}
+            </Typography>
+          ),
+        })}
         <Stack direction="row" sx={{ gap: 1, mt: 1, flexWrap: "wrap" }}>
           <Button
             size="small"

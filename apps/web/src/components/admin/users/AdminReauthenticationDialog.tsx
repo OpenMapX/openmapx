@@ -40,6 +40,7 @@ type Props = (
 ) & { onCompleted: (proofs: AdminReauthProofRef[]) => void; onClose: () => void };
 export function AdminReauthenticationDialog(props: Props) {
   const t = useTranslations("adminUsers");
+  const tCommon = useTranslations("common");
   const requestExit = useAdminDraftExit();
   const { apiUrl, actorId } = useAccountAdmin(),
     requests: AdminReauthIntent[] = props.purposes
@@ -97,7 +98,7 @@ export function AdminReauthenticationDialog(props: Props) {
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={close}>{t("cancel")}</Button>
+        <Button onClick={close}>{tCommon("cancel")}</Button>
         {stored?.phase === "completed" ? (
           <Button
             disabled={confirm.isPending}

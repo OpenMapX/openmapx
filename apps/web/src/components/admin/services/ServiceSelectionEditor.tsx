@@ -37,6 +37,7 @@ export function ServiceSelectionEditor() {
 }
 function SelectionEditor() {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const selection = useServiceSelection();
   const services = useServicesList();
   const save = useServiceSelectionSave();
@@ -62,7 +63,7 @@ function SelectionEditor() {
       if ("jobId" in result) setAccepted(String(result.jobId));
       toast(
         "jobId" in result
-          ? t("queuedServiceSelectionJobid", { jobId: String(result.jobId) })
+          ? t("serviceSelectionQueued", { jobId: String(result.jobId) })
           : t("serviceSelectionSaved"),
       );
     } catch (error) {
@@ -80,15 +81,15 @@ function SelectionEditor() {
         </Typography>
         {locked && (
           <Alert severity="warning">
-            {t("selectionIsControlledByEnvvarname", {
-              envVarName: selection.data?.envVarName ?? "",
+            {t("selectionControlledByHost", {
+              envVar: selection.data?.envVarName ?? "",
             })}
           </Alert>
         )}
         {selection.isError && (
           <Alert
             severity="error"
-            action={<Button onClick={() => void selection.refetch()}>{t("retry")}</Button>}
+            action={<Button onClick={() => void selection.refetch()}>{tCommon("retry")}</Button>}
           >
             {t("failedToLoadServiceSelection")}
           </Alert>
@@ -100,7 +101,7 @@ function SelectionEditor() {
           value={draft.values.roots ?? baseline}
           onChange={(event) => draft.setValues({ roots: event.target.value })}
           disabled={disabled}
-          placeholder={t("appApiValhallaOsrm")}
+          placeholder="app-api, valhalla, osrm"
         />
         {draft.conflicts.length > 0 && (
           <Alert
@@ -148,7 +149,7 @@ function SelectionEditor() {
         )}
         {!!selection.data?.missingIds.length && (
           <Alert severity="error">
-            {t("missingServiceIdsMissingids", { missingIds: selection.data.missingIds.join(", ") })}
+            {t("missingServiceIds", { missingIds: selection.data.missingIds.join(", ") })}
           </Alert>
         )}
         {accepted && <AdminJobLink id={accepted} source="application" />}

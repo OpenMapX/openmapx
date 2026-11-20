@@ -28,6 +28,7 @@ export function TransitSyncDialog(props: Props) {
 }
 function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -175,20 +176,20 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
           {preview && (
             <>
               <Typography>
-                {t("countriesMap", {
-                  map: preview.countries.map((c) => c.toUpperCase()).join(", "),
+                {t("countries", {
+                  countries: preview.countries.map((c) => c.toUpperCase()).join(", "),
                 })}
               </Typography>
               <Typography>
-                {t("feedcountFeedsEstimateReplaceall", {
+                {t("feedEstimate", {
                   feedCount: preview.result.estimate.feedCount,
-                  replaceAll: preview.result.estimate.basis.replaceAll("-", " "),
+                  estimate: preview.result.estimate.basis.replaceAll("-", " "),
                 })}
               </Typography>
               <Typography>
-                {t("diskRequiredCeilGibAvailable", {
-                  ceil: Math.ceil(preview.result.estimate.requiredDiskBytes / 1024 ** 3),
-                  floor: Math.floor(preview.result.capacity.freeDiskBytes / 1024 ** 3),
+                {t("diskEstimate", {
+                  required: Math.ceil(preview.result.estimate.requiredDiskBytes / 1024 ** 3),
+                  available: Math.floor(preview.result.capacity.freeDiskBytes / 1024 ** 3),
                 })}
               </Typography>
               {preview.result.blockers.map((reason) => (
@@ -208,7 +209,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
       </DialogContent>
       <DialogActions>
         <Button disabled={busy} onClick={onClose}>
-          {t("cancel")}
+          {tCommon("cancel")}
         </Button>
         <Button
           disabled={busy || !selected.length || !profile.data}

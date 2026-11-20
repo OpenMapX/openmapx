@@ -209,7 +209,7 @@ function ActionsMenu({
           <ListItemIcon>
             <LockResetIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>{t("accountRecovery2")}</ListItemText>
+          <ListItemText>{t("accountRecoveryMenuItem")}</ListItemText>
         </MenuItem>
         {!isSelf && !isLastAdmin && (
           <MenuItem
@@ -334,14 +334,13 @@ export function UserList() {
             onClick={() => setCreateOpen(true)}
             size="small"
           >
-            {t("createUser2")}
+            {t("createUserTitle")}
           </Button>
         }
       />
       {readError && (
         <Alert severity="error">
-          {t("couldNotLoadAccounts")}
-          {data ? t("showingTheLastConfirmedList") : ""}
+          {data ? t("couldNotLoadAccountsShowingLast") : t("couldNotLoadAccounts")}
         </Alert>
       )}
       {countError && !readError && (
@@ -401,14 +400,14 @@ export function UserList() {
                 </TableCell>
                 <TableCell>{t("role")}</TableCell>
                 <TableCell>{t("status")}</TableCell>
-                <TableCell sx={{ width: 40 }}>{t("n2fa2")}</TableCell>
+                <TableCell sx={{ width: 40 }}>{t("twoFactorColumn")}</TableCell>
                 <TableCell>
                   <TableSortLabel
                     active={sortField === "createdAt"}
                     direction={sortField === "createdAt" ? sortDir : "asc"}
                     onClick={() => handleSort("createdAt")}
                   >
-                    {t("joined2")}
+                    {t("joinedColumn")}
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ width: 48 }} />
@@ -467,7 +466,7 @@ export function UserList() {
                           >
                             <Typography variant="body2">{user.email}</Typography>
                             {user.emailVerified && (
-                              <Tooltip title={t("emailVerified2")}>
+                              <Tooltip title={t("emailVerifiedTooltip")}>
                                 <VerifiedIcon sx={{ fontSize: 14, color: "success.main" }} />
                               </Tooltip>
                             )}

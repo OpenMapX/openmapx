@@ -21,11 +21,10 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { OvertureRecoveryStatus, OvertureStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
-import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -73,7 +72,7 @@ export function overtureProgress(
       >
     | null
     | undefined,
-  t: AdminTranslator,
+  t: AdminTranslator<"adminServices">,
 ): {
   value: number | null;
   label: string;
@@ -88,8 +87,8 @@ export function overtureProgress(
     return {
       value: Math.min(100, (status.processedCount / status.extractedCount) * 100),
       label: t("overtureScored", {
-        processed: status.processedCount.toLocaleString(),
-        extracted: status.extractedCount.toLocaleString(),
+        processed: status.processedCount,
+        extracted: status.extractedCount,
       }),
     };
   }
@@ -102,14 +101,14 @@ export function overtureProgress(
     return {
       value: Math.min(100, (status.assignmentCursor / status.componentCount) * 100),
       label: t("overtureAssigned", {
-        assigned: status.assignmentCursor.toLocaleString(),
-        components: status.componentCount.toLocaleString(),
+        assigned: status.assignmentCursor,
+        components: status.componentCount,
       }),
     };
   }
   const label =
     status.phase === "extract"
-      ? t("overtureStreamed", { emitted: status.emittedCount?.toLocaleString() ?? "0" })
+      ? t("overtureStreamed", { emitted: status.emittedCount ?? 0 })
       : status.phase === "publish"
         ? t("overturePublishing")
         : t("overturePreparing");
@@ -136,7 +135,7 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
   return <OvertureMaintenanceView key={apiUrl} apiUrl={apiUrl} />;
 }
 function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
   const operationLabels: Record<Operation, string> = {
     "overture-sync": t("overtureSync"),
     "overture-conflate": t("overtureConflate"),
@@ -222,7 +221,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         register({ client, apiUrl, jobId, effect });
         if (execution.active) setLastAcceptedJobId(jobId);
         if (execution.active) {
-          showToast(t("queuedOperationnameJobid", { operationName, jobId }));
+          showToast(t("operationQueued", { operation: operationName, jobId }));
           setPrepared(null);
         }
       } catch (error) {
@@ -263,10 +262,11 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
             </Typography>
             {status?.status && (
               <Chip
-                label={t("statusValue", {
-                  status: status.status,
-                  value: visiblePhase ? ` · ${visiblePhase}` : "",
-                })}
+                label={
+                  visiblePhase
+                    ? t("overtureStatusPhase", { status: status.status, phase: visiblePhase })
+                    : t("overtureStatus", { status: status.status })
+                }
                 color={status.stalled || status.status === "failed" ? "error" : "primary"}
                 variant="outlined"
               />
@@ -294,7 +294,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
           }
           variant="text"
         >
-          {t("viewJobs2")}
+          {t("viewJobsLink")}
         </Button>
       </Stack>
 
@@ -315,11 +315,9 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
       )}
       {status?.stalled && (
         <Alert severity="warning" sx={{ mt: 1.5 }}>
-          {t("theWorkerHeartbeatIsStale")}
           {status.heartbeatAgeMs
-            ? t("floorMinutes", { floor: Math.floor(status.heartbeatAgeMs / 60_000) })
-            : ""}
-          {t("theExpiredLeaseCanBe")}
+            ? t("heartbeatStaleMinutes", { minutes: Math.floor(status.heartbeatAgeMs / 60_000) })
+            : t("heartbeatStale")}
         </Alert>
       )}
 
@@ -361,7 +359,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
       >
         <TextField
           label={t("region")}
-          placeholder={t("europeGermany")}
+          placeholder="europe/germany"
           value={region}
           onChange={(event) => setRegion(event.target.value)}
           sx={{ minWidth: 240 }}
@@ -420,10 +418,11 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
           </Typography>
           {recovery && (
             <Typography variant="body2" sx={{ mb: 1 }}>
-              {t("completedLocalPartition")}
-              {recovery.downloadedRelease ?? t("releaseNone")} {t("osmPbf")}
-              {recovery.osmAvailable ? t("osmAvailable") : t("osmMissing")} {t("installedRelease")}
-              {recovery.installedRelease ?? t("releaseNone")}
+              {t("recoveryState", {
+                downloaded: recovery.downloadedRelease ?? t("releaseNone"),
+                osm: String(recovery.osmAvailable),
+                installed: recovery.installedRelease ?? t("releaseNone"),
+              })}
             </Typography>
           )}
           <Stack spacing={1}>

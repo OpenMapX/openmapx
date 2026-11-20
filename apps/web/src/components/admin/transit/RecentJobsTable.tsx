@@ -110,12 +110,12 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               <JobStatusChip status={data.status} />
               <Chip
                 size="small"
-                label={t("triggeredByValue", { value: data.triggeredBy ?? "—" })}
+                label={t("triggeredByActor", { actor: data.triggeredBy ?? "—" })}
                 variant="outlined"
               />
               <Chip
                 size="small"
-                label={t("startedStartedat", {
+                label={t("startedAt", {
                   startedAt: formatTransitAdminTimestamp(data.startedAt),
                 })}
                 variant="outlined"
@@ -123,8 +123,8 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               {data.finishedAt && (
                 <Chip
                   size="small"
-                  label={t("durationStartedat", {
-                    startedAt: durationLabel(data.startedAt, data.finishedAt),
+                  label={t("durationValue", {
+                    duration: durationLabel(data.startedAt, data.finishedAt),
                   })}
                   variant="outlined"
                 />

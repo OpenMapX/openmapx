@@ -87,7 +87,7 @@ function ProvidesCell({ provides }: { provides: string[] }) {
       {provides.length > 3 && (
         <Tooltip title={provides.slice(3).join(", ")}>
           <Chip
-            label={t("value2", { value: provides.length - 3 })}
+            label={t("moreCount", { count: provides.length - 3 })}
             size="small"
             variant="outlined"
             sx={{ fontSize: "0.65rem" }}
@@ -165,6 +165,7 @@ export function ServiceCatalog() {
 
 function ServiceCatalogView() {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient();
   const owner = useAdminMutationOwner(client);
   const showToast = useAdminToast();
@@ -233,7 +234,7 @@ function ServiceCatalogView() {
       if (execution.active) setLastAcceptedJobId(result.jobId);
       if (execution.active) {
         setStageIntent(null);
-        showToast(t("queuedImageStagingJobid", { jobId: result.jobId }));
+        showToast(t("imageStagingQueued", { jobId: result.jobId }));
       }
     } catch (error) {
       if (execution.active) showToast(adminErrorText(error, t("imageStagingFailed")), "error");
@@ -244,8 +245,7 @@ function ServiceCatalogView() {
     const execution = owner;
     try {
       const result = await healthCheckMutation.mutateAsync();
-      if (execution.active)
-        showToast(t("checkedLengthServiceS", { length: result.statuses.length }));
+      if (execution.active) showToast(t("checkedServices", { count: result.statuses.length }));
     } catch (error) {
       if (execution.active) showToast(adminErrorText(error, t("checkFailed")), "error");
     }
@@ -256,10 +256,7 @@ function ServiceCatalogView() {
     if (!choice) return;
     if (choice.missingIds.length) {
       setPreset("");
-      showToast(
-        t("presetIsMissingMissingids", { missingIds: choice.missingIds.join(", ") }),
-        "warning",
-      );
+      showToast(t("presetMissing", { missingIds: choice.missingIds.join(", ") }), "warning");
       return;
     }
     setSelectedIds(new Set(choice.rootIds));
@@ -270,7 +267,7 @@ function ServiceCatalogView() {
       const result = await bulkMutation.mutateAsync(payload);
       if (execution.active) setLastAcceptedJobId(result.jobId);
       if (execution.active)
-        showToast(t("queuedActionJobid", { action: payload.action, jobId: result.jobId }));
+        showToast(t("actionQueued", { action: payload.action, jobId: result.jobId }));
       return execution.active;
     } catch (error) {
       if (execution.active) showToast(adminErrorText(error, t("bulkActionFailed")), "error");
@@ -287,8 +284,8 @@ function ServiceCatalogView() {
       <ConfirmDialog
         open={stageIntent !== null}
         title={t("stageSelectedImages")}
-        message={t("downloadImmutableImagesForValue", {
-          value: stageIntent?.serviceIds.join(", ") ?? "",
+        message={t("downloadImagesConfirm", {
+          services: stageIntent?.serviceIds.join(", ") ?? "",
         })}
         confirmLabel={t("stageImages")}
         loading={stageMutation.isPending}
@@ -297,10 +294,10 @@ function ServiceCatalogView() {
       />
       <AdminPageHeader
         title={t("services")}
-        subtitle={t("valueTotalValue2RunningValue3", {
-          value: summary?.total ?? "—",
-          value2: summary?.running ?? "—",
-          value3: summary?.stopped ?? "—",
+        subtitle={t("serviceCounts", {
+          total: summary?.total ?? "—",
+          running: summary?.running ?? "—",
+          stopped: summary?.stopped ?? "—",
         })}
         actions={
           <>
@@ -357,7 +354,7 @@ function ServiceCatalogView() {
         <CompactAlert severity="warning">
           {t("operationsAgentIsUnavailableService")}
           <Button onClick={() => void refetch()} size="small">
-            {t("retry")}
+            {tCommon("retry")}
           </Button>
         </CompactAlert>
       )}
@@ -383,8 +380,8 @@ function ServiceCatalogView() {
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <details>
             <summary>
-              {t("unrecognizedCapabilityVocabularyLength", {
-                length: data.capabilityInventory.unrecognized.length,
+              {t("unrecognizedVocabulary", {
+                count: data.capabilityInventory.unrecognized.length,
               })}
             </summary>
             <Typography variant="body2">{t("customVendorNamesAreAllowed")}</Typography>
@@ -411,13 +408,15 @@ function ServiceCatalogView() {
               value={preset}
               onChange={(event) => selectPreset(event.target.value)}
               size="small"
-              sx={{ minWidth: 200 }}
+              sx={{ minWidth: 240 }}
             >
               <MenuItem value="">{t("customSelection")}</MenuItem>
               {(presets.data?.presets ?? []).map((item) => (
                 <MenuItem key={item.id} value={item.id}>
-                  {item.id} ({item.rootIds.join(", ")})
-                  {item.missingIds.length ? t("missingServices") : ""}
+                  {t(item.missingIds.length ? "presetOptionMissing" : "presetOption", {
+                    id: item.id,
+                    roots: item.rootIds.join(", "),
+                  })}
                 </MenuItem>
               ))}
             </TextField>
@@ -490,7 +489,7 @@ function ServiceCatalogView() {
       >
         {summary && summary.unknown > 0 && (
           <CompactAlert severity="warning">
-            {t("unknownServiceSHaveUnknown", { unknown: summary.unknown })}
+            {t("unknownServices", { count: summary.unknown })}
           </CompactAlert>
         )}
         {isError && (
@@ -499,7 +498,7 @@ function ServiceCatalogView() {
             variant="outlined"
             action={
               <Button color="inherit" size="small" onClick={() => refetch()}>
-                {t("retry")}
+                {tCommon("retry")}
               </Button>
             }
           >
@@ -614,9 +613,9 @@ function ServiceCatalogView() {
             color: "text.secondary",
           }}
         >
-          {t("showingLengthOfLength2Services", {
-            length: filtered.length,
-            length2: services.length,
+          {t("showingServices", {
+            shown: filtered.length,
+            total: services.length,
           })}
         </Typography>
       )}

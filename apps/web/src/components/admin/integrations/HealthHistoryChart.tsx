@@ -66,10 +66,10 @@ function HealthTooltip({
         {formatBucketLabel(bucket.hour, hours)}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        {t("uptimeUptimepercent", { uptimePercent: bucket.uptimePercent })}
+        {t("uptimePercent", { percent: bucket.uptimePercent })}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        {t("avgResponseResponsetime", { responseTime })}
+        {t("averageResponse", { responseTime })}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
         {t("checksHealthyTotal", { healthy: bucket.healthy, total: bucket.total })}

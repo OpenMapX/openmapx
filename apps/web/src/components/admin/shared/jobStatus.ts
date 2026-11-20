@@ -35,7 +35,10 @@ const JOB_STATUS_DESCRIPTION_KEY: Record<string, string> = {
   skipped: "jobSkipped",
 };
 
-export function jobStatusDescription(status: string, t: AdminTranslator): string | null {
+export function jobStatusDescription(
+  status: string,
+  t: AdminTranslator<"adminShared">,
+): string | null {
   const key = JOB_STATUS_DESCRIPTION_KEY[status];
   return key ? t(key) : null;
 }

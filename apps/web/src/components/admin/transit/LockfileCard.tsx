@@ -164,16 +164,15 @@ function CatalogPinView() {
                 color={data.active ? "success" : "warning"}
               />
               <Typography variant="body2" sx={{ mt: 1, overflowWrap: "anywhere" }}>
-                {t("transitous")}
-                {data.active?.transitous.ref ?? t("notInitialized")}
+                {t("transitousRef", { ref: data.active?.transitous.ref ?? t("notInitialized") })}
               </Typography>
               <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                {t("atlas")}
-                {data.active?.transitous.submodules["transitland-atlas"] ?? "—"}
+                {t("atlasRef", {
+                  ref: data.active?.transitous.submodules["transitland-atlas"] ?? "—",
+                })}
               </Typography>
               <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                {t("gbfs")}
-                {data.active?.gbfs.commit ?? "—"}
+                {t("gbfsCommit", { commit: data.active?.gbfs.commit ?? "—" })}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {t("activePinsStaySelectedWhile")}
@@ -240,8 +239,11 @@ function CatalogPinView() {
                   {t("previousProposals")}
                 </Button>
                 <Typography variant="caption">
-                  {offset + 1}–{offset + data.page.proposals.length}{" "}
-                  {t("ofTotal", { total: data.page.total })}
+                  {t("pageRange", {
+                    from: offset + 1,
+                    to: offset + data.page.proposals.length,
+                    total: data.page.total,
+                  })}
                 </Typography>
                 <Button
                   disabled={data.page.nextOffset === null || query.isFetching}
@@ -269,8 +271,9 @@ function CatalogPinView() {
                     {t("transitousRef", { ref: data.proposal.pins.transitous.ref })}
                   </Typography>
                   <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                    {t("atlas")}
-                    {data.proposal.pins.transitous.submodules["transitland-atlas"] ?? "—"}
+                    {t("atlasRef", {
+                      ref: data.proposal.pins.transitous.submodules["transitland-atlas"] ?? "—",
+                    })}
                   </Typography>
                   <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
                     {t("gbfsCommit", { commit: data.proposal.pins.gbfs.commit })}
@@ -279,7 +282,7 @@ function CatalogPinView() {
                 {data.diff && (
                   <Box>
                     <Typography variant="subtitle2">
-                      {t("sourceAndLicenseReviewTotal", { total: data.diff.total })}
+                      {t("sourceLicenseReview", { total: data.diff.total })}
                     </Typography>
                     <Typography
                       variant="caption"
@@ -340,12 +343,12 @@ function CatalogPinView() {
                       </Button>
                       <Typography variant="caption">
                         {data.diff.total
-                          ? t("valueValue2", {
-                              value: data.diff.offset + 1,
-                              value2: data.diff.offset + data.diff.rows.length,
+                          ? t("pageRange", {
+                              from: data.diff.offset + 1,
+                              to: data.diff.offset + data.diff.rows.length,
+                              total: data.diff.total,
                             })
-                          : "0"}
-                        {t("ofTotal2", { total: data.diff.total })}
+                          : t("pageEmpty")}
                       </Typography>
                       <Button
                         disabled={data.diff.nextOffset === null || query.isFetching}
@@ -477,9 +480,10 @@ function CatalogPinView() {
               {(ownedJobId ?? execution?.id) && (
                 <AdminJobLink id={(ownedJobId ?? execution?.id) as string} source="data-manager" />
               )}
-              {t("catalogJob")}
-              {ownedJobId ?? execution?.id}:{" "}
-              {execution?.status ?? t("connectingToRetainedExecution")}
+              {t("catalogJobStatus", {
+                jobId: ownedJobId ?? execution?.id ?? "",
+                status: execution?.status ?? t("connectingToRetainedExecution"),
+              })}
             </Typography>
             {execution?.progress != null && (
               <Typography variant="caption">{Math.round(execution.progress * 100)}%</Typography>

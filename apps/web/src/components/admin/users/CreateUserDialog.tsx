@@ -34,6 +34,7 @@ export function CreateUserDialog(props: Props) {
 }
 function CreateUserForm({ open, onClose }: Props) {
   const t = useTranslations("adminUsers");
+  const tCommon = useTranslations("common");
   const errorText = useAccountErrorText();
   const toast = useAdminToast(),
     [name, setName] = useState(""),
@@ -138,7 +139,7 @@ function CreateUserForm({ open, onClose }: Props) {
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={close}>{created ? t("done") : t("cancel")}</Button>
+        <Button onClick={close}>{created ? tCommon("done") : tCommon("cancel")}</Button>
         {!created && (
           <Button
             variant="contained"

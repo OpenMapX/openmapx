@@ -30,7 +30,7 @@ import { useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
-import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -41,7 +41,10 @@ import { TransitSyncDialog } from "./TransitSyncDialog";
 
 export type { TransitSource };
 
-export function sourceStateLabel(source: TransitSource, t: AdminTranslator): string {
+export function sourceStateLabel(
+  source: TransitSource,
+  t: AdminTranslator<"adminServices">,
+): string {
   if (source.desiredState === "removed")
     return source.active ? t("sourceRemovedPendingSync") : t("sourceRemoved");
   if (source.desiredState === "disabled" && source.active) return t("sourceDisabledPendingSync");
@@ -80,7 +83,8 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
   return <TransitSourcesView key={apiUrl} apiUrl={apiUrl} />;
 }
 function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
@@ -254,7 +258,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
   const mutationPending = addMutation.isPending || sourceMutation.isPending || syncDialogOpen;
   const actionsDisabled = syncJob !== null || mutationPending;
   const disabledReason = syncJob
-    ? t("transitSyncJobidIsActive2", { jobId: syncJob.jobId })
+    ? t("transitSyncActiveBanner", { jobId: syncJob.jobId })
     : mutationPending
       ? t("aSourceChangeIsBeing")
       : "";
@@ -325,8 +329,8 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
           }
         >
           {syncJob
-            ? t("transitSyncJobidIsActive", { jobId: syncJob.jobId })
-            : t("sourceChangeQueuedAsLastjobid", { lastJobId: lastJobId ?? "" })}
+            ? t("transitSyncActiveSourcesLocked", { jobId: syncJob.jobId })
+            : t("sourceChangeQueuedLast", { jobId: lastJobId ?? "" })}
         </Alert>
       )}
       {syncDialogOpen && (
@@ -351,7 +355,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             <Alert severity="info">{t("theCurrentMotisDatasetRemains")}</Alert>
             <TextField
               label={t("scheduleUrl")}
-              placeholder={t("httpsExampleComFeedGtfs")}
+              placeholder="https://example.com/feed.gtfs.zip"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               autoFocus
@@ -367,7 +371,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             />
             <TextField
               label={t("region")}
-              placeholder={t("deBe")}
+              placeholder="de-be"
               value={region}
               onChange={(event) => setRegion(event.target.value)}
               fullWidth
@@ -385,7 +389,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <TextField
                 label={t("spdxLicense")}
-                placeholder={t("ccBy40")}
+                placeholder="CC-BY-4.0"
                 value={licenseSpdx}
                 onChange={(event) => setLicenseSpdx(event.target.value)}
                 fullWidth
@@ -465,7 +469,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)} disabled={addMutation.isPending}>
-            {t("cancel")}
+            {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"
@@ -543,10 +547,12 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                     />
                   </TableCell>
                   <TableCell>
-                    {source.format.toUpperCase()}
                     {source.artifact
-                      ? t("sizebytes", { sizeBytes: formatBytes(source.artifact.sizeBytes) })
-                      : ""}
+                      ? t("formatWithSize", {
+                          format: source.format.toUpperCase(),
+                          size: formatBytes(source.artifact.sizeBytes),
+                        })
+                      : source.format.toUpperCase()}
                   </TableCell>
                   <TableCell>
                     <Tooltip title={source.validationMessage ?? ""}>
@@ -601,7 +607,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
       <ConfirmDialog
         open={!!removing}
         title={t("removeTransitSource")}
-        message={t("removeValueItsSavedUrl", { value: removing?.name ?? "" })}
+        message={t("removeSourceConfirm", { name: removing?.name ?? "" })}
         confirmLabel={t("removeSource")}
         confirmColor="error"
         loading={sourceMutation.isPending}

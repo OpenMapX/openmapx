@@ -510,17 +510,17 @@ function CredentialsTab({
           {application.runtime === "applied"
             ? t("theSavedCredentialChangeIs")
             : application.runtime === "failed"
-              ? t("theCredentialChangeIsSaved")
-              : t("theCredentialChangeIsSaved2")}
+              ? t("credentialSavedReloadFailed")
+              : t("credentialChangeUnconfirmed")}
         </Alert>
       )}
       {!data.secretsConfigured && secretCredentials.length > 0 && (
         <Alert severity="warning" variant="outlined">
-          {t("vaultNotConfiguredSecretsCannot")}
-          <code>{t("openmapxSecretsKey")}</code>
-          {t("generateWith")}
-          <code>{t("opensslRandHex32")}</code>
-          {t("toEnableTheCredentialVault")}
+          {t.rich("vaultNotConfiguredSecrets", {
+            variable: "OPENMAPX_SECRETS_KEY",
+            command: "openssl rand -hex 32",
+            code: (chunks) => <code>{chunks}</code>,
+          })}
         </Alert>
       )}
       {secretCredentials.length > 0 && (
@@ -575,8 +575,8 @@ function CredentialsTab({
                             </Typography>
                             {cred.sharedSecretName && (
                               <Chip
-                                label={t("sharedSharedsecretname", {
-                                  sharedSecretName: cred.sharedSecretName,
+                                label={t("sharedSecret", {
+                                  name: cred.sharedSecretName,
                                 })}
                                 size="small"
                                 variant="outlined"
@@ -607,11 +607,9 @@ function CredentialsTab({
                         {(cred.ownership?.writable === false ||
                           ["env", "config.json"].includes(cred.source)) && (
                           <Typography variant="caption" sx={{ display: "block" }}>
-                            {t("hostControlled")}
                             {cred.ownership?.envVar
-                              ? t("envvar", { envVar: cred.ownership.envVar })
-                              : ""}
-                            {t("removeTheOverrideOnThe")}
+                              ? t("hostControlledByVariable", { envVar: cred.ownership.envVar })
+                              : t("hostControlledRemoveOverride")}
                           </Typography>
                         )}
                       </TableCell>
@@ -619,7 +617,7 @@ function CredentialsTab({
                         {cred.updatedAt ? (
                           <Tooltip
                             title={
-                              cred.updatedBy ? t("byUpdatedby", { updatedBy: cred.updatedBy }) : ""
+                              cred.updatedBy ? t("updatedBy", { updatedBy: cred.updatedBy }) : ""
                             }
                           >
                             <Typography
@@ -831,7 +829,7 @@ function HealthTab({
                       color: "text.secondary",
                     }}
                   >
-                    {t("responseTimeResponsetimeMs", { responseTime: health.responseTime })}
+                    {t("responseTimeMs", { responseTime: health.responseTime })}
                   </Typography>
                 )}
                 {health.error && (

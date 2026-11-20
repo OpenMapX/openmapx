@@ -60,6 +60,17 @@ setting the catalogue does not know keeps the server's text. Titles in
 integration and service `configSchema`s stay English, because community
 manifests have no catalogue.
 
+Admin messages are whole sentences. Inline markup such as `<code>` or
+`<strong>` goes through `t.rich` tags, counts use ICU plurals, and code values
+such as statuses go through ICU `select` (select keys cannot hold hyphens, so
+`self-hosted` is passed as `self_hosted`). Commands, environment variable names
+and other strings that read the same in every language are message arguments,
+not catalogue text. Shared verbs such as Cancel, Close, Retry and Confirm come
+from `common`. A helper outside a component declares the namespace it reads as
+`AdminTranslator<"adminServices">` (`apps/web/src/lib/admin/adminTranslator.ts`),
+and the component passes the translator from `useAdminTranslations`, so a
+translator for another namespace does not compile.
+
 Server components use `getTranslations`; `pnpm check-translations` recognizes it
 alongside `useTranslations` and `createTranslator`. In admin directories, Biome
 rejects literal text between JSX tags (`noJsxLiterals`), and

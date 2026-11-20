@@ -18,7 +18,6 @@ import {
 } from "@openmapx/core/api-admin-sdk";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
@@ -28,6 +27,7 @@ import {
   buildAdminSearchEntries,
   searchAdminEntries,
 } from "@/lib/admin/adminSearch";
+import { useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useSettingText } from "@/lib/admin/useSettingText";
 import { useActivityClient } from "./activity/activityQueries";
 
@@ -44,8 +44,8 @@ export function AdminSearch({
       (authority.owner?.role === "admin" &&
         authority.owner.actorId === actorId &&
         authority.owner.apiUrl === apiUrl));
-  const t = useTranslations("adminNavigation");
-  const ts = useTranslations("adminShared");
+  const t = useAdminTranslations("adminNavigation");
+  const ts = useAdminTranslations("adminShared");
   const settingText = useSettingText();
   const router = useRouter();
   const [open, setOpen] = useState(false);

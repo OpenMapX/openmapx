@@ -2,8 +2,8 @@
 
 import Chip, { type ChipProps } from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
-import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import { useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { jobStatusColor, jobStatusDescription } from "./jobStatus";
 
 export function JobStatusChip({
@@ -17,7 +17,7 @@ export function JobStatusChip({
   variant?: ChipProps["variant"];
   sx?: ChipProps["sx"];
 }) {
-  const t = useTranslations("adminShared");
+  const t = useAdminTranslations("adminShared");
   const value = status ?? "never";
   const chip = (
     <Chip

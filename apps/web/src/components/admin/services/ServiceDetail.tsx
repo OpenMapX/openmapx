@@ -36,6 +36,7 @@ import {
   useServiceDetail,
 } from "@/hooks/useServices";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
@@ -57,7 +58,7 @@ import { ServiceCredentials } from "./ServiceCredentials";
 import { ServiceLogsPanel } from "./ServiceLogsDrawer";
 
 function OverviewTab({ data }: { data: ServiceDetailData }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
   const { manifest } = data;
 
   return (
@@ -210,13 +211,18 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                       color: "text.secondary",
                     }}
                   >
-                    {t("mountedAt")}
-                    <code style={{ fontFamily: "monospace" }}>{c.mountAt}</code>
-                    {c.targetFilename
-                      ? t("asTargetfilename", { targetFilename: c.targetFilename })
-                      : ""}
-                    {c.readOnly ? t("readOnly") : ""}
-                    {c.required === false ? t("optional2") : ""}
+                    {t.rich("mountedAt", {
+                      path: c.mountAt,
+                      code: (chunks) => <code style={{ fontFamily: "monospace" }}>{chunks}</code>,
+                    })}
+                    {[
+                      c.targetFilename ? t("mountedAs", { file: c.targetFilename }) : null,
+                      c.readOnly ? t("readOnly") : null,
+                      c.required === false ? t("optional") : null,
+                    ]
+                      .filter(Boolean)
+                      .map((part) => ` · ${part}`)
+                      .join("")}
                   </Typography>
                 </Stack>
               ))}
@@ -276,8 +282,12 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                           color: "text.disabled",
                         }}
                       >
-                        {t("default")}
-                        <code style={{ fontFamily: "monospace" }}>{v.default}</code>
+                        {t.rich("defaultValue", {
+                          value: String(v.default),
+                          code: (chunks) => (
+                            <code style={{ fontFamily: "monospace" }}>{chunks}</code>
+                          ),
+                        })}
                       </Typography>
                     )}
                   </Stack>
@@ -359,7 +369,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                         fontFamily: "monospace",
                       }}
                     >
-                      {t("pathPathprefix", { pathPrefix: manifest.exposure.proxy.pathPrefix })}
+                      {t("pathPrefix", { path: manifest.exposure.proxy.pathPrefix })}
                     </Typography>
                   )}
                 </Stack>
@@ -385,7 +395,7 @@ function ConfigTab({
   onConfigurationSaved: () => void;
   applyOwner: ReturnType<typeof useAdminMutationOwner>;
 }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
   const { manifest } = data;
   const startAction = data.status === "running" ? "apply" : "start";
   const reason = (action: import("@openmapx/core/ops").ServiceAction) =>
@@ -458,7 +468,7 @@ function ConfigTab({
 }
 
 function ManifestTab({ data }: { data: ServiceDetailData }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
   return (
     <Card variant="outlined">
       <CardContent>
@@ -504,7 +514,8 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 }
 
 function ServiceDetailView({ id }: ServiceDetailProps) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const statusLabel = useServiceStatusLabel();
   const tabs = [
     t("tabOverview"),
@@ -566,7 +577,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
       if (!execution.active) return;
       setLastActionJobId(result.jobId);
       // Terminal observation refreshes the status; acceptance only queues work.
-      showToast(t("serviceActionQueuedJobJobid", { action, jobId: result.jobId }));
+      showToast(t("serviceActionQueued", { action, jobId: result.jobId }));
     } catch (err) {
       if (!execution.active) return;
       showToast(adminErrorText(err, t("actionActionFailed", { action })), "error");
@@ -675,7 +686,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
         <CompactAlert severity="warning">
           {t("operationsAgentIsUnavailableService")}
           <Button onClick={() => void refetch()} size="small">
-            {t("retry")}
+            {tCommon("retry")}
           </Button>
         </CompactAlert>
       )}

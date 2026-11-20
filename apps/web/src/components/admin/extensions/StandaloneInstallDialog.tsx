@@ -36,6 +36,7 @@ export function StandaloneInstallDialog() {
 }
 function StandaloneInstallDialogContent() {
   const t = useTranslations("adminExtensions");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient(),
     owner = useAdminMutationOwner(client, apiUrl),
     register = useAdminJobRegistration(),
@@ -313,7 +314,7 @@ function StandaloneInstallDialogContent() {
             )}
             {kind === "artifact" && (
               <TextField
-                label={t("archiveSha256")}
+                label={t("archiveDigest")}
                 value={sha}
                 disabled={busy || waiting}
                 onChange={(event) => {
@@ -336,7 +337,7 @@ function StandaloneInstallDialogContent() {
                   </Typography>
                 )}
                 <Typography sx={{ overflowWrap: "anywhere" }} variant="body2">
-                  {t("contentSha256Contentdigest", { contentDigest: inspection.contentDigest })}
+                  {t("contentDigest", { digest: inspection.contentDigest })}
                 </Typography>
                 <Typography variant="body2">{t("thisInstallsOrReplacesThe")}</Typography>
                 {inspection.denials.map((denial) => (
@@ -358,7 +359,7 @@ function StandaloneInstallDialogContent() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={close}>{done ? t("done") : t("close")}</Button>
+          <Button onClick={close}>{done ? tCommon("done") : tCommon("close")}</Button>
           {!done && (
             <Button variant="contained" disabled={busy || waiting} onClick={() => void review()}>
               {t("reviewSource")}

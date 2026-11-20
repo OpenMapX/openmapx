@@ -119,6 +119,7 @@ function OperationView({
   refreshKeys,
 }: AdminOperationCardProps) {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
     [apiUrl],
@@ -239,7 +240,7 @@ function OperationView({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPreview(null)} disabled={busy}>
-            {t("cancel")}
+            {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"
@@ -247,7 +248,7 @@ function OperationView({
             disabled={busy}
             onClick={() => runMutation.mutate()}
           >
-            {runMutation.isPending ? t("queueing2") : t("confirm")}
+            {runMutation.isPending ? t("queueing2") : tCommon("confirm")}
           </Button>
         </DialogActions>
       </Dialog>

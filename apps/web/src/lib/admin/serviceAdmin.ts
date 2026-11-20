@@ -182,7 +182,7 @@ export async function invalidateServiceAdministration(
 /** Display the same decision used by the server, without inferring permission from status. */
 export function serviceActionReason(
   decision: import("@openmapx/core/ops").ServiceActionDecision | undefined,
-  t: AdminTranslator,
+  t: AdminTranslator<"adminServices">,
 ): string | null {
   if (decision?.available) return null;
   switch (decision?.reason) {

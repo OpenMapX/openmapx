@@ -88,7 +88,7 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
       }}
     >
       {integration.health.responseTime != null
-        ? t("responsetimeMs", { responseTime: integration.health.responseTime })
+        ? t("responseTimeShort", { responseTime: integration.health.responseTime })
         : t("up")}
     </Typography>
   );
@@ -96,6 +96,7 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
 
 export function IntegrationList() {
   const t = useTranslations("adminIntegrations");
+  const tCommon = useTranslations("common");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client);
 
@@ -247,7 +248,7 @@ export function IntegrationList() {
             }}
           >
             <Chip
-              label={t("lengthTotal", { length: integrations.length })}
+              label={t("totalCount", { count: integrations.length })}
               size="small"
               variant="outlined"
             />
@@ -360,7 +361,7 @@ export function IntegrationList() {
                   setPage(0);
                 }}
               >
-                {t("clear")}
+                {tCommon("clear")}
               </Button>
             )}
 

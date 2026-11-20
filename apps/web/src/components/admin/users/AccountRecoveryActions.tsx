@@ -34,6 +34,7 @@ export function AccountRecoveryActions({ user }: { user: User }) {
 }
 function RecoveryForm({ user }: { user: User }) {
   const t = useTranslations("adminUsers");
+  const tCommon = useTranslations("common");
   const errorText = useAccountErrorText();
   const labels: Record<AccountRecoveryAction, string> = {
     invitation: t("recoveryInvitation"),
@@ -171,7 +172,7 @@ function RecoveryForm({ user }: { user: User }) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={close}>{t("cancel")}</Button>
+          <Button onClick={close}>{tCommon("cancel")}</Button>
           <Button disabled={!valid || mutation.isPending} onClick={() => setReauth(true)}>
             {t("confirmAdministratorSignIn")}
           </Button>

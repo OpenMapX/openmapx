@@ -120,7 +120,7 @@ function SecurityChip({ rating }: { rating: AdminExtensionSecurityRating }) {
       <Chip
         size="small"
         icon={<SecurityIcon />}
-        label={t("securityScore8", { score: rating.score })}
+        label={t("securityScore", { score: rating.score })}
         color={ratingColor(rating.score)}
         variant="outlined"
       />
@@ -149,6 +149,7 @@ function ExtensionSecurityPreviewDialog({
   onConfirm: () => void;
 }) {
   const t = useTranslations("adminExtensions");
+  const tCommon = useTranslations("common");
   const hostPorts = preview?.services.flatMap((service) =>
     service.hostPorts.map((port) => ({ service: service.name, port })),
   );
@@ -200,7 +201,7 @@ function ExtensionSecurityPreviewDialog({
                     variant="caption"
                     sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
                   >
-                    {t("commitRepositorycommit", { repositoryCommit: service.repositoryCommit })}
+                    {t("repositoryCommit", { commit: service.repositoryCommit })}
                   </Typography>
                   <Typography variant="body2">
                     {t("securityFacts", {
@@ -227,7 +228,7 @@ function ExtensionSecurityPreviewDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy}>
-          {t("cancel")}
+          {tCommon("cancel")}
         </Button>
         <Button variant="contained" color="warning" onClick={onConfirm} disabled={busy}>
           {preview?.requiresHostPortConfirmation
@@ -366,6 +367,7 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
 
 function BrowseTab() {
   const t = useTranslations("adminExtensions");
+  const tCommon = useTranslations("common");
   const showToast = useAdminToast();
   const [q, setQ] = useState("");
   const [trust, setTrust] = useState("");
@@ -447,8 +449,7 @@ function BrowseTab() {
                 const current = flow.capture();
                 void refresh.mutateAsync().then(
                   (r) => {
-                    if (current())
-                      showToast(t("catalogRefreshedEntriesEntries", { entries: r.entries }));
+                    if (current()) showToast(t("catalogRefreshed", { count: r.entries }));
                   },
                   (error) => {
                     if (current()) showToast(flow.errorText(error), "error");
@@ -478,8 +479,10 @@ function BrowseTab() {
       )}
       {!isLoading && !isError && entries.length === 0 && (
         <Alert severity="info" variant="outlined">
-          {t("noExtensionsFoundAddA")}
-          <code>{t("extensionJson")}</code> {t("url")}
+          {t.rich("noExtensionsFound", {
+            file: "extension.json",
+            code: (chunks) => <code>{chunks}</code>,
+          })}
         </Alert>
       )}
 
@@ -530,7 +533,7 @@ function BrowseTab() {
                 )}
                 {!e.compatible && (
                   <Alert severity="warning">
-                    {t("requiresPlatformMinplatformThisIs", {
+                    {t("requiresPlatform", {
                       minPlatform: e.minPlatform ?? "",
                       platformVersion: e.platformVersion,
                     })}
@@ -540,8 +543,7 @@ function BrowseTab() {
                 <Box>
                   {e.installed ? (
                     <Button size="small" disabled variant="outlined" fullWidth>
-                      {t("installed")}
-                      {e.hasUpdate ? t("updateAvailable") : ""}
+                      {e.hasUpdate ? t("installedUpdateAvailable") : t("installed")}
                     </Button>
                   ) : (
                     <Button
@@ -567,8 +569,7 @@ function BrowseTab() {
         <DialogTitle>{t("installFromExtensionJsonUrl")}</DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            {t("directInstallsAreTreatedAs")}
-            <strong>{t("community2")}</strong> {t("unreviewedOnlyInstallFromSources")}
+            {t.rich("directInstallTrust", { strong: (chunks) => <strong>{chunks}</strong> })}
           </Alert>
           <TextField
             autoFocus
@@ -579,11 +580,11 @@ function BrowseTab() {
               flow.retire();
               setManifestUrl(e.target.value);
             }}
-            placeholder={t("httpsExtensionJson")}
+            placeholder="https://…/extension.json"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeManifest}>{t("cancel")}</Button>
+          <Button onClick={closeManifest}>{tCommon("cancel")}</Button>
           <Button
             variant="contained"
             disabled={!manifestUrl.trim() || flow.preparing}
@@ -652,7 +653,7 @@ function InstalledTab() {
               <TableRow>
                 <TableCell>{t("extension")}</TableCell>
                 <TableCell>{t("trust")}</TableCell>
-                <TableCell>{t("version2")}</TableCell>
+                <TableCell>{t("versionColumn")}</TableCell>
                 <TableCell>{t("components")}</TableCell>
                 <TableCell align="right">{t("actions")}</TableCell>
               </TableRow>
@@ -682,7 +683,7 @@ function InstalledTab() {
                       <Chip
                         size="small"
                         color="info"
-                        label={t("latestversion", { latestVersion: ext.latestVersion ?? "" })}
+                        label={t("latestVersion", { latestVersion: ext.latestVersion ?? "" })}
                         sx={{ ml: 1 }}
                       />
                     )}
@@ -770,6 +771,7 @@ function InstalledTab() {
 
 function SourcesTab() {
   const t = useTranslations("adminExtensions");
+  const tCommon = useTranslations("common");
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useExtensionSources();
   const ui = useExtensionUiSession();
@@ -812,7 +814,7 @@ function SourcesTab() {
               <TableHead>
                 <TableRow>
                   <TableCell>{t("label")}</TableCell>
-                  <TableCell>{t("url2")}</TableCell>
+                  <TableCell>{t("urlColumn")}</TableCell>
                   <TableCell>{t("trust")}</TableCell>
                   <TableCell align="right">{t("actions")}</TableCell>
                 </TableRow>
@@ -879,9 +881,7 @@ function SourcesTab() {
         <DialogTitle>{t("addCatalogSource")}</DialogTitle>
         <DialogContent>
           <Alert severity="info" sx={{ mb: 2 }}>
-            {t("extensionsFromOperatorAddedSources")}
-            <strong>{t("community2")}</strong>
-            {t("unreviewedDefaultCatalogEntriesRetain")}
+            {t.rich("operatorSourceTrust", { strong: (chunks) => <strong>{chunks}</strong> })}
           </Alert>
           <Stack sx={{ gap: 2, mt: 1 }}>
             <TextField
@@ -900,7 +900,7 @@ function SourcesTab() {
                 ui.retire();
                 setUrl(e.target.value);
               }}
-              placeholder={t("httpsCatalogJson")}
+              placeholder="https://…/catalog.json"
               fullWidth
             />
           </Stack>
@@ -912,7 +912,7 @@ function SourcesTab() {
               setOpen(false);
             }}
           >
-            {t("cancel")}
+            {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"

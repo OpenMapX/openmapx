@@ -62,7 +62,7 @@ function StateChip({ provider }: { provider: ProviderHealthEntry }) {
           <Chip
             size="small"
             color="error"
-            label={retryAt ? t("openUntilRetryat", { retryAt }) : t("circuitOpen")}
+            label={retryAt ? t("openUntil", { retryAt }) : t("circuitOpen")}
           />
         </Tooltip>
       );
@@ -85,9 +85,9 @@ export function ProviderHealthTable() {
 
   const onReset = (providerId: string) => {
     resetMutation.mutate(providerId, {
-      onSuccess: () => showToast(t("providerProvideridReset", { providerId }), "success"),
+      onSuccess: () => showToast(t("providerReset", { providerId }), "success"),
       onError: (err) =>
-        showToast(adminErrorText(err, t("failedToResetProviderid", { providerId })), "error"),
+        showToast(adminErrorText(err, t("providerResetFailed", { providerId })), "error"),
     });
   };
 
@@ -162,7 +162,7 @@ export function ProviderHealthTable() {
                                 cursor: "help",
                               }}
                             >
-                              {t("lastErrorLasterror", { lastError })}
+                              {t("lastError", { error: lastError })}
                             </Typography>
                           </Tooltip>
                         )}
@@ -180,7 +180,7 @@ export function ProviderHealthTable() {
                     </TableCell>
                     <TableCell align="right">
                       {Number.isFinite(p.emaLatencyMs)
-                        ? t("emalatencymsMs", { emaLatencyMs: Math.round(p.emaLatencyMs) })
+                        ? t("averageLatency", { ms: Math.round(p.emaLatencyMs) })
                         : "—"}
                     </TableCell>
                     <TableCell>

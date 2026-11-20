@@ -52,6 +52,7 @@ function ServiceRequireRow({
               color: "text.secondary",
             }}
           >
+            {" "}
             {t("optional")}
           </Typography>
         )}
@@ -115,6 +116,7 @@ function CapabilityRequireRow({
               color: "text.secondary",
             }}
           >
+            {" "}
             {t("optional")}
           </Typography>
         )}
@@ -128,12 +130,10 @@ function CapabilityRequireRow({
       />
       <Stack>
         <Typography variant="caption">
-          {t("saved")}
-          {currentBinding ?? t("bindingAutomatic")}
+          {t("savedBinding", { binding: currentBinding ?? t("bindingAutomatic") })}
         </Typography>
         <Typography variant="caption">
-          {t("active")}
-          {activeServiceId ?? t("bindingUnresolved")}
+          {t("activeBinding", { binding: activeServiceId ?? t("bindingUnresolved") })}
         </Typography>
         <Button size="small" disabled={disabled} onClick={() => onBind(currentBinding)}>
           {t("applySavedBinding")}

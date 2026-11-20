@@ -69,7 +69,7 @@ export function ActorCell({ actorId, actor, fallbackLabel: fallback }: ActorCell
 
   // User row no longer exists — show truncated id with a hint.
   return (
-    <Tooltip title={t("actoridUserNoLongerExists", { actorId })}>
+    <Tooltip title={t("deletedActor", { actorId })}>
       <Typography
         variant="caption"
         sx={{

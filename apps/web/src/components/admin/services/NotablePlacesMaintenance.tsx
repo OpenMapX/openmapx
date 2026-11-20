@@ -78,7 +78,7 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
         register({ client, apiUrl, jobId, effect });
         if (execution.active) setLastAcceptedJobId(jobId);
         if (execution.active) {
-          showToast(t("queuedNotablePlacesBuildJobid", { jobId }));
+          showToast(t("notablePlacesBuildQueued", { jobId }));
           setConfirmOpen(false);
         }
       } catch (error) {
@@ -127,7 +127,7 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
           }
           variant="text"
         >
-          {t("viewJobs2")}
+          {t("viewJobsLink")}
         </Button>
       </Stack>
 

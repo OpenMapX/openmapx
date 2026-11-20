@@ -32,7 +32,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const t = useTranslations("adminShared");
+  const tCommon = useTranslations("common");
   return (
     <Dialog open={open} onClose={loading ? undefined : onCancel} maxWidth="xs" fullWidth>
       <DialogTitle>{title}</DialogTitle>
@@ -41,7 +41,7 @@ export function ConfirmDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onCancel} disabled={loading} size="small">
-          {cancelLabel ?? t("cancel")}
+          {cancelLabel ?? tCommon("cancel")}
         </Button>
         <Button
           variant="contained"
@@ -52,7 +52,7 @@ export function ConfirmDialog({
           startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
           autoFocus
         >
-          {confirmLabel ?? t("confirm")}
+          {confirmLabel ?? tCommon("confirm")}
         </Button>
       </DialogActions>
     </Dialog>

@@ -17,8 +17,9 @@ pattern non_copy() {
   or {
     // The product name.
     r"[\"'`]OpenMapX[\"'`]",
-    // Environment variable names, such as OPENMAPX_SECRETS_KEY.
-    r"[\"'`][A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+[\"'`]",
+    // Environment variable names and patterns, such as OPENMAPX_SECRETS_KEY
+    // or INTEGRATION_<ID>_<KEY>.
+    r"[\"'`][A-Z][A-Z0-9]*(?:_(?:[A-Z0-9]+|<[A-Z]+>))+[\"'`]",
     // Commands, file names and protocol names.
     r"[\"'`](?:openssl rand -hex 32|pnpm openmapx compose down|infra/docker/\.env|extension\.json|tcp)[\"'`]",
     // Licence identifiers.
@@ -36,11 +37,15 @@ pattern word_literal() {
 }
 
 // Words in the text of an untagged template; names inside a placeholder such
-// as `${row.state}` are code.
+// as `${row.state}` are code, and so is text made only of environment variable
+// characters, such as the `<KEY>` in `${prefix}<KEY>`.
 pattern word_template() {
   JsTemplateExpression(tag=$tag, elements=$elements) where {
     $tag <: .,
-    $elements <: some JsTemplateChunkElement() as $chunk where { $chunk <: r"(?s).*\p{L}{2,}.*" }
+    $elements <: some JsTemplateChunkElement() as $chunk where {
+      $chunk <: r"(?s).*\p{L}{2,}.*",
+      not $chunk <: r"[<>A-Z0-9_]+"
+    }
   }
 }
 
@@ -90,8 +95,8 @@ or {
   JsCallExpression(callee=`reportJob`, arguments=JsCallArguments(args=[$_, copy_value(), ...])),
   JsCallExpression(callee=$callee, arguments=JsCallArguments(args=$arguments)) where {
     $callee <: translator(),
-    $arguments <: some JsObjectExpression() as $values where {
-      $values <: contains JsPropertyObjectMember(value=copy_value())
+    $arguments <: some JsObjectExpression(members=$members) where {
+      $members <: some JsPropertyObjectMember(value=copy_value())
     }
   },
   JsVariableDeclarator(id=$id, initializer=$initializer) where {

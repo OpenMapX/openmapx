@@ -214,6 +214,8 @@ const AdminNavigationContext = createContext({ role: "admin" });
     {t.rich("setSecretsKey", { variable: "OPENMAPX_SECRETS_KEY", code: (chunks) => <code>{chunks}</code> })}
     <Chip label={"OPENMAPX_SECRETS_KEY"} />
     <code>{"openssl rand -hex 32"}</code>
+    {t.rich("pattern", { pattern: "INTEGRATION_<ID>_<KEY>", code: (chunks) => <Box sx={{ fontFamily: "monospace" }}>{chunks}</Box> })}
+    {t.rich("prefixed", { pattern: \`\${x.prefix}<KEY>\` })}
     <TextField placeholder="https://example.com/feed.gtfs.zip" helperText={x ?? "CC-BY-4.0"} />
     {x.protocol ?? "tcp"}
   </div>

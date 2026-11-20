@@ -14,6 +14,7 @@ import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/cor
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 
 type Action = AdminServicesBulkAction["action"] | "stage";
@@ -32,7 +33,7 @@ export function ServiceBulkActions({
   onStage: (ids: string[]) => void;
   onClear: () => void;
 }) {
-  const ta = useTranslations("adminServices");
+  const ta = useAdminTranslations("adminServices");
   const labels: Record<Action, string> = {
     start: ta("bulkStart"),
     stop: ta("bulkStop"),
@@ -85,7 +86,7 @@ export function ServiceBulkActions({
       <Stack sx={{ gap: 1.25 }}>
         <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", alignItems: "center" }}>
           <Typography variant="body2" sx={{ fontWeight: 650 }}>
-            {ta("lengthSelected", { length: ids.length })}
+            {ta("selectedCount", { count: ids.length })}
           </Typography>
           <TextField
             select
@@ -166,7 +167,7 @@ function BuildOptions({
   setMotisImport: (value: boolean) => void;
   disabled: boolean;
 }) {
-  const ta = useTranslations("adminServices");
+  const ta = useAdminTranslations("adminServices");
   return (
     <Stack direction="row" sx={{ gap: 1, alignItems: "center", flexWrap: "wrap" }}>
       <TextField

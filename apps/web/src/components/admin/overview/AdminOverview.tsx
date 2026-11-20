@@ -264,8 +264,10 @@ export function AdminOverview() {
           </Typography>
           {!credentialsOverview.data?.secretsConfigured && (
             <CompactAlert severity="warning" variant="outlined" sx={{ mb: 1.25 }}>
-              {t("credentialsVaultIsNotConfigured")}
-              <code>{t("openmapxSecretsKey")}</code> {t("toEnableSecureStorageIn")}
+              {t.rich("credentialsVaultNotConfigured", {
+                variable: "OPENMAPX_SECRETS_KEY",
+                code: (chunks) => <code>{chunks}</code>,
+              })}
             </CompactAlert>
           )}
           {missingCredentialIntegrations.length === 0 ? (
@@ -479,9 +481,9 @@ export function AdminOverview() {
               }}
             >
               {data.systemHealth.status === "pass"
-                ? t("allSystemsOperational2")
-                : t("unhealthycountUnhealthy", {
-                    unhealthyCount: data.systemHealth.unhealthyCount,
+                ? t("allSystemsOperationalStatus")
+                : t("unhealthyCount", {
+                    count: data.systemHealth.unhealthyCount,
                   })}
             </Typography>
           </StatCard>
@@ -659,7 +661,7 @@ export function AdminOverview() {
               <Chip
                 label={
                   totalMissingCredentials > 0
-                    ? t("lengthMissing", { length: missingCredentialIntegrations.length })
+                    ? t("missingCount", { count: missingCredentialIntegrations.length })
                     : t("allConfigured")
                 }
                 size="small"

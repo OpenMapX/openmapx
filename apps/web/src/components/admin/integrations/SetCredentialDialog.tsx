@@ -46,6 +46,7 @@ export function SetCredentialDialog({
   expectedRevision,
 }: SetCredentialDialogProps) {
   const t = useTranslations("adminIntegrations");
+  const tCommon = useTranslations("common");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(
     admin.client,
@@ -181,7 +182,7 @@ export function SetCredentialDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} disabled={mutation.isPending}>
-          {receipt ? t("done") : t("cancel")}
+          {receipt ? tCommon("done") : tCommon("cancel")}
         </Button>
         <Button
           variant="contained"

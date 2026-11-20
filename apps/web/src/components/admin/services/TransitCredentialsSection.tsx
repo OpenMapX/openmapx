@@ -124,6 +124,7 @@ function TransitCredentialView({
   onReviewFinished?: () => void;
 }) {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const client = useMemo(
     () => createApiClient({ baseUrl: browserAdminApiBase(apiUrl), credentials: "include" }),
     [apiUrl],
@@ -430,7 +431,7 @@ function TransitCredentialView({
           <Alert severity={stale ? "warning" : "info"}>
             {stale
               ? t("theCatalogConfigurationOrCredentials")
-              : t("reviewLengthKeyChangesExisting", { length: reviewed.preview.changes.length })}
+              : t("reviewKeyChanges", { count: reviewed.preview.changes.length })}
             <Stack spacing={1} sx={{ mt: 1 }}>
               {reviewed.preview.changes.map((change) => (
                 <Typography variant="body2" key={change.key}>
@@ -461,7 +462,7 @@ function TransitCredentialView({
               <Typography>{t("deletingWillBeRemovedFrom", { deleting })}</Typography>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setDeleting(null)}>{t("cancel")}</Button>
+              <Button onClick={() => setDeleting(null)}>{tCommon("cancel")}</Button>
               <Button
                 onClick={() => {
                   invalidateReview();

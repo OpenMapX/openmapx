@@ -19,10 +19,9 @@ import { ApiClientError } from "@openmapx/core";
 import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
 import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
-import { useTranslations } from "next-intl";
 import { useCallback, useId, useMemo, useState } from "react";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
-import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
 
@@ -94,7 +93,7 @@ export function buildConfigDiff(
   fields: SchemaConfigField[],
   values: Record<string, unknown>,
   changedKeys: string[],
-  t: AdminTranslator,
+  t: AdminTranslator<"adminShared">,
 ): Record<string, unknown> {
   const diff: Record<string, unknown> = {};
   for (const key of changedKeys) {
@@ -225,7 +224,7 @@ export function SchemaConfigForm({
   applySavedSuccessMessage: applySavedSuccessMessageProp,
   emptyMessage: emptyMessageProp,
 }: SchemaConfigFormProps) {
-  const t = useTranslations("adminShared");
+  const t = useAdminTranslations("adminShared");
   const applySavedLabel = applySavedLabelProp ?? t("applySavedConfiguration");
   const applyLabel = applyLabelProp ?? t("saveAndApply");
   const applySuccessMessage = applySuccessMessageProp ?? t("configurationSavedAndApplied");
@@ -327,12 +326,11 @@ export function SchemaConfigForm({
       )}
       {saved === "saved" && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          {t("configurationSaved")}
           {onApplySaved
-            ? t("applyTheSavedConfigurationWhen")
+            ? t("configurationSavedApplyWhenReady")
             : onSaveAndApply
-              ? t("runtimeApplicationIsStillPending")
-              : ""}
+              ? t("configurationSavedRuntimePending")
+              : t("configurationSaved")}
         </Alert>
       )}
       {(saved === "applied" || saved === "applied-saved") && (
@@ -343,14 +341,17 @@ export function SchemaConfigForm({
       {envPrefix && (
         <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
           <Typography variant="caption">
-            {t("hostEnvVarsAlwaysWin")}
-            <Box
-              component="code"
-              sx={{ fontFamily: "monospace", fontSize: "0.78rem", fontWeight: 600 }}
-            >
-              {t("envprefixLtKeyGt", { envPrefix })}
-            </Box>
-            {t("inTheHostEnvironment")}
+            {t.rich("hostEnvVarsAlwaysWin", {
+              pattern: `${envPrefix}<KEY>`,
+              code: (chunks) => (
+                <Box
+                  component="code"
+                  sx={{ fontFamily: "monospace", fontSize: "0.78rem", fontWeight: 600 }}
+                >
+                  {chunks}
+                </Box>
+              ),
+            })}
           </Typography>
         </Alert>
       )}
@@ -362,6 +363,7 @@ export function SchemaConfigForm({
           source === "env" ||
           source === "config.json" ||
           ownership?.[field.key]?.writable === false;
+        const envVar = ownership?.[field.key]?.envVar;
         const displayValue = isEnvOverridden ? toFormValue(field, entry?.value) : values[field.key];
 
         return (
@@ -403,11 +405,9 @@ export function SchemaConfigForm({
               <Typography variant="caption" color="text.secondary">
                 {source === "config.json"
                   ? t("controlledByTheHostConfig")
-                  : t("controlledByTheHostEnvironment", {
-                      value: ownership?.[field.key]?.envVar
-                        ? ` (${ownership[field.key].envVar})`
-                        : "",
-                    })}
+                  : envVar
+                    ? t("controlledByHostVariable", { envVar })
+                    : t("controlledByTheHostEnvironment")}
               </Typography>
             )}
             {field.setup && <CredentialSetupGuide setup={field.setup} />}
@@ -515,8 +515,7 @@ export function SchemaConfigForm({
           onClick={() => run("save", onSave)}
           disabled={saving || changedKeys.length === 0 || draft.conflicts.length > 0}
         >
-          {t("save")}
-          {changedKeys.length > 0 ? t("lengthChanged", { length: changedKeys.length }) : ""}
+          {changedKeys.length > 0 ? t("saveChanged", { count: changedKeys.length }) : t("save")}
         </Button>
         {(onSaveAndApply || onApplySaved) && (
           <Button

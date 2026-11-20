@@ -27,7 +27,7 @@ import {
   useSetServiceCredential,
 } from "@/hooks/useServices";
 import { adminErrorText } from "@/lib/admin/adminRequestError";
-import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
@@ -35,7 +35,7 @@ import { useAdminToast } from "../shared/AdminToast";
 
 function applyToast(
   result: AdminServiceCredentialChanged,
-  t: AdminTranslator,
+  t: AdminTranslator<"adminServices">,
 ): {
   message: string;
   severity: "success" | "info";
@@ -55,7 +55,8 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
 }
 
 function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
-  const t = useTranslations("adminServices");
+  const t = useAdminTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const { client } = useActivityClient();
   const query = useServiceCredentials(serviceId);
   const setCred = useSetServiceCredential(serviceId);
@@ -127,8 +128,10 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
     <Stack spacing={2}>
       {!secretsConfigured && (
         <Alert severity="warning" variant="outlined">
-          {t("theSecretVaultIsNot")}
-          <code>{t("openmapxSecretsKey")}</code> {t("a64CharHexString")}
+          {t.rich("secretVaultNotConfigured", {
+            variable: "OPENMAPX_SECRETS_KEY",
+            code: (chunks) => <code>{chunks}</code>,
+          })}
         </Alert>
       )}
 
@@ -177,9 +180,9 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                 )}
                 {(cred.source === "env" || cred.source === "config.json") && (
                   <Typography variant="body2">
-                    {t("hostControlled")}
-                    {cred.ownership?.envVar ? t("envvar", { envVar: cred.ownership.envVar }) : ""}
-                    {t("removeTheHostOverrideRefresh")}
+                    {cred.ownership?.envVar
+                      ? t("hostControlledByVariable", { envVar: cred.ownership.envVar })
+                      : t("hostControlledRemoveOverride")}
                   </Typography>
                 )}
                 {cred.managedBy === "transit.credentials" && (
@@ -189,10 +192,10 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                 )}
                 {cred.updatedAt && (
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    {t("updatedUpdatedat", {
+                    {t("updatedAt", {
                       updatedAt: new Date(cred.updatedAt).toLocaleString(),
                     })}
-                    {cred.updatedBy ? t("byUpdatedby", { updatedBy: cred.updatedBy }) : ""}
+                    {cred.updatedBy ? t("updatedBy", { updatedBy: cred.updatedBy }) : ""}
                   </Typography>
                 )}
                 {cred.managedBy === "dawarich-provisioning" && (
@@ -265,7 +268,7 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditing(null)}>{t("cancel")}</Button>
+          <Button onClick={() => setEditing(null)}>{tCommon("cancel")}</Button>
           <Button
             variant="contained"
             onClick={handleSave}

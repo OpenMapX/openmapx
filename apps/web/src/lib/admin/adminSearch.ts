@@ -1,6 +1,7 @@
 import { SCORE_CUTOFF, scoreCommand } from "@openmapx/command-palette";
 import { adminDataOperationHref } from "./adminDataNavigation";
 import { type AdminNavigationAccess, adminDestinations } from "./adminNavigation";
+import type { AdminTranslator } from "./adminTranslator";
 export interface AdminSearchEntry {
   id: string;
   title: string;
@@ -93,8 +94,8 @@ export interface AdminSearchCopy {
  * Shortcut keywords are one comma-separated message per locale.
  */
 export function adminSearchCopy(
-  navigation: (key: string) => string,
-  shared: (key: string) => string,
+  navigation: AdminTranslator<"adminNavigation">,
+  shared: AdminTranslator<"adminShared">,
 ): AdminSearchCopy {
   return {
     destination: (id) => ({

@@ -148,7 +148,7 @@ export function AdminTopBar({ user, selfHosted, sidebarOpen, onToggleSidebar }: 
             href="/"
             size="small"
             color="inherit"
-            aria-label={ta("backToMap2")}
+            aria-label={ta("backToMapLabel")}
           >
             <MapIcon fontSize="small" />
           </IconButton>

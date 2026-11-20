@@ -28,6 +28,7 @@ export function CompactAlertList({
   collapsedItemCount = 3,
 }: CompactAlertListProps) {
   const t = useTranslations("adminShared");
+  const tCommon = useTranslations("common");
   const visibleItems = expanded ? items : items.slice(0, collapsedItemCount);
   const hiddenItemCount = items.length - collapsedItemCount;
 
@@ -53,7 +54,7 @@ export function CompactAlertList({
           onClick={() => onExpandedChange(!expanded)}
           sx={{ alignSelf: "flex-start" }}
         >
-          {expanded ? t("showLess") : t("showHiddenitemcountMore", { hiddenItemCount })}
+          {expanded ? tCommon("showLess") : t("showMore", { count: hiddenItemCount })}
         </Button>
       )}
     </Stack>

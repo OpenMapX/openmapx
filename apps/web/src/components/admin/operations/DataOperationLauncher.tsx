@@ -18,6 +18,7 @@ import { AdminOperationCard } from "./AdminOperationCard";
 
 export function DataOperationLauncher({ operationIds }: { operationIds: readonly string[] }) {
   const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient();
   const toast = useAdminToast();
   const catalog = useQuery({
@@ -55,7 +56,7 @@ export function DataOperationLauncher({ operationIds }: { operationIds: readonly
       {catalog.isError && (
         <Alert
           severity="error"
-          action={<Button onClick={() => void catalog.refetch()}>{t("retry")}</Button>}
+          action={<Button onClick={() => void catalog.refetch()}>{tCommon("retry")}</Button>}
         >
           {t("operationsAreUnavailable")}
         </Alert>

@@ -54,64 +54,66 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
   const payload = formatPayload(job.payload);
 
   return (
-    <TableRow hover onClick={onSelect} sx={{ cursor: "pointer" }}>
-      <TableCell sx={{ width: 32, px: 1 }}>
-        <IconButton
-          size="small"
-          aria-label={t("openJobId", { id: job.id })}
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelect();
-          }}
-        >
-          <KeyboardArrowRightIcon fontSize="small" />
-        </IconButton>
-      </TableCell>
-      <TableCell>
-        <Typography
-          variant="body2"
-          sx={{
-            fontWeight: 500,
-          }}
-        >
-          {formatJobType(job.type)}
-        </Typography>
-        {payload && (
-          <Tooltip title={payload} placement="bottom-start">
-            <Typography
-              variant="caption"
-              noWrap
-              sx={{ color: "text.secondary", display: "block", maxWidth: 520 }}
-            >
-              {payload}
-            </Typography>
-          </Tooltip>
-        )}
-        {job.source === "data-manager" && (
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {t("dataManager")}
-          </Typography>
-        )}
-      </TableCell>
-      <TableCell>
-        <JobStatusChip status={job.status} />
-      </TableCell>
-      <TableCell>
-        <ActorCell actorId={job.createdBy} actor={job.actor} fallbackLabel={job.actorLabel} />
-      </TableCell>
-      <TableCell>
-        <Tooltip title={dtf.dateTime(job.createdAt)}>
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
+    <>
+      <TableRow hover onClick={onSelect} sx={{ cursor: "pointer" }}>
+        <TableCell sx={{ width: 32, px: 1 }}>
+          <IconButton
+            size="small"
+            aria-label={t("openJobId", { id: job.id })}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect();
             }}
           >
-            {dtf.recent(job.createdAt)}
+            <KeyboardArrowRightIcon fontSize="small" />
+          </IconButton>
+        </TableCell>
+        <TableCell>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 500,
+            }}
+          >
+            {formatJobType(job.type)}
           </Typography>
-        </Tooltip>
-      </TableCell>
-    </TableRow>
+          {payload && (
+            <Tooltip title={payload} placement="bottom-start">
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{ color: "text.secondary", display: "block", maxWidth: 520 }}
+              >
+                {payload}
+              </Typography>
+            </Tooltip>
+          )}
+          {job.source === "data-manager" && (
+            <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+              {t("dataManager")}
+            </Typography>
+          )}
+        </TableCell>
+        <TableCell>
+          <JobStatusChip status={job.status} />
+        </TableCell>
+        <TableCell>
+          <ActorCell actorId={job.createdBy} actor={job.actor} fallbackLabel={job.actorLabel} />
+        </TableCell>
+        <TableCell>
+          <Tooltip title={dtf.dateTime(job.createdAt)}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
+              {dtf.recent(job.createdAt)}
+            </Typography>
+          </Tooltip>
+        </TableCell>
+      </TableRow>
+    </>
   );
 }
 
@@ -209,7 +211,7 @@ export function JobList() {
             <Box sx={{ flexGrow: 1 }} />
 
             <Chip
-              label={t("valueJobs", { value: data?.total ?? 0 })}
+              label={t("jobCount", { count: data?.total ?? 0 })}
               size="small"
               variant="outlined"
             />

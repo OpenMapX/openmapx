@@ -79,13 +79,13 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
         }}
       >
         <Chip
-          label={t("jobJobid", { jobId: jobId.slice(0, 8) })}
+          label={t("jobLabel", { jobId: jobId.slice(0, 8) })}
           size="small"
           variant="outlined"
           sx={{ fontFamily: "monospace" }}
         />
         <Chip
-          label={t("lengthStageSRecorded", { length: stages.length })}
+          label={t("stagesRecorded", { count: stages.length })}
           size="small"
           variant="outlined"
         />
@@ -130,7 +130,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           onQueued={(jobId) => {
             setQueuedJobId(jobId);
             setSyncReview(false);
-            showToast(t("syncQueuedJobid", { jobId: jobId.slice(0, 8) }), "success");
+            showToast(t("syncQueued", { jobId: jobId.slice(0, 8) }), "success");
             void qc.invalidateQueries({ queryKey: ["admin", "transit"] });
           }}
         />
@@ -189,9 +189,9 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               color: "text.secondary",
             }}
           >
-            {t("startedStartedatStartedat2SElapsed", {
+            {t("startedElapsed", {
               startedAt: formatTransitAdminTimestamp(inflight.startedAt),
-              startedAt2: durationSecs(inflight.startedAt),
+              seconds: durationSecs(inflight.startedAt),
             })}
           </Typography>
           <RunningJobDetail jobId={inflight.jobId} />

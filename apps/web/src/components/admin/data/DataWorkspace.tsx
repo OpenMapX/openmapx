@@ -83,6 +83,7 @@ export function DataWorkspace({ topic = "overview" }: { topic?: DataTopic }) {
 }
 function DataDirectory() {
   const ta = useTranslations("adminShared");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient();
   // No domain-specific status subscriptions or polling on the directory.
   const access = useAdminNavigationAccess();
@@ -97,7 +98,7 @@ function DataDirectory() {
       {query.isError && (
         <Alert
           severity="warning"
-          action={<Button onClick={() => void query.refetch()}>{ta("retry")}</Button>}
+          action={<Button onClick={() => void query.refetch()}>{tCommon("retry")}</Button>}
         >
           {ta("inventorySummaryIsUnavailableOpen")}
         </Alert>
@@ -133,6 +134,7 @@ function DataDirectory() {
 }
 function OsmWorkspace() {
   const ta = useTranslations("adminShared");
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient();
   const { params, update } = useAdminQueryState();
   const raw = params.get("offset") ?? "0";
@@ -147,7 +149,7 @@ function OsmWorkspace() {
       {query.isError && (
         <Alert
           severity="error"
-          action={<Button onClick={() => void query.refetch()}>{ta("retry")}</Button>}
+          action={<Button onClick={() => void query.refetch()}>{tCommon("retry")}</Button>}
         >
           {ta("failedToLoadDataInventory")}
         </Alert>
