@@ -1,9 +1,10 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { type OfflineMapPackageManifest, validateOfflineMapPackageManifest } from "@openmapx/core";
 import { type OfflinePackageApi, OfflinePackageApiError } from "./packageApi";
 import { type OfflinePackageMetric, recordOfflinePackageMetric } from "./packageMetrics";
 import { validateLocalPmtilesArchive } from "./pmtilesReader";
 import { resetOfflinePackageRuntime } from "./runtime";
-import { Sha256 } from "./sha256";
 import type {
   OfflinePackageDownloadProgress,
   OfflinePackageRecord,
@@ -56,13 +57,16 @@ function parseRangeStart(value: string | null): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+/** An incremental SHA-256 of the archive bytes received so far. */
+type ArchiveHash = ReturnType<typeof sha256.create>;
+
 async function hashPrefix(
   file: {
     read(offset: number, length: number): Promise<Uint8Array>;
   },
   length: number,
-): Promise<Sha256> {
-  const hash = new Sha256();
+): Promise<ArchiveHash> {
+  const hash = sha256.create();
   for (let offset = 0; offset < length; ) {
     const chunk = await file.read(offset, Math.min(1024 * 1024, length - offset));
     if (chunk.byteLength === 0) throw new Error("offline package partial archive is truncated");
@@ -293,7 +297,7 @@ async function downloadOfflinePackageImpl(
         record.verifiedPrefixBytes = 0;
         attemptStartBytes = 0;
         await storage.put(record);
-        hash = new Sha256();
+        hash = sha256.create();
         response = await api.openArchive(manifest.packageId, undefined, options.signal);
       }
       if (
@@ -349,7 +353,7 @@ async function downloadOfflinePackageImpl(
     if (record.bytesReceived !== manifest.archive.byteLength) {
       throw new Error("offline package archive length mismatch");
     }
-    if (hash.digestHex() !== manifest.archive.sha256) {
+    if (bytesToHex(hash.digest()) !== manifest.archive.sha256) {
       // None of this prefix is trustworthy after the whole-archive check fails.
       // Reset the durable counters even if truncating/flushing itself fails;
       // the next attempt will truncate the file to that zero-byte prefix.

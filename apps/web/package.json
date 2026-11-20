@@ -39,6 +39,7 @@
     "@mui/material": "^9.5.0",
     "@mui/material-nextjs": "^9.5.0",
     "@mui/system": "^9.5.0",
+    "@noble/hashes": "2.4.0",
     "@openmapx/command-palette": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/ev-charge-planner": "workspace:^",
