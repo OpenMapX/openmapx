@@ -1,6 +1,13 @@
 "use client";
 
-import { runOverlayTransaction, useNavigationStore, useOverlayExclusion } from "@openmapx/core";
+import {
+  allReplacements,
+  type BuildingReplacement,
+  runOverlayTransaction,
+  useBuildingReplacementStore,
+  useNavigationStore,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
@@ -15,6 +22,17 @@ import {
   findBuildingSourceReference,
 } from "./building-style";
 import manifest from "./manifest.json";
+import {
+  addMaskedSource,
+  ensureMaskProtocol,
+  isMaskable,
+  type LiveBuildingSource,
+  MASKED_SOURCE_ID,
+  MASKED_TEMPLATE,
+  readLiveBuildingSource,
+  tileLngLatBounds,
+  tilesTouchedBy,
+} from "./masked-source";
 import { BUILDING_TILT_THRESHOLD as TILT_THRESHOLD, useBuildingsStore } from "./store";
 
 const LAYER_ID = "openmapx-3d-buildings";
@@ -32,6 +50,56 @@ function moveToPitch(map: maplibregl.Map, pitch: number, duration: number): void
   }
   map.easeTo({ pitch, duration }, { programmatic: true });
 }
+
+type BuildingSourceReference = NonNullable<ReturnType<typeof findBuildingSourceReference>>;
+
+function extrusionLayer(
+  map: maplibregl.Map,
+  basemap: BuildingSourceReference,
+  source: string,
+  sourceLayer: string,
+): maplibregl.FillExtrusionLayerSpecification {
+  return {
+    id: LAYER_ID,
+    type: "fill-extrusion",
+    source,
+    "source-layer": sourceLayer,
+    minzoom: MIN_ZOOM,
+    filter: ["!=", ["get", "hide_3d"], true],
+    layout: {
+      visibility:
+        useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
+          ? "visible"
+          : "none",
+    },
+    paint: {
+      "fill-extrusion-color": buildingExtrusionColor(
+        findBuildingRoofColor(map, basemap) ?? EXTRUSION_COLOR,
+      ),
+      "fill-extrusion-height": EXTRUSION_HEIGHT,
+      "fill-extrusion-base": EXTRUSION_BASE,
+      "fill-extrusion-opacity": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        MIN_ZOOM,
+        0,
+        MIN_ZOOM + 0.5,
+        1,
+      ],
+      "fill-extrusion-vertical-gradient": true,
+    },
+  } as maplibregl.FillExtrusionLayerSpecification;
+}
+
+const overlapsBounds = (a: readonly number[], b: readonly number[]) =>
+  (a[0] as number) <= (b[2] as number) &&
+  (a[2] as number) >= (b[0] as number) &&
+  (a[1] as number) <= (b[3] as number) &&
+  (a[3] as number) >= (b[1] as number);
+
+const replacementKey = (replacement: BuildingReplacement) =>
+  `${replacement.id}|${replacement.bbox.join(",")}`;
 
 export function BuildingExtrusionLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -76,37 +144,7 @@ export function BuildingExtrusionLayer() {
       if (!map.getLayer(LAYER_ID)) {
         addLayerInSlot(
           map,
-          {
-            id: LAYER_ID,
-            type: "fill-extrusion",
-            source: buildingSource.source,
-            "source-layer": buildingSource.sourceLayer,
-            minzoom: MIN_ZOOM,
-            filter: ["!=", ["get", "hide_3d"], true],
-            layout: {
-              visibility:
-                useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
-                  ? "visible"
-                  : "none",
-            },
-            paint: {
-              "fill-extrusion-color": buildingExtrusionColor(
-                findBuildingRoofColor(map, buildingSource) ?? EXTRUSION_COLOR,
-              ),
-              "fill-extrusion-height": EXTRUSION_HEIGHT,
-              "fill-extrusion-base": EXTRUSION_BASE,
-              "fill-extrusion-opacity": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                MIN_ZOOM,
-                0,
-                MIN_ZOOM + 0.5,
-                1,
-              ],
-              "fill-extrusion-vertical-gradient": true,
-            },
-          },
+          extrusionLayer(map, buildingSource, buildingSource.source, buildingSource.sourceLayer),
           "area-overlays",
           5,
         );
@@ -132,6 +170,102 @@ export function BuildingExtrusionLayer() {
       map.off("pitchend", syncVisibility);
     };
   }, [layerVisible, mapReady, styleVersion, mapRef]);
+
+  // Buildings that drawn models replace (published to the core store) are cut
+  // out of a masked copy of the basemap's building tiles. The masked source is
+  // used from the first registered owner for the rest of the session, so the
+  // layer is swapped once, not every time a model appears or disappears.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const store = useBuildingReplacementStore;
+    let live: LiveBuildingSource | null = null;
+    let basemap: BuildingSourceReference | null = null;
+    let previous = new Map<string, BuildingReplacement>();
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const refreshAvailability = () => {
+      basemap = findBuildingSourceReference(map);
+      live = basemap ? readLiveBuildingSource(map, basemap.source, basemap.sourceLayer) : null;
+      store.getState().setMaskingAvailable(isMaskable(live, document.baseURI));
+    };
+
+    const ensureMasked = () => {
+      const state = store.getState();
+      if (!state.maskingAvailable || state.owners.size === 0 || !live || !basemap) return;
+      const layer = map.getLayer(LAYER_ID) as { source?: string } | undefined;
+      if (!layer || layer.source === MASKED_SOURCE_ID) return;
+      const maskedFrom = live;
+      ensureMaskProtocol(() => ({
+        source: maskedFrom,
+        replacements: allReplacements(store.getState()),
+      }));
+      addMaskedSource(map, maskedFrom);
+      map.removeLayer(LAYER_ID);
+      addLayerInSlot(
+        map,
+        extrusionLayer(map, basemap, MASKED_SOURCE_ID, maskedFrom.sourceLayer),
+        "area-overlays",
+        5,
+      );
+    };
+
+    const refreshTouchedTiles = () => {
+      const current = new Map(
+        allReplacements(store.getState()).map((replacement) => [
+          replacementKey(replacement),
+          replacement,
+        ]),
+      );
+      const changed = [
+        ...[...current].filter(([key]) => !previous.has(key)).map(([, r]) => r),
+        ...[...previous].filter(([key]) => !current.has(key)).map(([, r]) => r),
+      ];
+      previous = current;
+      const source = map.getSource(MASKED_SOURCE_ID) as
+        | { setTiles?: (tiles: string[]) => void }
+        | undefined;
+      if (!source || changed.length === 0) return;
+      const tiles = tilesTouchedBy(changed, live?.maxzoom ?? 14);
+      const view = map.getBounds();
+      const viewBox = [view.getWest(), view.getSouth(), view.getEast(), view.getNorth()];
+      // refreshTiles reloads only tiles in view, and MapLibre reuses its
+      // off-screen cache without reloading; a whole-source reload clears it.
+      if (tiles.every((tile) => overlapsBounds(tileLngLatBounds(tile), viewBox))) {
+        map.refreshTiles(MASKED_SOURCE_ID, tiles);
+      } else {
+        source.setTiles?.([MASKED_TEMPLATE]);
+      }
+    };
+
+    const onSourceData = (event: { sourceId?: string; sourceDataType?: string }) => {
+      if (event.sourceDataType !== "metadata") return;
+      if (basemap && event.sourceId !== basemap.source) return;
+      refreshAvailability();
+      ensureMasked();
+    };
+    const onStyleLoading = () => store.getState().setMaskingAvailable(false);
+
+    refreshAvailability();
+    ensureMasked();
+    const unsubscribe = store.subscribe((state, before) => {
+      if (state.owners !== before.owners || state.maskingAvailable !== before.maskingAvailable)
+        ensureMasked();
+      if (state.revision !== before.revision) {
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refreshTouchedTiles, 150);
+      }
+    });
+    map.on("sourcedata", onSourceData);
+    map.on("styledataloading", onStyleLoading);
+    return () => {
+      unsubscribe();
+      clearTimeout(refreshTimer);
+      map.off("sourcedata", onSourceData);
+      map.off("styledataloading", onStyleLoading);
+    };
+  }, [mapReady, styleVersion, mapRef]);
 
   // Selecting 3D from the layer catalog also provides a useful camera angle.
   // Turning the layer off does not change a camera angle chosen by the user.

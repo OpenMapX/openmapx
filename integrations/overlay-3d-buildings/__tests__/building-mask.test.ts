@@ -12,7 +12,7 @@ import {
 
 const EXTENT = 4096;
 const TILE: TileCoordinate = { z: 14, x: 8192, y: 5461 };
-const [WEST, SOUTH, EAST, NORTH] = tileBounds(TILE);
+const [WEST, SOUTH] = tileBounds(TILE);
 
 /** Tile pixel → lng/lat inside TILE (linear in x; latitude via inverse Mercator). */
 function lngLat(px: number, py: number): [number, number] {
