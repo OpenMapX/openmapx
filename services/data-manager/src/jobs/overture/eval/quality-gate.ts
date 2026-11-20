@@ -5,7 +5,7 @@ import {
   rankAndLimitPoiResults,
 } from "@openmapx/core";
 import { openMapXCategoryToOvertureConcepts } from "@openmapx/core/utils/overtureCategoryMap";
-import { sql } from "../../../db/index.js";
+import type postgres from "postgres";
 import { assertValidRegion } from "../pull.js";
 import { assertValidOvertureSchema } from "../schema.js";
 import { OVERTURE_QUALITY_BASELINE, type OvertureQualityCase } from "./quality-baseline.js";
@@ -114,6 +114,7 @@ interface FusedOvertureRow {
 
 /** Mirrors the final category-search union against the fully assigned next links. */
 async function queryFusedCase(
+  sql: postgres.Sql,
   schema: string,
   baseline: OvertureQualityCase,
 ): Promise<PoiSearchResult[]> {
@@ -189,7 +190,11 @@ async function queryFusedCase(
   );
 }
 
-async function queryCase(schema: string, baseline: OvertureQualityCase): Promise<string[]> {
+async function queryCase(
+  sql: postgres.Sql,
+  schema: string,
+  baseline: OvertureQualityCase,
+): Promise<string[]> {
   const concepts = openMapXCategoryToOvertureConcepts(baseline.category);
   if (concepts.length === 0) {
     throw new Error(`Quality baseline ${baseline.id} uses unmapped category ${baseline.category}`);
@@ -224,6 +229,7 @@ async function queryCase(schema: string, baseline: OvertureQualityCase): Promise
  * staging schema. Any regression fails before the atomic activation swap.
  */
 export async function validateOvertureQuality(
+  sql: postgres.Sql,
   schema: string,
   region: string,
   cases: readonly OvertureQualityCase[] = OVERTURE_QUALITY_BASELINE,
@@ -233,7 +239,7 @@ export async function validateOvertureQuality(
   const applicable = cases.filter((entry) => appliesToImportedRegion(region, entry.region));
   const results: OvertureQualityCaseResult[] = [];
   for (const entry of applicable) {
-    results.push(evaluateOvertureQualityCase(entry, await queryCase(schema, entry)));
+    results.push(evaluateOvertureQualityCase(entry, await queryCase(sql, schema, entry)));
   }
 
   const failures = results.filter((result) => result.violations.length > 0);
@@ -253,6 +259,7 @@ export async function validateOvertureQuality(
  * link-table activation.
  */
 export async function validateFusedOvertureQuality(
+  sql: postgres.Sql,
   schema: string,
   region: string,
   cases: readonly OvertureQualityCase[] = OVERTURE_QUALITY_BASELINE,
@@ -262,7 +269,7 @@ export async function validateFusedOvertureQuality(
   const applicable = cases.filter((entry) => appliesToImportedRegion(region, entry.region));
   const results: OvertureQualityCaseResult[] = [];
   for (const entry of applicable) {
-    const fused = await queryFusedCase(schema, entry);
+    const fused = await queryFusedCase(sql, schema, entry);
     results.push(
       evaluateOvertureQualityCase(
         entry,

@@ -24,26 +24,15 @@ const AUTHORITY_SERVICE = "ops-agent";
 /** The agent's state, relative to the checkout. */
 const AGENT_STATE = "infra/docker/state";
 
-/** The parts of the agent's state another service may mount: app-api's snapshot queue… */
-const AGENT_TRUSTED_CONFIG_QUEUE = `${AGENT_STATE}/ops-agent/trusted-config`;
-/** …and, read-only, the integrations the agent installed, which app-api loads. */
+/** The part of the agent's state app-api may mount, read-only: the integrations the agent installed. */
 const AGENT_INTEGRATION_STORE = `${AGENT_STATE}/ops-agent/custom-integrations`;
+/** Data-manager's own private control records, which only it mounts. */
+const DATA_MANAGER_PRIVATE_STATE = `${AGENT_STATE}/data-manager/control`;
 /** Traefik reads, read-only, its dynamic directory and its static file in the applied generation. */
 const AGENT_TRAEFIK_FILES = new Set([
   `${AGENT_STATE}/ops-agent/traefik/dynamic`,
   `${AGENT_STATE}/ops-agent/configuration/current/traefik/traefik.yml`,
 ]);
-
-/** The services that hold a signed-control role, and the roles there are. */
-const CONTROL_ROLE_OF_SERVICE: Readonly<Record<string, string>> = {
-  "ops-agent": "ops-agent",
-  "data-manager": "data-manager",
-};
-const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
-const CONTROL_PRIVATE = "infra/docker/control-private";
-/** What a sibling's key and private directory are hidden behind. */
-const CONTROL_KEY_MASK = `${CONTROL_PRIVATE}/hidden-key`;
-const CONTROL_DIRECTORY_MASK = `${CONTROL_PRIVATE}/empty`;
 
 /**
  * Secret files with a fixed set of holders. No other service may mount one,
@@ -116,61 +105,6 @@ function reachesAgentState(path: string): boolean {
     path.startsWith(`${AGENT_STATE}/`) ||
     path.startsWith("infra/docker/.")
   );
-}
-
-/** A container path with every form of `$OPENMAPX_HOST_DIR` written the same way. */
-function containerPath(target: string): string {
-  return posix
-    .normalize(
-      target.replace(
-        /\$(?:OPENMAPX_HOST_DIR(?![A-Za-z0-9_])|\{OPENMAPX_HOST_DIR(?:[:?+-][^}]*)?\})/g,
-        "$OPENMAPX_HOST_DIR",
-      ),
-    )
-    .replace(/\/+$/, "");
-}
-
-/**
- * A service may mount only its own control role's key and private directory.
- * A wider mount that contains a sibling role's key or directory is allowed
- * only when that sibling is hidden behind a mask mounted at its place.
- */
-function controlViolations(
-  serviceId: string,
-  mounts: ReadonlyArray<{ source: string; target: string }>,
-): string[] {
-  const own = CONTROL_ROLE_OF_SERVICE[serviceId];
-  const resolved = mounts.map((mount) => ({
-    ...mount,
-    path: checkoutPath(serviceId, mount.source),
-    at: containerPath(mount.target),
-  }));
-  const details: string[] = [];
-  for (const mount of resolved) {
-    const path = mount.path;
-    if (path === null || path === CONTROL_KEY_MASK || path === CONTROL_DIRECTORY_MASK) continue;
-    for (const role of CONTROL_ROLES) {
-      if (role === own) continue;
-      for (const [sibling, mask, kind] of [
-        [`infra/docker/secrets/control-${role}.key`, CONTROL_KEY_MASK, "key"],
-        [`${CONTROL_PRIVATE}/${role}`, CONTROL_DIRECTORY_MASK, "private directory"],
-      ] as const) {
-        if (path === sibling || path.startsWith(`${sibling}/`)) {
-          details.push(
-            `service "${serviceId}" mounts the ${role} control ${kind} (${mount.source})`,
-          );
-        } else if (sibling.startsWith(`${path}/`) || path === "." || path.startsWith("..")) {
-          const place = containerPath(posix.join(mount.at, posix.relative(path, sibling)));
-          const masked = resolved.some((other) => other.path === mask && other.at === place);
-          if (!masked)
-            details.push(
-              `service "${serviceId}" reaches the ${role} control ${kind} through ${mount.source} without a mask`,
-            );
-        }
-      }
-    }
-  }
-  return details;
 }
 
 /** Directories whose production TypeScript must not invoke Docker directly. */
@@ -276,9 +210,6 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
       target: typeof mount.target === "string" ? mount.target : "",
     }));
 
-    // Signed-control keys and private records: each role reaches only its own.
-    for (const detail of controlViolations(serviceId, mounts)) violations.push({ file, detail });
-
     // Data-manager tokens and database role passwords stay with their holders.
     for (const { source } of mounts) {
       const path = checkoutPath(serviceId, source);
@@ -375,12 +306,11 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           detail: `service "${serviceId}" mounts the host repository root`,
         });
       }
-      // The agent's own state (job journal, trusted-config
-      // queue, privacy scratch, stores). app-api publishes into the trusted-config
-      // queue and reads the integration store, and nothing else; every other
-      // service, data-manager above all,
-      // must not be able to reach it, by whichever form of source. A source
-      // this gate cannot resolve is refused rather than assumed to be safe.
+      // The agent's own state (job journal, configuration candidates, privacy
+      // scratch, stores). app-api reads the integration store and nothing else;
+      // every other service, data-manager above all, must not be able to reach
+      // it, by whichever form of source. A source this gate cannot resolve is
+      // refused rather than assumed to be safe.
       if (source !== "@docker-socket") {
         const path = checkoutPath(serviceId, source);
         if (path === null) {
@@ -390,11 +320,9 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           });
         } else if (
           reachesAgentState(path) &&
-          !(
-            serviceId === "app-api" &&
-            (path === AGENT_TRUSTED_CONFIG_QUEUE || (path === AGENT_INTEGRATION_STORE && readOnly))
-          ) &&
-          !(serviceId === "traefik" && AGENT_TRAEFIK_FILES.has(path) && readOnly)
+          !(serviceId === "app-api" && path === AGENT_INTEGRATION_STORE && readOnly) &&
+          !(serviceId === "traefik" && AGENT_TRAEFIK_FILES.has(path) && readOnly) &&
+          !(serviceId === "data-manager" && path === DATA_MANAGER_PRIVATE_STATE)
         ) {
           violations.push({
             file: relative(root, manifestPath),

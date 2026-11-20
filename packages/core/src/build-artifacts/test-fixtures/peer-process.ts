@@ -1,212 +1,144 @@
 import { createInterface } from "node:readline";
-import * as c from "../control-authority";
 import { inspectControlAdmission } from "../peer-admission";
 import * as l from "../target-lease";
 import { verifiedParentForArtifactDelegation } from "../target-lease";
+import * as c from "./control";
 
 for await (const line of createInterface({ input: process.stdin })) {
   try {
     const input = JSON.parse(line);
-    if (input.mode === "deadline-lease") {
+    if (input.mode === "owner") {
       const installation = c.openControlInstallation({
         infraDir: input.infraDir,
         role: input.role,
         serviceIds: ["motis", "osrm"],
       });
-      const peer = c.verifyControlPeer(installation, {
-        rawHeaders: ["x-openmapx-parent-execution", input.assertion],
-        transportPrincipal: "ops-agent",
-        execution: input.execution,
-        kind: input.operation.kind,
-      });
-      const parent = c.verifyParentExecution(input.assertion, peer, {
-        execution: input.execution,
-        kind: input.operation.kind,
-        requestedDeadlineAt: input.execution.deadlineAt,
-      });
-      const authority = c.retainAdmittedControlExecution(installation, {
-        execution: input.execution,
-        operation: input.operation,
-        kind: input.operation.kind,
-        admittedAt: input.admittedAt,
-        parent,
-        serviceIds: ["osrm"],
-      });
-      const lease = await l.acquireArtifactTargetLease({
-        serviceIds: ["osrm"],
-        owner: authority,
-      });
-      c.retainControlEffectReceipt(authority, {
-        outcome: "failed_without_effect",
-        publication: "not_started",
-        receipt: { kind: "not-started" },
-      });
-      await l.settleArtifactTargetLeaseChild(
-        lease,
-        c.verifyControlEffectSettlement(installation, input.execution),
-      );
-      await l.releaseArtifactTargetLease(lease);
-      const origin = c.retainedExecutionOrigin(c.installationState(installation), input.execution);
-      c.closeControlInstallation(installation);
-      process.stdout.write(`${JSON.stringify({ ok: true, leaseId: lease.leaseId, origin })}\n`);
-    } else if (input.mode === "owner") {
-      const installation = c.openControlInstallation({
-        infraDir: input.infraDir,
-        role: input.role,
-        serviceIds: ["motis", "osrm"],
-      });
-      const authority = c.retainAdmittedControlExecution(installation, input.admitted);
+      const authority = await c.retainAdmittedControlExecution(installation, input.admitted);
       const lease = await l.acquireArtifactTargetLease({
         serviceIds: input.admitted.serviceIds,
         owner: authority,
       });
-      if (input.fixedId)
-        input.child.childPublicKey = c.prepareFixedControlChild(authority, input.fixedId);
-      const assertion = await l.delegateArtifactTargetLease(lease, input.child);
-      if (input.prepared) c.retainControlPreparedTerminal(authority);
-      c.retainControlEffectReceipt(authority, {
+      const delegation = await l.delegateArtifactTargetLease(lease, input.child);
+      await c.retainControlEffectReceipt(authority, {
         outcome: "failed_without_effect",
         publication: "not_started",
         receipt: { kind: "not-started" },
       });
-      process.stdout.write(`${JSON.stringify({ ok: true, assertion, leaseId: lease.leaseId })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, delegation, leaseId: lease.leaseId })}\n`);
       await new Promise(() => setInterval(() => {}, 60000));
-    } else if (input.mode === "helper") {
-      const installation = c.openFixedChildInstallation({
-        infraDir: input.infraDir,
-        assertion: input.assertion,
-      });
-      const peer = c.verifyFixedCliControlPeer(installation, {
-        assertion: input.assertion,
-        execution: input.execution,
-        kind: "configuration-helper",
-        recipient: "configuration-helper",
-      });
-      const lease = await l.adoptArtifactTargetLease({
-        assertion: input.assertion,
-        peer,
-        execution: input.execution,
-        serviceIds: ["motis"],
-      });
-      l.verifyConfigurationHelperReady(lease);
-      process.stdout.write(`${JSON.stringify({ ok: true, drainPermitted: true })}\n`);
     } else if (input.mode === "fixed") {
       const installation = c.openFixedChildInstallation({
         infraDir: input.infraDir,
-        assertion: input.assertion,
+        child: input.leaseChild,
       });
       const intent = c.readFixedCliSpawnIntent(installation, input.execution, input.args);
       const peer = c.verifyFixedCliControlPeer(installation, {
-        assertion: input.assertion,
+        leaseChild: input.leaseChild,
         execution: input.execution,
         kind: intent.operation.kind,
       });
       const parent = verifiedParentForArtifactDelegation(
         installation,
-        input.assertion,
+        input.leaseChild,
         input.execution,
       );
       const lease = await l.adoptArtifactTargetLease({
-        assertion: input.assertion,
         peer,
         execution: input.execution,
         serviceIds: intent.serviceIds,
       });
-      const authority = c.retainAdmittedControlExecution(installation, {
+      const authority = await c.retainAdmittedControlExecution(installation, {
         requestedDeadlineAt: input.execution.deadlineAt,
         execution: input.execution,
         kind: intent.operation.kind,
         operation: intent.operation,
         admittedAt: intent.admittedAt,
         parent,
+        leaseChild: input.leaseChild,
         serviceIds: intent.serviceIds,
+        ...(intent.reservations ? { reservations: intent.reservations } : {}),
       });
       l.bindBorrowedControlExecution(lease, authority);
       if (input.action === "cancel") await l.cancelArtifactTargetLease(lease);
-      if (input.action === "run") c.beginFixedCliExecution(installation, input.execution);
-      let assertion: string | undefined;
-      if (input.child) assertion = await l.delegateArtifactTargetLease(lease, input.child);
+      if (input.action === "run") await c.beginFixedCliExecution(installation, input.execution);
+      let delegation: c.ControlDelegation | undefined;
+      if (input.child) delegation = await l.delegateArtifactTargetLease(lease, input.child);
       if (input.action === "settle") {
-        c.retainControlEffectReceipt(authority, {
+        await c.retainControlEffectReceipt(authority, {
           outcome: "committed",
           publication: "committed",
           receipt: { kind: "fixed-cli-exit", args: input.args, exitCode: 0 },
         });
         await l.settleArtifactTargetLeaseChild(
           lease,
-          c.verifyControlEffectSettlement(installation, input.execution),
+          await c.verifyControlEffectSettlement(installation, input.execution),
         );
       }
-      process.stdout.write(`${JSON.stringify({ ok: true, leaseId: lease.leaseId, assertion })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, leaseId: lease.leaseId, delegation })}\n`);
     } else {
       const installation = c.openControlInstallation({
         infraDir: input.infraDir,
         role: input.role,
         serviceIds: ["motis", "osrm"],
       });
-      const admission =
-        input.role === "ops-agent" && !input.primitive
-          ? inspectControlAdmission(installation, {
-              rawHeaders: ["x-openmapx-control-delegation", input.assertion],
-              transportPrincipal:
-                input.transportPrincipal ??
-                (input.role === "ops-agent" ? "data-manager" : "ops-agent"),
+      const admission = !input.primitive
+        ? inspectControlAdmission(installation, {
+            leaseChild: input.leaseChild,
+            transportPrincipal: input.transportPrincipal ?? "data-manager",
+            kind: input.kind,
+            operation: input.operation,
+            operationKey: input.execution.operationKey,
+            operationFingerprint: input.execution.operationFingerprint,
+            requestedDeadlineAt: input.execution.deadlineAt,
+          })
+        : (() => {
+            // Primitive protocol fixture, not the production operation adapter.
+            const inspected = l.inspectArtifactDelegation({
+              leaseChild: input.leaseChild,
+              installation,
+            });
+            const peer = c.verifyControlPeer(installation, {
+              leaseChild: input.leaseChild,
+              transportPrincipal: input.transportPrincipal ?? "data-manager",
+              execution: input.execution,
               kind: input.kind,
-              operation: input.operation,
-              operationKey: input.execution.operationKey,
-              operationFingerprint: input.execution.operationFingerprint,
-              requestedDeadlineAt: input.execution.deadlineAt,
-            })
-          : (() => {
-              // Primitive protocol fixture, not the future generation-bound DM HTTP adapter.
-              const inspected = l.inspectArtifactDelegation({
-                assertion: input.assertion,
+            });
+            return {
+              ...inspected,
+              parent: verifiedParentForArtifactDelegation(
                 installation,
-              });
-              const peer = c.verifyControlPeer(installation, {
-                rawHeaders: ["x-openmapx-control-delegation", input.assertion],
-                transportPrincipal:
-                  input.transportPrincipal ??
-                  (input.role === "ops-agent" ? "data-manager" : "ops-agent"),
-                execution: input.execution,
-                kind: input.kind,
-              });
-              return {
-                ...inspected,
-                parent: verifiedParentForArtifactDelegation(
-                  installation,
-                  input.assertion,
-                  input.execution,
-                ),
-                adopt: (execution: typeof input.execution) =>
-                  l.adoptArtifactTargetLease({
-                    assertion: input.assertion,
-                    peer,
-                    execution,
-                    serviceIds: inspected.serviceIds,
-                  }),
-              };
-            })();
+                input.leaseChild,
+                input.execution,
+              ),
+              adopt: (execution: typeof input.execution) =>
+                l.adoptArtifactTargetLease({
+                  peer,
+                  execution,
+                  serviceIds: inspected.serviceIds,
+                }),
+            };
+          })();
       const lease = await admission.adopt(input.execution);
-      if (input.forward) l.assertArtifactTargetLeaseForward(lease);
-      const authority = c.retainAdmittedControlExecution(installation, {
+      if (input.forward) await l.assertArtifactTargetLeaseForward(lease);
+      const authority = await c.retainAdmittedControlExecution(installation, {
         requestedDeadlineAt: input.execution.deadlineAt,
         execution: input.execution,
         kind: input.kind,
         operation: input.operation,
         admittedAt: input.admittedAt,
         parent: admission.parent,
+        leaseChild: input.leaseChild,
         serviceIds: lease.serviceIds,
       });
       if (input.settle) {
-        c.retainControlEffectReceipt(authority, {
+        await c.retainControlEffectReceipt(authority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },
         });
         await l.settleArtifactTargetLeaseChild(
           lease,
-          c.verifyControlEffectSettlement(installation, input.execution),
+          await c.verifyControlEffectSettlement(installation, input.execution),
         );
       }
       if (input.cancel) await l.cancelArtifactTargetLease(lease);

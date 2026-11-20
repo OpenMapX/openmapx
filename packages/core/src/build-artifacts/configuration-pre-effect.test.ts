@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -8,31 +8,32 @@ import { createControlRootOperationKey } from "../ops/control-root-key";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
-  bindControlChildPhase,
-  type ControlChildReservation,
-  issueControlChildPhase,
-} from "./child-phase";
-import {
   beginControlEffect,
-  closeControlInstallation,
-  controlChildOperationKey,
+  bindControlChildPhase,
+  fixedCliArguments,
   inspectConfigurationPreEffectRefusal,
-  openControlInstallation,
-  prepareFixedControlChild,
-  provisionControlInstallation,
-  reserveControlTerminal,
-  restoreConfigurationPreEffectTerminal,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
-  retainControlTerminalCommitment,
+  retainFixedCliSpawnIntent,
   verifyControlEffectSettlement,
-} from "./control-authority";
-import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
+  verifyLocalArtifactTargetRootRelease,
+} from "./execution-record";
+import {
+  type ControlChildReservation,
+  controlChildOperationKey,
+  leaseStoreDirectory,
+  openLeaseStore,
+} from "./lease-store";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlDirectories,
+} from "./private-records";
 import {
   acquireArtifactTargetLease,
+  issueControlChildPhase,
   releaseArtifactTargetLease,
   settleArtifactTargetLeaseChild,
-  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 let root: string, installation: ReturnType<typeof openControlInstallation>;
@@ -41,7 +42,7 @@ const targets = ["data-manager", "motis"],
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-configuration-pre-effect-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   installation = openControlInstallation({
     infraDir: root,
     role: "ops-agent",
@@ -103,28 +104,28 @@ function start() {
   });
 }
 it("settles the actual unissued root and consumes only its indexed not-started effect", async () => {
-  const owner = start(),
+  const owner = await start(),
     lease = await acquireArtifactTargetLease({
       serviceIds: targets,
       owner,
     });
-  retainConfigurationPreEffectRefusal(owner);
-  inspectConfigurationPreEffectRefusal(owner);
+  await retainConfigurationPreEffectRefusal(owner);
+  await inspectConfigurationPreEffectRefusal(owner);
   await settleArtifactTargetLeaseChild(
     lease,
-    verifyControlEffectSettlement(installation, owner.execution),
+    await verifyControlEffectSettlement(installation, owner.execution),
   );
   await releaseArtifactTargetLease(lease);
-  verifyLocalArtifactTargetRootRelease(owner);
-  expect(() => beginControlEffect(owner)).toThrow();
+  await verifyLocalArtifactTargetRootRelease(owner);
+  await expect(beginControlEffect(owner)).rejects.toThrow();
 });
 it.each(["begun", "bound", "issued"])(
   "keeps an actual %s root fenced rather than claiming not-started",
   async (boundary) => {
     const owner =
         boundary === "begun"
-          ? start()
-          : admit(
+          ? await start()
+          : await admit(
               {
                 kind: "service.update",
                 serviceId: "motis",
@@ -136,75 +137,32 @@ it.each(["begun", "bound", "issued"])(
         serviceIds: targets,
         owner,
       });
-    if (boundary === "begun") beginControlEffect(owner);
+    if (boundary === "begun") await beginControlEffect(owner);
     else {
-      await bindControlChildPhase(owner, { phase: "lifecycle", ordinal: 0 });
-      if (boundary === "issued")
-        await issueControlChildPhase(owner, {
-          phase: "lifecycle",
-          ordinal: 0,
-          lease,
-          childPublicKey: prepareFixedControlChild(owner, randomUUID()),
+      const bound = await bindControlChildPhase(owner, { phase: "lifecycle", ordinal: 0 });
+      if (boundary === "issued") {
+        const childKey = randomUUID(),
+          operation = {
+            kind: "service.update" as const,
+            serviceId: "motis",
+            expectedConfigurationRevisionId: revision,
+          };
+        await retainFixedCliSpawnIntent(owner, {
+          childKey,
+          execution: bound.execution,
+          operation,
+          args: fixedCliArguments(operation),
         });
+        await issueControlChildPhase(owner, { phase: "lifecycle", ordinal: 0, lease, childKey });
+      }
     }
-    expect(() => retainConfigurationPreEffectRefusal(owner)).toThrow();
-    expect(() => inspectConfigurationPreEffectRefusal(owner)).toThrow();
-    expect(() => verifyLocalArtifactTargetRootRelease(owner)).toThrow();
+    await expect(retainConfigurationPreEffectRefusal(owner)).rejects.toThrow();
+    await expect(inspectConfigurationPreEffectRefusal(owner)).rejects.toThrow();
+    await expect(verifyLocalArtifactTargetRootRelease(owner)).rejects.toThrow();
     expect(
       openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })
         .list()
         .map((value) => value.leaseId),
     ).toEqual([lease.leaseId]);
-  },
-);
-it.each(["exact", "different error", "missing"] as const)(
-  "restores original pre-effect whole tuple only from %s commitment",
-  async (mode) => {
-    const owner = start();
-    reserveControlTerminal(owner);
-    retainConfigurationPreEffectRefusal(owner);
-    const admission = JSON.parse(
-        readFileSync(
-          join(
-            root,
-            "control-private/ops-agent/executions",
-            `${owner.execution.operationKey}.json`,
-          ),
-          "utf8",
-        ),
-      ).payload,
-      terminalAt = Date.now(),
-      status = {
-        version: 2 as const,
-        admittedAt: admission.admittedAt,
-        deadlineAt: owner.execution.deadlineAt,
-        fingerprint: owner.execution.fingerprint,
-        operationId: owner.execution.executionId,
-        operationKey: owner.execution.operationKey,
-        kind: "service.start" as const,
-        resourceId: "motis",
-        state: "failed" as const,
-        submittedAt: new Date(admission.admittedAt).toISOString(),
-        updatedAt: new Date(terminalAt).toISOString(),
-        errorClass:
-          mode === "different error"
-            ? ("runtime" as const)
-            : ("configuration_prerequisite" as const),
-        failureResult: {},
-      };
-    if (mode !== "missing") retainControlTerminalCommitment(owner, status, terminalAt);
-    const observed = {
-      ...status,
-      errorClass: "recovery_required" as const,
-      updatedAt: new Date(terminalAt + 1000).toISOString(),
-    };
-    if (mode === "exact")
-      expect(
-        restoreConfigurationPreEffectTerminal(installation, owner.execution, observed),
-      ).toEqual({ status, terminalAt });
-    else
-      expect(() =>
-        restoreConfigurationPreEffectTerminal(installation, owner.execution, observed),
-      ).toThrow();
   },
 );

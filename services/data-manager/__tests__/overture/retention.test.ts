@@ -14,7 +14,7 @@ describe("Overture release retention", () => {
     expect(compareOvertureReleases("2026-08-01.0", "2026-07-22.99")).toBeGreaterThan(0);
   });
 
-  it("keeps the active release and one predecessor without touching work directories", () => {
+  it("keeps the active release and one predecessor without touching work directories", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-overture-retention-"));
     const root = join(dataDir, "overture");
     for (const release of ["2026-05-20.0", "2026-06-18.0", "2026-07-22.0"]) {
@@ -23,7 +23,7 @@ describe("Overture release retention", () => {
     }
     mkdirSync(join(root, "osm-extract"));
 
-    const result = pruneOvertureReleases({
+    const result = await pruneOvertureReleases({
       dataDir,
       activeRelease: "2026-07-22.0",
       retain: 2,
@@ -43,13 +43,13 @@ describe("Overture release retention", () => {
     expect(() => overtureReleaseRetentionFromEnv("many")).toThrow(/between 1 and 12/);
   });
 
-  it("does not delete a newer pulled snapshot when an older release is pinned active", () => {
+  it("does not delete a newer pulled snapshot when an older release is pinned active", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-overture-retention-pinned-"));
     const root = join(dataDir, "overture");
     for (const release of ["2026-05-20.0", "2026-06-18.0", "2026-07-22.0"]) {
       mkdirSync(join(root, release), { recursive: true });
     }
-    const result = pruneOvertureReleases({
+    const result = await pruneOvertureReleases({
       dataDir,
       activeRelease: "2026-06-18.0",
       retain: 1,

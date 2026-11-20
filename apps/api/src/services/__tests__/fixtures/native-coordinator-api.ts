@@ -2,9 +2,7 @@
  * reply delivery and kills this native process; no DB/service/authority mocks. */
 
 import { createHmac, randomUUID } from "node:crypto";
-import { constants, readFileSync, renameSync, writeFileSync } from "node:fs";
-import filesystem from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "../../../db";
 import { handleServiceBulkJob } from "../../admin-job-handlers";
@@ -25,72 +23,40 @@ const input = JSON.parse(body) as {
   jobId?: string;
   serviceIds?: string[];
   noDeps?: boolean;
-  filesystemFault?: "after-retirement-unlink" | "before-candidate-write" | "after-candidate-sync";
+  filesystemFault?: "after-retirement-unlink";
 };
-if (
-  input.filesystemFault !== undefined &&
-  input.filesystemFault !== "after-retirement-unlink" &&
-  input.filesystemFault !== "before-candidate-write" &&
-  input.filesystemFault !== "after-candidate-sync"
-)
+if (input.filesystemFault !== undefined && input.filesystemFault !== "after-retirement-unlink")
   throw Error("Invalid fixture edge");
-if (input.filesystemFault === "after-retirement-unlink") {
-  const unlink = filesystem.unlink,
-    directory = join(process.env.OPS_TRUSTED_CONFIG_DIR!, ".candidates") + "/";
-  filesystem.unlink = async (path) => {
-    const candidate = String(path).startsWith(directory) ? readFileSync(path) : undefined;
-    await unlink(path);
-    if (candidate) {
-      const marker = join(process.env.OPENMAPX_ROOT_DIR!, "coordinator-retirement-unlinked");
-      writeFileSync(`${marker}.partial`, candidate, { mode: 0o600, flag: "wx" });
-      renameSync(`${marker}.partial`, marker);
-      await new Promise<void>(() => {});
-    }
+// The candidate lives in the agent's store: pause this API right after the
+// typed operation that discards it.
+if (input.filesystemFault !== undefined) {
+  const fetchImpl = globalThis.fetch;
+  const pause = (name: string, bytes: string | Buffer = "paused") => {
+    const marker = join(process.env.OPENMAPX_ROOT_DIR!, name);
+    writeFileSync(`${marker}.partial`, bytes, { mode: 0o600, flag: "wx" });
+    renameSync(`${marker}.partial`, marker);
+    return new Promise<never>(() => {});
   };
-  syncBuiltinESMExports();
-}
-if (input.filesystemFault === "before-candidate-write") {
-  const open = filesystem.open,
-    directory = join(process.env.OPS_TRUSTED_CONFIG_DIR!, ".candidates") + "/";
-  filesystem.open = (async (path, flags, ...rest) => {
-    if (
-      String(path).startsWith(directory) &&
-      typeof flags === "number" &&
-      (flags & constants.O_EXCL) !== 0
-    ) {
-      writeFileSync(
-        join(process.env.OPENMAPX_ROOT_DIR!, "coordinator-candidate-write-paused"),
-        "paused",
-      );
-      await new Promise<void>(() => {});
-    }
-    return open(path, flags, ...rest);
-  }) as typeof filesystem.open;
-  syncBuiltinESMExports();
-}
-if (input.filesystemFault === "after-candidate-sync") {
-  const open = filesystem.open,
-    directory = join(process.env.OPS_TRUSTED_CONFIG_DIR!, ".candidates") + "/";
-  filesystem.open = (async (path, flags, ...rest) => {
-    const handle = await open(path, flags, ...rest);
-    if (
-      String(path).startsWith(directory) &&
-      typeof flags === "number" &&
-      (flags & constants.O_EXCL) !== 0
-    ) {
-      const sync = handle.sync.bind(handle);
-      handle.sync = async () => {
-        await sync();
-        writeFileSync(
-          join(process.env.OPENMAPX_ROOT_DIR!, "coordinator-candidate-sync-paused"),
-          "paused",
-        );
-        await new Promise<void>(() => {});
-      };
-    }
-    return handle;
-  }) as typeof filesystem.open;
-  syncBuiltinESMExports();
+  globalThis.fetch = (async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const request =
+      typeof init?.body === "string"
+        ? (JSON.parse(init.body) as { operation?: { kind?: string; operationKey?: string } })
+        : undefined;
+    const kind = request?.operation?.kind;
+    const candidate =
+      kind === "configuration.candidate.discard"
+        ? readFileSync(
+            join(
+              process.env.OPENMAPX_ROOT_DIR!,
+              "infra/docker/state/ops-agent/configuration-candidates",
+              `${request?.operation?.operationKey}.json`,
+            ),
+          )
+        : undefined;
+    const response = await fetchImpl(url, init);
+    if (response.ok && candidate) return pause("coordinator-retirement-unlinked", candidate);
+    return response;
+  }) as typeof fetch;
 }
 let exit = 2;
 try {

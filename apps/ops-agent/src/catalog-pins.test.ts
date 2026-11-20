@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { createCatalogPinSet, initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { OpsClient } from "@openmapx/core/ops";
@@ -44,7 +44,7 @@ it("serializes the largest legal paired pins through the actual HTTP server/clie
     };
   writeFileSync(join(infra, "transitous.lock.json"), JSON.stringify(t), { mode: 0o600 });
   writeFileSync(join(infra, "gbfs-catalog.lock.json"), JSON.stringify(g), { mode: 0o600 });
-  await provisionControlInstallation(infra);
+  await provisionControlDirectories(infra);
   const installation = openControlInstallation({
     infraDir: infra,
     role: "ops-agent",

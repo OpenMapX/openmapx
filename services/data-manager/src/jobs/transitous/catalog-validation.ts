@@ -1,13 +1,8 @@
 /** The admitted validation root owns the inactive slot through proxy restoration and final stop. */
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
+import { controlDigest } from "@openmapx/core/build-artifacts";
 import {
-  controlDigest,
-  executionAuthorityState,
-  signControl,
-} from "@openmapx/core/build-artifacts";
-import {
-  CATALOG_VALIDATION_DOMAIN,
   type CatalogRuntimeInputs,
   type CatalogValidation,
   catalogRuntimeInputsSchema,
@@ -60,7 +55,7 @@ export async function runCatalogValidation(options: {
     throw Error("Enable and apply two-slot MOTIS and the paired GBFS compiler before validation");
   const input = record.input,
     selection = await loadOwnedCatalogSelection(context, input.proposalId),
-    evidence = ownedCatalogSelectionEvidence(selection, context);
+    evidence = await ownedCatalogSelectionEvidence(selection, context);
   if (!evidence.runtimeInputs)
     throw Error("Verified catalog runtime inputs required before validation");
   const runtimeInputs = scopeCatalogRuntimeInputs(evidence.runtimeInputs, input.countries);
@@ -126,7 +121,11 @@ export async function runCatalogValidation(options: {
       abortSignal: context.signal,
       logger,
       onStageComplete: async (stage) => {
-        await makePersistingOnStageComplete(context.execution.executionId, logger)(stage);
+        await makePersistingOnStageComplete(
+          context.sql,
+          context.execution.executionId,
+          logger,
+        )(stage);
         const diagnostic = dataExecutionDiagnostic(stage.message ?? stage.stage);
         await context.checkpoint({
           progress: Math.min(
@@ -147,14 +146,14 @@ export async function runCatalogValidation(options: {
   } catch (error) {
     if (error instanceof DataOpsObservationPending || error instanceof DataPublicationUnknown)
       throw error;
-    context.assertForward();
+    await context.assertForward();
     failure = true;
   }
   // Restoration is part of validation, not best-effort cleanup. An uncertain
   // child throws and keeps this root fenced; it cannot publish passing evidence.
   await rollbackProxyTransaction(ctx);
   await child(4);
-  context.assertForward();
+  await context.assertForward();
   const fresh = await runOpsOperation(
     { kind: "transitousLock.inspect", proposalId: input.proposalId, offset: 0 },
     { signal: context.signal },
@@ -219,22 +218,18 @@ export async function runCatalogValidation(options: {
       imageDigest: runtimeInputs.imageDigest,
     };
   }
-  const owner = executionAuthorityState(context.authority),
-    retained = catalogValidationRecordSchema.parse({
-      version: 1,
-      installationId: context.installation.installationId,
-      sourceExecution: context.execution,
-      proposalDigest: controlDigest(evidence.proposal),
-      runtimeInputs,
-      validation,
-    });
+  const retained = catalogValidationRecordSchema.parse({
+    version: 1,
+    sourceExecution: context.execution,
+    proposalDigest: controlDigest(evidence.proposal),
+    runtimeInputs,
+    validation,
+  });
   await publishDataChange(() =>
     withCatalogProposalDirectory(context.installation, input.proposalId, (directory) =>
       directory.write(
         `validation-${context.execution.executionId}.json`,
-        canonicalJson(
-          signControl(owner.installation.privateKey, CATALOG_VALIDATION_DOMAIN, retained),
-        ),
+        canonicalJson(retained),
         true,
       ),
     ),

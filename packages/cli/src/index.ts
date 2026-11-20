@@ -51,7 +51,7 @@ try {
     await program.parseAsync(process.argv);
   });
 } catch (error) {
-  if (!process.env.OPENMAPX_CONTROL_DELEGATION && !process.env.OPENMAPX_PARENT_EXECUTION) {
+  if (!process.env.OPENMAPX_CONTROL_CHILD) {
     if (error instanceof coreServices.CommunityServiceRecordsError) {
       log.err(error.message);
       process.exitCode = 1;

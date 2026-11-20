@@ -1,6 +1,7 @@
-/** Docker reference identity for the fixed sibling-pull refusal only. Never
- * rewrites an operation or authorizes an image/container. Unsupported forms
- * fail closed. Follows distribution/reference normalize.go, ParseDockerRef. */
+/** The normalized identity of a Docker image reference, which image staging
+ * pins. Never rewrites an operation or authorizes an image or container.
+ * Unsupported forms fail closed. Follows distribution/reference normalize.go,
+ * ParseDockerRef. */
 import { serviceImageReferenceSchema } from "@openmapx/extension-contracts/service";
 export function coordinatorPullReferenceIdentity(reference: string): string {
   serviceImageReferenceSchema.parse(reference);

@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { controlOriginSchema } from "./control-root-key";
 import { executionRefSchema } from "./execution-ref";
 
 /** Target leases as the agent's store records them; plain data only. */
@@ -29,6 +30,8 @@ export const leaseChildIntentSchema = z.strictObject({
   phase: z.string().min(1).max(64),
   recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
   targets: leaseTargetsSchema,
+  /** The root the issuer descends from; a child the recipient admits inherits it. */
+  origin: controlOriginSchema.optional(),
   /**
    * What the issuer prepared for the recipient to act on, such as the transit
    * candidate data-manager staged for the agent. The recipient re-checks it
@@ -87,8 +90,6 @@ export const leaseOperationSchemas = [
       z.strictObject({ action: z.literal("release") }),
     ]),
   }),
-  /** Data-manager reports the known outcome of a child it ran under another's lease. */
-  z.strictObject({ kind: z.literal("lease.settleChild"), settlement: leaseSettlementSchema }),
 ] as const;
 export const leaseResultSchemas = {
   "lease.acquire": z.discriminatedUnion("outcome", [
@@ -97,5 +98,4 @@ export const leaseResultSchemas = {
   ]),
   "lease.read": z.strictObject({ lease: leaseRecordSchema.nullable() }),
   "lease.update": z.strictObject({ lease: leaseRecordSchema.nullable() }),
-  "lease.settleChild": z.strictObject({ lease: leaseRecordSchema.nullable() }),
 } as const;

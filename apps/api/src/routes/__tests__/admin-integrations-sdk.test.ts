@@ -275,7 +275,6 @@ beforeEach(() => {
       enabledServiceIds: [],
       followUp: "complete",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     },
   });
@@ -547,7 +546,6 @@ describe("actual integration producers through generated SDK", () => {
           outcome: "not_committed",
           reason: "failed",
           cleanupFailed: false,
-          publisherCleanupFailed: false,
           registryUpdateFailed: false,
         });
       });

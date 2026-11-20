@@ -1,48 +1,22 @@
-/** Fixed same-image helper effects. Only Docker process I/O is replaceable in
- * tests; ownership, source checks, ordering and verification are installed. */
+/** The configuration helper's Docker effects: it replaces each handoff target
+ * with the generation the maintenance committed and checks the result. Only
+ * Docker process I/O is replaceable in tests. */
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
-import {
-  assertArtifactTargetLeaseForward,
-  beginControlEffect,
-  controlDigest,
-  controlRolePublicKey,
-  readPrivateRecord,
-  retainControlEffectReceipt,
-  settleArtifactTargetLeaseChild,
-  signControl,
-  verifyControl,
-  verifyControlEffectSettlement,
-  writePrivateRecord,
-} from "@openmapx/core/build-artifacts";
+import type { ControlInstallation } from "@openmapx/core/build-artifacts";
 import { type ConfigurationReleaseDownloads, canonicalJson } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
-import {
-  type ConfigurationHandoffWorkerRecord,
-  configurationHandoffProgressSchema,
-  configurationHandoffWorkerRecordSchema,
-  configurationHandoffRecordDomains as domains,
-  configurationHandoffRecordName as name,
-} from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
 import { maintenanceDockerContainerSchema } from "../../../packages/core/src/build-artifacts/configuration-maintenance-docker-records";
-import { configurationMaintenanceOwnerRecordSchema } from "../../../packages/core/src/build-artifacts/configuration-maintenance-owner-records";
-import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
-import {
-  assertConfigurationHandoffHostSources,
-  type ConfigurationHandoffChild,
-  configurationHandoffChildState,
-  waitForConfigurationHandoffPreparation,
-} from "./configuration-handoff-control";
 import {
   awaitAppliedContainerHealth,
   inspectMaintenanceDockerRuntime,
 } from "./configuration-maintenance-docker-inspection";
 import { inspectConfigurationReleaseImages } from "./configuration-release-images";
 import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime";
+import type { HandoffHelperHost } from "./handoff-helper";
+import { type MaintenanceFile, readMaintenance } from "./maintenance";
 import { createOwnedServiceResolver } from "./owned-services";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
-
-const running = new WeakSet<ConfigurationHandoffChild>();
 
 /** The maintenance committed the generation that pins this release before the helper ran. */
 function assertAppliedRelease(infraDir: string, manifestDigest: string): void {
@@ -63,155 +37,90 @@ export async function observeConfigurationHandoffReleaseImage(input: {
   if (!observed) throw Error("Pinned release image is not available locally");
   return { imageId: observed.imageId };
 }
-function ownerFor(child: ConfigurationHandoffChild) {
-  const state = configurationHandoffChildState(child),
-    local = installationState(state.installation),
-    intent = state.intent,
-    file = `${intent.operation.maintenanceId}.json`,
-    raw = readPrivateRecord(local, "configuration-maintenance", file),
-    owner = verifyControl(
-      controlRolePublicKey(state.installation, "ops-agent"),
-      "openmapx-configuration-maintenance-owner-v2",
-      raw,
-      configurationMaintenanceOwnerRecordSchema,
-    ),
-    step = owner.plan.steps.find((value) => value.phase === "maintenance-handoff"),
-    source = step && owner.apiControls.steps.find((value) => value.ordinal === step.ordinal);
-  if (
-    canonicalJson(owner.origin) !== canonicalJson(intent.origin) ||
-    canonicalJson(owner.plan.prepare) !== canonicalJson(intent.ownerPrepare) ||
-    owner.leaseId !== intent.leaseId ||
-    !step ||
-    canonicalJson(step.operation) !== canonicalJson(intent.operation) ||
-    !source?.grant ||
-    canonicalJson(source.execution) !== canonicalJson(intent.preparer) ||
-    source.grant.leaseId !== intent.leaseId ||
-    owner.final ||
-    owner.inspection ||
-    !owner.preparedFence ||
-    (intent.release !== undefined) !== (owner.plan.release !== undefined) ||
-    (intent.release && canonicalJson(intent.release) !== canonicalJson(owner.plan.release)) ||
-    owner.receipt.dmFence?.state !== "prepared" ||
-    owner.receipt.state !== "applying" ||
-    owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide ||
-    owner.receipt.generation !== "committed" ||
-    owner.receipt.appliedRevisionId !== intent.operation.expectedCurrentRevisionId ||
-    (intent.operation.mode.kind === "release" && !intent.release)
-  )
-    throw Error("Original active configuration handoff owner required");
-  return owner;
+
+/** The handoff step's operation in the plan. */
+function handoffOperation(file: MaintenanceFile) {
+  const step = file.plan.steps.find((value) => value.phase === "maintenance-handoff");
+  if (step?.operation.kind !== "configurationHandoff.prepare")
+    throw Error("Maintenance has no handoff step");
+  return step.operation;
 }
 
-/** This result describes observed helper runtime only. The parent/root remain
- * held until the independent effect/physical/final/SQL/ACK chain settles. */
-export async function runConfigurationHandoffApplication(input: {
-  child: ConfigurationHandoffChild;
+export async function createConfigurationHandoffHost(input: {
+  installation: ControlInstallation;
   rootDir: string;
   execFile?: DockerRuntimeOptions["execFile"];
-  signal?: AbortSignal;
-}) {
-  const { child } = input;
-  const state = configurationHandoffChildState(child);
-  if (running.has(child)) throw Error("Original helper already running");
-  running.add(child);
-  const local = installationState(state.installation),
-    intent = state.intent,
-    signal = AbortSignal.any([
-      input.signal ?? new AbortController().signal,
-      AbortSignal.timeout(Math.max(1, intent.helper.deadlineAt - Date.now())),
-    ]),
-    execFile = input.execFile ?? runContainedProcess,
-    stack = repoPaths(input.rootDir),
-    file = name(intent.operation.handoffId, "completion");
-  let worker: ConfigurationHandoffWorkerRecord | undefined;
-  const save = (next: ConfigurationHandoffWorkerRecord, exclusive = false) => {
-    const value = configurationHandoffWorkerRecordSchema.parse(next);
-    writePrivateRecord(
-      local,
-      "observations",
-      file,
-      signControl(local.privateKey, domains.completion, value),
-      exclusive,
-    );
-    worker = value;
-  };
-  try {
-    await waitForConfigurationHandoffPreparation(child, signal);
-    assertConfigurationHandoffHostSources(child);
-    if (stack.infraDir !== join(input.rootDir, "infra/docker"))
-      throw Error("Original helper checkout required");
-    const capture = await services.captureReleaseServiceAuthority(input.rootDir),
-      loadAuthority = createTrustedConfigurationAuthorityLoader({
-        rootDir: input.rootDir,
-        builtInServices: capture.services,
-        builtInAuthorityDigest: capture.digest,
-      }),
-      owned = createOwnedServiceResolver({ stack, execFile, loadAuthority }),
-      parentName = name(intent.operation.handoffId, "progress"),
-      parentRaw = readPrivateRecord(local, "observations", parentName),
-      parent = verifyControl(
-        controlRolePublicKey(state.installation, "ops-agent"),
-        domains.progress,
-        parentRaw,
-        configurationHandoffProgressSchema,
-      );
+}): Promise<HandoffHelperHost> {
+  const execFile = input.execFile ?? runContainedProcess,
+    stack = repoPaths(input.rootDir);
+  if (stack.infraDir !== join(input.rootDir, "infra/docker"))
+    throw Error("Configuration helper checkout required");
+  const capture = await services.captureReleaseServiceAuthority(input.rootDir),
+    loadAuthority = createTrustedConfigurationAuthorityLoader({
+      rootDir: input.rootDir,
+      builtInServices: capture.services,
+      builtInAuthorityDigest: capture.digest,
+    }),
+    owned = createOwnedServiceResolver({ stack, execFile, loadAuthority });
+  /** The maintenance still applies the generation this helper replaces services
+   * with, and has not recorded the handoff's outcome. */
+  const current = (file: MaintenanceFile) => {
+    const now = readMaintenance(input.installation, file.record.maintenanceId);
     if (
-      parent.intentDigest !== controlDigest(intent) ||
-      parent.phase !== "launched" ||
-      parent.launch.state !== "confirmed"
+      now.record.state !== "applying" ||
+      now.record.generation !== "committed" ||
+      now.record.handoff?.handoffId !== file.record.handoff?.handoffId ||
+      now.record.steps.at(-1)?.state !== "attempted"
     )
-      throw Error("Original confirmed launch required");
-    // Existing worker publication is observation-only, never another dispatch.
-    try {
-      readPrivateRecord(local, "observations", file);
-      throw Error("Original attempted helper requires observation");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    beginControlEffect(state.authority);
-    save(
-      {
-        ...parent,
-        execution: intent.helper,
-        preparationDigest: controlDigest(parent),
-        observations: [],
-        ...(intent.release
-          ? {
-              release: {
-                images: intent.release.downloads.images.map((image) => ({
-                  image: image.image,
-                  reference: image.reference,
-                  phase: "pending" as const,
-                  imageId: null,
-                })),
-              },
-            }
-          : {}),
-        sequence: 0,
-        phase: "draining",
-        updatedAt: Date.now(),
-      },
-      true,
+      throw Error("Configuration maintenance is no longer applying");
+    return now;
+  };
+  const verifiedImages = new Map<string, string>();
+  const inspectTarget = async (file: MaintenanceFile, id: string, signal: AbortSignal) => {
+    if (!file.plan.release)
+      return (await owned.inspectOwnedServices(signal)).find((value) => value.serviceId === id);
+    // A release update keeps the exact old container of each target, whatever
+    // the changed overlay would select.
+    const original = file.originalContainers.find((value) => value.serviceId === id);
+    if (!original) throw Error("Original release container required");
+    const result = await execFile(
+      "docker",
+      ["container", "inspect", "--format", "{{json .}}", original.containerId],
+      { signal, timeout: 15000, maxBuffer: 1024 * 1024 },
     );
-    if (intent.release) {
-      const release = intent.release;
+    if (Buffer.byteLength(result.stdout) > 1024 * 1024)
+      throw Error("Original container observation capacity");
+    const observed = maintenanceDockerContainerSchema.parse(JSON.parse(result.stdout)),
+      labels = observed.Config.Labels;
+    if (
+      observed.Id !== original.containerId ||
+      observed.Image !== original.provenance.imageId ||
+      labels["com.docker.compose.project"] !== original.provenance.project ||
+      labels["com.docker.compose.service"] !== id ||
+      realpathSync(labels["com.docker.compose.project.working_dir"]!) !==
+        original.provenance.composeWorkingDirectory ||
+      canonicalJson(
+        labels["com.docker.compose.project.config_files"]
+          ?.split(",")
+          .map((path) => realpathSync(path.trim())),
+      ) !== canonicalJson(original.provenance.composeConfigFiles) ||
+      (original.state === "running"
+        ? !observed.State.Running || observed.State.Status !== "running"
+        : observed.State.Running ||
+          (original.state === "created"
+            ? observed.State.Status !== "created"
+            : !["exited", "dead"].includes(observed.State.Status)))
+    )
+      throw Error("Original release container changed");
+    return original;
+  };
+  return {
+    async verifyRelease(file, signal) {
+      const release = file.plan.release;
+      if (!release) return;
       for (const image of release.downloads.images) {
-        await services.withConfigurationGenerationWriter(
-          stack.infraDir,
-          async () => {
-            assertArtifactTargetLeaseForward(state.lease);
-            assertConfigurationHandoffHostSources(child);
-            ownerFor(child);
-            assertAppliedRelease(stack.infraDir, release.manifestDigest);
-            if (
-              worker!.release!.images.find((value) => value.image === image.image)?.phase !==
-              "pending"
-            )
-              throw Error("Original release image observation requires a pending image");
-          },
-          signal,
-        );
+        current(file);
+        assertAppliedRelease(stack.infraDir, release.manifestDigest);
         // The images were downloaded before maintenance began. Maintenance only
         // observes them, so a registry outage cannot strand the instance here.
         const observed = await observeConfigurationHandoffReleaseImage({
@@ -220,136 +129,55 @@ export async function runConfigurationHandoffApplication(input: {
           execFile,
           signal,
         });
-        const current = worker!;
-        save({
-          ...current,
-          sequence: current.sequence + 1,
-          release: {
-            ...current.release!,
-            images: current.release!.images.map((value) =>
-              value.image === image.image
-                ? { ...value, phase: "verified", imageId: observed.imageId }
-                : value,
-            ),
-          },
-          updatedAt: Date.now(),
-        });
+        verifiedImages.set(image.reference, observed.imageId);
       }
-      await services.withConfigurationGenerationWriter(
-        stack.infraDir,
-        async () => {
-          assertArtifactTargetLeaseForward(state.lease);
-          assertConfigurationHandoffHostSources(child);
-          ownerFor(child);
-          assertAppliedRelease(stack.infraDir, release.manifestDigest);
-          const current = worker!;
-          if (current.release!.images.some((image) => image.phase !== "verified"))
-            throw Error("Original release images must be verified before recreation");
-          save({
-            ...current,
-            sequence: current.sequence + 1,
-            phase: "applying",
-            updatedAt: Date.now(),
-          });
-        },
-        signal,
-      );
-      assertConfigurationHandoffHostSources(child);
-    }
-    const inspectTarget = async (id: string, owner: ReturnType<typeof ownerFor>) => {
-      if (!intent.release)
-        return (await owned.inspectOwnedServices(signal)).find((value) => value.serviceId === id);
-      // A changed overlay must not weaken the general owned-service resolver.
-      // Only this original owner may retain its exact old immutable container.
-      const original = owner.originalContainers.find((value) => value.serviceId === id);
-      if (!original) throw Error("Original release container required");
-      const result = await execFile(
-        "docker",
-        ["container", "inspect", "--format", "{{json .}}", original.containerId],
-        { signal, timeout: 15000, maxBuffer: 1024 * 1024 },
-      );
-      if (Buffer.byteLength(result.stdout) > 1024 * 1024)
-        throw Error("Original container observation capacity");
-      const observed = maintenanceDockerContainerSchema.parse(JSON.parse(result.stdout)),
-        labels = observed.Config.Labels;
-      if (
-        observed.Id !== original.containerId ||
-        observed.Image !== original.provenance.imageId ||
-        labels["com.docker.compose.project"] !== original.provenance.project ||
-        labels["com.docker.compose.service"] !== id ||
-        realpathSync(labels["com.docker.compose.project.working_dir"]!) !==
-          original.provenance.composeWorkingDirectory ||
-        canonicalJson(
-          labels["com.docker.compose.project.config_files"]
-            ?.split(",")
-            .map((path) => realpathSync(path.trim())),
-        ) !== canonicalJson(original.provenance.composeConfigFiles) ||
-        (original.state === "running"
-          ? !observed.State.Running || observed.State.Status !== "running"
-          : observed.State.Running ||
-            (original.state === "created"
-              ? observed.State.Status !== "created"
-              : !["exited", "dead"].includes(observed.State.Status)))
-      )
-        throw Error("Original release container changed");
-      return original;
-    };
-    for (const id of services.selfUpdateServiceOrder(intent.operation.serviceIds)) {
-      signal.throwIfAborted();
-      const owner = ownerFor(child),
-        authority = await loadAuthority();
-      if (authority.revisionId !== owner.plan.sourceAuthorityRevision)
-        throw Error("Original helper authority changed");
-      const target = await inspectTarget(id, owner),
-        original = owner.originalContainers.find((value) => value.serviceId === id);
+    },
+    async replace(file, id, beforeEffect, signal) {
+      const operation = handoffOperation(file),
+        deadlineAt = file.plan.prepare.deadlineAt;
+      if ((await loadAuthority()).revisionId !== file.plan.sourceAuthorityRevision)
+        throw Error("Configuration helper authority changed");
+      const target = await inspectTarget(file, id, signal),
+        original = file.originalContainers.find((value) => value.serviceId === id);
       if (
         !target ||
         !original ||
         target.containerId !== original.containerId ||
-        (!intent.release && target.state !== "running") ||
-        target.provenance.imageId !== intent.operation.expectedImageIdentities[id]
+        (!file.plan.release && target.state !== "running") ||
+        target.provenance.imageId !== operation.expectedImageIdentities[id]
       )
-        throw Error("Original helper target changed");
+        throw Error("Configuration helper target changed");
       const args = await services.withConfigurationGenerationWriter(
         stack.infraDir,
         async () => {
-          assertArtifactTargetLeaseForward(state.lease);
-          assertConfigurationHandoffHostSources(child);
-          ownerFor(child);
+          current(file);
           if (
-            (await loadAuthority()).revisionId !== owner.plan.sourceAuthorityRevision ||
+            (await loadAuthority()).revisionId !== file.plan.sourceAuthorityRevision ||
             services.currentConfigurationGeneration(stack.infraDir) !==
-              intent.operation.expectedCurrentRevisionId
+              operation.expectedCurrentRevisionId
           )
-            throw Error("Original helper generation changed");
-          const fresh = await inspectTarget(id, ownerFor(child));
+            throw Error("Configuration helper generation changed");
+          const fresh = await inspectTarget(file, id, signal);
           if (!fresh || canonicalJson(fresh) !== canonicalJson(target))
-            throw Error("Original helper target raced");
-          if (intent.release) {
-            const reference =
-                intent.release.serviceImages[id as keyof typeof intent.release.serviceImages],
-              pulled = worker!.release!.images.find((value) => value.reference === reference);
-            if (pulled?.phase !== "verified")
-              throw Error("Original verified release image required");
+            throw Error("Configuration helper target raced");
+          const release = file.plan.release;
+          if (release) {
+            const reference = release.serviceImages[id as keyof typeof release.serviceImages];
+            const download = release.downloads.images.find(
+              (value) => value.reference === reference,
+            );
+            const verified = reference ? verifiedImages.get(reference) : undefined;
+            if (!download || !verified) throw Error("Verified release image required");
             const [observed] = await inspectConfigurationReleaseImages({
-              downloads: intent.release.downloads,
-              image: pulled.image,
+              downloads: release.downloads,
+              image: download.image,
               execFile,
               signal,
             });
-            if (observed?.imageId !== pulled.imageId)
-              throw Error("Original pulled release image changed");
+            if (observed?.imageId !== verified) throw Error("Pulled release image changed");
           }
-          const current = worker!;
-          save({
-            ...current,
-            sequence: current.sequence + 1,
-            phase: "applying",
-            targets: current.targets.map((value) =>
-              value.serviceId === id ? { ...value, phase: "recreate_attempted" } : value,
-            ),
-            updatedAt: Date.now(),
-          });
+          // The progress records the attempt before Compose replaces the container.
+          beforeEffect();
           return [
             ...services.stackComposeArgs(stack),
             "up",
@@ -361,12 +189,9 @@ export async function runConfigurationHandoffApplication(input: {
         },
         signal,
       );
-      // No configuration/release writer survives container replacement.
-      assertArtifactTargetLeaseForward(state.lease);
-      assertConfigurationHandoffHostSources(child);
       await execFile("docker", args, {
         signal,
-        timeout: Math.max(1, intent.helper.deadlineAt - Date.now()),
+        timeout: Math.max(1, deadlineAt - Date.now()),
         maxBuffer: 1024 * 1024,
       });
       // A recreated service with a healthcheck reports `starting` at first;
@@ -379,88 +204,29 @@ export async function runConfigurationHandoffApplication(input: {
           containerId: applied.containerId,
           execFile,
           signal,
-          deadlineAt: intent.helper.deadlineAt,
+          deadlineAt,
         });
-      const containers = await owned.inspectOwnedServices(signal),
-        inspection = await inspectMaintenanceDockerRuntime({
-          stack,
-          execFile,
-          owner: ownerFor(child),
-          containers,
-          privateKey: local.privateKey,
-          signal,
-          handoffTargetId: id,
-        }),
-        observed = containers.find((value) => value.serviceId === id);
-      if (!observed) throw Error("Applied helper container unavailable");
-      const current = worker!;
-      save({
-        ...current,
-        sequence: current.sequence + 1,
-        phase: "verifying",
-        targets: current.targets.map((value) =>
-          value.serviceId === id
-            ? { ...value, phase: "verified", newContainerId: observed.containerId }
-            : value,
-        ),
-        observations: [
-          ...current.observations,
-          {
-            serviceId: id,
-            checksDigest: controlDigest(inspection.checks),
-            detailsDigest: controlDigest(inspection.details),
-          },
-        ],
-        updatedAt: Date.now(),
+      const containers = await owned.inspectOwnedServices(signal);
+      await inspectMaintenanceDockerRuntime({
+        stack,
+        execFile,
+        owner: current(file),
+        containers,
+        signal,
+        handoffTargetId: id,
       });
-    }
-    const owner = ownerFor(child);
-    assertConfigurationHandoffHostSources(child);
-    await inspectMaintenanceDockerRuntime({
-      stack,
-      execFile,
-      owner,
-      containers: await owned.inspectOwnedServices(signal),
-      privateKey: local.privateKey,
-      signal,
-    });
-    const completedAt = Date.now(),
-      current = worker!;
-    save({
-      ...current,
-      sequence: current.sequence + 1,
-      phase: "applied",
-      updatedAt: completedAt,
-      completedAt,
-    });
-    retainControlEffectReceipt(state.authority, {
-      outcome: "committed",
-      publication: "committed",
-      receipt: { kind: "configuration-helper-completion", completionDigest: controlDigest(worker) },
-    });
-    await settleArtifactTargetLeaseChild(
-      state.lease,
-      verifyControlEffectSettlement(state.installation, intent.helper),
-    );
-    return {
-      phase: "applied" as const,
-      completedServiceIds: services.selfUpdateServiceOrder(intent.operation.serviceIds),
-    };
-  } catch (error) {
-    if (worker && worker.completedAt === null) {
-      try {
-        save({
-          ...worker,
-          sequence: worker.sequence + 1,
-          phase: "recovery_required",
-          updatedAt: Date.now(),
-        });
-      } catch {
-        /* Unknown publication retains the original root. */
-      }
-    }
-    throw error;
-  } finally {
-    running.delete(child);
-  }
+      const observed = containers.find((value) => value.serviceId === id);
+      if (!observed) throw Error("Applied helper container unavailable");
+      return observed.containerId;
+    },
+    async verifyAll(file, signal) {
+      await inspectMaintenanceDockerRuntime({
+        stack,
+        execFile,
+        owner: current(file),
+        containers: await owned.inspectOwnedServices(signal),
+        signal,
+      });
+    },
+  };
 }

@@ -1,17 +1,13 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import * as nodeFs from "node:fs";
-import { mkdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
-import { dataConfigurationFencePrepareSchema } from "@openmapx/core/data-manager-contracts";
+import { dataConfigurationFencePrepareRequestSchema } from "@openmapx/core/data-manager-contracts";
 import {
   canonicalJson,
-  controlTerminalReceiptDigest,
   createControlRootOperationKey,
   type ExecutionRef,
   executionFingerprint,
-  signMaintenanceRecoveryProof,
-  verifyMaintenanceRecoveryProof,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
@@ -46,13 +42,6 @@ async function settledByAgent(
     terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
   });
 }
-/** One delegated child as the agent's lease store records it now. */
-function storeChild(infraDir: string, leaseId: string, delegationId: string) {
-  return control
-    .openLeaseStore({ directory: control.leaseStoreDirectory(infraDir), purpose: "test" })
-    .get(leaseId)
-    ?.children.find((child) => child.key === delegationId);
-}
 
 // Keep real filesystem checks and writes; expose only the publication boundary
 // so an acknowledged rename can lose its reply in the recovery tests.
@@ -86,11 +75,10 @@ import { setupCron } from "../../../../../services/data-manager/src/cron.js";
 import { installDataMutationAdmission } from "../../../../../services/data-manager/src/jobs/execution/admission.js";
 import { createDataConfigurationMaintenance } from "../../../../../services/data-manager/src/jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "../../../../../services/data-manager/src/jobs/execution/dispatch.js";
-import { startLegacyDataMutation } from "../../../../../services/data-manager/src/jobs/execution/legacy-mutation.js";
+import { installLocalDataExecutions } from "../../../../../services/data-manager/src/jobs/execution/local.js";
 import { createDataExecutionReceiver } from "../../../../../services/data-manager/src/jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "../../../../../services/data-manager/src/jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "../../../../../services/data-manager/src/jobs/execution/store.js";
-import { createJobRow } from "../../../../../services/data-manager/src/jobs/persistence.js";
 import { resolveOperationsProfile } from "../../../../../services/data-manager/src/jobs/transitous/operations-profile.js";
 import { createSingleFlightController } from "../../../../../services/data-manager/src/jobs/transitous/single-flight.js";
 import { PostgresOfflinePackageAccountingStore } from "../../../../../services/data-manager/src/offline-packages/postgres-accounting.js";
@@ -101,539 +89,6 @@ describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("configuration fence real PostgreSQL and retained grants", () => {
-  it.each([
-    { producer: "immediate", alreadyFailed: false },
-    { producer: "immediate", alreadyFailed: true },
-    { producer: "immediate", alreadyFailed: "unlink" },
-    { producer: "guarded", alreadyFailed: true },
-    { producer: "guarded", alreadyFailed: "unlink" },
-  ] as const)(
-    "discards the recovered original candidate before admitting a subsequent writer ($producer, already failed=$alreadyFailed)",
-    async ({ producer, alreadyFailed }) => {
-      const f = await ownedFenceFixture({
-        productionRegistration: true,
-        immediateRecovery: producer === "immediate",
-        guardedRecovery: producer === "guarded",
-      });
-      let fault: ReturnType<typeof vi.spyOn> | undefined,
-        faulted = false;
-      try {
-        const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-        await fence.startup();
-        await f.failPreparation();
-        const { cancelAdminJobOperations } = await import("../admin-job-ops"),
-          { jobRunner } = await import("../job-runner"),
-          candidate = f.ctx.checkpointResult!._configurationCandidate as {
-            sealedOperationKey: string;
-          },
-          canonicalPath = join(
-            f.root,
-            "control-private/ops-agent/observations",
-            `terminal-${f.owner.operationKey}.json`,
-          ),
-          canonical = readFileSync(canonicalPath);
-        vi.useFakeTimers({ toFake: ["Date"] });
-        vi.setSystemTime(f.owner.deadlineAt + 1);
-        if (alreadyFailed === true) {
-          await vi.waitFor(
-            async () =>
-              expect(
-                await cancelAdminJobOperations(f.ctx.checkpointResult, undefined, {
-                  context: f.ctx,
-                  jobId: f.ctx.jobId,
-                  pollIntervalMs: 1,
-                }),
-              ).toBe("recovered_failure"),
-            { timeout: 15000, interval: 100 },
-          );
-          // Exact prior-version terminalization: real recovery and copy/ACK,
-          // but the original private candidate has not been discarded.
-          await f.sql`UPDATE admin_job SET status='failed', finished_at=now(),
-            error='Maintenance preparation failed; original ownership was safely released.',
-            result=result || jsonb_build_object('_cancelRequestedAt',${new Date().toISOString()}::text)
-            WHERE id=${f.ctx.jobId}`;
-          const [historical] = await f.sql`SELECT result FROM admin_job WHERE id=${f.ctx.jobId}`;
-          for (const changed of ["proof", "candidate", "job"] as const) {
-            const altered = structuredClone(historical!.result),
-              entry = altered.opsProjection.operations[f.owner.operationKey];
-            if (changed === "proof") entry.receiptDelivery.maintenanceRecovery = "changed";
-            if (changed === "candidate") altered._configurationCandidate.candidateId = randomUUID();
-            if (changed === "job") entry.attempt.apiJobId = randomUUID();
-            await f.sql`UPDATE admin_job SET result=${JSON.stringify(altered)}::jsonb WHERE id=${f.ctx.jobId}`;
-            await jobRunner.reconcile({ limit: 32 });
-            const [refused] =
-              await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
-            expect(refused?.status).toBe("failed");
-            expect(refused?.result._configurationCandidate.phase).toBe("prepared");
-            expect(
-              existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
-            ).toBe(true);
-            await f.sql`UPDATE admin_job SET result=${JSON.stringify(historical!.result)}::jsonb WHERE id=${f.ctx.jobId}`;
-          }
-          const agentUrl = process.env.OPS_AGENT_URL;
-          vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
-          vi.setSystemTime(f.owner.deadlineAt + 120001);
-          await jobRunner.reconcile({ limit: 32 });
-          const [reclaimed] =
-            await f.sql`SELECT status,finished_at FROM admin_job WHERE id=${f.ctx.jobId}`;
-          expect(reclaimed?.status).toBe("running");
-          expect(reclaimed?.finished_at).toBeNull();
-          vi.stubEnv("OPS_AGENT_URL", agentUrl);
-        } else {
-          if (alreadyFailed === "unlink") {
-            // Make the recovered-failure branch conclusive before checking
-            // that public cancellation accepts its pending local cleanup.
-            await vi.waitFor(
-              async () => {
-                expect(
-                  await cancelAdminJobOperations(f.ctx.checkpointResult, undefined, {
-                    context: f.ctx,
-                    jobId: f.ctx.jobId,
-                    pollIntervalMs: 1,
-                  }),
-                ).toBe("recovered_failure");
-              },
-              { timeout: 15000, interval: 100 },
-            );
-            expect(await jobRunner.cancel(f.ctx.jobId)).toBe(true);
-          } else await jobRunner.cancel(f.ctx.jobId);
-        }
-        if (alreadyFailed === "unlink") {
-          const promises = await import("node:fs/promises"),
-            actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
-          fault = vi.spyOn(promises, "unlink").mockImplementation(async (path) => {
-            await actual.unlink(path);
-            if (
-              !faulted &&
-              String(path).endsWith(`/.candidates/${candidate.sealedOperationKey}.json`)
-            ) {
-              faulted = true;
-              throw Error("Lost acknowledgement after original inert candidate unlink");
-            }
-          });
-        }
-        vi.setSystemTime(f.owner.deadlineAt + 240001);
-        await jobRunner.reconcile({ limit: 32 });
-        if (alreadyFailed === "unlink") {
-          // Cancellation/recovery is asynchronous. Reach the injected real
-          // unlink boundary before testing its lost response and later resume.
-          let observationTime = Date.now();
-          await vi.waitFor(
-            async () => {
-              if (!faulted) {
-                observationTime += 120000;
-                vi.setSystemTime(observationTime);
-                await jobRunner.reconcile({ limit: 32 });
-              }
-              expect(faulted).toBe(true);
-            },
-            { timeout: 15000, interval: 100 },
-          );
-          expect(
-            existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
-          ).toBe(false);
-          const [interrupted] = await f.sql`SELECT result FROM admin_job WHERE id=${f.ctx.jobId}`;
-          expect(
-            await (await import("../admin-job-ops")).hasRecoveredMaintenanceCandidate(
-              interrupted!.result,
-              f.ctx.jobId,
-            ),
-          ).toBe(true);
-          const agentUrl = process.env.OPS_AGENT_URL;
-          const afterUnlink = Date.now();
-          vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
-          vi.setSystemTime(afterUnlink + 120000);
-          await jobRunner.reconcile({ limit: 32 });
-          const [unavailable] =
-            await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
-          expect(unavailable?.status).toBe("running");
-          expect(unavailable?.result._configurationCandidate.phase).toBe(
-            "discarding_without_guard",
-          );
-          vi.stubEnv("OPS_AGENT_URL", agentUrl);
-          vi.setSystemTime(afterUnlink + 240000);
-          await jobRunner.reconcile({ limit: 32 });
-        }
-        const [finished] = await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
-        expect(
-          finished?.status,
-          JSON.stringify({
-            candidate: finished?.result._configurationCandidate,
-            observation: finished?.result.observation,
-          }),
-        ).toBe("failed");
-        expect(finished?.result._configurationCandidate.phase).toBe("discarded");
-        expect(
-          existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
-        ).toBe(false);
-        expect(readFileSync(canonicalPath)).toEqual(canonical);
-        expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
-        expect(f.data.preparePosts).toBe(0);
-        expect(f.host.calls.some((args) => args.includes("up") || args.includes("restart"))).toBe(
-          false,
-        );
-        const nextId = randomUUID(),
-          execution = { owner: randomUUID(), version: 1 },
-          next = {
-            ...f.ctx,
-            jobId: nextId,
-            execution,
-            checkpointResult: { _execution: execution },
-          },
-          writer = await import("../administrative-configuration-writer");
-        await f.sql`INSERT INTO admin_job(id,type,status,payload,result)
-          VALUES(${nextId},'service.apply','running','{}',${JSON.stringify(next.checkpointResult)}::jsonb)`;
-        await expect(
-          writer.withAdministrativeConfigurationJob(next, () =>
-            writer.withAdministrativeConfigurationWriter(
-              {
-                actorId: nextId,
-                operationKey: `opk1_${nextId.replaceAll("-", "")}`,
-                integrationIds: [],
-              },
-              async () => "next-writer-admitted",
-            ),
-          ),
-        ).resolves.toBe("next-writer-admitted");
-      } finally {
-        fault?.mockRestore();
-        vi.useRealTimers();
-        await f.close();
-      }
-    },
-    90000,
-  );
-
-  it("keeps ownership when negative receiver evidence is live, changed, admitted, or unavailable", async () => {
-    const f = await ownedFenceFixture({ productionRegistration: true });
-    let clock: ReturnType<typeof vi.spyOn> | undefined;
-    const request = (input = f.input, headers: Record<string, string> = {}) =>
-      fetch(`${f.data.baseUrl}/executions/configuration-maintenance/recovery`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${f.data.token}`,
-          "content-type": "application/json",
-          "x-openmapx-control-delegation": f.assertion,
-          ...headers,
-        },
-        body: JSON.stringify(input),
-      });
-    try {
-      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-      await fence.startup();
-      expect((await request()).status).not.toBe(200); // live original
-      // Data-manager answers from the expired delegation and its own SQL; it
-      // never reads the agent's lease store. The agent cancels before asking.
-      clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-      control.cancelControlExecution(f.authority);
-      await control.cancelArtifactTargetLease(f.lease);
-      expect((await request(f.input, { authorization: "Bearer wrong" })).status).toBe(401);
-      expect(
-        (await request(f.input, { "x-openmapx-control-delegation": "changed" })).status,
-      ).not.toBe(200);
-      expect((await request({ ...f.input, candidateId: randomUUID() })).status).not.toBe(200);
-      for (const identity of ["key", "id"] as const) {
-        const id = identity === "id" ? f.child.executionId : randomUUID(),
-          key =
-            identity === "key" ? f.child.operationKey : `opk1_${randomUUID().replaceAll("-", "")}`;
-        await f.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key) VALUES(${id},'download-fonts','ok',${key})`;
-        try {
-          expect((await request()).status).not.toBe(200);
-        } finally {
-          await f.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        }
-      }
-      // A fence row for the same maintenance means the preparation was admitted.
-      await f.sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state)
-        VALUES(${f.input.maintenanceId},${randomUUID()},${`opk1_${randomUUID().replaceAll("-", "")}`},${f.input.candidateId},${f.input.planDigest},${JSON.stringify(f.input)}::jsonb,'prepared')`;
-      try {
-        expect((await request()).status).not.toBe(200);
-      } finally {
-        await f.sql`DELETE FROM data_manager.configuration_fence WHERE maintenance_id=${f.input.maintenanceId}`;
-      }
-      for (const [namespace, name] of [
-        ["executions", `${f.child.operationKey}.json`],
-        ["effects", `${f.child.operationKey}.json`],
-        ["effect-started", `${f.child.operationKey}.json`],
-      ]) {
-        const directory = join(f.root, "control-private/data-manager", namespace!),
-          file = join(directory, name!);
-        mkdirSync(directory, { recursive: true, mode: 0o700 });
-        writeFileSync(file, "null", { mode: 0o600 });
-        try {
-          expect((await request()).status).not.toBe(200);
-        } finally {
-          unlinkSync(file);
-        }
-      }
-      await f.sql.begin(async (tx) => {
-        await tx`SELECT pg_advisory_xact_lock(${0x4f4d58},2)`;
-        expect((await request()).status).not.toBe(200);
-      });
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
-      const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8"));
-      expect(storeChild(f.root, assertion.leaseId, assertion.delegationId)?.state).toBe("held");
-    } finally {
-      clock?.mockRestore();
-      await f.close();
-    }
-  }, 60000);
-
-  it("cancels the original failed preparation without changing its canonical or replaying PREPARE", async () => {
-    const f = await ownedFenceFixture({
-      productionRegistration: true,
-      loseRecoveryResponseOnce: true,
-    });
-    let clock: ReturnType<typeof vi.spyOn> | undefined;
-    try {
-      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-      await fence.startup();
-      await f.failPreparation();
-      const { createApiOpsClient } = await import("../ops-client"),
-        client = createApiOpsClient(),
-        original = await client.status("configurationMaintenance.prepare", f.owner.executionId);
-      expect(original).toMatchObject({ state: "failed", errorClass: "recovery_required" });
-      clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-      const { cancelAdminJobOperations } = await import("../admin-job-ops");
-      vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:0");
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("pending");
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
-      vi.stubEnv("DATA_MANAGER_URL", f.data.baseUrl);
-      const cancel = client.cancel.bind(client),
-        legacy = vi.spyOn(client, "cancel").mockImplementation(async (...args) => {
-          const { diagnostics: _diagnostics, ...status } = await cancel(...args);
-          return status; // an older agent cannot attest original ownership closure
-        });
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("pending");
-      expect(() => control.verifyLocalArtifactTargetRootRelease(f.authority)).toThrow();
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("pending");
-      legacy.mockRestore();
-      for (const change of ["token", "candidate", "canonical"] as const) {
-        const altered = vi.spyOn(client, "cancel").mockImplementation(async (...args) => {
-          const status = await cancel(...args),
-            proof = verifyMaintenanceRecoveryProof(
-              f.host.token,
-              status.diagnostics!.maintenanceRecovery!,
-            );
-          return {
-            ...status,
-            diagnostics: {
-              ...status.diagnostics!,
-              maintenanceRecovery: signMaintenanceRecoveryProof(
-                change === "token" ? "other-token" : f.host.token,
-                {
-                  ...proof,
-                  ...(change === "candidate" ? { candidateId: randomUUID() } : {}),
-                  ...(change === "canonical" ? { terminalDigest: "f".repeat(64) } : {}),
-                },
-              ),
-            },
-          };
-        });
-        try {
-          expect(
-            await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
-              context: f.ctx,
-              jobId: f.ctx.jobId,
-              pollIntervalMs: 1,
-            }),
-          ).toBe("pending");
-        } finally {
-          altered.mockRestore();
-        }
-      }
-      expect(
-        await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
-          context: f.ctx,
-          jobId: f.ctx.jobId,
-          pollIntervalMs: 1,
-        }),
-      ).toBe("recovered_failure");
-      // A new API cancellation context can complete the durable copy/ACK even
-      // while the agent is unreachable; it does not infer recovery from a flag.
-      vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
-      const { jobRunner } = await import("../job-runner");
-      expect(await jobRunner.cancel(f.ctx.jobId)).toBe(true);
-      const [finished] =
-        await f.sql`SELECT status,finished_at,result FROM admin_job WHERE id=${f.ctx.jobId}`;
-      expect(finished?.status).toBe("failed");
-      expect(finished?.finished_at).not.toBeNull();
-      expect(finished?.result._cancelRequestedAt).toBeDefined();
-      expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
-      expect(await client.status("configurationMaintenance.prepare", f.owner.executionId)).toEqual(
-        original,
-      );
-      expect(
-        controlTerminalReceiptDigest(
-          await client.cancel(f.owner.executionId, { fingerprint: f.owner.fingerprint }),
-        ),
-      ).toBe(controlTerminalReceiptDigest(original));
-      expect(f.data.preparePosts).toBe(0);
-      // Asking data-manager again is read-only and answers the same.
-      expect(f.data.recoveryPosts).toBeGreaterThanOrEqual(1);
-      expect(
-        await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
-      ).toHaveLength(0);
-      const maintenance = await import(
-          "../../../../../apps/ops-agent/src/configuration-maintenance-store"
-        ),
-        origin = maintenance.readOwnedConfigurationMaintenance(f.authority).origin,
-        admission = join(
-          f.root,
-          "control-private/ops-agent/executions",
-          `${f.owner.operationKey}.json`,
-        ),
-        closedAt = Date.now();
-      // Kept until 72 hours after it finished and until its root key expired.
-      expect(await control.pruneControlRecords(f.agent, { now: closedAt + 60 * 3600000 })).toEqual(
-        [],
-      );
-      expect(existsSync(admission)).toBe(true);
-      const later = Math.max(origin.notAfter, closedAt) + 96 * 3600000;
-      expect(await control.pruneControlRecords(f.agent, { now: later })).toContain(
-        f.owner.operationKey,
-      );
-      await f.data.pruneRecords(later);
-      expect(existsSync(admission)).toBe(false);
-      // A later request under the expired root is refused, never re-admitted.
-      expect(() => control.assertFreshControlRoot(f.owner.operationKey, origin.notAfter)).toThrow();
-    } finally {
-      clock?.mockRestore();
-      await f.close();
-    }
-  }, 60000);
-
-  it.each(["owner", "release"] as const)(
-    "rejoins only original negative recovery after lost %s publication acknowledgement",
-    async (boundary) => {
-      const f = await ownedFenceFixture({ productionRegistration: true });
-      let clock: ReturnType<typeof vi.spyOn> | undefined,
-        fault: ReturnType<typeof vi.spyOn> | undefined;
-      try {
-        const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-        await fence.startup();
-        await f.failPreparation();
-        const canonicalPath = join(
-            f.root,
-            "control-private/ops-agent/observations",
-            `terminal-${f.owner.operationKey}.json`,
-          ),
-          canonical = readFileSync(canonicalPath),
-          // The agent's own owner record, and the lease store it releases the root in.
-          suffix = boundary === "owner" ? `${f.input.maintenanceId}.json` : "leases.json",
-          nativeRename = (await vi.importActual<typeof import("node:fs")>("node:fs")).renameSync,
-          maintenance = await import(
-            "../../../../../apps/ops-agent/src/configuration-maintenance-store"
-          );
-        let faulted = false;
-        clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-        fault = vi.spyOn(nodeFs, "renameSync").mockImplementation((source, target) => {
-          nativeRename(source, target);
-          if (!faulted && String(target).endsWith(suffix)) {
-            faulted = true;
-            throw Error("Named acknowledgement loss after original recovery publication");
-          }
-        });
-        const recovery = maintenance.recoverUnadmittedConfigurationMaintenance(
-          f.host.runtime,
-          f.authority,
-        );
-        // A lost write ends this attempt; the retry reuses what was kept and
-        // asks data-manager no second time.
-        await expect(recovery).rejects.toThrow();
-        fault.mockRestore();
-        expect(faulted).toBe(true);
-        await maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority);
-        expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
-        expect(readFileSync(canonicalPath)).toEqual(canonical);
-        expect(f.data.preparePosts).toBe(0);
-        expect(f.data.recoveryPosts).toBe(1);
-        expect(
-          await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
-        ).toHaveLength(0);
-      } finally {
-        fault?.mockRestore();
-        clock?.mockRestore();
-        await f.close();
-      }
-    },
-    60000,
-  );
-
-  it("settles only the expired unadmitted original preparation through receiver recovery", async () => {
-    const f = await ownedFenceFixture({ productionRegistration: true });
-    let clock: ReturnType<typeof vi.spyOn> | undefined;
-    try {
-      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-      await fence.startup();
-      const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
-        execution = join(
-          f.root,
-          "control-private/data-manager/executions",
-          `${f.child.operationKey}.json`,
-        );
-      expect(existsSync(execution)).toBe(false);
-      clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-      control.cancelControlExecution(f.authority);
-      await control.cancelArtifactTargetLease(f.lease);
-      const response = await fetch(
-        `${f.data.baseUrl}/executions/configuration-maintenance/recovery`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${f.data.token}`,
-            "content-type": "application/json",
-            "x-openmapx-control-delegation": f.assertion,
-          },
-          body: JSON.stringify(f.input),
-        },
-      );
-      expect(response.status).toBe(200);
-      const proof = await response.json();
-      expect(proof).toMatchObject({
-        kind: "configuration-prepare-not-admitted",
-        input: f.input,
-        child: f.child,
-      });
-      expect(existsSync(execution)).toBe(false);
-      // data-manager answers; the agent settles its child from that answer.
-      expect(storeChild(f.root, assertion.leaseId, assertion.delegationId)?.state).not.toBe(
-        "settled",
-      );
-      expect(
-        await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
-      ).toHaveLength(0);
-      const maintenance = await import(
-        "../../../../../apps/ops-agent/src/configuration-maintenance-store"
-      );
-      await expect(
-        maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority),
-      ).resolves.toMatchObject({ maintenanceId: f.input.maintenanceId });
-      expect(control.verifyLocalArtifactTargetRootRelease(f.authority)).toBeDefined();
-    } finally {
-      clock?.mockRestore();
-      await f.close();
-    }
-  }, 60000);
-
   it("prepares a full application closure with the production Data Manager target registration", async () => {
     const f = await ownedFenceFixture({ productionRegistration: true });
     try {
@@ -641,11 +96,7 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("ops-agent");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(
-        f.input,
-        ["x-openmapx-control-delegation", f.assertion],
-        "ops-agent",
-      );
+      const receipt = await fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
       expect(receipt.state).toBe("prepared");
       await settledByAgent(f.lease, f.child, receipt);
       expect(
@@ -669,11 +120,7 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("community-tiles");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(
-        f.input,
-        ["x-openmapx-control-delegation", f.assertion],
-        "ops-agent",
-      );
+      const receipt = await fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
       expect(receipt.state).toBe("prepared");
       await settledByAgent(f.lease, f.child, receipt);
       expect(
@@ -689,15 +136,11 @@ describe.skipIf(
 
   it("prepares a terminal logical guard, blocks concurrent admissions, and restores it before new mutation", async () => {
     const f = await ownedFenceFixture(),
-      { sql, root, dm, child, input, assertion, lease } = f;
+      { sql, root, dm, child, input, delegation, lease } = f;
     try {
       const fence = createDataConfigurationMaintenance(sql, dm);
       await fence.startup();
-      const receipt = await fence.prepare(
-        input,
-        ["x-openmapx-control-delegation", assertion],
-        "ops-agent",
-      );
+      const receipt = await fence.prepare({ ...input, delegation }, "ops-agent");
       expect(receipt).toMatchObject({ fenceId: child.executionId, state: "prepared", sequence: 0 });
       const rows =
         await sql`SELECT state,operation_key,outcome FROM data_manager.configuration_fence WHERE fence_id=${child.executionId}`;
@@ -709,7 +152,9 @@ describe.skipIf(
         outcome: "committed",
         terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
       });
-      const store = createPostgresDataExecutionStore(sql),
+      const store = createPostgresDataExecutionStore(sql, {
+          controlJournal: control.createDataExecutionControlJournal(dm, sql),
+        }),
         deadline = Date.now() + 30000,
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
       await expect(
@@ -730,7 +175,7 @@ describe.skipIf(
             offlinePackageArtifactReferences,
           },
         }),
-        singleFlight = createSingleFlightController({ db: actualDb, admissionSql: sql }),
+        singleFlight = createSingleFlightController(),
         journal = control.createDataExecutionControlJournal(dm, sql),
         ownedStore = createPostgresDataExecutionStore(sql, {
           controlJournal: journal,
@@ -750,10 +195,6 @@ describe.skipIf(
           sql,
           singleFlight,
           operationsPolicy,
-          runHardlinks: async () => {
-            dataEffects++;
-            throw Error("Closed generation continuation");
-          },
         }),
         receiver = createDataExecutionReceiver({
           runtime,
@@ -763,19 +204,15 @@ describe.skipIf(
           operationsPolicy,
         }),
         app = Fastify();
-      registerAuth(
-        app,
-        {
-          api: "guard-fixture-token-api",
-          "ops-agent": "guard-fixture-token",
-          "host-cli": "guard-fixture-token-cli",
-        },
-        { executionReceiver: () => receiver },
-      );
+      installLocalDataExecutions(receiver);
+      registerAuth(app, {
+        api: "guard-fixture-token-api",
+        "ops-agent": "guard-fixture-token",
+        "host-cli": "guard-fixture-token-cli",
+      });
       registerApi(app, {
         executionReceiver: receiver,
         dataDir: join(root, "data"),
-        singleFlight,
         operationsPolicy,
         searchIndexSql: sql,
         bakePredicted: async () => {
@@ -804,21 +241,13 @@ describe.skipIf(
           });
           expect(response.statusCode, url + response.body).toBe(409);
         }
-        await expect(
-          singleFlight.tryStartSync({ trigger: "cron", triggeredBy: "fixture" }),
-        ).rejects.toThrow("configuration_maintenance_busy");
-        await expect(createJobRow({ kind: "traffic-predicted" }, sql)).rejects.toThrow(
-          "configuration_maintenance_busy",
-        );
-        await expect(
-          startLegacyDataMutation(
-            "traffic-predicted",
-            async () => {
+        // In-process work of both classes is refused at admission.
+        for (const input of [{ kind: "traffic-predicted" }, { kind: "data-reload" }] as const)
+          await expect(
+            receiver.runLocal(input, async () => {
               dataEffects++;
-            },
-            sql,
-          ),
-        ).rejects.toThrow("configuration_maintenance_busy");
+            }),
+          ).rejects.toThrow("configuration_maintenance_busy");
         const offline = new PostgresOfflinePackageAccountingStore(sql),
           candidate: OfflinePackageJobRecord = {
             jobId: randomUUID(),
@@ -886,7 +315,6 @@ describe.skipIf(
       } finally {
         await app.close();
         await runtime.close();
-        journal.close();
       }
       const restarted = createDataConfigurationMaintenance(sql, dm);
       await restarted.startup();
@@ -894,31 +322,90 @@ describe.skipIf(
         "configuration_maintenance_busy",
       );
       await expect(
-        fence.prepare(
-          { ...input, candidateId: randomUUID() },
-          ["x-openmapx-control-delegation", assertion],
-          "ops-agent",
-        ),
+        fence.prepare({ ...input, candidateId: randomUUID(), delegation }, "ops-agent"),
       ).rejects.toThrow();
-      expect(
-        await fence.prepare(input, ["x-openmapx-control-delegation", assertion], "ops-agent"),
-      ).toEqual(receipt);
+      expect(await fence.prepare({ ...input, delegation }, "ops-agent")).toEqual(receipt);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
     } finally {
       await f.close();
     }
   }, 60000);
+
+  it("records a refusal and refuses the same request again", async () => {
+    const f = await ownedFenceFixture(),
+      { sql, dm, child, input, delegation } = f;
+    const busyJob = randomUUID();
+    try {
+      const fence = createDataConfigurationMaintenance(sql, dm);
+      await fence.startup();
+      // An unfinished data job refuses the preparation before anything changes.
+      await sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key)
+        VALUES(${busyJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`})`;
+      await expect(fence.prepare({ ...input, delegation }, "ops-agent")).rejects.toThrow(
+        "configuration_maintenance_busy",
+      );
+      expect(
+        await sql`SELECT state,operation_key,outcome FROM data_manager.configuration_fence WHERE maintenance_id=${input.maintenanceId}`,
+      ).toEqual([{ state: "refused", operation_key: child.operationKey, outcome: null }]);
+      // The refusal stands for this request once nothing blocks a fence any more.
+      await sql`DELETE FROM data_manager.jobs WHERE id=${busyJob}`;
+      await expect(fence.prepare({ ...input, delegation }, "ops-agent")).rejects.toThrow(
+        "configuration_maintenance_busy",
+      );
+      await expect(fence.withAdmission(async () => "open")).resolves.toBe("open");
+      expect(
+        await fence.inspect(input.maintenanceId, { candidateId: input.candidateId }, "ops-agent"),
+      ).toBeNull();
+      await expect(
+        fence.settle(
+          {
+            maintenanceId: input.maintenanceId,
+            candidateId: input.candidateId,
+            planDigest: input.planDigest,
+            outcome: "unused",
+          },
+          "host-cli",
+        ),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    } finally {
+      await sql`DELETE FROM data_manager.jobs WHERE id=${busyJob}`;
+      await f.close();
+    }
+  }, 60000);
+
+  it("removes rows that ended more than 72 hours ago when it prepares a fence", async () => {
+    const f = await ownedFenceFixture(),
+      { sql, dm, input, delegation } = f;
+    const oldMaintenance = randomUUID(),
+      recentMaintenance = randomUUID();
+    try {
+      const fence = createDataConfigurationMaintenance(sql, dm);
+      await fence.startup();
+      for (const [id, age] of [
+        [oldMaintenance, "96 hours"],
+        [recentMaintenance, "1 hour"],
+      ] as const)
+        await sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state,settled_at)
+          VALUES(${id}::uuid,gen_random_uuid(),${`opk1_${randomUUID().replaceAll("-", "")}`},${input.candidateId}::uuid,${input.planDigest},${JSON.stringify(input)}::jsonb,'refused',now() - ${age}::interval)`;
+      expect((await fence.prepare({ ...input, delegation }, "ops-agent")).state).toBe("prepared");
+      expect(
+        (
+          await sql`SELECT maintenance_id FROM data_manager.configuration_fence WHERE maintenance_id IN (${oldMaintenance},${recentMaintenance})`
+        ).map((row) => row.maintenance_id),
+      ).toEqual([recentMaintenance]);
+    } finally {
+      await sql`DELETE FROM data_manager.configuration_fence WHERE maintenance_id IN (${oldMaintenance},${recentMaintenance})`;
+      await f.close();
+    }
+  }, 60000);
 });
 
-import { existsSync, readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 async function ownedFenceFixture(
   options: {
     productionRegistration?: boolean;
-    loseRecoveryResponseOnce?: boolean;
-    immediateRecovery?: boolean;
     guardedRecovery?: boolean;
     /** Installed, enabled services outside the release's built-in set. */
     enabledCommunityServiceIds?: string[];
@@ -972,7 +459,6 @@ async function ownedFenceFixture(
       sql: fixture.sql,
       infraDir: root,
       serviceIds: dmServiceIds,
-      loseRecoveryResponseOnce: options.loseRecoveryResponseOnce,
     }),
     dm = control.openControlInstallation({
       infraDir: root,
@@ -994,9 +480,6 @@ async function ownedFenceFixture(
   for (const [key, value] of Object.entries({
     OPS_AGENT_URL: await app.listen({ host: "127.0.0.1", port: 0 }),
     OPS_AGENT_TOKEN_FILE: tokenFile,
-    OPS_TRUSTED_CONFIG_DIR: host.queue,
-    OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-    OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
     OPENMAPX_ROOT_DIR: host.root,
     OPENMAPX_SECRETS_KEY: "71".repeat(32),
     OPENMAPX_RELEASE: "local",
@@ -1048,19 +531,8 @@ async function ownedFenceFixture(
           releaseId: checkedRelease.releaseId,
           expectedDigest: checkedRelease.manifestDigest,
         }
-      : options.immediateRecovery
-        ? { operationKey }
-        : {},
-    initialResult = {
-      _execution: execution,
-      ...(options.immediateRecovery
-        ? {
-            _immediateJobId: jobId,
-            _immediateActorId: actorId,
-            _immediateIntentDigest: "a".repeat(64),
-          }
-        : {}),
-    };
+      : {},
+    initialResult = {};
   if (options.guardedRecovery) {
     await fixture.db.insert(apiSchema.user).values({
       id: actorId,
@@ -1079,6 +551,7 @@ async function ownedFenceFixture(
     payload,
     status: "running",
     result: initialResult,
+    protocol: { execution },
   });
   const ctx: JobContext = {
     jobId,
@@ -1087,34 +560,42 @@ async function ownedFenceFixture(
     payload,
     signal: new AbortController().signal,
     checkpointResult: initialResult,
+    protocol: { execution },
     log: async () => {},
     setProgress: async () => {},
-    checkpoint: async (result, progress, admissionKey, stepAddress) => {
-      if ((result.opsProjection as { version?: number } | undefined)?.version === 3) {
+    checkpoint: async (result, progress, admissionKey, stepAddress, operations) => {
+      const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+      if (recorded) {
         const { checkpointOwnedAdminJob } = await import(
           "../../../../../apps/api/src/services/admin-job-checkpoint"
         );
-        ctx.checkpointResult = await checkpointOwnedAdminJob(
+        const saved = await checkpointOwnedAdminJob(
           jobId,
           execution,
           result,
+          recorded,
           progress,
           admissionKey,
           stepAddress,
           ctx.checkpointResult ?? {},
         );
+        ctx.checkpointResult = saved.result;
+        ctx.protocol = saved.protocol;
       } else {
-        await fixture.db
+        const { replaceJobCheckpoint } = await import("../admin-job-state");
+        const [saved] = await fixture.db
           .update(apiSchema.adminJob)
-          .set({ result })
-          .where(eq(apiSchema.adminJob.id, jobId));
+          .set(replaceJobCheckpoint(result))
+          .where(eq(apiSchema.adminJob.id, jobId))
+          .returning({ protocol: apiSchema.adminJob.protocol });
         ctx.checkpointResult = result;
+        ctx.protocol = saved?.protocol;
       }
     },
   };
   const captured = Promise.withResolvers<{
       input: import("@openmapx/core/data-manager-contracts").DataConfigurationFencePrepare;
-      assertion: string;
+      delegation: control.ControlDelegation;
     }>(),
     response = Promise.withResolvers<Response>(),
     originalFetch = globalThis.fetch;
@@ -1125,12 +606,10 @@ async function ownedFenceFixture(
       String(url) === `${data.baseUrl}/executions/configuration-maintenance/prepare` &&
       init?.method === "POST"
     ) {
-      const assertion = new Headers(init.headers).get("x-openmapx-control-delegation");
-      if (!assertion) throw Error("Actual maintenance grant required");
-      captured.resolve({
-        input: dataConfigurationFencePrepareSchema.parse(JSON.parse(String(init.body))),
-        assertion,
-      });
+      const { delegation, ...input } = dataConfigurationFencePrepareRequestSchema.parse(
+        JSON.parse(String(init.body)),
+      );
+      captured.resolve({ input, delegation });
       return response.promise;
     }
     return originalFetch(url, init);
@@ -1164,10 +643,10 @@ async function ownedFenceFixture(
                 ],
               },
             });
-            await prospective.stageProspectiveConfigurationMaintenance(candidate);
-            return (
-              await import("../../../../../apps/api/src/services/configuration-maintenance")
-            ).prepareConfigurationMaintenance(candidate);
+            // The fixture holds the preparation's data-manager request below.
+            return prospective.persistAndApplyProspectiveConfiguration(candidate, {
+              coordinatorMode: "ensure-running",
+            });
           },
         ),
       );
@@ -1180,13 +659,10 @@ async function ownedFenceFixture(
     },
   );
   // The original API producer must reach the actual agent-issued child grant.
-  const { input, assertion } = await Promise.race([captured.promise, pending]);
-  const child = control.inspectArtifactDelegation({
-      assertion,
-      installation: dm,
-    }).execution,
+  const { input, delegation } = await Promise.race([captured.promise, pending]);
+  const child = delegation.execution,
     owner = input.ownerPrepare,
-    authority = control.restoreAdmittedControlExecution(agent, owner),
+    authority = await control.restoreAdmittedControlExecution(agent, owner),
     lease = control.restoreArtifactTargetLeaseForSettlement(authority);
   return {
     sql: fixture.sql,
@@ -1197,7 +673,7 @@ async function ownedFenceFixture(
     child,
     authority,
     lease,
-    assertion,
+    delegation,
     input,
     data,
     host,
@@ -1259,17 +735,15 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       },
     });
     await fence.startup();
-    const attempt = fence.prepare(
-      f.input,
-      ["x-openmapx-control-delegation", f.assertion],
-      "ops-agent",
-    );
+    const attempt = fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
     const rejected = expect(attempt).rejects.toThrow("Synthetic process crash");
     try {
       await ready;
       const deadline = Date.now() + 30000,
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
-        store = createPostgresDataExecutionStore(f.sql);
+        store = createPostgresDataExecutionStore(f.sql, {
+          controlJournal: control.createDataExecutionControlJournal(f.dm, f.sql),
+        });
       await expect(
         store.admit(
           { kind: "download-fonts" },
@@ -1299,114 +773,43 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
   60000,
 );
 it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
-  "rejects a signed foreign generation owner without changing the prepared guard",
+  "admits beside a prepared fence only its own maintenance's hardlink plan, without changing it",
   async () => {
     const f = await ownedFenceFixture(),
-      fence = createDataConfigurationMaintenance(f.sql, f.dm),
-      host = control.openControlInstallation({
-        infraDir: f.root,
-        role: "host-cli",
-        serviceIds: ["foreign-consumer"],
-      });
-    let foreignLease: control.ArtifactTargetLease | undefined;
+      fence = createDataConfigurationMaintenance(f.sql, f.dm);
     try {
       await fence.startup();
-      await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent");
+      await fence.prepare({ ...f.input, delegation: f.delegation }, "ops-agent");
       const before = await f.sql`SELECT * FROM data_manager.configuration_fence`;
-      const now = Date.now(),
-        deadline = now + 30000,
-        operation = { kind: "data.link" as const },
-        opHash = createHash("sha256").update(canonicalJson(operation)).digest("hex"),
-        owner: ExecutionRef = {
-          executor: "host-cli",
-          principal: "host-cli",
-          executionId: randomUUID(),
-          operationKey: createControlRootOperationKey({
-            notAfter: deadline,
-            nonce: randomBytes(16),
-          }),
-          operationFingerprint: opHash,
-          deadlineAt: deadline,
-          fingerprint: executionFingerprint({
-            kind: operation.kind,
-            operationFingerprint: opHash,
-            deadlineAt: deadline,
-          }),
-        },
-        plan = { plan: [], prune: true as const },
-        planDigest = control.controlDigest(plan);
-      const requests = [
-        {
+      const own = {
           revisionId: f.input.revisionId,
-          planDigest,
-          coordinatorMode: f.input.coordinatorMode,
+          planDigest: f.input.hardlinkPlanDigest ?? "f".repeat(64),
+          leaseId: control.rootLeaseId(f.input.ownerPrepare),
         },
-      ].map((body, ordinal) => {
-        const input = { kind: "generation-hardlinks" as const, ...body },
-          hash = createHash("sha256").update(canonicalJson(input)).digest("hex"),
-          execution: ExecutionRef = {
-            executor: "data-manager",
-            principal: "host-cli",
-            executionId: randomUUID(),
-            operationKey: control.controlChildOperationKey(
-              owner.operationKey,
-              "hardlinks",
-              ordinal,
-            ),
-            operationFingerprint: hash,
-            deadlineAt: deadline,
-            fingerprint: executionFingerprint({
-              kind: input.kind,
-              operationFingerprint: hash,
-              deadlineAt: deadline,
-              parent: control.retainedControlParent(owner),
-            }),
-          };
-        return {
-          input,
-          plan,
-          slot: {
-            phase: "hardlinks" as const,
-            ordinal,
-            kind: input.kind,
-            recipient: "data-manager" as const,
-            execution,
-            serviceIds: ["foreign-consumer"],
-          },
-        };
-      });
-      const authority = control.retainAdmittedControlExecution(host, {
-        execution: owner,
-        kind: operation.kind,
-        operation,
-        admittedAt: now,
-        requestedDeadlineAt: deadline,
-        serviceIds: ["foreign-consumer"],
-        plan: requests.map((request) => request.slot),
-      });
-      foreignLease = await control.acquireArtifactTargetLease({
-        serviceIds: ["foreign-consumer"],
-        owner: authority,
-      });
-      for (const request of requests) {
-        const assertion = await control.delegateArtifactTargetLease(foreignLease, {
-          ...request.slot,
-          childPublicKey: f.dm.publicKey,
-        });
-        await expect(
-          fence.assertGenerationAdmission(
-            {
-              operationKey: request.slot.execution.operationKey,
-              requestedDeadlineAt: deadline,
-              input: request.input,
-              plan,
-            },
-            ["x-openmapx-control-delegation", assertion],
-            "ops-agent",
-          ),
-        ).rejects.toMatchObject({ statusCode: 403 });
-        expect(await f.sql`SELECT id FROM data_manager.jobs WHERE execution_version=2`).toEqual([]);
-      }
+        // Beside a prepared fence what the agent shows of the lease does not
+        // matter: only the fence's own maintenance gets through.
+        admit = (
+          input: typeof own,
+          caller: Parameters<typeof fence.assertLinkAdmission>[2]["caller"],
+          lease: "held" | "not_held" = caller === "host-cli" ? "held" : "not_held",
+        ): Promise<unknown> =>
+          f.sql.begin((tx) => fence.assertLinkAdmission(tx, input, { caller, lease }));
+      // The host CLI, another lease, another revision and another plan stay out.
+      for (const [input, caller] of [
+        [own, "host-cli"],
+        [{ ...own, leaseId: randomUUID() }, "ops-agent"],
+        [{ ...own, revisionId: `cfg1_${"z".repeat(43)}` }, "ops-agent"],
+        [{ ...own, planDigest: "e".repeat(64) }, "ops-agent"],
+      ] as const)
+        await expect(admit(input, caller)).rejects.toThrow("configuration_maintenance_busy");
+      // The API's token never sends a plan under a lease.
+      await expect(admit(own, "api")).rejects.toMatchObject({ statusCode: 403 });
+      // The maintenance's own plan: its fence names the plan it froze. A
+      // maintenance without a plan names none, so nothing is admitted beside it.
+      if (f.input.hardlinkPlanDigest)
+        await expect(admit(own, "ops-agent")).resolves.toBeUndefined();
+      else await expect(admit(own, "ops-agent")).rejects.toThrow("configuration_maintenance_busy");
+      expect(await f.sql`SELECT id FROM data_manager.jobs WHERE execution_version=2`).toEqual([]);
       expect(await f.sql`SELECT * FROM data_manager.configuration_fence`).toEqual(before);
       await expect(
         fence.withAdmission(async () => {
@@ -1414,8 +817,6 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         }),
       ).rejects.toThrow("configuration_maintenance_busy");
     } finally {
-      if (foreignLease) control.closeArtifactTargetLeaseHandle(foreignLease);
-      control.closeControlInstallation(host);
       await f.close();
     }
   },

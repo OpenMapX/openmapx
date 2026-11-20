@@ -1,12 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   bindControlChildPhase,
+  type ControlDelegation,
   cliDataReservation,
   closeControlInstallation,
   consumeControlChildDispatch,
   controlChildOperationKey,
   controlRegisteredServiceIds,
-  controlRolePublicKey,
   fixedDataBodyFingerprint,
   issueControlChildPhase,
   openControlInstallation,
@@ -54,7 +54,8 @@ export async function executeDurableDataStep(
     transport: DataManagerTransport;
     signal?: AbortSignal;
     requestedDeadlineAt: number;
-    parentAssertion?: string;
+    /** The child as this command issued it; absent when an earlier run already did. */
+    delegation?: ControlDelegation;
     observerDeadlineAt: number;
     checkpointAttempt: (attempt: DataChildAttempt) => Promise<void>;
     checkpoint: (status: DataExecutionStatus) => Promise<void>;
@@ -101,7 +102,7 @@ export async function executeDurableDataStep(
       state: "prepared",
     };
     await options.checkpointAttempt(attempt);
-    if (!options.parentAssertion) throw Error("Original signed data parent assertion required");
+    if (!options.delegation) throw Error("Original data child delegation required");
     attempt = { ...attempt, state: "attempted" };
     await options.checkpointAttempt(attempt);
     try {
@@ -112,12 +113,9 @@ export async function executeDurableDataStep(
               operationKey: options.operationKey,
               input: normalized,
               requestedDeadlineAt: options.requestedDeadlineAt,
+              delegation: options.delegation,
             },
-            {
-              transport: options.transport,
-              signal: options.signal,
-              headers: { "x-openmapx-parent-execution": options.parentAssertion },
-            },
+            { transport: options.transport, signal: options.signal },
           ),
         ),
       );
@@ -168,7 +166,7 @@ export async function executeDurableDataStep(
   if (checkpointError) throw checkpointError;
   // Data-manager releases its own lease just after its terminal; a next step
   // that claims the same targets waits for that in its own acquisition.
-  verifyCliDataTerminal(context.authority, terminal);
+  await verifyCliDataTerminal(context.authority, terminal);
   await options.checkpointAttempt({ ...attempt, state: "terminal" });
   return terminal;
 }
@@ -203,22 +201,21 @@ export async function runOwnedDataStep(
   const slot = cliDataReservation(context.authority, phase),
     bound = await bindControlChildPhase(context.authority, slot);
   const prior = readCliDataAttempt(context.authority, slot.execution.operationKey);
-  let assertion: string | undefined;
+  let delegation: ControlDelegation | undefined;
   if (!prior) {
     const issued = await issueControlChildPhase(context.authority, {
       phase,
       ordinal: slot.ordinal,
-      childPublicKey: controlRolePublicKey(context.installation, "data-manager"),
     });
-    assertion = issued.assertion;
-    consumeControlChildDispatch(issued.dispatchTicket);
+    delegation = issued.delegation;
+    await consumeControlChildDispatch(issued.dispatchTicket);
   }
   const result = await executeDurableDataStep(input, {
     phase,
     signal: cliAcquisitionOptions().signal,
     operationKey: slot.execution.operationKey,
     requestedDeadlineAt: bound.execution.deadlineAt,
-    parentAssertion: assertion,
+    delegation,
     transport,
     observerDeadlineAt: context.authority.execution.deadlineAt,
     checkpointAttempt: async (attempt) => retainCliDataAttempt(context.authority, attempt),
@@ -266,7 +263,7 @@ export async function runCliDataStep(
       deadlineAt: normalized.deadlineAt,
     };
   try {
-    const authority = retainAdmittedControlExecution(installation, {
+    const authority = await retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
@@ -294,7 +291,7 @@ export async function runCliDataStep(
     const result = await withHostDataControlContext(installation, authority, () =>
       runOwnedDataStep(input, transport),
     );
-    retainControlEffectReceipt(authority, {
+    await retainControlEffectReceipt(authority, {
       outcome: "committed",
       publication: "committed",
       receipt: { kind: "data-command", status: result },

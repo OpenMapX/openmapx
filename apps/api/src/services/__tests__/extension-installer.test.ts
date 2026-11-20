@@ -826,7 +826,6 @@ describe("installExtension", () => {
           ? {
               outcome,
               reason: "transport_or_result",
-              publisherCleanupFailed: false,
               registryUpdateFailed: false,
             }
           : {
@@ -835,7 +834,6 @@ describe("installExtension", () => {
               enabledServiceIds: ["svc-one"],
               followUp: "failed",
               cleanupFailed: false,
-              publisherCleanupFailed: false,
               registryUpdateFailed: false,
             },
       );

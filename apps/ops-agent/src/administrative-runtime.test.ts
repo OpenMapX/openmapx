@@ -1224,11 +1224,10 @@ describe("fixed CLI execution context", () => {
     execution.deadlineAt = Date.now() + 12 * 3600_000;
     writeFileSync(
       join(root, "cli.mjs"),
-      `import{writeFileSync,existsSync}from'node:fs';import{setTimeout}from'node:timers/promises';if(process.env.OPENMAPX_CONTROL_DELEGATION||process.env.OPENMAPX_PARENT_EXECUTION)process.exit(2);const execution=JSON.parse(process.env.OPENMAPX_CONTROL_EXECUTION);writeFileSync(${JSON.stringify(ready)},JSON.stringify(execution));while(!existsSync(${JSON.stringify(release)}))await setTimeout(5);console.log('completed');`,
+      `import{writeFileSync,existsSync}from'node:fs';import{setTimeout}from'node:timers/promises';if(process.env.OPENMAPX_CONTROL_CHILD)process.exit(2);const execution=JSON.parse(process.env.OPENMAPX_CONTROL_EXECUTION);writeFileSync(${JSON.stringify(ready)},JSON.stringify(execution));while(!existsSync(${JSON.stringify(release)}))await setTimeout(5);console.log('completed');`,
       { mode: 0o644 },
     );
-    vi.stubEnv("OPENMAPX_CONTROL_DELEGATION", "untrusted-inherited");
-    vi.stubEnv("OPENMAPX_PARENT_EXECUTION", "untrusted-parent");
+    vi.stubEnv("OPENMAPX_CONTROL_CHILD", "untrusted-inherited");
     let settled = false;
     const completion = createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
       execution,

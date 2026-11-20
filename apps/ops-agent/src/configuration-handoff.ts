@@ -1,13 +1,7 @@
-/** Fixed configuration helper launch mechanics. These data builders confer no
- * authority: the installed owner/runtime must first join the original frozen
- * step, actual borrowed lease, signed source and one-use helper dispatch. */
+/** Configuration helper launch mechanics. The helper acts only under the lease
+ * child the agent recorded for it before the launch. */
 import { join } from "node:path";
-import {
-  type ExecutionRef,
-  executionRefSchema,
-  type OpsJobState,
-  type OpsOperation,
-} from "@openmapx/core/ops";
+import type { OpsJobState, OpsOperation } from "@openmapx/core/ops";
 import { z } from "zod";
 import type { DockerCommandRunner } from "./release-images";
 import { OpsHostUpdateRequiredError } from "./runtime";
@@ -25,9 +19,9 @@ const NOT_INHERITED = new Set([
   "HOSTNAME",
   "DOCKER_CONFIG",
   "OPS_CONFIGURATION_HANDOFF_ID",
-  "OPENMAPX_CONTROL_EXECUTION",
-  "OPENMAPX_CONTROL_DELEGATION",
-  "OPENMAPX_PARENT_EXECUTION",
+  "OPENMAPX_MAINTENANCE_ID",
+  "OPENMAPX_LEASE_ID",
+  "OPENMAPX_LEASE_CHILD",
   "OPENMAPX_ROOT_DIR",
 ]);
 
@@ -143,7 +137,7 @@ export async function inspectAgentContainer(
 
 /** Only original inherited environment values participate in the private source
  * copy. Container identity and fixed helper transport necessarily differ. */
-export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts): string[] {
+function configurationHandoffEnvironmentNames(facts: AgentContainerFacts): string[] {
   return z
     .array(
       z
@@ -156,22 +150,18 @@ export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts)
     .refine((names) => Buffer.byteLength(JSON.stringify(names)) <= 8192)
     .parse([...new Set(facts.envNames.filter((name) => !NOT_INHERITED.has(name)))].sort());
 }
-/** Runs the running agent's image with its identity and mounts, sibling role keys
- * and private receipts hidden, no network and confined resources. */
+/** Runs the running agent's image with its identity and mounts, no network and
+ * confined resources. The container is kept after it exits, so the agent reads
+ * its exit code; the agent removes it once it recorded the outcome. */
 export function configurationHandoffRunArgs(
   facts: AgentContainerFacts,
   rootDir: string,
-  input: { handoffId: string; assertion: string; execution: ExecutionRef },
+  input: { handoffId: string; maintenanceId: string; leaseId: string; leaseChild: string },
 ): string[] {
   const handoffId = z.uuid().parse(input.handoffId),
-    execution = executionRefSchema.parse(input.execution);
-  z.string()
-    .min(1)
-    .max(4096)
-    .regex(/^[A-Za-z0-9_-]+$/)
-    .parse(input.assertion);
-  if (execution.executor !== "host-cli")
-    throw Error("Original configuration helper execution required");
+    maintenanceId = z.uuid().parse(input.maintenanceId),
+    leaseId = z.uuid().parse(input.leaseId),
+    leaseChild = z.uuid().parse(input.leaseChild);
   if (
     !MOUNT_PATH.test(rootDir) ||
     facts.rootMounts.length === 0 ||
@@ -189,50 +179,15 @@ export function configurationHandoffRunArgs(
   const inherited = facts.envNames.filter(
     (name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !NOT_INHERITED.has(name),
   );
-  const hostSource = (target: string): string => {
-    const mount = facts.rootMounts
-      .filter((entry) => target === entry.target || target.startsWith(`${entry.target}/`))
-      .at(-1);
-    if (!mount) throw Error("Configuration helper control mounts unavailable");
-    return `${mount.source}${target.slice(mount.target.length)}`;
-  };
-  // The helper's own mounts: the other roles' keys and private directories
-  // hidden, and its control material. The agent masks some of the same
-  // targets itself; Docker refuses two mounts at one target, so the helper
-  // keeps its own and does not inherit the agent's there.
-  const own = [
-    ...["ops-agent", "data-manager", "host-cli"].map((role) => ({
-      source: hostSource(join(rootDir, "infra/docker/control-private/hidden-key")),
-      target: `${rootDir}/infra/docker/secrets/control-${role}.key`,
-      readOnly: true,
-    })),
-    ...["data-manager", "host-cli"].map((role) => ({
-      source: hostSource(join(rootDir, "infra/docker/control-private/empty")),
-      target: `${rootDir}/infra/docker/control-private/${role}`,
-      readOnly: true,
-    })),
-    {
-      source: hostSource(join(rootDir, "infra/docker/control-private/ops-agent")),
-      target: "/var/lib/openmapx/control-private",
-      readOnly: false,
-    },
-    {
-      source: hostSource(join(rootDir, "infra/docker/secrets/control-verifiers.json")),
-      target: "/run/secrets/openmapx-control-verifiers",
-      readOnly: true,
-    },
-  ];
   const mounts = [
     { source: facts.dockerSocketSource, target: "/var/run/docker.sock", readOnly: false },
-    ...facts.rootMounts.filter((mount) => !own.some((entry) => entry.target === mount.target)),
-    ...own,
+    ...facts.rootMounts,
   ];
   if (new Set(mounts.map((mount) => mount.target)).size !== mounts.length)
     throw Error("Configuration helper launch rejected");
   return [
     "run",
     "--detach",
-    "--rm",
     "--name",
     `openmapx-configuration-handoff-${handoffId}`,
     "--label",
@@ -265,9 +220,11 @@ export function configurationHandoffRunArgs(
     "--env",
     `OPS_CONFIGURATION_HANDOFF_ID=${handoffId}`,
     "--env",
-    `OPENMAPX_CONTROL_DELEGATION=${input.assertion}`,
+    `OPENMAPX_MAINTENANCE_ID=${maintenanceId}`,
     "--env",
-    `OPENMAPX_CONTROL_EXECUTION=${JSON.stringify(execution)}`,
+    `OPENMAPX_LEASE_ID=${leaseId}`,
+    "--env",
+    `OPENMAPX_LEASE_CHILD=${leaseChild}`,
     "--workdir",
     "/app/apps/ops-agent",
     "--entrypoint",

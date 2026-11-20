@@ -50,8 +50,7 @@ async function fixture() {
   cleanups.push(() => closeControlInstallation(installation));
   const store = new ArtifactTransferStore({
     dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
-    privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
-    token: host.token,
+    privateRoot: join(host.infraDir, "state/ops-agent/artifact-transfers"),
     capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
   });
   cleanups.push(() => store.close());
@@ -321,7 +320,9 @@ it("imports through the real registered server and original target root after a 
     fingerprint: status.fingerprint,
     deadlineAt: status.deadlineAt,
   });
-  verifyLocalArtifactTargetRootRelease(restoreAdmittedControlExecution(f.installation, execution));
+  await verifyLocalArtifactTargetRootRelease(
+    await restoreAdmittedControlExecution(f.installation, execution),
+  );
   expect(
     f.calls.some((args) => args.includes("up") || args.includes("stop") || args.includes("pull")),
   ).toBe(false);
@@ -450,8 +451,7 @@ it("reconciles the original prepared publication after exact foreign-inode repai
   });
   const store = new ArtifactTransferStore({
     dataRoot: join(f.infraDir, "data/.openmapx-transfers"),
-    privateRoot: join(f.infraDir, "control-private/ops-agent/artifact-transfers"),
-    token: f.token,
+    privateRoot: join(f.infraDir, "state/ops-agent/artifact-transfers"),
     capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
   });
   cleanups.push(() => store.close());
@@ -498,7 +498,9 @@ it("reconciles the original prepared publication after exact foreign-inode repai
     fingerprint: status.fingerprint,
     deadlineAt: status.deadlineAt,
   });
-  verifyLocalArtifactTargetRootRelease(restoreAdmittedControlExecution(installation, execution));
+  await verifyLocalArtifactTargetRootRelease(
+    await restoreAdmittedControlExecution(installation, execution),
+  );
   expect(
     journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
   ).toHaveLength(1);
@@ -627,8 +629,8 @@ it("observes committed publication after result loss without rewriting its origi
     fingerprint: original.fingerprint,
     deadlineAt: original.deadlineAt,
   });
-  verifyLocalArtifactTargetRootRelease(
-    restoreAdmittedControlExecution(next.installation, execution),
+  await verifyLocalArtifactTargetRootRelease(
+    await restoreAdmittedControlExecution(next.installation, execution),
   );
   expect(readFileSync(join(f.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(files);
   expect(
@@ -653,8 +655,7 @@ async function reassembleCommittedFixture(f: Awaited<ReturnType<typeof fixture>>
   });
   const store = new ArtifactTransferStore({
     dataRoot: join(f.infraDir, "data/.openmapx-transfers"),
-    privateRoot: join(f.infraDir, "control-private/ops-agent/artifact-transfers"),
-    token: f.token,
+    privateRoot: join(f.infraDir, "state/ops-agent/artifact-transfers"),
     capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
   });
   cleanups.push(() => store.close());
@@ -757,4 +758,78 @@ it("contains a failed archive validation and exposes only its original private-p
   expect(
     f.calls.some((args) => args.includes("up") || args.includes("stop") || args.includes("pull")),
   ).toBe(false);
+}, 60000);
+
+it("admits another operation while a failed archive validation is being contained", async () => {
+  const f = await fixture();
+  async function badStage() {
+    const bytes = Buffer.from("not an archive"),
+      stage = await f.store.createStage({
+        ownerId: "synthetic-admin",
+        purpose: "prepared-artifact",
+        direction: "upload",
+        declaredBytes: bytes.length,
+        operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+      });
+    await f.store.upload({
+      stageId: stage.stageId,
+      ownerId: "synthetic-admin",
+      purpose: stage.purpose,
+      attemptId: randomUUID(),
+      deadlineAt: Date.now() + 60000,
+      body: new ReadableStream({
+        start(c) {
+          c.enqueue(bytes);
+          c.close();
+        },
+      }),
+    });
+    return stage;
+  }
+  async function validate(stageId: string) {
+    const deadline = Date.now() + 600000,
+      operation = {
+        kind: "artifactTransfer.validate" as const,
+        stageId,
+        ownerId: "synthetic-admin",
+        purpose: "prepared-artifact" as const,
+      },
+      admitted = await f.client.execute(operation, {
+        operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+        execution: { requestedDeadlineAt: deadline },
+      });
+    if (admitted.execution !== "async") throw Error("Validation was not queued");
+    return admitted.operationId;
+  }
+  const [first, second] = [await badStage(), await badStage()];
+  let entered = () => {},
+    release = () => {};
+  const containing = new Promise<void>((resolve) => {
+      entered = resolve;
+    }),
+    held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  const contain = f.store.containPreparedValidation.bind(f.store);
+  vi.spyOn(f.store, "containPreparedValidation").mockImplementation(async (authority) => {
+    entered();
+    await held;
+    return contain(authority);
+  });
+  const firstId = await validate(first.stageId);
+  await containing;
+  try {
+    // The first validation's containment holds no admission lock: a second
+    // operation is admitted and recorded while it waits.
+    const secondId = await validate(second.stageId);
+    expect((await f.client.status("artifactTransfer.validate", firstId)).state).not.toBe("failed");
+    expect(f.journal.records().some((row) => row.operationId === secondId)).toBe(true);
+  } finally {
+    release();
+  }
+  await vi.waitFor(
+    async () =>
+      expect((await f.client.status("artifactTransfer.validate", firstId)).state).toBe("failed"),
+    { timeout: 20000, interval: 50 },
+  );
 }, 60000);

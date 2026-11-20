@@ -4,7 +4,7 @@ import * as control from "@openmapx/core/build-artifacts";
 import Fastify from "fastify";
 import { registerApi } from "../../../api.js";
 import { registerAuth } from "../../../auth.js";
-import { db, rawSql } from "../../../db/index.js";
+import { connectDatabase, sql } from "../../../db/index.js";
 import { StateStore } from "../../../state.js";
 import { resolveOperationsProfile } from "../../transitous/operations-profile.js";
 import { createDefaultTransitousScriptRunner } from "../../transitous/script-runner.js";
@@ -15,6 +15,7 @@ import { createDataExecutionDispatcher } from "../dispatch.js";
 import { createDataExecutionReceiver } from "../receiver.js";
 import { createDataExecutionRuntime } from "../runtime.js";
 import { createPostgresDataExecutionStore } from "../store.js";
+import { openCancellableSql } from "../worker-scope.js";
 
 // Host mode uses the production maintenance dispatcher. Python mode isolates
 // the actual owned script producer, so SIGKILL lands during its remote process.
@@ -34,25 +35,22 @@ const installation = control.openControlInstallation({
   role: "data-manager",
   serviceIds: ["data-manager", "motis", "motis-staging", "motis-feed-proxy"],
 });
-const fence = createDataConfigurationMaintenance(rawSql, installation);
+const fence = createDataConfigurationMaintenance(sql, installation);
 await fence.startup();
 installDataMutationAdmission(fence);
-const journal = control.createDataExecutionControlJournal(installation, rawSql);
-const store = createPostgresDataExecutionStore(rawSql, {
+const journal = control.createDataExecutionControlJournal(installation, sql);
+const store = createPostgresDataExecutionStore(sql, {
   controlJournal: journal,
   configurationFence: fence,
 });
-const singleFlight = createSingleFlightController({ db, admissionSql: rawSql });
+const singleFlight = createSingleFlightController();
 const policy = resolveOperationsProfile({ countries: ["de"] });
 const dispatcher = createDataExecutionDispatcher({
   dataDir: join(root, "data"),
   state: new StateStore(join(root, "data")),
-  sql: rawSql,
+  sql,
   singleFlight,
   operationsPolicy: policy,
-  runHardlinks: async () => {
-    throw Error("No hardlinks in this fixture");
-  },
 });
 const runner = createDefaultTransitousScriptRunner();
 let dispatches = 0;
@@ -86,6 +84,7 @@ const runtime = createDataExecutionRuntime({
       sourceRevision: "public-fixture",
     };
   },
+  openSql: (signal) => openCancellableSql(connectDatabase, sql, signal),
 });
 const receiver = createDataExecutionReceiver({
   runtime,
@@ -96,17 +95,12 @@ const receiver = createDataExecutionReceiver({
 });
 await runtime.reconcile();
 const app = Fastify();
-registerAuth(
-  app,
-  { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` },
-  { executionReceiver: () => receiver },
-);
+registerAuth(app, { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` });
 registerApi(app, {
   dataDir: join(root, "data"),
-  singleFlight,
   operationsPolicy: policy,
   executionReceiver: receiver,
-  searchIndexSql: rawSql,
+  searchIndexSql: sql,
 });
 await app.listen({ host: "127.0.0.1", port: 0 });
 const address = app.server.address();
@@ -119,7 +113,7 @@ for await (const line of { [Symbol.asyncIterator]: () => messages }) {
     const pendingRunners =
       record?.input.kind === "transit-sync"
         ? journal.pendingRunnerAttempts(
-            control.restoreAdmittedControlExecution(installation, record.execution),
+            await control.restoreAdmittedControlExecution(installation, record.execution),
           ).length
         : undefined;
     send({ type: "probe", dispatches, pendingRunners });

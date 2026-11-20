@@ -8,7 +8,7 @@ import {
   awaitAppliedContainerHealth,
   inspectMaintenanceDockerRuntime,
 } from "./configuration-maintenance-docker-inspection";
-import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-store";
+import type { MaintenanceFile } from "./maintenance";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -105,14 +105,14 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
   };
   // The inspector consumes already-admitted data; this fixture creates no authority.
   const owner = {
-    receipt: { generation: "not_committed" },
+    record: { generation: "not_committed" },
     originalContainers: [container],
     plan: {
       operation: { revisionId: revision, expectedCurrentRevisionId: revision },
       steps: [],
       handoff: { serviceIds: ["app-api"] },
     },
-  } as unknown as ConfigurationMaintenanceOwnerRecord;
+  } as unknown as MaintenanceFile;
   let content = "fixture-content";
   const readFiles: string[] = [];
   const inspect = () =>
@@ -123,7 +123,6 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
       },
       owner,
       containers: [container],
-      privateKey: key,
       signal: new AbortController().signal,
       execFile: async (_file, args) => {
         if (args[0] === "compose" && args.includes("--format"))

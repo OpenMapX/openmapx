@@ -18,6 +18,37 @@ import { build } from "esbuild";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { transitChildCandidateId } from "./ops-children.js";
 
+/** A fault that runs at the next forward check; every check waits for it. `bound`
+ * runs after a child's binding is recorded on its cell. */
+const forwardGate = vi.hoisted(() => ({
+  fault: undefined as (() => Promise<void>) | undefined,
+  running: undefined as Promise<void> | undefined,
+  bound: undefined as ((input: { phase: string }) => void) | undefined,
+}));
+vi.mock("@openmapx/core/build-artifacts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core/build-artifacts")>();
+  return {
+    ...actual,
+    bindControlChildPhase: async (...args: Parameters<typeof actual.bindControlChildPhase>) => {
+      const child = await actual.bindControlChildPhase(...args);
+      forwardGate.bound?.(args[1]);
+      return child;
+    },
+    assertControlExecutionForward: async (
+      ...args: Parameters<typeof actual.assertControlExecutionForward>
+    ) => {
+      const fault = forwardGate.fault;
+      forwardGate.fault = undefined;
+      if (fault)
+        forwardGate.running = fault().finally(() => {
+          forwardGate.running = undefined;
+        });
+      await forwardGate.running;
+      return actual.assertControlExecutionForward(...args);
+    },
+  };
+});
+
 /** The lease holding `target` in the installation whose data root is `data`. */
 function targetLease(data: string, target: string): string | undefined {
   return control
@@ -50,7 +81,7 @@ it.each(["promotion", "reload"] as const)(
   async (kind) => {
     const root = mkdtempSync(join(tmpdir(), "omx-data-http-cancel-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -87,36 +118,29 @@ it.each(["promotion", "reload"] as const)(
       deadlineAt,
       fingerprint: executionFingerprint({ kind: input.kind, operationFingerprint, deadlineAt }),
     };
-    const child: ExecutionRef = {
-      executor: "ops-agent",
-      principal: "data-manager",
-      executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-      operationKey: control.controlChildOperationKey(owner.operationKey, phase, 0),
-      operationFingerprint: opsOperationFingerprint(operation),
-      deadlineAt,
-      fingerprint: executionFingerprint({
-        kind: operation.kind,
-        operationFingerprint: opsOperationFingerprint(operation),
-        deadlineAt,
-        parent: control.retainedControlParent(owner),
-      }),
-    };
-    const plan = {
+    const reservation: control.ControlChildReservation = {
+      version: 1,
       phase,
       ordinal: 0,
       kind: operation.kind,
-      execution: child,
+      recipient: "ops-agent",
       serviceIds,
-      recipient: "ops-agent" as const,
+      operationFingerprint: opsOperationFingerprint(operation),
+      execution: {
+        executor: "ops-agent",
+        principal: "data-manager",
+        executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+        operationKey: control.controlChildOperationKey(owner.operationKey, phase, 0),
+      },
     };
-    const authority = control.retainAdmittedControlExecution(dm, {
+    const authority = await control.retainAdmittedControlExecution(dm, {
       execution: owner,
       kind: input.kind,
       operation: input,
       admittedAt: deadlineAt - 60000,
       requestedDeadlineAt: deadlineAt,
       serviceIds,
-      plan: [plan],
+      reservations: [reservation],
     });
     const lease = await control.acquireArtifactTargetLease({
       serviceIds,
@@ -124,7 +148,7 @@ it.each(["promotion", "reload"] as const)(
     });
     if (kind === "promotion") {
       writePreparedFixture(join(root, "data/motis/staging"), executionId);
-      control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
+      await control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
       renameSync(join(root, "data/motis/staging"), join(root, "data/motis/live"));
     } else {
       mkdirSync(join(root, "data/motis-feed-proxy/conf"), { mode: 0o700, recursive: true });
@@ -137,12 +161,12 @@ it.each(["promotion", "reload"] as const)(
         mode: 0o600,
       });
       linkProxyFixture(join(root, "data"));
-      control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
+      await control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
     }
-    const assertion = await control.delegateArtifactTargetLease(lease, {
-      ...plan,
-      childPublicKey: agentVerifier.publicKey,
-      evidence: control.publishedDataTransitCandidate(authority, { phase, ordinal: 0 }),
+    const child = (await control.bindControlChildPhase(authority, reservation)).execution;
+    const { delegation } = await control.issueControlChildPhase(authority, {
+      ...reservation,
+      lease,
     });
     const token = "b".repeat(43),
       tokenFile = join(root, "token");
@@ -199,14 +223,14 @@ it.each(["promotion", "reload"] as const)(
       await expect(
         client.execute(operation, {
           operationKey: child.operationKey,
-          execution: { requestedDeadlineAt: deadlineAt },
-          controlAssertion: assertion,
+          execution: { requestedDeadlineAt: child.deadlineAt },
+          leaseChild: { leaseId: lease.leaseId, childKey: delegation.childKey },
         }),
       ).rejects.toThrow();
       expect((await next()).type).toBe("effect");
       const adopted = await client.lookup(operation, child.operationKey, {
         fingerprint: child.fingerprint,
-        execution: { requestedDeadlineAt: deadlineAt },
+        execution: { requestedDeadlineAt: child.deadlineAt },
       });
       expect(adopted.operationId).toBe(child.executionId);
       const cancellation = client
@@ -257,7 +281,6 @@ it.each(["promotion", "reload"] as const)(
   60000,
 );
 
-import { existsSync } from "node:fs";
 import {
   cancelDataExecution,
   createDataManagerTransport,
@@ -287,10 +310,12 @@ it.skipIf(
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
 
-    const sql = postgres(url, { max: 4 }),
+    // Job rows are shared by every fixture; this test's are those admitted since it began.
+    const startedAt = Date.now(),
+      sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-durable-dm-agent-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -311,11 +336,12 @@ it.skipIf(
       sql,
       singleFlight,
       operationsPolicy,
-      runHardlinks: async () => {
-        throw Error("This fixture has no generation grant");
-      },
     });
-    const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch }),
+    const runtime = createDataExecutionRuntime({
+        store,
+        dispatch: dispatcher.dispatch,
+        openSql: () => ({ sql, close: async () => {} }),
+      }),
       receiver = createDataExecutionReceiver({
         runtime,
         installation: dm,
@@ -369,18 +395,13 @@ it.skipIf(
       }),
     );
     const app = Fastify();
-    registerAuth(
-      app,
-      {
-        api: "synthetic-dm-token-api",
-        "ops-agent": "synthetic-dm-token",
-        "host-cli": "synthetic-dm-token-cli",
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: "synthetic-dm-token-api",
+      "ops-agent": "synthetic-dm-token",
+      "host-cli": "synthetic-dm-token-cli",
+    });
     registerApi(app, {
       dataDir: join(root, "data"),
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -471,7 +492,7 @@ it.skipIf(
       expect(posts).toBe(1);
       expect(cancels).toBe(1);
       expect((await store.inspect(id))?.children).toMatchObject([
-        { state: "terminal", publication: "committed", dispatchState: "claimed" },
+        { state: "terminal", publication: "committed" },
       ]);
     } finally {
       send({ type: "release" });
@@ -482,23 +503,11 @@ it.skipIf(
       agent.stdin.end();
       await exited;
       resetOpsClient();
-      const fixtureRows = await store.listUnsettled();
       const ownIds = new Set([
         ...(id ? [id] : []),
-        ...fixtureRows
-          .filter((row) =>
-            existsSync(
-              join(
-                root,
-                "control-private/data-manager/executions",
-                `${row.status.operationKey}.json`,
-              ),
-            ),
-          )
-          .map((row) => row.status.id),
+        ...(await dataJobsSince(sql, store, startedAt)).map((row) => row.status.id),
       ]);
       for (const ownId of ownIds) await sql`DELETE FROM data_manager.jobs WHERE id=${ownId}`;
-      journal.close();
       control.closeControlInstallation(dm);
       await sql.end();
       lines.close();
@@ -508,10 +517,11 @@ it.skipIf(
   60000,
 );
 
-import { readFileSync, renameSync, statSync } from "node:fs";
+import { readFileSync, renameSync } from "node:fs";
 import { startDataExecution } from "@openmapx/core/data-manager-sdk";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { dataJobsSince } from "../../../__tests__/helpers/job-rows.js";
 import { createCandidateManifest } from "../transitous/candidate.js";
 import { retainTransitPhaseCandidate, runTransitOwnedPhase } from "../transitous/owned-ops.js";
 import { buildJobContext } from "../transitous/pipeline.js";
@@ -542,7 +552,7 @@ it
     const root = mkdtempSync(join(tmpdir(), "omx-late-durable-child-")),
       data = join(root, "data");
     mkdirSync(data, { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const services = ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
       dm = control.openControlInstallation({
         infraDir: root,
@@ -614,9 +624,6 @@ it
         sql,
         singleFlight,
         operationsPolicy,
-        runHardlinks: async () => {
-          throw Error("No generation grant");
-        },
       }),
       receiver = createDataExecutionReceiver({
         runtime,
@@ -627,35 +634,41 @@ it
       });
     let restoreFault: ReturnType<typeof vi.spyOn> | undefined,
       recoveryFaultReached = false;
-    const retainRecovery = journal.retainProxyRecoveryIntent.bind(journal);
-    journal.retainProxyRecoveryIntent = async (authority, backupDigest) => {
-      await retainRecovery(authority, backupDigest);
-      if (kind === "cancel-before-restore")
-        await runtime.requestCancel({
-          id: authority.execution.executionId,
-          operationKey: authority.execution.operationKey,
-          fingerprint: authority.execution.fingerprint,
-        });
+    // Each fault strikes once the restore reservation is confirmed on the row.
+    const reserveChild = store.reserveChild.bind(store);
+    store.reserveChild = async (id, version, child) => {
+      const saved = await reserveChild(id, version, child);
+      if (!saved?.continuation || child.phase !== "proxy-restore") return saved;
+      if (kind === "cancel-before-restore") {
+        // The cancellation waits for this write, so it runs at the next forward check.
+        const { execution } = saved.record;
+        forwardGate.fault = async () => {
+          await runtime.requestCancel({
+            id: execution.executionId,
+            operationKey: execution.operationKey,
+            fingerprint: execution.fingerprint,
+          });
+          recoveryFaultReached = true;
+        };
+        return saved;
+      }
       if (kind === "expire-before-restore")
         restoreFault = vi.spyOn(Date, "now").mockReturnValue(deadline + 1);
       recoveryFaultReached = true;
       if (kind === "restore-reservation-crash")
         throw Error("Synthetic crash after confirmed restore reservation");
-    };
-    const checkpointChild = store.checkpointChild.bind(store);
-    store.checkpointChild = async (id, version, child) => {
-      const saved = await checkpointChild(id, version, child);
-      if (
-        saved &&
-        child.phase === "proxy-restore" &&
-        child.state === "bound" &&
-        kind === "restore-files-crash"
-      )
-        throw Error(
-          "Synthetic response loss after files and confirmed binding, before validation dispatch",
-        );
       return saved;
     };
+    forwardGate.bound =
+      kind === "restore-files-crash"
+        ? (input) => {
+            if (input.phase !== "proxy-restore") return;
+            forwardGate.bound = undefined;
+            throw Error(
+              "Synthetic response loss after files and confirmed binding, before validation dispatch",
+            );
+          }
+        : undefined;
     const token = "c".repeat(43),
       tokenFile = join(root, "token");
     writeFileSync(tokenFile, token, { mode: 0o600 });
@@ -710,18 +723,13 @@ it
       }),
     );
     const app = Fastify();
-    registerAuth(
-      app,
-      {
-        api: "late-fixture-token-api",
-        "ops-agent": "late-fixture-token",
-        "host-cli": "late-fixture-token-cli",
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: "late-fixture-token-api",
+      "ops-agent": "late-fixture-token",
+      "host-cli": "late-fixture-token-cli",
+    });
     registerApi(app, {
       dataDir: data,
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -816,10 +824,9 @@ it
           expect(held).toBeDefined();
           await expect
             .poll(
-              () =>
-                existsSync(
-                  join(root, "control-private/data-manager/observations", `worker-${key}.json`),
-                ),
+              async () =>
+                (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id!}`)[0]
+                  ?.execution_completion != null,
               { timeout: 15000 },
             )
             .toBe(true);
@@ -897,8 +904,10 @@ it
       expect(record.status.deadlineAt).toBe(deadline);
       const lease = () => targetLease(data, kind === "promotion" ? "motis" : "motis-feed-proxy"),
         held = lease(),
-        rootReceipt = join(root, "control-private/data-manager/executions", `${key}.json`),
-        original = readFileSync(rootReceipt);
+        // The root's admission, on its job row, is never rewritten; its progress records the cancel.
+        admission = async () =>
+          (await control.restoreAdmittedControlExecution(dm, record.execution)).receiptDigest,
+        original = await admission();
       await receiver.requestCancel({ id, operationKey: key, fingerprint: admitted.fingerprint });
       expect((await next()).type).toBe("aborted");
       expect(held).toBeDefined();
@@ -918,7 +927,7 @@ it
         .toBe("canceled");
       expect((await receiver.inspect(id))?.publication).toBe("committed");
       await expect.poll(lease, { timeout: 10000 }).toBeUndefined();
-      expect(readFileSync(rootReceipt)).toEqual(original);
+      expect(await admission()).toEqual(original);
       expect(posts).toBe(1);
       expect(cancels).toBe(1);
       expect((await store.inspect(id))?.children).toMatchObject([
@@ -935,7 +944,6 @@ it
       await exited;
       resetOpsClient();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(dm);
       await sql.end();
       lines.close();
@@ -987,7 +995,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
     });
     writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
     linkProxyFixture(data);
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -1033,7 +1041,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         operationKey: control.controlChildOperationKey(operationKey, "proxy-stage", 0),
       },
     };
-    const authority = control.retainAdmittedControlExecution(dm, {
+    const authority = await control.retainAdmittedControlExecution(dm, {
       execution: parent,
       kind: input.kind,
       operation: input,
@@ -1046,14 +1054,9 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       serviceIds: ["motis-feed-proxy"],
       owner: authority,
     });
-    control.retainOwnedDataTransitCandidate(authority, reservation);
+    await control.retainOwnedDataTransitCandidate(authority, reservation);
     const bound = await control.bindControlChildPhase(authority, reservation),
-      issued = await control.issueControlChildPhase(authority, {
-        ...reservation,
-        lease,
-        childPublicKey: agentVerifier.publicKey,
-        evidence: control.publishedDataTransitCandidate(authority, reservation),
-      });
+      issued = await control.issueControlChildPhase(authority, { ...reservation, lease });
     const token = "e".repeat(43),
       tokenFile = join(root, "token");
     writeFileSync(tokenFile, token, { mode: 0o600 });
@@ -1097,23 +1100,15 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       restarted: Awaited<ReturnType<typeof start>> | undefined;
     try {
       first = await start(crash);
-      control.consumeControlChildDispatch(issued.dispatchTicket);
+      await control.consumeControlChildDispatch(issued.dispatchTicket);
       await first.client
         .execute(operation, {
           operationKey: bound.execution.operationKey,
           execution: { requestedDeadlineAt: bound.execution.deadlineAt },
-          controlAssertion: issued.assertion,
+          leaseChild: { leaseId: lease.leaseId, childKey: issued.delegation.childKey },
         })
         .catch(() => undefined);
       expect(await first.exited).toBe(86);
-      const terminalPath = join(
-        root,
-        "control-private/ops-agent/observations",
-        `terminal-${bound.execution.operationKey}.json`,
-      );
-      const originalTerminal = existsSync(terminalPath)
-        ? JSON.parse(readFileSync(terminalPath, "utf8"))?.payload
-        : undefined;
       restarted = await start();
       const status = await restarted.client.lookup(operation, bound.execution.operationKey, {
         fingerprint: bound.execution.fingerprint,
@@ -1123,21 +1118,11 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       if (crash === "after-terminal") {
         expect(status.state).toBe("failed");
         expect(status.errorClass).toBe("runtime");
-        // data-manager records the agent's terminal status it observed.
-        control.recordOpsControlTerminalObservation(dm, bound.execution, status);
-        expect(control.readOpsControlTerminalObservation(dm, bound.execution).state).toBe("failed");
         await expect(
           control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
         ).resolves.toMatchObject({ outcome: "contained", publication: "not_started" });
-        const repaired = JSON.parse(readFileSync(terminalPath, "utf8")).payload;
-        expect(repaired.terminalDigest).toBe(originalTerminal.terminalDigest);
-        expect(repaired.terminalAt).toBe(originalTerminal.terminalAt);
       } else {
         expect(status.errorClass).toBe("recovery_required");
-        // A status that is not terminal is never recorded.
-        expect(() =>
-          control.recordOpsControlTerminalObservation(dm, bound.execution, status),
-        ).toThrow();
       }
       const jobs = JSON.parse(readFileSync(join(root, "state/ops-agent/jobs-v1.json"), "utf8"));
       expect(JSON.stringify(jobs)).toContain(bound.execution.operationKey);

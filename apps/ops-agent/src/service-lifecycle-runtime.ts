@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   bindControlChildPhase,
@@ -10,7 +9,6 @@ import {
   issueControlChildPhase,
   openFixedChildInstallation,
   planFixedServiceUpdate,
-  prepareFixedControlChild,
   readFixedServiceLifecyclePlan,
   restoreAdmittedControlExecution,
   retainFixedCliSpawnIntent,
@@ -44,21 +42,21 @@ export function installServiceLifecycleRuntime(
     if (!authority || !lease) throw new OpsHostUpdateRequiredError();
     const plan = readFixedServiceLifecyclePlan(authority);
     const child = await bindControlChildPhase(authority, { phase: "lifecycle", ordinal: 0 });
-    const publicKey = prepareFixedControlChild(authority, plan.delegationId),
-      args = fixedCliArguments(operation);
-    retainFixedCliSpawnIntent(authority, {
-      delegationId: plan.delegationId,
+    const args = fixedCliArguments(operation);
+    await retainFixedCliSpawnIntent(authority, {
+      childKey: plan.delegationId,
       execution: child.execution,
       operation,
       args,
-      reservations: plan.cliReservations,
+      reservations: [],
     });
     const issued = await issueControlChildPhase(authority, {
       phase: "lifecycle",
       ordinal: 0,
-      childPublicKey: publicKey,
+      childKey: plan.delegationId,
       lease,
     });
+    const fixedChild = { leaseId: lease.leaseId, childKey: issued.delegation.childKey };
     await services.withServiceLifecycleReceiptAuthority(
       authority,
       () =>
@@ -72,27 +70,26 @@ export function installServiceLifecycleRuntime(
           expectedRevisionId: operation.expectedConfigurationRevisionId,
           seedRevisionId: operation.expectedConfigurationRevisionId,
         }),
-      { execution: child.execution, publicKey },
+      { execution: child.execution, childKey: plan.delegationId },
     );
-    consumeControlChildDispatch(issued.dispatchTicket);
+    await consumeControlChildDispatch(issued.dispatchTicket);
     let failure: unknown;
     try {
       await options.runFixedCli(args, {
         ...context,
         execution: child.execution,
         operationKind: "service.update",
-        controlAssertion: issued.assertion,
+        child: fixedChild,
       });
     } catch (error) {
       failure = error;
     }
     const installation = openFixedChildInstallation({
       infraDir: options.infraDir,
-      assertion: issued.assertion,
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
+      child: fixedChild,
     });
     try {
-      const childAuthority = restoreAdmittedControlExecution(installation, child.execution);
+      const childAuthority = await restoreAdmittedControlExecution(installation, child.execution);
       const receipt = await services.withServiceLifecycleReceiptAuthority(childAuthority, () =>
         services.readServiceLifecycleReceipt({
           dataRoot: join(options.infraDir, "data"),
@@ -119,7 +116,7 @@ export function installServiceLifecycleRuntime(
           receipt.phase === "failed" ? "runtime" : "recovery_required",
           { serviceLifecycle: evidence },
         );
-      verifyControlEffectSettlement(installation, child.execution);
+      await verifyControlEffectSettlement(installation, child.execution);
       const settled = inspectLocalLeaseChildSettlement(lease, child.execution);
       if (settled?.outcome !== "committed" || settled.publication !== "committed")
         throw new OpsExecutionFailure("recovery_required", { serviceLifecycle: evidence });

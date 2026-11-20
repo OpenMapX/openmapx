@@ -39,13 +39,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await edges("overture_global", 10001, true);
       await pg.sql.unsafe(`INSERT INTO overture_global.poi_conflation_candidate(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
    VALUES('node',10001,'g10000',0.8,1,'fixture','{}','fixture'),('node',10000,'g1',0.8,1,'fixture','{}','fixture')`);
-      const count = await module.buildConflationComponents("overture_global");
+      const count = await module.buildConflationComponents(db.sql, "overture_global");
       expect(count).toBe(9999);
       const rows = await pg.sql.unsafe(
         `SELECT count(DISTINCT component_id)::INT AS groups FROM overture_global.poi_conflation_component WHERE osm_id IN (1,10000,10001)`,
       );
       expect(rows[0].groups).toBe(1);
       const result = await module.assignOvertureCandidates({
+        sql: db.sql,
         schema: "overture_global",
         componentCount: count,
       });
@@ -59,7 +60,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await edges("overture_pages", 20002, true);
       await pg.sql.unsafe(`INSERT INTO overture_pages.poi_conflation_candidate(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
         SELECT 'node',i+10001,'g'||i,0.8,1,'fixture','{}','fixture' FROM generate_series(1,10001) i`);
-      const count = await module.buildConflationComponents("overture_pages");
+      const count = await module.buildConflationComponents(db.sql, "overture_pages");
       expect(count).toBe(10001);
       const [roots] = await pg.sql.unsafe(
         `SELECT count(*)::INT AS n FROM overture_pages.poi_conflation_component a JOIN overture_pages.poi_conflation_component b ON b.osm_id=a.osm_id+10001 AND b.osm_type=a.osm_type WHERE a.osm_id<=10001 AND a.component_id=b.component_id`,
@@ -68,9 +69,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 120000);
     it("refuses oversized connected graphs without publishing arbitrary truncated assignments", async () => {
       await edges("overture_dense", 513, false);
-      await expect(module.assignOvertureCandidates({ schema: "overture_dense" })).rejects.toThrow(
-        /component.*512/i,
-      );
+      await expect(
+        module.assignOvertureCandidates({ sql: db.sql, schema: "overture_dense" }),
+      ).rejects.toThrow(/component.*512/i);
       const [counts] = await pg.sql.unsafe(
         `SELECT (SELECT count(*) FROM overture_dense.poi_conflation_link)::INT AS published,(SELECT count(*) FROM overture_dense.poi_conflation_link_next)::INT AS staged`,
       );

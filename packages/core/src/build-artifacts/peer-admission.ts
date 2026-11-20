@@ -1,20 +1,20 @@
 import { opsOperationSchema } from "../ops/contract";
-import type { ExecutionRef, VerifiedParentExecution } from "../ops/execution-identity";
+import type { ExecutionRef } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
-import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
+import { type ControlInstallation, controlDigest } from "./control-records";
 import {
-  type ControlInstallation,
+  type ControlDelegation,
   type ControlTransportPrincipal,
-  controlDigest,
-  controlHeaders,
   inspectRemoteDelegation,
-  installationState,
-  parseControlAssertion,
-  retainedControlParent,
-  verifiedRemoteParentExecution,
+  type LeaseChildRef,
   verifyControlPeer,
-} from "./control-authority";
-import { adoptArtifactTargetLease, inspectArtifactDelegation } from "./target-lease";
+} from "./execution-record";
+import { installationState } from "./private-records";
+import {
+  adoptArtifactTargetLease,
+  inspectArtifactDelegation,
+  verifiedParentForArtifactDelegation,
+} from "./target-lease";
 /**
  * The agent's receiver for data-manager's delegated operations. The child was
  * recorded in the agent's own lease store when data-manager asked for it; this
@@ -23,7 +23,7 @@ import { adoptArtifactTargetLease, inspectArtifactDelegation } from "./target-le
 export function inspectControlAdmission(
   installation: ControlInstallation,
   input: {
-    rawHeaders: readonly string[];
+    leaseChild: LeaseChildRef;
     transportPrincipal: ControlTransportPrincipal;
     kind: string;
     operation: unknown;
@@ -59,9 +59,7 @@ export function inspectControlAdmission(
     opsOperationFingerprint(operation) !== input.operationFingerprint
   )
     throw Error("Receiving typed operation mismatch");
-  const { delegation } = controlHeaders(input.rawHeaders);
-  if (!delegation) throw Error("Missing control assertion");
-  const inspected = inspectArtifactDelegation({ assertion: delegation, installation });
+  const inspected = inspectArtifactDelegation({ leaseChild: input.leaseChild, installation });
   if (
     inspected.kind !== input.kind ||
     inspected.execution.operationKey !== input.operationKey ||
@@ -71,44 +69,38 @@ export function inspectControlAdmission(
     inspected.owner.executor !== "data-manager"
   )
     throw Error("Recorded admission mismatch");
-  if (
-    operation.kind === "transitousLock.approve" &&
-    (inspected.phase !== "paired-pin-commit" || inspected.owner.executor !== "data-manager")
-  )
+  if (operation.kind === "transitousLock.approve" && inspected.phase !== "paired-pin-commit")
     throw Error("Original paired activation leaf required");
   if (targets.some((id) => !state.registeredTargets.has(id) || !inspected.serviceIds.includes(id)))
     throw Error("Delegation does not contain operation-derived target closure");
   const peer = verifyControlPeer(installation, {
-    rawHeaders: input.rawHeaders,
+    leaseChild: input.leaseChild,
     transportPrincipal: input.transportPrincipal,
     execution: inspected.execution,
     kind: input.kind,
   });
-  const parent = Object.freeze(retainedControlParent(inspected.parent)) as VerifiedParentExecution;
-  verifiedParents.add(parent);
-  verifiedParentOrigins.set(parent, parseControlAssertion(delegation).origin);
+  const parent = verifiedParentForArtifactDelegation(
+    installation,
+    input.leaseChild,
+    inspected.execution,
+  );
   return Object.freeze({
     ...inspected,
     parent,
     async adopt(execution: ExecutionRef) {
       if (controlDigest(execution) !== controlDigest(inspected.execution))
         throw Error("Normalized execution identity differs from delegation");
-      return adoptArtifactTargetLease({
-        assertion: delegation,
-        peer,
-        execution,
-        serviceIds: inspected.serviceIds,
-      });
+      return adoptArtifactTargetLease({ peer, execution, serviceIds: inspected.serviceIds });
     },
   });
 }
 
 /** Data-manager's receiver for executions the agent or the host CLI issued.
- * The caller's token says who sent them; the delegation or parent names them. */
+ * The caller's token says who sent them; the delegation names them. */
 export function inspectDataExecutionAdmission(
   installation: ControlInstallation,
   input: {
-    rawHeaders: readonly string[];
+    delegation?: ControlDelegation;
     input: import("../services/data-manager/contracts/executions").DataExecutionInput;
     transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">;
     operationKey: string;
@@ -117,42 +109,20 @@ export function inspectDataExecutionAdmission(
   },
 ) {
   if (installation.role !== "data-manager") throw Error("Data-manager receiver required");
-  const headers = controlHeaders(input.rawHeaders);
-  if (!headers.parent && !headers.delegation) return null;
-  if (headers.parent) {
-    const { parent, execution } = verifiedRemoteParentExecution(installation, headers.parent, {
-      transportPrincipal: input.transportPrincipal,
-      operationKey: input.operationKey,
-      operationFingerprint: input.operationFingerprint,
-      kind: input.input.kind,
-      requestedDeadlineAt: input.requestedDeadlineAt,
-    });
-    return Object.freeze({
-      execution,
-      parent,
-      serviceIds: [] as string[],
-      async adopt(adopted: ExecutionRef) {
-        if (controlDigest(adopted) !== controlDigest(execution))
-          throw Error("Normalized data child differs from parent");
-        return undefined;
-      },
-    });
-  }
+  if (!input.delegation) return null;
   const delegation = inspectRemoteDelegation(
     installation,
-    input.rawHeaders,
+    input.delegation,
     input.transportPrincipal,
   );
   if (
-    input.input.kind !== "generation-hardlinks" ||
     delegation.kind !== input.input.kind ||
     delegation.execution.operationKey !== input.operationKey ||
     delegation.execution.operationFingerprint !== input.operationFingerprint ||
-    delegation.execution.deadlineAt !== input.requestedDeadlineAt
+    delegation.execution.deadlineAt !== input.requestedDeadlineAt ||
+    delegation.leaseId !== null
   )
     throw Error("Unsupported or mismatched delegated data leaf");
-  const local = installationState(installation);
-  local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
   return Object.freeze({
     execution: delegation.execution,
     parent: delegation.verifiedParent,

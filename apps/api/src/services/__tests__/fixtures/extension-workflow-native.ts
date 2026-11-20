@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, sql } from "../../../db";
 import { adminJob, installedExtension, installedIntegration } from "../../../db/schema";
 import { checkpointOwnedAdminJob } from "../../admin-job-checkpoint";
-import { jobOwnership } from "../../admin-job-state";
+import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "../../admin-job-state";
 import { publishIntegration, settleIntegration } from "../../agent-integrations";
 import {
   extensionDatabaseStep,
@@ -22,35 +22,41 @@ const payload = row.payload as {
     source: { kind: "artifact"; url: string; sha256: string };
     bundle: string;
   },
-  execution = (row.result as { _execution: { owner: string; version: number } })._execution;
+  execution = (row.protocol as { execution: { owner: string; version: number } }).execution;
 const ctx: JobContext = {
   jobId: id,
   jobType: row.type,
   execution,
   payload: row.payload as Record<string, unknown>,
   signal: new AbortController().signal,
-  checkpointResult: row.result as Record<string, unknown>,
+  checkpointResult: jobCheckpoint(row.result, row.protocol),
+  protocol: row.protocol,
   log: async () => {},
   setProgress: async () => {},
-  checkpoint: async (value, progress, key, address) => {
-    if (value.opsProjection)
-      ctx.checkpointResult = await checkpointOwnedAdminJob(
+  checkpoint: async (value, progress, key, address, operations) => {
+    const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+    if (recorded) {
+      const saved = await checkpointOwnedAdminJob(
         id,
         execution,
         value,
+        recorded,
         progress,
         key,
         address,
         ctx.checkpointResult ?? {},
       );
-    else {
+      ctx.checkpointResult = saved.result;
+      ctx.protocol = saved.protocol;
+    } else {
       const [saved] = await db
         .update(adminJob)
-        .set({ result: value })
+        .set(replaceJobCheckpoint(value))
         .where(jobOwnership(id, execution))
         .returning();
       if (!saved) throw Error("Owner changed");
-      ctx.checkpointResult = saved.result as Record<string, unknown>;
+      ctx.checkpointResult = jobCheckpoint(saved.result, saved.protocol);
+      ctx.protocol = saved.protocol;
     }
   },
 };

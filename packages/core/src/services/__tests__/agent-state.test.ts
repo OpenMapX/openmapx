@@ -1,9 +1,7 @@
 import {
-  chmodSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -45,49 +43,10 @@ describe("agent state directories", () => {
     prepareAgentStateDirectories(infraDir);
 
     const current = agentStatePaths(infraDir);
-    for (const directory of [current.directory, current.trustedConfig, current.traefikDynamic]) {
+    for (const directory of [current.directory, current.traefikDynamic]) {
       expect(lstatSync(directory).isDirectory()).toBe(true);
       expect(statSync(directory).mode & 0o777).toBe(0o700);
     }
-  });
-
-  it("keep existing directories and what they hold, tightening their permissions", () => {
-    const infraDir = infra();
-    const current = agentStatePaths(infraDir);
-    mkdirSync(current.trustedConfig, { recursive: true, mode: 0o755 });
-    chmodSync(current.trustedConfig, 0o755);
-    writeFileSync(join(current.trustedConfig, "queued-snapshot"), "sealed");
-    const queue = statSync(current.trustedConfig).ino;
-
-    prepareAgentStateDirectories(infraDir);
-    prepareAgentStateDirectories(infraDir);
-
-    expect(statSync(current.trustedConfig).ino).toBe(queue);
-    expect(statSync(current.trustedConfig).mode & 0o777).toBe(0o700);
-    expect(readdirSync(current.trustedConfig)).toEqual(["queued-snapshot"]);
-    expect(readFileSync(join(current.trustedConfig, "queued-snapshot"), "utf8")).toBe("sealed");
-  });
-
-  it("move a planted symlink aside unfollowed and replace it with a fresh directory", () => {
-    const infraDir = infra();
-    const current = agentStatePaths(infraDir);
-    const outside = join(infraDir, "..", "outside");
-    mkdirSync(outside);
-    mkdirSync(current.directory, { recursive: true, mode: 0o700 });
-    symlinkSync(outside, current.trustedConfig);
-
-    prepareAgentStateDirectories(infraDir);
-
-    expect(lstatSync(current.trustedConfig).isSymbolicLink()).toBe(false);
-    expect(lstatSync(current.trustedConfig).isDirectory()).toBe(true);
-    expect(statSync(current.trustedConfig).mode & 0o777).toBe(0o700);
-    expect(statSync(current.trustedConfig).ino).not.toBe(statSync(outside).ino);
-    const aside = readdirSync(current.directory).filter((name) =>
-      name.startsWith("trusted-config.rejected-"),
-    );
-    expect(aside).toHaveLength(1);
-    expect(lstatSync(join(current.directory, aside[0] as string)).isSymbolicLink()).toBe(true);
-    expect(readdirSync(outside)).toEqual([]);
   });
 
   it("fail when a file is where the state directory must go", () => {

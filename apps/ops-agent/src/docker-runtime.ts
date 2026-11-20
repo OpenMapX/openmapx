@@ -135,12 +135,7 @@ export interface StreamingProcessOptions {
 
 function childEnvironment(): NodeJS.ProcessEnv {
   const env = { ...process.env };
-  for (const key of [
-    "OPENMAPX_CONTROL_EXECUTION",
-    "OPENMAPX_CONTROL_DELEGATION",
-    "OPENMAPX_PARENT_EXECUTION",
-  ])
-    delete env[key];
+  for (const key of ["OPENMAPX_CONTROL_EXECUTION", "OPENMAPX_CONTROL_CHILD"]) delete env[key];
   return env;
 }
 
@@ -724,8 +719,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     args: () => string[],
     continuation?: () => string[] | undefined,
   ) => {
-    if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
-    if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+    if (context.artifactLease) await assertArtifactTargetLeaseForward(context.artifactLease);
+    if (context.controlAuthority) await assertControlExecutionForward(context.controlAuthority);
     try {
       return await services.withConfigurationGenerationWriter(
         options.stack.infraDir,
@@ -774,8 +769,10 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
           const result = await changed(command, context, LIFECYCLE_TIMEOUT_MS);
           const next = continuation?.();
           if (next) {
-            if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
-            if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+            if (context.artifactLease)
+              await assertArtifactTargetLeaseForward(context.artifactLease);
+            if (context.controlAuthority)
+              await assertControlExecutionForward(context.controlAuthority);
             return await changed(next, context, LIFECYCLE_TIMEOUT_MS);
           }
           return result;
@@ -975,7 +972,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     );
     return { availableBytes: parsePosixDfAvailableBytes(result.stdout) };
   };
-  function assertTransitCandidateEffect(
+  async function assertTransitCandidateEffect(
     operation: Parameters<typeof assertDataTransitCandidateForExecution>[1],
     context: OpsExecutionContext,
   ) {
@@ -986,15 +983,15 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       typeof context.claim.capability.values.candidateDigest !== "string"
     )
       throw Error("Original owned transit resource claim required");
-    assertArtifactTargetLeaseForward(context.artifactLease);
-    assertDataTransitCandidateForExecution(
+    await assertArtifactTargetLeaseForward(context.artifactLease);
+    await assertDataTransitCandidateForExecution(
       context.controlAuthority,
       operation,
       context.claim.capability.values.candidateDigest,
     );
   }
   runtime["feedProxy.validateAndReload"] = async (operation, context) => {
-    assertTransitCandidateEffect(operation, context);
+    await assertTransitCandidateEffect(operation, context);
     // Validate before reloading: a reload against a bad configuration would
     // take the proxy down rather than reject the candidate.
     if (!context.commitFeedProxyValidationFailure || !context.markFeedProxyReloadAttempted)
@@ -1028,9 +1025,9 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       });
       throw new OpsExecutionFailure("runtime", {});
     }
-    assertTransitCandidateEffect(operation, context);
+    await assertTransitCandidateEffect(operation, context);
     await context.markFeedProxyReloadAttempted();
-    assertTransitCandidateEffect(operation, context);
+    await assertTransitCandidateEffect(operation, context);
     await changed(["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], context, 30_000);
     return { candidateId: operation.candidateId, reloaded: true as const };
   };
@@ -1104,13 +1101,13 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     return { state: tileMtime > tarMtime ? ("not_ready" as const) : ("ready" as const) };
   };
 
-  function assertTrafficForward(context: OpsExecutionContext): void {
+  async function assertTrafficForward(context: OpsExecutionContext): Promise<void> {
     context.signal.throwIfAborted();
-    if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
-    if (context.ownedTargetLease) assertArtifactTargetLeaseForward(context.ownedTargetLease);
+    if (context.controlAuthority) await assertControlExecutionForward(context.controlAuthority);
+    if (context.ownedTargetLease) await assertArtifactTargetLeaseForward(context.ownedTargetLease);
   }
   runtime["valhalla.traffic.maintain"] = async (operation, context) => {
-    assertTrafficForward(context);
+    await assertTrafficForward(context);
     const dataRoot = options.trafficDataRoot;
     if (!dataRoot) throw new Error("Valhalla traffic maintenance data root is not configured");
     const writerLockPath = join(dataRoot, "traffic", "live-state.json.lock");
@@ -1143,7 +1140,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     );
     if (stopped.stdout.trim() !== "false") throw new Error("Valhalla serving could not be fenced");
 
-    assertTrafficForward(context);
+    await assertTrafficForward(context);
     // data-manager can rewrite everything under the data root, so the agent
     // writes this directory only through descriptors opened without
     // following a symlink, never by a path it re-resolves.
@@ -1244,10 +1241,10 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         waysToEdgesGeneration: generation,
         completedAt: new Date().toISOString(),
       };
-      assertTrafficForward(context);
+      await assertTrafficForward(context);
       shared.replaceFile(TRAFFIC_GENERATIONS_MANIFEST, `${JSON.stringify(manifest)}\n`, 0o644);
 
-      assertTrafficForward(context);
+      await assertTrafficForward(context);
       await run(["start", VALHALLA_CONTAINER], context.signal, 30_000);
       const healthDeadline = Date.now() + 60_000;
       while (true) {
@@ -1261,7 +1258,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      assertTrafficForward(context);
+      await assertTrafficForward(context);
       shared.removeFile(TRAFFIC_MAINTENANCE_FENCE);
       return {
         changed: true,
@@ -1310,7 +1307,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   };
 
   runtime["valhalla.traffic.refreshWaysToEdges"] = async (_operation, context) => {
-    assertTrafficForward(context);
+    await assertTrafficForward(context);
     // Writes `<tile_dir>/way_edges.txt`, a hard-coded name with no output flag.
     // data-manager reads and filters it from the shared mount afterwards.
     // A whole-country graph takes minutes, far past the default command bound.
@@ -1321,7 +1318,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     );
     if (build.exitCode !== 0) throw new Error("valhalla_ways_to_edges failed");
     const owner = options.dataMountOwner ?? defaultDataMountOwner;
-    assertTrafficForward(context);
+    await assertTrafficForward(context);
     await valhallaExec(
       ["chown", `${owner.uid}:${owner.gid}`, `${VALHALLA_TILE_DIR}/way_edges.txt`],
       context.signal,
@@ -1338,7 +1335,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["motis.primary.restart"] = (_operation, context) =>
     changed([...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", "motis"], context);
   runtime["motis.primary.promote"] = async (operation, context) => {
-    assertTransitCandidateEffect(operation, context);
+    await assertTransitCandidateEffect(operation, context);
     // Recreate rather than restart: Docker resolves a bind-mount symlink when
     // the container is created, so a plain restart can keep pointing at the old
     // A/B target. `--no-deps` stops Compose from cascading into the feed proxy

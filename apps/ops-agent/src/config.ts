@@ -6,7 +6,6 @@ export interface OpsAgentConfig {
   dataManagerTokenFile: string;
   rootDir: string;
   journalFile: string;
-  trustedConfigDirectory: string;
   host: string;
   port: number;
 }
@@ -33,8 +32,6 @@ export function loadOpsAgentConfig(env: NodeJS.ProcessEnv = process.env): OpsAge
     ),
     rootDir,
     journalFile: services.agentStatePaths(join(rootDir, "infra", "docker")).journal,
-    trustedConfigDirectory: services.agentStatePaths(join(rootDir, "infra", "docker"))
-      .trustedConfig,
     host: env.HOST?.trim() || "0.0.0.0",
     port,
   };

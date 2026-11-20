@@ -268,7 +268,7 @@ export function registerControlCommands(program: Command): void {
       // A maintenance root also holds the data-manager fence; the same idempotent
       // settle the agent uses releases it.
       if (lease.ownerKind === "configurationMaintenance.prepare")
-        await settleMaintenanceFence(lease, options.as);
+        await settleMaintenanceFence(repoPaths().infraDir, lease, options.as);
       const outcome: "committed" | "contained" =
         options.as === "committed" ? "committed" : "contained";
       const evidence = (identity: LeaseRecord["owner"]) => ({

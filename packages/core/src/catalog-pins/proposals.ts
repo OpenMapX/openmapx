@@ -1,8 +1,8 @@
-/** Immutable agent-signed proposals; retaining one never selects active pins. */
+/** Immutable agent-retained proposals; retaining one never selects active pins. */
 import { join } from "node:path";
-import { type ControlInstallation, installationState } from "../build-artifacts/control-authority";
-import { controlDigest, signControl, verifyControl } from "../build-artifacts/control-records";
+import { type ControlInstallation, controlDigest } from "../build-artifacts/control-records";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
+import { installationState } from "../build-artifacts/private-records";
 import { canonicalJson } from "../ops/canonical-json";
 import { withConfigurationGenerationWriter } from "../services/configuration-generation";
 import { parseCatalogPinSet } from "./generation";
@@ -14,7 +14,6 @@ import {
 } from "./proposal-schemas";
 import { readCatalogPinSet } from "./store";
 
-const DOMAIN = "openmapx-catalog-proposal-v1";
 export const MAX_CATALOG_PROPOSAL_BYTES = 768 * 1024;
 function withProposalDirectory<T>(
   rootDir: string,
@@ -44,15 +43,9 @@ function withProposalDirectory<T>(
   }
 }
 function decode(installation: ControlInstallation, bytes: Buffer): CatalogProposal {
-  const state = installationState(installation),
-    value = verifyControl(
-      state.publicKeys["ops-agent"],
-      DOMAIN,
-      JSON.parse(bytes.toString("utf8")),
-      catalogProposalEnvelopePayloadSchema,
-    );
-  if (value.installationId !== installation.installationId || value.proposal.state !== "proposed")
-    throw Error("Foreign catalog proposal");
+  installationState(installation);
+  const value = catalogProposalEnvelopePayloadSchema.parse(JSON.parse(bytes.toString("utf8")));
+  if (value.proposal.state !== "proposed") throw Error("Foreign catalog proposal");
   parseCatalogPinSet(value.proposal.pins);
   return value.proposal;
 }
@@ -111,13 +104,10 @@ export async function retainCatalogProposal(input: {
           state: "proposed",
           createdAt: (input.now ?? new Date()).toISOString(),
         };
-        const bytes = canonicalJson(
-          signControl(state.privateKey, DOMAIN, {
-            version: 1,
-            installationId: input.installation.installationId,
-            proposal: retained,
-          }),
-        );
+        const bytes = canonicalJson({
+          version: 1,
+          proposal: retained,
+        });
         if (Buffer.byteLength(bytes, "utf8") > MAX_CATALOG_PROPOSAL_BYTES)
           throw Error("Catalog proposal exceeds its byte limit");
         directory.write(name, bytes);
@@ -126,7 +116,7 @@ export async function retainCatalogProposal(input: {
     input.signal,
   );
 }
-/** Bounded metadata only; selecting a proposal separately re-verifies its signature. */
+/** Bounded metadata only; selecting a proposal separately re-reads and re-checks it. */
 export function listCatalogProposals(input: {
   rootDir: string;
   installation: ControlInstallation;

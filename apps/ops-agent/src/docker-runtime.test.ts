@@ -1042,6 +1042,7 @@ describe("fixed Docker runtime adapters", () => {
           coordinatorMode: "require-running",
           kind: "stack.render",
           revisionId: `cfg1_${"a".repeat(43)}`,
+          payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         },
         context(),
       ),

@@ -26,6 +26,7 @@ import {
   parseOpsResult,
 } from "./contract";
 import { opsOperationFingerprint } from "./fingerprint";
+import type { TrustedConfigurationPayload } from "./trusted-config";
 
 const TOKEN_BYTES = 43;
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
@@ -499,10 +500,13 @@ export class OpsClient {
       try {
         value = await this.get("/v1/protocol", { signal });
       } catch (error) {
+        // Only an agent that answers without this protocol needs an update; one
+        // that does not answer at all (restarting, recreated) is unreachable.
         if (
           isAbortError(error) ||
           (error instanceof OpsClientError &&
-            ["authentication", "authorization", "timeout"].includes(error.errorClass))
+            (["authentication", "authorization", "timeout"].includes(error.errorClass) ||
+              (error.errorClass === "runtime" && error.status === undefined)))
         )
           throw error;
         throw new OpsProtocolUpgradeRequiredError();
@@ -531,8 +535,11 @@ export class OpsClient {
       operationKey?: string;
       signal?: AbortSignal;
       execution?: { requestedDeadlineAt: number };
-      controlAssertion?: string;
+      /** The child row data-manager recorded for this operation in the agent's lease store. */
+      leaseChild?: { leaseId: string; childKey: string };
       parentAssertion?: string;
+      /** A configuration apply's payload, which its operation names by digest. */
+      payload?: TrustedConfigurationPayload;
     } = {},
   ): Promise<OpsSubmitResult<K>> {
     if (OPS_KIND_POLICIES[operation.kind].execution === "async" && !options.operationKey) {
@@ -552,7 +559,9 @@ export class OpsClient {
         issued.getTime() + Math.min(20_000, OPS_MAX_REQUEST_TTL_MS),
       ).toISOString(),
       operation,
+      ...(options.payload ? { payload: options.payload } : {}),
       ...(options.execution ? { execution: options.execution } : {}),
+      ...(options.leaseChild ? { leaseChild: options.leaseChild } : {}),
     };
     const timeoutSignal = AbortSignal.timeout(
       opsRequestTimeoutMs(operation.kind, this.configuredRequestTimeoutMs),
@@ -567,9 +576,6 @@ export class OpsClient {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
-          ...(options.controlAssertion
-            ? { "x-openmapx-control-delegation": options.controlAssertion }
-            : {}),
           ...(options.parentAssertion
             ? { "x-openmapx-parent-execution": options.parentAssertion }
             : {}),

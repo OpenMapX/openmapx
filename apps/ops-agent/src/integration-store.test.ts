@@ -15,7 +15,7 @@ import { gzipSync } from "node:zlib";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey, type OpsResourcePolicy } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -282,7 +282,7 @@ describe("integration store", () => {
     });
     const infraDir = join(f.root, "infra/docker");
     mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
-    await provisionControlInstallation(infraDir);
+    await provisionControlDirectories(infraDir);
     const installation = openControlInstallation({
       infraDir,
       role: "ops-agent",
@@ -371,13 +371,13 @@ describe("integration store", () => {
     const source = await artifact(f, "weather-radar", { description });
     const infraDir = join(f.root, "infra/docker");
     mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
-    await provisionControlInstallation(infraDir);
+    await provisionControlDirectories(infraDir);
     const installation = openControlInstallation({
       infraDir,
       role: "ops-agent",
       serviceIds: ["ops-agent"],
     });
-    const privateRoot = join(infraDir, "control-private/ops-agent");
+    const privateRoot = join(infraDir, "state/ops-agent/control");
     const before = readdirSync(privateRoot, { recursive: true }).sort();
     const journal = await openOpsJobJournal(services.agentStatePaths(infraDir).journal);
     const now = new Date();

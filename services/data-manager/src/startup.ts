@@ -5,18 +5,16 @@ import type { DataManagerReadiness } from "./readiness.js";
 export interface RequiredStartupDependencies {
   readiness: DataManagerReadiness;
   initializeOfflineStorage: () => Promise<void>;
-  reconcileJobs: () => Promise<string[]>;
+  /** Reconciles the data executions a previous process left unsettled. */
+  reconcileJobs: () => Promise<void>;
   setupCronSchedulers: () => CronHandles;
   controlInstallation?: ControlInstallation;
   onControlPruneError?: (error: unknown) => void;
   onControlPruneStarted?: (stop: () => Promise<void>) => void;
-  /** Removes this service's own rows for executions whose records are pruned. */
-  removePrunedRows?: (operationKeys: readonly string[]) => Promise<void>;
 }
 
 export interface RequiredStartupResult {
   cronHandles: CronHandles;
-  interruptedJobIds: string[];
   stopControlPrune?: () => Promise<void>;
 }
 
@@ -30,14 +28,13 @@ export async function initializeRequiredSubsystems(
     await dependencies.initializeOfflineStorage();
 
     dependencies.readiness.setPhase("job-reconciliation");
-    const interruptedJobIds = await dependencies.reconcileJobs();
+    await dependencies.reconcileJobs();
 
     if (dependencies.controlInstallation) {
       const prune = startControlPrune(dependencies.controlInstallation, {
         onError:
           dependencies.onControlPruneError ??
           ((error) => console.warn("Control record prune failed", error)),
-        beforeRemove: dependencies.removePrunedRows,
       });
       let stopRequested = false;
       stopControlPrune = async () => {
@@ -55,7 +52,6 @@ export async function initializeRequiredSubsystems(
 
     return {
       cronHandles,
-      interruptedJobIds,
       ...(stopControlPrune ? { stopControlPrune } : {}),
     };
   } catch (error) {

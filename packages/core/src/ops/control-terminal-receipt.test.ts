@@ -1,10 +1,6 @@
 import { expect, it } from "vitest";
 import type { OpsJobStatus } from "./contract";
-import {
-  controlTerminalReceiptDigest,
-  signMaintenanceRecoveryProof,
-  verifyMaintenanceRecoveryProof,
-} from "./control-terminal-receipt";
+import { controlTerminalReceiptDigest } from "./control-terminal-receipt";
 
 const status: OpsJobStatus = {
   version: 2,
@@ -39,35 +35,4 @@ it("binds exact safe terminal evidence while excluding observation-only timestam
   expect(() =>
     controlTerminalReceiptDigest({ ...status, version: 1 } as unknown as OpsJobStatus),
   ).toThrow();
-});
-
-it("authenticates a bounded recovery observation independently of the unchanged failed canonical", () => {
-  const fields = {
-      version: 1 as const,
-      kind: "configuration-maintenance-contained" as const,
-      operationId: "job1_abcdefghijklmnop",
-      operationKey: "opk1_abcdefghijklmnop",
-      fingerprint: "a".repeat(64),
-      terminalDigest: "b".repeat(64),
-      maintenanceId: "b877b2e3-4d00-42a3-84ca-0d76a0f28964",
-      candidateId: "cc051823-df8e-49ed-94cd-9ee294ae3535",
-      receiverEvidenceDigest: "d".repeat(64),
-      releasedAt: 123456,
-    },
-    proof = signMaintenanceRecoveryProof("original-token", fields),
-    [payload, mac] = proof.split(".") as [string, string];
-  expect(verifyMaintenanceRecoveryProof("original-token", proof)).toEqual(fields);
-  expect(() => verifyMaintenanceRecoveryProof("other-token", proof)).toThrow();
-  expect(() =>
-    verifyMaintenanceRecoveryProof(
-      "original-token",
-      `${payload}.${mac[0] === "A" ? "B" : "A"}${mac.slice(1)}`,
-    ),
-  ).toThrow();
-  expect(
-    controlTerminalReceiptDigest({
-      ...status,
-      diagnostics: { tail: [], truncated: false, maintenanceRecovery: proof },
-    }),
-  ).toBe(controlTerminalReceiptDigest(status));
 });

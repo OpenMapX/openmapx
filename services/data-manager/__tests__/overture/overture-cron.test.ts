@@ -12,7 +12,7 @@ describe("Overture cron durable ownership", () => {
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   function start(extra: Partial<CronSetupOptions> = {}) {
     // This collaborator is never used to start data work: the receiver owns it.
-    const singleFlight = createSingleFlightController({ db: {} as never });
+    const singleFlight = createSingleFlightController();
     const handles = setupCron({
       dataDir,
       countries: [],

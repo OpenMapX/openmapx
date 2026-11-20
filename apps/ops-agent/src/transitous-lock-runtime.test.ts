@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { createCatalogPinSet, initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { opsOperationSchema } from "@openmapx/core/ops";
@@ -62,7 +62,7 @@ describe("agent-owned Transitous catalog lock", () => {
     const rootDir = root(),
       infra = join(rootDir, "infra/docker");
     mkdirSync(join(infra, "data"), { mode: 0o700 });
-    await provisionControlInstallation(infra);
+    await provisionControlDirectories(infra);
     const pins = createCatalogPinSet(
       {
         ref: REF,
@@ -101,8 +101,7 @@ describe("agent-owned Transitous catalog lock", () => {
         "utf8",
       ),
     );
-    expect(retained.payload.proposal.pins.gbfs.commit).toBe("d".repeat(40));
-    expect(retained.signature).toMatch(/^[A-Za-z0-9_-]{86}$/);
+    expect(retained.proposal.pins.gbfs.commit).toBe("d".repeat(40));
     const originalBytes = readFileSync(
       join(infra, "catalog-pins/proposals/00000000-0000-4000-8000-000000000001.json"),
       "utf8",
@@ -216,7 +215,7 @@ describe("agent-owned Transitous catalog lock", () => {
     );
     const infra = join(rootDir, "infra/docker");
     mkdirSync(join(infra, "data"), { mode: 0o700 });
-    await provisionControlInstallation(infra);
+    await provisionControlDirectories(infra);
     const installation = openControlInstallation({
       infraDir: infra,
       role: "ops-agent",

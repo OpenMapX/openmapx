@@ -17,7 +17,7 @@ const principal = "a".repeat(64);
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 let container: StartedPostgreSqlContainer;
 let sql: Sql;
-let closeAdmission: (() => void) | undefined;
+let closeAdmission: (() => Promise<void>) | undefined;
 
 const artifacts = new Map<string, OfflineMapPackageManifest>();
 const artifactOptions = { readManifest: async (id: string) => artifacts.get(id) };
@@ -148,7 +148,7 @@ integration("PostgreSQL offline-package accounting", () => {
   });
 
   afterAll(async () => {
-    closeAdmission?.();
+    await closeAdmission?.();
     await sql?.end();
     await container?.stop();
   });

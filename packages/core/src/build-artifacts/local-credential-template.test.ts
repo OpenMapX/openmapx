@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createControlRootOperationKey, executionFingerprint, opsOperationSchema } from "../ops";
+import { controlDigest } from "./control-records";
+import { retainAdmittedControlExecution } from "./execution-record";
 import {
   closeControlInstallation,
-  controlDigest,
-  localFeedCredentialTemplateMac,
+  localFeedCredentialTemplateDigest,
   openControlInstallation,
-  provisionControlInstallation,
-  retainAdmittedControlExecution,
-} from "./control-authority";
+  provisionControlDirectories,
+} from "./private-records";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -21,13 +21,13 @@ const operation = {
   kind: "transit.credentials.template",
   catalogRevisionId: "a".repeat(64),
   outputPath: "services/motis/tools/transitous/api-keys.json",
-  fileMac: "b".repeat(64),
+  fileDigest: "b".repeat(64),
 };
 async function fixture(role: "host-cli" | "ops-agent" | "data-manager") {
   const root = mkdtempSync(join(tmpdir(), "omx-local-credential-owner-"));
   roots.push(root);
   mkdirSync(join(root, "data"), { mode: 0o755 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   return openControlInstallation({ infraDir: root, role, serviceIds: ["motis", "valhalla"] });
 }
 function input(
@@ -64,13 +64,13 @@ it.each(["ops-agent", "data-manager"] as const)(
   async (role) => {
     const installation = await fixture(role);
     try {
-      expect(() =>
+      await expect(
         retainAdmittedControlExecution(
           installation,
           input(role, role === "ops-agent" ? "api" : "data-manager"),
         ),
-      ).toThrow(/local/);
-      expect(() => localFeedCredentialTemplateMac(installation, operation, "{}\n")).toThrow(
+      ).rejects.toThrow(/local/);
+      expect(() => localFeedCredentialTemplateDigest(installation, operation, "{}\n")).toThrow(
         /Local host/,
       );
     } finally {
@@ -81,12 +81,12 @@ it.each(["ops-agent", "data-manager"] as const)(
 it("requires local host intent and exactly the MOTIS closure", async () => {
   const installation = await fixture("host-cli");
   try {
-    expect(() => retainAdmittedControlExecution(installation, input("host-cli", "api"))).toThrow(
-      /local/,
-    );
-    expect(() =>
+    await expect(
+      retainAdmittedControlExecution(installation, input("host-cli", "api")),
+    ).rejects.toThrow(/local/);
+    await expect(
       retainAdmittedControlExecution(installation, input("host-cli", "host-cli", ["valhalla"])),
-    ).toThrow(/local/);
+    ).rejects.toThrow(/local/);
   } finally {
     closeControlInstallation(installation);
   }

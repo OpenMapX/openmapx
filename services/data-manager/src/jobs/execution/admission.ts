@@ -1,3 +1,4 @@
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
 import type { DataConfigurationMaintenance } from "./configuration-maintenance.js";
 
@@ -13,7 +14,8 @@ export async function assertDataMutationAdmission(tx: postgres.TransactionSql): 
   // Shared: ordinary writers only need configuration maintenance and execution
   // admission kept out, which both take this lock exclusively. An exclusive
   // lock here turned concurrent writers away from each other as "busy".
-  const lock = await tx`SELECT pg_try_advisory_xact_lock_shared(${0x4f4d58},${2}) AS held`;
+  const [namespace, key] = DATA_ADVISORY_LOCKS.dataAdmission;
+  const lock = await tx`SELECT pg_try_advisory_xact_lock_shared(${namespace},${key}) AS held`;
   if (lock[0]?.held !== true)
     throw Object.assign(Error("configuration_maintenance_busy"), { statusCode: 409 });
   await maintenance.assertAdmission(tx);

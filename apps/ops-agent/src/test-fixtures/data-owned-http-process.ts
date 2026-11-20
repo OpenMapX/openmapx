@@ -8,13 +8,15 @@ import {
   restoreAdmittedControlExecution,
 } from "@openmapx/core/build-artifacts";
 import { services as coreServices } from "@openmapx/core/server";
-import { createDataTransitTrustedOpsDataSource } from "../data-transit-resource-source";
+import {
+  configurationPayloadSource,
+  createDataTransitTrustedOpsDataSource,
+} from "../data-transit-resource-source";
 import { createDockerRuntime, runContainedProcess } from "../docker-runtime";
 import { openOpsJobJournal } from "../journal";
 import { createProductionRegistryResourceClaimer } from "../policy";
 import { buildOpsAgentServer } from "../server";
 import { createTransitousLockRuntime } from "../transitous-lock-runtime";
-import { createFileTrustedOpsDataSource } from "../trusted-config-source";
 
 const lines = createInterface({ input: process.stdin });
 const messages = lines[Symbol.asyncIterator]();
@@ -112,15 +114,7 @@ const app = buildOpsAgentServer({
       isBuiltIn: true,
     })),
     integrationIds: [],
-    trustedData: createDataTransitTrustedOpsDataSource(
-      installation,
-      createFileTrustedOpsDataSource({
-        directory: join(root, "trusted-config"),
-        token: "a".repeat(43),
-        allowedUids: [process.getuid!()],
-        expectedGid: process.getgid!(),
-      }),
-    ),
+    trustedData: createDataTransitTrustedOpsDataSource(installation, configurationPayloadSource),
   }),
 });
 let cancels = 0;
@@ -145,7 +139,7 @@ try {
       const record = journal.records()[0];
       if (!record?.operationFingerprint || !record.deadlineAt)
         throw Error("Missing original admission");
-      const authority = restoreAdmittedControlExecution(installation, {
+      const authority = await restoreAdmittedControlExecution(installation, {
         executor: "ops-agent",
         principal: "data-manager",
         executionId: record.operationId,
@@ -156,7 +150,7 @@ try {
       });
       let forward = true;
       try {
-        assertControlExecutionForward(authority);
+        await assertControlExecutionForward(authority);
       } catch {
         forward = false;
       }

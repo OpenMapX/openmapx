@@ -9,6 +9,7 @@ import {
 import {
   type ConfigurationMaintenancePrepare,
   type ConfigurationMaintenanceStep,
+  configurationMaintenanceEffectFingerprint,
   configurationMaintenancePrepareSchema,
   configurationMaintenanceStepSchema,
   protectedConfigurationServiceIdSchema,
@@ -29,13 +30,12 @@ import {
   type ConfigurationReleaseSnapshot,
   configurationReleaseSnapshotSchema,
 } from "./configuration-release-snapshot";
+import { controlDigest } from "./control-records";
 import {
   type ControlChildReservation,
   controlChildOperationKey,
   controlChildReservationSchema,
-} from "./control-child-records";
-import { controlDigest } from "./control-records";
-import { generationHardlinksReservation } from "./generation-hardlinks-records";
+} from "./lease-store";
 
 const ids = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
@@ -49,7 +49,6 @@ const coordinatorImageSchema = z.strictObject({
   imageReference: servicePullResultSchema.shape.imageReference,
   imageId: servicePullResultSchema.shape.imageId,
   releaseSelectionDigest: servicePullResultSchema.shape.releaseSelectionDigest,
-  pullSubmissionDigest: digest.nullable(),
 });
 export const fixedConfigurationMaintenancePlanSchema = z.strictObject({
   version: z.literal(1),
@@ -71,7 +70,6 @@ export const fixedConfigurationMaintenancePlanSchema = z.strictObject({
     .array(z.lazy(() => controlChildReservationSchema))
     .min(2)
     .max(33),
-  nestedHardlinks: z.lazy(() => controlChildReservationSchema).nullable(),
   dmPrepare: dataConfigurationFencePrepareSchema,
 });
 export type FixedConfigurationMaintenancePlan = z.infer<
@@ -126,7 +124,6 @@ function freeze<T>(value: T): T {
   return value;
 }
 export function buildFixedConfigurationMaintenancePlan(input: {
-  installationId: string;
   prepare: ExecutionRef;
   operation: ConfigurationMaintenancePrepare;
   apiParent: RetainedParentExecution;
@@ -208,10 +205,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
   if (
     input.coordinatorImage &&
     (canonicalJson(recreates) !== '["data-manager"]' ||
-      (input.coordinatorImage.action === "apply" &&
-        (input.coordinatorImage.noDeps || input.coordinatorImage.pullSubmissionDigest !== null)) ||
-      (input.coordinatorImage.action === "update" &&
-        input.coordinatorImage.pullSubmissionDigest === null))
+      (input.coordinatorImage.action === "apply" && input.coordinatorImage.noDeps))
   )
     throw Error("Fixed coordinator image expectation conflict");
   if (
@@ -226,9 +220,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
     throw Error("Fixed maintenance continuation conflict");
   const intents: {
     phase: ConfigurationMaintenanceStep["phase"];
-    operation:
-      | OpsOperation
-      | Omit<Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>, "planDigest">;
+    operation: Record<string, unknown> & { kind: string };
     prerequisites: number[];
   }[] = [{ phase: "configuration-commit", operation: apply, prerequisites: [] }];
   if (hardlinkPlan.plan.length)
@@ -289,7 +281,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
         ? intent.operation
         : { ...intent.operation, planDigest };
     const execution = address(prepare.operationKey, intent.phase, ordinal, "ops-agent"),
-      operationFingerprint = opsOperationFingerprint(opsOperationSchema.parse(body));
+      operationFingerprint = configurationMaintenanceEffectFingerprint(body);
     reservations.push({
       version: 1,
       phase: intent.phase,
@@ -333,7 +325,6 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       ...dmPrepare,
     }),
   });
-  const middle = reservations.find((value) => value.phase === "maintenance-hardlinks");
   const handoffStep = steps.find((step) => step.phase === "maintenance-handoff");
   const nestedHandoff =
     handoff && handoffStep
@@ -370,23 +361,13 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       steps,
       reservations,
       dmPrepare,
-      nestedHardlinks: middle
-        ? generationHardlinksReservation({
-            parent: middle.execution,
-            revisionId: operation.revisionId,
-            coordinatorMode: operation.coordinatorMode,
-            plan: hardlinkPlan,
-            serviceIds,
-          })
-        : null,
     }),
   );
 }
 /** Restore comparisons recompute every derived body/address from the original
- * retained inputs. A schema-valid signed summary is not a frozen graph. */
+ * retained inputs. A schema-valid summary is not a frozen graph. */
 export function assertFixedConfigurationMaintenancePlan(
   value: FixedConfigurationMaintenancePlan,
-  installationId: string,
 ): void {
   const plan = fixedConfigurationMaintenancePlanSchema.parse(value),
     first = plan.steps[0];
@@ -398,7 +379,6 @@ export function assertFixedConfigurationMaintenancePlan(
       : [],
   );
   const rebuilt = buildFixedConfigurationMaintenancePlan({
-    installationId,
     prepare: plan.prepare,
     operation: plan.operation,
     apiParent: plan.apiParent,

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statfsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 import { runOpsOperation } from "../../ops-client.js";
 import { assertValidOvertureSchema } from "./schema.js";
 
@@ -49,7 +49,10 @@ export async function freeBytesInPostgresContainer(): Promise<number> {
   return result.availableBytes;
 }
 
-export async function postgresOvertureSchemaBytes(schema: string): Promise<number> {
+export async function postgresOvertureSchemaBytes(
+  sql: postgres.Sql,
+  schema: string,
+): Promise<number> {
   assertValidOvertureSchema(schema);
   const [row] = await sql.unsafe<{ bytes: string }[]>(
     `SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)::TEXT AS bytes
@@ -70,11 +73,12 @@ export async function postgresFreeBytes(): Promise<number> {
 }
 
 export async function assertOverturePostgresCapacity(input: {
+  sql: postgres.Sql;
   schema: string;
   stage: string;
   workingBytes: (schemaBytes: number) => number;
 }): Promise<void> {
-  const schemaBytes = await postgresOvertureSchemaBytes(input.schema);
+  const schemaBytes = await postgresOvertureSchemaBytes(input.sql, input.schema);
   assertOvertureDiskCapacity({
     stage: input.stage,
     workingBytes: input.workingBytes(schemaBytes),

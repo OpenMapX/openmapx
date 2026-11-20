@@ -1,13 +1,8 @@
 // Unit boundary: these tests exercise traffic/auth/async response behavior.
 // SQL admission and retained ownership are qualified by the owned PostgreSQL
 // legacy-admission/configuration-maintenance suites, never by this collaborator.
-vi.mock("../../src/jobs/execution/legacy-mutation.js", () => ({
-  withLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
-  independentLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
-  startLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => ({
-    id: "unit-writer",
-    completion: run(),
-  }),
+vi.mock("../../src/jobs/execution/local.js", () => ({
+  runLocalDataExecution: async (_input: unknown, run: () => Promise<unknown>) => run(),
 }));
 
 import Fastify from "fastify";

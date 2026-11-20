@@ -62,54 +62,33 @@ export const configurationHandoffPrepareOperationSchema =
     planDigest: digest,
     expectedCurrentRevisionId: revision,
   });
-export const configurationHandoffInspectOperationSchema = z.strictObject({
-  kind: z.literal("configurationHandoff.inspect"),
-  handoffId: z.uuid(),
-});
-export const configurationHandoffPreparedSchema = z.strictObject({
-  handoffId: z.uuid(),
-  phase: z.literal("prepared"),
-});
-export const configurationHandoffInspectionSchema = z
+/** What the configuration helper reports while it replaces protected services.
+ * Only the helper writes it; the agent reads it once the helper container exited. */
+export const handoffProgressSchema = z
   .strictObject({
+    version: z.literal(1),
+    maintenanceId: z.uuid(),
     handoffId: z.uuid(),
-    phase: z.enum([
-      "prepared",
-      "draining",
-      "applying",
-      "verifying",
-      "applied",
-      "rolled_back",
-      "failed",
-      "recovery_required",
-    ]),
-    expectedRevisionId: revision,
-    appliedRevisionId: revision.nullable(),
-    completedServiceIds: z.array(id).max(64),
-    failedServiceIds: z.array(id).max(64),
-    recoveryCodes: z
+    phase: z.enum(["applying", "verifying", "applied", "cancelled", "failed"]),
+    targets: z
       .array(
-        z.enum([
-          "helper_unavailable",
-          "launch_unknown",
-          "source_changed",
-          "deadline_expired",
-          "cancel_pending",
-          "container_unknown",
-          "readiness_failed",
-          "restore_failed",
-          "receipt_pending",
-        ]),
+        z.strictObject({
+          serviceId: id,
+          phase: z.enum(["pending", "recreate_attempted", "verified"]),
+          oldContainerId: z.string().regex(/^[a-f0-9]{64}$/),
+          newContainerId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .nullable(),
+          expectedImageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+        }),
       )
-      .max(16),
+      .min(1)
+      .max(64),
+    updatedAt: z.iso.datetime(),
   })
-  .superRefine((value, ctx) => {
-    if (
-      new Set(value.completedServiceIds).size !== value.completedServiceIds.length ||
-      new Set(value.failedServiceIds).size !== value.failedServiceIds.length ||
-      value.failedServiceIds.some((id) => value.completedServiceIds.includes(id)) ||
-      (value.phase === "applied" &&
-        (value.appliedRevisionId !== value.expectedRevisionId || value.failedServiceIds.length > 0))
-    )
-      ctx.addIssue({ code: "custom", message: "Inconsistent handoff observation" });
-  });
+  .refine(
+    (value) =>
+      new Set(value.targets.map((target) => target.serviceId)).size === value.targets.length,
+  );
+export type HandoffProgress = z.infer<typeof handoffProgressSchema>;

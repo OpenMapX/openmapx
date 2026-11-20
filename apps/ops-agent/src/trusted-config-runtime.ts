@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import {
   closeControlInstallation,
@@ -17,29 +17,28 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
-import {
-  executionAuthorityState,
-  retainConfigurationGenerationNonCommit,
-} from "../../../packages/core/src/build-artifacts/control-authority";
+import { retainConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/execution-record";
 import { configurationGenerationNonCommitForError } from "../../../packages/core/src/services/configuration-generation";
 import {
   type ConfigurationCandidateSource,
+  discardConfigurationCandidate,
   readConfigurationCandidate,
+  readConfigurationCandidateRecord,
+  retainConfigurationCandidate,
 } from "./configuration-candidate-source";
 import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
 import { assertConfigurationCoordinatorReady } from "./configuration-hardlinks-runtime";
-import {
-  assertStagedCoordinatorConfigurationWrite,
-  inspectOwnedMaintenanceGenerationRuntime,
-  readMaintenanceRelease,
-  readPreparedMaintenanceRelease,
-} from "./configuration-maintenance-store";
 import {
   preflightConfigurationRelease,
   verifyFrozenConfigurationRelease,
 } from "./configuration-release-preflight";
 import { configurationPolicyRevision } from "./configured-resource-authority";
 import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime";
+import {
+  assertMaintenanceGenerationStep,
+  readMaintenancePlan,
+  readPreparedMaintenanceRelease,
+} from "./maintenance-source";
 import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsExecutionContext, OpsRuntime, OpsTrustedClaim } from "./runtime";
 import { OpsHostUpdateRequiredError } from "./runtime";
@@ -113,7 +112,6 @@ export async function initializeTrustedConfigurationRuntime(infraDir: string): P
 const MAX_RECORDED_FAILURES = 32;
 
 async function commitGeneration(
-  runtime: OpsRuntime,
   options: TrustedConfigurationRuntimeOptions,
   operation: TrustedConfigurationOperation,
   payload: TrustedConfigurationPayload,
@@ -138,12 +136,6 @@ async function commitGeneration(
             cleanupFailed: false,
           });
         if (!executionContext) throw Error("Actual configuration publication context required");
-        await assertStagedCoordinatorConfigurationWrite(
-          runtime,
-          operation,
-          executionContext,
-          signal,
-        );
         const authority = await options.loadAuthority?.();
         if (
           authority &&
@@ -158,7 +150,6 @@ async function commitGeneration(
           infraDir: options.infraDir,
           role: "ops-agent",
           serviceIds: services.map((service) => service.manifest.id),
-          container: existsSync("/run/secrets/openmapx-control-verifiers"),
         });
         try {
           verifyConfigurationSourceWitness({
@@ -173,28 +164,20 @@ async function commitGeneration(
           closeControlInstallation(installation);
         }
         const env = options.env ?? process.env;
-        // Capture cleanup retention before selection effects under the same writer.
-        const frozen =
+        if (
           (operation.kind === "stack.render" || operation.kind === "vault.apply") &&
-          operation.maintenanceId &&
-          executionContext
-            ? await inspectOwnedMaintenanceGenerationRuntime(
-                runtime,
-                executionContext,
-                operation,
-                signal,
-              )
+          operation.maintenanceId
+        )
+          assertMaintenanceGenerationStep(executionContext, operation);
+        // Capture cleanup retention before selection effects under the same writer.
+        const inventory = options.ownedServices?.inspectInventory
+          ? await options.ownedServices.inspectInventory(signal)
+          : options.ownedServices
+            ? {
+                services: await options.ownedServices.inspectOwnedServices(signal),
+                observedContainerIds: undefined,
+              }
             : undefined;
-        const inventory =
-          frozen ??
-          (options.ownedServices?.inspectInventory
-            ? await options.ownedServices.inspectInventory(signal)
-            : options.ownedServices
-              ? {
-                  services: await options.ownedServices.inspectOwnedServices(signal),
-                  observedContainerIds: undefined,
-                }
-              : undefined);
         const ownedServiceGenerations = inventory?.services.map((snapshot) => ({
           containerId: snapshot.containerId,
           revisionIds: snapshot.provenance.composeConfigFiles
@@ -236,29 +219,43 @@ async function commitGeneration(
         coreServices.prepareAgentStateDirectories(options.infraDir);
         // And its stores, which the generation mounts into app-api.
         coreServices.prepareAgentStores(options.infraDir);
-        // A release update's maintenance pins its frozen release in the generation it commits.
+        // A release update's maintenance pins its frozen release in the generation
+        // it commits; a coordinator update commits the image it pulled.
         let release: coreServices.ReleaseManifest | undefined;
+        let coordinatorImageId: string | undefined;
         if (operation.kind === "stack.render" && operation.maintenanceId) {
           const reading = openControlInstallation({
             infraDir: options.infraDir,
             role: "ops-agent",
             serviceIds: services.map((service) => service.manifest.id),
-            container: existsSync("/run/secrets/openmapx-control-verifiers"),
           });
           try {
-            const frozen = readMaintenanceRelease(reading, operation.maintenanceId);
-            if (frozen)
+            const frozen = readMaintenancePlan(reading, operation.maintenanceId);
+            if (frozen.release)
               release = coreServices.parseReleaseManifest(
-                frozen.canonicalManifest,
-                frozen.imagePrefix,
+                frozen.release.canonicalManifest,
+                frozen.release.imagePrefix,
               );
+            coordinatorImageId = frozen.coordinatorImage?.imageId;
           } finally {
             closeControlInstallation(reading);
           }
         }
+        const docker = options.execFile ?? runContainedProcess;
         const mounts = await options.containerBindMounts?.();
         const committed = await writer.commit({
           ...(release ? { release } : {}),
+          // What the generation's containers run, recorded while its references name it.
+          imageIds: async (references) => {
+            const ids = await coreServices.inspectLocalImageIds(
+              references,
+              async (args) =>
+                (await docker("docker", args, { signal, timeout: 15000, maxBuffer: 4096 })).stdout,
+            );
+            if (coordinatorImageId !== undefined && ids["data-manager"] !== coordinatorImageId)
+              throw Error("The coordinator image changed after its pull");
+            return ids;
+          },
           ...(mounts ? { containerBindMounts: mounts } : {}),
           services,
           ownedServiceGenerations,
@@ -269,10 +266,6 @@ async function commitGeneration(
           revisionId: operation.revisionId,
           expectedCurrentRevisionId: operation.expectedCurrentRevisionId,
           operationKey: executionContext?.execution.operationKey,
-          installationId: executionContext?.controlAuthority
-            ? executionAuthorityState(executionContext.controlAuthority).installation.installation
-                .installationId
-            : undefined,
           beforeCommit: options.beforeCommit,
           afterGenerationRename: options.afterGenerationRename,
           afterCommit: options.afterCommit,
@@ -294,7 +287,7 @@ async function commitGeneration(
   } catch (error) {
     const original = configurationGenerationNonCommitForError(error);
     if (original && executionContext?.controlAuthority)
-      retainConfigurationGenerationNonCommit(executionContext.controlAuthority, original);
+      await retainConfigurationGenerationNonCommit(executionContext.controlAuthority, original);
     const problem = operatorProblem(error);
     if (problem) {
       // The agent's log, and the admin panel through configuration.failure.inspect.
@@ -350,7 +343,6 @@ export function installTrustedConfigurationRuntime(
         infraDir: options.infraDir,
         role: "ops-agent",
         serviceIds: services.map((service) => service.manifest.id),
-        container: existsSync("/run/secrets/openmapx-control-verifiers"),
       });
       try {
         const observed = observeConfigurationSources({
@@ -385,14 +377,12 @@ export function installTrustedConfigurationRuntime(
       candidate.record.expectedSourceRevision !== operation.expectedSourceRevision
     )
       throw Error("Configuration preview identity conflict");
-    await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
     const authority = await options.loadAuthority?.();
     const services = authority?.services ?? options.services;
     const installation = openControlInstallation({
       infraDir: options.infraDir,
       role: "ops-agent",
       serviceIds: services.map((service) => service.manifest.id),
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
     try {
       verifyConfigurationSourceWitness({
@@ -464,7 +454,6 @@ export function installTrustedConfigurationRuntime(
           infraDir: options.infraDir,
           role: "ops-agent",
           serviceIds: services.map((service) => service.manifest.id),
-          container: existsSync("/run/secrets/openmapx-control-verifiers"),
         });
         try {
           frozenRelease = readPreparedMaintenanceRelease(reading, candidate.record.maintenanceId);
@@ -532,6 +521,20 @@ export function installTrustedConfigurationRuntime(
         .digest("hex"),
     };
   };
+  const candidates = () => {
+    if (!options.candidateSource) throw Error("Configuration candidate source unavailable");
+    return options.candidateSource;
+  };
+  runtime["configuration.candidate.retain"] = async (operation) => {
+    retainConfigurationCandidate(candidates(), operation.record);
+    return { retained: true };
+  };
+  runtime["configuration.candidate.read"] = async (operation) => ({
+    record: readConfigurationCandidateRecord(candidates(), operation.lookup),
+  });
+  runtime["configuration.candidate.discard"] = async (operation) => ({
+    removed: await discardConfigurationCandidate(candidates(), operation.operationKey),
+  });
   // Why recent applies were not committed, when the operator can act on it.
   const failures = new Map<string, string>();
   runtime["configuration.failure.inspect"] = async (operation) => ({
@@ -546,7 +549,6 @@ export function installTrustedConfigurationRuntime(
     );
   runtime["stack.render"] = (operation, context) =>
     commitGeneration(
-      runtime,
       options,
       operation,
       trustedPayload(operation, context),
@@ -584,7 +586,6 @@ export function installTrustedConfigurationRuntime(
     );
   runtime["serviceSelection.apply"] = (operation, context) =>
     commitGeneration(
-      runtime,
       options,
       operation,
       trustedPayload(operation, context),
@@ -598,7 +599,6 @@ export function installTrustedConfigurationRuntime(
     if (!payload.serviceConfigs.some((entry) => entry.serviceId === operation.serviceId))
       throw new Error(FAILED);
     return commitGeneration(
-      runtime,
       options,
       operation,
       payload,
@@ -616,7 +616,6 @@ export function installTrustedConfigurationRuntime(
       throw new Error(FAILED);
     }
     return commitGeneration(
-      runtime,
       options,
       operation,
       payload,
@@ -631,7 +630,6 @@ export function installTrustedConfigurationRuntime(
     if (!payload.serviceSecrets.some((entry) => entry.serviceId === operation.serviceId))
       throw new Error(FAILED);
     return commitGeneration(
-      runtime,
       options,
       operation,
       payload,

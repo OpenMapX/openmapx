@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   chmodSync,
   closeSync,
@@ -27,14 +27,12 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
   opsExecutionBudget,
+  prepareConfigurationCandidate,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { waitForOpsResult } from "../apps/api/src/services/ops-client";
-import {
-  consumePublishedTrustedConfiguration,
-  publishTrustedConfigurationSnapshot,
-} from "../apps/api/src/services/trusted-config-publisher";
 import {
   buildRuntimeBundle,
   RUNTIME_BUNDLES,
@@ -46,8 +44,8 @@ import {
  * .env without UID or GID, through to a committed trusted-configuration
  * request: in the host update's order (the host's render, then the agent)
  * and in the panel self-update's (the new agent first). Only the host's render writes UID and GID; the agent and its fixed
- * CLI read .env and never change it. The fixture publishes with the UID/GID
- * Compose gives app-api from .env and submits a truthful local bearer root.
+ * CLI read .env and never change it. The fixture sends the configuration in
+ * the request, as app-api does, under a truthful local bearer root.
  *
  * Runs only on Linux where `OPENMAPX_TEST_DEPLOYMENT_USER` names the uid the
  * test runs as, which must not be 1000 and must own the repository, e.g. in a
@@ -253,8 +251,9 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       client: OpsClient,
       operation: Extract<OpsOperation, { kind: K }>,
       identity = localRootIdentity(operation.kind),
+      payload?: TrustedConfigurationPayload,
     ): Promise<OpsResultFor<K>> {
-      const submitted = await client.execute<K>(operation, identity);
+      const submitted = await client.execute<K>(operation, { ...identity, payload });
       if (submitted.execution === "sync") return submitted.value;
       return waitForOpsResult<K>(client, operation.kind, submitted, {
         execution: identity.execution,
@@ -262,12 +261,11 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       });
     }
 
-    /** A request app-api publishes as the UID and GID Compose passes it. */
+    /** A configuration apply as app-api sends it: the payload in the request. */
     async function submit(
       target: string,
       agent: { port: number; output: () => string },
       name: string,
-      user: { uid: number; gid: number },
     ) {
       const infra = join(target, "infra", "docker");
       const tokenFile = join(infra, "secrets", "ops-agent-api-token");
@@ -277,33 +275,32 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       const identity = localRootIdentity("stack.render");
       const { operationKey } = identity;
       const before = services.currentConfigurationGeneration(infra);
-      const sealed = await publishTrustedConfigurationSnapshot({
-        directory: services.agentStatePaths(infra).trustedConfig,
-        token: readFileSync(tokenFile, "utf8").trim(),
-        ownerUid: user.uid,
-        ownerGid: user.gid,
+      const payload = {
+        domain: `${name}.example.test`,
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      };
+      const sealed = prepareConfigurationCandidate({
+        role: "api",
+        nonce: `nonce_${randomUUID().replaceAll("-", "")}`,
         operationKey,
-        operationForRevision: (revisionId) => ({
+        operationForRevision: (revisionId, payloadDigest) => ({
           kind: "stack.render",
           revisionId,
+          payloadDigest,
           expectedCurrentRevisionId: before,
           expectedSourceRevision: inspected.value.sourceRevision,
           coordinatorMode: "require-running",
         }),
-        payload: {
-          domain: `${name}.example.test`,
-          serviceConfigs: [],
-          integrationConfigs: [],
-          serviceSecrets: [],
-        },
+        payload,
       });
-      const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-        executeLocalRoot(client, sealed.operation, identity),
+      const submitted = await executeLocalRoot(client, sealed.operation, identity, payload).catch(
+        (reason: unknown) => {
+          throw Error(`${String(reason)}\n${agent.output()}`);
+        },
       );
-      expect(consumed.submission.status, agent.output()).toBe("fulfilled");
-      const result = configurationApplyResultSchema.parse(
-        consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined,
-      );
+      const result = configurationApplyResultSchema.parse(submitted);
       if (result.outcome === "committed")
         expect(result.revisionId).toBe(sealed.operation.revisionId);
       return result;
@@ -316,7 +313,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
     ) {
       const infra = join(target, "infra", "docker");
       const before = services.currentConfigurationGeneration(infra);
-      const result = await submit(target, agent, name, deploymentUser(target));
+      const result = await submit(target, agent, name);
       expect(result, `${JSON.stringify(result)}\n${agent.output()}`).toMatchObject({
         outcome: "committed",
       });
@@ -347,14 +344,8 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       const written = envFileState(target, true);
       const agent = await startAgent(target);
       expect(agent.output()).not.toContain("sets no UID");
-      const infra = join(target, "infra", "docker");
-      const before = services.currentConfigurationGeneration(infra);
-      await expect(
-        submit(target, agent, "wrong-deployment-user", { uid: 1000, gid: statSync(target).gid }),
-      ).rejects.toThrow("Trusted configuration snapshot publish failed");
-      expect(envFileState(target)).toEqual(written);
-      expect(services.currentConfigurationGeneration(infra)).toBe(before);
       await expectCommitted(target, agent, "host-update");
+      expect(envFileState(target)).toEqual(written);
       // The agent's fixed CLI renders with it too, and leaves .env as it was.
       await agentCli(target, "compose", "render");
       expect(envFileState(target)).toEqual(written);
@@ -376,10 +367,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       expect(agent.output()).toContain(HOST_RENDER_NEEDED);
       expect(envFileState(target)).toEqual(unset);
       // The admin panel's apply and the agent's fixed CLI render both refuse.
-      const refused = await submit(target, agent, "self-update", {
-        uid: EXPECTED_UID,
-        gid: statSync(target).gid,
-      });
+      const refused = await submit(target, agent, "self-update");
       expect(refused, agent.output()).toMatchObject({ outcome: "not_committed" });
       await expect(agentCli(target, "compose", "render")).rejects.toThrow(HOST_RENDER_NEEDED);
       expect(envFileState(target)).toEqual(unset);

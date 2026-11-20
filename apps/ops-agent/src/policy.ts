@@ -5,22 +5,16 @@ import {
   type OpsOperationKind,
   type OpsResourcePolicy,
 } from "@openmapx/core/ops";
-import {
-  inspectOwnedMaintenanceRecreateAdmission,
-  isOwnedMaintenanceRecreateAdmission,
-} from "./configuration-maintenance-store";
-import {
-  attachCoordinatorPullOwnershipCapture,
-  captureCoordinatorPullOwnership,
-  type OwnedServiceResolver,
-} from "./owned-services";
+import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsTrustedClaim } from "./runtime";
 import { decideServiceAction } from "./service-action-policy";
 
-export interface OpsClaimOwner {
+interface OpsClaimOwner {
   role: "api" | "data-manager";
   operationKey: string;
-  maintenanceStep?: unknown;
+  /** Set only by the agent's own configuration maintenance for one of its
+   * steps: the step may run a workflow action. */
+  maintenanceStep?: true;
 }
 
 export interface OpsResourceClaimer {
@@ -38,14 +32,7 @@ export interface TrustedOpsDataSource {
     fingerprint: string,
     signal: AbortSignal,
     owner?: OpsClaimOwner,
-  ): Promise<
-    | OpsTrustedClaim["capability"]
-    | {
-        capability: OpsTrustedClaim["capability"];
-        admission: NonNullable<OpsTrustedClaim["admission"]>;
-      }
-    | null
-  >;
+  ): Promise<OpsTrustedClaim["capability"] | null>;
 }
 
 export const denyAllTrustedOpsData: TrustedOpsDataSource = {
@@ -230,7 +217,6 @@ function immutableClaim(
   fingerprint: string,
   source: OpsTrustedClaim["source"],
   capability: OpsTrustedClaim["capability"] = { revisionId: "registry-v1", values: {} },
-  admission?: OpsTrustedClaim["admission"],
 ): OpsTrustedClaim {
   const deepFreeze = (value: unknown): void => {
     if (!value || typeof value !== "object" || Object.isFrozen(value)) return;
@@ -246,7 +232,6 @@ function immutableClaim(
     operation: snapshot,
     source,
     capability: capabilitySnapshot,
-    ...(admission ? { admission } : {}),
   });
 }
 
@@ -272,7 +257,6 @@ export function createRegistryResourceClaimer(options: {
   integrationIds: Iterable<string>;
   trustedData: TrustedOpsDataSource;
   registryRevision?: string;
-  configurationAuthorityRevision?: string;
   resourceAuthority?: Pick<
     OpsResourcePolicy,
     | "allowBackup"
@@ -291,21 +275,9 @@ export function createRegistryResourceClaimer(options: {
       if (!requiresTrustedSource(operation)) {
         const action = serviceActionForOperation(operation.kind);
         if ("serviceId" in operation && action && options.ownedServices) {
-          const snapshots =
-            operation.serviceId === "data-manager" &&
-            isOwnedMaintenanceRecreateAdmission(
-              owner?.maintenanceStep,
-              operation,
-              owner?.operationKey ?? "",
-            )
-              ? await inspectOwnedMaintenanceRecreateAdmission(
-                  owner?.maintenanceStep,
-                  operation,
-                  owner?.operationKey ?? "",
-                  signal,
-                )
-              : await options.ownedServices.inspectOwnedServices(signal);
-          const snapshot = snapshots.find((s) => s.serviceId === operation.serviceId);
+          const snapshot = (await options.ownedServices.inspectOwnedServices(signal)).find(
+            (s) => s.serviceId === operation.serviceId,
+          );
           const service = options.serviceMetadata?.find(
             (s) => s.serviceId === operation.serviceId,
           ) ?? { serviceId: operation.serviceId, isBuiltIn: true, buildable: true };
@@ -318,35 +290,12 @@ export function createRegistryResourceClaimer(options: {
             snapshot,
             action,
           );
-          let coordinatorCapture:
-            | Awaited<ReturnType<typeof captureCoordinatorPullOwnership>>
-            | undefined;
-          if (
+          // A coordinator pull is only the first step of its update, which names
+          // its candidate; a bare data-manager pull stays unavailable.
+          const checkedCoordinatorUpdate =
             operation.kind === "service.pull" &&
             operation.serviceId === "data-manager" &&
-            operation.candidateId
-          ) {
-            if (!options.configurationAuthorityRevision || !options.registryRevision) return null;
-            try {
-              coordinatorCapture = await captureCoordinatorPullOwnership(
-                options.ownedServices,
-                operation,
-                fingerprint,
-                {
-                  configurationAuthorityRevision: options.configurationAuthorityRevision,
-                  policyRevision: options.registryRevision,
-                },
-                signal,
-              );
-            } catch {
-              return null;
-            }
-          }
-          // Only the literal opaque capture admits the existing internal Update
-          // submission to its mandatory first-server MAC/parent join. Bare pull
-          // remains unavailable and cannot obtain this private claim association.
-          const checkedCoordinatorUpdate =
-            coordinatorCapture !== undefined &&
+            !!operation.candidateId &&
             decideServiceAction(
               {
                 revisionId: options.registryRevision ?? "registry-v1",
@@ -363,10 +312,10 @@ export function createRegistryResourceClaimer(options: {
               !checkedCoordinatorUpdate &&
               !(operation.kind === "service.image.stage" && decision.workflow === "image-stage") &&
               !(operation.kind === "coreService.restart" && decision.workflow === "core-restart") &&
-              !isOwnedMaintenanceRecreateAdmission(
-                owner?.maintenanceStep,
-                operation,
-                owner?.operationKey ?? "",
+              !(
+                owner?.maintenanceStep &&
+                (operation.kind === "service.recreate" ||
+                  operation.kind === "service.recreateIsolated")
               ))
           )
             return null;
@@ -383,7 +332,6 @@ export function createRegistryResourceClaimer(options: {
             revisionId: options.registryRevision ?? "registry-v1",
             values: snapshot ? { ownedService: JSON.stringify(snapshot) } : {},
           });
-          if (coordinatorCapture) attachCoordinatorPullOwnershipCapture(claim, coordinatorCapture);
           return claim;
         }
         return (await authorizeOpsResources(operation, policy))
@@ -401,17 +349,11 @@ export function createRegistryResourceClaimer(options: {
         return null;
       }
       if (signal.aborted) return null;
-      const resolved = await options.trustedData.claim(operation, fingerprint, signal, owner);
-      if (!resolved) return null;
-      const capability = "capability" in resolved ? resolved.capability : resolved;
-      const admission = "capability" in resolved ? resolved.admission : undefined;
-      const rejectResolved = async () => {
-        await admission?.rollback().catch(() => undefined);
-        return null;
-      };
-      if (signal.aborted) return rejectResolved();
+      const capability = await options.trustedData.claim(operation, fingerprint, signal, owner);
+      if (!capability) return null;
+      if (signal.aborted) return null;
       if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(capability.revisionId)) {
-        return rejectResolved();
+        return null;
       }
       if (
         !capability.values ||
@@ -426,12 +368,12 @@ export function createRegistryResourceClaimer(options: {
         ) ||
         Buffer.byteLength(JSON.stringify(capability), "utf8") > 512 * 1024
       ) {
-        return rejectResolved();
+        return null;
       }
       if (!(await authorizeOpsResources(operation, claimedResourcePolicy(policy, operation)))) {
-        return rejectResolved();
+        return null;
       }
-      return immutableClaim(operation, fingerprint, "trusted-data", capability, admission);
+      return immutableClaim(operation, fingerprint, "trusted-data", capability);
     },
   };
 }
@@ -461,7 +403,6 @@ export function createProductionRegistryResourceClaimer<
   enabledServiceIds?: (services: readonly Service[]) => ReadonlySet<string>;
   loadAuthority?: () => Promise<{
     revisionId: string;
-    configurationAuthorityRevision?: string;
     services: readonly Service[];
     integrationIds: readonly string[];
   }>;
@@ -506,22 +447,12 @@ export function createProductionRegistryResourceClaimer<
       }
       const trustedData: TrustedOpsDataSource = {
         claim: async (...args) => {
-          const resolved = await options.trustedData.claim(...args);
-          if (!resolved) return null;
-          const capability = "capability" in resolved ? resolved.capability : resolved;
-          if (capability.values.authorityRevision !== undefined) {
-            if ("capability" in resolved) {
-              await resolved.admission.rollback().catch(() => undefined);
-            }
-            return null;
-          }
-          const bound = {
+          const capability = await options.trustedData.claim(...args);
+          if (!capability || capability.values.authorityRevision !== undefined) return null;
+          return {
             ...capability,
             values: { ...capability.values, authorityRevision: authority.revisionId },
           };
-          return "capability" in resolved
-            ? { capability: bound, admission: resolved.admission }
-            : bound;
         },
       };
       return createRegistryResourceClaimer({
@@ -532,7 +463,6 @@ export function createProductionRegistryResourceClaimer<
         integrationIds: authority.integrationIds,
         trustedData,
         registryRevision: authority.revisionId,
-        configurationAuthorityRevision: authority.configurationAuthorityRevision,
         resourceAuthority: options.resourceAuthority,
       }).claim(operation, fingerprint, signal, owner);
     },

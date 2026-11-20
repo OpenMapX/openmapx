@@ -8,13 +8,14 @@ import {
   buildControlTestServer as buildOpsAgentServer,
   controlTestKey,
 } from "./__fixtures__/server";
+import { OPS_AGENT_RETENTION_LIMITS } from "./job-table";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
 import {
   type OpsExecutionContext,
   OpsExecutionFailure,
   OpsHostUpdateRequiredError,
 } from "./runtime";
-import { OPS_AGENT_RETENTION_LIMITS, type OpsAuditEvent } from "./server";
+import type { OpsAuditEvent } from "./server";
 
 const apiToken = Buffer.alloc(32, 21).toString("base64url");
 const dataManagerToken = Buffer.alloc(32, 22).toString("base64url");
@@ -851,7 +852,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-admission-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -952,7 +953,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-start-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -1026,7 +1027,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-stale-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -1087,7 +1088,7 @@ describe("one admission path for target effects", () => {
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "omx-leased-failure-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",

@@ -14,26 +14,21 @@ import { registerApi } from "./api.js";
 import { registerAuth, resolveCallerTokens } from "./auth.js";
 import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "./control-targets.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
-import { rawSql, sql } from "./db/index.js";
+import { connectDatabase, sql } from "./db/index.js";
 import { installDataMutationAdmission } from "./jobs/execution/admission.js";
 import type { DataExecutionReceiver } from "./jobs/execution/api.js";
 import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "./jobs/execution/dispatch.js";
-import { applyOwnedGenerationHardlinks } from "./jobs/execution/hardlinks.js";
-import { removePrunedDataRows } from "./jobs/execution/prune-rows.js";
+import { installLocalDataExecutions } from "./jobs/execution/local.js";
 import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "./jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "./jobs/execution/store.js";
+import { openCancellableSql } from "./jobs/execution/worker-scope.js";
 import {
   type NotablePlacesSchedule,
   scheduleNotablePlaces,
 } from "./jobs/notable-places/schedule.js";
 import { createNotablePlacesRuntimeState } from "./jobs/notable-places/state.js";
-import {
-  type InterruptedLegacyJobReconciler,
-  reconcileOrphanedJobs,
-  startInterruptedLegacyJobReconciler,
-} from "./jobs/reconcile.js";
 import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
@@ -48,7 +43,7 @@ import { OfflinePackageGenerator } from "./offline-packages/generator.js";
 import { PostgresOfflinePackageAccountingStore } from "./offline-packages/postgres-accounting.js";
 import { createOpenMapxPackageSourceFactory } from "./offline-packages/source-catalog.js";
 import { OfflinePackageStorage } from "./offline-packages/storage.js";
-import { observeRetainedHostOperation, opsClient } from "./ops-client.js";
+import { opsClient } from "./ops-client.js";
 import { DataManagerReadiness } from "./readiness.js";
 import { initializeRequiredSubsystems } from "./startup.js";
 import { StateStore } from "./state.js";
@@ -56,12 +51,11 @@ import { StateStore } from "./state.js";
 const app = Fastify({ loggerInstance: rootLogger });
 let executionReceiver: DataExecutionReceiver | undefined;
 let stopControlPrune: (() => Promise<void>) | undefined;
-let interruptedJobReconciler: InterruptedLegacyJobReconciler | undefined;
 let shuttingDown = false;
 app.addHook("onClose", async () => {
   await stopControlPrune?.();
 });
-registerAuth(app, resolveCallerTokens(app), { executionReceiver: () => executionReceiver });
+registerAuth(app, resolveCallerTokens(app));
 const readiness = new DataManagerReadiness();
 const controlStartup = loadControlStartup({
   infraDir: "/data",
@@ -103,13 +97,13 @@ const notablePlaces = {
 
 const dataState = new StateStore(dataDir);
 const executionJournal = controlStartup.installation
-  ? createDataExecutionControlJournal(controlStartup.installation, rawSql)
+  ? createDataExecutionControlJournal(controlStartup.installation, sql)
   : undefined;
 const configurationFence = controlStartup.installation
-  ? createDataConfigurationMaintenance(rawSql, controlStartup.installation)
+  ? createDataConfigurationMaintenance(sql, controlStartup.installation)
   : undefined;
 if (configurationFence) installDataMutationAdmission(configurationFence);
-const executionStore = createPostgresDataExecutionStore(rawSql, {
+const executionStore = createPostgresDataExecutionStore(sql, {
   controlJournal: executionJournal,
   configurationFence,
 });
@@ -117,6 +111,7 @@ const catalogReview = controlStartup.installation
   ? createCatalogReviewService({
       dataDir,
       installation: controlStartup.installation,
+      executions: executionStore,
       operationsPolicy,
     })
   : undefined;
@@ -126,14 +121,14 @@ const dispatcher = createDataExecutionDispatcher({
   sql,
   singleFlight,
   operationsPolicy,
-  runHardlinks: applyOwnedGenerationHardlinks,
   notablePlaces,
 });
 const executionRuntime = createDataExecutionRuntime({
   store: executionStore,
   dispatch: dispatcher.dispatch,
+  openSql: (signal) => openCancellableSql(connectDatabase, sql, signal),
 });
-if (controlStartup.installation && configurationFence)
+if (controlStartup.installation && configurationFence) {
   executionReceiver = createDataExecutionReceiver({
     runtime: executionRuntime,
     installation: controlStartup.installation,
@@ -141,6 +136,8 @@ if (controlStartup.installation && configurationFence)
     dispatcher,
     operationsPolicy,
   });
+  installLocalDataExecutions(executionReceiver);
+}
 
 registerApi(app, {
   catalogReview,
@@ -148,7 +145,6 @@ registerApi(app, {
   searchIndexRuntimeState: dispatcher.searchIndexRuntimeState,
   dataDir,
   offlinePackages,
-  singleFlight,
   operationsPolicy,
   notablePlaces,
   readiness: () => readiness.snapshot(),
@@ -215,21 +211,11 @@ let notablePlacesSchedule: NotablePlacesSchedule | null = null;
 
 async function start(): Promise<void> {
   const store = dataState;
-  try {
-    await configurationFence?.startup();
-    await executionRuntime.reconcile();
-  } catch (err) {
-    app.log.error(
-      { err },
-      "Data mutation admission remains closed pending retained ownership recovery",
-    );
-  }
   const countries = transitAllowedCountries(operationsPolicy);
   const initialized = await initializeRequiredSubsystems({
     readiness,
     controlInstallation: controlStartup.installation ?? undefined,
     onControlPruneError: (err) => app.log.warn({ err }, "Control record prune failed"),
-    removePrunedRows: (operationKeys) => removePrunedDataRows(rawSql, operationKeys),
     onControlPruneStarted: (stop) => {
       stopControlPrune = stop;
       if (shuttingDown) void stop();
@@ -238,7 +224,17 @@ async function start(): Promise<void> {
       await offlinePackages.initialize();
       app.log.info("offline package storage reconciled");
     },
-    reconcileJobs: reconcileOrphanedJobs,
+    reconcileJobs: async () => {
+      try {
+        await configurationFence?.startup();
+        await executionRuntime.reconcile();
+      } catch (err) {
+        app.log.error(
+          { err },
+          "Data mutation admission remains closed pending retained ownership recovery",
+        );
+      }
+    },
     setupCronSchedulers: () =>
       setupCron({
         catalogReview,
@@ -267,36 +263,6 @@ async function start(): Promise<void> {
   });
   cronHandles = initialized.cronHandles;
   stopControlPrune = initialized.stopControlPrune;
-  // Orphans were just marked interrupted, so the first pass has work to settle.
-  // It observes the ops agent and must not delay listening when that is down.
-  interruptedJobReconciler = startInterruptedLegacyJobReconciler({
-    database: rawSql,
-    observe: observeRetainedHostOperation,
-    onResult: ({ resolved, held }) => {
-      if (resolved.length > 0)
-        app.log.warn(
-          { jobIds: resolved },
-          "data-manager: settled interrupted legacy jobs after observing their host operations",
-        );
-      if (held.length > 0)
-        app.log.info(
-          { jobIds: held },
-          "data-manager: interrupted legacy jobs wait for their host operations to be observed",
-        );
-    },
-    onError: (err, jobId) =>
-      app.log.warn({ err, jobId }, "data-manager: interrupted legacy job reconciliation failed"),
-  });
-  if (shuttingDown) await interruptedJobReconciler.stop();
-  if (initialized.interruptedJobIds.length > 0) {
-    app.log.warn(
-      {
-        count: initialized.interruptedJobIds.length,
-        jobIds: initialized.interruptedJobIds,
-      },
-      "data-manager: marked orphaned running jobs as interrupted on startup",
-    );
-  }
 
   const addr = await app.listen({ port, host });
   readiness.markReady();
@@ -339,7 +305,6 @@ void start().catch(async (err) => {
   readiness.markFailed();
   app.log.error({ err, readiness: readiness.snapshot() }, "data-manager startup failed");
   cronHandles?.stop();
-  await interruptedJobReconciler?.stop();
   await app.close().catch(() => {});
   process.exit(1);
 });
@@ -357,7 +322,6 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, "data-manager: shutdown requested");
   cronHandles?.stop();
   notablePlacesSchedule?.stop();
-  await interruptedJobReconciler?.stop();
   await stopControlPrune?.();
   await offlinePackages.close();
   await executionRuntime.close();

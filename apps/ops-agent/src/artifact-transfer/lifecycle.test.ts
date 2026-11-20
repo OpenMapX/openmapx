@@ -13,7 +13,6 @@ it("runs expiry cleanup at startup and periodically, then stops observation on c
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "stages"),
     privateRoot: join(root, "private"),
-    token: "synthetic-lifecycle-token",
     now: () => now,
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
   });

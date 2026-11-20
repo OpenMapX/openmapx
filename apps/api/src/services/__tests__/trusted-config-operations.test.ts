@@ -62,7 +62,6 @@ const committed = {
   enabledServiceIds: ["photon"],
   followUp: "complete" as const,
   cleanupFailed: false,
-  publisherCleanupFailed: false,
   registryUpdateFailed: false,
 };
 function owner(): JobContext {
@@ -87,17 +86,13 @@ beforeEach(() => {
   ports.prepare.mockReset().mockResolvedValue(candidate);
   ports.state.mockReset().mockReturnValue({
     payload,
-    sealed: { operation: { kind: "stack.render" } },
+    operation: { kind: "stack.render" },
     record: {},
     overlay: { purpose: "render", changes: [] },
   });
   ports.apply.mockReset().mockImplementation(async () => ({ application: { ...committed } }));
   ports.retained.mockReset().mockReturnValue(false);
-  const {
-    publisherCleanupFailed: _publisher,
-    registryUpdateFailed: _registry,
-    ...agentOutcome
-  } = committed;
+  const { registryUpdateFailed: _registry, ...agentOutcome } = committed;
   ports.observe.mockReset().mockResolvedValue(agentOutcome);
   ports.immediate.mockReset();
 });
@@ -142,13 +137,13 @@ describe("retained trusted configuration producer", () => {
   });
 
   it.each<{
-    sealed?: { operation: { kind: string; serviceId?: string } };
+    operation?: { kind: string; serviceId?: string };
     record?: { apiFollowUp: string };
     followUp?: "service-apply";
     message: string;
   }>([
     {
-      sealed: { operation: { kind: "vault.apply", serviceId: "photon" } },
+      operation: { kind: "vault.apply", serviceId: "photon" },
       message: "candidate intent",
     },
     {
@@ -158,10 +153,10 @@ describe("retained trusted configuration producer", () => {
     },
   ])(
     "rejects mismatched immutable $message before submission",
-    async ({ sealed, record, followUp, message }) => {
+    async ({ operation, record, followUp, message }) => {
       ports.state.mockReturnValue({
         payload,
-        sealed: sealed ?? { operation: { kind: "stack.render" } },
+        operation: operation ?? { kind: "stack.render" },
         record: record ?? {},
         overlay: { purpose: "render", changes: [] },
       });
@@ -185,7 +180,6 @@ describe("retained trusted configuration producer", () => {
         outcome: "not_committed",
         reason: "failed",
         cleanupFailed: false,
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       },
     });
@@ -219,7 +213,6 @@ describe("retained trusted configuration producer", () => {
         outcome: "not_committed",
         reason: "failed",
         cleanupFailed: false,
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       },
     });
@@ -266,8 +259,8 @@ describe("retained trusted configuration producer", () => {
     expect(ports.apply).not.toHaveBeenCalled();
   });
 
-  it("retains committed cleanup failure instead of claiming completed application", async () => {
-    ports.apply.mockResolvedValue({ application: { ...committed, publisherCleanupFailed: true } });
+  it("retains a committed registry update failure instead of claiming completed application", async () => {
+    ports.apply.mockResolvedValue({ application: { ...committed, registryUpdateFailed: true } });
     const error = await subject
       .applyTrustedConfiguration({ kind: "stack.render", operationKey: key, ctx: owner() })
       .catch((caught: unknown) => caught);
@@ -275,7 +268,7 @@ describe("retained trusted configuration producer", () => {
     if (!(error instanceof AdminJobFailure)) throw error;
     expect(error.result.configuration).toMatchObject({
       outcome: "committed",
-      publisherCleanupFailed: true,
+      registryUpdateFailed: true,
     });
   });
 

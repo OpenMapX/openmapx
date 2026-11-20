@@ -1,5 +1,6 @@
 import { rmSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
@@ -80,6 +81,72 @@ describe("owned service cleanup", () => {
     await expect(host.owned.inspectOwnedServices(signal())).rejects.toThrow(
       "inventory unavailable",
     );
+  });
+
+  it("keeps a container that runs the image its generation recorded after a pull moved the tag", async () => {
+    const host = await fixture();
+    const reference = host.row.ConfigImage as string;
+    // The fixture's generation recorded the image its containers were created with.
+    expect(services.readGenerationImageIds(host.infraDir, host.initial.revisionId).motis).toBe(
+      host.row.Image,
+    );
+    host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
+    expect(
+      (await host.owned.inspectOwnedServices(signal())).map((s) => [
+        s.serviceId,
+        s.provenance.imageId,
+      ]),
+    ).toEqual([["motis", `sha256:${"b".repeat(64)}`]]);
+    // An image neither recorded nor named by the reference now is a stranger's.
+    host.row.Image = `sha256:${"c".repeat(64)}`;
+    expect(await host.owned.inspectOwnedServices(signal())).toEqual([]);
+    // A container the reference names now is the agent's, recorded or not.
+    host.row.Image = `sha256:${"e".repeat(64)}`;
+    expect((await host.owned.inspectOwnedServices(signal())).map((s) => s.serviceId)).toEqual([
+      "motis",
+    ]);
+  });
+
+  it("matches a container from a generation that recorded no images against the applied one's record", async () => {
+    const host = await fixture();
+    const reference = host.row.ConfigImage as string;
+    // The container's generation was written before its images existed.
+    rmSync(
+      join(
+        dirname(
+          services.configurationGenerationComposeFile(host.infraDir, host.initial.revisionId),
+        ),
+        "images.json",
+      ),
+    );
+    host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
+    expect(await host.owned.inspectOwnedServices(signal())).toEqual([]);
+    // A later generation, applied while the old image was present, recorded it.
+    host.setImageIdentity(reference, host.row.Image as string);
+    await services.commitConfigurationGeneration({
+      infraDir: host.infraDir,
+      services: host.loaded,
+      input: {
+        domain: "later.example.test",
+        selectedRoots: ["motis"],
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      },
+      imageIds: (references) =>
+        services.inspectLocalImageIds(references, async (args) => {
+          const { stdout } = await host.execFile("docker", args, {
+            signal: signal(),
+            timeout: 15_000,
+            maxBuffer: 4096,
+          });
+          return stdout;
+        }),
+    });
+    host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
+    expect((await host.owned.inspectOwnedServices(signal())).map((s) => s.serviceId)).toEqual([
+      "motis",
+    ]);
   });
 
   it.each(["oversized", "malformed IDs", "blank record", "malformed inspection"])(

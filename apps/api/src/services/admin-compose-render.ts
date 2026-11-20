@@ -1,14 +1,14 @@
 import { adminComposeRenderInputSchema } from "@openmapx/core/api-contracts";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import { hasRetainedAdminJobOperation } from "./admin-job-ops";
-import { JobOwnershipLost } from "./admin-job-state";
+import { JobOwnershipLost, readAdminJobProtocol } from "./admin-job-state";
 import {
   withAdministrativeConfigurationJob,
   withAdministrativeConfigurationWriter,
 } from "./administrative-configuration-writer";
 import type { JobContext } from "./job-runner";
 import { createDurableOpsKey, OpsObservationPending } from "./ops-client";
-import { resumeRetainedConfigurationCandidate } from "./prospective-configuration";
+import { resumeConfigurationCandidate } from "./prospective-configuration";
 import { assertRetainedMaintenanceJob } from "./retained-maintenance-authorization";
 import { applyGenerationHardlinks, publishServiceGeneration } from "./service-preparation";
 import {
@@ -17,7 +17,7 @@ import {
 } from "./trusted-config-outcome";
 
 export async function handleComposeRenderJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  await assertRetainedMaintenanceJob(ctx);
+  assertRetainedMaintenanceJob(ctx);
   const { expectedCurrentRevisionId } = adminComposeRenderInputSchema.parse({
     expectedCurrentRevisionId: ctx.payload.expectedCurrentRevisionId,
     confirmed: ctx.payload.confirmed,
@@ -36,10 +36,10 @@ export async function handleComposeRenderJob(ctx: JobContext): Promise<Record<st
         if (
           ctx.execution &&
           ctx.execution.version >= 2 &&
-          ctx.checkpointResult?._configurationCandidate &&
+          readAdminJobProtocol(ctx.protocol).candidate?.operationKey === operationKey &&
           !hasRetainedAdminJobOperation(ctx, operationKey)
         ) {
-          const resumed = await resumeRetainedConfigurationCandidate(),
+          const resumed = await resumeConfigurationCandidate(),
             application = parseTrustedConfigurationApplyOutcome(resumed.configuration);
           if (
             !completeTrustedConfigurationApply(application) ||

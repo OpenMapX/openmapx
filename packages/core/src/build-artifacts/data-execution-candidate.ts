@@ -18,33 +18,23 @@ import type { OpsOperation } from "../ops/contract";
 import { retainedParentExecutionSchema } from "../ops/execution-identity";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { opsOperationFingerprint } from "../ops/fingerprint";
-// biome-ignore lint/suspicious/noImportCycles: Candidate snapshots and fixed proof publication share the original phase/authority; calls occur after schema initialization.
-import { inspectControlChildPublication } from "./child-phase";
-// biome-ignore-start lint/suspicious/noImportCycles: Nominal execution verification is reused by the fixed producer after module initialization.
 import {
-  assertControlExecutionForward,
-  type ControlChildPhase,
   type ControlInstallation,
-  controlChildOperationKey,
   controlDigest,
-  executionAuthorityState,
-  installationState,
-  readPrivateRecord,
-  retainedControlParent,
-  type VerifiedExecutionAuthority,
-  withPrivateEffectWriter,
-  writePrivateRecord,
-} from "./control-authority";
-// biome-ignore-end lint/suspicious/noImportCycles: Shared original execution verification described above.
-import {
   controlOriginSchema,
   sameControlOrigin,
-  signControl,
-  verifyControl,
 } from "./control-records";
+import {
+  assertControlExecutionForward,
+  type ExecutionHandle,
+  inspectControlChildPublication,
+  retainControlChildEvidence,
+  retainedControlParent,
+  withControlExecutionForward,
+} from "./execution-record";
 import { AnchoredDirectory, identity, sameInode } from "./filesystem";
-// biome-ignore lint/suspicious/noImportCycles: The candidate reads the agent's store through the same lease module as its issuer.
-import { localLeases } from "./target-lease";
+import { type ControlChildPhase, controlChildOperationKey, localLeases } from "./lease-store";
+import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 
 const schema = z.strictObject({
   version: z.literal(1),
@@ -130,7 +120,7 @@ const artifactSchema = z.strictObject({
   sizeBytes: z.number().int().nonnegative().safe(),
 });
 /** The existing candidate writer verifies artifact hashes before retaining its
- * manifest. Bind all verified files' inode/change metadata into the signed
+ * manifest. Bind all verified files' inode/change metadata into the retained
  * snapshot as well, so subsequent byte/inode changes cannot hide behind an
  * unchanged manifest. Paths are the finite manifest roles, never HTTP input. */
 function candidateArtifacts(
@@ -231,34 +221,12 @@ function proxyConsumer(
   }
 }
 function catalogRecordSource(state: ReturnType<typeof installationState>) {
-  return {
-    dataRoot: state.dataRoot,
-    installationId: state.installation.installationId,
-    dataManagerPublicKey: state.publicKeys["data-manager"],
-    agentPublicKey: state.publicKeys["ops-agent"],
-  };
+  return { dataRoot: state.dataRoot };
 }
-function catalogActivationCandidate(s: ReturnType<typeof executionAuthorityState>) {
+function catalogActivationCandidate(s: ExecutionHandle) {
   if (s.kind !== "catalog.activate") return undefined;
-  const raw = readPrivateRecord(
-      s.installation,
-      "executions",
-      `${s.execution.operationKey}.json`,
-      65536,
-    ),
-    admitted = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-control-execution-v2",
-      raw,
-      z
-        .object({
-          kind: z.literal("catalog.activate"),
-          operation: z.record(z.string(), z.unknown()),
-        })
-        .passthrough(),
-    );
+  const admitted = { operation: z.record(z.string(), z.unknown()).parse(s.operation) };
   if (
-    controlDigest(raw) !== s.receiptDigest ||
     controlDigest(admitted.operation) !== s.execution.operationFingerprint ||
     admitted.operation.kind !== "catalog.activate"
   )
@@ -323,12 +291,12 @@ function verifyCatalogActivationCandidate(
   return selected.validationId;
 }
 function snapshot(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   phase: ControlChildPhase,
   ordinal: number,
   preparing = false,
 ) {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     slot =
       s.reservations.find((r) => r.phase === phase && r.ordinal === ordinal) ??
       s.plan.find((r) => r.phase === phase && r.ordinal === ordinal);
@@ -387,97 +355,37 @@ function snapshot(
     directory.close();
   }
 }
-const name = (authority: VerifiedExecutionAuthority, ordinal: number) =>
-  `candidate-${authority.execution.operationKey}-${ordinal}.json`;
-export function retainOwnedDataTransitCandidate(
-  authority: VerifiedExecutionAuthority,
-  input: { phase: ControlChildPhase; ordinal: number },
-): string | null {
-  const value = snapshot(authority, input.phase, input.ordinal, input.phase === "promote-primary");
-  if (!value) return null;
-  const s = executionAuthorityState(authority),
-    reserved = s.reservations.some(
-      (slot) => slot.phase === input.phase && slot.ordinal === input.ordinal,
-    ),
-    publication = reserved ? inspectControlChildPublication(authority, input) : undefined;
-  let saved: unknown;
-  try {
-    saved = readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  if (saved !== null && saved !== undefined) {
-    const prior = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-data-candidate-v1",
-      saved,
-      schema,
-    );
-    if (canonicalJson(prior) !== canonicalJson(value))
-      throw Error("Original candidate bytes/owner changed");
-    return controlDigest(prior);
-  }
-  if (publication && (publication.binding || publication.publication.state !== "unissued"))
-    throw Error("Attempted candidate cannot be reconstructed");
-  assertControlExecutionForward(authority);
-  const parsed = schema.parse(value);
-  writePrivateRecord(
-    s.installation,
-    "observations",
-    name(authority, input.ordinal),
-    signControl(s.installation.privateKey, "openmapx-data-candidate-v1", parsed),
-    true,
-  );
-  return controlDigest(parsed);
-}
-export function assertOwnedDataTransitCandidate(
-  authority: VerifiedExecutionAuthority,
-  input: { phase: ControlChildPhase; ordinal: number },
-): string | null {
-  const value = snapshot(authority, input.phase, input.ordinal);
-  if (!value) return null;
-  const s = executionAuthorityState(authority),
-    saved = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-data-candidate-v1",
-      readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192),
-      schema,
-    );
-  if (canonicalJson(saved) !== canonicalJson(value))
-    throw Error("Foreign or changed owned transit candidate");
-  return controlDigest(saved);
-}
-
-/** The candidate on the child's row; the row itself names the child, its body and targets. */
+/** The candidate as the child's cell records it and its grant carries it. */
 const publishedSchema = z.strictObject({ candidate: schema });
 /**
- * The candidate a transit phase acts on, as the agent receives it with the
- * child's grant. Null when the phase has no retained candidate.
+ * Records the candidate a transit phase acts on, on the child's cell before
+ * the child is bound. The same files again keep it; changed files are refused.
  */
-export function publishedDataTransitCandidate(
-  authority: VerifiedExecutionAuthority,
+export async function retainOwnedDataTransitCandidate(
+  authority: ExecutionHandle,
   input: { phase: ControlChildPhase; ordinal: number },
-): Record<string, unknown> | undefined {
-  const s = executionAuthorityState(authority);
-  let saved: unknown;
-  try {
-    saved = readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-  const candidate = verifyControl(
-    s.installation.installation.publicKey,
-    "openmapx-data-candidate-v1",
-    saved,
-    schema,
+): Promise<void> {
+  const value = snapshot(authority, input.phase, input.ordinal, input.phase === "promote-primary");
+  if (!value) return;
+  await retainControlChildEvidence(
+    authority,
+    input,
+    publishedSchema.parse({ candidate: schema.parse(value) }),
   );
-  const slot =
-    s.reservations.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal) ??
-    s.plan.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal);
-  if (!slot || candidate.phase !== input.phase)
-    throw Error("Dated original candidate slot required");
-  return publishedSchema.parse({ candidate });
+}
+/** The digest of the evidence the cell recorded, once the files still match its candidate. */
+export async function assertOwnedDataTransitCandidate(
+  authority: ExecutionHandle,
+  input: { phase: ControlChildPhase; ordinal: number },
+): Promise<string | null> {
+  const value = snapshot(authority, input.phase, input.ordinal);
+  if (!value) return null;
+  const evidence = (await inspectControlChildPublication(authority, input)).evidence;
+  if (!evidence) throw Error("Transit candidate was not recorded before the phase");
+  const { candidate } = publishedSchema.parse(evidence);
+  if (canonicalJson(candidate) !== canonicalJson(value))
+    throw Error("Foreign or changed owned transit candidate");
+  return controlDigest(evidence);
 }
 /**
  * Fixed registry resource input: the candidate data-manager recorded with the
@@ -580,30 +488,18 @@ export function inspectDataTransitCandidate(
 /** Recheck the actual admitted parent, target lease and snapshot at each fixed
  * Docker effect boundary; a previously returned resource claim is insufficient. */
 export function verifyDataTransitCandidateForExecution(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   operation: OpsOperation,
   expectedDigest: string,
 ): void {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     checked = inspectDataTransitCandidate(
       s.installation.installation,
       s.execution.operationKey,
       operation,
     ),
-    raw = readPrivateRecord(
-      s.installation,
-      "executions",
-      `${s.execution.operationKey}.json`,
-      65536,
-    ),
-    admission = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-control-execution-v2",
-      raw,
-      z.object({ parent: retainedParentExecutionSchema }).passthrough(),
-    );
+    admission = { parent: retainedParentExecutionSchema.parse(s.parent) };
   if (
-    controlDigest(raw) !== s.receiptDigest ||
     checked.digest !== expectedDigest ||
     canonicalJson(admission.parent) !==
       canonicalJson(retainedControlParent(checked.proof.candidate.execution)) ||
@@ -611,13 +507,13 @@ export function verifyDataTransitCandidateForExecution(
   )
     throw Error("Candidate differs from original borrowed admission");
 }
-export function assertDataTransitCandidateForExecution(
-  authority: VerifiedExecutionAuthority,
+export async function assertDataTransitCandidateForExecution(
+  authority: ExecutionHandle,
   operation: OpsOperation,
   expectedDigest: string,
-): void {
+): Promise<void> {
   verifyDataTransitCandidateForExecution(authority, operation, expectedDigest);
-  assertControlExecutionForward(authority);
+  await assertControlExecutionForward(authority);
 }
 
 /** Fixed proxy proof helpers share the original candidate verifier and indexed
@@ -633,7 +529,6 @@ export const {
   const schema = z
     .strictObject({
       version: z.literal(2),
-      installationId: z.uuid(),
       origin: controlOriginSchema,
       execution: executionRefSchema,
       admissionDigest: digest,
@@ -655,11 +550,10 @@ export const {
         ctx.addIssue({ code: "custom", message: "Invalid fixed validation phase" });
     });
   type Proof = z.infer<typeof schema>;
-  const domain = "openmapx-feed-proxy-validation-v2";
-  const name = (authority: VerifiedExecutionAuthority) =>
+  const name = (authority: ExecutionHandle) =>
     `proxy-validation-${authority.execution.operationKey}.json`;
-  function state(authority: VerifiedExecutionAuthority) {
-    const s = executionAuthorityState(authority);
+  function state(authority: ExecutionHandle) {
+    const s = authority;
     if (
       s.installation.installation.role !== "ops-agent" ||
       s.kind !== "feedProxy.validateAndReload"
@@ -667,12 +561,11 @@ export const {
       throw Error("Original fixed proxy authority required");
     return s;
   }
-  function read(authority: VerifiedExecutionAuthority) {
+  function read(authority: ExecutionHandle) {
     const s = state(authority),
       raw = readPrivateRecord(s.installation, "observations", name(authority), 4096);
-    const p = verifyControl(s.installation.installation.publicKey, domain, raw, schema);
+    const p = schema.parse(raw);
     if (
-      p.installationId !== s.installation.installation.installationId ||
       !sameControlOrigin(p.origin, s.origin) ||
       p.admissionDigest !== s.receiptDigest ||
       controlDigest(p.execution) !== controlDigest(s.execution) ||
@@ -684,22 +577,14 @@ export const {
       throw Error("Original validation proof identity changed");
     return p;
   }
-  function write(authority: VerifiedExecutionAuthority, value: Proof, exclusive = false) {
+  function write(authority: ExecutionHandle, value: Proof, exclusive = false) {
     const s = state(authority),
       p = { ...value, padding: "" };
-    // Account the entire cell up front; transitions allocate no additional space.
-    const signed = signControl(s.installation.privateKey, domain, p);
-    const room = 4096 - Buffer.byteLength(canonicalJson(signed));
+    const room = 4096 - Buffer.byteLength(canonicalJson(p));
     if (room < 0) throw Error("Validation proof capacity exceeded");
     p.padding = " ".repeat(room);
     const parsed = schema.parse(p);
-    writePrivateRecord(
-      s.installation,
-      "observations",
-      name(authority),
-      signControl(s.installation.privateKey, domain, parsed),
-      exclusive,
-    );
+    writePrivateRecord(s.installation, "observations", name(authority), parsed, exclusive);
   }
   function feedProxyValidationCompletionDigest(
     execution: ExecutionRef,
@@ -715,19 +600,19 @@ export const {
       validationExitCode,
     });
   }
-  function reserveFeedProxyValidation(
-    authority: VerifiedExecutionAuthority,
+  async function reserveFeedProxyValidation(
+    authority: ExecutionHandle,
     candidateId: string,
     candidateDigest: string,
-  ): void {
+  ): Promise<void> {
     const s = state(authority);
-    assertControlExecutionForward(authority);
+    await assertControlExecutionForward(authority);
     verifyDataTransitCandidateForExecution(
       authority,
       { kind: "feedProxy.validateAndReload", candidateId },
       candidateDigest,
     );
-    withPrivateEffectWriter(s, () => {
+    {
       let raw: unknown;
       try {
         raw = readPrivateRecord(s.installation, "observations", name(authority), 4096);
@@ -744,7 +629,6 @@ export const {
         authority,
         schema.parse({
           version: 2,
-          installationId: s.installation.installation.installationId,
           origin: s.origin,
           execution: s.execution,
           admissionDigest: s.receiptDigest,
@@ -759,14 +643,14 @@ export const {
         }),
         true,
       );
-    });
+    }
   }
   function commitFeedProxyValidationFailure(
-    authority: VerifiedExecutionAuthority,
+    authority: ExecutionHandle,
     input: { candidateDigest: string; validationExitCode: number; completionDigest: string },
   ): void {
-    const s = state(authority);
-    withPrivateEffectWriter(s, () => {
+    state(authority);
+    {
       const p = read(authority);
       if (p.candidateDigest !== input.candidateDigest) throw Error("Foreign validation candidate");
       if (p.phase === "validation_failed") {
@@ -790,24 +674,22 @@ export const {
         authority,
         schema.parse({ ...p, ...input, phase: "validation_failed", completedAt: Date.now() }),
       );
-    });
+    }
   }
-  function recordFeedProxyReloadAttempted(authority: VerifiedExecutionAuthority): void {
-    const s = state(authority);
-    withPrivateEffectWriter(s, () => {
-      const p = read(authority);
-      if (p.phase !== "validation_pending") throw Error("Validation phase already consumed");
-      verifyDataTransitCandidateForExecution(
-        authority,
-        { kind: "feedProxy.validateAndReload", candidateId: p.candidateId },
-        p.candidateDigest,
-      );
-      write(authority, { ...p, phase: "reload_started", completedAt: Date.now() });
-    });
+  function recordFeedProxyReloadAttempted(authority: ExecutionHandle): void {
+    state(authority);
+    const p = read(authority);
+    if (p.phase !== "validation_pending") throw Error("Validation phase already consumed");
+    verifyDataTransitCandidateForExecution(
+      authority,
+      { kind: "feedProxy.validateAndReload", candidateId: p.candidateId },
+      p.candidateDigest,
+    );
+    write(authority, { ...p, phase: "reload_started", completedAt: Date.now() });
   }
   /** Frozen original proof stays valid after a legitimate restore replaces files. */
   function inspectFeedProxyValidationFailure(
-    authority: VerifiedExecutionAuthority,
+    authority: ExecutionHandle,
     expectedDigest?: string,
   ): string | null {
     const p = read(authority);
@@ -826,3 +708,7 @@ export const {
     inspectFeedProxyValidationFailure,
   };
 })();
+/** Records that the proxy reload began, while the execution may still go forward. */
+export async function markFeedProxyReloadAttempted(authority: ExecutionHandle): Promise<void> {
+  await withControlExecutionForward(authority, () => recordFeedProxyReloadAttempted(authority));
+}

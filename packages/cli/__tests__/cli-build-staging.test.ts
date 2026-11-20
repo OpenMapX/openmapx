@@ -25,19 +25,19 @@ function dirWith(path: string, content: string): string {
 }
 
 describe("staged build dirs", () => {
-  it("clears leftover .prev and .next before a build starts", () => {
+  it("clears leftover .prev and .next before a build starts", async () => {
     const live = dirWith(join(tmp, "graph"), "LIVE");
     dirWith(`${live}.prev`, "STALE");
     dirWith(`${live}.next`, "STALE");
 
-    const next = prepareStagedBuildDir(live);
+    const next = await prepareStagedBuildDir(live);
 
     expect(existsSync(`${live}.prev`)).toBe(false);
     expect(existsSync(join(next, "file"))).toBe(false);
     expect(readFileSync(join(live, "file"), "utf-8")).toBe("LIVE");
   });
 
-  it("swaps several dirs as one unit", () => {
+  it("swaps several dirs as one unit", async () => {
     const a = dirWith(join(tmp, "a"), "OLD-A");
     const b = dirWith(join(tmp, "b"), "OLD-B");
     const swaps = [
@@ -45,7 +45,7 @@ describe("staged build dirs", () => {
       { liveDir: b, nextDir: dirWith(join(tmp, "b.next"), "NEW-B") },
     ];
 
-    promoteStagedBuildDirs(swaps);
+    await promoteStagedBuildDirs(swaps);
 
     expect(readFileSync(join(a, "file"), "utf-8")).toBe("NEW-A");
     expect(readFileSync(join(b, "file"), "utf-8")).toBe("NEW-B");
@@ -53,17 +53,17 @@ describe("staged build dirs", () => {
     expect(existsSync(`${b}.prev`)).toBe(false);
   });
 
-  it("restores every live dir when a later swap fails", () => {
+  it("restores every live dir when a later swap fails", async () => {
     const a = dirWith(join(tmp, "a"), "OLD-A");
     const b = dirWith(join(tmp, "b"), "OLD-B");
     const aNext = dirWith(join(tmp, "a.next"), "NEW-A");
 
-    expect(() =>
+    await expect(
       promoteStagedBuildDirs([
         { liveDir: a, nextDir: aNext },
         { liveDir: b, nextDir: join(tmp, "missing.next") },
       ]),
-    ).toThrow();
+    ).rejects.toThrow();
 
     expect(readFileSync(join(a, "file"), "utf-8")).toBe("OLD-A");
     expect(readFileSync(join(b, "file"), "utf-8")).toBe("OLD-B");
@@ -77,7 +77,7 @@ it("keeps staged and live bytes unchanged when the retained parent cancels befor
     { withHostDataControlContext } = await import("../src/lib/control-context");
   const ownerRoot = mkdtempSync(join(tmpdir(), "omx-canceled-build-"));
   mkdirSync(join(ownerRoot, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(ownerRoot);
+  await control.provisionControlDirectories(ownerRoot);
   const installation = control.openControlInstallation({
     infraDir: ownerRoot,
     role: "host-cli",
@@ -104,7 +104,7 @@ it("keeps staged and live bytes unchanged when the retained parent cancels befor
           deadlineAt,
         }),
       };
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
@@ -115,12 +115,12 @@ it("keeps staged and live bytes unchanged when the retained parent cancels befor
     const liveDir = join(ownerRoot, "data/graph");
     mkdirSync(liveDir);
     writeFileSync(join(liveDir, "old"), "old");
-    const nextDir = prepareStagedBuildDir(liveDir);
+    const nextDir = await prepareStagedBuildDir(liveDir);
     writeFileSync(join(nextDir, "new"), "new");
-    control.cancelControlExecution(authority);
+    await control.cancelControlExecution(authority);
     await withHostDataControlContext(installation, authority, async () => {
-      expect(() => promoteStagedBuildDir(liveDir, nextDir)).toThrow();
-      expect(() => prepareStagedBuildDir(liveDir)).toThrow();
+      await expect(promoteStagedBuildDir(liveDir, nextDir)).rejects.toThrow();
+      await expect(prepareStagedBuildDir(liveDir)).rejects.toThrow();
     });
     expect(readFileSync(join(liveDir, "old"), "utf8")).toBe("old");
     expect(readFileSync(join(nextDir, "new"), "utf8")).toBe("new");

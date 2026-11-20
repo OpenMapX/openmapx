@@ -1,20 +1,18 @@
-/** One root-fixed CLI Update and its optional, root-fixed generation leaf. */
+/** One root-fixed CLI Update. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { type OpsOperation, opsOperationSchema } from "../ops/contract";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
-import { generationHardlinksPlanSchema } from "../services/data-manager/contracts/executions";
-import { type ControlChildReservation, controlChildReservationSchema } from "./child-phase";
+import { currentConfigurationGeneration } from "../services/configuration-generation";
+import { controlDigest } from "./control-records";
+import type { ExecutionHandle } from "./execution-record";
 import {
+  type ControlChildReservation,
   controlChildOperationKey,
-  executionAuthorityState,
-  readPrivateRecord,
-  type VerifiedExecutionAuthority,
-  writePrivateRecord,
-} from "./control-authority";
-import { controlDigest, signControl, verifyControl } from "./control-records";
-import { readOwnedGenerationHardlinkPlan } from "./generation-hardlinks-owner";
+  controlChildReservationSchema,
+} from "./lease-store";
+import { readPrivateRecord, writePrivateRecord } from "./private-records";
 
 const domain = "openmapx-fixed-service-lifecycle-v1";
 const schema = z.strictObject({
@@ -22,10 +20,8 @@ const schema = z.strictObject({
   parent: executionRefSchema,
   operation: opsOperationSchema,
   rootReservation: controlChildReservationSchema,
-  cliReservations: z.array(controlChildReservationSchema).max(1),
   delegationId: z.uuid(),
   finalRevisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
-  plan: generationHardlinksPlanSchema,
 });
 export type FixedServiceLifecyclePlan = z.infer<typeof schema>;
 function address(key: string, purpose: string) {
@@ -40,42 +36,11 @@ export function serviceLifecycleFinalRevisionId(rootOperationKey: string): strin
     throw Error("Lifecycle root identity required");
   return `cfg1_${createHash("sha256").update(`${domain}\0final-generation\0${rootOperationKey}`).digest("base64url")}`;
 }
-export function ownedServiceLifecycleFinalRevisionId(
-  authority: VerifiedExecutionAuthority,
-): string {
-  const s = executionAuthorityState(authority);
+export function ownedServiceLifecycleFinalRevisionId(authority: ExecutionHandle): string {
+  const s = authority;
   if (!["service.start", "service.update"].includes(s.kind))
     throw Error("Original lifecycle authority required");
   return serviceLifecycleFinalRevisionId(s.origin.rootKey);
-}
-export function lifecycleHardlinkReservation(options: {
-  parent: Pick<ExecutionRef, "executor" | "principal" | "executionId" | "operationKey">;
-  revisionId: string;
-  plan: z.infer<typeof generationHardlinksPlanSchema>;
-  serviceIds: readonly string[];
-}): ControlChildReservation | null {
-  if (!options.plan.plan.length) return null;
-  const input = {
-    kind: "generation-hardlinks",
-    revisionId: options.revisionId,
-    coordinatorMode: "ensure-running",
-    planDigest: controlDigest(options.plan),
-  };
-  return controlChildReservationSchema.parse({
-    version: 1,
-    phase: "hardlinks",
-    ordinal: 0,
-    kind: "generation-hardlinks",
-    recipient: "data-manager",
-    serviceIds: [...options.serviceIds].sort(),
-    operationFingerprint: controlDigest(input),
-    execution: {
-      executor: "data-manager",
-      principal: "host-cli",
-      executionId: address(options.parent.operationKey, "hardlinks"),
-      operationKey: controlChildOperationKey(options.parent.operationKey, "hardlinks", 0),
-    },
-  });
 }
 export function planFixedServiceUpdate(options: {
   infraDir: string;
@@ -85,10 +50,12 @@ export function planFixedServiceUpdate(options: {
 }): FixedServiceLifecyclePlan {
   const operation = opsOperationSchema.parse(options.operation),
     finalRevisionId = serviceLifecycleFinalRevisionId(options.parent.operationKey);
-  const plan = readOwnedGenerationHardlinkPlan(
-    options.infraDir,
-    options.operation.expectedConfigurationRevisionId,
-  );
+  // An update planned against a generation that is no longer current is refused at admission.
+  if (
+    currentConfigurationGeneration(options.infraDir) !==
+    options.operation.expectedConfigurationRevisionId
+  )
+    throw Error("Lifecycle configuration revision conflict");
   const child = {
     executor: "host-cli" as const,
     principal: "host-cli" as const,
@@ -105,28 +72,20 @@ export function planFixedServiceUpdate(options: {
     operationFingerprint: opsOperationFingerprint(operation),
     execution: child,
   };
-  const leaf = lifecycleHardlinkReservation({
-    parent: child,
-    revisionId: finalRevisionId,
-    plan,
-    serviceIds: options.serviceIds,
-  });
   return schema.parse({
     version: 1,
     parent: options.parent,
     operation,
     rootReservation,
-    cliReservations: leaf ? [leaf] : [],
     delegationId: address(options.parent.operationKey, "challenge"),
     finalRevisionId,
-    plan,
   });
 }
 export function retainFixedServiceLifecyclePlan(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   value: FixedServiceLifecyclePlan,
 ): void {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     plan = schema.parse(value);
   if (
     s.kind !== "service.update" ||
@@ -141,24 +100,21 @@ export function retainFixedServiceLifecyclePlan(
     s.installation,
     "observations",
     `service-lifecycle-${s.execution.operationKey}.json`,
-    signControl(s.installation.privateKey, domain, plan),
+    plan,
     true,
   );
 }
 export function readFixedServiceLifecyclePlan(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
 ): FixedServiceLifecyclePlan {
-  const s = executionAuthorityState(authority),
-    plan = verifyControl(
-      s.installation.installation.publicKey,
-      domain,
+  const s = authority,
+    plan = schema.parse(
       readPrivateRecord(
         s.installation,
         "observations",
         `service-lifecycle-${s.execution.operationKey}.json`,
         128 * 1024,
       ),
-      schema,
     );
   if (
     s.kind !== "service.update" ||

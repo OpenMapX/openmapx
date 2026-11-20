@@ -81,7 +81,7 @@ function checkedChild(
     throw Error("Full Update child identity changed");
   return status;
 }
-/** Pure sequencing; operation authority and signed terminal verification belong to its installed effects. */
+/** Pure sequencing; operation authority and terminal verification belong to its installed effects. */
 export async function runDataUpdate(
   options: DataUpdateOptions,
   effects: DataUpdateEffects,

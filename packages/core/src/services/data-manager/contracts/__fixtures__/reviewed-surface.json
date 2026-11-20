@@ -68,14 +68,6 @@
       "path": "/executions/configuration-maintenance/prepare"
     },
     {
-      "method": "POST",
-      "path": "/executions/configuration-maintenance/recovery"
-    },
-    {
-      "method": "POST",
-      "path": "/executions/generation-hardlinks"
-    },
-    {
       "method": "GET",
       "path": "/internal/transit/operator-feed/:handle"
     },

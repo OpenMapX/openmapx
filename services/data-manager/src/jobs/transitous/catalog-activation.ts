@@ -1,7 +1,7 @@
 /** Activate exactly one reviewed candidate under the existing finite root and child reservations. */
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { controlDigest, readDataControlTerminalObservation } from "@openmapx/core/build-artifacts";
+import { assertDataManagerTerminal, controlDigest } from "@openmapx/core/build-artifacts";
 import {
   catalogProposalSchema,
   catalogRuntimeInputsSchema,
@@ -55,15 +55,16 @@ export async function runCatalogActivation(options: {
     currentValidation.selected.validationDigest !== controlDigest(validation)
   )
     throw Error("Validation was invalidated before slot reuse; validate again");
-  const terminal = readDataControlTerminalObservation(
-    context.installation,
-    validation.sourceExecution,
-  );
+  const validated = await context.store.lookup(validation.sourceExecution.operationKey),
+    terminal = validated
+      ? assertDataManagerTerminal(validation.sourceExecution, validated.status)
+      : null;
   if (
-    terminal.status.status !== "ok" ||
-    terminal.status.result?.kind !== "catalog.validate" ||
-    terminal.status.result.status !== "passed" ||
-    terminal.status.result.validationId !== input.validationId
+    !terminal ||
+    terminal.status !== "ok" ||
+    terminal.result?.kind !== "catalog.validate" ||
+    terminal.result.status !== "passed" ||
+    terminal.result.validationId !== input.validationId
   )
     throw Error("Original successful validation completion required");
   const selected = await runOpsOperation(
@@ -106,7 +107,11 @@ export async function runCatalogActivation(options: {
       abortSignal: context.signal,
       logger,
       onStageComplete: async (stage) => {
-        await makePersistingOnStageComplete(context.execution.executionId, logger)(stage);
+        await makePersistingOnStageComplete(
+          context.sql,
+          context.execution.executionId,
+          logger,
+        )(stage);
         const diagnostic = dataExecutionDiagnostic(stage.message ?? stage.stage);
         await context.checkpoint({
           diagnostics: {
@@ -150,7 +155,7 @@ export async function runCatalogActivation(options: {
   } catch (error) {
     if (error instanceof DataOpsObservationPending || error instanceof DataPublicationUnknown)
       throw error;
-    context.assertForward();
+    await context.assertForward();
     await rollbackProxyTransaction(ctx);
     await runTransitOwnedPhase(ctx, "stop-staging");
     const current = readMotisSlotState(dataDir);

@@ -246,6 +246,30 @@ The union of actual installed-Vitest selections must equal the unsharded
 selection. Vitest 5 file-only listing ignores its native shard option, so the
 launcher partitions explicit files and verifies each resulting collection. More workers within one runner would reintroduce filesystem contention.
 
+### Control-plane tests on macOS
+
+The agent, CLI and core control-plane files that were slow on macOS were measured
+again on 18 November 2026 on an Apple M1 Pro with three Vitest workers, after the
+update system stopped signing and mirroring its records:
+
+| Measurement                         | Before (8 November 2026) | Now             |
+| ----------------------------------- | ------------------------ | --------------- |
+| Files                               | 10                       | 9               |
+| Tests                               | 87                       | 67              |
+| Summed test time on macOS           | 787 s                    | 73 s            |
+| Wall time on macOS                  | not recorded             | 26 s            |
+| Failures at the default timeout     | 14                       | 0               |
+| Summed test time on Linux, 1 worker | 63 s                     | not re-measured |
+
+The files are `control-admission`, `core-service-runtime`, `production-runtime`,
+`standalone-integration-runtime` and `artifact-transfer/integration-consumer` in
+the agent, `cli-build-artifacts` and `cli-control-context` in the CLI,
+`target-lease` in core and data-manager's `catalog-validation-current`. The
+target-lease adoption file was deleted with the adoption records it tested. The
+largest remaining costs are `cli-build-artifacts` (25 s) and `production-runtime`
+(19 s). macOS is no longer the bottleneck for these files; CI on Linux stays the
+reference for the control-plane suites.
+
 ## Database groups and scenario partitions
 
 | Logical group            | Partitions | Selection and prerequisites                                                                                                              |

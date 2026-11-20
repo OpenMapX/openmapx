@@ -342,7 +342,7 @@ export type GetDataExecution200Result =
       };
     }
   | {
-      kind: "generation-hardlinks";
+      kind: "generation-link";
       hardlinks: {
         applied: boolean;
         /**
@@ -372,4 +372,22 @@ export type GetDataExecution200Result =
       kind: "transit-maintenance";
       action: "restart-primary" | "reload-feed-proxy";
       changed: true;
+    }
+  | {
+      kind: "traffic-live";
+    }
+  | {
+      kind: "traffic-maintenance";
+    }
+  | {
+      kind: "traffic-predicted";
+    }
+  | {
+      kind: "transit-proposal";
+    }
+  | {
+      kind: "data-reload";
+    }
+  | {
+      kind: "ambient-publication";
     };

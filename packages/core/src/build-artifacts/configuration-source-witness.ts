@@ -1,10 +1,9 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
-import { configurationHandoffPrepareOperationSchema } from "../ops/configuration-handoff-records";
 import {
   type ConfigurationSourcesInspection,
   configurationSourcesInspectionSchema,
@@ -16,20 +15,8 @@ import {
 } from "../services/configuration-generation";
 import { serviceSelectionPath } from "../services/deployment";
 import type { LoadedService } from "../services/types";
-import { configurationMaintenanceOwnerRecordSchema } from "./configuration-maintenance-owner-records";
-import {
-  assertControlExecutionForward,
-  type ControlInstallation,
-  controlDigest,
-  executionAuthorityState,
-  fixedControlChildId,
-  installationState,
-  readConfigurationHandoffSpawnIntent,
-  readPrivateRecord,
-  type VerifiedExecutionAuthority,
-  writePrivateRecord,
-} from "./control-authority";
-import { signControl, verifyControl } from "./control-records";
+import type { ControlInstallation } from "./control-records";
+import { installationState, readPrivateRecord, writePrivateRecord } from "./private-records";
 
 const domain = "openmapx-configuration-source-witness-v1";
 const witnessSchema = z.strictObject({
@@ -42,130 +29,6 @@ const witnessSchema = z.strictObject({
 });
 const name = (id: string) => `configuration-source-${z.uuid().parse(id)}.json`;
 
-function handoffSourceBytes(
-  infraDir: string,
-  environmentNames: readonly string[],
-  files = currentSources(infraDir, {}),
-) {
-  // File values stay private/keyed, including credentials. Process-only helper
-  // transport variables are absent from the original inherited-name projection.
-  return canonicalJson({
-    files,
-    runtimeEnvironment: Object.fromEntries(
-      environmentNames.map((name) => [name, process.env[name] ?? null]),
-    ),
-  });
-}
-const helperSourceDomain = "openmapx-configuration-helper-host-sources-v1\0";
-/** The installed parent copies continuity of the already committed generation,
- * not fresh mutation authority. Its original role HMAC must still match after
- * substituting only this owner's exact intended platform-generation change. */
-export function captureConfigurationHandoffHostSources(
-  authority: VerifiedExecutionAuthority,
-  helper: ControlInstallation,
-  environmentNames: readonly string[],
-): string {
-  const state = executionAuthorityState(authority),
-    local = state.installation,
-    child = installationState(helper);
-  if (
-    state.kind !== "configurationHandoff.prepare" ||
-    local.fixedChildId ||
-    !child.fixedChildId ||
-    helper.installationId !== local.installation.installationId ||
-    fixedControlChildId(local, helper.publicKey, state.execution) !== child.fixedChildId
-  )
-    throw Error("Original handoff source producer required");
-  assertControlExecutionForward(authority);
-  const admission = readPrivateRecord(
-    local,
-    "executions",
-    `${state.execution.operationKey}.json`,
-    65536,
-  ) as { payload?: { operation?: unknown } };
-  if (controlDigest(admission) !== state.receiptDigest)
-    throw Error("Original handoff admission changed");
-  const operation = configurationHandoffPrepareOperationSchema.parse(admission.payload?.operation),
-    ownerName = `${operation.maintenanceId}.json`,
-    raw = readPrivateRecord(local, "configuration-maintenance", ownerName),
-    owner = verifyControl(
-      local.installation.publicKey,
-      "openmapx-configuration-maintenance-owner-v2",
-      raw,
-      configurationMaintenanceOwnerRecordSchema,
-    ),
-    infraDir = dirname(local.dataRoot),
-    witness = verifyControl(
-      local.installation.publicKey,
-      domain,
-      readPrivateRecord(local, "observations", name(owner.plan.operation.expectedSourceRevision)),
-      witnessSchema,
-    );
-  if (
-    canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
-    owner.receipt.generation !== "committed" ||
-    owner.receipt.appliedRevisionId !== operation.expectedCurrentRevisionId ||
-    owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide ||
-    !owner.plan.steps.some(
-      (step) =>
-        step.phase === "maintenance-handoff" &&
-        canonicalJson(step.operation) === canonicalJson(operation),
-    ) ||
-    currentConfigurationGeneration(infraDir) !== operation.expectedCurrentRevisionId ||
-    witness.authorityRevision !== owner.plan.sourceAuthorityRevision ||
-    witness.inspection.sourceRevision !== owner.plan.operation.expectedSourceRevision ||
-    witness.inspection.revisionId !== owner.plan.operation.expectedCurrentRevisionId
-  )
-    throw Error("Original owned handoff generation required");
-  const { platform: _current, ...observed } = currentSources(infraDir, process.env),
-    original = {
-      ...observed,
-      ...(witness.inspection.platform ? { platform: witness.inspection.platform } : {}),
-    },
-    originalDigest = createHmac("sha256", local.privateKey.export({ type: "pkcs8", format: "der" }))
-      .update(`${domain}\0`)
-      .update(canonicalJson(original))
-      .digest("hex");
-  if (!timingSafeEqual(Buffer.from(originalDigest, "hex"), Buffer.from(witness.observation, "hex")))
-    throw Error("Original host sources changed before handoff");
-  return createHmac("sha256", child.privateKey.export({ type: "pkcs8", format: "der" }))
-    .update(helperSourceDomain)
-    .update(handoffSourceBytes(infraDir, environmentNames))
-    .digest("hex");
-}
-/** Only the actual fixed child can check its own private keyed source copy.
- * No supplied hash, environment values, path or boolean is accepted. */
-export function assertConfigurationHandoffHostSources(authority: VerifiedExecutionAuthority): void {
-  const state = executionAuthorityState(authority),
-    local = state.installation;
-  if (state.kind !== "configuration-helper" || !local.fixedChildId)
-    throw Error("Original configuration helper required");
-  const raw = readPrivateRecord(
-    local,
-    "executions",
-    `${state.execution.operationKey}.json`,
-    65536,
-  ) as { payload?: { operation?: { handoffId?: string } } };
-  if (controlDigest(raw) !== state.receiptDigest || !raw.payload?.operation?.handoffId)
-    throw Error("Original helper admission changed");
-  const intent = readConfigurationHandoffSpawnIntent(
-      local.installation,
-      state.execution,
-      raw.payload.operation.handoffId,
-    ),
-    infraDir = dirname(local.dataRoot),
-    keyed = (files?: ReturnType<typeof currentSources>) =>
-      createHmac("sha256", local.privateKey.export({ type: "pkcs8", format: "der" }))
-        .update(helperSourceDomain)
-        .update(handoffSourceBytes(infraDir, intent.environmentNames, files))
-        .digest("hex"),
-    matches = (value: string) =>
-      timingSafeEqual(Buffer.from(value, "hex"), Buffer.from(intent.sourceDigest, "hex"));
-  if (currentConfigurationGeneration(infraDir) !== intent.operation.expectedCurrentRevisionId)
-    throw Error("Helper host generation changed");
-  if (!matches(keyed())) throw Error("Helper host sources changed");
-}
 function hostEnv(infraDir: string, env: NodeJS.ProcessEnv) {
   const path = join(infraDir, ".env");
   let file: NodeJS.ProcessEnv = {};
@@ -322,8 +185,7 @@ export function observeConfigurationSources(options: {
       sourceRevision: randomUUID(),
       services: configurationHostFields(options.services, observed.env),
     });
-    const key = state.privateKey.export({ type: "pkcs8", format: "der" });
-    const observation = createHmac("sha256", key)
+    const observation = createHash("sha256")
       .update(`${domain}\0`)
       .update(canonicalJson(observed))
       .digest("hex");
@@ -334,11 +196,8 @@ export function observeConfigurationSources(options: {
       for (const entry of directory
         .listBounded(4096)
         .filter((entry) => /^configuration-source-/.test(entry))) {
-        const retained = verifyControl(
-          options.installation.publicKey,
-          domain,
+        const retained = witnessSchema.parse(
           JSON.parse(directory.read(entry, 128 * 1024).toString("utf8")),
-          witnessSchema,
         );
         if (retained.expiresAt <= Date.now() && !retained.pins.length) {
           directory.removeFile(entry);
@@ -347,21 +206,17 @@ export function observeConfigurationSources(options: {
         count++;
         bytes += directory.read(entry, 128 * 1024).length;
       }
-      const signed = signControl(
-        state.privateKey,
-        domain,
-        witnessSchema.parse({
-          version: 2,
-          inspection,
-          authorityRevision: options.authorityRevision,
-          observation,
-          expiresAt: Date.now() + 300000,
-          pins: [],
-        }),
-      );
-      if (count >= 128 || bytes + Buffer.byteLength(canonicalJson(signed)) > 1024 * 1024)
+      const record = witnessSchema.parse({
+        version: 2,
+        inspection,
+        authorityRevision: options.authorityRevision,
+        observation,
+        expiresAt: Date.now() + 300000,
+        pins: [],
+      });
+      if (count >= 128 || bytes + Buffer.byteLength(canonicalJson(record)) > 1024 * 1024)
         throw Error("Host source witness capacity unavailable");
-      writePrivateRecord(state, "observations", name(inspection.sourceRevision), signed, true);
+      writePrivateRecord(state, "observations", name(inspection.sourceRevision), record, true);
     } finally {
       directory.close();
     }
@@ -378,18 +233,14 @@ export function verifyConfigurationSourceWitness(options: {
   env?: NodeJS.ProcessEnv;
 }): void {
   const state = installationState(options.installation);
-  const retained = verifyControl(
-    options.installation.publicKey,
-    domain,
+  const retained = witnessSchema.parse(
     readPrivateRecord(state, "observations", name(options.sourceRevision)),
-    witnessSchema,
   );
   const observed =
     retained.version === 2
       ? currentSources(options.infraDir, options.env ?? process.env)
       : hostEnv(options.infraDir, options.env ?? process.env);
-  const key = state.privateKey.export({ type: "pkcs8", format: "der" });
-  const digest = createHmac("sha256", key)
+  const digest = createHash("sha256")
     .update(`${domain}\0`)
     .update(canonicalJson(observed))
     .digest("hex");
@@ -408,15 +259,12 @@ export function verifyConfigurationSourceWitness(options: {
 export function verifyConfigurationReleaseSourceWitness(
   options: Parameters<typeof verifyConfigurationSourceWitness>[0],
 ): void {
-  const retained = verifyControl(
-    options.installation.publicKey,
-    domain,
+  const retained = witnessSchema.parse(
     readPrivateRecord(
       installationState(options.installation),
       "observations",
       name(options.sourceRevision),
     ),
-    witnessSchema,
   );
   if (retained.version !== 2) throw Error("Release-bound host source required");
   verifyConfigurationSourceWitness(options);

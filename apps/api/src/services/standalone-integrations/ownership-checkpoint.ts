@@ -30,7 +30,7 @@ export async function assertOwnershipSettlementCheckpoint(
     !state.inspection?.allowed
   )
     throw new JobOwnershipLost();
-  const sources = Object.values(readProjection(result).operations).filter(
+  const sources = Object.values(readProjection(row.protocol, result).operations).filter(
     (x) =>
       x.operation?.kind === "integration.inspectOwnership" &&
       x.operation.operationId === state.operationId,

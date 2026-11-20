@@ -108,11 +108,13 @@ For the difference between `services start` (a subset) and `compose up` (the
 whole stack), and how `--services` overrides the persisted selection for a single
 render, see [Rendering the stack](../install/managing-services.md#rendering-the-stack).
 
-`compose up` applies hardlinks through data-manager's `/link` route, which
-refuses with `A signed generation-hardlinks execution is required` when the plan
-has links to make or prune. With nothing prepared it succeeds. When engines have
-built data, use `services start <ids>`, which applies the plan through a signed
-execution.
+`compose up` applies the applied generation's hardlink plan through
+data-manager's `/link` route. Data-manager links and prunes inside its own
+container as a data job named by the generation, so no configuration change or
+other data job runs meanwhile; the same plan again links nothing new. With
+nothing to link or prune, data-manager is not asked. While a configuration change
+or another data job runs, data-manager answers busy: `compose up` warns and starts
+the stack anyway, and `data link` applies the plan once that job has finished.
 
 ## `control`
 
@@ -123,7 +125,7 @@ resolve and rollback is appended to `control-audit.jsonl` there and printed.
 | Command                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `control status`                                    | Show the held leases with their owner, targets and children, the agent operations without a final outcome (except those an operator resolved or cleared), and the holders of the writer, lease store and backup store locks.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `control resolve --op <key> --as committed\|failed` | Record the outcome of an operation whose outcome is unknown and release its lease. Prints what Docker reports for the held services first. Resolving a configuration maintenance also settles Data Manager's configuration fence, also after a clear. Refuses a lease Data Manager owns: Data Manager settles its own jobs when it starts and during recovery, and `control clear` is the explicit release.                                                                                                                                                                                                            |
+| `control resolve --op <key> --as committed\|failed` | Record the outcome of an operation whose outcome is unknown and release its lease. Prints what Docker reports for the held services first. Resolving a configuration maintenance also settles Data Manager's configuration fence, also after a clear, with the outcome the agent's record already fixed if it has one; it is refused while the agent still drives that maintenance (preparing, prepared or applying). Refuses a lease Data Manager owns: Data Manager settles its own jobs when it starts and during recovery, and `control clear` is the explicit release.                                            |
 | `control clear --op <key>`                          | Drop the lease of an operation whose holder is gone. A cleared configuration maintenance leaves the fence prepared until `control resolve`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `control clear --lock <name>`                       | Remove a lock (`writer`, `leases` or `backups`, or the name a busy message prints, including an update receipt's lock path) whose holder cannot be proved gone, and a reclaim guard a dead reclaimer left beside it. Check that the holder has exited first: on macOS, and for a host CLI holder seen from a container, a dead holder is not reclaimed automatically.                                                                                                                                                                                                                                                  |
 | `control rollback [--yes]`                          | Render the newest retained configuration that pins another release than the applied one again, with that release, and recreate the services in the self-update order. Check out that release's source first. Refuses when no such configuration is retained, or when the database has a migration newer than that release's recorded migration head. Rolling back reverts the configuration made since: release selection, selected services, service configuration and secrets; services it does not select keep running. After a partial failure, finish with `compose up`. Without `--yes` it only prints the plan. |
@@ -163,10 +165,11 @@ hardlinks, authenticated feeds — lives in
 | `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                                                                                                             |
 | `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                                                                                                  |
 
-`data link` and `services build` use the same `/link` route as
-`compose up` and refuse the same way when the plan has links to make or prune;
-a build's artifacts are complete by then. `services start` and `services update`
-apply the plan through a signed execution.
+`data link`, `services build`, `services start` and `services update` use the
+same `/link` route as `compose up`; a build's artifacts are complete by then.
+They fail instead of warning while data-manager is busy. A command that holds a
+lease on its services sends the plan under that lease, so data-manager does not
+need one of its own.
 
 `data download osm`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing

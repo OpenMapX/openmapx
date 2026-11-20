@@ -21,7 +21,6 @@ async function transferStore() {
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token: "a".repeat(43),
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
   });
   cleanups.push(async () => store.close());

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import {
@@ -51,7 +51,7 @@ it("freezes distinct original data/finalization slots and refuses targets before
       });
     expect(plan.dataChildren.map((s) => s.ordinal)).toEqual([0, 1, 2]);
     expect(plan.finalizationReservation.ordinal).toBe(1);
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution: parent,
       operation,
       kind: operation.kind,
@@ -69,10 +69,9 @@ it("freezes distinct original data/finalization slots and refuses targets before
       }),
     ).rejects.toThrow("data phase not admitted");
     expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
-    const child = await control.bindControlChildPhase(authority, plan.dataReservation),
-      key = control.prepareFixedControlChild(authority, plan.dataDelegationId);
-    control.retainFixedCliSpawnIntent(authority, {
-      delegationId: plan.dataDelegationId,
+    const child = await control.bindControlChildPhase(authority, plan.dataReservation);
+    await control.retainFixedCliSpawnIntent(authority, {
+      childKey: plan.dataDelegationId,
       execution: child.execution,
       operation,
       args: control.fixedCliArguments(operation),
@@ -82,9 +81,9 @@ it("freezes distinct original data/finalization slots and refuses targets before
     const issued = await control.issueControlChildPhase(authority, {
       phase: "data-workflow",
       ordinal: 0,
-      childPublicKey: key,
+      childKey: plan.dataDelegationId,
     });
-    control.consumeControlChildDispatch(issued.dispatchTicket);
+    await control.consumeControlChildDispatch(issued.dispatchTicket);
     // An issued original CLI is still not a completed data prerequisite.
     await expect(
       control.acquireArtifactTargetLease({

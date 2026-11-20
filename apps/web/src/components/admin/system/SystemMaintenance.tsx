@@ -66,8 +66,8 @@ interface ImageStatus {
 
 interface ReleaseStatus {
   configuredSelector?: string;
+  /** The release the applied configuration pins, which the services run. */
   currentReleaseId?: string;
-  selectedReleaseId?: string;
   availableReleaseId?: string;
   currentVersion?: string;
   availableVersion?: string;
@@ -583,14 +583,18 @@ export function SystemMaintenance({
             <Typography variant="body2">
               Configured channel: {status?.release?.configuredSelector ?? "unknown"}
             </Typography>
+            {/* Only an answered inspection names the channel; without one, a missing pin is unknown. */}
             <Typography variant="body2">
-              Current release: {status?.release?.currentReleaseId ?? "unknown"}
+              Current release (pinned):{" "}
+              {status?.release?.configuredSelector === undefined
+                ? "unknown"
+                : (status.release.currentReleaseId ?? "none")}
             </Typography>
             <Typography variant="body2">
-              Selected pin: {status?.release?.selectedReleaseId ?? "none or unavailable"}
-            </Typography>
-            <Typography variant="body2">
-              Checked release: {status?.release?.availableReleaseId ?? "not checked"}
+              Checked release:{" "}
+              {status?.release?.configuredSelector === undefined
+                ? "unknown"
+                : (status.release.availableReleaseId ?? "not checked")}
             </Typography>
             {status?.release?.availableDigest && (
               <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
@@ -605,16 +609,16 @@ export function SystemMaintenance({
               resolve the configured channel again.
             </Typography>
             <Button
-              disabled={active || !status?.release?.selectedReleaseId}
+              disabled={active || !status?.release?.currentReleaseId}
               onClick={() => {
-                const releaseId = status?.release?.selectedReleaseId;
+                const releaseId = status?.release?.currentReleaseId;
                 if (releaseId) {
                   setPinToClear({ releaseId, key: crypto.randomUUID(), origin: apiUrl });
                   setClearConfirmation("");
                 }
               }}
             >
-              Clear selected release pin
+              Clear the release pin
             </Button>
           </Paper>
 

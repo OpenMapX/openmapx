@@ -164,7 +164,6 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
                 properties: {
                   configuredSelector: { type: "string" },
                   currentReleaseId: { type: "string" },
-                  selectedReleaseId: { type: "string" },
                   availableReleaseId: { type: "string" },
                   currentVersion: { type: "string" },
                   availableVersion: { type: "string" },

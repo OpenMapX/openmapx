@@ -13,7 +13,7 @@ import { unionAll } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { adminJob, adminJobLog, dataManagerJobStages, dataManagerJobs } from "../db/schema";
 import { type ActorSummary, resolveActors } from "../utils/resolve-actor";
-import { publicAdminJobPayload, publicAdminJobResult } from "./admin-job-failure";
+import { publicAdminJobPayload } from "./admin-job-failure";
 
 export type ActivityJobSource = "application" | "data-manager";
 export type ActivityJobFilter = "active" | "completed" | "failed";
@@ -177,7 +177,7 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
       startedAt: dataManagerJobs.startedAt,
       finishedAt: dataManagerJobs.finishedAt,
       cancelable:
-        sql<boolean>`${dataManagerJobs.executionVersion}=2 AND (${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()}) AND ${dataManagerJobs.kind} IN ('download-osm','download-fonts','convert-overpass','transit-sync','overture-pull','overture-ingest','overture-extract','overture-conflate','overture-sync','search-index-build','notable-places-build','generation-hardlinks','transit-maintenance','catalog.validate','catalog.activate') AND ${dataManagerJobs.operationKey} IS NOT NULL AND ${dataManagerJobs.executionFingerprint} IS NOT NULL`.as(
+        sql<boolean>`${dataManagerJobs.executionVersion}=2 AND (${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()}) AND ${dataManagerJobs.operationKey} IS NOT NULL AND ${dataManagerJobs.executionFingerprint} IS NOT NULL`.as(
           "cancelable",
         ),
     })
@@ -240,8 +240,10 @@ export async function listActivityJobs(options: {
 
 export async function getActivityJob(id: string, source: ActivityJobSource) {
   if (source === "application") {
-    const [job] = await db.select().from(adminJob).where(eq(adminJob.id, id)).limit(1);
-    if (!job) return null;
+    const [row] = await db.select().from(adminJob).where(eq(adminJob.id, id)).limit(1);
+    if (!row) return null;
+    // The runner's protocol state never leaves the API.
+    const { protocol: _protocol, ...job } = row;
     const logs = await db
       .select()
       .from(adminJobLog)
@@ -249,7 +251,7 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
       .orderBy(adminJobLog.seq);
     return {
       ...job,
-      result: publicAdminJobResult(job.result),
+      result: job.result,
       payload: publicAdminJobPayload(job.type, job.payload),
       source,
       actorLabel: job.createdBy ? "Administrator" : "System",

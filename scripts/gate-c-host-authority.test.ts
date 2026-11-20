@@ -133,7 +133,7 @@ describe("Gate C — host authority", () => {
   });
 
   it("keeps the operations agent's state out of every other service's reach in the rendered stack", () => {
-    // The journal, trusted-config queue and privacy scratch
+    // The journal, configuration candidates and privacy scratch
     // live in infra/docker/state/ops-agent. data-manager, which mounts the
     // data directory read-write as the same uid, must not reach any of it.
     const state = "./state/ops-agent";
@@ -151,7 +151,6 @@ describe("Gate C — host authority", () => {
         .map((source) => `${id} ${source}`),
     );
     expect(reaching.filter((entry) => !entry.startsWith(`${AUTHORITY_SERVICE} `))).toEqual([
-      "app-api ./state/ops-agent/trusted-config",
       "app-api ./state/ops-agent/custom-integrations",
       "traefik ./state/ops-agent/configuration/current/traefik/traefik.yml",
       "traefik ./state/ops-agent/traefik/dynamic",
@@ -314,10 +313,14 @@ describe("Gate C — host authority", () => {
           }),
         );
       };
-      manifest("app-api", ["@infra:state/ops-agent/trusted-config", "@infra:state/ops-agent"]);
+      manifest("app-api", [
+        "@infra:state/ops-agent/configuration-candidates",
+        "@infra:state/ops-agent",
+      ]);
       manifest("data-manager", ["@infra:data", "@infra:state", "@infra:."]);
-      manifest("ops-agent", ["@infra:state/ops-agent/trusted-config"]);
+      manifest("ops-agent", ["@infra:state/ops-agent/configuration-candidates"]);
       expect(stateDetails(findAuthorityViolations(root))).toEqual([
+        `service "app-api" mounts the operations agent's state (@infra:state/ops-agent/configuration-candidates)`,
         `service "app-api" mounts the operations agent's state (@infra:state/ops-agent)`,
         `service "data-manager" mounts the operations agent's state (@infra:state)`,
         `service "data-manager" mounts the operations agent's state (@infra:.)`,
@@ -343,8 +346,6 @@ describe("Gate C — host authority", () => {
       };
       manifest("app-api", [
         "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/custom_integrations",
-        "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent/trusted-config",
-        "@infra:data/../state/ops-agent/trusted-config/",
       ]);
       manifest("data-manager", [
         "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",
@@ -396,55 +397,22 @@ describe("Gate C — host authority", () => {
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
 
   // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
-  it("lets each service mount only its own control role's key and private records", () => {
-    const host = "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}";
-    const mask = (sibling: string, kind: "hidden-key" | "empty") => ({
-      source: `@infra:control-private/${kind}`,
-      target: `${host}/infra/docker/${sibling}`,
-    });
+  it("lets data-manager mount only its own private records under the state directory", () => {
     withManifests(
       {
         "data-manager": {
           bindMounts: [
-            { source: "@infra:control-private/data-manager", target: "/var/lib/control-private" },
-            { source: "@infra:secrets/control-data-manager.key", target: "/run/secrets/key" },
-            { source: "@infra:control-private/ops-agent", target: "/mnt/agent" },
-            { source: "@infra:secrets/control-host-cli.key", target: "/mnt/cli-key" },
+            { source: "@infra:state/data-manager/control", target: "/var/lib/openmapx/control" },
           ],
         },
         "app-api": {
-          bindMounts: [{ source: "@infra:secrets/control-data-manager.key", target: "/mnt/key" }],
-        },
-        // The agent's wide mount is allowed only with every sibling masked.
-        "ops-agent": {
-          bindMounts: [
-            { source: `${host}/infra/docker/secrets`, target: `${host}/infra/docker/secrets` },
-            { source: "@infra:control-private/ops-agent", target: "/var/lib/control-private" },
-            mask("secrets/control-data-manager.key", "hidden-key"),
-          ],
+          bindMounts: [{ source: "@infra:state/data-manager/control", target: "/mnt/records" }],
         },
       },
       (details) =>
         expect(details).toEqual([
-          'service "app-api" mounts the data-manager control key (@infra:secrets/control-data-manager.key)',
-          'service "data-manager" mounts the ops-agent control private directory (@infra:control-private/ops-agent)',
-          'service "data-manager" mounts the host-cli control key (@infra:secrets/control-host-cli.key)',
-          `service "ops-agent" reaches the host-cli control key through ${host}/infra/docker/secrets without a mask`,
+          'service "app-api" mounts the operations agent\'s state (@infra:state/data-manager/control)',
         ]),
-    );
-    withManifests(
-      {
-        "ops-agent": {
-          bindMounts: [
-            { source: `${host}/infra/docker`, target: `${host}/infra/docker` },
-            mask("secrets/control-data-manager.key", "hidden-key"),
-            mask("secrets/control-host-cli.key", "hidden-key"),
-            mask("control-private/data-manager", "empty"),
-            mask("control-private/host-cli", "empty"),
-          ],
-        },
-      },
-      (details) => expect(details).toEqual([]),
     );
   });
 

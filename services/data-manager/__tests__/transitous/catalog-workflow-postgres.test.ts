@@ -63,9 +63,6 @@ vi.mock("../../src/db/index", () => ({
   get sql() {
     return state.db.sql;
   },
-  get rawSql() {
-    return state.db.sql;
-  },
 }));
 const csv =
   "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n";
@@ -496,7 +493,6 @@ it
           JSON.stringify({
             root: f.root,
             infraDir: f.infraDir,
-            queue: f.queue,
             stack: f.stack,
             serviceIds,
             token: f.token,
@@ -628,29 +624,19 @@ it
           controlJournal: journal,
           configurationFence: fence,
         }),
-        singleFlight = createSingleFlightController({
-          db: drizzle(state.db.sql, {
-            schema: {
-              jobs,
-              jobStages,
-              feedState,
-              offlinePackageJobs,
-              offlinePackageJobOwners,
-              offlinePackageArtifactReferences,
-            },
-          }),
-        }),
+        singleFlight = createSingleFlightController(),
         dispatcher = createDataExecutionDispatcher({
           dataDir: data,
           state: new StateStore(data),
           sql: state.db.sql,
           singleFlight,
           operationsPolicy: policy,
-          runHardlinks: async () => {
-            throw Error("No generation operation in catalog workflow");
-          },
         });
-      runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
+      runtime = createDataExecutionRuntime({
+        store,
+        dispatch: dispatcher.dispatch,
+        openSql: () => ({ sql: state.db.sql, close: async () => {} }),
+      });
       const receiver = createDataExecutionReceiver({
         runtime,
         installation,
@@ -659,14 +645,9 @@ it
         operationsPolicy: policy,
       });
       dm = Fastify();
-      registerAuth(
-        dm,
-        { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` },
-        { executionReceiver: () => receiver },
-      );
+      registerAuth(dm, { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` });
       registerApi(dm, {
         dataDir: data,
-        singleFlight,
         operationsPolicy: policy,
         executionReceiver: receiver,
       });
@@ -807,20 +788,24 @@ it
       const proof = readCatalogValidation(installation, proposalId, validation.id);
       expect(proof.validation.status).toBe("passed");
       expect(readCatalogPinSet(f.root)).toEqual(active);
-      // Like the review eligibility reader, require the real immutable contained
-      // completion, not merely the earlier visible SQL terminal projection.
+      // Like the review eligibility reader, require data-manager's own row to
+      // hold the exact terminal of the validation the proof names, and the
+      // validation to have released its lease after that terminal.
       await vi.waitFor(
-        () =>
+        async () => {
+          const row = await store.lookup(proof.sourceExecution.operationKey);
           expect(() =>
-            control.readDataControlTerminalObservation(installation!, proof.sourceExecution),
-          ).not.toThrow(),
+            control.assertDataManagerTerminal(proof.sourceExecution, row!.status),
+          ).not.toThrow();
+          expect(heldTargets(dirname(data)).includes("motis")).toBe(false);
+        },
         { timeout: 10000, interval: 100 },
       );
       const completedValidation = await store.inspect(validation.id);
       const child = completedValidation!.children.find((child) => child.state === "terminal");
       if (!child || child.state !== "terminal")
         throw Error("Expected actual settled validation child");
-      const originalOwner = control.restoreAdmittedControlExecution(
+      const originalOwner = await control.restoreAdmittedControlExecution(
         installation,
         proof.sourceExecution,
       );
@@ -912,7 +897,7 @@ it
             existsSync(
               join(
                 dirname(data),
-                "control-private/data-manager/execution-witnesses/data-manager",
+                "state/data-manager/control/execution-witnesses/data-manager",
                 `${activation.operationKey}.writer`,
               ),
             ),
@@ -1013,7 +998,6 @@ it
       await runner?.close();
       await bridge.close();
       await motis.close();
-      journal?.close();
       if (installation) control.closeControlInstallation(installation);
       if (agentInstallation) control.closeControlInstallation(agentInstallation);
       if (host) rmSync(host.cleanupRoot, { recursive: true, force: true });

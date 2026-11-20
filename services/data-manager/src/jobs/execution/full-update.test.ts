@@ -23,12 +23,13 @@ import postgres from "postgres";
 import { expect, it } from "vitest";
 import { ownedServiceHost } from "../../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
 import { configurationPolicyRevision } from "../../../../../apps/ops-agent/src/configured-resource-authority";
+import { configurationPayloadSource } from "../../../../../apps/ops-agent/src/data-transit-resource-source";
 import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
 import { createProductionRegistryResourceClaimer } from "../../../../../apps/ops-agent/src/policy";
 import { dispatchOpsOperation } from "../../../../../apps/ops-agent/src/runtime";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
-import { createFileTrustedOpsDataSource } from "../../../../../apps/ops-agent/src/trusted-config-source";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { dataJobsSince } from "../../../__tests__/helpers/job-rows";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "../../control-targets";
@@ -37,7 +38,6 @@ import { resolveOperationsProfile } from "../transitous/operations-profile";
 import { getSingleFlightController } from "../transitous/runtime";
 import { createDataConfigurationMaintenance } from "./configuration-maintenance";
 import { createDataExecutionDispatcher } from "./dispatch";
-import { applyOwnedGenerationHardlinks } from "./hardlinks";
 import { createDataExecutionReceiver } from "./receiver";
 import { createDataExecutionRuntime } from "./runtime";
 import { createPostgresDataExecutionStore } from "./store";
@@ -122,8 +122,8 @@ it.skipIf(
       journal = control.createDataExecutionControlJournal(dm, sql),
       fence = createDataConfigurationMaintenance(sql, dm);
     const publicationFailures: Record<string, string> = {};
-    const publishContained = journal.recordContainedTerminal;
-    journal.recordContainedTerminal = async (execution) => {
+    const publishContained = journal.verifyContainedTerminal;
+    journal.verifyContainedTerminal = async (execution) => {
       try {
         return await publishContained(execution);
       } catch (error) {
@@ -133,10 +133,13 @@ it.skipIf(
       }
     };
     await fence.startup();
-    const store = createPostgresDataExecutionStore(sql, {
+    // Job rows are shared by every fixture; this test's are those admitted since it began.
+    const startedAt = Date.now(),
+      store = createPostgresDataExecutionStore(sql, {
         controlJournal: journal,
         configurationFence: fence,
       }),
+      ownRows = () => dataJobsSince(sql, store, startedAt),
       singleFlight = getSingleFlightController(),
       operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
     let releaseTransit!: () => void, transitStarted!: () => void;
@@ -153,15 +156,11 @@ it.skipIf(
       sql,
       singleFlight,
       operationsPolicy,
-      runHardlinks: async () => {
-        throw Error("Actual generation receiver owns its hardlink worker");
-      },
     });
     const runtime = createDataExecutionRuntime({
         store,
         dispatch: async (input, context) => {
           effects.push(input.kind);
-          if (input.kind === "generation-hardlinks") return applyOwnedGenerationHardlinks(context);
           if (input.kind === "download-osm") {
             await publishDataChange(() => {
               mkdirSync(join(data, "osm"), { recursive: true });
@@ -174,7 +173,7 @@ it.skipIf(
           if (input.kind === "transit-sync") {
             transitStarted();
             await held;
-            context.assertForward();
+            await context.assertForward();
             await retainDataPublication();
             return {
               kind: input.kind,
@@ -211,18 +210,13 @@ it.skipIf(
       }
       return payload;
     });
-    registerAuth(
-      app,
-      {
-        api: `${agentToken}-api`,
-        "ops-agent": agentToken,
-        "host-cli": `${agentToken}-cli`,
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: `${agentToken}-api`,
+      "ops-agent": agentToken,
+      "host-cli": `${agentToken}-cli`,
+    });
     registerApi(app, {
       dataDir: data,
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -274,12 +268,7 @@ it.skipIf(
           };
         },
         enabledServiceIds: () => new Set(["data-manager", "motis", "osrm"]),
-        trustedData: createFileTrustedOpsDataSource({
-          directory: host.queue,
-          token: host.token,
-          allowedUids: [process.geteuid?.() ?? 0],
-          expectedGid: process.getegid?.() ?? 0,
-        }),
+        trustedData: configurationPayloadSource,
         ownedServices: host.owned,
         resourceAuthority: {
           allowRegion: (kind, id) => kind === "data.update" && id === "europe/germany",
@@ -343,12 +332,14 @@ it.skipIf(
         },
       });
       expect(admissions).toBe(3);
-      expect(effects).toEqual([
-        "download-osm",
-        "transit-sync",
-        "download-fonts",
-        "generation-hardlinks",
-      ]);
+      expect(effects).toEqual(["download-osm", "transit-sync", "download-fonts"]);
+      // The final generation's plan went through /link under the update's own
+      // lease: data-manager took no lease of its own for it.
+      const links = await sql<{ status: string; execution_input: { leaseId: string | null } }[]>`
+        SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link'`;
+      expect(links).toHaveLength(1);
+      expect(links[0]).toMatchObject({ status: "ok" });
+      expect(links[0]!.execution_input.leaseId).toEqual(expect.any(String));
       expect(readFileSync(commands, "utf8")).toContain("osrm-extract");
       expect(existsSync(join(data, "osrm-graph/region.osrm"))).toBe(true);
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(
@@ -357,19 +348,9 @@ it.skipIf(
       expect(heldTargets(dirname(data)).includes("osrm")).toBe(false);
     } catch (error) {
       const witnessProblems: Record<string, string> = {};
-      for (const row of await store.listUnsettled()) {
-        if (
-          !existsSync(
-            join(
-              host.infraDir,
-              "control-private/data-manager/executions",
-              `${row.status.operationKey}.json`,
-            ),
-          )
-        )
-          continue;
+      for (const row of await ownRows()) {
         try {
-          control.readDataControlTerminalObservation(agentInstallation, row.execution, row.status);
+          control.assertDataManagerTerminal(row.execution, row.status);
           witnessProblems[row.input.kind] = "verified";
         } catch (problem) {
           witnessProblems[row.input.kind] =
@@ -386,21 +367,11 @@ it.skipIf(
             witnessProblems,
             publicationFailures,
             actualFailure: actualFailure instanceof Error ? actualFailure.stack : actualFailure,
-            rows: (await store.listUnsettled())
-              .filter((row) =>
-                existsSync(
-                  join(
-                    host.infraDir,
-                    "control-private/data-manager/executions",
-                    `${row.status.operationKey}.json`,
-                  ),
-                ),
-              )
-              .map((row) => ({
-                kind: row.input.kind,
-                status: row.status,
-                finishedAt: row.finishedAt,
-              })),
+            rows: (await ownRows()).map((row) => ({
+              kind: row.input.kind,
+              status: row.status,
+              finishedAt: row.finishedAt,
+            })),
             commands: existsSync(commands) ? readFileSync(commands, "utf8") : "",
           },
           await client.status("data.update", operationId),
@@ -414,15 +385,9 @@ it.skipIf(
       app.server.closeAllConnections();
       await app.close();
       await runtime.close();
-      for (const row of await store.listUnsettled())
+      for (const row of await dataJobsSince(sql, store, 0))
         if (
-          existsSync(
-            join(
-              host.infraDir,
-              "control-private/data-manager/executions",
-              `${row.status.operationKey}.json`,
-            ),
-          ) ||
+          row.status.admittedAt >= startedAt ||
           (rootOperationKey &&
             row.parent &&
             "execution" in row.parent &&
@@ -432,7 +397,6 @@ it.skipIf(
             ].includes(row.parent.execution.operationKey))
         )
           await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id} AND operation_key=${row.status.operationKey}`;
-      journal.close();
       control.closeControlInstallation(dm);
       control.closeControlInstallation(agentInstallation);
       await sql.end();

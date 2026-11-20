@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import pMap from "p-map";
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 
 export const DEFAULT_MODEL = "mxbai-embed-large";
 const DEFAULT_OLLAMA_URL = "http://local-ai:11434";
@@ -15,15 +15,14 @@ function textHash(model: string, text: string): string {
   return createHash("sha256").update(`${model}\n${text}`).digest("hex");
 }
 
-class SqlEmbeddingCache implements EmbeddingCache {
-  private schema: string;
-
-  constructor(schema = "overture_places") {
-    this.schema = schema;
-  }
+export class SqlEmbeddingCache implements EmbeddingCache {
+  constructor(
+    private readonly sql: postgres.Sql,
+    private readonly schema = "overture_places",
+  ) {}
 
   async get(hash: string): Promise<number[] | null> {
-    const rows = await sql.unsafe<{ embedding: number[] }[]>(
+    const rows = await this.sql.unsafe<{ embedding: number[] }[]>(
       `SELECT embedding FROM "${this.schema}".embedding_cache WHERE text_hash = $1`,
       [hash],
     );
@@ -31,7 +30,7 @@ class SqlEmbeddingCache implements EmbeddingCache {
   }
 
   async set(hash: string, model: string, embedding: number[]): Promise<void> {
-    await sql.unsafe(
+    await this.sql.unsafe(
       `INSERT INTO "${this.schema}".embedding_cache (text_hash, model, embedding)
        VALUES ($1, $2, $3::DOUBLE PRECISION[])
        ON CONFLICT (text_hash) DO NOTHING`,
@@ -64,17 +63,17 @@ async function fetchEmbedding(
  */
 export async function embed(
   texts: string[],
-  opts?: {
+  opts: {
     model?: string;
     ollamaUrl?: string;
     fetchImpl?: typeof fetch;
-    cache?: EmbeddingCache;
+    cache: EmbeddingCache;
   },
 ): Promise<number[][]> {
-  const model = opts?.model ?? DEFAULT_MODEL;
-  const ollamaUrl = opts?.ollamaUrl ?? process.env.OLLAMA_URL ?? DEFAULT_OLLAMA_URL;
-  const fetchImpl = opts?.fetchImpl ?? fetch;
-  const cache: EmbeddingCache = opts?.cache ?? new SqlEmbeddingCache();
+  const model = opts.model ?? DEFAULT_MODEL;
+  const ollamaUrl = opts.ollamaUrl ?? process.env.OLLAMA_URL ?? DEFAULT_OLLAMA_URL;
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const { cache } = opts;
 
   const hashes = texts.map((t) => textHash(model, t));
   const results: (number[] | null)[] = await Promise.all(hashes.map((h) => cache.get(h)));

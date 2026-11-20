@@ -10,8 +10,8 @@ import {
   opsOperationFingerprint,
 } from "../../ops/index";
 import { DEFAULT_ARTIFACT_ARCHIVE_LIMITS, validateBuildBundle, writeBuildBundle } from "../archive";
-import * as control from "../control-authority";
 import { acquireArtifactTargetLease } from "../target-lease";
+import * as control from "./control";
 
 const root = process.argv[2]!,
   point = process.argv[3]!;
@@ -68,7 +68,7 @@ const bundle = await validateBuildBundle({
   limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
   signal: new AbortController().signal,
 });
-await control.provisionControlInstallation(root);
+await control.provisionControlDirectories(root);
 const installation = control.openControlInstallation({
   infraDir: root,
   role: "host-cli",
@@ -95,7 +95,7 @@ const admittedAt = Date.now(),
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
   };
-const authority = control.retainAdmittedControlExecution(installation, {
+const authority = await control.retainAdmittedControlExecution(installation, {
     execution,
     kind: operation.kind,
     operation,
@@ -129,7 +129,7 @@ fs.renameSync = (from, to) => {
         oldRecord,
         oldDirectoryInode,
         leaseId: lease.leaseId,
-        admissionDigest: control.executionAuthorityState(authority).receiptDigest,
+        admissionDigest: authority.receiptDigest,
       }),
       { mode: 0o600 },
     );

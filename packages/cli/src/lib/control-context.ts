@@ -1,6 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseForward,
@@ -11,6 +9,7 @@ import {
   type ControlInstallation,
   closeArtifactTargetLeaseHandle,
   closeControlInstallation,
+  type ExecutionHandle,
   openFixedChildInstallation,
   pruneControlRecords,
   readFixedCliSpawnIntent,
@@ -18,17 +17,21 @@ import {
   retainControlEffectReceipt,
   retainDataUpdatePlan,
   settleArtifactTargetLeaseChild,
-  type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
+  verifiedRetainedControlParent,
   verifyControlEffectSettlement,
   verifyFixedCliControlPeer,
-  verifyParentExecution,
 } from "@openmapx/core/build-artifacts";
 import { executionRefSchema } from "@openmapx/core/ops";
+import { z } from "zod";
 import { repoPaths } from "./paths";
 
+const fixedChildSchema = z.strictObject({
+  leaseId: z.uuid().nullable(),
+  childKey: z.uuid(),
+});
 const contexts = new AsyncLocalStorage<{
-  authority: VerifiedExecutionAuthority;
+  authority: ExecutionHandle;
   installation: ControlInstallation;
   lease?: BorrowedArtifactTargetLease;
   dataWorkflowInitial?: import("@openmapx/core/ops").DataWorkflowReceipt;
@@ -65,62 +68,54 @@ export async function withCliControlContext<T>(
   args: readonly string[],
   run: () => Promise<T>,
 ): Promise<T> {
-  const delegation = process.env.OPENMAPX_CONTROL_DELEGATION,
-    parentAssertion = process.env.OPENMAPX_PARENT_EXECUTION;
-  if (!delegation && !parentAssertion) return run();
-  if (delegation && parentAssertion) throw Error("Ambiguous fixed CLI control authority");
+  const named = process.env.OPENMAPX_CONTROL_CHILD;
+  if (!named) return run();
+  if (Buffer.byteLength(named) > 1024) throw Error("Fixed CLI child exceeds its budget");
+  const child = fixedChildSchema.parse(JSON.parse(named));
   const encoded = process.env.OPENMAPX_CONTROL_EXECUTION;
   if (!encoded || Buffer.byteLength(encoded) > 2048)
     throw Error("Missing bounded fixed CLI execution");
   const execution = executionRefSchema.parse(JSON.parse(encoded));
-  const assertion = delegation ?? parentAssertion;
-  if (!assertion) throw Error("Missing fixed CLI control assertion");
-  if (assertion.length > 4096) throw Error("Fixed CLI assertion exceeds header budget");
   const infraDir = repoPaths().infraDir;
-  const installation = openFixedChildInstallation({
-    infraDir,
-    assertion,
-    container: existsSync("/run/secrets/openmapx-control-verifiers"),
-  });
+  const installation = openFixedChildInstallation({ infraDir, child });
   let lease: BorrowedArtifactTargetLease | undefined;
   try {
     const intent = readFixedCliSpawnIntent(installation, execution, args);
-    const peer = verifyFixedCliControlPeer(installation, {
-      assertion,
-      execution,
-      kind: intent.operation.kind,
-    });
-    let parent: ReturnType<typeof verifyParentExecution> | undefined;
-    if (delegation) {
-      parent = verifiedParentForArtifactDelegation(installation, assertion, execution);
+    let parent: ReturnType<typeof verifiedParentForArtifactDelegation>;
+    if (child.leaseId !== null) {
+      const leaseChild = { leaseId: child.leaseId, childKey: child.childKey };
+      parent = verifiedParentForArtifactDelegation(installation, leaseChild, execution);
       lease = await adoptArtifactTargetLease({
-        assertion,
-        peer,
+        peer: verifyFixedCliControlPeer(installation, {
+          leaseChild,
+          execution,
+          kind: intent.operation.kind,
+        }),
         execution,
         serviceIds: intent.serviceIds,
       });
     } else {
-      parent = verifyParentExecution(assertion, peer, {
-        execution,
-        kind: intent.operation.kind,
-        requestedDeadlineAt: execution.deadlineAt,
-      });
+      // The parent recorded this child's spawn in its own private state.
+      parent = await verifiedRetainedControlParent(installation, intent.parent);
     }
     // The lease grant's parent is verified in admission; role fingerprints were checked by the fixed runner.
-    const authority = retainAdmittedControlExecution(installation, {
+    const authority = await retainAdmittedControlExecution(installation, {
       execution,
       kind: intent.operation.kind,
       operation: intent.operation,
       admittedAt: intent.admittedAt,
-      ...(parent ? { parent } : {}),
+      parent,
+      ...(child.leaseId !== null
+        ? { leaseChild: { leaseId: child.leaseId, childKey: child.childKey } }
+        : {}),
       serviceIds: intent.serviceIds,
       plan: intent.plan,
       ...(intent.reservations ? { reservations: intent.reservations } : {}),
     });
     if (intent.dataUpdatePlan) retainDataUpdatePlan(authority, intent.dataUpdatePlan);
-    beginFixedCliExecution(installation, execution);
+    await beginFixedCliExecution(installation, execution);
     if (lease) bindBorrowedControlExecution(lease, authority);
-    if (lease) assertArtifactTargetLeaseForward(lease);
+    if (lease) await assertArtifactTargetLeaseForward(lease);
     try {
       let result: T;
       try {
@@ -142,7 +137,7 @@ export async function withCliControlContext<T>(
       }
       if (process.exitCode && Number(process.exitCode) !== 0)
         throw Error("Fixed CLI command failed");
-      retainControlEffectReceipt(authority, {
+      await retainControlEffectReceipt(authority, {
         outcome: "committed",
         publication: "committed",
         receipt: { kind: "fixed-cli-exit", args: [...args], exitCode: 0 },
@@ -150,11 +145,11 @@ export async function withCliControlContext<T>(
       if (lease)
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(installation, execution),
+          await verifyControlEffectSettlement(installation, execution),
         );
       return result;
     } catch (e) {
-      retainControlEffectReceipt(authority, {
+      await retainControlEffectReceipt(authority, {
         outcome: "unknown",
         publication: "unknown",
         receipt: { kind: "unresolved" },
@@ -162,7 +157,7 @@ export async function withCliControlContext<T>(
       if (lease)
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(installation, execution),
+          await verifyControlEffectSettlement(installation, execution),
         );
       throw e;
     }
@@ -174,7 +169,7 @@ export async function withCliControlContext<T>(
 
 export function withHostDataControlContext<T>(
   installation: ControlInstallation,
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   run: () => Promise<T>,
 ): Promise<T> {
   if (contexts.getStore()) throw Error("Existing CLI control context");
@@ -183,9 +178,9 @@ export function withHostDataControlContext<T>(
 
 /** Restriction at actual host mutation boundaries; observation remains usable
  * after cancellation and cannot acquire authority through this helper. */
-export function assertCliControlForward(): void {
+export async function assertCliControlForward(): Promise<void> {
   const context = contexts.getStore();
   if (!context) return;
-  assertControlExecutionForward(context.authority);
-  if (context.lease) assertArtifactTargetLeaseForward(context.lease);
+  await assertControlExecutionForward(context.authority);
+  if (context.lease) await assertArtifactTargetLeaseForward(context.lease);
 }

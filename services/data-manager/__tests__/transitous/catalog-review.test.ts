@@ -7,7 +7,7 @@ import {
   closeControlInstallation,
   createDataExecutionControlJournal,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins, readCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { createControlRootOperationKey, OpsClient } from "@openmapx/core/ops";
@@ -36,6 +36,7 @@ import { registerAuth } from "../../src/auth";
 import { installDataMutationAdmission } from "../../src/jobs/execution/admission";
 import { createDataConfigurationMaintenance } from "../../src/jobs/execution/configuration-maintenance";
 import { createDataExecutionDispatcher } from "../../src/jobs/execution/dispatch";
+import { installLocalDataExecutions } from "../../src/jobs/execution/local";
 import { createDataExecutionReceiver } from "../../src/jobs/execution/receiver";
 import { createDataExecutionRuntime } from "../../src/jobs/execution/runtime";
 import { createPostgresDataExecutionStore } from "../../src/jobs/execution/store";
@@ -51,9 +52,6 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../../src/db/index", () => ({
   get sql() {
-    return state.fixture.sql;
-  },
-  get rawSql() {
     return state.fixture.sql;
   },
   get db() {
@@ -146,7 +144,7 @@ it.skipIf(!enabled)(
     const remote = join(root, "upstream.git");
     git(root, ["clone", "--bare", catalog, remote]);
     git(catalog, ["remote", "add", "origin", remote]);
-    await provisionControlInstallation(infra);
+    await provisionControlDirectories(infra);
     agentInstallation = openControlInstallation({
       infraDir: infra,
       role: "ops-agent",
@@ -198,9 +196,33 @@ it.skipIf(!enabled)(
     const fence = createDataConfigurationMaintenance(state.fixture.sql, dmInstallation);
     await fence.startup();
     installDataMutationAdmission(fence);
+    // A catalog proposal runs as an in-process durable data job.
+    const proposalRuntime = createDataExecutionRuntime({
+      store: createPostgresDataExecutionStore(state.fixture.sql, {
+        controlJournal: createDataExecutionControlJournal(dmInstallation, state.fixture.sql),
+        configurationFence: fence,
+      }),
+      openSql: () => ({ sql: state.fixture.sql, close: async () => {} }),
+      dispatch: async () => {
+        throw Error("Unexpected dispatched data job");
+      },
+    });
+    installLocalDataExecutions(
+      createDataExecutionReceiver({
+        runtime: proposalRuntime,
+        installation: dmInstallation,
+        configurationFence: fence,
+        dispatcher: {} as never,
+        operationsPolicy: resolveOperationsProfile({
+          profile: "regional-assisted",
+          countries: ["de"],
+        }),
+      }),
+    );
     const reviewer = createCatalogReviewService({
       dataDir,
       installation: dmInstallation,
+      executions: { lookup: (key) => store.lookup(key) },
       operationsPolicy: resolveOperationsProfile({
         profile: "regional-assisted",
         countries: ["de"],
@@ -281,34 +303,23 @@ it.skipIf(!enabled)(
     // negative validation deliberately has no installed host prerequisites;
     // it must finish as error without fabricating passed evidence or pins.
     const policy = resolveOperationsProfile({ profile: "regional-assisted", countries: ["de"] });
-    const singleFlight = createSingleFlightController({
-      db: drizzle(state.fixture.sql, {
-        schema: {
-          jobs,
-          jobStages,
-          feedState,
-          offlinePackageJobs,
-          offlinePackageJobOwners,
-          offlinePackageArtifactReferences,
-        },
-      }),
-      admissionSql: state.fixture.sql,
-    });
+    const singleFlight = createSingleFlightController();
     const dispatcher = createDataExecutionDispatcher({
       dataDir,
       state: new StateStore(dataDir),
       sql: state.fixture.sql,
       singleFlight,
       operationsPolicy: policy,
-      runHardlinks: async () => {
-        throw Error("Unexpected generation effect");
-      },
     });
     const store = createPostgresDataExecutionStore(state.fixture.sql, {
       controlJournal: createDataExecutionControlJournal(dmInstallation, state.fixture.sql),
       configurationFence: fence,
     });
-    const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
+    const runtime = createDataExecutionRuntime({
+      store,
+      dispatch: dispatcher.dispatch,
+      openSql: () => ({ sql: state.fixture.sql, close: async () => {} }),
+    });
     const receiver = createDataExecutionReceiver({
       runtime,
       installation: dmInstallation,
@@ -318,19 +329,14 @@ it.skipIf(!enabled)(
     });
     const api = Fastify(),
       serviceToken = "catalog-service-fixture-token";
-    registerAuth(
-      api,
-      {
-        api: serviceToken,
-        "ops-agent": `${serviceToken}-agent`,
-        "host-cli": `${serviceToken}-cli`,
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(api, {
+      api: serviceToken,
+      "ops-agent": `${serviceToken}-agent`,
+      "host-cli": `${serviceToken}-cli`,
+    });
     registerApi(api, {
       dataDir,
       operationsPolicy: policy,
-      singleFlight,
       catalogReview: reviewer,
       executionReceiver: receiver,
     });
@@ -387,6 +393,7 @@ it.skipIf(!enabled)(
       else process.env.MOTIS_TWO_SLOT = oldTwoSlot;
       await api.close();
       await runtime.close();
+      await proposalRuntime.close();
     }
   },
   90000,

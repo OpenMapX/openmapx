@@ -3,11 +3,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import {
+  assertDataManagerTerminal,
   type ControlInstallation,
   controlDigest,
-  readDataControlTerminalObservation,
-  signControl,
-  verifyControl,
 } from "@openmapx/core/build-artifacts";
 import {
   type CatalogProposal,
@@ -36,14 +34,15 @@ import {
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import z from "zod/v4";
-import { installationState } from "../../../../../packages/core/src/build-artifacts/control-authority";
 import {
   AnchoredDirectory,
   identity,
   sameInode,
 } from "../../../../../packages/core/src/build-artifacts/filesystem";
+import { installationState } from "../../../../../packages/core/src/build-artifacts/private-records";
 import { runOpsOperation } from "../../ops-client.js";
-import { withLegacyDataMutation } from "../execution/legacy-mutation.js";
+import { runLocalDataExecution } from "../execution/local.js";
+import type { DataExecutionStore } from "../execution/store.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
 import { CANDIDATE_MANIFEST_FILENAME } from "./candidate.js";
 import {
@@ -55,11 +54,9 @@ import { resolveTransitOverlayPath } from "./internal.js";
 import { type MotisOperationsPolicy, transitAllowedCountries } from "./operations-profile.js";
 import { readMotisSlotState } from "./slot-state.js";
 
-const DOMAIN = "openmapx-catalog-resolution-v1";
 const MAX_DIFF_BYTES = 64 * 1024 * 1024;
 const resolutionSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   branch: z
     .string()
     .max(215)
@@ -86,6 +83,8 @@ const safeUpstreamFetch: typeof fetch = async (input, init) => {
 export function createCatalogReviewService(options: {
   dataDir: string;
   installation: ControlInstallation;
+  /** Data-manager's own execution rows, where a validation's terminal is read. */
+  executions: Pick<DataExecutionStore, "lookup">;
   operationsPolicy: MotisOperationsPolicy;
 }) {
   const state = installationState(options.installation);
@@ -133,17 +132,10 @@ export function createCatalogReviewService(options: {
   function retainedResolution(proposalId: string) {
     try {
       return directory(proposalId, false, (dir) => {
-        const value = verifyControl(
-          state.installation.publicKey,
-          DOMAIN,
+        const value = resolutionSchema.parse(
           JSON.parse(dir.read("resolution.json", 768 * 1024).toString("utf8")),
-          resolutionSchema,
         );
-        if (
-          value.installationId !== options.installation.installationId ||
-          value.proposal.proposalId !== proposalId
-        )
-          throw Error("Foreign catalog resolution");
+        if (value.proposal.proposalId !== proposalId) throw Error("Foreign catalog resolution");
         parseCatalogPinSet(value.proposal.pins);
         const bytes = dir.read("diff.json", MAX_DIFF_BYTES);
         if (createHash("sha256").update(bytes).digest("hex") !== value.proposal.diffDigest)
@@ -169,7 +161,7 @@ export function createCatalogReviewService(options: {
   }): Promise<CatalogProposal> {
     const branch = resolutionSchema.shape.branch.parse(input.branch),
       proposalId = input.proposalId ?? randomUUID();
-    return withLegacyDataMutation("transit-proposal", async () => {
+    return runLocalDataExecution({ kind: "transit-proposal", proposalId }, async () => {
       input.signal?.throwIfAborted();
       let resolution = retainedResolution(proposalId);
       if (resolution && resolution.branch !== branch)
@@ -272,7 +264,6 @@ export function createCatalogReviewService(options: {
           throw Error("Catalog source policy changed during resolution");
         resolution = resolutionSchema.parse({
           version: 1,
-          installationId: options.installation.installationId,
           branch,
           proposal: {
             proposalId,
@@ -286,7 +277,7 @@ export function createCatalogReviewService(options: {
         });
         directory(proposalId, true, (dir) => {
           dir.write("diff.json", bytes, true);
-          const envelope = canonicalJson(signControl(state.privateKey, DOMAIN, resolution));
+          const envelope = canonicalJson(resolution);
           if (Buffer.byteLength(envelope, "utf8") > 768 * 1024)
             throw Error("Catalog resolution exceeds its byte limit");
           dir.write("resolution.json", envelope, true);
@@ -338,16 +329,17 @@ export function createCatalogReviewService(options: {
         );
         validation = retained.validation;
         if (validation.status === "passed") {
-          const completed = readDataControlTerminalObservation(
-              options.installation,
-              retained.sourceExecution,
-            ),
+          const row = await options.executions.lookup(retained.sourceExecution.operationKey),
+            completed = row
+              ? assertDataManagerTerminal(retained.sourceExecution, row.status)
+              : null,
             pointer = readCurrentCatalogValidation(options.installation),
             slots = readMotisSlotState(options.dataDir);
           if (
-            completed.status.status !== "ok" ||
-            completed.status.result?.kind !== "catalog.validate" ||
-            completed.status.result.status !== "passed" ||
+            !completed ||
+            completed.status !== "ok" ||
+            completed.result?.kind !== "catalog.validate" ||
+            completed.result.status !== "passed" ||
             pointer?.selected?.validationId !== validation.validationId ||
             pointer.selected.validationDigest !== controlDigest(retained) ||
             Date.now() >= Date.parse(validation.expiresAt) ||

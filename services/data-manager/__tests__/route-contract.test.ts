@@ -58,7 +58,11 @@ describe("data-manager producer contract metadata", () => {
         });
       },
     });
+    const revisionId = `cfg1_${"a".repeat(43)}`;
     const oversizedBody = {
+      operationKey: `opk1_${"k".repeat(32)}`,
+      requestedDeadlineAt: Date.now() + 60_000,
+      revisionId,
       plan: [
         { source: "x".repeat(100), target: "target", consumerService: "consumer", dataType: "osm" },
       ],
@@ -78,7 +82,10 @@ describe("data-manager producer contract metadata", () => {
     expect(media.statusCode).toBe(415);
     expect(oversized.statusCode).toBe(413);
     await expect(
-      linkDatasets({ plan: [] }, { transport, headers: { "Content-Type": "application/xml" } }),
+      linkDatasets(
+        { ...oversizedBody, plan: [] },
+        { transport, headers: { "Content-Type": "application/xml" } },
+      ),
     ).resolves.toMatchObject({ status: 415, data: media.json() });
     await expect(linkDatasets(oversizedBody, { transport })).resolves.toMatchObject({
       status: 413,

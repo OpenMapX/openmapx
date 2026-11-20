@@ -35,17 +35,14 @@ Data Manager's configuration fence that the signed certificates used.
 
 ## Who is affected
 
-Every installation upgrading from an earlier release, and operators whose
-scripts stop or restart services during updates or backups, which now refuse
-while the services are held. Lease records and lifecycle receipts of the earlier
-format are not converted.
+Every installation, and operators whose scripts stop or restart services during
+updates or backups, which now refuse while the services are held. Lease records
+and lifecycle receipts of the earlier format are not converted.
 
 ## Required action
 
-Install this release fresh, or upgrade only while no update, service lifecycle
-command, backup or configuration apply is in progress. Remove an earlier
-`infra/docker/data/.admin-target-control` directory by hand after the upgrade;
-nothing reads it. When a command reports a held service after a crash, follow
+Install fresh, as `update-system-fresh-install.md` describes. When a command
+reports a held service after a crash, follow
 [Operations whose outcome is unknown](../docs/docs/install/upgrading.md#operations-whose-outcome-is-unknown):
 check the containers, then `openmapx control resolve --op <key> --as
 committed|failed`. On macOS, and for a host CLI lock holder seen from a

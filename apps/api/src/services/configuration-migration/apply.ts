@@ -172,13 +172,13 @@ export async function runConfigurationMigration(ctx: JobContext, input: Migratio
               failurePhase = "retirement";
               await retireSettledProspectiveConfiguration(candidate);
             } catch (error) {
+              // Dropping the applied candidate is repeated by the job's recovery;
+              // the completed migration stands.
+              if (failurePhase === "retirement")
+                throw new JobObservationPending("recovery_required");
               const known = new Set([
                 "Integration source changed",
-                "Configuration reload unavailable",
-                "Original delivered maintenance completion required",
-                "Actual original maintenance closure required before cleanup",
-                "Original platform completion required",
-                "Committed configuration candidate required",
+                "Applied configuration candidate required",
               ]);
               await ctx.checkpoint({
                 ...ctx.checkpointResult,

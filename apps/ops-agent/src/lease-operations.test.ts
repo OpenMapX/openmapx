@@ -9,7 +9,7 @@ import {
   leaseStoreDirectory,
   openControlInstallation,
   openLeaseStore,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import type { ExecutionRef } from "@openmapx/core/ops";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -20,7 +20,7 @@ let installation: ControlInstallation;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-lease-operations-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   installation = openControlInstallation({
     infraDir: root,
     role: "ops-agent",
@@ -108,62 +108,29 @@ describe("lease operations for data-manager", () => {
     ).rejects.toBeInstanceOf(LeaseRefused);
   });
 
-  it("settles a hardlink child data-manager ran under another's lease, once", async () => {
-    const cli = owner("host-cli");
-    const leaf = owner("data-manager");
-    const leaseId = await store().update((leases) => {
-      const lease = leaseRules.acquire(
-        leases,
-        { owner: cli, ownerKind: "data.link", targets: ["osrm"] },
-        Date.now(),
-      );
-      leaseRules.delegate(
-        leases,
-        {
-          leaseId: lease.leaseId,
-          child: {
-            key: randomUUID(),
-            parentKey: null,
-            parent: cli,
-            execution: leaf,
-            kind: "data.link",
-            phase: "hardlinks",
-            recipient: "data-manager",
-            targets: ["osrm"],
-          },
-        },
-        Date.now(),
-      );
-      return lease.leaseId;
-    });
-    const settlement = {
-      identity: leaf,
-      outcome: "committed" as const,
-      publication: "committed" as const,
-      terminalReceiptDigest: "c".repeat(64),
-    };
-    // Another role's execution is never settled by data-manager.
-    await expect(
-      runLeaseOperation(installation, store(), "data-manager", {
-        kind: "lease.settleChild",
-        settlement: { ...settlement, identity: cli },
-      }),
-    ).rejects.toBeInstanceOf(LeaseRefused);
-    await runLeaseOperation(installation, store(), "data-manager", {
-      kind: "lease.settleChild",
-      settlement,
-    });
-    expect(store().get(leaseId)?.children[0]).toMatchObject({ state: "settled", settlement });
-    // The first known outcome wins: the issuer may have mapped the same result
-    // from data-manager's status differently, and nothing changes.
-    for (const later of [
-      { ...settlement, terminalReceiptDigest: "d".repeat(64) },
-      { ...settlement, outcome: "contained" as const },
-    ])
+  it("shows another holder's lease on data-manager without letting data-manager change it", async () => {
+    const host = owner("host-cli");
+    const leaseId = await store().update(
+      (leases) =>
+        leaseRules.acquire(
+          leases,
+          { owner: host, ownerKind: "control.rollback", targets: ["data-manager", "redis"] },
+          Date.now(),
+        ).leaseId,
+    );
+    expect(
       await runLeaseOperation(installation, store(), "data-manager", {
-        kind: "lease.settleChild",
-        settlement: later,
-      });
-    expect(store().get(leaseId)?.children[0]?.settlement).toEqual(settlement);
+        kind: "lease.read",
+        leaseId,
+      }),
+    ).toMatchObject({ lease: { leaseId, owner: host, state: "held" } });
+    expect(
+      await runLeaseOperation(installation, store(), "data-manager", {
+        kind: "lease.update",
+        leaseId,
+        action: { action: "release" },
+      }),
+    ).toEqual({ lease: null });
+    expect(store().get(leaseId)).toMatchObject({ state: "held" });
   });
 });

@@ -37,7 +37,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         id: jobId,
         type: "compose.render",
         status: "running",
-        result: { _execution: execution },
+        protocol: { execution },
       });
       const ctx: JobContext = {
         jobId,
@@ -45,15 +45,24 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         execution,
         payload: {},
         signal: new AbortController().signal,
-        checkpointResult: { _execution: execution },
+        checkpointResult: {},
+        protocol: { execution },
         log: async () => {},
         setProgress: async () => {},
-        checkpoint: async (result) => {
+        checkpoint: async (result, _progress, _key, _address, operations) => {
+          const { splitJobCheckpoint } = await import("../admin-job-state"),
+            split = splitJobCheckpoint(result),
+            protocol = {
+              ...ctx.protocol,
+              ...(operations ? { operations } : {}),
+              handler: split.handler,
+            };
           await fixture.db
             .update(schema.adminJob)
-            .set({ result })
+            .set({ result: split.result, protocol: protocol as Record<string, unknown> })
             .where(eq(schema.adminJob.id, jobId));
           ctx.checkpointResult = result;
+          ctx.protocol = protocol;
         },
       };
       return ctx;
@@ -198,22 +207,20 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("retains a durable unresolved candidate fence after the physical session lock releases", async () => {
       const first = await job(),
         second = await job();
+      const candidate = (operationKey: string, phase: string) =>
+        fixture.db
+          .update(schema.adminJob)
+          .set({
+            protocol: sql`${schema.adminJob.protocol} || ${JSON.stringify({ candidate: { operationKey, phase } })}::jsonb`,
+          })
+          .where(eq(schema.adminJob.id, first.jobId));
       await writer(first, [], async (owned) => {
-        await first.checkpoint({
-          ...first.checkpointResult,
-          _configurationCandidate: { operationKey: owned.operationKey, phase: "save_attempted" },
-        });
+        await candidate(owned.operationKey, "candidate_prepared");
       });
       await expect(writer(second, [], async () => {})).rejects.toThrow(
         "Configuration writer unavailable",
       );
-      await first.checkpoint({
-        ...first.checkpointResult,
-        _configurationCandidate: {
-          operationKey: `opk1_${first.jobId.replaceAll("-", "")}`,
-          phase: "settled",
-        },
-      });
+      await candidate(`opk1_${first.jobId.replaceAll("-", "")}`, "generation_applied");
       await expect(writer(second, [], async () => "allowed")).resolves.toBe("allowed");
     });
   },

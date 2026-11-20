@@ -54,16 +54,41 @@ export const jobs = dataManager.table(
     executionParent: jsonb("execution_parent"),
     executionInput: jsonb("execution_input"),
     executionState: jsonb("execution_state"),
-    executionChildren: jsonb("execution_children").notNull().default([]),
+    /** Agent operations of in-process work: reserved at admission, recorded as
+     * attempted before the request and as terminal once the agent answers. */
+    executionAgentOperations: jsonb("execution_agent_operations").notNull().default([]),
+    /** The execution row, inserted with the job row: the parts of its admission
+     * the columns above do not carry (targets, planned and reserved children,
+     * origin), fixed when recorded. */
+    executionAdmission: jsonb("execution_admission"),
+    /** The execution row's progress: phase, effect start, settlement (with the
+     * terminal it committed) and one cell per reserved child, the job's only
+     * record of its children: what the child acts on, its binding and grant,
+     * and data-manager's record of it (cancellation, how it last observed the
+     * child). The control kernel's changes never touch `ownership_version`;
+     * data-manager's own child records change it like the job's status. */
+    executionProgress: jsonb("execution_progress"),
+    /** How the worker ended, recorded once after its work returned or failed,
+     * or by recovery for a worker that died with its process. */
+    executionCompletion: jsonb("execution_completion"),
+    /** When a finished job released what it held (its own lease, if any);
+     * startup recovery leaves the row alone from then on. */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
     uniqueIndex("data_manager_jobs_execution_key_uq")
       .on(table.operationKey)
       .where(sql`${table.operationKey} IS NOT NULL`),
+    // The code bounds the progress's compact JSON at 256 KiB; jsonb's text form
+    // adds a space after each separator, so it stays under twice that.
     check(
       "data_manager_jobs_execution_bounds",
-      sql`${table.ownershipVersion} >= 0 AND jsonb_typeof(${table.executionChildren}) = 'array' AND jsonb_array_length(${table.executionChildren}) <= 32 AND octet_length(${table.executionChildren}::text) <= 131072`,
+      sql`${table.ownershipVersion} >= 0 AND (${table.executionProgress} IS NULL OR octet_length(${table.executionProgress}::text) <= 524288)`,
+    ),
+    check(
+      "data_manager_jobs_execution_row",
+      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR (${table.finishedAt} IS NOT NULL AND ${table.executionAdmission} IS NOT NULL))`,
     ),
     check(
       "data_manager_jobs_execution_shape",
@@ -75,7 +100,10 @@ export const jobs = dataManager.table(
 /**
  * The configuration fence: while a row is `prepared`, a configuration
  * maintenance owns the data plane and no data job is admitted. The agent
- * prepares and settles it; both calls are idempotent on the same body.
+ * prepares and settles it; both calls are idempotent on the same body. The
+ * row is data-manager's only record of the agent's fence child: a `refused`
+ * row records that the preparation was refused before anything changed, so
+ * the same request is refused again.
  */
 export const configurationFence = dataManager.table(
   "configuration_fence",
@@ -88,11 +116,12 @@ export const configurationFence = dataManager.table(
     planDigest: text("plan_digest").notNull(),
     /** The prepare request body, compared on a repeated prepare. */
     input: jsonb("input").notNull(),
-    /** "prepared" | "settled" */
+    /** "prepared" | "settled" | "refused" */
     state: text("state").notNull(),
     /** "applied" | "unused" | "contained", set by the settle. */
     outcome: text("outcome"),
     preparedAt: timestamp("prepared_at", { withTimezone: true }).notNull().defaultNow(),
+    /** When the row was settled or refused; a later preparation removes it after 72 hours. */
     settledAt: timestamp("settled_at", { withTimezone: true }),
   },
   (table) => [
@@ -101,7 +130,7 @@ export const configurationFence = dataManager.table(
       .where(sql`${table.state} = 'prepared'`),
     check(
       "configuration_fence_state",
-      sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL)`,
+      sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL) OR (${table.state} = 'refused' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NOT NULL)`,
     ),
   ],
 );

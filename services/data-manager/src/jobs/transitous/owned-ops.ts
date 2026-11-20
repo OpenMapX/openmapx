@@ -21,7 +21,7 @@ export async function retainTransitPhaseCandidate(
   phase: DataOpsChildPhase,
 ): Promise<void> {
   const { context, child } = await transitOwnedPhase(ctx, phase);
-  retainOwnedDataTransitCandidate(context.authority, child);
+  await retainOwnedDataTransitCandidate(context.authority, child);
 }
 export async function runTransitOwnedPhase(
   ctx: JobContext,
@@ -44,10 +44,10 @@ export async function reserveTransitProxyRecovery(
   if (!ctx.executionContext) throw Error("Original proxy recovery owner missing");
   return reserveOwnedProxyRecovery(ctx.executionContext, backupDigest);
 }
-export function assertTransitForward(ctx: JobContext): void {
+export async function assertTransitForward(ctx: JobContext): Promise<void> {
   ctx.abortSignal.throwIfAborted();
   if (!ctx.executionContext) throw Error("Durable transit ownership is required");
-  ctx.executionContext.assertForward();
+  await ctx.executionContext.assertForward();
 }
 export function preserveTransitPending(ctx: JobContext, error: unknown): void {
   if (error instanceof DataOpsObservationPending || error instanceof DataPublicationUnknown)
@@ -59,9 +59,9 @@ export async function publishTransitChange<T>(
   ctx: JobContext,
   run: () => T | Promise<T>,
 ): Promise<T> {
-  assertTransitForward(ctx);
-  return publishDataChange(() => {
-    assertTransitForward(ctx);
+  await assertTransitForward(ctx);
+  return publishDataChange(async () => {
+    await assertTransitForward(ctx);
     return run();
   });
 }

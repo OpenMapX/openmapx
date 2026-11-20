@@ -190,7 +190,7 @@ export async function reconcileCommunityRepositoryTransactions(
     return { runtimeRecoveryNeeded: false, orphanedServiceIds: [], restartServiceIds: [] };
   }
   if (!options.ctx) throw new JobObservationPending("recovery_required");
-  const projection = readProjection(options.ctx.checkpointResult);
+  const projection = readProjection(options.ctx.protocol, options.ctx.checkpointResult);
   for (const entry of pending) {
     const original = Object.values(projection.operations).find(
       (operation) =>

@@ -1,15 +1,11 @@
-import {
-  type CoordinatorMode,
-  canonicalJson,
-  type ServicePreparationResult,
-} from "@openmapx/core/ops";
+import type { CoordinatorMode, ServicePreparationResult } from "@openmapx/core/ops";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
   executeAdminJobOperation,
   hasRetainedAdminJobOperation,
-  observeRetainedAdminJobOperation,
   retainedAdminJobOperation,
 } from "./admin-job-ops";
+import { readAdminJobProtocol } from "./admin-job-state";
 import {
   currentAdministrativeConfigurationWriter,
   withAdministrativeConfigurationJob,
@@ -25,8 +21,7 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-c
 import {
   persistAndApplyProspectiveConfiguration,
   prepareProspectiveConfiguration,
-  reconcileUnstagedCoordinatorPull,
-  resumeRetainedConfigurationCandidate,
+  resumeConfigurationCandidate,
 } from "./prospective-configuration";
 import {
   completeTrustedConfigurationApply,
@@ -41,34 +36,25 @@ export async function applyCoordinatorService(
   originalOrdinal: number | null,
   expectedCurrentRevisionId?: string,
 ) {
-  const operationKey = coordinatorLifecycleOperationKey(ctx.jobId, originalOrdinal);
-  if (ctx.checkpointResult?._completedCoordinatorMaintenance && originalOrdinal !== null) {
-    const { completedCoordinatorMaintenance } = await import(
-      "./configuration-maintenance-step-records"
-    );
-    const archived = completedCoordinatorMaintenance(ctx.checkpointResult);
-    if (
-      archived.originalOrdinal !== originalOrdinal ||
-      archived.receipt.apiJobId !== ctx.jobId ||
-      archived.candidate.operationKey !== operationKey
-    )
+  const operationKey = coordinatorLifecycleOperationKey(ctx.jobId, originalOrdinal),
+    retained = readAdminJobProtocol(ctx.protocol).candidate;
+  // A batch that moved on to its next candidate keeps this step's outcome.
+  const finished = (
+    ctx.checkpointResult?._configurationOutcomes as Record<string, unknown> | undefined
+  )?.[operationKey];
+  if (finished && retained?.operationKey !== operationKey) {
+    const applied = parseTrustedConfigurationApplyOutcome(finished);
+    if (!completeTrustedConfigurationApply(applied) || applied.outcome !== "committed")
       throw new JobObservationPending("invalid_identity");
-    const observed = await observeRetainedAdminJobOperation(ctx, archived.settlementOperationKey);
-    if (canonicalJson(observed) !== canonicalJson(archived.receipt))
-      throw new JobObservationPending("invalid_identity");
-    return { changed: true as const, revisionId: archived.candidate.revisionId };
+    return { changed: true as const, revisionId: applied.revisionId };
   }
   return withAdministrativeConfigurationJob(ctx, () =>
     withAdministrativeConfigurationWriter(
       { actorId: ctx.jobId, operationKey, integrationIds: [], signal: ctx.signal },
       async () => {
-        await reconcileUnstagedCoordinatorPull();
-        const checkpoint = ctx.checkpointResult?._configurationCandidate as
-          | Record<string, unknown>
-          | undefined;
         let application: unknown;
-        if (checkpoint?.operationKey === operationKey) {
-          const result = await resumeRetainedConfigurationCandidate();
+        if (retained?.operationKey === operationKey) {
+          const result = await resumeConfigurationCandidate();
           application = result.configuration;
         } else {
           const current = await executeAndWait(

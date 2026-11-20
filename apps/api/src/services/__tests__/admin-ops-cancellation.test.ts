@@ -10,6 +10,7 @@ import {
   verifyApiJobParentExecution,
 } from "@openmapx/core/ops";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { jobCheckpoint } from "../admin-job-state.js";
 import type { JobContext } from "../job-runner.js";
 
 // Integration-route imports require a synthetic application secret, scoped to this file.
@@ -49,6 +50,7 @@ const database = vi.hoisted(() => ({
     type: "service.stop",
     status: "running",
     result: null as Record<string, unknown> | null,
+    protocol: {} as Record<string, unknown>,
   },
   updates: [] as Array<Record<string, unknown>>,
 }));
@@ -97,7 +99,7 @@ const agentClient = vi.hoisted(() => ({
       },
     ) => {
       if (!options.parentAssertion) throw Error("Original parent assertion required");
-      const parent = verifyApiJobParentExecution(options.parentAssertion, token, {
+      const parent = verifyApiJobParentExecution(options.parentAssertion, {
         operationKey: options.operationKey,
         operationFingerprint: opsOperationFingerprint(operation),
         requestedDeadlineAt: options.execution?.requestedDeadlineAt,
@@ -173,7 +175,7 @@ vi.mock("../service-registry.js", () => ({
 vi.mock("../../db", () => {
   function update(value: Record<string, unknown>) {
     const apply = () => {
-      const p = database.row.result?.opsProjection as
+      const p = database.row.protocol.operations as
         | { operations: Record<string, { terminal: boolean; receiptDelivery?: object }> }
         | undefined;
       if (
@@ -187,10 +189,16 @@ vi.mock("../../db", () => {
       if (typeof value.status === "string") database.row.status = value.status;
       if (value.result && typeof value.result === "object" && !("queryChunks" in value.result))
         database.row.result = structuredClone(value.result as Record<string, unknown>);
+      if (
+        value.protocol &&
+        typeof value.protocol === "object" &&
+        !("queryChunks" in value.protocol)
+      )
+        database.row.protocol = structuredClone(value.protocol as Record<string, unknown>);
       if (value.status === "cancel_pending")
-        database.row.result = {
-          ...database.row.result,
-          _cancelRequestedAt: new Date().toISOString(),
+        database.row.protocol = {
+          ...database.row.protocol,
+          cancelRequestedAt: new Date().toISOString(),
         };
       return [structuredClone(database.row)];
     };
@@ -253,8 +261,9 @@ beforeEach(async () => {
   agent.cancelCalls.length = 0;
   agent.events = [];
   database.row.status = "running";
-  database.row.result = {
-    _execution: { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 1 },
+  database.row.result = {};
+  database.row.protocol = {
+    execution: { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 1 },
   };
   database.updates.length = 0;
   vi.clearAllMocks();
@@ -288,25 +297,30 @@ function startJob(action: (service: string, ctx: JobContext) => Promise<void>): 
     signal: controller.signal,
     log,
     setProgress: vi.fn().mockResolvedValue(undefined),
-    checkpoint: async (result, _progress, admissionKey, stepAddress) => {
+    checkpoint: async (result, _progress, admissionKey, stepAddress, operations) => {
       // Use the production merge/identity checks for managed checkpoints.
-      if ((result.opsProjection as { version?: number } | undefined)?.version === 3) {
+      const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+      if (recorded) {
         const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint");
-        ctx.checkpointResult = await checkpointOwnedAdminJob(
+        const saved = await checkpointOwnedAdminJob(
           JOB_ID,
           ctx.execution,
           result,
+          recorded,
           undefined,
           admissionKey,
           stepAddress,
           ctx.checkpointResult ?? {},
         );
+        ctx.checkpointResult = saved.result;
+        ctx.protocol = saved.protocol;
       } else {
         database.row.result = { ...database.row.result, ...structuredClone(result) };
         ctx.checkpointResult = structuredClone(database.row.result);
       }
     },
     checkpointResult: structuredClone(database.row.result),
+    protocol: structuredClone(database.row.protocol),
   };
   const active = (jobRunner as unknown as { active: Map<string, AbortController> }).active;
   active.set(JOB_ID, controller);
@@ -358,7 +372,7 @@ function observe(promise: Promise<boolean>) {
 }
 
 function projectedOperations(): Record<string, Record<string, unknown>> | undefined {
-  const projection = database.row.result?.opsProjection as
+  const projection = database.row.protocol.operations as
     | { operations: Record<string, Record<string, unknown>> }
     | undefined;
   return projection?.operations;
@@ -393,7 +407,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(agent.admissions).toHaveLength(1);
     expect(agent.admissions[0]?.operation).toEqual({ kind: scenario.kind, serviceId: "redis" });
     expect(expectedKey()).toMatch(/^opk1_t1_/);
-    expect(database.row.result?.opsProjection).toMatchObject({
+    expect(database.row.protocol.operations).toMatchObject({
       version: 3,
       steps: {
         [stepAddress()]: {
@@ -513,7 +527,8 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
       payload: {},
       execution: { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 1 },
       signal: new AbortController().signal,
-      checkpointResult: structuredClone(database.row.result),
+      checkpointResult: structuredClone(jobCheckpoint(database.row.result, database.row.protocol)),
+      protocol: structuredClone(database.row.protocol),
       checkpoint: async () => {},
       log: async () => {},
       setProgress: async () => {},

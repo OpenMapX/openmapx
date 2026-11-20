@@ -1,12 +1,9 @@
 /** The fixed approval child receives the actual already-settled promotion, never a caller assertion. */
 import {
   controlDigest,
-  executionAuthorityState,
   inspectArtifactTargetLeaseChildSettlement,
-  signControl,
 } from "@openmapx/core/build-artifacts";
 import {
-  CATALOG_ACTIVATION_DOMAIN,
   catalogActivationRecordSchema,
   readCatalogValidation,
   scopeCatalogRuntimeInputs,
@@ -21,7 +18,7 @@ export async function retainCatalogActivationRecord(
   context: DataExecutionContext,
   approval: ExecutionRef,
 ): Promise<void> {
-  context.assertForward();
+  await context.assertForward();
   const record = await context.record();
   if (record.input.kind !== "catalog.activate") throw Error("Original activation input required");
   const input = record.input,
@@ -60,7 +57,6 @@ export async function retainCatalogActivationRecord(
     throw Error("Original promotion physical settlement required");
   const body = catalogActivationRecordSchema.parse({
     version: 1,
-    installationId: context.installation.installationId,
     parent: context.execution,
     proposalId: input.proposalId,
     validationId: input.validationId,
@@ -74,21 +70,14 @@ export async function retainCatalogActivationRecord(
     promotion: {
       execution: promotion.execution,
       terminalReceiptDigest: physical.terminalReceiptDigest,
-      adoption: {
-        leaseId: promotion.leaseId,
-        delegationId: promotion.delegationId,
-        phase: "ready",
-      },
+      leaseChild: { leaseId: promotion.leaseId, childKey: promotion.childKey },
     },
     approval,
   });
-  const owner = executionAuthorityState(context.authority);
   await publishDataChange(() =>
     withCatalogProposalDirectory(context.installation, input.proposalId, (directory) => {
       const name = `activation-${context.execution.executionId}.json`,
-        bytes = canonicalJson(
-          signControl(owner.installation.privateKey, CATALOG_ACTIVATION_DOMAIN, body),
-        );
+        bytes = canonicalJson(body);
       try {
         const previous = directory.read(name, 128 * 1024, true).toString("utf8");
         if (previous !== bytes) throw Error("Original immutable catalog activation record changed");

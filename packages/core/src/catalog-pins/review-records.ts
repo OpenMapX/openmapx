@@ -1,5 +1,6 @@
-/** Fixed cross-role reads obtain paths and public keys from the installed nominal role. */
-import { type ControlInstallation, installationState } from "../build-artifacts/control-authority";
+/** Fixed cross-role reads obtain their paths from the installed nominal role. */
+import type { ControlInstallation } from "../build-artifacts/control-records";
+import { installationState } from "../build-artifacts/private-records";
 import {
   readCatalogActivationFile,
   readCatalogValidationFile,
@@ -7,16 +8,9 @@ import {
   withCatalogProposalDataDirectory,
 } from "./record-files";
 
-export { CATALOG_ACTIVATION_DOMAIN, CATALOG_VALIDATION_DOMAIN } from "./record-files";
-
 function source(installation: ControlInstallation) {
   const state = installationState(installation);
-  return {
-    dataRoot: state.dataRoot,
-    installationId: installation.installationId,
-    dataManagerPublicKey: state.publicKeys["data-manager"],
-    agentPublicKey: state.publicKeys["ops-agent"],
-  };
+  return { dataRoot: state.dataRoot };
 }
 export function withCatalogProposalDirectory<T>(
   installation: ControlInstallation,

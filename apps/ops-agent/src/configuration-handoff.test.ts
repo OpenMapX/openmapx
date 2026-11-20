@@ -19,34 +19,29 @@ const facts = {
   envNames: [
     "HOME",
     "OPS_CONFIGURATION_HANDOFF_ID",
-    "OPENMAPX_CONTROL_EXECUTION",
-    "OPENMAPX_CONTROL_DELEGATION",
+    "OPENMAPX_LEASE_ID",
+    "OPENMAPX_LEASE_CHILD",
     "DOCKER_CONFIG",
   ],
   dockerSocketSource: "/var/run/docker.sock",
   rootMounts: [{ source: "/synthetic/host", target: "/synthetic/host", readOnly: false }],
 };
-it("launches the existing confined old-image helper with only original control references", () => {
-  const args = configurationHandoffRunArgs(facts, "/synthetic/host", {
-    handoffId,
-    assertion: "original-signed-assertion",
-    execution: {
-      executor: "host-cli",
-      principal: "api",
-      executionId: "22222222-2222-4222-8222-222222222222",
-      operationKey: "opk1_helperoriginaladdress",
-      operationFingerprint: "b".repeat(64),
-      fingerprint: "c".repeat(64),
-      deadlineAt: Date.now() + 60000,
-    },
-  });
+const ids = {
+  maintenanceId: "22222222-2222-4222-8222-222222222222",
+  leaseId: "33333333-3333-4333-8333-333333333333",
+  leaseChild: handoffId,
+};
+it("launches the confined old-image helper with only its maintenance and lease child ids", () => {
+  const args = configurationHandoffRunArgs(facts, "/synthetic/host", { handoffId, ...ids });
   expect(args[args.indexOf("--name") + 1]).toBe(`openmapx-configuration-handoff-${handoffId}`);
   expect(args).toContain("dist/configuration-handoff-main.mjs");
   expect(args).toContain(image);
   expect(args).toContain("--read-only");
-  expect(args.join(" ")).toContain("control-private/hidden-key");
-  expect(args.join(" ")).toContain("control-private/empty");
-  expect(args.filter((a) => a.startsWith("OPENMAPX_CONTROL_DELEGATION="))).toHaveLength(1);
+  expect(args.join(" ")).not.toMatch(/control-private|control-[a-z-]+\.key|control-verifiers/);
+  expect(args.filter((a) => a.startsWith("OPENMAPX_LEASE_ID="))).toEqual([
+    `OPENMAPX_LEASE_ID=${ids.leaseId}`,
+  ]);
+  expect(args).not.toContain("OPENMAPX_LEASE_ID");
   expect(args.filter((a) => a.startsWith("OPS_CONFIGURATION_HANDOFF_ID="))).toEqual([
     `OPS_CONFIGURATION_HANDOFF_ID=${handoffId}`,
   ]);
@@ -56,21 +51,8 @@ it("launches the existing confined old-image helper with only original control r
   ]);
 });
 describe("configuration helper container", () => {
-  const execution = {
-    executor: "host-cli" as const,
-    principal: "api" as const,
-    executionId: "22222222-2222-4222-8222-222222222222",
-    operationKey: "opk1_helperoriginaladdress",
-    operationFingerprint: "b".repeat(64),
-    fingerprint: "c".repeat(64),
-    deadlineAt: Date.now() + 60000,
-  };
   const launch = (agent: AgentContainerFacts, rootDir = "/srv/openmapx", id = handoffId) =>
-    configurationHandoffRunArgs(agent, rootDir, {
-      handoffId: id,
-      assertion: "signed-assertion",
-      execution,
-    });
+    configurationHandoffRunArgs(agent, rootDir, { handoffId: id, ...ids });
   const agent: AgentContainerFacts = {
     imageId: image,
     user: "1000:1000",
@@ -95,9 +77,10 @@ describe("configuration helper container", () => {
     ],
   };
 
-  it("runs the agent image with isolated control material, no network and no privileges", () => {
+  it("runs the agent image kept after exit, with no network and no privileges", () => {
     const args = launch(agent);
-    expect(args.slice(0, 3)).toEqual(["run", "--detach", "--rm"]);
+    // Without --rm the agent reads the exit code before it removes the container.
+    expect(args.slice(0, 3)).toEqual(["run", "--detach", "--name"]);
     expect(args).toEqual(
       expect.arrayContaining([
         "--network",
@@ -112,11 +95,7 @@ describe("configuration helper container", () => {
         "PATH",
       ]),
     );
-    expect(args.filter((arg) => arg === "--mount")).toHaveLength(9);
-    for (const role of ["ops-agent", "data-manager", "host-cli"])
-      expect(args).toContain(
-        `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
-      );
+    expect(args.filter((arg) => arg === "--mount")).toHaveLength(2);
     // Only names: Docker copies each value from the agent's own environment.
     const env = args.flatMap((arg, index) => (args[index - 1] === "--env" ? [arg] : []));
     expect(env).toEqual([
@@ -124,8 +103,9 @@ describe("configuration helper container", () => {
       "DOCKER_CONFIG=/tmp/docker",
       "OPENMAPX_ROOT_DIR=/srv/openmapx",
       `OPS_CONFIGURATION_HANDOFF_ID=${handoffId}`,
-      "OPENMAPX_CONTROL_DELEGATION=signed-assertion",
-      `OPENMAPX_CONTROL_EXECUTION=${JSON.stringify(execution)}`,
+      `OPENMAPX_MAINTENANCE_ID=${ids.maintenanceId}`,
+      `OPENMAPX_LEASE_ID=${ids.leaseId}`,
+      `OPENMAPX_LEASE_CHILD=${ids.leaseChild}`,
     ]);
     expect(args.slice(args.indexOf("--workdir"))).toEqual([
       "--workdir",
@@ -149,16 +129,6 @@ describe("configuration helper container", () => {
       "type=bind,source=/srv/openmapx/infra/docker/data,target=/srv/openmapx/infra/docker/data",
       "type=bind,source=/srv/openmapx/infra/docker/secrets,target=/srv/openmapx/infra/docker/secrets",
       "type=bind,source=/srv/openmapx/infra/docker/backups,target=/srv/openmapx/infra/docker/backups",
-      ...["ops-agent", "data-manager", "host-cli"].map(
-        (role) =>
-          `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
-      ),
-      ...["data-manager", "host-cli"].map(
-        (role) =>
-          `type=bind,source=/srv/openmapx/infra/docker/control-private/empty,target=/srv/openmapx/infra/docker/control-private/${role},readonly`,
-      ),
-      "type=bind,source=/srv/openmapx/infra/docker/control-private/ops-agent,target=/var/lib/openmapx/control-private",
-      "type=bind,source=/srv/openmapx/infra/docker/secrets/control-verifiers.json,target=/run/secrets/openmapx-control-verifiers,readonly",
     ]);
     expect(mounts.join("\n")).not.toContain("target=/srv/openmapx,");
   });
@@ -182,28 +152,12 @@ describe("configuration helper container", () => {
       }))
       .filter((mount) => mount.target === rootDir || mount.target.startsWith(`${rootDir}/`))
       .sort((left, right) => left.target.length - right.target.length);
-    // The agent masks the other roles' keys and private directories itself.
-    expect(rootMounts.map((mount) => mount.target)).toEqual(
-      expect.arrayContaining([
-        `${rootDir}/infra/docker/secrets/control-data-manager.key`,
-        `${rootDir}/infra/docker/control-private/host-cli`,
-      ]),
-    );
     const args = launch({ ...agent, rootMounts }, rootDir);
     const targets = args
       .flatMap((arg, index) => (args[index - 1] === "--mount" ? [arg] : []))
       .map((mount) => /(?:^|,)target=([^,]+)/.exec(mount)?.[1]);
     expect(targets).not.toContain(undefined);
     expect(targets.filter((target, index) => targets.indexOf(target) !== index)).toEqual([]);
-    // Every mask is still in place, read-only.
-    for (const role of ["ops-agent", "data-manager", "host-cli"])
-      expect(args).toContain(
-        `type=bind,source=${rootDir}/infra/docker/control-private/hidden-key,target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
-      );
-    for (const role of ["data-manager", "host-cli"])
-      expect(args).toContain(
-        `type=bind,source=${rootDir}/infra/docker/control-private/empty,target=${rootDir}/infra/docker/control-private/${role},readonly`,
-      );
   });
 
   it("rejects mount paths that would change the mount specification", () => {
@@ -280,8 +234,8 @@ describe("configuration helper container", () => {
       },
       {
         Type: "bind",
-        Source: "/srv/openmapx/infra/docker/state/ops-agent/trusted-config",
-        Destination: "/var/lib/openmapx/trusted-config",
+        Source: "/srv/openmapx/infra/docker/state/ops-agent/custom-integrations",
+        Destination: "/var/lib/openmapx/custom-integrations",
         RW: true,
       },
     ]);
@@ -438,39 +392,6 @@ it("uses actual server job state when excluding a live log observer from drain",
     release.resolve();
     await app.close();
   }
-});
-
-it("rejects a handoff DTO without the actual borrowed original owner", async () => {
-  const { assertOwnedMaintenanceHandoffRuntime } = await import(
-    "./configuration-maintenance-store"
-  );
-  const { createUnavailableRuntime } = await import("./runtime");
-  const { testExecution } = await import("./__fixtures__/execution");
-  const operation = {
-    kind: "configurationHandoff.prepare" as const,
-    handoffId,
-    maintenanceId: "22222222-2222-4222-8222-222222222222",
-    candidateId: "33333333-3333-4333-8333-333333333333",
-    planDigest: "a".repeat(64),
-    previewFingerprint: "b".repeat(64),
-    serviceIds: ["ops-agent"],
-    expectedCurrentRevisionId: `cfg1_${"c".repeat(43)}`,
-    expectedImageIdentities: { "ops-agent": image },
-    mode: { kind: "configuration" as const },
-  };
-  await expect(
-    assertOwnedMaintenanceHandoffRuntime(createUnavailableRuntime(), operation, {
-      execution: testExecution(),
-      signal: new AbortController().signal,
-      emitLog: () => {},
-      claim: {
-        operation,
-        fingerprint: "a".repeat(64),
-        source: "registry",
-        capability: { revisionId: "registry1", values: {} },
-      },
-    }),
-  ).rejects.toThrow("Actual original borrowed maintenance handoff required");
 });
 
 const pinnedDigest = `sha256:${"a".repeat(64)}`,

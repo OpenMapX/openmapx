@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,9 +108,6 @@ beforeAll(async () => {
     OPS_AGENT_URL: url,
     OPS_AGENT_TOKEN_FILE: token,
     OPENMAPX_ROOT_DIR: host.root,
-    OPS_TRUSTED_CONFIG_DIR: host.queue,
-    OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-    OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
     DOMAIN: "example.test",
     POSTGRES_PASSWORD: "p".repeat(24),
     BETTER_AUTH_SECRET: "a".repeat(32),
@@ -154,36 +151,43 @@ it.skipIf(!enabled)(
       type: "extension.install",
       payload,
       status: "running",
-      result: { _execution: execution },
+      protocol: { execution },
     });
-    let baseline: Record<string, unknown> = { _execution: execution };
+    let baseline: Record<string, unknown> = {};
     const ctx: JobContext = {
       jobId: id,
       jobType: "extension.install",
       execution,
       payload,
       signal: new AbortController().signal,
-      checkpointResult: { _execution: execution },
+      checkpointResult: {},
+      protocol: { execution },
       log: async () => {},
       setProgress: async () => {},
-      checkpoint: async (value, progress, key, address) => {
-        if (value.opsProjection)
-          ctx.checkpointResult = await checkpointOwnedAdminJob(
+      checkpoint: async (value, progress, key, address, operations) => {
+        const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+        if (recorded) {
+          const saved = await checkpointOwnedAdminJob(
             id,
             ctx.execution,
             value,
+            recorded,
             progress,
             key,
             address,
             baseline,
           );
-        else {
+          ctx.checkpointResult = saved.result;
+          ctx.protocol = saved.protocol;
+        } else {
+          const { jobCheckpoint, replaceJobCheckpoint } = await import("./admin-job-state");
           const rows = await fixture.db
             .update(schema.adminJob)
-            .set({ result: value })
+            .set(replaceJobCheckpoint(value))
             .where(eq(schema.adminJob.id, id))
             .returning();
-          ctx.checkpointResult = rows[0]!.result as Record<string, unknown>;
+          ctx.checkpointResult = jobCheckpoint(rows[0]!.result, rows[0]!.protocol);
+          ctx.protocol = rows[0]!.protocol;
         }
         baseline = structuredClone(ctx.checkpointResult ?? {});
       },
@@ -226,7 +230,7 @@ it.skipIf(!enabled)(
         type: "extension.install",
         status: "running",
         payload: { source, bundle },
-        result: { _execution: { owner: randomUUID(), version: 1 } },
+        protocol: { execution: { owner: randomUUID(), version: 1 } },
       });
       const count = publications;
       const start = (boundary: string) => {
@@ -339,35 +343,42 @@ it.skipIf(!enabled)(
         execution = { owner: randomUUID(), version: 1 };
       await fixture.db
         .insert(schema.adminJob)
-        .values({ id, type, status: "running", payload, result: { _execution: execution } });
-      let baseline: Record<string, unknown> = { _execution: execution };
+        .values({ id, type, status: "running", payload, protocol: { execution } });
+      let baseline: Record<string, unknown> = {};
       const ctx: JobContext = {
         jobId: id,
         jobType: type,
         payload,
         execution,
         signal: new AbortController().signal,
-        checkpointResult: { _execution: execution },
+        checkpointResult: {},
+        protocol: { execution },
         log: async () => {},
         setProgress: async () => {},
-        checkpoint: async (value, progress, key, address) => {
-          if (value.opsProjection)
-            ctx.checkpointResult = await checkpointOwnedAdminJob(
+        checkpoint: async (value, progress, key, address, operations) => {
+          const recorded = operations ?? (ctx.protocol?.operations as typeof operations);
+          if (recorded) {
+            const saved = await checkpointOwnedAdminJob(
               id,
               ctx.execution,
               value,
+              recorded,
               progress,
               key,
               address,
               baseline,
             );
-          else {
+            ctx.checkpointResult = saved.result;
+            ctx.protocol = saved.protocol;
+          } else {
+            const { jobCheckpoint, replaceJobCheckpoint } = await import("./admin-job-state");
             const [saved] = await fixture.db
               .update(schema.adminJob)
-              .set({ result: value })
+              .set(replaceJobCheckpoint(value))
               .where(eq(schema.adminJob.id, id))
               .returning();
-            ctx.checkpointResult = saved!.result as Record<string, unknown>;
+            ctx.checkpointResult = jobCheckpoint(saved!.result, saved!.protocol);
+            ctx.protocol = saved!.protocol;
           }
           baseline = structuredClone(ctx.checkpointResult ?? {});
         },
@@ -416,14 +427,14 @@ it.skipIf(!enabled)(
       console.error(
         "extension-phase",
         JSON.stringify({
-          candidate: ctx.checkpointResult?._configurationCandidate,
+          candidate: (ctx.protocol as { candidate?: unknown } | undefined)?.candidate,
           configuration: ctx.checkpointResult?.configuration,
         }),
       );
       throw error;
     }
     const operations = (
-      ctx.checkpointResult!.opsProjection as {
+      ctx.protocol!.operations as {
         operations: Record<
           string,
           {

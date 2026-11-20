@@ -240,10 +240,10 @@ async function recordBuild(
   input?: { path: string; evidence: Awaited<ReturnType<typeof hashDataFile>> },
 ): Promise<void> {
   assertCliExecutionAvailable();
-  assertCliControlForward();
+  await assertCliControlForward();
   const provenance = await buildProvenance(rootDir);
   assertCliExecutionAvailable();
-  assertCliControlForward();
+  await assertCliControlForward();
   const record: BuildRecord = {
     schemaVersion: 1,
     service: serviceId,
@@ -451,7 +451,7 @@ export async function buildServices(
     log.dim(`Manifest command → ${item.buildCommand}`);
     try {
       assertCliExecutionAvailable();
-      assertCliControlForward();
+      await assertCliControlForward();
       const resolvedRegion = resolveBuildRegion(item.id, opts.region);
       if (resolvedRegion.sourceEnv) {
         log.dim(
@@ -497,7 +497,7 @@ export async function buildServices(
         interrupted = true;
       try {
         assertCliExecutionAvailable();
-        assertCliControlForward();
+        await assertCliControlForward();
       } catch {
         interrupted = true;
       }

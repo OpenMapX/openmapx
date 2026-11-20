@@ -188,15 +188,12 @@ This renders and applies producer-to-consumer hardlinks under
 consumer directories must share a filesystem; derived indexes still occupy
 additional disk space.
 
-:::caution[`data link` with prepared data]
-`compose up` and `data link` still go through a data-manager route that refuses
-with `A signed generation-hardlinks execution is required` when the hardlink
-plan has links to make or prune. With no prepared data they have nothing to link
-and succeed. Once engines have built data, apply the plan with
-`pnpm openmapx services start <ids>`, which applies it through a signed
-execution. `services build` links through the same route, so
-with a nonempty plan they report the refusal after the build has finished;
-start the consumers with `services start` instead of `data link`.
+:::note[`data link` with prepared data]
+Data-manager makes the links inside its container, so a plan with links to make
+or prune needs it running; with no prepared data there is nothing to link. While
+another data job or a configuration change runs, `data link` fails with a message
+to retry, and `compose up` warns and starts the stack anyway; run
+`pnpm openmapx data link` once it has finished.
 :::
 
 ## 9. Bring up the full stack

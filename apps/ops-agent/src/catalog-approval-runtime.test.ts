@@ -18,13 +18,6 @@ it("refuses pin publication without the original nominal borrowed activation lea
       signal: new AbortController().signal,
     } as OpsExecutionContext),
   ).rejects.toThrow(/Original reviewed activation/);
-  await expect(
-    runtime[operation.kind](operation, {
-      artifactLease: { mode: "borrowed", owner: { executor: "data-manager" } },
-      controlAuthority: {},
-      signal: new AbortController().signal,
-    } as OpsExecutionContext),
-  ).rejects.toThrow(/Unverified execution authority/);
 });
 it("gives one immutable approval attempt a stable distinct commit marker", () => {
   const key = "opk1_aaaaaaaaaaaaaaaa",

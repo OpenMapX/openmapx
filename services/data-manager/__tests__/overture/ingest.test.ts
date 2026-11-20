@@ -1,14 +1,9 @@
+import type postgres from "postgres";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const mocks = vi.hoisted(() => ({
-  unsafe: vi.fn(),
-}));
-
-vi.mock("../../src/db/index.js", () => ({
-  sql: { unsafe: mocks.unsafe },
-}));
-
 import { validateOvertureContributors } from "../../src/jobs/overture/ingest.js";
+
+const mocks = { unsafe: vi.fn() };
+const sql = { unsafe: mocks.unsafe } as unknown as postgres.Sql;
 
 describe("Overture staged-release contributor validation", () => {
   beforeEach(() => {
@@ -26,7 +21,7 @@ describe("Overture staged-release contributor validation", () => {
       { dataset: "Overture" },
     ]);
 
-    await expect(validateOvertureContributors("overture_places__staging")).resolves.toEqual([
+    await expect(validateOvertureContributors(sql, "overture_places__staging")).resolves.toEqual([
       "AllThePlaces",
       "Foursquare",
       "Microsoft",
@@ -45,7 +40,7 @@ describe("Overture staged-release contributor validation", () => {
       { dataset: "Unattributed New Dataset" },
     ]);
 
-    await expect(validateOvertureContributors("overture_places__staging")).rejects.toThrow(
+    await expect(validateOvertureContributors(sql, "overture_places__staging")).rejects.toThrow(
       /unsupported contributor dataset\(s\): Unattributed New Dataset/,
     );
   });

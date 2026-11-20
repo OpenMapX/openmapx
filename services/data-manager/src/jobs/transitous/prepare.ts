@@ -26,7 +26,7 @@ export const run: StageFn = async (ctx) => {
     if (ctx.useProposedLock && !ctx.reviewedCatalog)
       throw Error("Paired proposal validation requires the reviewed activation workflow");
     if (ctx.reviewedCatalog) {
-      ctx.state.catalogPins = selectedCatalogPins(ctx);
+      ctx.state.catalogPins = await selectedCatalogPins(ctx);
     } else {
       const pins = await runOpsOperation({ kind: "catalogPins.inspect" });
       if (!pins.active || pins.catalogRevisionId !== pins.active.generationId)

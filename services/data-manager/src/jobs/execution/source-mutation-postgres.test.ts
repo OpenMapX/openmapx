@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,7 +44,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       patches: [],
       quarantine: [],
     });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
@@ -108,8 +108,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     const deadline = Date.now() + 60000,
       key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
     let id: string | undefined;
-    const keys = [key],
-      sourceReservationId = randomUUID();
+    const keys = [key];
     try {
       const fontKey = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
         blockedKey = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
@@ -129,11 +128,9 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await expect
         .poll(async () => (await runtime.inspect(competing.id))?.status, { timeout: 15000 })
         .toBe("ok");
-      await sql`INSERT INTO data_manager.jobs(id,kind,status,metadata) VALUES (${sourceReservationId},'transit-source-disable','running',${JSON.stringify({ action: "disable", sourceId: "operator:de:local" })}::text::jsonb)`;
       const admitted = await runtime.admit(input, {
         operationKey: key,
         requestedDeadlineAt: deadline,
-        sourceJobId: sourceReservationId,
       });
       id = admitted.id;
       await expect
@@ -142,10 +139,10 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(readFeedOverlay(overlayPath)?.patches).toEqual([
         { sourceId: "operator:de:local", skip: true },
       ]);
+      // The sync is the only row the mutation wrote.
       expect(
-        (await sql`SELECT status FROM data_manager.jobs WHERE id=${sourceReservationId}`)[0]
-          ?.status,
-      ).toBe("ok");
+        await sql`SELECT kind FROM data_manager.jobs WHERE kind LIKE 'transit-source-%'`,
+      ).toHaveLength(0);
       const bytes = readFileSync(overlayPath);
       expect(
         (await runtime.admit(input, { operationKey: key, requestedDeadlineAt: deadline })).id,
@@ -197,8 +194,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     } finally {
       held.resolve();
       await runtime.close();
-      await sql`DELETE FROM data_manager.jobs WHERE operation_key IN ${sql(keys)} OR id=${sourceReservationId}`;
-      journal.close();
+      await sql`DELETE FROM data_manager.jobs WHERE operation_key IN ${sql(keys)}`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });

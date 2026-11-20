@@ -27,7 +27,7 @@ export function installCoreServiceRuntime(
         options.infraDir,
         async () => {
           context.signal.throwIfAborted();
-          assertArtifactTargetLeaseForward(context.ownedTargetLease!);
+          await assertArtifactTargetLeaseForward(context.ownedTargetLease!);
           if (
             services.currentConfigurationGeneration(options.infraDir) !==
             operation.expectedConfigurationRevisionId
@@ -58,7 +58,7 @@ export function installCoreServiceRuntime(
             JSON.stringify(claimed.provenance) !== JSON.stringify(target.provenance)
           )
             throw new OpsExecutionFailure("conflict", {});
-          beginControlEffect(context.controlAuthority!);
+          await beginControlEffect(context.controlAuthority!);
           await execFile("docker", ["restart", "--time", "30", target.containerId], {
             signal: context.signal,
             timeout: Math.max(1, context.execution.deadlineAt - Date.now()),
@@ -79,10 +79,10 @@ export function installCoreServiceRuntime(
         context.signal,
       );
     } catch (error) {
-      // The existing source verifies actual null effect-started, original owner
-      // and frozen/unissued children; it refuses after Docker was dispatched.
+      // Recorded only while the row shows no effect start and no attempted
+      // child; it refuses after Docker was dispatched.
       try {
-        retainConfigurationPreEffectRefusal(context.controlAuthority);
+        await retainConfigurationPreEffectRefusal(context.controlAuthority);
       } catch {
         /* Unknown effects keep the original fence. */
       }

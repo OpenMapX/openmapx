@@ -90,7 +90,7 @@ export const run: StageFn = async (ctx) => {
     // Best-effort: if the write fails (read-only mount, race with restart) we
     // still return ok and let promote fall through to its MOTIS-file sentinel.
     try {
-      assertTransitForward(ctx);
+      await assertTransitForward(ctx);
       writeFileSync(
         join(ctx.motisStagingDataDir, IMPORT_MARKER_FILE),
         `${JSON.stringify(

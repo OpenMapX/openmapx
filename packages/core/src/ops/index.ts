@@ -7,13 +7,14 @@ export * from "./catalog-pin-approval";
 export * from "./client";
 export {
   type ConfigurationHandoffIntent,
-  configurationHandoffInspectionSchema,
   configurationHandoffIntentSchema,
   configurationHandoffPrepareOperationSchema,
+  type HandoffProgress,
+  handoffProgressSchema,
   protectedConfigurationServiceIdSchema,
 } from "./configuration-handoff-records";
 export * from "./configuration-maintenance";
-export * from "./configuration-maintenance-control-validation";
+export * from "./configuration-maintenance-record";
 export * from "./configuration-preparation";
 export * from "./configuration-release-downloads";
 export * from "./contract";
@@ -32,4 +33,3 @@ export * from "./service-results";
 export * from "./standalone-integrations";
 export * from "./trusted-config";
 export * from "./trusted-config-outcome";
-export * from "./trusted-config-queue-lock";

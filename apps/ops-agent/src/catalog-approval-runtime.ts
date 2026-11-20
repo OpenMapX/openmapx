@@ -2,26 +2,19 @@
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { join, sep } from "node:path";
-import type {
-  TargetLeaseAuthority,
-  VerifiedExecutionAuthority,
-} from "@openmapx/core/build-artifacts";
+import type { ExecutionHandle, TargetLeaseAuthority } from "@openmapx/core/build-artifacts";
 import {
   assertControlExecutionForward,
   controlDigest,
-  executionAuthorityState,
+  executionReceipt,
   inspectArtifactDelegation,
   inspectDataTransitCandidate,
   restoreAdmittedControlExecution,
-  retainedControlAdoptionAssertion,
   retainedControlParent,
-  verifyControl,
   verifyControlEffectSettlement,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
-  catalogApprovalAdmissionSchema,
-  catalogPromotionEffectSchema,
   catalogRuntimeInputsSchema,
   publishCatalogPinSet,
   readCatalogActivation,
@@ -39,10 +32,6 @@ import {
   opsOperationFingerprint,
   parseOpsResult,
 } from "@openmapx/core/ops";
-import {
-  childSettlementState,
-  readPrivateRecord,
-} from "../../../packages/core/src/build-artifacts/control-authority";
 import { verifyDataTransitCandidateForExecution } from "../../../packages/core/src/build-artifacts/data-execution-candidate";
 import { AnchoredDirectory } from "../../../packages/core/src/build-artifacts/filesystem";
 import { dataManagerTerminal } from "./data-manager-terminal";
@@ -54,13 +43,13 @@ const installedRoots = new WeakMap<OpsRuntime, string>();
  * reevaluates eligibility, acquires a root, or changes the active pointer. */
 export async function readCommittedCatalogApproval(
   runtime: OpsRuntime,
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   lease: TargetLeaseAuthority,
   operation: Extract<OpsOperation, { kind: "transitousLock.approve" }>,
 ) {
   const rootDir = installedRoots.get(runtime);
   if (!rootDir) return null;
-  const own = executionAuthorityState(authority);
+  const own = authority;
   if (
     own.kind !== operation.kind ||
     own.execution.operationFingerprint !== opsOperationFingerprint(operation) ||
@@ -136,8 +125,8 @@ export function installCatalogApprovalRuntime(
       !operation.acknowledgeLicenseChanges
     )
       throw Error("Original reviewed activation borrower required");
-    assertControlExecutionForward(authority);
-    const own = executionAuthorityState(authority),
+    await assertControlExecutionForward(authority);
+    const own = authority,
       installation = own.installation.installation;
     if (
       own.kind !== operation.kind ||
@@ -186,74 +175,59 @@ export function installCatalogApprovalRuntime(
       currentValidation.selected.validationDigest !== controlDigest(validation)
     )
       throw Error("Validation was invalidated before slot reuse");
-    const validated = await dataManagerTerminal(installation, validation.sourceExecution);
+    const validated = await dataManagerTerminal(validation.sourceExecution, context.signal);
     if (
-      validated.status.status !== "ok" ||
-      validated.status.result?.kind !== "catalog.validate" ||
-      validated.status.result.status !== "passed" ||
-      validated.status.result.validationId !== passed.validationId
+      validated.status !== "ok" ||
+      validated.result?.kind !== "catalog.validate" ||
+      validated.result.status !== "passed" ||
+      validated.result.validationId !== passed.validationId
     )
       throw Error("Successful original validation completion required");
-    const admission = verifyControl(
-      installation.publicKey,
-      "openmapx-control-execution-v2",
-      readPrivateRecord(
-        own.installation,
-        "executions",
-        `${context.execution.operationKey}.json`,
-        65536,
-      ),
-      catalogApprovalAdmissionSchema,
-    );
     if (
-      canonicalJson(admission.parent) !== canonicalJson(retainedControlParent(activation.parent)) ||
-      canonicalJson(admission.operation) !== canonicalJson(operation)
+      canonicalJson(own.parent) !== canonicalJson(retainedControlParent(activation.parent)) ||
+      canonicalJson(own.operation) !== canonicalJson(operation)
     )
       throw Error("Approval differs from its actual parent admission");
-    const promoted = restoreAdmittedControlExecution(installation, activation.promotion.execution),
-      promotion = executionAuthorityState(promoted);
-    if (
-      promotion.kind !== "motis.primary.promote" ||
-      activation.promotion.adoption.leaseId !== lease.leaseId
-    )
-      throw Error("Promotion must belong to this exact original physical root");
-    const assertion = retainedControlAdoptionAssertion(
+    const promoted = await restoreAdmittedControlExecution(
         installation,
-        activation.promotion.adoption,
         activation.promotion.execution,
       ),
-      grant = inspectArtifactDelegation({ installation, assertion });
+      promotion = promoted;
+    if (
+      promotion.kind !== "motis.primary.promote" ||
+      activation.promotion.leaseChild.leaseId !== lease.leaseId
+    )
+      throw Error("Promotion must belong to this exact original physical root");
+    const grant = inspectArtifactDelegation({
+      installation,
+      leaseChild: activation.promotion.leaseChild,
+    });
     if (
       grant.phase !== "promote-primary" ||
       controlDigest(grant.parent) !== controlDigest(activation.parent) ||
       controlDigest(grant.owner) !== controlDigest(lease.owner)
     )
       throw Error("Original promotion grant required");
-    verifyRetainedArtifactTargetSettlement(
+    await verifyRetainedArtifactTargetSettlement(
       installation,
-      activation.promotion.adoption,
+      activation.promotion.leaseChild,
       activation.promotion.execution,
     );
-    const settlement = childSettlementState(
-      verifyControlEffectSettlement(installation, activation.promotion.execution),
-    ).evidence;
+    const settlement = await verifyControlEffectSettlement(
+      installation,
+      activation.promotion.execution,
+    );
     if (
       settlement.outcome !== "committed" ||
       settlement.publication !== "committed" ||
       settlement.terminalReceiptDigest !== activation.promotion.terminalReceiptDigest
     )
       throw Error("Original successful promotion settlement required");
-    const effect = verifyControl(
-      installation.publicKey,
-      "openmapx-control-settlement-v1",
-      readPrivateRecord(
-        own.installation,
-        "effects",
-        `${activation.promotion.execution.operationKey}.json`,
-      ),
-      catalogPromotionEffectSchema,
-    );
-    if (parseOpsResult("motis.primary.promote", effect.receipt.result).activeRunId !== passed.epoch)
+    const effect = await executionReceipt(promoted);
+    if (
+      effect.kind !== "ops-result" ||
+      parseOpsResult("motis.primary.promote", effect.result).activeRunId !== passed.epoch
+    )
       throw Error("Promotion activated a different candidate");
     const selected = await runtime["transitousLock.inspect"](
       { kind: "transitousLock.inspect", proposalId: operation.proposalId, offset: 0 },
@@ -286,7 +260,7 @@ export function installCatalogApprovalRuntime(
       const bytes = live.read("motis-candidate-manifest.json", 32 * 1024 * 1024, false);
       if (createHash("sha256").update(bytes).digest("hex") !== passed.manifestHash)
         throw Error("Activated manifest differs from validation");
-      // The host independently rejoins its actual promotion's signed candidate
+      // The host independently rejoins its actual promotion's retained candidate
       // publication and current inode/size/mtime/ctime inventory. Re-reading
       // multi-hundred-GB datasets inside a 120-second pin leaf is not viable;
       // the owned DM validation/activation worker hashes their complete bytes.

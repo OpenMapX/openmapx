@@ -35,7 +35,7 @@ async function runnerResponseBody(response: Response): Promise<unknown> {
   }
 }
 
-/** Recovery uses only the signed original pending requests. The capability
+/** Recovery uses only the recorded original pending requests. The capability
  * authorizes cancel/inspect after expiry, never another execution POST. */
 export async function cancelAndSettleRetainedTransitousScripts(
   context: DataExecutionContext,

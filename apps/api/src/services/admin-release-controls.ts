@@ -7,7 +7,7 @@ import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 import { assertRetainedMaintenanceJob } from "./retained-maintenance-authorization";
 export async function handleReleaseClearJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  await assertRetainedMaintenanceJob(ctx);
+  assertRetainedMaintenanceJob(ctx);
   const releaseId = ctx.payload.expectedReleaseId;
   if (typeof releaseId !== "string" || ctx.payload.confirmation !== "CLEAR RELEASE PIN")
     throw Error("Exact release pin confirmation required");

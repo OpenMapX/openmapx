@@ -46,7 +46,6 @@ it.skipIf(process.env.RUN_ARTIFACT_INGRESS_TESTS !== "1")(
     const store = new ArtifactTransferStore({
       dataRoot: join(root, "data"),
       privateRoot: join(root, "private"),
-      token,
       capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
     });
     const runtime = createUnavailableRuntime();

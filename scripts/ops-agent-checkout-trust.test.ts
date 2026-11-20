@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -23,14 +23,12 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
   opsExecutionBudget,
+  prepareConfigurationCandidate,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { waitForOpsResult } from "../apps/api/src/services/ops-client";
-import {
-  consumePublishedTrustedConfiguration,
-  publishTrustedConfigurationSnapshot,
-} from "../apps/api/src/services/trusted-config-publisher";
 import { extractIntegrationArchive } from "../packages/integration-framework/src/installer";
 import {
   buildRuntimeBundle,
@@ -204,8 +202,9 @@ async function executeLocalRoot<K extends OpsOperationKind>(
   client: OpsClient,
   operation: Extract<OpsOperation, { kind: K }>,
   identity = localRootIdentity(operation.kind),
+  payload?: TrustedConfigurationPayload,
 ): Promise<OpsResultFor<K>> {
-  const submitted = await client.execute<K>(operation, identity);
+  const submitted = await client.execute<K>(operation, { ...identity, payload });
   if (submitted.execution === "sync") return submitted.value;
   return waitForOpsResult<K>(client, operation.kind, submitted, {
     execution: identity.execution,
@@ -213,48 +212,52 @@ async function executeLocalRoot<K extends OpsOperationKind>(
   });
 }
 
-/** Publishes the real sealed payload and current source witness over agent HTTP. */
+/** Sends a real configuration payload and the current source witness over agent HTTP. */
 async function expectTrustedConfigurationCommitted(
   checkout: string,
   agent: RunningAgent,
   name: string,
-  payload: Partial<Parameters<typeof publishTrustedConfigurationSnapshot>[0]["payload"]>,
+  overrides: Partial<TrustedConfigurationPayload>,
 ): Promise<void> {
   const infra = join(checkout, "infra", "docker");
-  const trustedConfig = join(infra, "state", "ops-agent", "trusted-config");
   const tokenFile = join(infra, "secrets", "ops-agent-api-token");
-  const token = readFileSync(tokenFile, "utf8").trim();
-  const directory = statSync(trustedConfig);
   const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
   const inspected = await client.execute({ kind: "configuration.sources.inspect" });
   if (inspected.execution !== "sync") throw Error("Expected a synchronous source inspection");
   const identity = localRootIdentity("stack.render");
   const { operationKey } = identity;
   const before = services.currentConfigurationGeneration(infra);
-  const sealed = await publishTrustedConfigurationSnapshot({
-    directory: trustedConfig,
-    token,
-    ownerUid: directory.uid,
-    ownerGid: directory.gid,
+  const payload = {
+    domain: `${name}.example.test`,
+    serviceConfigs: [],
+    integrationConfigs: [],
+    serviceSecrets: [],
+    ...overrides,
+  };
+  const sealed = prepareConfigurationCandidate({
+    role: "api",
+    nonce: `nonce_${randomUUID().replaceAll("-", "")}`,
     operationKey,
-    operationForRevision: (revisionId) => ({
+    operationForRevision: (revisionId, payloadDigest) => ({
       kind: "stack.render",
       revisionId,
+      payloadDigest,
       expectedCurrentRevisionId: before,
       expectedSourceRevision: inspected.value.sourceRevision,
       coordinatorMode: "require-running",
     }),
-    payload: {
-      domain: `${name}.example.test`,
-      serviceConfigs: [],
-      integrationConfigs: [],
-      serviceSecrets: [],
-      ...payload,
-    },
+    payload,
   });
-  const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-    executeLocalRoot(client, sealed.operation, identity),
-  );
+  let submission: PromiseSettledResult<unknown>;
+  try {
+    submission = {
+      status: "fulfilled",
+      value: await executeLocalRoot(client, sealed.operation, identity, payload),
+    };
+  } catch (reason) {
+    submission = { status: "rejected", reason };
+  }
+  const consumed = { submission };
   expect(consumed.submission.status, agent.output()).toBe("fulfilled");
   const result = consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
   expect(result, `${JSON.stringify(result)}\n${agent.output()}`).toMatchObject({

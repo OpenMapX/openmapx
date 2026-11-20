@@ -14,7 +14,7 @@ import {
   restoreIntegrationComponentLock,
 } from "@openmapx/integration-framework/installer";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
-import type { OpsExecutionContext, OpsRuntime } from "./runtime";
+import type { OpsRuntime } from "./runtime";
 import type { StandaloneOwnershipRecord } from "./standalone-integration-records";
 
 const absent = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -122,7 +122,7 @@ export function installStandaloneOwnershipRuntime(
     }
   };
   runtime["integration.inspectOwnership"] = async (operation, context) => {
-    const installationId = store.standaloneInstallationId(context);
+    store.assertStandaloneContext(context);
     try {
       const old = store.readStandaloneOwnership(context, operation.operationId);
       if (canonicalJson(old.inspectionExecution) !== canonicalJson(context.execution))
@@ -175,7 +175,6 @@ export function installStandaloneOwnershipRuntime(
         dir = staging.directory(`ownership-${operation.operationId}`, false, true);
         const record: StandaloneOwnershipRecord = {
           version: 1,
-          installationId,
           transactionId: operation.operationId,
           integrationId: operation.integrationId,
           ownerId: operation.ownerId,

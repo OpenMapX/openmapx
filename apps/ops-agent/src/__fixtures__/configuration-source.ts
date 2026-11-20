@@ -1,6 +1,6 @@
 /** Real read-only source witness for standalone runtime fixtures. Never a
  * caller-generated UUID or a replacement mutation/inspection handler. */
-import { provisionControlInstallation } from "@openmapx/core/build-artifacts";
+import { provisionControlDirectories } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { opsOperationFingerprint } from "@openmapx/core/ops";
 import { dispatchOpsOperation, type OpsRuntime } from "../runtime";
@@ -18,7 +18,7 @@ export async function configurationSource(runtime: OpsRuntime, infraDir: string)
   if (!retained || retained.revision !== revision) {
     const value = (async () => {
       mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
-      await provisionControlInstallation(infraDir);
+      await provisionControlDirectories(infraDir);
       const operation = { kind: "configuration.sources.inspect" } as const;
       const source = await dispatchOpsOperation(runtime, operation, { execution: testExecution(), signal: new AbortController().signal,
         emitLog() {}, claim: { operation, fingerprint: opsOperationFingerprint(operation), source: "registry",

@@ -1,5 +1,5 @@
-/** Exact portable decoding of the existing API HMAC parent preimage.
- * Schema property order is part of that existing signed encoding. */
+/** Exact portable decoding of the API's record of a child it attempted under a
+ * job. Schema property order is part of its canonical encoding. */
 import { z } from "zod";
 export const apiJobChildAttemptSchema = z.strictObject({
   version: z.literal(1),

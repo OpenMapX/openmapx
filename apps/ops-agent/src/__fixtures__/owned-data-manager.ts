@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { closeControlInstallation, createDataExecutionControlJournal, openControlInstallation, pruneControlRecords } from "@openmapx/core/build-artifacts";
+import { closeControlInstallation, createDataExecutionControlJournal, openControlInstallation } from "@openmapx/core/build-artifacts";
 import Fastify from "fastify";
 import { registerApi } from "../../../../services/data-manager/src/api";
 import { registerAuth } from "../../../../services/data-manager/src/auth";
@@ -8,10 +8,8 @@ import { resolveOperationsProfile } from "../../../../services/data-manager/src/
 import { getSingleFlightController } from "../../../../services/data-manager/src/jobs/transitous/runtime";
 import { createDataConfigurationMaintenance } from "../../../../services/data-manager/src/jobs/execution/configuration-maintenance";
 import { createDataExecutionDispatcher } from "../../../../services/data-manager/src/jobs/execution/dispatch";
-import { applyOwnedGenerationHardlinks } from "../../../../services/data-manager/src/jobs/execution/hardlinks";
 import { createDataExecutionReceiver } from "../../../../services/data-manager/src/jobs/execution/receiver";
 import { createDataExecutionRuntime } from "../../../../services/data-manager/src/jobs/execution/runtime";
-import { removePrunedDataRows } from "../../../../services/data-manager/src/jobs/execution/prune-rows";
 import { createPostgresDataExecutionStore } from "../../../../services/data-manager/src/jobs/execution/store";
 
 /** Actual HTTP receiver, SQL admission guard, dispatcher, filesystem leaf and journal. */
@@ -22,9 +20,10 @@ export async function ownedDataManager(options: {
   pausePrepareResponse?: boolean;
   /** Drops the first successful settle reply after the row was settled. */
   loseSettleResponseOnce?: boolean;
+  /** Answers every settle with 503 while it returns true, before anything is settled. */
+  refuseSettles?: () => boolean;
   /** Called once the fence has been prepared successfully. */
   onPrepared?: () => void;
-  loseRecoveryResponseOnce?: boolean;
 }) {
   const prepareReplyEntered = Promise.withResolvers<void>(), continuePrepareReply = Promise.withResolvers<void>();
   const installation = openControlInstallation({ infraDir: options.infraDir, role: "data-manager", serviceIds: options.serviceIds });
@@ -40,21 +39,21 @@ export async function ownedDataManager(options: {
   }
   const store = createPostgresDataExecutionStore(options.sql, { controlJournal: journal, configurationFence: fence });
   const singleFlight = getSingleFlightController(), operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
-  const dispatcher = createDataExecutionDispatcher({ dataDir, state: new StateStore(dataDir), sql: options.sql, singleFlight, operationsPolicy, runHardlinks: applyOwnedGenerationHardlinks });
-  const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
+  const dispatcher = createDataExecutionDispatcher({ dataDir, state: new StateStore(dataDir), sql: options.sql, singleFlight, operationsPolicy });
+  // Workers share the fixture's pool; their cancellation is covered by data-manager's runtime suite.
+  const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch, openSql: () => ({ sql: options.sql, close: async () => {} }) });
   const receiver = createDataExecutionReceiver({ runtime, installation, configurationFence: fence, dispatcher, operationsPolicy });
-  const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0, recoveryPosts = 0;
+  const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0;
   const maintenanceIds = new Set<string>();
   const maintenanceReplies: { status: number; error: unknown }[] = [];
   const settlementResponseStatuses:number[]=[];
   const fenceInspectionReplies: { status: number; body: unknown }[] = [];
   let originalInspection: { url: string; headers: Record<string, string> } | undefined;
   const keys = new Set<string>(), replies: { status: number; body: unknown }[] = [];
+  app.addHook("onRequest", async (request, reply) => {
+    if (options.refuseSettles?.() && request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) await reply.code(503).send({ error: "unavailable" });
+  });
   app.addHook("onSend", async (request, reply, payload) => {
-    if (request.method === "POST" && request.url === "/executions/configuration-maintenance/recovery") {
-      recoveryPosts++;
-      if (options.loseRecoveryResponseOnce && recoveryPosts === 1 && reply.statusCode === 200) reply.raw.destroy();
-    }
     if (request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) {settlePosts++;settlementResponseStatuses.push(reply.statusCode);if(options.loseSettleResponseOnce&&reply.statusCode===200&&settlementResponseStatuses.filter(status=>status===200).length===1)reply.raw.destroy();}
     if (request.method === "GET" && request.url.startsWith("/executions/configuration-maintenance/")) {
       fenceInspectionReplies.push({ status: reply.statusCode, body: typeof payload === "string" ? JSON.parse(payload) : null });
@@ -69,11 +68,12 @@ export async function ownedDataManager(options: {
       if (options.pausePrepareResponse && reply.statusCode === 200) { prepareReplyEntered.resolve(); await continuePrepareReply.promise; }
       if (options.losePrepareResponseOnce && preparePosts === 1) reply.raw.destroy();
     }
-    if (request.method === "POST" && request.url === "/executions/generation-hardlinks") {
+    if (request.method === "POST" && request.url === "/link") {
       const key = (request.body as { operationKey?: string } | undefined)?.operationKey;
       if (key) keys.add(key);
       replies.push({ status: reply.statusCode, body: typeof payload === "string" ? JSON.parse(payload) : null });
-      posts++; if (options.loseHardlinkResponse) reply.raw.destroy();
+      // Only the first answer is lost: the agent asks again under the same key.
+      posts++; if (options.loseHardlinkResponse && posts === 1) reply.raw.destroy();
     }
     return payload;
   });
@@ -81,10 +81,9 @@ export async function ownedDataManager(options: {
   // The operations agent's own token; the API's and host CLI's differ.
   registerAuth(
     app,
-    { api: `${token}-api`, "ops-agent": token, "host-cli": `${token}-cli` },
-    { executionReceiver: () => receiver },
+    { api: `${token}-api`, "ops-agent": token, "host-cli": `${token}-cli` }
   );
-  registerApi(app, { dataDir, singleFlight, operationsPolicy, executionReceiver: receiver });
+  registerApi(app, { dataDir, operationsPolicy, executionReceiver: receiver });
   const baseUrl = await app.listen({ host: "127.0.0.1", port: 0 });
   const resumeHttp=async()=>{
     if(app.server.listening)return;
@@ -103,9 +102,9 @@ export async function ownedDataManager(options: {
     if (stopped) return;
     continuePrepareReply.resolve();
     await runtime.close(); app.server.closeAllConnections(); await app.close();
-    journal.close(); closeControlInstallation(installation); stopped = true;
+    closeControlInstallation(installation); stopped = true;
   };
-  return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; }, get recoveryPosts() { return recoveryPosts; },
+  return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; },
     prepareReplyEntered: prepareReplyEntered.promise, releasePrepareResponse: () => continuePrepareReply.resolve(),
     get fenceInspections() { return structuredClone(fenceInspectionReplies); }, stopForRestart,
     get startupRecoveryRequired() { return startupRecoveryRequired; },
@@ -124,12 +123,6 @@ export async function ownedDataManager(options: {
     },
     get hardlinkResponseStatuses() { return replies.map(reply => reply.status); },
     get hardlinkResponses() { return structuredClone(replies); },
-    /** One prune pass as the service runs it, at the given time. */
-    pruneRecords: (now?: number) =>
-      pruneControlRecords(installation, {
-        now,
-        beforeRemove: (keys) => removePrunedDataRows(options.sql, keys),
-      }),
     async diagnostics() { return { maintenanceReplies, replies: replies.map(reply => ({ status: reply.status, error: (reply.body as { error?: unknown } | null)?.error })),
       executions: await Promise.all([...keys].map(async key => { const value = await store.lookup(key); return value && { status: value.status.status, publication: value.status.publication, diagnostics: value.status.diagnostics }; })) }; },
     async close() {

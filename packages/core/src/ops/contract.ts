@@ -21,12 +21,6 @@ import {
   backupPruneResultSchema,
 } from "./backup-prune";
 import {
-  configurationHandoffInspectionSchema,
-  configurationHandoffInspectOperationSchema,
-  configurationHandoffPreparedSchema,
-  configurationHandoffPrepareOperationSchema,
-} from "./configuration-handoff-records";
-import {
   configurationGenerationRevisionSchema,
   configurationHardlinksApplyOperationSchema,
   integrationConfigApplyOperationSchema,
@@ -39,6 +33,7 @@ import {
   stackRenderOperationSchema,
   vaultApplyOperationSchema,
 } from "./configuration-operation-records";
+import { preparedConfigurationRecordSchema } from "./configuration-preparation-records";
 import {
   CONFIGURATION_RELEASE_IMAGE_NAMES,
   configurationReleaseSelectionSchema,
@@ -51,6 +46,11 @@ import {
   standaloneIntegrationOperationSchemas,
   standaloneIntegrationResultSchemas,
 } from "./standalone-integrations";
+import {
+  configurationPayloadDigest,
+  parseTrustedConfigurationPayload,
+  trustedConfigurationPayloadSchema,
+} from "./trusted-config";
 
 export { configurationGenerationRevisionSchema } from "./configuration-operation-records";
 
@@ -60,11 +60,15 @@ import {
   pairedPinApprovalResultSchema,
 } from "./catalog-pin-approval";
 import {
-  configurationMaintenanceDecisionSchema,
+  configurationMaintenanceApplySchema,
+  configurationMaintenanceInspectSchema,
   configurationMaintenancePrepareSchema,
-  configurationMaintenanceReceiptSchema,
   configurationMaintenanceSettleSchema,
 } from "./configuration-maintenance";
+import {
+  maintenanceRecordSchema,
+  maintenanceStepOutcomeSchema,
+} from "./configuration-maintenance-record";
 import {
   configurationHardlinksPreviewSchema,
   configurationSourcesInspectionSchema,
@@ -116,11 +120,12 @@ export const OPS_OPERATION_KINDS = [
   "configuration.hardlinks.apply",
   "configurationMaintenance.prepare",
   "configurationMaintenance.inspect",
-  "configurationMaintenance.decide",
+  "configurationMaintenance.apply",
   "configurationMaintenance.settle",
-  "configurationHandoff.prepare",
-  "configurationHandoff.inspect",
   "configuration.failure.inspect",
+  "configuration.candidate.retain",
+  "configuration.candidate.read",
+  "configuration.candidate.discard",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -201,7 +206,6 @@ export const OPS_OPERATION_KINDS = [
   "lease.acquire",
   "lease.read",
   "lease.update",
-  "lease.settleChild",
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
@@ -264,11 +268,12 @@ export const OPS_KIND_POLICIES = {
   "configuration.hardlinks.apply": asyncEffect("api", 10 * 60_000),
   "configurationMaintenance.prepare": asyncEffect("api", 3600_000, 65536),
   "configurationMaintenance.inspect": sync("api", 15_000, 65536),
-  "configurationMaintenance.decide": asyncEffect("api", 60_000, 65536),
+  "configurationMaintenance.apply": asyncEffect("api", 3600_000, 65536),
   "configurationMaintenance.settle": asyncEffect("api", 60_000, 65536),
-  "configurationHandoff.prepare": asyncEffect("api", 3600_000, 65536),
-  "configurationHandoff.inspect": sync("api", 15_000, 65536),
   "configuration.failure.inspect": sync("api", 15_000),
+  "configuration.candidate.retain": sync("api", 15_000),
+  "configuration.candidate.read": sync("api", 15_000, OPS_MAX_RESULT_BYTES),
+  "configuration.candidate.discard": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
@@ -348,11 +353,10 @@ export const OPS_KIND_POLICIES = {
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
   // Read-only, for the admin panel: the pins, never a proposal or a change.
   "transitousPin.inspect": sync("api", 30_000),
-  // Data-manager claims targets, and settles the children it ran, through the agent.
+  // Data-manager claims targets through the agent.
   "lease.acquire": sync("data-manager", 15_000, 256 * 1024),
   "lease.read": sync("data-manager", 15_000, 256 * 1024),
   "lease.update": sync("data-manager", 15_000, 256 * 1024),
-  "lease.settleChild": sync("data-manager", 15_000, 256 * 1024),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
 /** Read streams/diagnostics do not acquire control-root authority or a retention dependency. */
@@ -364,6 +368,9 @@ export function opsKindRequiresControlAuthority(kind: OpsOperationKind): boolean
       "system.diagnostics",
       "serviceRepository.inspect",
       "catalogIntegration.inspect",
+      // These run under the maintenance's own lease and record.
+      "configurationMaintenance.apply",
+      "configurationMaintenance.settle",
     ].includes(kind)
   );
 }
@@ -467,14 +474,8 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("configuration.inspect"),
   kindOnly("configuration.sources.inspect"),
   configurationMaintenancePrepareSchema,
-  configurationHandoffPrepareOperationSchema,
-  configurationHandoffInspectOperationSchema,
-  z.strictObject({
-    kind: z.literal("configurationMaintenance.inspect"),
-    maintenanceId: z.uuid(),
-    candidateId: z.uuid(),
-  }),
-  configurationMaintenanceDecisionSchema,
+  configurationMaintenanceInspectSchema,
+  configurationMaintenanceApplySchema,
   configurationMaintenanceSettleSchema,
   z.strictObject({
     kind: z.literal("configuration.hardlinks.preview"),
@@ -492,6 +493,24 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("configuration.hardlinks.inspect"),
     revisionId: configurationGenerationRevisionSchema,
+  }),
+  // A prepared candidate the API keeps in the agent's own state until it is
+  // applied or discarded. Retaining the same operation key again with a
+  // different record is a conflict.
+  z.strictObject({
+    kind: z.literal("configuration.candidate.retain"),
+    record: preparedConfigurationRecordSchema,
+  }),
+  z.strictObject({
+    kind: z.literal("configuration.candidate.read"),
+    lookup: z.union([
+      z.strictObject({ operationKey: operationKeySchema }),
+      z.strictObject({ candidateId: z.uuid() }),
+    ]),
+  }),
+  z.strictObject({
+    kind: z.literal("configuration.candidate.discard"),
+    operationKey: operationKeySchema,
   }),
   // Why a configuration apply was not committed, when the operator can act
   // on it (an override render may not use), as one line for the admin panel.
@@ -741,9 +760,13 @@ const opsRequestSchema = z.strictObject({
   issuedAt: timestampSchema,
   expiresAt: timestampSchema,
   operation: opsOperationSchema,
+  // Only a configuration apply carries one; its operation names the digest.
+  payload: trustedConfigurationPayloadSchema.optional(),
   execution: z
     .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
     .optional(),
+  /** A data-manager child: its row in the agent's lease store. */
+  leaseChild: z.strictObject({ leaseId: z.uuid(), childKey: z.uuid() }).optional(),
 });
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 
@@ -818,6 +841,19 @@ export function parseOpsRequest(input: unknown, options: { role: OpsRole }): Ops
     throw new OpsContractError("authorization", "Operation is not permitted for this role");
   const parsed = opsRequestSchema.safeParse(input);
   if (!parsed.success) throw new OpsContractError("validation", "Invalid operations request");
+  const operation = parsed.data.operation;
+  if (isTrustedConfigurationApplyOperation(operation)) {
+    let digest: string | undefined;
+    try {
+      if (parsed.data.payload)
+        digest = configurationPayloadDigest(parseTrustedConfigurationPayload(parsed.data.payload));
+    } catch {
+      digest = undefined;
+    }
+    if (digest !== operation.payloadDigest)
+      throw new OpsContractError("validation", "Invalid operations request");
+  } else if (parsed.data.payload !== undefined)
+    throw new OpsContractError("validation", "Invalid operations request");
   return parsed.data;
 }
 
@@ -1081,12 +1117,23 @@ export const OPS_RESULT_SCHEMAS = {
   "configuration.sources.inspect": configurationSourcesInspectionSchema,
   "configuration.hardlinks.preview": configurationHardlinksPreviewSchema,
   "configuration.hardlinks.apply": hardlinkApplySummarySchema,
-  "configurationMaintenance.prepare": configurationMaintenanceReceiptSchema,
-  "configurationHandoff.prepare": configurationHandoffPreparedSchema,
-  "configurationHandoff.inspect": configurationHandoffInspectionSchema,
-  "configurationMaintenance.inspect": configurationMaintenanceReceiptSchema,
-  "configurationMaintenance.decide": configurationMaintenanceReceiptSchema,
-  "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.prepare": maintenanceRecordSchema,
+  "configurationMaintenance.inspect": maintenanceRecordSchema,
+  // `generation` is the generation step's result when this run applied it.
+  "configurationMaintenance.apply": z.strictObject({
+    outcome: z.union([
+      maintenanceStepOutcomeSchema.exclude(["failed_without_effect"]),
+      z.literal("running"),
+    ]),
+    record: maintenanceRecordSchema,
+    generation: configurationApplyResultSchema.nullable(),
+  }),
+  "configurationMaintenance.settle": maintenanceRecordSchema,
+  "configuration.candidate.retain": z.strictObject({ retained: z.literal(true) }),
+  "configuration.candidate.read": z.strictObject({
+    record: preparedConfigurationRecordSchema.nullable(),
+  }),
+  "configuration.candidate.discard": z.strictObject({ removed: z.boolean() }),
   "configuration.failure.inspect": z.strictObject({
     attemptedRevisionId: configurationGenerationRevisionSchema,
     problem: z.string().min(1).max(4_096).nullable(),
@@ -1176,8 +1223,8 @@ export const OPS_RESULT_SCHEMAS = {
       .max(CONFIGURATION_RELEASE_IMAGE_NAMES.length),
   }),
   "release.inspect": z.strictObject({
+    /** The release the applied configuration pins: what runs, and what an update replaces. */
     currentReleaseId: stableIdSchema.optional(),
-    selectedReleaseId: stableIdSchema.optional(),
     availableReleaseId: stableIdSchema.optional(),
     configuredSelector: z.string().max(128).optional(),
     currentVersion: z.string().max(128).optional(),
@@ -1209,7 +1256,6 @@ export const OPS_RESULT_SCHEMAS = {
     maintenanceReady: z.boolean(),
     release: z.strictObject({
       currentReleaseId: stableIdSchema.optional(),
-      selectedReleaseId: stableIdSchema.optional(),
       availableReleaseId: stableIdSchema.optional(),
       configuredSelector: z.string().max(128).optional(),
       currentVersion: z.string().max(128).optional(),

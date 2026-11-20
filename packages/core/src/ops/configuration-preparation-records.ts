@@ -4,6 +4,7 @@ import { platformConfigurationSchema } from "../services/platform-configuration"
 import { protectedConfigurationReconcileIdsSchema } from "./configuration-handoff-records";
 import { configurationReleaseSelectionSchema } from "./configuration-release-downloads";
 import { coordinatorLifecycleMetadataSchema } from "./coordinator-lifecycle-records";
+import { configurationSnapshotSchema, trustedConfigurationPayloadSchema } from "./trusted-config";
 
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
@@ -90,7 +91,8 @@ export const preparedConfigurationRecordSchema = z.strictObject({
   operation: z.unknown(),
   sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   expectedSourceRevision: z.uuid(),
-  sealed: z.string().max(699052),
+  snapshot: configurationSnapshotSchema,
+  payload: trustedConfigurationPayloadSchema,
   privateOverlay: z.unknown(),
   apiJobId: z.uuid(),
   actorId: z.string().min(1).max(256),
@@ -111,29 +113,6 @@ export const preparedConfigurationRecordSchema = z.strictObject({
   privatePlatformIntent: platformConfigurationIntentSchema.optional(),
   privateCoordinatorLifecycle: coordinatorLifecycleMetadataSchema.optional(),
   privateCoordinatorSource: configurationSourcesInspectionSchema.optional(),
-  // Exact current DM credential persistence inputs retained before its helper
-  // prerequisite. Recovery never regenerates row IDs, encryption or a seal.
-  privateMaintenancePreparation: z
-    .strictObject({
-      version: z.literal(1),
-      source: configurationSourcesInspectionSchema,
-      serviceSecrets: z
-        .array(
-          z.strictObject({
-            id: z.uuid(),
-            serviceId: z.literal("data-manager"),
-            key,
-            ciphertext: z.string().max(350000),
-            iv: z.string().max(64),
-            tag: z.string().max(64),
-            createdAt: z.iso.datetime(),
-            updatedAt: z.iso.datetime(),
-            updatedBy: z.string().max(256).nullable(),
-          }),
-        )
-        .max(128),
-    })
-    .optional(),
   // Private authenticated recovery data, counted in the existing 768KiB cell.
   // No raw process environment, backend/provider objects or new authority.
   privateIntegrationReload: z

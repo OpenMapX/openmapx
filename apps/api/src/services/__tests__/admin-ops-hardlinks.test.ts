@@ -63,8 +63,9 @@ function context(): JobContext {
     log: async () => {},
     setProgress: async () => {},
     checkpointResult: {},
-    checkpoint: async (value) => {
+    checkpoint: async (value, _progress, _key, _address, operations) => {
       ctx.checkpointResult = structuredClone(value);
+      if (operations) ctx.protocol = { ...ctx.protocol, operations: structuredClone(operations) };
     },
   };
   return ctx;

@@ -1,10 +1,9 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   adminIntegrationReloadResultSchema,
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
-import { canonicalJson, hardlinkApplySummarySchema, readOpsTokenFile } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
+import { canonicalJson, hardlinkApplySummarySchema } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
@@ -15,19 +14,17 @@ import {
   isActiveMaintenanceViolation,
 } from "./active-maintenance-conflict";
 import { checkpointOwnedAdminJob } from "./admin-job-checkpoint";
+import { apiKeyedDigest } from "./admin-job-digest";
 import {
   AdminJobFailure,
   ConfigurationPrerequisiteFailure,
   JobObservationPending,
   publicAdminJobResult,
 } from "./admin-job-failure";
+import { cancelAdminJobOperations, resumeAdminJobObservation } from "./admin-job-ops";
+import { type OpsProjection, readProjection } from "./admin-job-projection";
 import {
-  cancelAdminJobOperations,
-  hasRecoveredMaintenanceCandidate,
-  resumeAdminJobObservation,
-} from "./admin-job-ops";
-import { readProjection } from "./admin-job-projection";
-import {
+  type AdminJobProtocol,
   adminJobObservationDue,
   claimAdminJob,
   hasUnsettledManagedOperation,
@@ -36,21 +33,25 @@ import {
   JobOwnershipLost,
   JobStepAllocationConflict,
   JobStepCapacityExceeded,
+  jobCheckpoint,
   jobOwnership,
+  mergeJobCheckpoint,
   noUnsettledManagedOperation,
+  readAdminJobProtocol,
   readJobExecution,
   renewAdminJobClaim,
+  replaceJobCheckpoint,
+  splitJobCheckpoint,
 } from "./admin-job-state";
 import {
   configurationRejection,
   restoreConfigurationRejection,
 } from "./configuration-ownership-view";
-import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
 import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { hasRetainedExtensionWorkflow } from "./extension-workflow";
 import { IntegrationBindingConflict as RetainedBindingConflict } from "./integration-binding-participant";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
-import { ApiOpsError, createDurableOpsKey, OpsObservationPending } from "./ops-client";
+import { ApiOpsError, OpsObservationPending } from "./ops-client";
 import { guardedSystemReleasePayloadSchema } from "./platform-configuration-job";
 import { retainedMaintenanceJob } from "./retained-maintenance-authorization";
 import { type RetainedMaintenanceJobType, retainMaintenanceJob } from "./retained-maintenance-job";
@@ -87,31 +88,38 @@ export interface JobContext {
     progress?: number,
     admissionKey?: string,
     stepAddress?: string,
+    operations?: OpsProjection,
   ): Promise<void>;
   /** Last durable checkpoint loaded with the job and updated after each checkpoint. */
   checkpointResult?: Record<string, unknown> | null;
+  /** The runner's protocol state, loaded with the job and updated after each checkpoint. */
+  protocol?: AdminJobProtocol;
 }
 
 function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobContext {
   const context: JobContext = {
     jobId: job.id,
     jobType: job.type,
-    execution: readJobExecution(job.result),
-    checkpointResult: job.result as Record<string, unknown> | null,
+    execution: readJobExecution(job.protocol),
+    checkpointResult: jobCheckpoint(job.result, job.protocol),
+    protocol: readAdminJobProtocol(job.protocol),
     payload: {},
     signal: new AbortController().signal,
     log: async () => {},
     setProgress: async () => {},
-    checkpoint: async (value) => {
-      context.checkpointResult = await checkpointOwnedAdminJob(
+    checkpoint: async (value, _progress, admissionKey, stepAddress, operations) => {
+      const saved = await checkpointOwnedAdminJob(
         job.id,
         context.execution,
         value,
+        operations ?? readProjection(context.protocol, context.checkpointResult),
         undefined,
-        undefined,
-        undefined,
+        admissionKey,
+        stepAddress,
         context.checkpointResult ?? {},
       );
+      context.checkpointResult = saved.result;
+      context.protocol = saved.protocol;
     },
   };
   return context;
@@ -119,9 +127,9 @@ function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobConte
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
 function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string, unknown> {
   try {
-    const { opsProjection, ...output } = value;
+    const output = value;
     // Host-owned recovery packets are protocol state, not extension output.
-    // Redacting their signatures/owner IDs would destroy original authority.
+    // Redacting their keys or owner IDs would lose the original identity.
     const retained = Object.fromEntries(
       Object.entries(output).filter(([key]) => key.startsWith("_")),
     );
@@ -134,11 +142,6 @@ function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string,
     if (serialized === undefined) return { value: "[redacted]" };
     const sanitized = sanitizeLogMetadata(JSON.parse(serialized) as unknown);
     Object.assign(sanitized, retained);
-    if (opsProjection === undefined) return sanitized;
-    sanitized.opsProjection = readProjection({ opsProjection }) as unknown as Record<
-      string,
-      unknown
-    >;
     return sanitized;
   } catch {
     return { value: "[redacted]" };
@@ -185,103 +188,51 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
  * still authenticate the original private packet, owned row/nonce, source and
  * every retained attempt before it can deliver an original continuation. */
 function hasRetainedImmediateConfiguration(job: {
-  id: string;
   type: string;
   payload: unknown;
-  result: unknown;
+  protocol: unknown;
 }): boolean {
-  const result = job.result as Record<string, unknown> | null,
+  const immediate = readAdminJobProtocol(job.protocol).immediate,
     payload = job.payload as Record<string, unknown> | null;
   return (
     IMMEDIATE_CONFIGURATION_JOB_TYPES.some((type) => type === job.type) &&
-    result?._immediateJobId === job.id &&
-    typeof result._immediateActorId === "string" &&
-    typeof result._immediateIntentDigest === "string" &&
-    /^[a-f0-9]{64}$/.test(result._immediateIntentDigest) &&
+    typeof immediate?.actorId === "string" &&
+    typeof immediate.intentDigest === "string" &&
+    /^[a-f0-9]{64}$/.test(immediate.intentDigest) &&
     typeof payload?.operationKey === "string" &&
-    /^opk1_[A-Za-z0-9_-]{16,64}$/.test(payload.operationKey) &&
-    !!result._configurationCandidate
+    /^opk1_[A-Za-z0-9_-]{16,64}$/.test(payload.operationKey)
   );
 }
-/** Routing only. The fixed producer reauthenticates the original MAC packet,
- * actual owned row/payload and saved decision before any next phase. */
+/** Routing only: a queued job that carries a configuration candidate, a
+ * service batch or a release runs its handler again on reclaim. Every step it
+ * takes is keyed by the job, so a step already sent to the agent returns its
+ * original operation, and its candidate continues from the recorded phase. */
 function hasRetainedQueuedCoordinator(job: {
-  id: string;
   type: string;
   payload: unknown;
   result: unknown;
+  protocol: unknown;
 }) {
-  const payload = job.payload as Record<string, unknown> | null,
-    candidate = (job.result as { _configurationCandidate?: { operationKey?: unknown } } | null)
-      ?._configurationCandidate;
+  const payload = job.payload as Record<string, unknown> | null;
   if (!payload) return false;
   const batch = (job.result as Record<string, unknown> | null)?._serviceUpdateBatch;
-  if (job.type === "service.bulk" && payload.action === "update" && batch) return true; // Routing only; the fixed handler validates the actual owned batch/ACK chain.
-  if (!candidate) return false;
-  if (job.type === "system.update") {
-    const fixed = (job.result as Record<string, unknown> | null)?._systemRelease;
-    return (
-      guardedSystemReleasePayloadSchema.safeParse(payload).success &&
-      !!fixed &&
-      typeof fixed === "object" &&
-      (fixed as { operationKey?: unknown }).operationKey ===
-        createDurableOpsKey("admin-job.guarded-release", job.id) &&
-      candidate.operationKey === createDurableOpsKey("admin-job.guarded-release", job.id)
-    );
-  }
-  const ordinal =
-    job.type === "service.apply" &&
-    payload.service === "data-manager" &&
-    Object.keys(payload).every((k) => k === "service" || k === "_maintenanceRequest")
-      ? null
-      : job.type === "service.bulk" &&
-          payload.action === "update" &&
-          Array.isArray(payload.serviceIds)
-        ? payload.serviceIds.indexOf("data-manager")
-        : -1;
-  return (
-    ordinal !== -1 && candidate.operationKey === coordinatorLifecycleOperationKey(job.id, ordinal)
-  );
+  if (job.type === "service.bulk" && payload.action === "update" && batch) return true;
+  if (job.type === "system.update")
+    return guardedSystemReleasePayloadSchema.safeParse(payload).success;
+  return readAdminJobProtocol(job.protocol).candidate !== undefined;
 }
 
-function canResumeConfigurationCandidate(job: {
-  id: string;
-  type: string;
-  payload: unknown;
-  result: unknown;
-}) {
-  return (
-    hasRetainedImmediateConfiguration(job) ||
-    hasRetainedQueuedCoordinator(job) ||
-    retainedMaintenanceJob(job)
-  );
-}
-
-async function needsRecoveredCandidateCleanup(job: {
-  id: string;
-  type: string;
-  payload: unknown;
-  result: unknown;
-}) {
-  return (
-    canResumeConfigurationCandidate(job) &&
-    (job.result as { _configurationCandidate?: { phase?: string } } | null)?._configurationCandidate
-      ?.phase !== "discarded" &&
-    (await hasRecoveredMaintenanceCandidate(job.result, job.id))
-  );
-}
 export class RetainedJobConflict extends Error {}
-/** Routing only: the fixed handler authenticates the original request and sealed checkpoint before continuing. */
+/** Routing only: the handler checks the original request and its checkpoint before continuing. */
 function hasRetainedStandalone(job: { type: string; result: unknown }) {
   const value = job.result as {
-    _standalone?: { body?: unknown; mac?: unknown };
+    _standalone?: { body?: unknown };
     _standaloneSettled?: unknown;
   } | null;
   return (
     ["standalone.install", "standalone.adopt", "standalone.remove"].includes(job.type) &&
     value?._standaloneSettled !== true &&
-    typeof value?._standalone?.body === "string" &&
-    typeof value._standalone.mac === "string"
+    typeof value?._standalone?.body === "string"
   );
 }
 class JobPersistenceUnavailable extends Error {}
@@ -358,8 +309,7 @@ class AdminJobRunner {
   ): Promise<{ jobId: string; operationId: string }> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
       throw new RetainedJobConflict("Invalid mutation key");
-    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-    const digest = createHmac("sha256", token)
+    const digest = createHash("sha256")
       .update("openmapx-standalone-request-v1\0")
       .update(canonicalJson({ type, payload, actorId }))
       .digest("hex");
@@ -431,13 +381,9 @@ class AdminJobRunner {
     run: (
       ctx: JobContext,
     ) => Promise<{ value: T; result: Record<string, unknown>; failed?: boolean }>,
-    restore: (result: Record<string, unknown>) => T,
+    restore: (result: Record<string, unknown>, jobId: string) => T,
   ): Promise<T> {
-    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-    const intentDigest = createHmac("sha256", token)
-      .update("openmapx-immediate-configuration-intent-v1\0")
-      .update(canonicalJson(options.intent))
-      .digest("hex");
+    const intentDigest = apiKeyedDigest("immediate-configuration-intent", options.intent);
     const actorId = options.actorId ?? "internal";
     const find = (connection: Pick<typeof db, "select">) =>
       connection
@@ -446,7 +392,7 @@ class AdminJobRunner {
         .where(
           and(
             sql`${adminJob.payload}->>'operationKey' = ${options.operationKey}`,
-            sql`${adminJob.result}->>'_immediateActorId' = ${actorId}`,
+            sql`${adminJob.protocol}->'immediate'->>'actorId' = ${actorId}`,
           ),
         )
         .limit(2);
@@ -471,12 +417,10 @@ class AdminJobRunner {
               startedAt: new Date(),
               payload: { operationKey: options.operationKey },
               createdBy: dbActorId(options.actorId),
-              result: {
-                _execution: execution,
-                _observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),
-                _immediateJobId: id,
-                _immediateActorId: actorId,
-                _immediateIntentDigest: intentDigest,
+              protocol: {
+                execution,
+                observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),
+                immediate: { actorId, intentDigest },
               },
             })
             .returning();
@@ -486,9 +430,12 @@ class AdminJobRunner {
         });
     if (retained.length !== 1) throw new JobObservationPending("recovery_required");
     let job = retained[0]!,
-      checkpoint = (job.result ?? {}) as Record<string, unknown>,
+      checkpoint = jobCheckpoint(job.result, job.protocol) ?? {},
       recovering = false;
-    if (job.type !== options.type || checkpoint._immediateIntentDigest !== intentDigest)
+    if (
+      job.type !== options.type ||
+      readAdminJobProtocol(job.protocol).immediate?.intentDigest !== intentDigest
+    )
       throw new AdminJobFailure("Retained configuration intent conflicts", {
         errorCode: "conflict",
       });
@@ -497,21 +444,20 @@ class AdminJobRunner {
       if (["success", "failed"].includes(job.status)) {
         if (checkpoint._configurationRejection)
           throw restoreConfigurationRejection(checkpoint._configurationRejection);
-        return restore(checkpoint);
+        return restore(checkpoint, job.id);
       }
       if (
         !["running", "cancel_pending"].includes(job.status) ||
-        !checkpoint._configurationCandidate ||
         !IMMEDIATE_CONFIGURATION_JOB_TYPES.some((type) => type === options.type)
       )
         throw new JobObservationPending("recovery_required");
       const claimed = await claimAdminJob(job, {}, true);
       if (!claimed) throw new JobObservationPending("recovery_required");
       job = claimed;
-      checkpoint = (claimed.result ?? {}) as Record<string, unknown>;
+      checkpoint = jobCheckpoint(claimed.result, claimed.protocol) ?? {};
       recovering = true;
     }
-    const execution = readJobExecution(checkpoint)!;
+    const execution = readJobExecution(job.protocol)!;
     const controller = new AbortController(),
       signal = options.signal
         ? AbortSignal.any([controller.signal, options.signal])
@@ -528,6 +474,7 @@ class AdminJobRunner {
         options.type,
         { operationKey: options.operationKey },
         checkpoint,
+        job.protocol,
         signal,
         false,
         async (ctx) => {
@@ -553,7 +500,7 @@ class AdminJobRunner {
       if (!settled || !["success", "failed"].includes(settled.status))
         throw new JobObservationPending("recovery_required");
       if (failure && !(value !== undefined && failure instanceof AdminJobFailure)) throw failure;
-      return value ?? restore((settled.result ?? {}) as Record<string, unknown>);
+      return value ?? restore((settled.result ?? {}) as Record<string, unknown>, job.id);
     } finally {
       clearInterval(heartbeat);
       this.active.delete(job.id);
@@ -565,28 +512,29 @@ class AdminJobRunner {
    * reconciliation. No registered callback, new intent or latest desired state
    * is used; all authority is reconstructed by its nominal private reader. */
   private async resumeImmediateConfiguration(ctx: JobContext): Promise<Record<string, unknown>> {
+    const immediate = readAdminJobProtocol(ctx.protocol).immediate;
     if (
+      !immediate ||
       !hasRetainedImmediateConfiguration({
-        id: ctx.jobId,
         type: ctx.jobType ?? "",
         payload: ctx.payload,
-        result: ctx.checkpointResult,
+        protocol: ctx.protocol,
       })
     )
       throw new JobObservationPending("recovery_required");
-    const actorId = ctx.checkpointResult!._immediateActorId as string,
+    const actorId = immediate.actorId,
       operationKey = ctx.payload.operationKey as string,
       { withAdministrativeConfigurationJob, withAdministrativeConfigurationWriter } = await import(
         "./administrative-configuration-writer"
       ),
-      { resumeRetainedConfigurationCandidate, retainedConfigurationIntegrationIds } = await import(
+      { resumeConfigurationCandidate, retainedConfigurationIntegrationIds } = await import(
         "./prospective-configuration"
       ),
-      integrationIds = await retainedConfigurationIntegrationIds(ctx, actorId, operationKey),
+      integrationIds = await retainedConfigurationIntegrationIds(ctx, operationKey),
       originalResult = await withAdministrativeConfigurationJob(ctx, () =>
         withAdministrativeConfigurationWriter(
           { actorId, operationKey, integrationIds, signal: ctx.signal },
-          () => resumeRetainedConfigurationCandidate(),
+          () => resumeConfigurationCandidate(),
         ),
       ),
       result = await (
@@ -597,11 +545,11 @@ class AdminJobRunner {
       .from(adminJob)
       .where(jobOwnership(ctx.jobId, ctx.execution, ["canceled"]));
     if (canceled) {
-      // The fixed producer already published its actual canceled/nonissuance
-      // completion under this nonce. Observe it; generic settlement must not
-      // overwrite that terminal source with success or failure.
+      // The producer already recorded its own canceled completion under this
+      // nonce. Observe it; generic settlement must not overwrite it with
+      // success or failure.
       this.announce(ctx.jobId, "canceled", {
-        result: publicAdminJobResult(canceled.result as Record<string, unknown> | null),
+        result: canceled.result as Record<string, unknown> | null,
         finishedAt: canceled.finishedAt?.toISOString(),
       });
       throw new JobOwnershipLost();
@@ -711,7 +659,7 @@ class AdminJobRunner {
           failed: value.outcome.outcome !== "committed" || value.outcome.followUp !== "complete",
         };
       },
-      (result) => {
+      (result, jobId) => {
         if (result.errorCode === "configuration_prerequisite")
           throw new ConfigurationPrerequisiteFailure();
         let outcome = parseTrustedConfigurationApplyOutcome(result.configuration);
@@ -746,7 +694,7 @@ class AdminJobRunner {
         return {
           outcome,
           ...(integrationReload ? { integrationReload } : {}),
-          ...(typeof result._immediateJobId === "string" ? { jobId: result._immediateJobId } : {}),
+          jobId,
         };
       },
     );
@@ -957,7 +905,7 @@ class AdminJobRunner {
       .update(adminJob)
       .set({
         status: "cancel_pending",
-        result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('_cancelRequestedAt', coalesce(${adminJob.result}->>'_cancelRequestedAt', ${new Date().toISOString()}::text))`,
+        protocol: sql`${adminJob.protocol} || jsonb_build_object('cancelRequestedAt', coalesce(${adminJob.protocol}->>'cancelRequestedAt', ${new Date().toISOString()}::text))`,
       })
       .where(and(eq(adminJob.id, jobId), inArray(adminJob.status, ["running", "cancel_pending"])))
       .returning();
@@ -966,67 +914,55 @@ class AdminJobRunner {
     // Stops only this observer/forward handler. Backend containment is independently verified.
     this.active.get(jobId)?.abort();
     let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>> = "pending";
+    const context = cancellationReceiptContext(job);
     try {
-      outcome = await cancelAdminJobOperations(job.result, undefined, {
-        context: cancellationReceiptContext(job),
-        jobId,
-        onEvidence: async (evidence) => {
-          await db
-            .update(adminJob)
-            .set({
-              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
-            })
-            .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
+      // A helper the agent's apply left running is stopped before this returns.
+      const { abandonAppliedConfigurationMaintenance } = await import(
+        "./prospective-configuration"
+      );
+      await abandonAppliedConfigurationMaintenance(context);
+    } catch {
+      /* The job's next run sends the same abandonment. */
+    }
+    try {
+      outcome = await cancelAdminJobOperations(
+        context.checkpointResult,
+        context.protocol,
+        undefined,
+        {
+          context,
+          jobId,
+          onEvidence: async (evidence) => {
+            await db
+              .update(adminJob)
+              .set(mergeJobCheckpoint(evidence))
+              .where(jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]));
+          },
         },
-      });
+      );
     } catch {
       /* Retain intent. */
     }
-    if (outcome !== "canceled" && outcome !== "recovered_failure") return false;
-    if (outcome === "recovered_failure") {
-      const [current] = await db
-        .select()
-        .from(adminJob)
-        .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
-      if (current && (await needsRecoveredCandidateCleanup(current))) {
-        // Keep the original cancel marker. It prevents forward admission while
-        // the existing fixed producer observes closure and discards its packet.
-        const accepted = await db
-          .update(adminJob)
-          .set({
-            status: "running",
-            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('observation', jsonb_build_object('state','unknown','reason','recovery_required','nextCheckAt',${new Date().toISOString()}::text),'_observationLeaseUntil',null)`,
-          })
-          .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]))
-          .returning({ id: adminJob.id });
-        // Acknowledge the retained cancellation request, not a terminal
-        // canceled outcome. The original failed canonical remains unchanged.
-        return accepted.length > 0;
-      }
-    }
-    const status = outcome === "recovered_failure" ? "failed" : "canceled";
+    if (outcome !== "canceled") return false;
     const finishedAt = new Date();
     const rows = await db
       .update(adminJob)
       .set({
-        status,
-        ...(outcome === "recovered_failure"
-          ? { error: "Maintenance preparation failed; original ownership was safely released." }
-          : {}),
+        status: "canceled",
         finishedAt,
         result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
       })
       .where(
         and(
-          jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]),
+          jobOwnership(jobId, readJobExecution(job.protocol), ["cancel_pending"]),
           noUnsettledManagedOperation(),
         ),
       )
       .returning({ id: adminJob.id, result: adminJob.result });
     if (rows.length === 0) return false;
-    this.announce(jobId, status, {
+    this.announce(jobId, "canceled", {
       finishedAt: finishedAt.toISOString(),
-      result: publicAdminJobResult(rows[0]?.result as Record<string, unknown> | null),
+      result: rows[0]?.result as Record<string, unknown> | null,
     });
     return true;
   }
@@ -1060,7 +996,12 @@ class AdminJobRunner {
     // and are now running the exact image that the update pulled. Any other
     // interrupted job retains uncertainty until its original effect is observed.
     const interruptedUpdates = await db
-      .select({ id: adminJob.id, result: adminJob.result, status: adminJob.status })
+      .select({
+        id: adminJob.id,
+        result: adminJob.result,
+        protocol: adminJob.protocol,
+        status: adminJob.status,
+      })
       .from(adminJob)
       .where(and(eq(adminJob.status, "running"), eq(adminJob.type, "system.update")));
     const checkpointedUpdates = interruptedUpdates.flatMap((job) => {
@@ -1070,7 +1011,7 @@ class AdminJobRunner {
     for (const candidate of checkpointedUpdates) {
       const claimed = await claimAdminJob({ ...candidate, status: candidate.status ?? "running" });
       if (!claimed) continue;
-      const execution = readJobExecution(claimed.result);
+      const execution = readJobExecution(claimed.protocol);
       const outcome = await (options.resolveReplacementOutcome ?? (async () => null))(
         candidate.checkpoint.outcomeFile,
       );
@@ -1214,11 +1155,12 @@ class AdminJobRunner {
   }
 
   private launchJob(
-    job: typeof adminJob.$inferSelect,
+    row: typeof adminJob.$inferSelect,
     observe = false,
     observationSignal?: AbortSignal,
   ): Promise<void> {
-    const controller = new AbortController(),
+    const job = { ...row, result: jobCheckpoint(row.result, row.protocol) },
+      controller = new AbortController(),
       retainedConfiguration =
         observe &&
         (hasRetainedImmediateConfiguration(job) ||
@@ -1234,7 +1176,7 @@ class AdminJobRunner {
     const renew = async () => {
       if (closed || controller.signal.aborted) return;
       try {
-        await renewAdminJobClaim(job.id, readJobExecution(job.result));
+        await renewAdminJobClaim(job.id, readJobExecution(job.protocol));
       } catch (error) {
         controller.abort(error);
         return;
@@ -1253,6 +1195,7 @@ class AdminJobRunner {
       job.type,
       (job.payload as Record<string, unknown>) ?? {},
       (job.result as Record<string, unknown> | null) ?? null,
+      job.protocol,
       observe
         ? AbortSignal.any([
             controller.signal,
@@ -1282,6 +1225,7 @@ class AdminJobRunner {
     type: string,
     payload: Record<string, unknown>,
     checkpointResult: Record<string, unknown> | null,
+    protocol: unknown,
     signal: AbortSignal,
     observe = false,
     immediateHandler?: JobHandler,
@@ -1294,11 +1238,10 @@ class AdminJobRunner {
       throw error;
     };
     const retainedImmediate =
-        observe &&
-        hasRetainedImmediateConfiguration({ id: jobId, type, payload, result: checkpointResult }),
+        observe && hasRetainedImmediateConfiguration({ type, payload, protocol }),
       retainedQueuedCoordinator =
         observe &&
-        hasRetainedQueuedCoordinator({ id: jobId, type, payload, result: checkpointResult }),
+        hasRetainedQueuedCoordinator({ type, payload, result: checkpointResult, protocol }),
       retainedStandalone = observe && hasRetainedStandalone({ type, result: checkpointResult }),
       retainedExtension =
         observe && hasRetainedExtensionWorkflow({ type, result: checkpointResult }),
@@ -1321,7 +1264,7 @@ class AdminJobRunner {
               ? observeExtensionJob
               : resumeAdminJobObservation
             : (immediateHandler ?? this.handlers.get(type));
-    const execution = readJobExecution(checkpointResult);
+    const execution = readJobExecution(protocol);
     let checkpointTail = Promise.resolve();
     let checkpointBaseline = structuredClone((checkpointResult ?? {}) as Record<string, unknown>);
     const sanitizeExtensionOutput = type === "extension.install";
@@ -1353,6 +1296,7 @@ class AdminJobRunner {
       payload: executionPayload,
       signal,
       checkpointResult: checkpointResult === null ? null : durableRecord(checkpointResult),
+      protocol: readAdminJobProtocol(protocol),
       log: async (line, stream = "stdout", sourceEventId, sourceSeq) => {
         const localSeq = this.logSeq.get(jobId) ?? 0;
         const seq = sourceSeq ?? localSeq;
@@ -1399,58 +1343,55 @@ class AdminJobRunner {
         if (!rows.length) lost();
         jobEventBus.publish(jobId, { type: "progress", progress });
       },
-      checkpoint: async (result, progress, admissionKey, stepAddress) => {
+      checkpoint: async (result, progress, admissionKey, stepAddress, operations) => {
         result = durableRecord(result);
         const write = checkpointTail.then(async () => {
-          const isV3 = (result.opsProjection as { version?: number } | undefined)?.version === 3;
-          if (isV3) {
+          // A job that records agent operations checkpoints them with its result.
+          const recorded =
+            operations ??
+            (ctx.protocol?.operations === undefined
+              ? undefined
+              : readProjection(ctx.protocol, ctx.checkpointResult));
+          if (recorded) {
             if (admissionKey) signal.throwIfAborted();
             try {
-              ctx.checkpointResult = await checkpointOwnedAdminJob(
+              const saved = await checkpointOwnedAdminJob(
                 jobId,
                 execution,
                 result,
+                recorded,
                 progress,
                 admissionKey,
                 stepAddress,
                 checkpointBaseline,
               );
+              ctx.checkpointResult = saved.result;
+              ctx.protocol = saved.protocol;
               checkpointBaseline = structuredClone(ctx.checkpointResult);
             } catch (error) {
-              if (error instanceof JobStepAllocationConflict)
+              if (error instanceof JobStepAllocationConflict) {
                 ctx.checkpointResult = error.checkpoint;
+                ctx.protocol = error.protocol;
+              }
               throw error;
             }
             if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
             return;
           }
+          if (admissionKey) throw Error("An operation reservation needs its operations");
           signal.throwIfAborted();
-          // A handler cannot replace the runner's ownership member.
-          const merged: Record<string, unknown> = {
-            ...ctx.checkpointResult,
-            ...result,
-            ...(execution ? { _execution: execution } : {}),
-          };
+          const merged: Record<string, unknown> = { ...ctx.checkpointResult, ...result };
           const rows = await db
             .update(adminJob)
             .set({
-              result: sql`${JSON.stringify(merged)}::jsonb || jsonb_build_object('_observationLeaseUntil', ${adminJob.result}->'_observationLeaseUntil')`,
+              ...replaceJobCheckpoint(merged),
               ...(progress === undefined ? {} : { progress }),
             })
-            .where(
-              and(
-                jobOwnership(jobId, execution),
-                ...(admissionKey
-                  ? [
-                      sql`${adminJob.result}->'opsProjection'->'operations'->${admissionKey} IS NULL`,
-                      sql`(${adminJob.result}->'_parentExecution' IS NULL OR ${adminJob.result}->'_parentExecution' = ${JSON.stringify(merged._parentExecution ?? null)}::jsonb)`,
-                    ]
-                  : []),
-              ),
-            )
+            .where(jobOwnership(jobId, execution))
             .returning({ id: adminJob.id });
           if (!rows.length) lost();
           ctx.checkpointResult = merged;
+          ctx.protocol = { ...ctx.protocol, handler: splitJobCheckpoint(merged).handler };
           if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
         });
         checkpointTail = write.catch(() => undefined);
@@ -1474,7 +1415,6 @@ class AdminJobRunner {
         const attempts = Math.min(12, Number(ctx.checkpointResult?._observationAttempts ?? 0) + 1);
         const observationPatch = {
           _observationAttempts: attempts,
-          _observationLeaseUntil: null,
           observation: {
             state: "unknown",
             reason,
@@ -1485,14 +1425,12 @@ class AdminJobRunner {
         };
         const rows = await db
           .update(adminJob)
-          .set({
-            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(observationPatch)}::jsonb`,
-          })
+          .set(mergeJobCheckpoint(observationPatch, { protocol: { observationLeaseUntil: null } }))
           .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]))
           .returning({ status: adminJob.status, result: adminJob.result });
         if (rows[0])
           this.announce(jobId, rows[0].status, {
-            result: publicAdminJobResult(rows[0].result as Record<string, unknown> | null),
+            result: rows[0].result as Record<string, unknown> | null,
           });
       } catch {
         throw new JobPersistenceUnavailable("Administrative job persistence unavailable");
@@ -1507,20 +1445,18 @@ class AdminJobRunner {
       if (error !== undefined) error = durableLine(error);
       try {
         await checkpointTail;
-        const merged: Record<string, unknown> = {
-          ...ctx.checkpointResult,
-          ...result,
-          ...(execution ? { _execution: execution } : {}),
-        };
+        const merged: Record<string, unknown> = { ...ctx.checkpointResult, ...result };
         delete merged.observation;
         const safeMerged = durableRecord(merged);
-        if (hasUnsettledManagedOperation(ctx.checkpointResult)) {
+        if (hasUnsettledManagedOperation(ctx.checkpointResult, ctx.protocol)) {
           if (status === "success" || knownFailure)
             await db
               .update(adminJob)
-              .set({
-                result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(safeMerged), error } })}::jsonb`,
-              })
+              .set(
+                mergeJobCheckpoint({
+                  _settled: { status, result: publicAdminJobResult(safeMerged), error },
+                }),
+              )
               .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
           throw new JobObservationPending("recovery_required");
         }
@@ -1529,7 +1465,14 @@ class AdminJobRunner {
           .update(adminJob)
           .set({
             status,
-            result: sql`(coalesce(${adminJob.result}, '{}'::jsonb) - 'observation') || ${JSON.stringify(Object.fromEntries(Object.entries(safeMerged).filter(([key]) => !["opsProjection", "_opsLogEvents", "_opsLogBytes"].includes(key))))}::jsonb`,
+            ...mergeJobCheckpoint(
+              Object.fromEntries(
+                Object.entries(safeMerged).filter(
+                  ([key]) => !["_opsLogEvents", "_opsLogBytes"].includes(key),
+                ),
+              ),
+              { dropObservation: true },
+            ),
             error: error ?? null,
             finishedAt,
             ...(status === "success" ? { progress: 100 } : {}),
@@ -1547,9 +1490,11 @@ class AdminJobRunner {
           // Cancel intent wins; retain late evidence without publishing a terminal event.
           await db
             .update(adminJob)
-            .set({
-              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(safeMerged), error } })}::jsonb`,
-            })
+            .set(
+              mergeJobCheckpoint({
+                _settled: { status, result: publicAdminJobResult(safeMerged), error },
+              }),
+            )
             .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
           await pending("transport");
         }
@@ -1569,11 +1514,11 @@ class AdminJobRunner {
           .limit(1);
         if (!current) return;
         if (current.status === "cancel_pending" && !retainedStandalone) {
-          const original = current.result as Record<string, unknown> | null;
+          const original = jobCheckpoint(current.result, current.protocol);
           const artifactObservation =
             retainedMaintenance &&
             ["artifact.import", "artifact.validate"].includes(type) &&
-            Object.values(readProjection(original).operations).some(
+            Object.values(readProjection(current.protocol, original).operations).some(
               (operation) =>
                 operation.operationId &&
                 operation.attempt &&
@@ -1584,7 +1529,7 @@ class AdminJobRunner {
                     ? "artifactTransfer.import"
                     : "artifactTransfer.validate"),
             );
-          const outcome = await cancelAdminJobOperations(current.result, undefined, {
+          const outcome = await cancelAdminJobOperations(original, current.protocol, undefined, {
             context: ctx,
             jobId,
             signal,
@@ -1592,9 +1537,7 @@ class AdminJobRunner {
               ctx.checkpointResult = { ...ctx.checkpointResult, ...evidence };
               await db
                 .update(adminJob)
-                .set({
-                  result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
-                })
+                .set(mergeJobCheckpoint(evidence))
                 .where(jobOwnership(jobId, execution, ["cancel_pending"]));
             },
           }).catch((error) => {
@@ -1609,42 +1552,24 @@ class AdminJobRunner {
             if (
               !artifactObservation &&
               (!retainedConfiguration ||
-                Object.keys(readProjection(original).operations).length !== 0 ||
+                Object.keys(readProjection(current.protocol, original).operations).length !== 0 ||
                 original?._dataExecutions !== undefined)
             ) {
               await pending("transport");
               return;
             }
             // Routing only: before any child admission the generic canceller
-            // has no terminal to observe. The fixed producer must authenticate
-            // its private candidate and locked nonissuance state before cleanup
-            // or canceled publication. The cancel marker still blocks forward
-            // admission; neither an empty projection nor this status grants it.
+            // has no terminal to observe. The producer reads its own candidate
+            // before cleanup or canceled publication. The cancel marker still
+            // blocks forward admission; neither an empty projection nor this
+            // status grants it.
           }
-          if (
-            (outcome === "canceled" || outcome === "recovered_failure") &&
-            !(
-              outcome === "recovered_failure" &&
-              (await needsRecoveredCandidateCleanup({
-                id: jobId,
-                type,
-                payload,
-                result: ctx.checkpointResult,
-              }))
-            )
-          ) {
-            const status = outcome === "recovered_failure" ? "failed" : "canceled";
+          if (outcome === "canceled") {
             const finishedAt = new Date();
             const rows = await db
               .update(adminJob)
               .set({
-                status,
-                ...(outcome === "recovered_failure"
-                  ? {
-                      error:
-                        "Maintenance preparation failed; original ownership was safely released.",
-                    }
-                  : {}),
+                status: "canceled",
                 finishedAt,
                 result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
               })
@@ -1656,9 +1581,9 @@ class AdminJobRunner {
               )
               .returning({ id: adminJob.id, result: adminJob.result });
             if (rows.length)
-              this.announce(jobId, status, {
+              this.announce(jobId, "canceled", {
                 finishedAt: finishedAt.toISOString(),
-                result: publicAdminJobResult(rows[0]?.result as Record<string, unknown> | null),
+                result: rows[0]?.result as Record<string, unknown> | null,
               });
             return;
           }
@@ -1727,26 +1652,6 @@ class AdminJobRunner {
       )
       .orderBy(asc(adminJob.createdAt))
       .limit(limit);
-    if (due.length < limit) {
-      // Prior releases published FAILED immediately after negative recovery,
-      // before discarding the inert candidate. Select only those historical
-      // packets for verification; neither this query nor a flag grants cleanup.
-      const historical = await db
-        .select()
-        .from(adminJob)
-        .where(
-          and(
-            eq(adminJob.status, "failed"),
-            inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
-            sql`${adminJob.result}->'_configurationCandidate'->>'phase' IN ('prepared','discarding_without_guard')`,
-            sql`${adminJob.result}->>'_cancelRequestedAt' IS NOT NULL`,
-            noUnsettledManagedOperation(),
-          ),
-        )
-        .orderBy(asc(adminJob.createdAt))
-        .limit(limit - due.length);
-      for (const job of historical) if (await needsRecoveredCandidateCleanup(job)) due.push(job);
-    }
     for (const job of due) {
       if (signal?.aborted) break;
       if (this.active.has(job.id)) continue;

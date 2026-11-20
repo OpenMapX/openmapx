@@ -1,7 +1,5 @@
 /** Standalone host-CLI roots for the two fixed artifact operations. */
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import type { ArtifactPublicationResult, OpsOperation, OpsResultFor } from "@openmapx/core/ops";
 import {
@@ -29,8 +27,7 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
     .list()
     .map((service) => service.manifest.id)
     .sort();
-  if (!existsSync("/run/secrets/openmapx-control-verifiers"))
-    await control.provisionControlInstallation(paths.infraDir);
+  control.provisionControlDirectories(paths.infraDir);
   const installation = control.openControlInstallation({
     infraDir: paths.infraDir,
     role: "host-cli",
@@ -65,26 +62,26 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
       AbortSignal.timeout(budget),
       ...(cliAcquisitionOptions().signal ? [cliAcquisitionOptions().signal!] : []),
     ]);
+    // An import into the current generation applies that generation's plan
+    // once its files are committed.
     const hardlinks =
       operation.kind === "artifactTransfer.import" && operation.expectedCurrentRevisionId
-        ? control.planGenerationHardlinksOwner({
-            infraDir: paths.infraDir,
-            parent: execution,
+        ? {
             revisionId: operation.expectedCurrentRevisionId,
-            coordinatorMode: "require-running",
-            serviceIds: targets,
-          })
+            plan: control.readGenerationHardlinkPlan(
+              paths.infraDir,
+              operation.expectedCurrentRevisionId,
+            ).plan,
+          }
         : undefined;
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
       admittedAt,
       requestedDeadlineAt: deadlineAt,
       serviceIds: targets,
-      ...(hardlinks ? { reservations: hardlinks.reservation ? [hardlinks.reservation] : [] } : {}),
     });
-    if (hardlinks) control.retainGenerationHardlinksOwnerPlan(authority, hardlinks);
     lease = await control.acquireArtifactTargetLease({
       serviceIds: targets,
       owner: authority,
@@ -100,16 +97,16 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
 /** Export reads managed targets; it publishes no managed files. The fixed
  * caller invokes this only after its external output stream has completed. */
 export async function settleCliReadOnlyExport(owner: CliArtifactOwner) {
-  if (control.executionAuthorityState(owner.authority).kind !== "artifactTransfer.export")
+  if (owner.authority.kind !== "artifactTransfer.export")
     throw Error("Original read-only export required");
-  control.retainControlEffectReceipt(owner.authority, {
+  await control.retainControlEffectReceipt(owner.authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
   });
   await control.settleArtifactTargetLeaseChild(
     owner.lease,
-    control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
+    await control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
   );
   await control.releaseArtifactTargetLease(owner.lease);
 }
@@ -119,14 +116,14 @@ export async function settleCliArtifactOwner(
   result: ArtifactPublicationResult | OpsResultFor<"artifactTransfer.export">,
 ) {
   const notCommitted = "outcome" in result && result.outcome === "not_committed";
-  control.retainControlEffectReceipt(owner.authority, {
+  await control.retainControlEffectReceipt(owner.authority, {
     outcome: notCommitted ? "contained" : "committed",
     publication: notCommitted ? "not_started" : "committed",
     receipt: { kind: "ops-result", result },
   });
   await control.settleArtifactTargetLeaseChild(
     owner.lease,
-    control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
+    await control.verifyControlEffectSettlement(owner.installation, owner.authority.execution),
   );
   await control.releaseArtifactTargetLease(owner.lease);
 }

@@ -8,7 +8,12 @@ import {
   installedIntegration,
 } from "../../db/schema";
 import { readProjection } from "../admin-job-projection";
-import { JobOwnershipLost } from "../admin-job-state";
+import {
+  cancelRequestedAt,
+  JobOwnershipLost,
+  jobCheckpoint,
+  readAdminJobProtocol,
+} from "../admin-job-state";
 import { assertOwnershipSettlementCheckpoint } from "./ownership-checkpoint";
 import { readOwnershipState } from "./ownership-state";
 import { readStandaloneState } from "./state";
@@ -38,7 +43,7 @@ export async function assertStandaloneSettlementCheckpoint(
     state.request.inspectionId !== state.inspection.inspectionId
   )
     throw new JobOwnershipLost();
-  const original = Object.values(readProjection(current).operations).filter(
+  const original = Object.values(readProjection(row.protocol, current).operations).filter(
     (entry) =>
       entry.operation?.kind === "integration.install" &&
       entry.operation.operationId === state.operationId,
@@ -113,24 +118,21 @@ export async function assertStandaloneSettlementCheckpoint(
     (integration?.managedByExtension && integration.managedByExtension !== state.parentId)
   )
     throw new JobOwnershipLost();
-  // The unchanged parent/body/address checks in the caller and actual signed
-  // agent transaction independently enforce the original lifetime and ownership.
+  // The unchanged parent/body/address checks in the caller and the agent's own
+  // keyed operation independently enforce the original lifetime and ownership.
 }
 
 /** Whole-job cancellation is supported by the original successful restore leaf,
  * not by the generic fact that every child returned successfully. */
 export async function hasVerifiedStandaloneRestoration(
   result: unknown,
+  protocol: unknown,
   jobId: string | undefined,
 ): Promise<boolean> {
   try {
-    if (!jobId || !result || typeof result !== "object") return false;
-    const value = result as Record<string, unknown>;
-    if (
-      value._standaloneSettled !== true ||
-      typeof value._cancelRequestedAt !== "string" ||
-      !Number.isFinite(Date.parse(value._cancelRequestedAt))
-    )
+    const value = jobCheckpoint(result, protocol);
+    if (!jobId || !value) return false;
+    if (value._standaloneSettled !== true || !cancelRequestedAt(readAdminJobProtocol(protocol)))
       return false;
     let ownership: Awaited<ReturnType<typeof readOwnershipState>> | undefined;
     try {
@@ -143,7 +145,7 @@ export async function hasVerifiedStandaloneRestoration(
         ownership.outcome !== "restored"
       )
         return false;
-      const children = Object.values(readProjection(value).operations),
+      const children = Object.values(readProjection(protocol, value).operations),
         restores = children.filter(
           (x) =>
             x.operation?.kind === "integration.settle" &&
@@ -161,7 +163,7 @@ export async function hasVerifiedStandaloneRestoration(
     const state = await readStandaloneState(value._standalone);
     if (state.jobId !== jobId || state.phase !== "complete" || state.outcome !== "restored")
       return false;
-    const operations = Object.values(readProjection(value).operations);
+    const operations = Object.values(readProjection(protocol, value).operations);
     if (operations.some((operation) => !operation.terminal || !operation.receiptDelivery))
       return false;
     const restore = operations.filter(

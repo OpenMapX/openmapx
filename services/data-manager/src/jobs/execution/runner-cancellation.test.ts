@@ -6,7 +6,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -130,7 +129,7 @@ it.skipIf(
     const sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-runner-union-crash-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const catalog = join(root, "catalog"),
       ready = join(catalog, "ready"),
       keyFile = join(root, "runner-key"),
@@ -234,13 +233,14 @@ it.skipIf(
       if (!original) throw Error("Original row missing");
       const lease = motisLease(root);
       expect(lease).toBeDefined();
-      const proof = join(
-        root,
-        `control-private/data-manager/observations/worker-${original.operation_key}.json`,
-      );
       await dm!.kill();
       dm = undefined;
-      expect(existsSync(proof)).toBe(false);
+      // The killed worker never recorded how it ended.
+      expect(original.execution_completion).toBeNull();
+      expect(
+        (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id}`)[0]
+          ?.execution_completion,
+      ).toBeNull();
       base = await start(true);
       const retry = await fetch(base + "/transit/sync", {
         method: "POST",
@@ -306,7 +306,7 @@ it.skipIf(
       ])
         expect(current?.[key]).toEqual(original[key]);
       expect(motisLease(root)).toBe(lease);
-      expect(existsSync(proof)).toBe(false);
+      expect(current?.execution_completion).toBeNull();
       expect(posts).toBe(2);
       for (const [name, controlDigest] of controlledDigests)
         expect(controlDigest).toBe(originalDigests.get(name));
@@ -337,7 +337,7 @@ it
     const sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-dm-active-crash-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const token = "b".repeat(43),
       tokenFile = join(root, "token"),
       keyFile = join(root, "runner-key");
@@ -444,8 +444,11 @@ it
       await dm!.kill();
       dm = undefined;
       // SIGKILL occurred while dispatcher awaited the independent child.
-      const observations = join(root, "control-private/data-manager/observations");
-      expect(existsSync(join(observations, `worker-${operationKey}.json`))).toBe(false);
+      const jobId = id;
+      const completion = async () =>
+        (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${jobId}`)[0]
+          ?.execution_completion;
+      expect(await completion()).toBeNull();
       base = await start(true);
       if (mode === "python") {
         const retry = await fetch(base + "/transit/sync", {
@@ -512,7 +515,7 @@ it
       ])
         expect(current?.[key]).toEqual(original[key]);
       expect(motisLease(root)).toBe(lease);
-      expect(existsSync(join(observations, `worker-${operationKey}.json`))).toBe(false);
+      expect(await completion()).toBeNull();
       dm!.send({ type: "probe" });
       expect((await dm!.next("probe")).dispatches).toBe(0);
       if (agent) {
@@ -521,7 +524,7 @@ it
         expect(probe.effects).toBe(1);
         expect(probe.forward).toBe(false);
         expect(probe.operationId).toBe(
-          original.execution_children.find(
+          original.metadata.dataExecution.childReservations.find(
             (child: { phase: string }) => child.phase === "recover-primary",
           )?.proposedId,
         );
@@ -557,7 +560,7 @@ it.skipIf(
       released = join(catalog, "release");
     mkdirSync(join(root, "data"), { mode: 0o700 });
     mkdirSync(join(catalog, "src"), { recursive: true });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     writeFileSync(
       join(catalog, "src/garbage-collect.py"),
       "import os,time\nfrom pathlib import Path\nPath('ready').write_text(str(os.getpid()))\nwhile not Path('release').exists(): time.sleep(0.05)\n",
@@ -597,13 +600,13 @@ it.skipIf(
     const cleanupHeld = new Promise<void>((resolve) => {
         resumeCleanup = resolve;
       }),
-      publishTerminal = journal.publishTerminal.bind(journal);
-    // Keep the real terminal commit/signature, but hold the live worker before
-    // lease release. A terminal row must not masquerade as completed cleanup.
+      verifyTerminal = journal.verifyContainedTerminal.bind(journal);
+    // Keep the real terminal commit, but hold the live worker before lease
+    // release. A terminal row must not masquerade as completed cleanup.
     const publication = vi
-      .spyOn(journal, "publishTerminal")
+      .spyOn(journal, "verifyContainedTerminal")
       .mockImplementation(async (execution) => {
-        await publishTerminal(execution);
+        await verifyTerminal(execution);
         terminalPublished = true;
         await cleanupHeld;
       });
@@ -658,32 +661,14 @@ it.skipIf(
       const terminal = await store.inspect(id);
       if (!terminal) throw Error("Original terminal row missing");
       expect(motisLease(root)).toBeDefined();
-      expect(() =>
-        control.readDataControlTerminalObservation(
-          installation,
-          terminal.execution,
-          terminal.status,
-        ),
-      ).toThrow(/ENOENT/);
       expect(terminal.status.publication).toBe("not_started");
       expect(terminal.finishedAt).not.toBeNull();
       expect(posts).toBe(1);
       expect(cancels).toBeGreaterThanOrEqual(1);
       resumeCleanup();
-      // The contained terminal is recorded only after lease release; the
-      // canceled database row above is visible before that point.
-      await expect
-        .poll(
-          () =>
-            control.readDataControlTerminalObservation(
-              installation,
-              terminal.execution,
-              terminal.status,
-            ).status,
-          { timeout: 15000 },
-        )
-        .toEqual(terminal.status);
-      expect(motisLease(root)).toBeUndefined();
+      // The lease is released only after cleanup; the canceled database row
+      // above is visible before that point.
+      await expect.poll(() => motisLease(root), { timeout: 15000 }).toBeUndefined();
     } finally {
       resumeCleanup();
       writeFileSync(released, "release");
@@ -693,7 +678,6 @@ it.skipIf(
       await runner.close();
       if (!id && operationKey) id = (await store.lookup(operationKey))?.status.id;
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });

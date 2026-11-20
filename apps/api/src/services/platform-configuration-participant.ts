@@ -1,6 +1,6 @@
 /** Sole built-in platform issuer. Parsed previews/overlays and copied objects
  * are data; only this writer-bound instance participates in a desired save. */
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { AdminPlatformPreview } from "@openmapx/core/api-contracts";
 import { type ConfigurationSourcesInspection, canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -159,6 +159,11 @@ export function assertPlatformConfigurationSource(
   });
   if (rebuilt.previewFingerprint !== p.previewFingerprint) throw new PlatformPreviewConflict();
 }
+/** One handoff per job step, so a rerun of the step names the same handoff. */
+function jobHandoffId(jobId: string, operationKey: string): string {
+  const hex = createHash("sha256").update(canonicalJson({ jobId, operationKey })).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 export async function preparePlatformConfigurationChange(
   input: Pick<
     PlatformConfigurationCommitInput,
@@ -274,7 +279,7 @@ export async function preparePlatformConfigurationChange(
       )
         throw new PlatformPreviewConflict();
       const generation = Object.values(
-        readProjection(current.job.checkpointResult).operations,
+        readProjection(current.job.protocol, current.job.checkpointResult).operations,
       ).find(
         (entry) =>
           entry.operation?.kind === "stack.render" &&
@@ -389,7 +394,7 @@ export async function preparePlatformConfigurationChange(
     preview,
     sourceSnapshot: immutable(retained.sourceSnapshot!),
     expectedDesiredRowVersion: desired?.version ?? null,
-    handoffId: randomUUID(),
+    handoffId: jobHandoffId(owner.job.jobId, writer.operationKey),
     ...(migration
       ? {
           migrationStageId: migration.stage.previewId,

@@ -43,11 +43,12 @@ function required<T>(value: T | undefined | null): T {
   return value;
 }
 function checkedCheckpoint(
-  value: unknown,
-): Record<string, unknown> & { opsProjection: ReturnType<typeof readProjection> } {
+  job: { result: unknown; protocol: unknown } | undefined,
+): Record<string, unknown> & { operations: ReturnType<typeof readProjection> } {
+  const value = job?.result;
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw Error("Missing fixture checkpoint");
-  return { ...value, opsProjection: readProjection(value) };
+  return { ...value, operations: readProjection(job.protocol, value) };
 }
 // Explicit opt-in connection supplied only after the task launcher verifies the
 // synthetic container's exact ID/owner. No migrations or table-wide cleanup.
@@ -94,16 +95,33 @@ describe.skipIf(
     const id = randomUUID();
     ids.push(id);
     const execution = { owner: randomUUID(), version: 1 };
+    // A fixture's recorded agent operations belong in the protocol column.
+    const { operations, ...rest } = result;
     const [job] = await state.db
       .insert(adminJob)
-      .values({ id, type, status, payload: {}, result: { ...result, _execution: execution } })
+      .values({
+        id,
+        type,
+        status,
+        payload: {},
+        result: rest,
+        protocol: { execution, ...(operations ? { operations } : {}) },
+      })
       .returning();
     return job;
   }
   const row = async (id: string) =>
     (await state.db.select().from(adminJob).where(eq(adminJob.id, id)))[0];
   const run = (job: typeof adminJob.$inferSelect, observe = false) =>
-    runner.executeJob(job.id, job.type, {}, job.result, new AbortController().signal, observe);
+    runner.executeJob(
+      job.id,
+      job.type,
+      {},
+      job.result,
+      job.protocol,
+      new AbortController().signal,
+      observe,
+    );
   const holdPump = () =>
     vi.spyOn(jobRunner as unknown as { pump(): Promise<void> }, "pump").mockResolvedValue();
   const jobsMarked = async (marker: string) => {
@@ -231,7 +249,7 @@ describe.skipIf(
     const locked = Promise.withResolvers<number>();
     const commit = Promise.withResolvers<void>();
     const replacement = client.begin(async (tx) => {
-      await tx`UPDATE admin_job SET result = result || ${JSON.stringify({ _execution: { owner: randomUUID(), version: 2 } })}::jsonb WHERE id = ${job.id}`;
+      await tx`UPDATE admin_job SET protocol = protocol || ${JSON.stringify({ execution: { owner: randomUUID(), version: 2 } })}::jsonb WHERE id = ${job.id}`;
       const [backend] = await tx`SELECT pg_backend_pid() AS pid`;
       locked.resolve(backend.pid);
       await commit.promise;
@@ -275,15 +293,15 @@ describe.skipIf(
     try {
       vi.setSystemTime(start + 40_000);
       await renewAdminJobClaim(job.id, ctx.execution);
-      const live = (await row(job.id)).result as Record<string, unknown>;
+      const live = (await row(job.id)).protocol as Record<string, unknown>;
       await ctx.checkpoint({ phase: "still working" });
-      expect((await row(job.id)).result).toHaveProperty(
-        "_observationLeaseUntil",
-        live._observationLeaseUntil,
+      expect((await row(job.id)).protocol).toHaveProperty(
+        "observationLeaseUntil",
+        live.observationLeaseUntil,
       );
       vi.setSystemTime(start + 65_000); // Original snapshot expired, renewed owner is live.
       expect(await claimAdminJob(claimed, {}, true)).toBeUndefined();
-      expect(readJobExecution((await row(job.id)).result)).toEqual(ctx.execution);
+      expect(readJobExecution((await row(job.id)).protocol)).toEqual(ctx.execution);
       vi.setSystemTime(start + 105_000);
       await expect(renewAdminJobClaim(job.id, ctx.execution)).rejects.toBeInstanceOf(
         JobOwnershipLost,
@@ -452,7 +470,7 @@ describe.skipIf(
             reason: "transport",
             nextCheckAt: new Date(0).toISOString(),
           },
-          opsProjection: {
+          operations: {
             version: 3,
             steps: {},
             eventTotal: 0,
@@ -516,7 +534,7 @@ describe.skipIf(
         expect(finished.finishedAt).not.toBeNull();
         expect(finished.result).not.toHaveProperty("observation");
         expect(finished.result).toHaveProperty("diagnostics", diagnostics);
-        expect(checkedCheckpoint(finished.result).opsProjection.operations[key]).toMatchObject({
+        expect(checkedCheckpoint(finished).operations.operations[key]).toMatchObject({
           terminal: true,
           phase: "terminal",
           errorClass: "runtime",
@@ -537,7 +555,7 @@ describe.skipIf(
       const pending = await row(job.id);
       expect(pending.status).toBe("cancel_pending");
       expect(pending.finishedAt).toBeNull();
-      expect(checkedCheckpoint(pending.result).opsProjection.operations[key]).toMatchObject({
+      expect(checkedCheckpoint(pending).operations.operations[key]).toMatchObject({
         terminal: false,
         phase: "observing",
       });
@@ -629,7 +647,7 @@ describe.skipIf(
   }
   async function seedCapacity(count: number, mixed = false) {
     const job = await seed(`test.renewal.capacity.${randomUUID()}`),
-      execution = required(readJobExecution(job.result));
+      execution = required(readJobExecution(job.protocol));
     const parent = retainedParent(job.id),
       operations: ReturnType<typeof readProjection>["operations"] = {},
       steps: ReturnType<typeof readProjection>["steps"] = {};
@@ -710,7 +728,10 @@ describe.skipIf(
       ...(job.result as Record<string, unknown>),
       _parentExecution: parent,
       untouched: { receipt: "preserve" },
-      opsProjection: {
+    };
+    const protocol = {
+      ...(job.protocol as Record<string, unknown>),
+      operations: {
         version: 3,
         eventTotal: 7,
         byteTotal: 17,
@@ -719,8 +740,15 @@ describe.skipIf(
         operations,
       },
     };
-    await state.db.update(adminJob).set({ result }).where(eq(adminJob.id, job.id));
-    return { ...job, result };
+    // The parent binding is the handler's own state, kept in the protocol.
+    const { splitJobCheckpoint } = await import("../admin-job-state"),
+      split = splitJobCheckpoint(result),
+      stored = { ...protocol, handler: split.handler };
+    await state.db
+      .update(adminJob)
+      .set({ result: split.result, protocol: stored })
+      .where(eq(adminJob.id, job.id));
+    return { ...job, result, protocol: stored };
   }
   it("renewal: same-owner same-address different deadlines has one CAS winner and at most one mutation POST", async () => {
     const job = await seed("test.renewal.same-address"),
@@ -750,29 +778,39 @@ describe.skipIf(
     unlock.resolve();
     await locked;
     await Promise.allSettled([first, second]);
-    const saved = checkedCheckpoint((await row(job.id)).result);
-    expect(Object.keys(saved.opsProjection.steps)).toHaveLength(1);
-    expect(Object.keys(saved.opsProjection.operations)).toHaveLength(1);
+    const saved = checkedCheckpoint(await row(job.id));
+    expect(Object.keys(saved.operations.steps)).toHaveLength(1);
+    expect(Object.keys(saved.operations.operations)).toHaveLength(1);
     expect(remote.counts().mutations).toBe(1);
-    const winner = required(saved.opsProjection.steps.opk1_sameaddress12345);
+    const winner = required(saved.operations.steps.opk1_sameaddress12345);
     expect(
       (
-        required(saved.opsProjection.operations[winner.operationKey]).operation as {
+        required(saved.operations.operations[winner.operationKey]).operation as {
           backupId: string;
         }
       ).backupId,
     ).toBe("winner");
-    expect(holders.contexts[1]?.checkpointResult).toMatchObject({
-      opsProjection: { steps: { opk1_sameaddress12345: winner } },
+    expect(holders.contexts[1]?.protocol).toMatchObject({
+      operations: { steps: { opk1_sameaddress12345: winner } },
     });
     await holders.finish();
   });
   it("renewal: current-row log capacity admits one last event and stale checkpoints cannot reset its charge", async () => {
     const job = await seedCapacity(0),
-      execution = required(readJobExecution(job.result));
+      execution = required(readJobExecution(job.protocol));
     const stale = { ...job.result, _opsLogEvents: 1999, _opsLogBytes: 0 };
-    await state.db.update(adminJob).set({ result: stale }).where(eq(adminJob.id, job.id));
-    const { insertOwnedJobLog } = await import("../admin-job-state");
+    const { insertOwnedJobLog, jobCheckpoint, splitJobCheckpoint } = await import(
+      "../admin-job-state"
+    );
+    await state.db
+      .update(adminJob)
+      .set({
+        protocol: {
+          ...(job.protocol as Record<string, unknown>),
+          handler: splitJobCheckpoint(stale).handler,
+        },
+      })
+      .where(eq(adminJob.id, job.id));
     const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint");
     const entries = [0, 1].map((seq) => ({
       id: `${job.id}:last:${seq}`,
@@ -790,12 +828,14 @@ describe.skipIf(
       job.id,
       execution,
       { ...stale, retainedPatch: true },
+      readProjection(job.protocol, stale),
       undefined,
       undefined,
       undefined,
       stale,
     );
-    expect((await row(job.id)).result).toMatchObject({
+    const charged = await row(job.id);
+    expect(jobCheckpoint(charged.result, charged.protocol)).toMatchObject({
       _opsLogEvents: 2000,
       _opsLogBytes: 4,
       retainedPatch: true,
@@ -821,11 +861,10 @@ describe.skipIf(
         { operationKey: "opk1_ambiguousaddress", client: remote.client },
       ),
     ).rejects.toThrow();
-    expect(
-      Object.keys(checkedCheckpoint((await row(job.id)).result).opsProjection.steps),
-    ).toHaveLength(1);
-    const fresh = (await row(job.id)).result;
-    required(holders.contexts[1]).checkpointResult = fresh as Record<string, unknown>;
+    expect(Object.keys(checkedCheckpoint(await row(job.id)).operations.steps)).toHaveLength(1);
+    const fresh = await row(job.id);
+    required(holders.contexts[1]).checkpointResult = fresh?.result as Record<string, unknown>;
+    required(holders.contexts[1]).protocol = fresh?.protocol;
     await expect(
       executeAdminJobOperation(
         required(holders.contexts[1]),
@@ -850,11 +889,11 @@ describe.skipIf(
         }),
       ),
     );
-    const saved = checkedCheckpoint((await row(job.id)).result);
-    expect(Object.keys(saved.opsProjection.steps)).toHaveLength(3);
-    expect(Object.keys(saved.opsProjection.operations)).toHaveLength(3);
+    const saved = checkedCheckpoint(await row(job.id));
+    expect(Object.keys(saved.operations.steps)).toHaveLength(3);
+    expect(Object.keys(saved.operations.operations)).toHaveLength(3);
     expect(saved.untouched).toEqual({ receipt: "preserve" });
-    expect(saved.opsProjection.eventTotal).toBe(7);
+    expect(saved.operations.eventTotal).toBe(7);
     expect(remote.counts().mutations).toBe(2);
     await holders.finish();
   });
@@ -878,14 +917,12 @@ describe.skipIf(
           (r.reason as Error).constructor.name === "JobStepCapacityExceeded",
       ),
     ).toHaveLength(1);
-    const saved = checkedCheckpoint((await row(job.id)).result);
-    expect(Object.keys(saved.opsProjection.steps)).toHaveLength(64);
-    expect(Object.keys(saved.opsProjection.operations)).toHaveLength(64);
+    const saved = checkedCheckpoint(await row(job.id));
+    expect(Object.keys(saved.operations.steps)).toHaveLength(64);
+    expect(Object.keys(saved.operations.operations)).toHaveLength(64);
     expect(remote.counts().mutations).toBe(1);
-    for (const [key, value] of Object.entries(
-      checkedCheckpoint(job.result).opsProjection.operations,
-    ))
-      expect(saved.opsProjection.operations[key]).toEqual(value);
+    for (const [key, value] of Object.entries(checkedCheckpoint(job).operations.operations))
+      expect(saved.operations.operations[key]).toEqual(value);
     await holders.finish();
   });
   it("renewal: full mixed legacy/v3 rows refuse a missing address but observe an existing winner at capacity", async () => {
@@ -893,21 +930,22 @@ describe.skipIf(
       holders = await checkpointContexts(job, 1),
       remote = successfulClient(),
       ctx = required(holders.contexts[0]);
-    const before = structuredClone((await row(job.id)).result);
+    const before = structuredClone(await row(job.id));
     await expect(
       executeAdminJobOperation(ctx, { kind: "backup.delete", backupId: "refused" }, "test", {
         operationKey: "opk1_missingfulladdress",
         client: remote.client,
       }),
     ).rejects.toBeInstanceOf((await import("../admin-job-state")).JobStepCapacityExceeded);
-    const address = required(Object.keys(checkedCheckpoint(job.result).opsProjection.steps)[0]);
+    const address = required(Object.keys(checkedCheckpoint(job).operations.steps)[0]);
     await expect(
       executeAdminJobOperation(ctx, { kind: "backup.delete", backupId: "changed" }, "test", {
         operationKey: address,
         client: remote.client,
       }),
     ).resolves.toMatchObject({ backupId: expect.stringMatching(/^old-/) });
-    expect((await row(job.id)).result).toEqual(before);
+    expect((await row(job.id)).result).toEqual(before?.result);
+    expect((await row(job.id)).protocol).toEqual(before?.protocol);
     expect(remote.counts().mutations).toBe(0);
     await holders.finish();
   });

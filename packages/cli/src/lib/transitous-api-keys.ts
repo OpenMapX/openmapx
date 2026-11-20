@@ -3,7 +3,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import {
   closeSync,
   constants,
-  existsSync,
   fchmodSync,
   fstatSync,
   linkSync,
@@ -259,8 +258,7 @@ export async function generateTransitousApiKeys(
   if (
     cliControlContext() ||
     process.env.OPENMAPX_CONTROL_EXECUTION ||
-    process.env.OPENMAPX_CONTROL_DELEGATION ||
-    process.env.OPENMAPX_PARENT_EXECUTION
+    process.env.OPENMAPX_CONTROL_CHILD
   )
     throw Error("Credential templates require an explicit local host command");
   if (options.transitousRepoUrl && options.transitousRepoUrl !== DEFAULT_TRANSITOUS_REPO_URL)
@@ -325,15 +323,14 @@ export async function generateTransitousApiKeys(
   // Serialize the map by code-unit key order using the shared canonical encoder.
   const { canonicalFeedCredentialMap } = await import("@openmapx/transitous-core");
   const contents = `${canonicalFeedCredentialMap(merged.values).canonicalJson}\n`;
-  if (!existsSync(join(paths.infraDir, "secrets/control-verifiers.json")))
-    await control.provisionControlInstallation(paths.infraDir);
+  control.provisionControlDirectories(paths.infraDir);
   const installation = control.openControlInstallation({
     infraDir: paths.infraDir,
     role: "host-cli",
     serviceIds: ["motis"],
   });
   let lease: control.ArtifactTargetLease | undefined;
-  let authority: control.VerifiedExecutionAuthority | undefined;
+  let authority: control.ExecutionHandle | undefined;
   let began = false;
   let replacement: PreparedPlatformFileReplacement | undefined;
   try {
@@ -342,9 +339,13 @@ export async function generateTransitousApiKeys(
       kind: "transit.credentials.template",
       catalogRevisionId: pins.generationId,
       outputPath: outputRelative,
-      fileMac: "0".repeat(64),
+      fileDigest: "0".repeat(64),
     };
-    operation.fileMac = control.localFeedCredentialTemplateMac(installation, operation, contents);
+    operation.fileDigest = control.localFeedCredentialTemplateDigest(
+      installation,
+      operation,
+      contents,
+    );
     const admittedAt = Date.now(),
       deadlineAt = admittedAt + 300000,
       operationFingerprint = control.controlDigest(operation);
@@ -357,7 +358,7 @@ export async function generateTransitousApiKeys(
       operationFingerprint,
       fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
     };
-    authority = control.retainAdmittedControlExecution(installation, {
+    authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       kind: operation.kind,
       operation,
@@ -378,8 +379,8 @@ export async function generateTransitousApiKeys(
       throw Error("Catalog pins changed; inspect the new pin before retrying");
     if (existingSnapshot(outputPath)?.identity !== before?.identity)
       throw Error("Credential file changed; review before retrying");
-    control.assertArtifactTargetLeaseForward(lease);
-    control.beginControlEffect(authority);
+    await control.assertArtifactTargetLeaseForward(lease);
+    await control.beginControlEffect(authority);
     began = true;
     replacement = preparePlatformFileReplacement(outputPath, contents, {
       temporaryFileOps: { chmod: (fd) => fchmodSync(fd, 0o600) },
@@ -389,14 +390,14 @@ export async function generateTransitousApiKeys(
     replacement.assertTargetUnchanged();
     replacement.commit();
     fsyncDirectory(dirname(outputPath));
-    control.retainControlEffectReceipt(authority, {
+    await control.retainControlEffectReceipt(authority, {
       outcome: "committed",
       publication: "committed",
-      receipt: { kind: "feed-credential-template-written", fileMac: operation.fileMac },
+      receipt: { kind: "feed-credential-template-written", fileDigest: operation.fileDigest },
     });
     await control.settleArtifactTargetLeaseChild(
       lease,
-      control.verifyControlEffectSettlement(installation, execution),
+      await control.verifyControlEffectSettlement(installation, execution),
     );
     await control.releaseArtifactTargetLease(lease);
     lease = undefined;
@@ -411,7 +412,7 @@ export async function generateTransitousApiKeys(
     };
   } catch (error) {
     if (authority && !began) {
-      control.retainControlEffectReceipt(authority, {
+      await control.retainControlEffectReceipt(authority, {
         outcome: "failed_without_effect",
         publication: "not_started",
         receipt: { kind: "not-started" },
@@ -419,10 +420,7 @@ export async function generateTransitousApiKeys(
       if (lease) {
         await control.settleArtifactTargetLeaseChild(
           lease,
-          control.verifyControlEffectSettlement(
-            installation,
-            control.executionAuthorityState(authority).execution,
-          ),
+          await control.verifyControlEffectSettlement(installation, authority.execution),
         );
         await control.releaseArtifactTargetLease(lease);
         lease = undefined;

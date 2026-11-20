@@ -6,13 +6,10 @@ import {
   type AmbientRegion,
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import postgres from "postgres";
+import { cancellableTransaction } from "../execution/worker-scope.js";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
-import { OVERTURE_LOCK_KEY, OVERTURE_LOCK_NAMESPACE } from "../overture/operation-lock.js";
-import {
-  SEARCH_INDEX_LOCK_KEY,
-  SEARCH_INDEX_LOCK_NAMESPACE,
-} from "../search-index/operation-lock.js";
 import { assertPlanetDiskCapacity, planetPlaceLimit } from "./capacity.js";
 import type { AmbientBuildOptions } from "./germany.js";
 import { planetOsmBatch, planetOvertureBatch } from "./planet-batches.js";
@@ -35,32 +32,29 @@ async function withPlanetSession<T>(
   const options = { ...sql.options, max: 1, idle_timeout: 0, max_lifetime: 0 };
   const connection = postgres(options as unknown as postgres.Options<{}>);
   let writer = false;
-  const held: number[] = [];
+  const held: (readonly [number, number])[] = [];
   try {
     const [lock] = await connection.unsafe<{ locked: boolean; pid: number }[]>(
       `SELECT pg_try_advisory_lock(${AMBIENT_WRITE_LOCK}) AS locked,pg_backend_pid() AS pid`,
     );
     if (!lock.locked) throw new AmbientPublicationBusyError();
     writer = true;
-    for (const key of [OVERTURE_LOCK_KEY, SEARCH_INDEX_LOCK_KEY]) {
+    for (const pair of [DATA_ADVISORY_LOCKS.overture, DATA_ADVISORY_LOCKS.searchIndex]) {
       const [source] = await connection.unsafe<{ locked: boolean }[]>(
         `SELECT pg_try_advisory_lock_shared($1,$2) AS locked`,
-        [SEARCH_INDEX_LOCK_NAMESPACE, key],
+        [...pair],
       );
       if (!source.locked)
         throw new AmbientPublicationBusyError(
           "Planet sources are being prepared; retry after source publication",
         );
-      held.push(key);
+      held.push(pair);
     }
     return await operation(connection, lock.pid);
   } finally {
     try {
-      for (const key of held.reverse())
-        await connection.unsafe(`SELECT pg_advisory_unlock_shared($1,$2)`, [
-          OVERTURE_LOCK_NAMESPACE,
-          key,
-        ]);
+      for (const pair of held.reverse())
+        await connection.unsafe(`SELECT pg_advisory_unlock_shared($1,$2)`, [...pair]);
       if (writer) await connection.unsafe(`SELECT pg_advisory_unlock(${AMBIENT_WRITE_LOCK})`);
     } finally {
       await connection.end({ timeout: 2 });
@@ -81,10 +75,10 @@ async function planetTransaction<T>(
   pid: number,
   operation: (tx: postgres.TransactionSql) => Promise<T>,
 ): Promise<T> {
-  return connection.begin(async (tx) => {
+  return cancellableTransaction(connection, async (tx) => {
     await assertSession(tx, pid);
     return operation(tx);
-  }) as Promise<T>;
+  });
 }
 const initial: PlanetCheckpoint = {
   phase: "osm",

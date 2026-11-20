@@ -1,17 +1,15 @@
-import { createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   standaloneInstallRequestSchema,
   standalonePreviewRequestSchema,
 } from "@openmapx/core/api-contracts";
 import {
   canonicalJson,
-  readOpsTokenFile,
   type StandaloneIntegrationProvenance,
   standaloneInstallInspectionSchema,
   standaloneInstallSourceSchema,
   standaloneIntegrationProvenanceSchema,
 } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
 import { and, eq, sql } from "drizzle-orm";
 import z from "zod/v4";
 import { db } from "../../db";
@@ -33,9 +31,6 @@ type State = import("./state").StandaloneState;
 
 import { readStandaloneState, sealStandaloneState } from "./state";
 
-async function token() {
-  return readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-}
 async function authenticatePayload(ctx: JobContext) {
   const payload = ctx.payload;
   if (
@@ -53,7 +48,7 @@ async function authenticatePayload(ctx: JobContext) {
           inspectionId: payload.inspectionId,
           expectedContentDigest: payload.expectedContentDigest,
         });
-  const expected = createHmac("sha256", await token())
+  const expected = createHash("sha256")
     .update("openmapx-standalone-request-v1\0")
     .update(canonicalJson({ type, payload: body, actorId: payload.ownerId }))
     .digest("hex");
@@ -335,7 +330,7 @@ export function handleStandaloneInstall(ctx: JobContext): Promise<Record<string,
     if (
       state.phase === "prepared" &&
       (await cancellationRequested(ctx)) &&
-      !Object.values(readProjection(ctx.checkpointResult).operations).some(
+      !Object.values(readProjection(ctx.protocol, ctx.checkpointResult).operations).some(
         (operation) => operation.kind === "integration.install",
       )
     ) {

@@ -26,7 +26,7 @@ async function recoverArtifactPurpose(
   >,
   originalError: unknown,
 ) {
-  const projection = readProjection(ctx.checkpointResult),
+  const projection = readProjection(ctx.protocol, ctx.checkpointResult),
     projected = Object.values(projection.operations).find(
       (value) =>
         value.kind === operation.kind &&
@@ -133,7 +133,7 @@ async function recoverArtifactPurpose(
 export async function handlePreparedArtifactExportJob(
   ctx: JobContext,
 ): Promise<Record<string, unknown>> {
-  await assertRetainedMaintenanceJob(ctx);
+  assertRetainedMaintenanceJob(ctx);
   const ownerId = z.string().min(1).max(128).parse(ctx.payload.ownerId);
   if ((ctx.payload._maintenanceRequest as { actorId?: string }).actorId !== ownerId)
     throw Error("Original artifact owner required");
@@ -151,7 +151,7 @@ export async function handlePreparedArtifactExportJob(
 export async function handlePreparedArtifactValidationJob(
   ctx: JobContext,
 ): Promise<Record<string, unknown>> {
-  await assertRetainedMaintenanceJob(ctx);
+  assertRetainedMaintenanceJob(ctx);
   const stageId = z.uuid().parse(ctx.payload.stageId),
     ownerId = z.string().min(1).max(128).parse(ctx.payload.ownerId);
   if ((ctx.payload._maintenanceRequest as { actorId?: string }).actorId !== ownerId)
@@ -182,7 +182,7 @@ export async function handlePreparedArtifactValidationJob(
 export async function handlePreparedArtifactImportJob(
   ctx: JobContext,
 ): Promise<Record<string, unknown>> {
-  await assertRetainedMaintenanceJob(ctx);
+  assertRetainedMaintenanceJob(ctx);
   const stageId = z.uuid().parse(ctx.payload.stageId),
     ownerId = z.string().min(1).max(128).parse(ctx.payload.ownerId);
   if ((ctx.payload._maintenanceRequest as { actorId?: string }).actorId !== ownerId)

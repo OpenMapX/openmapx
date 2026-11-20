@@ -35,7 +35,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
   const infra = join(root, "infra");
   mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
   mkdirSync(join(root, "services"), { mode: 0o755 });
-  await control.provisionControlInstallation(infra);
+  await control.provisionControlDirectories(infra);
   const installation = control.openControlInstallation({
     infraDir: infra,
     role: "ops-agent",
@@ -45,7 +45,6 @@ it("validates real uploaded bytes only under the exact retained integration exec
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "stages"),
     privateRoot: join(root, "stage-meta"),
-    token: "fixture-test-token",
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
   });
   cleanup.push(() => store.close());
@@ -91,7 +90,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
     ownerId: "fixture-admin",
     source: { kind: "uploaded-artifact", stageId: stage.stageId, expectedSha256: sha256 },
   };
-  const makeContext = (operation: OpsOperation): OpsExecutionContext => {
+  const makeContext = async (operation: OpsOperation): Promise<OpsExecutionContext> => {
     const admittedAt = Date.now(),
       operationFingerprint = opsOperationFingerprint(operation),
       operationKey = createControlRootOperationKey({
@@ -114,7 +113,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
       deadlineAt: admission.deadlineAt,
       fingerprint: admission.fingerprint,
     };
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       kind: operation.kind,
       operation,
@@ -135,7 +134,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
       },
     };
   };
-  const context = makeContext(operation);
+  const context = await makeContext(operation);
   const preparedContext = createIntegrationArtifactPreparation({ rootDir: root });
   const result = await store.validateIntegrationArtifact(context, preparedContext);
   expect(result.inspection).toMatchObject({ stageId: stage.stageId, sha256, bytes: bytes.length });
@@ -169,7 +168,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
     ),
   ).rejects.toThrow(/authority|execution/i);
   const transactionId = randomUUID();
-  const installing = makeContext({
+  const installing = await makeContext({
     kind: "integration.install",
     inspectionId: result.inspection.inspectionId,
     ownerId: "fixture-admin",
@@ -186,7 +185,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
     expectedPreviousContentDigest: null,
     signal: installing.signal,
   });
-  const settling = makeContext({
+  const settling = await makeContext({
     kind: "integration.settle",
     transactionId,
     decision: "commit",
@@ -211,7 +210,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
   ).toMatchObject({ settlement: { outcome: "consumed", receiptId: transactionId } });
   await expect(
     store.claimIntegrationArtifactInstall(
-      makeContext({
+      await makeContext({
         ...installing.claim.operation,
         kind: "integration.install",
         inspectionId: result.inspection.inspectionId,

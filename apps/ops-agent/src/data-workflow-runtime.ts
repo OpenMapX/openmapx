@@ -1,12 +1,9 @@
-/** Full Update runs its data and target-owning phases through the same real CLI.
- * An attempted invocation is observation-only, including after a lost response. */
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import type { DataWorkflowReceipt, ExecutionRef, OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import type { FixedCliRunner } from "./administrative-runtime";
-import { assertStagedCoordinatorConfigurationWrite } from "./configuration-maintenance-runtime";
+import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
 import { OpsExecutionFailure, OpsHostUpdateRequiredError, type OpsRuntime } from "./runtime";
 
@@ -73,48 +70,44 @@ export function installDataWorkflowRuntime(
         delegationId =
           phase === "data-workflow" ? plan.dataDelegationId : plan.finalizationDelegationId;
       const bound = await control.bindControlChildPhase(authority, slot);
-      let attempted = control.lookupControlChildPhaseAttempt(authority, slot),
+      let attempted = await control.lookupControlChildPhaseAttempt(authority, slot),
         failure: unknown;
       if (!attempted) {
-        const key = control.prepareFixedControlChild(authority, delegationId);
-        control.retainFixedCliSpawnIntent(authority, {
-          delegationId,
+        await control.retainFixedCliSpawnIntent(authority, {
+          childKey: delegationId,
           execution: bound.execution,
           operation,
           args,
-          reservations: phase === "data-workflow" ? plan.dataChildren : plan.finalizationChildren,
+          reservations: phase === "data-workflow" ? plan.dataChildren : [],
           dataUpdatePlan: plan,
           ...(initial ? { dataWorkflowInitial: initial } : {}),
         });
         const issued = await control.issueControlChildPhase(authority, {
           phase,
           ordinal: slot.ordinal,
-          childPublicKey: key,
+          childKey: delegationId,
           ...(lease ? { lease } : {}),
         });
-        control.consumeControlChildDispatch(issued.dispatchTicket);
+        await control.consumeControlChildDispatch(issued.dispatchTicket);
         try {
           await options.runFixedCli(args, {
             ...context,
             execution: bound.execution,
             operationKind: "data.update",
-            ...(lease
-              ? { controlAssertion: issued.assertion }
-              : { parentAssertion: issued.assertion }),
+            child: { leaseId: issued.delegation.leaseId, childKey: issued.delegation.childKey },
           });
         } catch (error) {
           failure = error;
         }
-        attempted = control.lookupControlChildPhaseAttempt(authority, slot);
+        attempted = await control.lookupControlChildPhaseAttempt(authority, slot);
       }
       if (!attempted) throw new OpsExecutionFailure("recovery_required", {});
       const installation = control.openFixedChildInstallation({
         infraDir,
-        assertion: attempted.assertion,
-        container: existsSync("/run/secrets/openmapx-control-verifiers"),
+        child: { leaseId: attempted.leaseId, childKey: attempted.childKey },
       });
       try {
-        const childAuthority = control.restoreAdmittedControlExecution(
+        const childAuthority = await control.restoreAdmittedControlExecution(
             installation,
             bound.execution,
           ),
@@ -135,7 +128,7 @@ export function installDataWorkflowRuntime(
             "recovery_required",
             receipt ? { dataWorkflow: receipt } : {},
           );
-        control.verifyControlEffectSettlement(installation, bound.execution);
+        await control.verifyControlEffectSettlement(installation, bound.execution);
         if (lease) {
           const settled = control.inspectLocalLeaseChildSettlement(lease, bound.execution);
           if (settled?.outcome !== "committed" || settled.publication !== "committed")
@@ -146,17 +139,20 @@ export function installDataWorkflowRuntime(
         control.closeControlInstallation(installation);
       }
     };
-    await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
     await run("data-workflow");
     context.signal.throwIfAborted();
-    const initial = await control.verifyDataUpdatePrerequisites(authority);
-    await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
+    const initial = await control.verifyDataUpdatePrerequisites(
+      authority,
+      configurationDataManagerTransport(),
+      context.signal,
+    );
     const lease = await control.acquireArtifactTargetLease({
       serviceIds: plan.dataReservation.serviceIds,
       owner: authority,
       signal: context.signal,
+      dataManager: configurationDataManagerTransport(),
     });
-    context.ownDataFinalizationLease?.(lease);
+    await context.ownDataFinalizationLease?.(lease);
     try {
       const receipt = await run("data-finalization", lease, initial);
       return { completed: true, dataWorkflow: receipt };

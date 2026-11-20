@@ -6,11 +6,11 @@ import {
   opsOperationFingerprint,
 } from "../ops";
 import { releaseProvenance } from "../services/__fixtures__/release-provenance";
-import { controlChildOperationKey } from "./control-authority";
 import {
   assertFixedConfigurationMaintenancePlan,
   buildFixedConfigurationMaintenancePlan,
 } from "./fixed-configuration-maintenance";
+import { controlChildOperationKey } from "./lease-store";
 
 // Pure plan-data qualification only. These inputs confer no authority and are
 // not the real producer/decision/DM positive required by the task.
@@ -33,6 +33,7 @@ function input(): Parameters<typeof buildFixedConfigurationMaintenancePlan>[0] {
     maintenanceId: "33333333-3333-4333-8333-333333333333",
     candidateId: "44444444-4444-4444-8444-444444444444",
     revisionId: `cfg1_${"a".repeat(43)}`,
+    payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     expectedCurrentRevisionId: `cfg1_${"b".repeat(43)}`,
     expectedSourceRevision: "55555555-5555-4555-8555-555555555555",
     coordinatorMode: "ensure-running" as const,
@@ -65,7 +66,6 @@ function input(): Parameters<typeof buildFixedConfigurationMaintenancePlan>[0] {
     }),
   };
   return {
-    installationId: "66666666-6666-4666-8666-666666666666",
     prepare,
     operation,
     apiParent: parent,
@@ -100,21 +100,15 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   expect(plan.steps[0]!.operationKey).toBe(source.operation.applyOperationKey);
   expect(plan.reservations.map((value) => value.ordinal)).toEqual([0, 1, 2, 3]);
   expect(plan.reservations.map((value) => value.kind)).not.toContain("service.start");
-  expect(plan.nestedHardlinks).toMatchObject({
-    kind: "generation-hardlinks",
-    phase: "hardlinks",
-    ordinal: 0,
-    recipient: "data-manager",
-  });
   expect(plan.dmPrepare.planDigest).toBe(plan.planDigest);
   expect(plan.dmPrepare.hardlinkPlanDigest).not.toBe(plan.planDigest);
   const original = JSON.stringify(plan.dmPrepare);
   expect(Reflect.set(plan.dmPrepare, "planDigest", "0".repeat(64))).toBe(false);
   expect(JSON.stringify(plan.dmPrepare)).toBe(original);
-  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const changed = structuredClone(plan);
   changed.steps[1]!.prerequisites = [];
-  expect(() => assertFixedConfigurationMaintenancePlan(changed, source.installationId)).toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(changed)).toThrow();
 });
 it.each(["body", "source", "parent", "foreign-target", "protected-target", "capacity"])(
   "refuses %s before admitting any plan authority",
@@ -148,7 +142,6 @@ it("rebuilds the same plan from the frozen coordinator image", () => {
     imageReference: "example/data-manager:1",
     imageId: `sha256:${"e".repeat(64)}`,
     releaseSelectionDigest: "f".repeat(64),
-    pullSubmissionDigest: null,
   };
   const plan = buildFixedConfigurationMaintenancePlan({ ...source, coordinatorImage });
   const rebuilt = buildFixedConfigurationMaintenancePlan({
@@ -250,56 +243,7 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     "maintenance-hardlinks",
     "maintenance-handoff",
   ]);
-  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
-  const { configurationHandoffIntentRecordSchema } = await import(
-    "./configuration-handoff-records"
-  );
-  const intent = {
-    version: 1,
-    installationId: source.installationId,
-    origin: {
-      version: 1,
-      rootKey: prepare.operationKey,
-      issuer: "ops-agent",
-      notAfter: prepare.deadlineAt,
-    },
-    ownerPrepare: prepare,
-    preparer: prepare,
-    helper: {
-      ...prepare,
-      executor: "host-cli",
-      executionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    },
-    operation: plan.steps.at(-1)!.operation,
-    admittedAt: Date.now(),
-    requestedDeadlineAt: prepare.deadlineAt,
-    helperPublicKey: "a".repeat(43),
-    sourceDigest: "b".repeat(64),
-    environmentNames: [],
-    preparerAdmissionDigest: "c".repeat(64),
-    leaseId: "88888888-8888-4888-8888-888888888888",
-    delegationId: "99999999-9999-4999-8999-999999999999",
-    assertion: "original-fixed-assertion",
-    helperContainerName: `openmapx-configuration-handoff-${handoff.handoffId}`,
-    preparedAt: Date.now(),
-    release,
-  };
-  expect(configurationHandoffIntentRecordSchema.parse(intent).release).toEqual(release);
-  expect(
-    configurationHandoffIntentRecordSchema.safeParse({ ...intent, release: undefined }).success,
-  ).toBe(false);
-  expect(
-    configurationHandoffIntentRecordSchema.safeParse({
-      ...intent,
-      release: { ...release, manifestDigest: "f".repeat(64) },
-    }).success,
-  ).toBe(false);
-  expect(
-    configurationHandoffIntentRecordSchema.safeParse({
-      ...intent,
-      operation: { ...intent.operation, mode: { kind: "configuration" } },
-    }).success,
-  ).toBe(false);
+  expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   expect(plan.release).toEqual(release);
 
   // A realistic stack must fit without relaxing the private-record limits.
@@ -424,10 +368,10 @@ it("freezes protected handoff after the original generation and ordinary childre
   expect(plan.nestedHandoff?.execution.operationKey).toBe(
     controlChildOperationKey(step.operationKey, "configuration-handoff", 0),
   );
-  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const changed = structuredClone(plan);
   changed.handoff!.expectedImageIdentities["app-api"] = `sha256:${"3".repeat(64)}`;
-  expect(() => assertFixedConfigurationMaintenancePlan(changed, source.installationId)).toThrow();
+  expect(() => assertFixedConfigurationMaintenancePlan(changed)).toThrow();
 });
 
 import { createHash } from "node:crypto";

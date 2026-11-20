@@ -29,10 +29,7 @@ export async function withCliExecutionDeadline<T>(
 ): Promise<T> {
   const encoded = process.env.OPENMAPX_CONTROL_EXECUTION;
   const inherited = process.env.OPENMAPX_CLI_DEADLINE_AT;
-  if (
-    (process.env.OPENMAPX_CONTROL_DELEGATION || process.env.OPENMAPX_PARENT_EXECUTION) &&
-    encoded === undefined
-  )
+  if (process.env.OPENMAPX_CONTROL_CHILD && encoded === undefined)
     throw Error("Missing bounded fixed CLI execution");
 
   if (encoded === undefined && inherited === undefined) return run();
@@ -81,8 +78,7 @@ export function cliProcessOptions(phaseTimeoutMs?: number) {
     forceKillAfterDelay: 2000,
     env: {
       OPENMAPX_CONTROL_EXECUTION: undefined,
-      OPENMAPX_CONTROL_DELEGATION: undefined,
-      OPENMAPX_PARENT_EXECUTION: undefined,
+      OPENMAPX_CONTROL_CHILD: undefined,
       OPENMAPX_CLI_DEADLINE_AT: String(context.deadlineAt),
     },
   };
@@ -94,7 +90,7 @@ export function cliAcquisitionOptions(): { signal?: AbortSignal; requestTimeoutM
     ? { signal: context.signal, requestTimeoutMs: Math.min(15000, context.deadlineAt - Date.now()) }
     : {};
 }
-/** Remote mutations need a receiver-retained deadline. Unsigned CLI metadata cannot supply it. */
+/** Remote mutations need a receiver-retained deadline. The CLI's own metadata cannot supply it. */
 export function constrainCliDataManagerTransport(
   transport: DataManagerTransport,
 ): DataManagerTransport {
@@ -104,19 +100,10 @@ export function constrainCliDataManagerTransport(
       if (
         deadlines.getStore() &&
         !["GET", "HEAD"].includes((options?.method ?? "GET").toUpperCase()) &&
-        ![
-          "startDataExecution",
-          "cancelDataExecution",
-          "startGenerationHardlinksExecution",
-        ].includes(operationId)
+        !["startDataExecution", "cancelDataExecution", "link"].includes(operationId)
       )
         throw Error("Managed data-manager execution requires a deadline-aware receiver upgrade");
       return transport.request(operationId, url, options);
     },
   };
-}
-export function assertCliRemoteMutationSupported(): void {
-  assertCliExecutionAvailable();
-  if (deadlines.getStore())
-    throw Error("Managed data-manager execution requires a deadline-aware receiver upgrade");
 }

@@ -1,26 +1,20 @@
 import {
-  type ConfigurationPrepareNonAdmission,
-  configurationPrepareNonAdmissionSchema,
   type DataConfigurationFencePrepare,
   type DataConfigurationFenceReceipt,
   type DataConfigurationFenceSettle,
-  dataConfigurationFencePrepareSchema,
+  dataConfigurationFencePrepareRequestSchema,
   dataConfigurationFenceReceiptSchema,
-  dataConfigurationFenceSettleSchema,
+  dataConfigurationFenceSettleRequestSchema,
 } from "./contracts/configuration-maintenance";
+import type { DataControlDelegation } from "./contracts/executions";
 import * as sdk from "./generated/data-manager.generated";
 import { type DataManagerTransport, unwrapDataManagerResponse } from "./transport";
 
 type ControlOptions = {
   transport: DataManagerTransport;
-  controlAssertion: string;
+  delegation: DataControlDelegation;
   signal?: AbortSignal;
 };
-function boundedHeader(value: string): string {
-  if (!/^[A-Za-z0-9_-]+$/.test(value) || value.length > 4096)
-    throw Error("Invalid bounded control header");
-  return value;
-}
 function boundedBody<T>(value: T): T {
   if (new TextEncoder().encode(JSON.stringify(value)).length > 32 * 1024)
     throw Error("Configuration fence request exceeds budget");
@@ -31,12 +25,13 @@ export async function prepareDataConfigurationFence(
   options: ControlOptions,
 ): Promise<DataConfigurationFenceReceipt> {
   const result = await sdk.prepareDataConfigurationFence(
-    boundedBody(dataConfigurationFencePrepareSchema.parse(input)),
-    {
-      transport: options.transport,
-      signal: options.signal,
-      headers: { "x-openmapx-control-delegation": boundedHeader(options.controlAssertion) },
-    },
+    boundedBody(
+      dataConfigurationFencePrepareRequestSchema.parse({
+        ...input,
+        delegation: options.delegation,
+      }),
+    ),
+    { transport: options.transport, signal: options.signal },
   );
   return dataConfigurationFenceReceiptSchema.parse(unwrapDataManagerResponse(result));
 }
@@ -55,32 +50,20 @@ export async function inspectDataConfigurationFence(
   );
   return dataConfigurationFenceReceiptSchema.parse(unwrapDataManagerResponse(result));
 }
-export async function recoverUnadmittedDataConfigurationFence(
-  input: DataConfigurationFencePrepare,
-  options: ControlOptions,
-): Promise<ConfigurationPrepareNonAdmission> {
-  const result = await sdk.recoverUnadmittedConfigurationPreparation(
-    boundedBody(dataConfigurationFencePrepareSchema.parse(input)),
-    {
-      transport: options.transport,
-      signal: options.signal,
-      headers: { "x-openmapx-control-delegation": boundedHeader(options.controlAssertion) },
-    },
-  );
-  return configurationPrepareNonAdmissionSchema.parse(unwrapDataManagerResponse(result));
-}
-/** Without a control assertion the request is the operator's resolution, sent with the host CLI's token. */
+/** Without a delegation the request is the operator's resolution, sent with the host CLI's token. */
 export async function settleDataConfigurationFence(
   input: DataConfigurationFenceSettle,
-  options: Omit<ControlOptions, "controlAssertion"> & { controlAssertion?: string },
+  options: Omit<ControlOptions, "delegation"> & { delegation?: DataControlDelegation },
 ): Promise<DataConfigurationFenceReceipt> {
-  const body = boundedBody(dataConfigurationFenceSettleSchema.parse(input));
+  const body = boundedBody(
+    dataConfigurationFenceSettleRequestSchema.parse({
+      ...input,
+      ...(options.delegation ? { delegation: options.delegation } : {}),
+    }),
+  );
   const result = await sdk.settleDataConfigurationFence(body.maintenanceId, body, {
     transport: options.transport,
     signal: options.signal,
-    ...(options.controlAssertion === undefined
-      ? {}
-      : { headers: { "x-openmapx-control-delegation": boundedHeader(options.controlAssertion) } }),
   });
   return dataConfigurationFenceReceiptSchema.parse(unwrapDataManagerResponse(result));
 }

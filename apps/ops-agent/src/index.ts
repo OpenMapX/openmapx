@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   leaseStoreDirectory,
@@ -24,8 +23,11 @@ import { ArtifactTransferStore, artifactTransferPrivateRoot } from "./artifact-t
 import { startOpsAgentServer } from "./bootstrap";
 import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
-import { configurationHandoffPendingMaintenanceIds } from "./configuration-maintenance-store";
-import { createDataTransitTrustedOpsDataSource } from "./data-transit-resource-source";
+import { configurationCandidateSource } from "./configuration-candidate-source";
+import {
+  configurationPayloadSource,
+  createDataTransitTrustedOpsDataSource,
+} from "./data-transit-resource-source";
 import {
   createDockerDawarichCollector,
   createDockerDawarichRuntimeInspector,
@@ -34,6 +36,7 @@ import { describeDeploymentUserAtStart } from "./deployment-user-at-start";
 import { recoverInterruptedTrafficMaintenance } from "./docker-runtime";
 import { IntegrationStore } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
+import { pendingHandoffs } from "./maintenance";
 import { createProductionRegistryResourceClaimer } from "./policy";
 import {
   createProductionOpsRuntime,
@@ -50,10 +53,6 @@ import {
   initializeTrustedConfigurationRuntime,
   readTrustedEnabledServiceIds,
 } from "./trusted-config-runtime";
-import {
-  createFileTrustedOpsDataSource,
-  initializeTerminalClaimCleanup,
-} from "./trusted-config-source";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
 async function main(): Promise<void> {
@@ -71,7 +70,6 @@ async function main(): Promise<void> {
     const builtInServices = releaseAuthority.services.map((service) => structuredClone(service));
     const paths = repoPaths(config.rootDir);
     const uid = process.geteuid?.() ?? 0;
-    const gid = process.getegid?.() ?? 0;
     const authorityOptions = {
       rootDir: config.rootDir,
       builtInAuthorityDigest: releaseAuthority.digest,
@@ -159,7 +157,6 @@ async function main(): Promise<void> {
       infraDir: paths.infraDir,
       role: "ops-agent",
       serviceIds: [...builtInServices, ...communityServices].map((s) => s.manifest.id),
-      container: existsSync("/run/secrets/openmapx-control-verifiers"),
       leases: localLeaseBackend(leaseStore),
     });
     if (controlStartup.reason) console.error(controlStartup.reason);
@@ -175,15 +172,6 @@ async function main(): Promise<void> {
         );
       }
     }
-    const terminalClaimCleanup = await initializeTerminalClaimCleanup(
-      config.trustedConfigDirectory,
-      {
-        allowedUids: [uid],
-        expectedGid: gid,
-        token: apiToken,
-        journalRecords: journal.records(),
-      },
-    );
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     const authorityLoader = createTrustedConfigurationAuthorityLoader({
       ...authorityOptions,
@@ -218,25 +206,19 @@ async function main(): Promise<void> {
       communityRepositories,
       integrationStore,
       runFixedCli: administrativeCli,
-      candidateSource: {
-        directory: config.trustedConfigDirectory,
-        token: apiToken,
-        ownerUid: uid,
-        ownerGid: gid,
-      },
+      candidateSource: configurationCandidateSource(paths.infraDir),
+      apiToken,
     });
     const transferPolicy = loadArtifactTransferPolicy();
     const artifactTransfers =
       "policy" in transferPolicy && controlStartup.installation
         ? new ArtifactTransferStore({
             dataRoot: join(paths.infraDir, "data", ".openmapx-transfers"),
-            privateRoot: artifactTransferPrivateRoot(
-              paths.infraDir,
-              existsSync("/run/secrets/openmapx-control-verifiers"),
-            ),
-            token: apiToken,
+            privateRoot: artifactTransferPrivateRoot(paths.infraDir),
             policy: transferPolicy.policy,
-            admissionsOpen: () => configurationHandoffPendingMaintenanceIds(runtime).size === 0,
+            admissionsOpen: () =>
+              !controlStartup.installation ||
+              pendingHandoffs(controlStartup.installation).size === 0,
           })
         : undefined;
     if (artifactTransfers) {
@@ -271,7 +253,6 @@ async function main(): Promise<void> {
       const authority = await authorityLoader();
       return {
         revisionId: `${authority.revisionId.slice(0, 48)}-${loadConfiguredResourceAuthority().revisionId}`,
-        configurationAuthorityRevision: authority.revisionId,
         services: authority.services.map((service) => ({
           serviceId: service.manifest.id,
           enabled: service.enabled,
@@ -310,12 +291,7 @@ async function main(): Promise<void> {
           },
           trustedData: createDataTransitTrustedOpsDataSource(
             controlStartup.installation,
-            createFileTrustedOpsDataSource({
-              directory: config.trustedConfigDirectory,
-              token: apiToken,
-              allowedUids: [uid],
-              expectedGid: gid,
-            }),
+            configurationPayloadSource,
           ),
           resourceAuthority: {
             allowBackup: (kind, backupId, serviceIds) =>
@@ -332,7 +308,6 @@ async function main(): Promise<void> {
         }),
         journal,
         controlInstallation: controlStartup.installation,
-        terminalClaimCleanup,
         runtime,
         artifactTransfers,
         audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),

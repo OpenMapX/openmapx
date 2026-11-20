@@ -11,23 +11,15 @@ import {
   normalizeDataExecutionInput,
   ordinaryDataExecutionInputSchema,
 } from "../services/data-manager/contracts/executions";
+import { controlDigest } from "./control-records";
+import { assertDataManagerTerminal } from "./data-manager-terminal";
+import { type ExecutionHandle, lookupControlChildPhase } from "./execution-record";
 import {
   type ControlChildReservation,
-  controlChildReservationSchema,
-  lookupControlChildPhase,
-} from "./child-phase";
-import {
   controlChildOperationKey,
-  controlDigest,
-  executionAuthorityState,
-  readPrivateRecord,
-  recordDataControlTerminalObservation,
-  signControl,
-  type VerifiedExecutionAuthority,
-  verifyControl,
-  withPrivateEffectWriter,
-  writePrivateRecord,
-} from "./control-authority";
+  controlChildReservationSchema,
+} from "./lease-store";
+import { readPrivateRecord, writePrivateRecord } from "./private-records";
 
 const fixedDataKinds = [
   "data.downloadOsm",
@@ -152,10 +144,10 @@ export function planFixedSingleDataCommand(
   });
 }
 export function retainFixedSingleDataPlan(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   plan: ReturnType<typeof planFixedSingleDataCommand>,
 ): void {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     body = bundleSchema.parse(plan);
   if (
     s.installation.installation.role !== "ops-agent" ||
@@ -169,22 +161,19 @@ export function retainFixedSingleDataPlan(
     s.installation,
     "observations",
     `data-plan-${s.execution.operationKey}.json`,
-    signControl(s.installation.privateKey, "openmapx-fixed-data-plan-v1", body),
+    body,
     true,
   );
 }
-export function readFixedSingleDataPlan(authority: VerifiedExecutionAuthority) {
-  const s = executionAuthorityState(authority),
-    body = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-fixed-data-plan-v1",
+export function readFixedSingleDataPlan(authority: ExecutionHandle) {
+  const s = authority,
+    body = bundleSchema.parse(
       readPrivateRecord(
         s.installation,
         "observations",
         `data-plan-${s.execution.operationKey}.json`,
         8192,
       ),
-      bundleSchema,
     );
   if (
     controlDigest(body.parent) !== controlDigest(s.execution) ||
@@ -195,10 +184,10 @@ export function readFixedSingleDataPlan(authority: VerifiedExecutionAuthority) {
   return body;
 }
 export function readCliDataAttempt(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   key: string,
 ): DataChildAttempt | null {
-  const s = executionAuthorityState(authority);
+  const s = authority;
   let raw: unknown;
   try {
     raw = readPrivateRecord(s.installation, "observations", `data-attempt-${key}.json`, 8192);
@@ -206,21 +195,16 @@ export function readCliDataAttempt(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  return verifyControl(
-    s.installation.installation.publicKey,
-    "openmapx-cli-data-attempt-v1",
-    raw,
-    dataChildAttemptSchema,
-  );
+  return dataChildAttemptSchema.parse(raw);
 }
-export function retainCliDataAttempt(
-  authority: VerifiedExecutionAuthority,
+export async function retainCliDataAttempt(
+  authority: ExecutionHandle,
   value: DataChildAttempt,
-): void {
-  const s = executionAuthorityState(authority),
+): Promise<void> {
+  const s = authority,
     attempt = dataChildAttemptSchema.parse(value),
     slot = s.reservations.find((item) => item.execution.operationKey === attempt.operationKey),
-    binding = slot ? lookupControlChildPhase(authority, slot) : null;
+    binding = slot ? await lookupControlChildPhase(authority, slot) : null;
   if (
     !slot ||
     !binding ||
@@ -235,55 +219,50 @@ export function retainCliDataAttempt(
     (attempt.fingerprint && attempt.fingerprint !== binding.execution.fingerprint)
   )
     throw Error("Exact retained data command binding required");
-  withPrivateEffectWriter(s, () => {
-    const prior = readCliDataAttempt(authority, attempt.operationKey);
-    if (prior) {
-      const { state: _old, id: _id, fingerprint: _fp, deadlineAt: _deadline, ...before } = prior,
-        { state: _next, id: _id2, fingerprint: _fp2, deadlineAt: _deadline2, ...after } = attempt;
-      if (
-        canonicalJson(before) !== canonicalJson(after) ||
-        (prior.state !== "prepared" && attempt.state === "prepared") ||
-        (prior.id && prior.id !== attempt.id) ||
-        (prior.fingerprint && prior.fingerprint !== attempt.fingerprint) ||
-        (prior.state === "terminal" && canonicalJson(prior) !== canonicalJson(attempt))
-      )
-        throw Error("Retained CLI data attempt is immutable");
-    }
-    writePrivateRecord(
-      s.installation,
-      "observations",
-      `data-attempt-${attempt.operationKey}.json`,
-      signControl(s.installation.privateKey, "openmapx-cli-data-attempt-v1", attempt),
-      !prior,
-    );
-  });
+  const prior = readCliDataAttempt(authority, attempt.operationKey);
+  if (prior) {
+    const { state: _old, id: _id, fingerprint: _fp, deadlineAt: _deadline, ...before } = prior,
+      { state: _next, id: _id2, fingerprint: _fp2, deadlineAt: _deadline2, ...after } = attempt;
+    if (
+      canonicalJson(before) !== canonicalJson(after) ||
+      (prior.state !== "prepared" && attempt.state === "prepared") ||
+      (prior.id && prior.id !== attempt.id) ||
+      (prior.fingerprint && prior.fingerprint !== attempt.fingerprint) ||
+      (prior.state === "terminal" && canonicalJson(prior) !== canonicalJson(attempt))
+    )
+      throw Error("Retained CLI data attempt is immutable");
+  }
+  writePrivateRecord(
+    s.installation,
+    "observations",
+    `data-attempt-${attempt.operationKey}.json`,
+    attempt,
+    !prior,
+  );
 }
-export function verifyCliDataTerminal(
-  authority: VerifiedExecutionAuthority,
+export async function verifyCliDataTerminal(
+  authority: ExecutionHandle,
   status: import("../services/data-manager/contracts/executions").DataExecutionStatus,
 ) {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     slot = s.reservations.find((item) => item.execution.operationKey === status.operationKey),
-    binding = slot ? lookupControlChildPhase(authority, slot) : null;
+    binding = slot ? await lookupControlChildPhase(authority, slot) : null;
   if (
     !binding ||
     binding.execution.executionId !== status.id ||
     binding.execution.fingerprint !== status.fingerprint
   )
     throw Error("Original bound data command required");
-  // The status was read from data-manager over its authenticated route.
-  return recordDataControlTerminalObservation(
-    s.installation.installation,
-    binding.execution,
-    status,
-  );
+  // The status was read from data-manager over its authenticated route; any
+  // later reader asks data-manager again.
+  return assertDataManagerTerminal(binding.execution, status);
 }
 
 export function cliDataReservation(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   phase: "data-step" | "osm" | "transit" | "fonts" = "data-step",
 ) {
-  const s = executionAuthorityState(authority),
+  const s = authority,
     slots = s.reservations.filter(
       (slot) => slot.recipient === "data-manager" && slot.phase === phase,
     );

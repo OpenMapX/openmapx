@@ -24,13 +24,15 @@ import {
 it("reclaims an expired host-command family before another standalone command", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-host-retention-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
-  await c.provisionControlInstallation(root);
-  const owner = admittedRoot(root);
-  terminalWithoutEffect(owner.authority);
+  await c.provisionControlDirectories(root);
+  const owner = await admittedRoot(root);
+  await terminalWithoutEffect(owner.authority);
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
   try {
     await pruneHostControlRecords(owner.installation);
-    expect(() => c.restoreAdmittedControlExecution(owner.installation, owner.execution)).toThrow();
+    await expect(
+      c.restoreAdmittedControlExecution(owner.installation, owner.execution),
+    ).rejects.toThrow();
   } finally {
     clock.mockRestore();
     c.closeControlInstallation(owner.installation);
@@ -44,7 +46,7 @@ it.each([0, 1, 130])(
     const repo = mkdtempSync(join(tmpdir(), "omx-fixed-cli-entry-"));
     const infra = join(repo, "infra/docker");
     mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
-    await c.provisionControlInstallation(infra);
+    await c.provisionControlDirectories(infra);
     const installation = c.openControlInstallation({
       infraDir: infra,
       role: "ops-agent",
@@ -88,7 +90,7 @@ it.each([0, 1, 130])(
       serviceIds: ["motis"],
       recipient: "fixed-cli" as const,
     };
-    const authority = c.retainAdmittedControlExecution(installation, {
+    const authority = await c.retainAdmittedControlExecution(installation, {
       requestedDeadlineAt: execution.deadlineAt,
       execution,
       kind: operation.kind,
@@ -101,14 +103,11 @@ it.each([0, 1, 130])(
       serviceIds: ["motis"],
       owner: authority,
     });
-    const delegationId = randomUUID();
-    const publicKey = c.prepareFixedControlChild(authority, delegationId);
-    const assertion = await c.delegateArtifactTargetLease(lease, {
-      ...plan,
-      childPublicKey: publicKey,
-    });
+    const childKey = randomUUID();
     const args = c.fixedCliArguments(operation);
-    c.retainFixedCliSpawnIntent(authority, { delegationId, execution: child, operation, args });
+    await c.retainFixedCliSpawnIntent(authority, { childKey, execution: child, operation, args });
+    await c.delegateArtifactTargetLease(lease, { ...plan, childKey });
+    const fixedChild = { leaseId: lease.leaseId, childKey };
     const receiptOptions = {
       dataRoot: join(infra, "data"),
       execution: child,
@@ -122,12 +121,11 @@ it.each([0, 1, 130])(
     await services.withServiceLifecycleReceiptAuthority(
       authority,
       () => services.openServiceLifecycleReceipt(receiptOptions),
-      { execution: child, publicKey },
+      { execution: child, childKey },
     );
     vi.stubEnv("OPENMAPX_ROOT_DIR", repo);
     vi.stubEnv("OPENMAPX_CONTROL_EXECUTION", JSON.stringify(child));
-    vi.stubEnv("OPENMAPX_CONTROL_DELEGATION", assertion);
-    vi.stubEnv("OPENMAPX_PARENT_EXECUTION", undefined);
+    vi.stubEnv("OPENMAPX_CONTROL_CHILD", JSON.stringify(fixedChild));
     let calls = 0;
     try {
       const command = withCliControlContext(args, async () => {
@@ -156,10 +154,15 @@ it.each([0, 1, 130])(
       if (exitCode === 0) await command;
       else await expect(command).rejects.toMatchObject({ code: exitCode });
       expect(calls).toBe(1);
-      const childInstallation = c.openFixedChildInstallation({ infraDir: infra, assertion });
+      const childInstallation = c.openFixedChildInstallation({
+        infraDir: infra,
+        child: fixedChild,
+      });
       try {
-        const childAuthority = c.restoreAdmittedControlExecution(childInstallation, child);
-        expect(() => c.verifyControlEffectSettlement(childInstallation, child)).not.toThrow();
+        const childAuthority = await c.restoreAdmittedControlExecution(childInstallation, child);
+        await expect(
+          c.verifyControlEffectSettlement(childInstallation, child),
+        ).resolves.toBeTruthy();
         const receipt = await services.withServiceLifecycleReceiptAuthority(childAuthority, () =>
           services.readServiceLifecycleReceipt(receiptOptions),
         );
@@ -174,14 +177,14 @@ it.each([0, 1, 130])(
       ).rejects.toThrow();
       expect(calls).toBe(1);
       if (exitCode === 0) {
-        c.retainControlEffectReceipt(authority, {
+        await c.retainControlEffectReceipt(authority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },
         });
         await c.settleArtifactTargetLeaseChild(
           lease,
-          c.verifyControlEffectSettlement(installation, execution),
+          await c.verifyControlEffectSettlement(installation, execution),
         );
         await c.releaseArtifactTargetLease(lease);
       }

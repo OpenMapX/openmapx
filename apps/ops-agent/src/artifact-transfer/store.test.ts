@@ -19,7 +19,6 @@ async function fixture(free = 2 * 1024 ** 3, now?: () => number) {
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token: "test-api-token",
     capacity: () => ({ bytes: free, inodes: 100000 }),
     now,
   });
@@ -92,7 +91,7 @@ it("reclaims authenticated completed tombstones after seven days while preservin
     code: "ENOENT",
   });
   expect((await store.createStage(request)).stageId).not.toBe(stage.stageId);
-  expect(await readFile(join(root, "private/sweep-cursor.json"), "utf8")).toContain("mac");
+  expect(await readFile(join(root, "private/sweep-cursor.json"), "utf8")).toContain("after");
 });
 
 it("cleans a conclusively failed upload using its retained original content inode", async () => {
@@ -210,7 +209,6 @@ it("refuses unknown space and reserves actual small uploads, not expansion ceili
   const unavailable = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token: "test-api-token",
     capacity: () => {
       throw Error("unknown");
     },
@@ -415,7 +413,6 @@ it("closes new admissions during the existing drain without dropping the active 
   const store = new ArtifactTransferStore({
     dataRoot: join(root, "data"),
     privateRoot: join(root, "private"),
-    token: "test-api-token",
     admissionsOpen: () => open,
     capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
   });
@@ -462,36 +459,11 @@ it("closes new admissions during the existing drain without dropping the active 
   expect(await pending).toBeInstanceOf(Error);
   expect(store.activeStreams).toBe(0);
 });
-it("keeps production transfer metadata out of the strict configuration startup queue", async () => {
+it("keeps production transfer metadata in the agent's own state", async () => {
   const { root } = await fixture();
   const infraDir = join(root, "infra");
-  const queue = join(infraDir, "state", "ops-agent", "trusted-config");
-  await mkdir(queue, { recursive: true, mode: 0o700 });
   const { artifactTransferPrivateRoot } = await import("./store");
-  const { initializeTerminalClaimCleanup } = await import("../trusted-config-source");
-  await initializeTerminalClaimCleanup(queue, {
-    allowedUids: [process.getuid!()],
-    expectedGid: process.getgid!(),
-    token: "t".repeat(43),
-    journalRecords: [],
-  });
-  const store = new ArtifactTransferStore({
-    dataRoot: join(infraDir, "data", ".openmapx-transfers"),
-    privateRoot: artifactTransferPrivateRoot(infraDir),
-    token: "t".repeat(43),
-    capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
-  });
-  stores.push(store);
-  await store.createStage({ ...input(), declaredBytes: 4 });
-  await expect(
-    initializeTerminalClaimCleanup(queue, {
-      allowedUids: [process.getuid!()],
-      expectedGid: process.getgid!(),
-      token: "t".repeat(43),
-      journalRecords: [],
-    }),
-  ).resolves.toBeDefined();
-  expect(artifactTransferPrivateRoot(infraDir, true)).toBe(
-    "/var/lib/openmapx/control-private/artifact-transfers",
+  expect(artifactTransferPrivateRoot(infraDir)).toBe(
+    join(infraDir, "state", "ops-agent", "artifact-transfers"),
   );
 });

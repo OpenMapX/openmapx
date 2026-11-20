@@ -9,7 +9,7 @@ import { adminJob, user } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
-import { jobOwnership } from "./admin-job-state";
+import { cancelRequestedAt, jobOwnership, readAdminJobProtocol } from "./admin-job-state";
 import {
   withAdministrativeConfigurationJob,
   withAdministrativeConfigurationWriter,
@@ -27,7 +27,7 @@ import {
 } from "./platform-configuration-view";
 import { readPlatformPreview } from "./platform-preview-store";
 import {
-  resumeRetainedConfigurationCandidate,
+  resumeConfigurationCandidate,
   retainedConfigurationIntegrationIds,
 } from "./prospective-configuration";
 import {
@@ -55,7 +55,13 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
     throw new JobObservationPending("invalid_identity");
   const actorId = job.createdBy,
     operationKey = createDurableOpsKey("admin-job.guarded-release", ctx.jobId),
-    retained = ctx.checkpointResult?._configurationCandidate;
+    candidate = readAdminJobProtocol(ctx.protocol).candidate,
+    // Rows not yet saved and not cancelled: the forward path below runs again
+    // and continues with the candidate it prepared before the restart. From
+    // the saved rows on, the candidate continues as the agent holds it.
+    continued =
+      candidate?.phase === "candidate_prepared" && cancelRequestedAt(ctx.protocol) === undefined,
+    retained = candidate && !continued ? candidate : undefined;
   let fixed =
     ctx.checkpointResult?._systemRelease === undefined
       ? undefined
@@ -64,7 +70,6 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
     const [actor] = await db.select().from(user).where(eq(user.id, actorId));
     if (actor?.role !== "admin" || actor.banned === true)
       throw new AdminJobFailure("Release administrator is unavailable", { errorCode: "forbidden" });
-    if (ctx.observationOnly) throw new JobObservationPending("recovery_required");
     if (payload.createBackup !== false) {
       await ctx.log("Creating a backup before applying the checked release");
       await executeAdminJobOperation(
@@ -117,14 +122,14 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
       throw new JobObservationPending("invalid_identity");
   }
   const integrationIds = retained
-    ? await retainedConfigurationIntegrationIds(ctx, actorId, operationKey)
+    ? await retainedConfigurationIntegrationIds(ctx, operationKey)
     : getAllIntegrations().map((value) => value.id);
   const input = fixed;
   const result = await withAdministrativeConfigurationJob(ctx, () =>
     withAdministrativeConfigurationWriter(
       { actorId, operationKey, integrationIds, signal: ctx.signal },
       async () => {
-        if (retained) return resumeRetainedConfigurationCandidate();
+        if (retained) return resumeConfigurationCandidate();
         const applied = await applyPlatformConfigurationIntent(input);
         return { configuration: applied.application };
       },

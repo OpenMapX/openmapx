@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
 import { latLngToCell } from "h3-js";
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 import {
   assertDataPublication,
+  cancellableTransaction,
   publishDataChange,
   retainDataPublication,
 } from "../execution/worker-scope.js";
@@ -22,7 +23,7 @@ import { readOverturePullContract } from "./stac.js";
  * generalisation come directly from Overture and are never materialised into
  * an OpenMapX-owned taxonomy.
  */
-export async function backfillDerivedColumns(schema: string): Promise<void> {
+export async function backfillDerivedColumns(sql: postgres.Sql, schema: string): Promise<void> {
   assertValidOvertureSchema(schema);
 
   // Bulk loading leaves no useful null/selectivity statistics. Without this,
@@ -58,6 +59,7 @@ export async function backfillDerivedColumns(schema: string): Promise<void> {
 }
 
 export interface IngestOvertureOptions {
+  sql: postgres.Sql;
   region: string;
   dataDir: string;
   release?: string;
@@ -68,7 +70,10 @@ export interface IngestOvertureOptions {
  * Verifies that every contributor in the staged release has an explicit
  * OpenMapX attribution entry. This must run before the atomic schema swap.
  */
-export async function validateOvertureContributors(schema: string): Promise<string[]> {
+export async function validateOvertureContributors(
+  sql: postgres.Sql,
+  schema: string,
+): Promise<string[]> {
   assertValidOvertureSchema(schema);
   const rows = await sql.unsafe<{ dataset: string }[]>(
     `SELECT DISTINCT source->>'dataset' AS dataset
@@ -95,6 +100,7 @@ export async function validateOvertureContributors(schema: string): Promise<stri
  * catalog operation; no country-scale OSM table copy is performed.
  */
 export async function activateOvertureStagingSchema(
+  sql: postgres.Sql,
   schema: string,
   stagingSchema: string,
   placesPublishedAt: string,
@@ -105,9 +111,9 @@ export async function activateOvertureStagingSchema(
     `SELECT to_regclass($1) IS NOT NULL AS exists`,
     [`${schema}.osm_pois`],
   );
-  assertDataPublication();
+  await assertDataPublication();
   await publishDataChange(() =>
-    sql.begin(async (tx) => {
+    cancellableTransaction(sql, async (tx) => {
       if (existingOsmSnapshot?.exists) {
         // `rebuildOvertureLinks` verifies this fingerprint against the current
         // on-disk PBF before reuse and restarts extraction if it changed.
@@ -140,6 +146,7 @@ export async function activateOvertureStagingSchema(
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {
+  const { sql } = opts;
   const local = opts.release ? null : inspectOvertureLocalInputs(opts.dataDir, opts.region);
   if (local?.catalogueRefusal) throw Error(local.catalogueRefusal);
   const localRelease = opts.release ?? local?.downloadedRelease;
@@ -160,6 +167,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   const pullContract = readOverturePullContract(opts.dataDir, release, opts.region);
 
   await assertOverturePostgresCapacity({
+    sql,
     schema,
     stage: "PostGIS staging ingest",
     workingBytes: (activeSchemaBytes) =>
@@ -225,7 +233,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   );
 
   opts.onProgress?.("Backfilling h3_r8...");
-  await backfillDerivedColumns(stagingSchema);
+  await backfillDerivedColumns(sql, stagingSchema);
   await sql.unsafe(`ALTER TABLE "${stagingSchema}".places ALTER COLUMN h3_r8 SET NOT NULL`);
 
   opts.onProgress?.("Building Overture Places indexes after bulk load...");
@@ -233,7 +241,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   await sql.unsafe(`ANALYZE "${stagingSchema}".places`);
 
   opts.onProgress?.("Validating contributor attribution coverage...");
-  const contributors = await validateOvertureContributors(stagingSchema);
+  const contributors = await validateOvertureContributors(sql, stagingSchema);
   if (contributors.join("\0") !== pullContract.contributors.join("\0")) {
     throw new Error("Ingested Overture contributors do not match the pull contract");
   }
@@ -248,7 +256,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   }
 
   opts.onProgress?.("Running labeled regional quality regression gate...");
-  const quality = await validateOvertureQuality(stagingSchema, opts.region);
+  const quality = await validateOvertureQuality(sql, stagingSchema, opts.region);
   opts.onProgress?.(`Quality gate passed (${quality.applicableCases} applicable cases).`);
 
   await sql.unsafe(
@@ -259,7 +267,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   );
 
   opts.onProgress?.("Atomic swap staging → live...");
-  await activateOvertureStagingSchema(schema, stagingSchema, new Date().toISOString());
+  await activateOvertureStagingSchema(sql, schema, stagingSchema, new Date().toISOString());
 
   opts.onProgress?.("Ingest complete.");
 }

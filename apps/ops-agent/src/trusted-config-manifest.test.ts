@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { services } from "@openmapx/core/server";
+import type { services } from "@openmapx/core/server";
 import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..", "..", "..");
@@ -16,41 +16,23 @@ function manifest(id: "app-api" | "ops-agent") {
 }
 
 describe("trusted configuration deployment handoff", () => {
-  it("uses one narrow confidential host queue, which the API and the agent both use as the deployment's user", () => {
+  it("runs both ends as the deployment's user and shares no configuration directory", () => {
     const api = manifest("app-api");
     const agent = manifest("ops-agent");
     // Both run as UID:GID from .env, with no fallback uid: every render writes them.
     const user = `\${UID:?UID must be set, run pnpm openmapx compose render}:\${GID:?GID must be set, run pnpm openmapx compose render}`;
     expect(api.manifest.container.user).toBe(user);
     expect(agent.manifest.container.user).toBe(user);
-    // The agent opens the queue through the checkout,
-    // so only app-api mounts the queue and is told where it is.
-    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_DIR).toBe(
-      "/var/lib/openmapx/trusted-config",
-    );
-    expect(agent.manifest.container.environment).not.toHaveProperty("OPS_TRUSTED_CONFIG_DIR");
-    expect(api.manifest.bindMounts).toContainEqual({
-      source: "@infra:state/ops-agent/trusted-config",
-      target: "/var/lib/openmapx/trusted-config",
-      readOnly: false,
-    });
-    const agentSources = (agent.manifest.bindMounts ?? []).map((mount) => mount.source);
-    expect(agentSources).not.toContain("@infra:state/ops-agent/trusted-config");
-    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_UID).toBe(
-      `\${UID:?UID must be set, run pnpm openmapx compose render}`,
-    );
-    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_GID).toBe(
-      `\${GID:?GID must be set, run pnpm openmapx compose render}`,
-    );
-  });
-
-  it("renders the queue against the real infra root through the generation pointer", () => {
-    const rendered = services.renderCompose([manifest("app-api")], {
-      composeOutDir: join(root, "infra", "docker", services.CURRENT_CONFIGURATION),
-      infraDir: join(root, "infra", "docker"),
-      allServices: [manifest("app-api")],
-    });
-    expect(rendered.composeYaml).toContain("../../trusted-config:/var/lib/openmapx/trusted-config");
-    expect(rendered.composeYaml).not.toContain("current/state/ops-agent");
+    // The payload travels in the authenticated request; app-api mounts no
+    // part of the agent's state but the integrations it loads.
+    const apiAgentState = (api.manifest.bindMounts ?? [])
+      .map((mount) => mount.source)
+      .filter((source) => source.startsWith("@infra:state/ops-agent"));
+    expect(apiAgentState).toEqual(["@infra:state/ops-agent/custom-integrations"]);
+    expect(
+      Object.keys(api.manifest.container.environment ?? {}).filter((key) =>
+        key.startsWith("OPS_TRUSTED_CONFIG"),
+      ),
+    ).toEqual([]);
   });
 });

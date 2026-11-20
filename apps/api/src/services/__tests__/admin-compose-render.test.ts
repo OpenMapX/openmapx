@@ -15,7 +15,7 @@ vi.mock("../service-preparation", () => ({
 }));
 vi.mock("../admin-job-ops", () => ({ hasRetainedAdminJobOperation: calls.retained }));
 vi.mock("../prospective-configuration", () => ({
-  resumeRetainedConfigurationCandidate: calls.resume,
+  resumeConfigurationCandidate: calls.resume,
 }));
 vi.mock("../administrative-configuration-writer", () => ({
   withAdministrativeConfigurationJob: (_ctx: unknown, run: () => unknown) => run(),
@@ -110,14 +110,19 @@ it("resumes the exact retained candidate instead of resealing a replacement", as
       revisionId: revision,
       followUp: "complete",
       cleanupFailed: false,
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
       enabledServiceIds: [],
     },
   });
   const ctx = context();
   ctx.execution = { owner: "same-owner", version: 2 };
-  ctx.checkpointResult = { _configurationCandidate: { operationKey: "original" } };
+  const { createDurableOpsKey } = await import("../ops-client");
+  ctx.protocol = {
+    candidate: {
+      phase: "rows_saved",
+      operationKey: createDurableOpsKey("admin-job.config.prepare", "render-unit:compose-render"),
+    } as NonNullable<NonNullable<JobContext["protocol"]>["candidate"]>,
+  };
   await handleComposeRenderJob(ctx);
   expect(calls.resume).toHaveBeenCalledTimes(1);
   expect(calls.publish).not.toHaveBeenCalled();

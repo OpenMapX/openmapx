@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,7 +52,7 @@ const enabled = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1";
 describe.skipIf(!enabled)(
   "actual pinned managed credentials / original configuration maintenance / PostgreSQL",
   () => {
-    let pauseKind = "vault.apply";
+    let pauseKind = "configurationMaintenance.apply";
     let faults = false;
     const dropped = new Set<string>();
     let stopCoordinator: () => void;
@@ -77,9 +77,10 @@ describe.skipIf(!enabled)(
       faults = context.task.name.startsWith("consumes one real");
       dropped.clear();
       nativeRecovery = context.task.name.includes("killed native");
-      pauseKind = context.task.name.includes("phase=prepared")
+      // The saved case pauses at the agent's apply, whose first step writes the generation.
+      pauseKind = context.task.name.includes("phase=candidate_prepared")
         ? "configurationMaintenance.prepare"
-        : "vault.apply";
+        : "configurationMaintenance.apply";
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       vi.stubEnv("OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL", migrated.connectionUri);
       vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
@@ -146,7 +147,7 @@ describe.skipIf(!enabled)(
             faults &&
             [
               "configurationMaintenance.prepare",
-              "configurationMaintenance.decide",
+              "configurationMaintenance.apply",
               "configurationMaintenance.settle",
             ].includes(kind) &&
             reply.statusCode === 202 &&
@@ -173,9 +174,6 @@ describe.skipIf(!enabled)(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: url,
         OPS_AGENT_TOKEN_FILE: token,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
       }))
         vi.stubEnv(key, value);
       dm = await ownedDataManager({
@@ -509,9 +507,10 @@ describe.skipIf(!enabled)(
               return {
                 status: j.status,
                 type: j.type,
-                failure: r?._migrationFailure,
+                failure: (j.protocol as { handler?: { _migrationFailure?: unknown } })?.handler
+                  ?._migrationFailure,
                 configuration: r?.configuration,
-                phase: (r?._configurationCandidate as { phase?: unknown })?.phase,
+                phase: (j.protocol as { candidate?: { phase?: unknown } })?.candidate?.phase,
               };
             }),
           );
@@ -601,6 +600,7 @@ describe.skipIf(!enabled)(
       expect(dm.preparePosts).toBe(1);
     }, 90000);
     it("consumes one real purpose proof and commits a preserved map through one original guard, recreation and active mounted revision", async () => {
+      const startedAt = Date.now();
       const { input, catalog, challenge } = await authorizedInput();
       const competing = await authorizedInput({ seed: false }),
         applying = jobRunner.applyImmediateTransitCredentials(input);
@@ -630,7 +630,15 @@ describe.skipIf(!enabled)(
       expect(proof?.state).toBe("consumed");
       // The first prepare reply is lost; the agent repeats the same body.
       expect(dm.preparePosts).toBe(2);
-      expect(dm.posts).toBe(1);
+      // So is the first /link answer: the agent asks again under the same key and
+      // observes the one application data-manager ran under the maintenance's
+      // lease, beside its prepared fence.
+      expect(dm.posts).toBe(2);
+      const links = await state.fixture
+        .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${startedAt}`;
+      expect(links).toHaveLength(1);
+      expect(links[0]).toMatchObject({ status: "ok" });
+      expect(links[0]!.execution_input.leaseId).toEqual(expect.any(String));
       expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(dropped.size).toBe(3);
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
@@ -654,12 +662,17 @@ describe.skipIf(!enabled)(
         "synthetic-private-key",
       );
     }, 120000);
-    it.each(["prepared", "saved"])(
+    it.each(["candidate_prepared", "rows_saved"])(
       "recovers a killed native credential producer without consuming or applying twice (phase=%s)",
       async (phase) => {
         const { input } = await authorizedInput(),
           database = new URL(migrated.connectionUri);
         database.searchParams.set("search_path", state.fixture.schema);
+        // Every API process of one installation shares its secret, which keys
+        // the immediate job's intent digest.
+        const authSecret =
+          process.env.BETTER_AUTH_SECRET ?? "synthetic-transit-native-auth-fixture";
+        vi.stubEnv("BETTER_AUTH_SECRET", authSecret);
         const loader = createRequire(new URL("../../package.json", import.meta.url)).resolve(
             "tsx/esm",
           ),
@@ -675,7 +688,7 @@ describe.skipIf(!enabled)(
               DATABASE_URL: database.toString(),
               OPENMAPX_ROOT_DIR: host.root,
               NODE_ENV: "test",
-              BETTER_AUTH_SECRET: "synthetic-transit-native-auth-fixture",
+              BETTER_AUTH_SECRET: authSecret,
             },
           });
           children.push(child);
@@ -711,16 +724,13 @@ describe.skipIf(!enabled)(
         const [before] = await state.fixture.db.select().from(schema.adminJob),
           [proof] = await state.fixture.db.select().from(schema.adminActionReauthentication),
           [secret] = await state.fixture.db.select().from(schema.serviceSecret);
-        expect(proof?.state).toBe(phase === "saved" ? "consumed" : "completed");
-        expect(
-          (before!.result as { _configurationCandidate: { phase: string } })._configurationCandidate
-            .phase,
-        ).toBe(phase);
+        expect(proof?.state).toBe(phase === "rows_saved" ? "consumed" : "completed");
+        expect((before!.protocol as { candidate: { phase: string } }).candidate.phase).toBe(phase);
         first.child.kill("SIGKILL");
         await first.exited;
         releaseAdmission?.();
         releaseAdmission = undefined;
-        const lease = (before!.result as { _observationLeaseUntil: string })._observationLeaseUntil;
+        const lease = (before!.protocol as { observationLeaseUntil: string }).observationLeaseUntil;
         await new Promise((resolve) =>
           setTimeout(resolve, Math.max(0, Date.parse(lease) - Date.now() + 100)),
         );
@@ -730,19 +740,19 @@ describe.skipIf(!enabled)(
           "Native recovery result",
           JSON.stringify({ code, output: replacement.output() }),
         );
-        expect(code).toBe(phase === "saved" ? 0 : 2);
+        expect(code).toBe(phase === "rows_saved" ? 0 : 2);
         const [after] = await state.fixture.db.select().from(schema.adminJob),
           [afterProof] = await state.fixture.db.select().from(schema.adminActionReauthentication),
           [afterSecret] = await state.fixture.db.select().from(schema.serviceSecret);
         expect(after?.id).toBe(before!.id);
-        expect(after?.status).toBe(phase === "saved" ? "success" : "failed");
+        expect(after?.status).toBe(phase === "rows_saved" ? "success" : "failed");
         expect(afterProof?.consumedAt).toEqual(proof?.consumedAt);
         expect(afterSecret).toEqual(secret);
         expect(dm.preparePosts).toBe(1);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(
-          phase === "saved" ? 1 : 0,
+          phase === "rows_saved" ? 1 : 0,
         );
-        if (phase === "prepared") {
+        if (phase === "candidate_prepared") {
           const replay = await jobRunner.applyImmediateTransitCredentials(input);
           expect(replay.configuration.outcome).toBe("not_committed");
         }

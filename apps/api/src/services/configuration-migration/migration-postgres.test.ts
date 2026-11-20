@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { join } from "node:path";
 import { createApiClient } from "@openmapx/core";
@@ -95,7 +95,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       store = new ArtifactTransferStore({
         dataRoot: join(host.root, "stages"),
         privateRoot: join(host.root, "stage-meta"),
-        token: host.token,
         capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
       });
       installStandaloneIntegrationRuntime(host.runtime, { rootDir: host.root, store });
@@ -120,9 +119,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
         OPENMAPX_SECRETS_KEY: "71".repeat(32),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "migration-local-synthetic",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
@@ -240,21 +236,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ).unlink;
       let interrupted = false;
       vi.mocked(fsPromises.unlink).mockImplementation(async (path) => {
-        if (!interrupted && String(path).includes("/.candidates/")) {
+        if (!interrupted && String(path).includes("/configuration-candidates/")) {
           const row = (await state.fixture.db.select().from(adminJob)).find(
             (value) =>
               (value.payload as { operationKey?: string })?.operationKey === input.operationKey,
           );
           const retained = row?.result as Record<string, unknown> | undefined;
-          expect(retained?._configurationCandidate).toMatchObject({
-            phase: "settled",
-            retirement: { version: 1 },
-          });
-          expect((retained?._completion as { result?: unknown } | undefined)?.result).toMatchObject(
-            {
-              migration: { outcome: "applied", operationId: row!.id },
-            },
+          expect((row?.protocol as { candidate?: { phase?: string } })?.candidate?.phase).toBe(
+            "generation_applied",
           );
+          expect(retained?.migration).toMatchObject({ outcome: "applied", operationId: row!.id });
           await originalUnlink(path);
           interrupted = true;
           throw Error("API interrupted after migration packet unlink");
@@ -274,9 +265,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await state.fixture.db
           .update(adminJob)
           .set({
+            protocol: { ...row.protocol, observationLeaseUntil: new Date(0).toISOString() },
             result: {
               ...retained,
-              _observationLeaseUntil: new Date(0).toISOString(),
               observation: {
                 state: "unknown",
                 reason: "recovery_required",
@@ -299,8 +290,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           },
           { timeout: 30000 },
         );
-        const result = (retained._completion as { result: { migration: unknown } }).result
-          .migration;
+        const result = retained.migration;
         expect(await jobRunner.runImmediateConfigurationMigration(input)).toEqual(result);
         const next = await jobRunner.runImmediateConfigurationMigrationPreview({
           actorId: "migration-admin",
@@ -522,7 +512,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       let interrupted = false;
       vi.mocked(fsPromises.unlink).mockImplementation(async (path) => {
         await originalUnlink(path);
-        if (!interrupted && String(path).includes("/.candidates/")) {
+        if (!interrupted && String(path).includes("/configuration-candidates/")) {
           interrupted = true;
           throw Error("credential import acknowledgement lost after packet retirement");
         }
@@ -543,9 +533,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await state.fixture.db
           .update(adminJob)
           .set({
+            protocol: { ...row!.protocol, observationLeaseUntil: new Date(0).toISOString() },
             result: {
               ...(row!.result as Record<string, unknown>),
-              _observationLeaseUntil: new Date(0).toISOString(),
               observation: {
                 state: "unknown",
                 reason: "recovery_required",

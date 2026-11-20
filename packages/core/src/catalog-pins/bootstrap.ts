@@ -1,13 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import type { ControlInstallation } from "../build-artifacts/control-records";
+import { controlDigest } from "../build-artifacts/control-records";
 import {
   beginControlEffect,
-  controlDigest,
-  executionAuthorityState,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
-} from "../build-artifacts/control-authority";
-import type { ControlInstallation } from "../build-artifacts/control-records";
+} from "../build-artifacts/execution-record";
 import {
   type ArtifactTargetLease,
   acquireArtifactTargetLease,
@@ -37,7 +36,7 @@ export async function initializeManagedCatalogPins(options: {
     admittedAt = Date.now(),
     deadlineAt = admittedAt + 60000,
     hash = controlDigest(operation);
-  const authority = retainAdmittedControlExecution(options.installation, {
+  const authority = await retainAdmittedControlExecution(options.installation, {
     execution: {
       executor: role,
       principal: role === "ops-agent" ? "api" : "host-cli",
@@ -60,19 +59,16 @@ export async function initializeManagedCatalogPins(options: {
   let lease: ArtifactTargetLease | undefined;
   try {
     lease = await acquireArtifactTargetLease({ serviceIds: ["motis"], owner: authority });
-    beginControlEffect(authority);
+    await beginControlEffect(authority);
     const pins = await initializeCatalogPinSet({ rootDir: options.rootDir, lease });
-    retainControlEffectReceipt(authority, {
+    await retainControlEffectReceipt(authority, {
       outcome: "committed",
       publication: "committed",
       receipt: { kind: "catalog-pins-initialized", generationId: pins?.generationId ?? null },
     });
     await settleArtifactTargetLeaseChild(
       lease,
-      verifyControlEffectSettlement(
-        options.installation,
-        executionAuthorityState(authority).execution,
-      ),
+      await verifyControlEffectSettlement(options.installation, authority.execution),
     );
     await releaseArtifactTargetLease(lease);
     lease = undefined;

@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const cancelOperations = vi.hoisted(() => vi.fn());
 const database = vi.hoisted(() => {
   const updates: Array<Record<string, unknown>> = [];
-  const result = {
-    opsProjection: {
+  const result = {};
+  const protocol = {
+    operations: {
       version: 3,
       steps: {},
       eventTotal: 0,
@@ -18,6 +19,7 @@ const database = vi.hoisted(() => {
   return {
     updates,
     result,
+    protocol,
     db: {
       update: vi.fn(() => ({
         set: vi.fn((value: Record<string, unknown>) => {
@@ -29,7 +31,7 @@ const database = vi.hoisted(() => {
                 .mockResolvedValue(
                   value.status === "canceled" && updates.length === 1
                     ? []
-                    : [{ id: "job-1", status: value.status ?? "running", result }],
+                    : [{ id: "job-1", status: value.status ?? "running", result, protocol }],
                 ),
               // biome-ignore lint/suspicious/noThenProperty: the Drizzle query builder is thenable.
               then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
@@ -40,7 +42,7 @@ const database = vi.hoisted(() => {
       select: vi.fn(() => ({
         from: vi.fn(() => ({
           where: vi.fn(() => ({
-            limit: vi.fn().mockResolvedValue([{ status: "running", result }]),
+            limit: vi.fn().mockResolvedValue([{ status: "running", result, protocol }]),
           })),
         })),
       })),
@@ -66,6 +68,7 @@ describe("admin job cancellation", () => {
 
     expect(cancelOperations).toHaveBeenCalledWith(
       database.result,
+      database.protocol,
       undefined,
       expect.objectContaining({ onEvidence: expect.any(Function) }),
     );
@@ -95,10 +98,11 @@ it("observer abort without backend containment never publishes canceled", async 
       type: string,
       payload: Record<string, unknown>,
       result: Record<string, unknown> | null,
+      protocol: unknown,
       signal: AbortSignal,
     ): Promise<void>;
   };
-  await execute.executeJob("job-1", "test.observer-abort", {}, null, controller.signal);
+  await execute.executeJob("job-1", "test.observer-abort", {}, null, {}, controller.signal);
   expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
   const patch = new PgDialect().sqlToQuery(database.updates.at(-1)?.result as SQL);
   expect(JSON.parse(patch.params[0] as string)).toMatchObject({
@@ -128,6 +132,7 @@ it("retains a fulfilled backend's partial failure evidence in failed DB and SSE 
     "test.partial",
     {},
     { phase: "build" },
+    {},
     new AbortController().signal,
   );
   unsubscribe();

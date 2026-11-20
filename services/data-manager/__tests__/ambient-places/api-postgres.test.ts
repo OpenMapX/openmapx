@@ -90,7 +90,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await barrier.end({ timeout: 2 });
         await a.close();
         await b.close();
-        closeAdmission();
+        await closeAdmission();
         await pg.stop();
       }
     }, 120_000);

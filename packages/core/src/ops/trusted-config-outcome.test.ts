@@ -9,7 +9,6 @@ describe("shared trusted configuration outcome", () => {
     const value = parseTrustedConfigurationApplyOutcome({
       outcome: "unknown",
       reason: "transport_or_result",
-      publisherCleanupFailed: false,
       registryUpdateFailed: false,
     });
     expect(completeTrustedConfigurationApply(value)).toBe(false);

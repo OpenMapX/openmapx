@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authorizeOpsOperation, opsOperationSchema, parseOpsResult } from "./contract";
-import { opsExecutionBudget } from "./execution-identity";
+import { configurationHandoffPrepareOperationSchema } from "./configuration-handoff-records";
 
 const operation = () => ({
   kind: "configurationHandoff.prepare",
@@ -14,26 +13,7 @@ const operation = () => ({
   expectedImageIdentities: { "app-api": `sha256:${"1".repeat(64)}` },
   mode: { kind: "configuration" },
 });
-describe("fixed protected handoff wire data", () => {
-  it("has API-only mutation authority and a terminal prepared result, not an applied claim", () => {
-    const body = opsOperationSchema.parse(operation());
-    if (body.kind !== "configurationHandoff.prepare") throw Error("Unexpected operation");
-    expect(authorizeOpsOperation("api", body.kind)).toBe(true);
-    expect(authorizeOpsOperation("data-manager", body.kind)).toBe(false);
-    expect(
-      parseOpsResult("configurationHandoff.prepare", {
-        handoffId: body.handoffId,
-        phase: "prepared",
-      }),
-    ).toEqual({ handoffId: body.handoffId, phase: "prepared" });
-    expect(() =>
-      parseOpsResult("configurationHandoff.prepare", {
-        handoffId: body.handoffId,
-        phase: "applied",
-      }),
-    ).toThrow();
-    expect(opsExecutionBudget("configuration-helper").processMs).toBe(3600000);
-  });
+describe("handoff step body", () => {
   it("rejects extra paths, arbitrary images, unordered/duplicate targets and unbound target maps", () => {
     for (const value of [
       { ...operation(), path: "/other" },
@@ -47,7 +27,7 @@ describe("fixed protected handoff wire data", () => {
         expectedImageIdentities: { motis: `sha256:${"2".repeat(64)}` },
       },
     ])
-      expect(opsOperationSchema.safeParse(value).success).toBe(false);
+      expect(configurationHandoffPrepareOperationSchema.safeParse(value).success).toBe(false);
   });
   it("keeps release identity distinct from observed old image IDs without accepting caller pins", () => {
     const body = {
@@ -56,9 +36,9 @@ describe("fixed protected handoff wire data", () => {
       expectedImageIdentities: { motis: `sha256:${"2".repeat(64)}` },
       mode: { kind: "release", releaseId: "v0.1.0-beta.1", manifestDigest: "d".repeat(64) },
     };
-    expect(opsOperationSchema.safeParse(body).success).toBe(true);
+    expect(configurationHandoffPrepareOperationSchema.safeParse(body).success).toBe(true);
     expect(
-      opsOperationSchema.safeParse({
+      configurationHandoffPrepareOperationSchema.safeParse({
         ...body,
         mode: { ...body.mode, imageReferences: { motis: "arbitrary/image" } },
       }).success,

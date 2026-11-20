@@ -37,6 +37,8 @@ export const stackRenderOperationSchema = z.strictObject({
   kind: z.literal("stack.render"),
   ...configurationCondition,
   revisionId: stableIdSchema,
+  // The payload travels beside the operation in the request; this binds it.
+  payloadDigest: z.string().regex(/^[a-f0-9]{64}$/),
   expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
 });
 export const serviceRecreateOperationSchema = z.strictObject({
@@ -63,6 +65,8 @@ export const serviceSelectionApplyOperationSchema = z.strictObject({
   kind: z.literal("serviceSelection.apply"),
   ...configurationCondition,
   revisionId: stableIdSchema,
+  // The payload travels beside the operation in the request; this binds it.
+  payloadDigest: z.string().regex(/^[a-f0-9]{64}$/),
   expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
 });
 export const serviceConfigApplyOperationSchema = z.strictObject({
@@ -70,6 +74,8 @@ export const serviceConfigApplyOperationSchema = z.strictObject({
   ...configurationCondition,
   serviceId: serviceIdSchema,
   revisionId: stableIdSchema,
+  // The payload travels beside the operation in the request; this binds it.
+  payloadDigest: z.string().regex(/^[a-f0-9]{64}$/),
   expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
 });
 export const integrationConfigApplyOperationSchema = z.strictObject({
@@ -77,6 +83,8 @@ export const integrationConfigApplyOperationSchema = z.strictObject({
   ...configurationCondition,
   integrationId: serviceIdSchema,
   revisionId: stableIdSchema,
+  // The payload travels beside the operation in the request; this binds it.
+  payloadDigest: z.string().regex(/^[a-f0-9]{64}$/),
   expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
 });
 export const vaultApplyOperationSchema = z.strictObject({
@@ -84,6 +92,8 @@ export const vaultApplyOperationSchema = z.strictObject({
   ...configurationCondition,
   serviceId: serviceIdSchema,
   revisionId: stableIdSchema,
+  // The payload travels beside the operation in the request; this binds it.
+  payloadDigest: z.string().regex(/^[a-f0-9]{64}$/),
   expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
 });
 export const configurationMaintenanceEffectOperationSchema = z.discriminatedUnion("kind", [

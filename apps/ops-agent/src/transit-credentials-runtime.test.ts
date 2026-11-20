@@ -19,7 +19,7 @@ const { CONFIGURATION_GENERATIONS, CURRENT_CONFIGURATION, GENERATED_SECRETS_DIRN
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins, readCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { afterEach, expect, it } from "vitest";
@@ -99,7 +99,7 @@ async function fixture() {
     }),
     { mode: 0o644 },
   );
-  await provisionControlInstallation(infraDir);
+  await provisionControlDirectories(infraDir);
   const installation = openControlInstallation({
     infraDir,
     role: "ops-agent",

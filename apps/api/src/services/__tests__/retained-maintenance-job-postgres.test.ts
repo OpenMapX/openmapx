@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +31,7 @@ import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
+import { configurationCandidateSource } from "../../../../ops-agent/src/configuration-candidate-source";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import {
   createProductionOpsRuntime,
@@ -117,8 +118,7 @@ dbDescribe("retained finite maintenance requests", () => {
         );
       let store = new ArtifactTransferStore({
         dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
-        privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
-        token: host.token,
+        privateRoot: join(host.infraDir, "state/ops-agent/artifact-transfers"),
         capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
       });
       const stores = [store];
@@ -332,8 +332,7 @@ dbDescribe("retained finite maintenance requests", () => {
           });
           store = new ArtifactTransferStore({
             dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
-            privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
-            token: host.token,
+            privateRoot: join(host.infraDir, "state/ops-agent/artifact-transfers"),
             capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
           });
           stores.push(store);
@@ -522,10 +521,7 @@ dbDescribe("retained finite maintenance requests", () => {
     writeFileSync(tokenFile, host.token, { mode: 0o600 });
     vi.stubEnv("OPS_AGENT_URL", await agent.listen({ host: "127.0.0.1", port: 0 }));
     vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
     vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
-    vi.stubEnv("OPS_TRUSTED_CONFIG_UID", String(statSync(host.queue).uid));
-    vi.stubEnv("OPS_TRUSTED_CONFIG_GID", String(statSync(host.queue).gid));
     const { jobRunner } = await import("../job-runner"),
       { handleComposeRenderJob } = await import("../admin-compose-render"),
       { registerAdminComposeRoutes } = await import("../../routes/admin-compose");
@@ -646,7 +642,6 @@ dbDescribe("retained finite maintenance requests", () => {
     writeFileSync(tokenFile, host.token, { mode: 0o600 });
     vi.stubEnv("OPS_AGENT_URL", endpoint);
     vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
     const { jobRunner } = await import("../job-runner"),
       { handleBackupPruneJob } = await import("../admin-backup-maintenance"),
       { adminBackupMaintenanceRoute } = await import("../../routes/admin-backup-maintenance");
@@ -852,7 +847,6 @@ dbDescribe("retained finite maintenance requests", () => {
     const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 });
     vi.stubEnv("OPS_AGENT_URL", agentUrl);
     vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
     const { jobRunner } = await import("../job-runner"),
       { handleReleaseClearJob } = await import("../admin-release-controls"),
       { adminReleaseControlsRoute } = await import("../../routes/admin-release-controls");
@@ -1026,12 +1020,8 @@ dbDescribe("retained finite maintenance requests", () => {
         stack: host.stack,
         loadAuthority: host.loadAuthority,
         communityRepositories: host.repositories,
-        candidateSource: {
-          directory: host.queue,
-          token: host.token,
-          ownerUid: statSync(host.queue).uid,
-          ownerGid: statSync(host.queue).gid,
-        },
+        candidateSource: configurationCandidateSource(host.infraDir),
+        apiToken: host.token,
         docker: { execFile, fileExists: existsSync },
       });
       const installation = openControlInstallation({
@@ -1070,7 +1060,6 @@ dbDescribe("retained finite maintenance requests", () => {
       writeFileSync(tokenFile, host.token, { mode: 0o600 });
       vi.stubEnv("OPS_AGENT_URL", agentUrl);
       vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-      vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
       const { jobRunner } = await import("../job-runner"),
         { handleImageStageJob } = await import("../admin-image-staging"),
         { adminReleaseControlsRoute } = await import("../../routes/admin-release-controls");

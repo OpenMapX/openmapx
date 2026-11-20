@@ -71,7 +71,6 @@ export function createDataExecutionDispatcher(deps: {
   sql: postgres.Sql;
   singleFlight: SingleFlightController;
   operationsPolicy: MotisOperationsPolicy;
-  runHardlinks: (context: DataExecutionContext) => Promise<DataExecutionResult>;
   notablePlaces?: {
     runtimeState: ReturnType<typeof createNotablePlacesRuntimeState>;
     operationLock: ReturnType<typeof createNotablePlacesOperationLock>;
@@ -111,7 +110,7 @@ export function createDataExecutionDispatcher(deps: {
             emit(context.execution.executionId, { event: "progress", bytes, totalBytes }),
           withPublishLock: (publish) =>
             withOvertureOperationLock(async () => {
-              context.assertForward();
+              await context.assertForward();
               publish();
             }),
         });
@@ -121,7 +120,7 @@ export function createDataExecutionDispatcher(deps: {
         if (dataset)
           try {
             await updateCurrentSearchIndexFingerprint(
-              deps.sql,
+              context.sql,
               input.region,
               await fingerprintDataset(dataset),
             );
@@ -203,7 +202,11 @@ export function createDataExecutionDispatcher(deps: {
               executionContext: context,
               operatorFeedRelay: getOperatorFeedRelayStore(),
               onStageComplete: async (stage) => {
-                await makePersistingOnStageComplete(context.execution.executionId, logger)(stage);
+                await makePersistingOnStageComplete(
+                  context.sql,
+                  context.execution.executionId,
+                  logger,
+                )(stage);
                 const diagnostic = dataExecutionDiagnostic(stage.message ?? stage.stage);
                 await context.checkpoint({
                   diagnostics: {
@@ -284,34 +287,42 @@ export function createDataExecutionDispatcher(deps: {
       case "overture-ingest":
         await withOvertureOperationLock(async () => {
           const release = await assertOvertureRecoveryInputs(
+            context.sql,
             deps.dataDir,
             input.region,
             "overture-ingest",
           );
           if (!release) throw Error("Completed local Overture release required");
-          await ingestOverture({ ...common, region: input.region, release });
+          await ingestOverture({ ...common, sql: context.sql, region: input.region, release });
         });
         finish(context.execution.executionId, { event: "done", ok: true });
         return { kind: input.kind, region: input.region, metrics: {} };
       case "overture-extract":
         await withOvertureOperationLock(async () => {
-          await assertOvertureRecoveryInputs(deps.dataDir, input.region, "overture-extract");
-          await extractOsmPois({ ...common, region: input.region });
+          await assertOvertureRecoveryInputs(
+            context.sql,
+            deps.dataDir,
+            input.region,
+            "overture-extract",
+          );
+          await extractOsmPois({ ...common, sql: context.sql, region: input.region });
         });
         finish(context.execution.executionId, { event: "done", ok: true });
         return { kind: input.kind, region: input.region, metrics: {} };
       case "overture-conflate": {
         const result = await withOvertureOperationLock(async () => {
           await assertOvertureRecoveryInputs(
+            context.sql,
             deps.dataDir,
             input.region,
             "overture-conflate",
             input.restart === true,
           );
-          const installed = await getOvertureConflationState();
+          const installed = await getOvertureConflationState(context.sql);
           if (!installed) throw Error("No installed Overture release");
           const result = await rebuildOvertureLinksUnlocked({
             ...common,
+            sql: context.sql,
             region: input.region,
             release: installed.release,
             force: input.restart === true,
@@ -320,6 +331,7 @@ export function createDataExecutionDispatcher(deps: {
           });
           if (result.status === "completed" || result.status === "already_completed")
             await finalizeOvertureReleaseFiles({
+              sql: context.sql,
               dataDir: deps.dataDir,
               activeRelease: installed.release,
               retain: overtureReleaseRetentionFromEnv(process.env.OVERTURE_RELEASE_RETENTION),
@@ -341,8 +353,13 @@ export function createDataExecutionDispatcher(deps: {
         return { kind: input.kind, region: input.region, metrics: { processed: result.linked } };
       }
       case "overture-sync": {
-        const result = await syncOvertureRegion({ ...common, region: input.region });
+        const result = await syncOvertureRegion({
+          ...common,
+          sql: context.sql,
+          region: input.region,
+        });
         await writeOvertureFeedState(
+          context.sql,
           input.region,
           result.release,
           asJobLogger(
@@ -378,7 +395,7 @@ export function createDataExecutionDispatcher(deps: {
           ...common,
           region: input.region,
           store: deps.state,
-          sql: deps.sql,
+          sql: context.sql,
           runtimeState: searchState,
           operationLock: searchLock,
           onProgress: (progress) =>
@@ -394,7 +411,7 @@ export function createDataExecutionDispatcher(deps: {
       case "notable-places-build": {
         const result = await buildNotablePlaces({
           ...notablePlacesSettings(),
-          sql: deps.sql,
+          sql: context.sql,
           signal: context.signal,
           runtimeState: notableState,
           operationLock: notableLock,
@@ -404,13 +421,11 @@ export function createDataExecutionDispatcher(deps: {
         finish(context.execution.executionId, { event: "done", ok: true, ...result });
         return { kind: input.kind, metrics: { processed: result.placeCount } };
       }
-      case "generation-hardlinks":
-        return deps.runHardlinks(context);
       case "transit-maintenance": {
         const slot = (await context.record()).reservations[0];
         if (!slot) throw Error("Maintenance child reservation missing");
         if (input.action === "reload-feed-proxy")
-          retainOwnedDataTransitCandidate(context.authority, slot);
+          await retainOwnedDataTransitCandidate(context.authority, slot);
         await runOwnedDataOpsOperation(slot.operation, {
           context,
           phase: slot.phase,
@@ -419,6 +434,8 @@ export function createDataExecutionDispatcher(deps: {
         });
         return { kind: input.kind, action: input.action, changed: true };
       }
+      default:
+        throw Error(`${input.kind} runs only as in-process work`);
     }
   }
   return {

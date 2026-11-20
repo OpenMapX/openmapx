@@ -1,7 +1,9 @@
+import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 import { syncOvertureRegion } from "../../src/jobs/overture/sync.js";
 
 const OPTIONS = {
+  sql: {} as postgres.Sql,
   region: "europe/germany/berlin",
   dataDir: "/data",
   release: "2026-07-22.0",

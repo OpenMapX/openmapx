@@ -19,7 +19,7 @@ export type LifecycleOwnershipRequest = {
 };
 export type ServiceLifecycleEffects = {
   withOwnership<T>(request: LifecycleOwnershipRequest, run: () => Promise<T>): Promise<T>;
-  assertForward(signal?: AbortSignal): void;
+  assertForward(signal?: AbortSignal): Promise<void>;
   validatePins(ids: readonly string[], signal?: AbortSignal): Promise<void>;
   pull(ids: readonly string[], signal?: AbortSignal): Promise<void>;
   prepare(options: {
@@ -34,7 +34,7 @@ export function prepareServiceLifecycle(
   effects: ServiceLifecycleEffects,
 ): Promise<ServicePreparationResult> {
   return effects.withOwnership(request, async () => {
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     return effects.prepare({
       coordinatorMode: request.coordinatorMode,
       signal: request.signal,
@@ -46,16 +46,16 @@ export function runServiceUpdate(
   effects: ServiceLifecycleEffects,
 ): Promise<{ changed: true; revisionId: string }> {
   return effects.withOwnership(request, async () => {
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     await effects.validatePins(request.serviceIds, request.signal);
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     await effects.pull(request.serviceIds, request.signal);
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     const prepared = await prepareServiceLifecycle(
       { ...request, coordinatorMode: "ensure-running" },
       effects,
     );
-    effects.assertForward(request.signal);
+    await effects.assertForward(request.signal);
     await effects.recreate(request.serviceIds, request.noDeps ?? false, request.signal);
     return { changed: true, revisionId: prepared.revisionId };
   });
@@ -86,7 +86,7 @@ export async function runCliServiceLifecycle(options: {
       "Coordinator Update requires its guarded administrative workflow: use System → Updates or authenticated `pnpm openmapx system update` after `compose release --check`",
     );
   const { randomBytes, randomUUID } = await import("node:crypto");
-  const { existsSync, mkdirSync } = await import("node:fs");
+  const { mkdirSync } = await import("node:fs");
   const { join } = await import("node:path");
   const control = await import("@openmapx/core/build-artifacts");
   const ops = await import("@openmapx/core/ops");
@@ -96,14 +96,12 @@ export async function runCliServiceLifecycle(options: {
   const { assertCliDeploymentSecrets } = await import("./deployment-secret-policy");
   const { renderComposeWithWriter } = await import("../commands/compose");
   const { dockerComposeStream, dockerCompose } = await import("./docker");
-  const { readGeneratedHardlinkPlan } = await import("./hardlinks");
   const release = await import("./release");
   const { API_SERVICE_ID, migrateBeforeApiUpdate } = await import("./api-migrations");
   const paths = repoPaths();
   assertCliDeploymentSecrets();
   mkdirSync(join(paths.infraDir, "data"), { recursive: true });
-  if (!existsSync("/run/secrets/openmapx-control-verifiers"))
-    await control.provisionControlInstallation(paths.infraDir);
+  control.provisionControlDirectories(paths.infraDir);
   const ids = [...new Set(options.serviceIds)].sort();
   const registry = new services.ServiceRegistry({ rootDir: paths.root });
   await registry.load();
@@ -154,9 +152,6 @@ export async function runCliServiceLifecycle(options: {
       services.currentConfigurationGeneration(paths.infraDir),
     ));
   if (!expected) throw Error("An initial configuration generation is required");
-  // The existing generation supplies the exact finite hardlink intent. A nonempty
-  // plan must use its retained durable leaf; it can never fall back to /link/local.
-  const plan = readGeneratedHardlinkPlan().plan;
   const operation =
     options.action === "update"
       ? {
@@ -200,32 +195,18 @@ export async function runCliServiceLifecycle(options: {
   const finalRevisionId = inherited
     ? control.ownedServiceLifecycleFinalRevisionId(inherited.authority)
     : control.serviceLifecycleFinalRevisionId(execution.operationKey);
-  const frozenPlan = { plan, prune: true as const };
-  const reservation = control.lifecycleHardlinkReservation({
-    parent: execution,
-    revisionId: finalRevisionId,
-    plan: frozenPlan,
-    serviceIds: targets,
-  });
   const authority =
     inherited?.authority ??
-    control.retainAdmittedControlExecution(installation, {
+    (await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,
       admittedAt,
       requestedDeadlineAt: deadlineAt,
       serviceIds: targets,
-      reservations: reservation ? [reservation] : [],
-    });
-  control.retainGenerationHardlinksOwnerPlan(authority, {
-    version: 1,
-    parent: execution,
-    revisionId: finalRevisionId,
-    coordinatorMode: "ensure-running",
-    plan: frozenPlan,
-    reservation,
-  });
+    }));
+  // Set when data-manager never answered for this lifecycle's hardlink plan.
+  let hardlinkOutcomeUnknown = false;
   if (inherited && !inherited.lease)
     throw Error("Delegated lifecycle requires its original borrowed lease");
   let owning = false;
@@ -243,11 +224,11 @@ export async function runCliServiceLifecycle(options: {
     await store.checkpoint(receipt.sequence, next, owned);
     receipt = next;
   };
-  const assertForward = (signal?: AbortSignal) => {
+  const assertForward = async (signal?: AbortSignal) => {
     signal?.throwIfAborted();
     if (!lease) throw Error("Lifecycle target lease unavailable");
-    assertControlExecutionForward(authority);
-    assertArtifactTargetLeaseForward(lease);
+    await assertControlExecutionForward(authority);
+    await assertArtifactTargetLeaseForward(lease);
   };
   const failureEvidence = (
     last: services.ServiceLifecycleReceipt,
@@ -324,7 +305,7 @@ export async function runCliServiceLifecycle(options: {
         services.withVerifiedLifecycleOwnership(
           { writer, lease: held, authority },
           async (owned) => {
-            assertForward(signal);
+            await assertForward(signal);
             try {
               return await run(owned);
             } catch (error) {
@@ -352,7 +333,7 @@ export async function runCliServiceLifecycle(options: {
    */
   const beforeDockerEffect = async (revisionId: string, conflict: string, signal?: AbortSignal) => {
     await withWriterStep(async () => assertConfigurationUnchanged(revisionId, conflict), signal);
-    assertForward(signal);
+    await assertForward(signal);
   };
   const committedRevisionId = () => {
     if (!receipt?.finalRevisionId) throw Error("Lifecycle generation is not committed");
@@ -368,7 +349,7 @@ export async function runCliServiceLifecycle(options: {
     assertForward,
     async withOwnership(inner, run) {
       if (owning) {
-        assertForward(inner.signal);
+        await assertForward(inner.signal);
         if (
           ops.canonicalJson(inner.execution) !== ops.canonicalJson(execution) ||
           inner.serviceIds.some((id) => !ids.includes(id))
@@ -459,10 +440,9 @@ export async function runCliServiceLifecycle(options: {
           finalRevisionId: committed.revisionId,
           commit: "final_committed",
         });
-        if (ops.canonicalJson(readGeneratedHardlinkPlan().plan) !== ops.canonicalJson(plan))
-          throw Error("Hardlink intent changed");
         return committed;
       }, signal);
+      const plan = control.readGenerationHardlinkPlan(paths.infraDir, rendered.revisionId).plan;
       const conflict = "Lifecycle generation changed before hardlinks";
       const sdk = await import("@openmapx/core/data-manager-sdk"),
         { dataManagerUrl } = await import("./data-manager-url");
@@ -496,12 +476,19 @@ export async function runCliServiceLifecycle(options: {
       }
       return withWriterStep(async (owned) => {
         assertConfigurationUnchanged(rendered.revisionId, conflict);
-        const hardlinks = await control.executeOwnedGenerationHardlinks({
-          authority,
-          lease: owned.lease,
-          infraDir: paths.infraDir,
-          transport,
-        });
+        let hardlinks: ServicePreparationResult["hardlinks"];
+        try {
+          hardlinks = await control.applyGenerationLinks({
+            infraDir: paths.infraDir,
+            revisionId: rendered.revisionId,
+            transport,
+            issuer: authority.execution,
+            leaseId: owned.lease.leaseId,
+          });
+        } catch (error) {
+          if (error instanceof control.GenerationLinkUnknown) hardlinkOutcomeUnknown = true;
+          throw error;
+        }
         await checkpoint(owned, { phase: "hardlinks_applied", hardlinks });
         return { revisionId: rendered.revisionId, coordinatorMode, hardlinks };
       }, signal);
@@ -548,7 +535,7 @@ export async function runCliServiceLifecycle(options: {
     try {
       // A failure before the receipt opened has run nothing and has nothing to record.
       if (!receipt)
-        control.retainControlEffectReceipt(authority, {
+        await control.retainControlEffectReceipt(authority, {
           outcome: "failed_without_effect",
           publication: "not_started",
           receipt: { kind: "not-started" },
@@ -557,21 +544,14 @@ export async function runCliServiceLifecycle(options: {
         const failed = await services.withServiceLifecycleReceiptAuthority(authority, () =>
           services.readServiceLifecycleReceipt({ dataRoot, execution }),
         );
-        let attempt: unknown = null;
-        try {
-          if (reservation) attempt = control.lookupControlChildPhaseAttempt(authority, reservation);
-        } catch (lookupError) {
-          attempt = lookupError;
-        }
-        if (!services.lifecycleFailureHasNoSurvivor(failed, attempt)) {
-          // Recovery accepts only a failure at the hardlink step itself.
-          if (attempt !== null)
+        if (!services.lifecycleFailureHasNoSurvivor(failed, hardlinkOutcomeUnknown)) {
+          if (hardlinkOutcomeUnknown)
             log.warn(
-              `Operation ${key} keeps its service locks because a hardlink request issued to data-manager may still be running. Its record is infra/docker/state/ops-agent/lifecycle/${key}.json. Once data-manager has finished it, \`pnpm openmapx control status\` shows the lease and \`pnpm openmapx control resolve --op ${key} --as committed|failed\` ends it.`,
+              `Operation ${key} keeps its service locks because data-manager did not report whether it applied the hardlink plan. Its record is infra/docker/state/ops-agent/lifecycle/${key}.json. \`pnpm openmapx control status\` shows the lease; once data-manager answers, \`pnpm openmapx control resolve --op ${key} --as committed|failed\` ends it, and \`pnpm openmapx data link\` applies the plan again.`,
             );
           return;
         }
-        control.retainControlEffectReceipt(authority, {
+        await control.retainControlEffectReceipt(authority, {
           outcome: "contained",
           publication: "committed",
           receipt: {
@@ -582,7 +562,7 @@ export async function runCliServiceLifecycle(options: {
       }
       await control.settleArtifactTargetLeaseChild(
         held,
-        control.verifyControlEffectSettlement(installation, execution),
+        await control.verifyControlEffectSettlement(installation, execution),
       );
       await control.releaseArtifactTargetLease(held);
       lease = undefined;
@@ -621,7 +601,7 @@ export async function runCliServiceLifecycle(options: {
       );
       if (verified.phase !== "complete" || !verified.finalRevisionId)
         throw Error("Exact completed lifecycle receipt required");
-      control.retainControlEffectReceipt(authority, {
+      await control.retainControlEffectReceipt(authority, {
         outcome: "committed",
         publication: "committed",
         receipt: {
@@ -634,7 +614,7 @@ export async function runCliServiceLifecycle(options: {
       });
       await control.settleArtifactTargetLeaseChild(
         lease,
-        control.verifyControlEffectSettlement(installation, execution),
+        await control.verifyControlEffectSettlement(installation, execution),
       );
       await control.releaseArtifactTargetLease(lease);
       lease = undefined;

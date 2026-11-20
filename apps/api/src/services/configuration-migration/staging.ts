@@ -2,14 +2,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { canonicalJson } from "@openmapx/core/ops";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../../db";
-import {
-  adminJob,
-  capabilityBinding,
-  configurationMigrationPreview,
-  integrationBindingRevision,
-  systemSettings,
-} from "../../db/schema";
-import { noUnsettledManagedOperation } from "../admin-job-state";
+import { adminJob, configurationMigrationPreview } from "../../db/schema";
+import { noUnsettledManagedOperation, openCandidateCondition } from "../admin-job-state";
 import type { ConfigurationWriteTransaction } from "../administrative-configuration-writer-owner";
 import { decrypt, encrypt } from "../secrets";
 
@@ -26,13 +20,6 @@ export type MigrationStage = {
   fingerprint: string;
   expiresAt: string;
   value: unknown;
-  committed?: {
-    jobId: string;
-    candidateId: string;
-    settingsKeys: string[];
-    integrationIds: string[];
-    witness: string;
-  };
 };
 const stages = new WeakSet<MigrationStage>();
 function immutableStage<T>(value: T): T {
@@ -60,9 +47,9 @@ export async function pruneMigrationStages() {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or (${adminJob.result}->'_configurationCandidate' is not null and coalesce(${adminJob.result}->'_configurationCandidate'->>'phase','unknown') not in ('settled','discarded'))))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
-        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and ${adminJob.result}->'_configurationCandidate'->>'phase' in ('settled','discarded') and ${noUnsettledManagedOperation()})`,
+        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and not ${openCandidateCondition()} and ${noUnsettledManagedOperation()})`,
       ),
     )
     .returning({ id: configurationMigrationPreview.id });
@@ -96,7 +83,7 @@ export async function retainMigrationStage(input: {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or (${adminJob.result}->'_configurationCandidate' is not null and coalesce(${adminJob.result}->'_configurationCandidate'->>'phase','unknown') not in ('settled','discarded'))))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
       );
     const [counts] = await tx
@@ -193,18 +180,10 @@ export async function consumeMigrationStage(
   stage: MigrationStage,
   jobId: string,
   database: ConfigurationWriteTransaction,
-  commit?: { candidateId: string; settingsKeys: string[]; integrationIds: string[] },
 ) {
-  const committed = commit
-    ? {
-        jobId,
-        ...commit,
-        witness: await migrationRowWitness(database, commit.settingsKeys, commit.integrationIds),
-      }
-    : undefined;
   const rows = await database
     .update(configurationMigrationPreview)
-    .set({ consumedByJobId: jobId, ...(committed ? sealed({ ...stage, committed }) : {}) })
+    .set({ consumedByJobId: jobId })
     .where(
       and(
         eq(configurationMigrationPreview.id, stage.previewId),
@@ -216,74 +195,4 @@ export async function consumeMigrationStage(
     )
     .returning({ id: configurationMigrationPreview.id });
   if (rows.length !== 1) throw new MigrationConflict();
-}
-async function migrationRowWitness(
-  database: ConfigurationWriteTransaction,
-  settingsKeys: readonly string[],
-  integrationIds: readonly string[],
-) {
-  const settings = await database
-      .select({ key: systemSettings.key, version: sql<string>`xmin::text` })
-      .from(systemSettings),
-    bindings = await database
-      .select({
-        integrationId: capabilityBinding.integrationId,
-        capability: capabilityBinding.capability,
-        version: sql<string>`xmin::text`,
-      })
-      .from(capabilityBinding),
-    revisions = await database
-      .select({
-        integrationId: integrationBindingRevision.integrationId,
-        version: sql<string>`xmin::text`,
-      })
-      .from(integrationBindingRevision);
-  return canonicalJson({
-    settings: settings
-      .filter((r) => settingsKeys.includes(r.key))
-      .sort((a, b) => a.key.localeCompare(b.key)),
-    bindings: bindings
-      .filter((r) => integrationIds.includes(r.integrationId))
-      .sort((a, b) =>
-        `${a.integrationId}:${a.capability}`.localeCompare(`${b.integrationId}:${b.capability}`),
-      ),
-    revisions: revisions
-      .filter((r) => integrationIds.includes(r.integrationId))
-      .sort((a, b) => a.integrationId.localeCompare(b.integrationId)),
-  });
-}
-/** MAC-retained candidate restart joins the original consumed stage and exact
- * settings/binding xmin receipts. It issues no proof or fresh desired save. */
-export async function assertRetainedMigrationRows(
-  input: { previewId: string; actorId: string; jobId: string; candidateId: string },
-  database: ConfigurationWriteTransaction,
-) {
-  const [row] = await database
-    .select()
-    .from(configurationMigrationPreview)
-    .where(
-      and(
-        eq(configurationMigrationPreview.id, input.previewId),
-        eq(configurationMigrationPreview.actorId, input.actorId),
-        eq(configurationMigrationPreview.consumedByJobId, input.jobId),
-      ),
-    );
-  if (!row) throw new MigrationConflict();
-  const stage: MigrationStage = JSON.parse(decrypt(row.ciphertext, row.iv, row.tag)),
-    commit = stage.committed;
-  if (
-    stage.actorId !== input.actorId ||
-    stage.previewId !== input.previewId ||
-    stage.fingerprint !== row.intentFingerprint ||
-    !commit ||
-    commit.jobId !== input.jobId ||
-    commit.candidateId !== input.candidateId ||
-    !Array.isArray(commit.settingsKeys) ||
-    commit.settingsKeys.length > 128 ||
-    !Array.isArray(commit.integrationIds) ||
-    commit.integrationIds.length > 256 ||
-    commit.witness !==
-      (await migrationRowWitness(database, commit.settingsKeys, commit.integrationIds))
-  )
-    throw new MigrationConflict();
 }

@@ -547,7 +547,7 @@ describe("retained execution deadlines", () => {
       vi.useRealTimers();
     }
   });
-  it("rejects unsigned wire parent and delegation headers before effects", async () => {
+  it("rejects an unverified parent header and a lease child from the API before effects", async () => {
     const dispatch = vi.fn();
     const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
@@ -556,18 +556,27 @@ describe("retained execution deadlines", () => {
       dispatch,
     });
     try {
-      for (const name of ["x-openmapx-parent-execution", "x-openmapx-control-delegation"]) {
-        const r = await app.inject({
-          method: "POST",
-          url: "/v1/operations",
-          headers: { ...auth(apiToken), [name]: "unverified" },
-          payload: envelope(
-            { kind: "service.build", serviceId: "valhalla" },
-            `ops1_${name.replaceAll("-", "")}`,
-          ),
-        });
-        expect(r.statusCode).toBe(403);
-      }
+      const operation = { kind: "service.build" as const, serviceId: "valhalla" };
+      const parent = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { ...auth(apiToken), "x-openmapx-parent-execution": "unverified" },
+        payload: envelope(operation, "ops1_parentheaderunverified"),
+      });
+      expect(parent.statusCode).toBe(403);
+      const leaseChild = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(apiToken),
+        payload: {
+          ...envelope(operation, "ops1_leasechildfromapitoken"),
+          leaseChild: {
+            leaseId: "123e4567-e89b-42d3-a456-426614174000",
+            childKey: "123e4567-e89b-42d3-a456-426614174001",
+          },
+        },
+      });
+      expect(leaseChild.statusCode).toBe(403);
       expect(dispatch).not.toHaveBeenCalled();
     } finally {
       await app.close();
@@ -577,7 +586,6 @@ describe("retained execution deadlines", () => {
 
 describe("execution identity at the agent boundary", () => {
   it("clamps an authenticated late API child and keeps a duplicate after expiry immutable", async () => {
-    const { createHmac } = await import("node:crypto");
     const { opsOperationFingerprint } = await import("@openmapx/core/ops");
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     vi.setSystemTime(new Date(nowIso));
@@ -595,14 +603,7 @@ describe("execution identity at the agent boundary", () => {
       requestedDeadlineAt: Date.now() + 12 * 3600_000,
       attemptId: "123e4567-e89b-42d3-a456-426614174001",
     };
-    const payload = Buffer.from(JSON.stringify(fields)).toString("base64url");
-    const assertion =
-      payload +
-      "." +
-      createHmac("sha256", apiToken)
-        .update("openmapx-api-job-parent-v1\0")
-        .update(payload)
-        .digest("base64url");
+    const assertion = Buffer.from(JSON.stringify(fields)).toString("base64url");
     let finish!: (x: unknown) => void;
     let execution: import("@openmapx/core/ops").ExecutionRef | undefined;
     const app = await buildOpsAgentServer({
@@ -653,6 +654,76 @@ describe("execution identity at the agent boundary", () => {
       await vi.advanceTimersByTimeAsync(0);
       await app.close();
       vi.useRealTimers();
+    }
+  });
+  it("ends a preparation whose planning refuses it as failed without effect, not recovery_required", async () => {
+    const { opsOperationFingerprint } = await import("@openmapx/core/ops");
+    const requestedDeadlineAt = baseTime + 3600_000;
+    const operation = {
+      kind: "configurationMaintenance.prepare" as const,
+      maintenanceId: "123e4567-e89b-42d3-a456-426614174010",
+      candidateId: "123e4567-e89b-42d3-a456-426614174011",
+      applyOperationKey: key("opk1_refusedPlanApply0"),
+      applyOperationFingerprint: "c".repeat(64),
+      revisionId: `cfg1_${"a".repeat(43)}`,
+      expectedCurrentRevisionId: `cfg1_${"b".repeat(43)}`,
+      expectedSourceRevision: "55555555-5555-4555-8555-555555555555",
+      coordinatorMode: "ensure-running" as const,
+      followUp: "service-apply" as const,
+    };
+    const operationKey = key("opk1_refusedPlanPrepare", requestedDeadlineAt);
+    const assertion = Buffer.from(
+      JSON.stringify({
+        version: 1,
+        apiJobId: "123e4567-e89b-42d3-a456-426614174012",
+        apiOwnerVersion: 1,
+        parentOperationKey: key("opk1_refusedPlanParent0"),
+        parentFingerprint: "a".repeat(64),
+        parentDeadlineAt: requestedDeadlineAt,
+        childOperationKey: operationKey,
+        childOperationFingerprint: opsOperationFingerprint(operation),
+        requestedDeadlineAt,
+        attemptId: "123e4567-e89b-42d3-a456-426614174013",
+      }),
+    ).toString("base64url");
+    const snapshots: import("./journal").PersistedOpsJob[][] = [];
+    const dispatch = vi.fn();
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAll,
+      journal: {
+        records: () => [],
+        replace: async (records) => {
+          snapshots.push(structuredClone([...records]));
+        },
+      },
+      dispatch,
+    });
+    try {
+      // This runtime has no candidate source, so planning refuses before any lease.
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { ...auth(apiToken), "x-openmapx-parent-execution": assertion },
+        payload: {
+          ...envelope(operation, "ops1_refusedPlanFirst000", operationKey),
+          execution: { requestedDeadlineAt },
+        },
+      });
+      expect(response.statusCode, response.body).toBe(202);
+      const status = (
+        await app.inject({
+          method: "GET",
+          url: `/v1/operations/${response.json().result.operationId}`,
+          headers: auth(apiToken),
+        })
+      ).json().result;
+      expect(status).toMatchObject({ state: "failed", errorClass: "runtime" });
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]).toMatchObject([{ state: "failed", errorClass: "runtime" }]);
+      expect(dispatch).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
     }
   });
   it("retains a redacted live tail and independent failure evidence through the journal", async () => {

@@ -1,8 +1,6 @@
-import {
-  assertCliExecutionAvailable,
-  assertCliRemoteMutationSupported,
-  cliAcquisitionOptions,
-} from "./execution-deadline";
+import { cliControlContext } from "./control-context";
+import { assertCliExecutionAvailable, cliAcquisitionOptions } from "./execution-deadline";
+import { currentHostLease } from "./host-effect";
 // The CLI never links in the data directory itself: it hands the generated
 // plan to data-manager's `/link` route. Other containers write into the data
 // root, so a symlink planted there could race the planner's path checks;
@@ -10,13 +8,12 @@ import {
 // host CLI shares the risk, and the CLI the operations agent runs would
 // reach the host checkout and the Docker socket.
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  createDataManagerTransport,
-  link,
-  unwrapDataManagerResponse,
-} from "@openmapx/core/data-manager-sdk";
+import * as control from "@openmapx/core/build-artifacts";
+import { createDataManagerTransport } from "@openmapx/core/data-manager-sdk";
+import { createControlRootOperationKey, opsExecutionBudget } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import {
   type ApplyHardlinkResult,
@@ -39,6 +36,16 @@ export class DataManagerUnavailableError extends Error {
       `The hardlink plan (${entries} ${entries === 1 ? "entry" : "entries"}) was not applied: data-manager applies it inside its container, whose mounts confine every link to the data directory, and it is not reachable at ${baseUrl}. Start data-manager (pnpm openmapx services start data-manager), then run pnpm openmapx data link.`,
     );
     this.name = "DataManagerUnavailableError";
+  }
+}
+
+/** Data-manager or the configuration writer was taken by a configuration change or another data job. */
+export class DataManagerBusyError extends Error {
+  constructor(entries?: number) {
+    super(
+      `The hardlink plan${entries === undefined ? "" : ` (${entries} ${entries === 1 ? "entry" : "entries"})`} was not applied: data-manager is running another data job or a configuration change. Run pnpm openmapx data link once it has finished.`,
+    );
+    this.name = "DataManagerBusyError";
   }
 }
 
@@ -74,24 +81,6 @@ export interface ApplyGeneratedHardlinkResult extends ApplyHardlinkResult {
 
 function hardlinkPlanPath(infraDir: string): string {
   return coreServices.currentConfigurationFile(infraDir, coreServices.GENERATED_HARDLINK_PLAN_FILE);
-}
-
-export function readGeneratedHardlinkPlan(rootDir?: string): {
-  plan: HardlinkEntry[];
-  planPath: string;
-  dataRoot: string;
-} {
-  const paths = repoPaths(rootDir);
-  const planPath = hardlinkPlanPath(paths.infraDir);
-  const parsed = JSON.parse(readFileSync(planPath, "utf-8")) as unknown;
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Hardlink plan at ${planPath} is not an array`);
-  }
-  return {
-    plan: parsed as HardlinkEntry[],
-    planPath,
-    dataRoot: join(paths.infraDir, "data"),
-  };
 }
 
 /**
@@ -137,8 +126,33 @@ export async function applyGeneratedHardlinks(
       via: "none",
     };
   }
+  try {
+    // Like every other issuer, the CLI holds the configuration writer from
+    // reading the plan until data-manager answered, so no configuration change
+    // commits and links in between and then has its links pruned by this plan.
+    return await coreServices.withConfigurationGenerationWriter(
+      paths.infraDir,
+      () => applyCurrentHardlinks(paths.infraDir, planPath, opts),
+      cliAcquisitionOptions().signal,
+    );
+  } catch (error) {
+    if (!(error instanceof coreServices.ConfigurationGenerationError)) throw error;
+    if (error.result.outcome === "not_committed" && error.result.reason === "busy")
+      throw new DataManagerBusyError();
+    throw error.cause ?? error;
+  }
+}
 
-  const { plan, dataRoot } = readGeneratedHardlinkPlan(opts.rootDir);
+/** Sends the applied generation's plan to data-manager; the caller holds the writer. */
+async function applyCurrentHardlinks(
+  infraDir: string,
+  planPath: string,
+  opts: ApplyGeneratedHardlinkOptions,
+): Promise<ApplyGeneratedHardlinkResult> {
+  const revisionId = coreServices.currentConfigurationGeneration(infraDir);
+  if (!revisionId) throw new Error(`No applied configuration generation names ${planPath}`);
+  const { plan } = control.readGenerationHardlinkPlan(infraDir, revisionId);
+  const dataRoot = join(infraDir, "data");
   // Pre-create the host data root as the invoking user so docker doesn't
   // auto-create it as root on first compose up. Its mode is explicit rather
   // than the process umask's; the services that mount it run as other users.
@@ -174,28 +188,50 @@ export async function applyGeneratedHardlinks(
     throw new DataManagerUnavailableError(baseUrl, plan.length);
   }
   assertCliExecutionAvailable();
-  assertCliRemoteMutationSupported();
   const transport = createDataManagerTransport({
     ...cliAcquisitionOptions(),
     baseUrl,
     authToken: cliDataManagerToken(),
   });
-  const result = unwrapDataManagerResponse(await link({ plan, prune: opts.prune }, { transport }));
-  return {
-    applied: true,
-    entries: plan.length,
-    planPath,
-    linked: result.linked,
-    skipped: result.skipped,
-    pruned: result.pruned,
-    via: "data-manager",
-  };
+  // Under a lease, the application is that operation's: data-manager admits it
+  // under the lease and a repeat names the same application. Without one,
+  // data-manager leases itself and the key names this call only.
+  const held = currentHostLease();
+  const fixed = cliControlContext();
+  const issuer = held?.owner ?? fixed?.authority.execution;
+  const leaseId = held?.leaseId ?? fixed?.lease?.leaseId ?? null;
+  const deadlineAt =
+    issuer?.deadlineAt ?? Date.now() + opsExecutionBudget("generation-link").processMs;
+  let result: Awaited<ReturnType<typeof control.linkGeneration>>;
+  try {
+    result = await control.linkGeneration({
+      transport,
+      operationKey: issuer
+        ? control.generationLinkOperationKey(issuer, revisionId)
+        : createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
+      deadlineAt,
+      revisionId,
+      plan,
+      prune: opts.prune ?? false,
+      leaseId,
+      signal: cliAcquisitionOptions().signal,
+    });
+  } catch (error) {
+    if (error instanceof control.GenerationLinkNotApplied && error.reason === "busy")
+      throw new DataManagerBusyError(plan.length);
+    if (error instanceof control.GenerationLinkNotApplied && error.reason === "unavailable")
+      throw new DataManagerUnavailableError(baseUrl, plan.length);
+    if (error instanceof control.GenerationLinkUnknown)
+      error.message = `Data-manager did not report whether it applied the hardlink plan (${plan.length} ${plan.length === 1 ? "entry" : "entries"}). Applying the plan again links nothing twice: run pnpm openmapx data link once data-manager answers.`;
+    throw error;
+  }
+  return { ...result, applied: true, planPath, via: "data-manager" };
 }
 
 /**
- * Applies the plan before containers start. When data-manager is down, the
- * start goes ahead without it: the links made before stay in place, and the
- * warning says how to apply the rest once data-manager runs.
+ * Applies the plan before containers start. When data-manager is down or busy,
+ * the start goes ahead without it: the links made before stay in place, and the
+ * warning says how to apply the rest.
  */
 export async function applyGeneratedHardlinksBeforeStart(
   opts: ApplyGeneratedHardlinkOptions = {},
@@ -204,7 +240,8 @@ export async function applyGeneratedHardlinksBeforeStart(
     const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true, ...opts });
     logAppliedHardlinks(linked);
   } catch (error) {
-    if (!(error instanceof DataManagerUnavailableError)) throw error;
+    if (!(error instanceof DataManagerUnavailableError || error instanceof DataManagerBusyError))
+      throw error;
     log.warn(error.message);
   }
 }

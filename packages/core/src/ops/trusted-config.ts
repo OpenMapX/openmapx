@@ -1,46 +1,14 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import z from "zod/v4";
 import { platformConfigurationSchema } from "../services/platform-configuration";
-import {
-  isTrustedConfigurationApplyOperation,
-  type OpsOperation,
-  type OpsRole,
-  opsOperationSchema,
-} from "./contract";
-import { opsOperationFingerprint } from "./fingerprint";
+import { canonicalJson } from "./canonical-json";
 
 export const OPS_TRUSTED_CONFIG_MAX_BYTES = 512 * 1024;
-export const OPS_TRUSTED_CONFIG_TTL_MS = 5 * 60_000;
-export const OPS_TRUSTED_CONFIG_QUEUE_MAX_ENTRIES = 128;
-export const OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES = 16 * 1024 * 1024;
-const OPS_TRUSTED_CONFIG_CLOCK_SKEW_MS = 5_000;
-const REJECTED = "Trusted configuration snapshot rejected";
+/** How long after preparation a candidate's apply may still be submitted. */
+export const CONFIGURATION_CANDIDATE_TTL_MS = 5 * 60_000;
 const REVISION_DOMAIN = "openmapx-trusted-config-revision-v1\0";
-const MAC_DOMAIN = "openmapx-trusted-config-mac-v1\0";
 const JSON_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const FORBIDDEN_JSON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-
-export interface TrustedConfigurationQueueUsage {
-  retainedEntries: number;
-  retainedBytes: number;
-  reservedEntries: number;
-  reservedBytes: number;
-}
-
-/** One budget shared by publication, claim admission, and restart reconciliation. */
-export function trustedConfigurationQueueFits(usage: TrustedConfigurationQueueUsage): boolean {
-  const values = [
-    usage.retainedEntries,
-    usage.retainedBytes,
-    usage.reservedEntries,
-    usage.reservedBytes,
-  ];
-  if (values.some((value) => !Number.isSafeInteger(value) || value < 0)) return false;
-  return (
-    usage.retainedEntries + usage.reservedEntries <= OPS_TRUSTED_CONFIG_QUEUE_MAX_ENTRIES &&
-    usage.retainedBytes + usage.reservedBytes <= OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES
-  );
-}
 
 const stableId = z
   .string()
@@ -164,238 +132,104 @@ export const trustedConfigurationPayloadSchema = z
   .refine((value) => uniqueBy(value.serviceSecrets, (entry) => entry.serviceId));
 export type TrustedConfigurationPayload = z.infer<typeof trustedConfigurationPayloadSchema>;
 
-const unsignedSchema = z.strictObject({
+const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
+
+/** The digest an apply operation carries in place of its payload. */
+export function configurationPayloadDigest(payload: TrustedConfigurationPayload): string {
+  return createHash("sha256").update(canonicalJson(payload)).digest("hex");
+}
+
+/** Validates a payload received from another process, including its key and size limits. */
+export function parseTrustedConfigurationPayload(value: unknown): TrustedConfigurationPayload {
+  if (
+    hasUnsafeJsonKeys(value) ||
+    Buffer.byteLength(JSON.stringify(value ?? null), "utf8") > OPS_TRUSTED_CONFIG_MAX_BYTES
+  )
+    throw new Error("Configuration payload rejected");
+  return trustedConfigurationPayloadSchema.parse(value);
+}
+
+/** What a prepared candidate records about its payload; the payload itself is kept beside it. */
+export const configurationSnapshotSchema = z.strictObject({
   version: z.literal(1),
   role: z.enum(["api", "data-manager"]),
   operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
   issuedAt: z.string().datetime({ offset: true }),
   expiresAt: z.string().datetime({ offset: true }),
   nonce: stableId,
-  payload: trustedConfigurationPayloadSchema,
-});
-const authenticatedSchema = unsignedSchema.extend({
   revisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
-  operationFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  payloadDigest: digestSchema,
 });
-const envelopeSchema = authenticatedSchema.extend({
-  mac: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-});
+export type ConfigurationSnapshot = z.infer<typeof configurationSnapshotSchema>;
 
-type UnsignedSnapshot = z.infer<typeof unsignedSchema>;
-type AuthenticatedSnapshot = z.infer<typeof authenticatedSchema>;
-
-function reject(): never {
-  throw new Error(REJECTED);
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function validatedToken(token: string): Buffer {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) reject();
-  const bytes = Buffer.from(token, "base64url");
-  if (bytes.byteLength !== 32) reject();
-  return bytes;
-}
-
-function revisionId(unsigned: UnsignedSnapshot): string {
+function snapshotRevision(
+  snapshot: Omit<ConfigurationSnapshot, "revisionId" | "payloadDigest">,
+  payload: TrustedConfigurationPayload,
+): string {
   return `cfg1_${createHash("sha256")
     .update(REVISION_DOMAIN)
-    .update(canonicalJson(unsigned))
+    .update(
+      canonicalJson({
+        version: snapshot.version,
+        role: snapshot.role,
+        operationKey: snapshot.operationKey,
+        issuedAt: snapshot.issuedAt,
+        expiresAt: snapshot.expiresAt,
+        nonce: snapshot.nonce,
+        payload,
+      }),
+    )
     .digest("base64url")}`;
 }
 
-function snapshotMac(snapshot: AuthenticatedSnapshot, token: string): string {
-  return createHmac("sha256", validatedToken(token))
-    .update(MAC_DOMAIN)
-    .update(canonicalJson(snapshot))
-    .digest("base64url");
-}
-
-function revisionFromOperation(operation: OpsOperation): string | undefined {
-  return isTrustedConfigurationApplyOperation(operation) ? operation.revisionId : undefined;
-}
-
-function deepFreeze<T>(value: T): T {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
-    Object.freeze(value);
-  }
-  return value;
-}
-
-export interface SealTrustedConfigurationSnapshotOptions {
-  role: OpsRole;
+/** Names a new generation after its payload, its operation key and a nonce. */
+export function createConfigurationSnapshot(options: {
+  role: "api" | "data-manager";
   operationKey: string;
-  operationForRevision(revisionId: string): OpsOperation;
   payload: TrustedConfigurationPayload;
-  token: string;
+  nonce: string;
   issuedAtMs?: number;
   ttlMs?: number;
-  nonce: string;
-}
-
-export function sealTrustedConfigurationSnapshot(options: SealTrustedConfigurationSnapshotOptions) {
-  try {
-    if (hasUnsafeJsonKeys(options.payload)) reject();
-    const issuedAtMs = options.issuedAtMs ?? Date.now();
-    const ttlMs = options.ttlMs ?? OPS_TRUSTED_CONFIG_TTL_MS;
-    if (
-      !Number.isFinite(issuedAtMs) ||
-      !Number.isInteger(ttlMs) ||
-      ttlMs < 1 ||
-      ttlMs > OPS_TRUSTED_CONFIG_TTL_MS
-    ) {
-      reject();
-    }
-    const unsigned = unsignedSchema.parse({
-      version: 1,
-      role: options.role,
-      operationKey: options.operationKey,
-      issuedAt: new Date(issuedAtMs).toISOString(),
-      expiresAt: new Date(issuedAtMs + ttlMs).toISOString(),
-      nonce: options.nonce,
-      payload: options.payload,
-    });
-    const revisionIdValue = revisionId(unsigned);
-    const operation = opsOperationSchema.parse(options.operationForRevision(revisionIdValue));
-    if (revisionFromOperation(operation) !== revisionIdValue) reject();
-    const operationFingerprint = opsOperationFingerprint(operation);
-    const authenticated = authenticatedSchema.parse({
-      ...unsigned,
-      revisionId: revisionIdValue,
-      operationFingerprint,
-    });
-    const bytes = Buffer.from(
-      `${JSON.stringify({ ...authenticated, mac: snapshotMac(authenticated, options.token) })}\n`,
-      "utf8",
-    );
-    if (bytes.byteLength > OPS_TRUSTED_CONFIG_MAX_BYTES) reject();
-    return { revisionId: revisionIdValue, operation, operationFingerprint, bytes };
-  } catch {
-    reject();
-  }
-}
-
-export interface OpenTrustedConfigurationSnapshotOptions {
-  role: OpsRole;
-  operationKey: string;
-  operation: OpsOperation;
-  fingerprint: string;
-  token: string;
-  nowMs?: number;
-}
-
-export interface InspectTrustedConfigurationSnapshotOptions {
-  token: string;
-}
-
-function authenticateTrustedConfigurationSnapshot(
-  input: Uint8Array,
-  token: string,
-): {
-  envelope: z.infer<typeof envelopeSchema>;
-  issuedAtMs: number;
-  expiresAtMs: number;
-} {
-  if (input.byteLength < 2 || input.byteLength > OPS_TRUSTED_CONFIG_MAX_BYTES) reject();
-  const text = new TextDecoder("utf-8", { fatal: true }).decode(input);
-  const raw = JSON.parse(text) as unknown;
-  if (hasUnsafeJsonKeys(raw)) reject();
-  const envelope = envelopeSchema.parse(raw);
-  const authenticated = authenticatedSchema.parse({
-    version: envelope.version,
-    role: envelope.role,
-    operationKey: envelope.operationKey,
-    issuedAt: envelope.issuedAt,
-    expiresAt: envelope.expiresAt,
-    nonce: envelope.nonce,
-    payload: envelope.payload,
-    revisionId: envelope.revisionId,
-    operationFingerprint: envelope.operationFingerprint,
-  });
-  const expectedMac = Buffer.from(snapshotMac(authenticated, token), "base64url");
-  const actualMac = Buffer.from(envelope.mac, "base64url");
-  const issuedAtMs = Date.parse(envelope.issuedAt);
-  const expiresAtMs = Date.parse(envelope.expiresAt);
+}): ConfigurationSnapshot {
+  const payload = parseTrustedConfigurationPayload(options.payload);
+  const issuedAtMs = options.issuedAtMs ?? Date.now();
+  const ttlMs = options.ttlMs ?? CONFIGURATION_CANDIDATE_TTL_MS;
   if (
-    actualMac.byteLength !== expectedMac.byteLength ||
-    !timingSafeEqual(actualMac, expectedMac) ||
-    envelope.revisionId !==
-      revisionId(
-        unsignedSchema.parse({
-          version: envelope.version,
-          role: envelope.role,
-          operationKey: envelope.operationKey,
-          issuedAt: envelope.issuedAt,
-          expiresAt: envelope.expiresAt,
-          nonce: envelope.nonce,
-          payload: envelope.payload,
-        }),
-      ) ||
+    !Number.isFinite(issuedAtMs) ||
+    !Number.isInteger(ttlMs) ||
+    ttlMs < 1 ||
+    ttlMs > CONFIGURATION_CANDIDATE_TTL_MS
+  )
+    throw new Error("Configuration payload rejected");
+  const base = {
+    version: 1 as const,
+    role: options.role,
+    operationKey: options.operationKey,
+    issuedAt: new Date(issuedAtMs).toISOString(),
+    expiresAt: new Date(issuedAtMs + ttlMs).toISOString(),
+    nonce: options.nonce,
+  };
+  return configurationSnapshotSchema.parse({
+    ...base,
+    revisionId: snapshotRevision(base, payload),
+    payloadDigest: configurationPayloadDigest(payload),
+  });
+}
+
+/** Checks that a snapshot names exactly this payload. */
+export function verifyConfigurationSnapshot(
+  snapshot: ConfigurationSnapshot,
+  payload: TrustedConfigurationPayload,
+): { issuedAtMs: number; expiresAtMs: number } {
+  const parsed = configurationSnapshotSchema.parse(snapshot);
+  const issuedAtMs = Date.parse(parsed.issuedAt);
+  const expiresAtMs = Date.parse(parsed.expiresAt);
+  if (
+    parsed.payloadDigest !== configurationPayloadDigest(payload) ||
+    parsed.revisionId !== snapshotRevision(parsed, payload) ||
     expiresAtMs <= issuedAtMs ||
-    expiresAtMs - issuedAtMs > OPS_TRUSTED_CONFIG_TTL_MS
-  ) {
-    reject();
-  }
-  return { envelope, issuedAtMs, expiresAtMs };
-}
-
-export function inspectTrustedConfigurationSnapshot(
-  input: Uint8Array,
-  options: InspectTrustedConfigurationSnapshotOptions,
-) {
-  try {
-    const { envelope, issuedAtMs, expiresAtMs } = authenticateTrustedConfigurationSnapshot(
-      input,
-      options.token,
-    );
-    return deepFreeze({
-      revisionId: envelope.revisionId,
-      role: envelope.role,
-      operationKey: envelope.operationKey,
-      operationFingerprint: envelope.operationFingerprint,
-      issuedAtMs,
-      expiresAtMs,
-    });
-  } catch {
-    reject();
-  }
-}
-
-export function openTrustedConfigurationSnapshot(
-  input: Uint8Array,
-  options: OpenTrustedConfigurationSnapshotOptions,
-) {
-  try {
-    const { envelope, issuedAtMs, expiresAtMs } = authenticateTrustedConfigurationSnapshot(
-      input,
-      options.token,
-    );
-    const operation = opsOperationSchema.parse(options.operation);
-    const nowMs = options.nowMs ?? Date.now();
-    if (
-      envelope.role !== options.role ||
-      envelope.operationKey !== options.operationKey ||
-      revisionFromOperation(operation) !== envelope.revisionId ||
-      envelope.operationFingerprint !== options.fingerprint ||
-      opsOperationFingerprint(operation) !== envelope.operationFingerprint ||
-      issuedAtMs > nowMs + OPS_TRUSTED_CONFIG_CLOCK_SKEW_MS ||
-      expiresAtMs <= nowMs ||
-      expiresAtMs - issuedAtMs > OPS_TRUSTED_CONFIG_TTL_MS
-    ) {
-      reject();
-    }
-    return deepFreeze({ revisionId: envelope.revisionId, payload: envelope.payload });
-  } catch {
-    reject();
-  }
+    expiresAtMs - issuedAtMs > CONFIGURATION_CANDIDATE_TTL_MS
+  )
+    throw new Error("Configuration payload rejected");
+  return { issuedAtMs, expiresAtMs };
 }

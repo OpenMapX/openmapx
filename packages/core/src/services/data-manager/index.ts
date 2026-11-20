@@ -1,7 +1,7 @@
+export { DATA_ADVISORY_LOCKS } from "./advisory-locks";
 export {
   inspectDataConfigurationFence,
   prepareDataConfigurationFence,
-  recoverUnadmittedDataConfigurationFence,
   settleDataConfigurationFence,
 } from "./configuration-maintenance";
 export type {

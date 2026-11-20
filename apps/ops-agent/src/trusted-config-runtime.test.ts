@@ -170,6 +170,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "serviceSelection.apply" as const,
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     const trusted = claim(
       operation,
@@ -227,6 +228,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "stack.render" as const,
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     const trusted = claim(
       operation,
@@ -309,6 +311,7 @@ describe("ops-agent trusted configuration runtime", () => {
           expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
           kind: "stack.render",
           revisionId,
+          payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         },
         {
           execution: testExecution(),
@@ -320,6 +323,7 @@ describe("ops-agent trusted configuration runtime", () => {
               expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
               kind: "stack.render",
               revisionId,
+              payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
             },
             invalidPayload,
           ),
@@ -345,6 +349,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "stack.render" as const,
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     select(paths.infraDir, ["app-api"]);
     await expect(
@@ -383,6 +388,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "stack.render" as const,
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await dispatchOpsOperation(runtime, operation, {
       execution: testExecution(),
@@ -458,6 +464,7 @@ describe("ops-agent trusted configuration runtime", () => {
       kind: "integrationConfig.apply" as const,
       integrationId: "search-nlp",
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
@@ -499,6 +506,7 @@ describe("ops-agent trusted configuration runtime", () => {
       kind: "serviceConfig.apply" as const,
       serviceId: "dawarich-app",
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     select(paths.infraDir, ["dawarich-app"]);
     await expect(
@@ -543,6 +551,7 @@ describe("ops-agent trusted configuration runtime", () => {
       kind: "integrationConfig.apply" as const,
       integrationId: "custom",
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
@@ -591,6 +600,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "serviceSelection.apply" as const,
       revisionId: selectionRevision,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(runtime, selection, {
@@ -628,6 +638,7 @@ describe("ops-agent trusted configuration runtime", () => {
       kind: "integrationConfig.apply" as const,
       integrationId: "integration-live",
       revisionId: configRevision,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(runtime, config, {
@@ -656,6 +667,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "serviceSelection.apply" as const,
       revisionId: removedRevision,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(runtime, removed, {
@@ -696,6 +708,7 @@ describe("ops-agent trusted configuration runtime", () => {
           expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
           kind: "stack.render",
           revisionId,
+          payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         },
         {
           execution: testExecution(),
@@ -707,6 +720,7 @@ describe("ops-agent trusted configuration runtime", () => {
               expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
               kind: "stack.render",
               revisionId,
+              payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
             },
             payload({ integrationConfigs: [] }),
           ),
@@ -739,6 +753,7 @@ describe("ops-agent trusted configuration runtime", () => {
           expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
           kind: "stack.render",
           revisionId,
+          payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         },
         {
           execution: testExecution(),
@@ -750,6 +765,7 @@ describe("ops-agent trusted configuration runtime", () => {
               expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
               kind: "stack.render",
               revisionId,
+              payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
             },
             payload({ integrationConfigs: [] }),
           ),
@@ -779,6 +795,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "stack.render" as const,
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(crashing, operation, {
@@ -837,6 +854,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "stack.render" as const,
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await dispatchOpsOperation(runtime, operation, {
       execution: testExecution(),
@@ -880,6 +898,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "stack.render" as const,
       revisionId,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(crashing, operation, {
@@ -924,6 +943,7 @@ describe("ops-agent trusted configuration runtime", () => {
       kind: "vault.apply" as const,
       serviceId: "alpha",
       revisionId: firstRevision,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await dispatchOpsOperation(runtime, first, {
       execution: testExecution(),
@@ -948,6 +968,7 @@ describe("ops-agent trusted configuration runtime", () => {
       kind: "vault.apply" as const,
       serviceId: "alpha",
       revisionId: secondRevision,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await dispatchOpsOperation(runtime, second, {
       execution: testExecution(),
@@ -1010,6 +1031,7 @@ describe("ops-agent trusted configuration runtime", () => {
       kind: "serviceConfig.apply" as const,
       serviceId: "alpha",
       revisionId: `cfg1_${"c".repeat(43)}`,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
@@ -1046,6 +1068,7 @@ describe("ops-agent trusted configuration runtime", () => {
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "serviceSelection.apply" as const,
       revisionId: `cfg1_${"e".repeat(43)}`,
+      payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
@@ -1175,6 +1198,7 @@ describe("ops-agent trusted configuration runtime", () => {
         expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
         kind: "stack.render" as const,
         revisionId,
+        payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       };
       return dispatchOpsOperation(runtime, operation, {
         execution: testExecution(),
@@ -1243,6 +1267,7 @@ describe("ops-agent trusted configuration runtime", () => {
         expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
         kind: "stack.render" as const,
         revisionId,
+        payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       };
       return dispatchOpsOperation(runtime, operation, {
         execution: testExecution(),

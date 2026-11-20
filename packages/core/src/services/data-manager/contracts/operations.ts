@@ -79,40 +79,14 @@ export const dataManagerOperations = {
       503: json(httpErrorSchema),
     },
   },
-  startGenerationHardlinksExecution: {
-    method: "POST",
-    path: "/executions/generation-hardlinks",
-    auth: service,
-    request: { body: e.startGenerationHardlinksExecutionSchema },
-    responses: {
-      ...serviceErrors,
-      202: json(e.dataExecutionStatusSchema),
-      403: json(httpErrorSchema),
-      409: json(httpErrorSchema),
-      503: json(httpErrorSchema),
-    },
-  },
   prepareDataConfigurationFence: {
     method: "POST",
     path: "/executions/configuration-maintenance/prepare",
     auth: service,
-    request: { body: cm.dataConfigurationFencePrepareSchema },
+    request: { body: cm.dataConfigurationFencePrepareRequestSchema },
     responses: {
       ...serviceErrors,
       200: json(cm.dataConfigurationFenceReceiptSchema),
-      403: json(httpErrorSchema),
-      409: json(httpErrorSchema),
-      503: json(httpErrorSchema),
-    },
-  },
-  recoverUnadmittedConfigurationPreparation: {
-    method: "POST",
-    path: "/executions/configuration-maintenance/recovery",
-    auth: service,
-    request: { body: cm.dataConfigurationFencePrepareSchema },
-    responses: {
-      ...serviceErrors,
-      200: json(cm.configurationPrepareNonAdmissionSchema),
       403: json(httpErrorSchema),
       409: json(httpErrorSchema),
       503: json(httpErrorSchema),
@@ -140,7 +114,7 @@ export const dataManagerOperations = {
     auth: service,
     request: {
       params: z.strictObject({ maintenanceId: z.uuid() }),
-      body: cm.dataConfigurationFenceSettleSchema,
+      body: cm.dataConfigurationFenceSettleRequestSchema,
     },
     responses: {
       ...serviceErrors,
@@ -223,7 +197,12 @@ export const dataManagerOperations = {
     path: "/link",
     auth: service,
     request: { body: d.linkRequestSchema },
-    responses: { ...dataMutationErrors, 200: json(d.linkResultSchema) },
+    // 202: the application under this key is still running; ask again.
+    responses: {
+      ...dataMutationErrors,
+      200: json(d.linkResultSchema),
+      202: json(e.dataExecutionStatusSchema),
+    },
   },
   getSearchIndexStatus: {
     method: "GET",

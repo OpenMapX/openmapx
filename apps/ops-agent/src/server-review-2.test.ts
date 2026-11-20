@@ -74,159 +74,6 @@ function persisted(
 }
 
 describe("reviewed durable admission boundary", () => {
-  it("rolls back an authenticated late claim after the claim timeout without admitting a job", async () => {
-    let finish!: () => void;
-    let rollbacks = 0;
-    const dispatch = vi.fn();
-    const operation = {
-      expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
-      coordinatorMode: "require-running" as const,
-      expectedCurrentRevisionId: null,
-      kind: "stack.render" as const,
-      revisionId: `cfg1_${"t".repeat(43)}`,
-    };
-    const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
-      claimTimeoutMs: 5,
-      resourceClaimer: {
-        claim: async (_operation, fingerprint) => {
-          await new Promise<void>((resolve) => {
-            finish = resolve;
-          });
-          return {
-            operation,
-            fingerprint,
-            source: "trusted-data" as const,
-            capability: { revisionId: operation.revisionId, values: {} },
-            admission: {
-              rollback: async () => {
-                rollbacks += 1;
-              },
-              commit: async () => undefined,
-              release: async () => undefined,
-            },
-          };
-        },
-      },
-      now: () => new Date(baseTime),
-      dispatch,
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/operations",
-      headers: auth(),
-      payload: request(operation, "ops1_lateClaimRollback0", key("opk1_lateClaimRollback0")),
-    });
-    expect(response.statusCode).toBe(504);
-    finish();
-    for (let attempt = 0; attempt < 100 && rollbacks === 0; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
-    }
-    expect(rollbacks).toBe(1);
-    expect(dispatch).not.toHaveBeenCalled();
-    await app.close();
-  });
-
-  it.each(["succeeded", "failed"] as const)(
-    "releases confidential trusted data only after the job is durably %s",
-    async (outcome) => {
-      let retained = true;
-      let committed = false;
-      let records: readonly PersistedOpsJob[] = [];
-      let terminalWriteEntered = false;
-      let terminalDurableAtRelease = false;
-      const allowTerminalWrite = Promise.withResolvers<void>();
-      const operation = {
-        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
-        coordinatorMode: "require-running" as const,
-        expectedCurrentRevisionId: null,
-        kind: "stack.render" as const,
-        revisionId: `cfg1_${"r".repeat(43)}`,
-      };
-      const app = await buildOpsAgentServer({
-        tokens: { api: apiToken, "data-manager": dataManagerToken },
-        journal: {
-          records: () => records,
-          replace: async (next) => {
-            if (next.some((record) => record.state === outcome)) {
-              terminalWriteEntered = true;
-              await allowTerminalWrite.promise;
-            }
-            records = structuredClone(next);
-          },
-        },
-        resourceClaimer: {
-          claim: async (_operation, fingerprint) => ({
-            operation,
-            fingerprint,
-            source: "trusted-data" as const,
-            capability: { revisionId: operation.revisionId, values: {} },
-            admission: {
-              rollback: async () => undefined,
-              commit: async () => {
-                committed = true;
-              },
-              release: async () => {
-                if (!committed) throw new Error("released before durable admission");
-                terminalDurableAtRelease = records.some((record) => record.state === outcome);
-                retained = false;
-              },
-            },
-          }),
-        },
-        now: () => new Date(baseTime),
-        dispatch: async () => {
-          expect(retained).toBe(true);
-          if (outcome === "failed") throw new Error("runtime failed");
-          return {
-            outcome: "committed",
-            revisionId: operation.revisionId,
-            enabledServiceIds: [],
-            followUp: "complete",
-            cleanupFailed: false,
-          };
-        },
-      });
-      try {
-        const admitted = await app.inject({
-          method: "POST",
-          url: "/v1/operations",
-          headers: auth(),
-          payload: request(
-            operation,
-            `ops1_terminalRelease${outcome}0`,
-            key(`opk1_terminalRelease${outcome}0`),
-          ),
-        });
-        expect(admitted.statusCode).toBe(202);
-        const operationId = admitted.json().result.operationId as string;
-        await vi.waitFor(() => expect(terminalWriteEntered).toBe(true));
-        expect(retained).toBe(true);
-        allowTerminalWrite.resolve();
-        let status = admitted.json().result.state as string;
-        for (
-          let attempt = 0;
-          attempt < 100 && (!["succeeded", "failed"].includes(status) || retained);
-          attempt += 1
-        ) {
-          await new Promise((resolve) => setTimeout(resolve, 1));
-          const response = await app.inject({
-            method: "GET",
-            url: `/v1/operations/${operationId}`,
-            headers: { ...auth(), "x-ops-request-id": `ops1_terminalStatus${outcome}0` },
-          });
-          status = response.json().result.state as string;
-        }
-        expect(status).toBe(outcome);
-        expect(retained).toBe(false);
-        expect(terminalDurableAtRelease).toBe(true);
-      } finally {
-        allowTerminalWrite.resolve();
-        await app.close();
-      }
-    },
-  );
-
   it("retains recovery-required tombstones beyond TTL and capacity to prevent silent rerun", async () => {
     const operation = {
       kind: "service.pull",
@@ -387,7 +234,10 @@ describe("reviewed durable admission boundary", () => {
       records: () => [],
       replace: async () => {
         writes += 1;
-        if (writes >= 3) throw new Error("disk unavailable");
+        // Admission, its execution row, the running state and the effect
+        // start are written; the settlement, the terminal write and its
+        // fallback fail.
+        if (writes >= 5) throw new Error("disk unavailable");
       },
     };
     const app = await buildOpsAgentServer({

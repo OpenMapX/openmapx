@@ -189,8 +189,7 @@ async function fixture(mode = "success") {
           ],
           followUp: "complete",
           cleanupFailed: false,
-          publisherCleanupFailed: mode === "incomplete",
-          registryUpdateFailed: false,
+          registryUpdateFailed: mode === "incomplete",
         },
       });
       if (!finished) Object.assign(job, { status: "running", result: null, finishedAt: null });

@@ -650,7 +650,7 @@ it("clears the retry timer when the page is disposed during a wait", async () =>
   }
 });
 
-it("clears the selected pin rather than the running release, retaining the request key after a lost response", async () => {
+it("clears the pin of the current release, retaining the request key after a lost response", async () => {
   const posts: { url: string; body: unknown; key: string | null }[] = [];
   const status = {
     deployment: {
@@ -660,8 +660,7 @@ it("clears the selected pin rather than the running release, retaining the reque
       maintenanceReady: true,
     },
     release: {
-      currentReleaseId: "running-release",
-      selectedReleaseId: "selected-pin",
+      currentReleaseId: "pinned-release",
       configuredSelector: "main",
     },
     images: [],
@@ -691,8 +690,8 @@ it("clears the selected pin rather than the running release, retaining the reque
         <SystemMaintenance />
       </QueryClientProvider>,
     );
-    await screen.findByText("Selected pin: selected-pin");
-    fireEvent.click(screen.getByRole("button", { name: "Clear selected release pin" }));
+    await screen.findByText("Current release (pinned): pinned-release");
+    fireEvent.click(screen.getByRole("button", { name: "Clear the release pin" }));
     const confirm = screen.getByRole("button", { name: "Clear release pin" });
     expect(confirm).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Clear confirmation"), {
@@ -705,12 +704,56 @@ it("clears the selected pin rather than the running release, retaining the reque
     await waitFor(() => expect(posts).toHaveLength(2));
     expect(posts[0]?.url).toBe("http://api.test/api/admin/system/release/clear");
     expect(posts[0]?.body).toEqual({
-      expectedReleaseId: "selected-pin",
+      expectedReleaseId: "pinned-release",
       confirmation: "CLEAR RELEASE PIN",
     });
     expect(posts[0]?.key).toBeTruthy();
     expect(posts[1]?.key).toBe(posts[0]?.key);
     expect(screen.getByText("Configured channel: main")).toBeInTheDocument();
+  } finally {
+    cleanup();
+    client.clear();
+  }
+});
+
+it.each([
+  {
+    when: "the agent did not answer",
+    ready: false,
+    release: {},
+    lines: [
+      "Configured channel: unknown",
+      "Current release (pinned): unknown",
+      "Checked release: unknown",
+    ],
+  },
+  {
+    when: "no release is pinned",
+    ready: true,
+    release: { configuredSelector: "main" },
+    lines: [
+      "Configured channel: main",
+      "Current release (pinned): none",
+      "Checked release: not checked",
+    ],
+  },
+])("shows the release selection when $when", async ({ ready, release, lines }) => {
+  const deployment = {
+    dockerAvailable: ready,
+    composeRendered: ready,
+    hostControlConfigured: true,
+    maintenanceReady: ready,
+  };
+  vi.stubGlobal("fetch", async () => Response.json({ deployment, release, images: [] }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <SystemMaintenance />
+      </QueryClientProvider>,
+    );
+    for (const line of lines) expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear the release pin" })).toBeDisabled();
   } finally {
     cleanup();
     client.clear();

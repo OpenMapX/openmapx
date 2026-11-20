@@ -10,20 +10,22 @@ import {
 } from "../ops";
 import {
   beginControlEffect,
-  closeControlInstallation,
-  openControlInstallation,
-  provisionControlInstallation,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
-} from "./control-authority";
+} from "./execution-record";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlDirectories,
+} from "./private-records";
 
 it.each(["commit", "rollback", "release"] as const)(
   "records actual awaited repository %s as a known finite filesystem settlement",
   async (outcome) => {
     const root = mkdtempSync(join(tmpdir(), "repository-settle-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await provisionControlInstallation(root);
+    await provisionControlDirectories(root);
     const installation = openControlInstallation({
       infraDir: root,
       role: "ops-agent",
@@ -54,7 +56,7 @@ it.each(["commit", "rollback", "release"] as const)(
           deadlineAt,
         }),
       };
-      const authority = retainAdmittedControlExecution(installation, {
+      const authority = await retainAdmittedControlExecution(installation, {
         execution,
         operation,
         kind: operation.kind,
@@ -62,8 +64,8 @@ it.each(["commit", "rollback", "release"] as const)(
         requestedDeadlineAt: deadlineAt,
         serviceIds: ["motis"],
       });
-      beginControlEffect(authority);
-      expect(() =>
+      await beginControlEffect(authority);
+      await expect(
         retainControlEffectReceipt(authority, {
           outcome: "committed",
           publication: "committed",
@@ -72,8 +74,8 @@ it.each(["commit", "rollback", "release"] as const)(
             result: { repository: operation.repository, outcome, changed: true },
           },
         }),
-      ).not.toThrow();
-      expect(verifyControlEffectSettlement(installation, execution)).toBeTruthy();
+      ).resolves.toBeUndefined();
+      expect(await verifyControlEffectSettlement(installation, execution)).toBeTruthy();
     } finally {
       closeControlInstallation(installation);
       rmSync(root, { recursive: true, force: true });

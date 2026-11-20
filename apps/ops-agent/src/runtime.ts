@@ -1,7 +1,7 @@
 import type {
   ArtifactTargetLease,
   BorrowedArtifactTargetLease,
-  VerifiedExecutionAuthority,
+  ExecutionHandle,
 } from "@openmapx/core/build-artifacts";
 import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
 import {
@@ -50,11 +50,10 @@ export class OpsAgentBusyError extends Error {
 }
 
 export interface OpsExecutionContext {
-  readonly configurationMaintenanceControl?: import("./configuration-maintenance-store").ConfigurationMaintenanceControlOwner;
   readonly execution: ExecutionRef;
   readonly artifactLease?: BorrowedArtifactTargetLease;
   readonly ownedTargetLease?: ArtifactTargetLease;
-  readonly controlAuthority?: VerifiedExecutionAuthority;
+  readonly controlAuthority?: ExecutionHandle;
   commitFeedProxyValidationFailure?(input: {
     candidateDigest: string;
     validationExitCode: number;
@@ -69,7 +68,7 @@ export interface OpsExecutionContext {
   /** Persist progress before a batch can start its next effect. */
   checkpointServiceBatch?(result: ServiceBatchResult): Promise<void>;
   checkpointDataWorkflow?(result: import("@openmapx/core/ops").DataWorkflowReceipt): Promise<void>;
-  ownDataFinalizationLease?(lease: ArtifactTargetLease): void;
+  ownDataFinalizationLease?(lease: ArtifactTargetLease): Promise<void>;
 }
 
 export interface OpsTrustedClaim {
@@ -80,11 +79,6 @@ export interface OpsTrustedClaim {
     revisionId: string;
     values: Readonly<Record<string, string | number | boolean | null>>;
     trustedConfiguration?: Readonly<TrustedConfigurationPayload>;
-  }>;
-  readonly admission?: Readonly<{
-    commit(): Promise<void>;
-    rollback(): Promise<void>;
-    release(): Promise<void>;
   }>;
 }
 

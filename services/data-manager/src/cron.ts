@@ -20,10 +20,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod/v4";
 import { db } from "./db/index.js";
 import type { DataExecutionReceiver } from "./jobs/execution/api.js";
-import {
-  independentLegacyDataMutation,
-  withLegacyDataMutation,
-} from "./jobs/execution/legacy-mutation.js";
+import { runLocalDataExecution } from "./jobs/execution/local.js";
 import { createGithubIssueSink, type GithubIssueSink } from "./jobs/github-issue-sink.js";
 import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
 import { compareOvertureReleases } from "./jobs/overture/retention.js";
@@ -737,24 +734,37 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   // The way_id → GraphId map is refreshed from the current OpenConditions key
   // set so both traffic writers see ways added since the last graph rebuild.
-  const runWaysToEdgesRefresh = async (): Promise<void> => {
+  // It runs inside a traffic-maintenance execution.
+  const refreshWaysToEdgesMap = async (): Promise<void> => {
     if (!options.getCoveredWayIds) {
       log.info("ways-to-edges: refresh skipped (no covered-way-id source configured)");
       return;
     }
     try {
       const coveredWayIds = await options.getCoveredWayIds();
-      const result = await withLegacyDataMutation("traffic-maintenance", () =>
-        refreshWaysToEdges(coveredWayIds, { logger: log }),
-      );
+      const result = await refreshWaysToEdges(coveredWayIds, { logger: log });
       log.info("ways-to-edges: refresh complete", {
         wayCount: result.wayCount,
         edgeCount: result.edgeCount,
       });
     } catch (err) {
       log.error("ways-to-edges: refresh failed", { err: (err as Error).message });
+      throw err;
     }
   };
+  /** Runs `steps` in order as one traffic-maintenance execution. A failed step
+   * does not skip the next; the execution fails if any step failed. */
+  const trafficMaintenance = (
+    task: "extract-startup" | "extract-guard" | "ways-to-edges",
+    ...steps: Array<() => Promise<void>>
+  ): Promise<void> =>
+    runLocalDataExecution({ kind: "traffic-maintenance", task }, async () => {
+      let failure: unknown;
+      for (const step of steps) await step().catch((err: unknown) => (failure ??= err));
+      if (failure) throw failure;
+    }).catch((err: unknown) => {
+      log.error(`traffic-maintenance: ${task} failed`, { err: (err as Error).message });
+    });
 
   // The extract exists for the traffic writers, which read OpenConditions.
   // Without them nothing uses it, and on a host without Valhalla the agent's
@@ -765,70 +775,79 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     return true;
   };
 
+  const runWaysToEdgesRefresh = (): Promise<void> =>
+    trafficMaintenance("ways-to-edges", refreshWaysToEdgesMap);
+
   const runTrafficExtractStartup = async (): Promise<void> => {
     if (trafficExtractUnused("startup check")) return;
     let graphRebuilt = false;
-    try {
-      const result = await withLegacyDataMutation("traffic-maintenance", () =>
-        ensureExtract({ logger: log }),
-      );
-      graphRebuilt = result.built;
-      log.info("traffic-extract: startup check complete", { built: result.built });
-    } catch (err) {
-      log.error("traffic-extract: startup ensure failed", { err: (err as Error).message });
-    }
-    // A build (above, or the guard's rebuild) refreshes the way→edge map, but a
-    // traffic.tar that already exists from a prior boot leaves the map ungenerated
-    // on first run — the live writer then can't load it. Bootstrap it here when
-    // it's missing so the chain works without waiting for the next graph rebuild.
-    if (options.getCoveredWayIds && (graphRebuilt || !existsSync(waysToEdgesMapPath()))) {
-      log.info(
-        graphRebuilt
-          ? "ways-to-edges: graph rebuilt at startup, refreshing map"
-          : "ways-to-edges: map missing at startup, bootstrapping",
-      );
-      await runWaysToEdgesRefresh();
-    }
+    await trafficMaintenance(
+      "extract-startup",
+      async () => {
+        try {
+          const result = await ensureExtract({ logger: log });
+          graphRebuilt = result.built;
+          log.info("traffic-extract: startup check complete", { built: result.built });
+        } catch (err) {
+          log.error("traffic-extract: startup ensure failed", { err: (err as Error).message });
+          throw err;
+        }
+      },
+      // A build (above, or the guard's rebuild) refreshes the way→edge map, but
+      // a traffic.tar that already exists from a prior boot leaves the map
+      // ungenerated on first run — the live writer then can't load it. Bootstrap
+      // it here when it's missing so the chain works without waiting for the
+      // next graph rebuild.
+      async () => {
+        if (!options.getCoveredWayIds || (!graphRebuilt && existsSync(waysToEdgesMapPath())))
+          return;
+        log.info(
+          graphRebuilt
+            ? "ways-to-edges: graph rebuilt at startup, refreshing map"
+            : "ways-to-edges: map missing at startup, bootstrapping",
+        );
+        await refreshWaysToEdgesMap();
+      },
+    );
   };
 
   const runTrafficExtractGuard = async (): Promise<void> => {
     if (trafficExtractUnused("guard")) return;
-    try {
-      const stale = await checkExtractStale({ logger: log });
-      if (stale) {
-        // A stale extract doesn't fail soft — Valhalla throws mid-request when
-        // the traffic tile's directed_edge_count disagrees with the graph
-        // tile, so rebuild eagerly rather than wait for a request to surface
-        // it. `force` skips the redundant presence check: we already know the
-        // file exists, just that it's outdated.
-        log.info("traffic-extract: graph tiles newer than traffic.tar, rebuilding");
-        const result = await withLegacyDataMutation("traffic-maintenance", () =>
-          ensureExtract({ logger: log, force: true }),
-        );
-        log.info("traffic-extract: guard rebuild complete", { built: result.built });
-      } else {
-        log.info("traffic-extract: guard check found no rebuild needed");
-      }
-    } catch (err) {
-      log.error("traffic-extract: guard check failed", { err: (err as Error).message });
-    }
-
-    // Unconditional, and outside the try above so an extract failure can't skip
-    // it. The map's key set tracks the OpenConditions feed rather than the
-    // graph, and the feed grows as sources are added; gating this on a rebuild
-    // left it months stale while the live-speed writer silently covered a
-    // shrinking share of the feed. runWaysToEdgesRefresh contains its own
-    // error handling.
-    await runWaysToEdgesRefresh();
+    await trafficMaintenance(
+      "extract-guard",
+      async () => {
+        try {
+          const stale = await checkExtractStale({ logger: log });
+          if (stale) {
+            // A stale extract doesn't fail soft — Valhalla throws mid-request
+            // when the traffic tile's directed_edge_count disagrees with the
+            // graph tile, so rebuild eagerly rather than wait for a request to
+            // surface it. `force` skips the redundant presence check: we
+            // already know the file exists, just that it's outdated.
+            log.info("traffic-extract: graph tiles newer than traffic.tar, rebuilding");
+            const result = await ensureExtract({ logger: log, force: true });
+            log.info("traffic-extract: guard rebuild complete", { built: result.built });
+          } else {
+            log.info("traffic-extract: guard check found no rebuild needed");
+          }
+        } catch (err) {
+          log.error("traffic-extract: guard check failed", { err: (err as Error).message });
+          throw err;
+        }
+      },
+      // Unconditional, and a step of its own so an extract failure can't skip
+      // it. The map's key set tracks the OpenConditions feed rather than the
+      // graph, and the feed grows as sources are added; gating this on a
+      // rebuild left it months stale while the live-speed writer silently
+      // covered a shrinking share of the feed.
+      refreshWaysToEdgesMap,
+    );
   };
 
   let graphMaintenanceCheck: Promise<void> | null = null;
   const scheduleGraphMaintenanceCheck = (): void => {
     if (graphMaintenanceCheck) return;
-    graphMaintenanceCheck = independentLegacyDataMutation(
-      "traffic-maintenance",
-      runTrafficExtractGuard,
-    ).finally(() => {
+    graphMaintenanceCheck = runTrafficExtractGuard().finally(() => {
       graphMaintenanceCheck = null;
     });
   };
@@ -1019,7 +1038,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
     trafficLiveRunning = true;
     try {
-      await withLegacyDataMutation("traffic-live", runTrafficLiveCycle);
+      await runLocalDataExecution({ kind: "traffic-live" }, runTrafficLiveCycle);
+    } catch (err) {
+      log.error("traffic-live: cycle did not run", { err: (err as Error).message });
     } finally {
       trafficLiveRunning = false;
     }
@@ -1161,11 +1182,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         });
         // Fire-and-forget: a `valhalla_ways_to_edges` run is far slower than a
         // 2-minute cycle, and this cycle's write must not wait on it.
-        void independentLegacyDataMutation("traffic-maintenance", runWaysToEdgesRefresh).catch(
-          (err) => {
-            log.warn("traffic-live: way→edge refresh failed", { err: (err as Error).message });
-          },
-        );
+        void runWaysToEdgesRefresh();
       }
       // Live speeds alone hold the full lease. Written road-event overrides
       // also hold it to the policy, the conditions set and each contributing
@@ -1366,7 +1383,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       return;
     }
     try {
-      const result = await withLegacyDataMutation("traffic-predicted", () =>
+      const result = await runLocalDataExecution({ kind: "traffic-predicted" }, () =>
         bake({ openConditionsUrl, openConditionsToken, logger: log }),
       );
       log.info("traffic-predicted: cycle complete", { ...result });

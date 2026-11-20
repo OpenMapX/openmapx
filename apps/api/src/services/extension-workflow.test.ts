@@ -51,10 +51,4 @@ it("resumes the original completed publication without redispatch and rejects ch
   });
   expect(publish).toHaveBeenCalledTimes(1);
   await expect(openExtensionWorkflow(replacement, { id: "changed" })).rejects.toThrow();
-  const saved = replacement.checkpointResult!._extensionWorkflow as { body: string; mac: string };
-  replacement.checkpointResult = {
-    ...replacement.checkpointResult,
-    _extensionWorkflow: { ...saved, body: saved.body.replace("original", "forged") },
-  };
-  await expect(openExtensionWorkflow(replacement, { id: "original" })).rejects.toThrow();
 });

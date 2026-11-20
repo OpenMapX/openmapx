@@ -189,11 +189,13 @@ bounded structured audit fields. It is reachable solely on the private
 `ops-agent` is the sole owner of the Docker socket and trusted repository write
 mounts, including its stores of community service checkouts and installed
 integrations. `app-api` and `data-manager` submit typed operations instead of receiving
-that host authority themselves. The agent's own state (job journal and
-trusted-configuration queue) lives
+that host authority themselves. The agent's own state (job journal and the
+prepared configuration candidates the API hands it) lives
 in `infra/docker/state/ops-agent/`, outside the data directory data-manager
-mounts; `app-api` mounts only the queue and, read-only, the integration store,
-and `pnpm check-ops-authority` keeps it that way. `app-api` reads the release and active Transitous pins through the
+mounts; `app-api` mounts only the integration store, read-only, and
+`pnpm check-ops-authority` keeps it that way. A configuration apply carries its
+payload in the authenticated request, named in the operation by its digest; the
+agent's journal keeps the digest, never the payload. `app-api` reads the release and active Transitous pins through the
 read-only `transitousPin.inspect` operation. The proposal and every change stay
 `data-manager`'s operations, which the admin panel's bump goes through. The built-in service manifests the agent and its
 fixed CLI render come from the agent's own image, not from the host checkout.

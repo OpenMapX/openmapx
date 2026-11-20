@@ -1,0 +1,29 @@
+/**
+ * Every PostgreSQL advisory lock data-manager and its configuration fence take,
+ * by name, so no two purposes share a key by accident. A pair is
+ * `(namespace, key)`; a single number is a one-key lock.
+ *
+ * The API takes its own locks (administrative and integration writers in the
+ * `0x4f4d58`/`0x494e54` namespaces, account, privacy, platform, transit
+ * credential and migration locks); none of them uses a key listed here.
+ */
+export const DATA_ADVISORY_LOCKS = {
+  /** Data admission against the configuration fence: taken exclusively by a
+   * fence change and by durable execution admission, shared by other writers. */
+  dataAdmission: [0x4f4d58, 2],
+  /** One Overture workflow at a time. Ambient publication takes it shared
+   * while it reads Overture's tables. */
+  overture: [1_330_466_120, 1],
+  /** One search-index build at a time. Ambient publication takes it shared
+   * while it reads the index's source tables. */
+  searchIndex: [1_330_466_120, 2],
+  /** One notable-places build at a time. */
+  notablePlaces: [1_330_466_120, 3],
+  /** Ambient publication: its writer exclusively, readers of its schema shared. */
+  ambientPublication: 139399,
+  /** Offline package accounting: the global lock, then the seeds that hash a
+   * principal and a request key into their own locks. */
+  offlineAccountingGlobal: 606,
+  offlineAccountingPrincipalSeed: 604,
+  offlineAccountingRequestSeed: 605,
+} as const;

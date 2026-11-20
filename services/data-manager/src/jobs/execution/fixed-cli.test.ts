@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -19,6 +19,7 @@ import {
   OpsClient,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import { build } from "esbuild";
 import Fastify from "fastify";
 import postgres from "postgres";
@@ -31,6 +32,7 @@ import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
 import { createUnavailableRuntime } from "../../../../../apps/ops-agent/src/runtime";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { dataJobsSince } from "../../../__tests__/helpers/job-rows";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { StateStore } from "../../state";
@@ -46,7 +48,7 @@ it.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )(
-  "runs the actual fixed single data command through durable authenticated DM admission after a lost response",
+  "runs the actual fixed single data command through durable authenticated DM admission after a lost response, then the admin data link with a real plan",
   async () => {
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
@@ -54,7 +56,7 @@ it.skipIf(
       infra = join(root, "infra/docker"),
       data = join(infra, "data");
     mkdirSync(data, { recursive: true, mode: 0o700 });
-    await control.provisionControlInstallation(infra);
+    await control.provisionControlDirectories(infra);
     const envKeys = [
         "OPENMAPX_ROOT_DIR",
         "DATA_MANAGER_URL",
@@ -62,9 +64,12 @@ it.skipIf(
         "NODE_OPTIONS",
         "DATA_MANAGER_TOKEN_FILE",
         "OPENMAPTILES_FONTS_URL",
+        "POSTGRES_PASSWORD",
       ] as const,
       prior = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
     process.env.OPENMAPX_ROOT_DIR = root;
+    // The deployment credential the agent's environment carries on a real host.
+    process.env.POSTGRES_PASSWORD = "p".repeat(24);
     const assets = join(root, "font-source/Test Font");
     mkdirSync(assets, { recursive: true });
     writeFileSync(join(assets, "0-255.pbf"), "synthetic-public-glyph");
@@ -101,6 +106,9 @@ it.skipIf(
         js: `import {createRequire as fixtureCreateRequire} from 'node:module';const require=fixtureCreateRequire(${JSON.stringify(resolve("packages/cli/package.json"))});`,
       },
     });
+    // Job rows are shared by every fixture; this test's are those admitted since it began.
+    const startedAt = Date.now(),
+      ownRows = () => dataJobsSince(sql, store, startedAt);
     const sql = postgres(url, { max: 4 }),
       dm = control.openControlInstallation({
         infraDir: infra,
@@ -127,11 +135,12 @@ it.skipIf(
         sql,
         singleFlight,
         operationsPolicy,
-        runHardlinks: async () => {
-          throw Error("No generation grant");
-        },
       }),
-      runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch }),
+      runtime = createDataExecutionRuntime({
+        store,
+        dispatch: dispatcher.dispatch,
+        openSql: () => ({ sql, close: async () => {} }),
+      }),
       receiver = createDataExecutionReceiver({
         runtime,
         installation: dm,
@@ -148,18 +157,13 @@ it.skipIf(
       }
       return payload;
     });
-    registerAuth(
-      app,
-      {
-        api: "synthetic-dm-token-api",
-        "ops-agent": "synthetic-dm-token",
-        "host-cli": "synthetic-dm-token-cli",
-      },
-      { executionReceiver: () => receiver },
-    );
+    registerAuth(app, {
+      api: "synthetic-dm-token-api",
+      "ops-agent": "synthetic-dm-token",
+      "host-cli": "synthetic-dm-token-cli",
+    });
     registerApi(app, {
       dataDir: data,
-      singleFlight,
       operationsPolicy,
       executionReceiver: receiver,
     });
@@ -173,7 +177,8 @@ it.skipIf(
     // The fixed CLI the agent runs presents the agent's own token.
     process.env.DATA_MANAGER_TOKEN_FILE = join(root, "data-manager-ops-agent-token");
     writeFileSync(process.env.DATA_MANAGER_TOKEN_FILE, "synthetic-dm-token", { mode: 0o600 });
-    const agentJournal = await openOpsJobJournal(join(data, "ops-agent/jobs-v1.json")),
+    // A fixed CLI child reads its parent's execution row from the agent's journal.
+    const agentJournal = await openOpsJobJournal(services.agentStatePaths(infra).journal),
       agentRuntime = createAdministrativeRuntime(createUnavailableRuntime(), {
         rootDir: root,
         runFixedCli: createDefaultFixedCli(root, join(root, "agent.mjs")),
@@ -232,22 +237,66 @@ it.skipIf(
       expect(readFileSync(join(data, "tile-fonts/Test Font/0-255.pbf"), "utf8")).toBe(
         "synthetic-public-glyph",
       );
-      const rows = (await store.listUnsettled()).filter((row) =>
-        existsSync(
-          join(infra, "control-private/data-manager/executions", `${row.status.operationKey}.json`),
-        ),
-      );
+      const rows = await ownRows();
       expect(rows).toHaveLength(1);
       expect(rows[0]?.status.status).toBe("ok");
       expect(rows[0]?.parent?.issuer).toBe("host-cli");
       expect(rows[0]?.execution.principal).toBe("host-cli");
-      control.readDataControlTerminalObservation(
-        agentInstallation,
-        rows[0]!.execution,
-        rows[0]!.status,
-      );
+      control.assertDataManagerTerminal(rows[0]!.execution, rows[0]!.status);
+      expect(heldTargets(dirname(data)).includes("data-manager")).toBe(false);
+
+      // The admin panel's data link: the agent runs `data link` as a fixed
+      // child, which renders the generation from the selected services'
+      // manifests and sends its plan to /link. The agent takes no target lease
+      // for a data link, so data-manager leases itself and runs the application
+      // exclusively. Valhalla consumes the OSM extract data-manager produces.
+      symlinkSync(resolve("services"), join(root, "services"), "dir");
+      services.writeServiceSelectionFile(infra, ["data-manager", "valhalla"]);
+      mkdirSync(join(data, "osm"), { recursive: true });
+      writeFileSync(join(data, "osm", "planet.osm.pbf"), "PBF");
+      const link = { kind: "data.link" as const },
+        linkDeadline = Date.now() + 60000,
+        linkKey = createControlRootOperationKey({ notAfter: linkDeadline, nonce: randomBytes(16) });
+      const linked = await client.execute(link, {
+        operationKey: linkKey,
+        execution: { requestedDeadlineAt: linkDeadline },
+      });
+      if (linked.execution !== "async") throw Error("Async data link required");
+      try {
+        await expect
+          .poll(async () => (await client.status(link.kind, linked.operationId)).state, {
+            timeout: 25000,
+            interval: 200,
+          })
+          .toBe("succeeded");
+      } catch (error) {
+        console.info(
+          "Synthetic data link diagnostics",
+          JSON.stringify(await client.events(linked.operationId)),
+          JSON.stringify(await client.status(link.kind, linked.operationId)),
+        );
+        throw error;
+      }
+      // The rendered generation's plan links the extract into Valhalla's directory.
+      const entry = (
+        JSON.parse(
+          readFileSync(
+            services.currentConfigurationFile(infra, services.GENERATED_HARDLINK_PLAN_FILE),
+            "utf8",
+          ),
+        ) as { source: string; target: string; consumerService: string }[]
+      ).find((value) => value.consumerService === "valhalla" && value.source === "data/osm");
+      expect(entry, JSON.stringify((await client.events(linked.operationId)).events)).toBeDefined();
+      const linkedFile = join(infra, entry!.target, "planet.osm.pbf");
+      expect(statSync(linkedFile).ino).toBe(statSync(join(data, "osm", "planet.osm.pbf")).ino);
+      // One application, and nothing left held once it ended.
+      expect(
+        await sql`SELECT status, finished_at IS NOT NULL AS finished
+          FROM data_manager.jobs WHERE kind='generation-link'`,
+      ).toEqual([{ status: "ok", finished: true }]);
       expect(heldTargets(dirname(data)).includes("data-manager")).toBe(false);
     } finally {
+      await sql`DELETE FROM data_manager.jobs WHERE kind='generation-link'`;
       await runtime.close();
       agent.server.closeAllConnections();
       await agent.close();
@@ -255,18 +304,8 @@ it.skipIf(
       await app.close();
       fontServer.closeAllConnections();
       await new Promise<void>((resolve) => fontServer.close(() => resolve()));
-      for (const row of await store.listUnsettled())
-        if (
-          existsSync(
-            join(
-              infra,
-              "control-private/data-manager/executions",
-              `${row.status.operationKey}.json`,
-            ),
-          )
-        )
-          await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id}`;
-      journal.close();
+      for (const row of await ownRows())
+        await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id}`;
       control.closeControlInstallation(dm);
       control.closeControlInstallation(agentInstallation);
       await sql.end();

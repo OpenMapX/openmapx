@@ -813,8 +813,10 @@ and again at pointer activation. CLI preparation reads the applied configuration
 inside the same writer ownership, so it needs no separate observation request.
 
 The condition is distinct from the candidate `revisionId` and manifest authority
-revision. Strict operation parsing, its authenticated fingerprint and snapshot
-claim bind it through execution. Missing conditions are rejected; there is no
+revision. Each of these operations carries its payload beside it in the API's
+authenticated request and names it by `payloadDigest`; the agent refuses a
+payload that does not match, and its journal keeps only the digest. Strict
+operation parsing and its fingerprint bind the condition through execution. Missing conditions are rejected; there is no
 compatibility parser. CLI renders create fresh identities even for repeated
 content, preventing an old condition from becoming true again through content
 reuse. A conflict leaves the current generation and its follow-up files intact.

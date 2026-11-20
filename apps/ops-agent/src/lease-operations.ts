@@ -12,19 +12,19 @@ import {
   type OpsResultFor,
   type OpsRole,
 } from "@openmapx/core/ops";
-import { childPhaseKinds } from "../../../packages/core/src/build-artifacts/control-child-records";
+import { childPhaseKinds } from "../../../packages/core/src/build-artifacts/lease-store";
 
 type LeaseOperation = Extract<
   OpsOperation,
-  { kind: "lease.acquire" | "lease.read" | "lease.update" | "lease.settleChild" }
+  { kind: "lease.acquire" | "lease.read" | "lease.update" }
 >;
 
 /**
- * Leases data-manager holds through the agent. It sees and changes only
- * leases its own executions own, and the same rules apply as to the agent's
+ * Leases data-manager holds through the agent. It changes only leases its own
+ * executions own, and sees those and any lease on data-manager itself. The
+ * same rules apply as to the agent's
  * leases: one admission path, children recorded before they start, release
- * only once everything has a known outcome. It also reports the outcome of a
- * child it ran under the agent's or the host CLI's lease.
+ * only once everything has a known outcome.
  */
 export async function runLeaseOperation(
   installation: ControlInstallation,
@@ -36,14 +36,6 @@ export async function runLeaseOperation(
   const owned = (lease: LeaseRecord | undefined) =>
     lease && lease.owner.executor === role ? lease : undefined;
   const now = Date.now();
-  if (operation.kind === "lease.settleChild") {
-    if (operation.settlement.identity.executor !== role) throw new LeaseRefused();
-    return {
-      lease:
-        (await store.update((leases) => leaseRules.settleChild(leases, operation.settlement))) ??
-        null,
-    };
-  }
   if (operation.kind === "lease.acquire") {
     const registered = new Set(controlRegisteredServiceIds(installation));
     if (
@@ -64,8 +56,14 @@ export async function runLeaseOperation(
       };
     }
   }
-  if (operation.kind === "lease.read")
-    return { lease: owned(store.get(operation.leaseId)) ?? null };
+  if (operation.kind === "lease.read") {
+    // Another holder's lease on data-manager is shown, never changed, so
+    // data-manager can check the lease a hardlink plan's sender names.
+    const lease = store.get(operation.leaseId);
+    return {
+      lease: owned(lease) ?? (lease?.targets.includes("data-manager") ? lease : null),
+    };
+  }
   const lease = await store.update((leases) => {
     const current = owned(leases.find((value) => value.leaseId === operation.leaseId));
     if (!current) {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { describe, expect, it, vi } from "vitest";
 import { DataManagerReadiness } from "../src/readiness.js";
@@ -18,7 +18,7 @@ describe("initializeRequiredSubsystems", () => {
   it("publishes the stop handle before awaiting the initial prune and does not start cron after shutdown", async () => {
     const root = mkdtempSync(join(tmpdir(), "omx-startup-stop-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await provisionControlInstallation(root);
+    await provisionControlDirectories(root);
     const installation = openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -32,7 +32,7 @@ describe("initializeRequiredSubsystems", () => {
           readiness: new DataManagerReadiness(),
           controlInstallation: installation,
           initializeOfflineStorage: async () => {},
-          reconcileJobs: async () => [],
+          reconcileJobs: async () => {},
           setupCronSchedulers,
           onControlPruneStarted: (stop) => {
             stopped = stop();
@@ -60,7 +60,6 @@ describe("initializeRequiredSubsystems", () => {
       },
       reconcileJobs: async () => {
         calls.push("reconcile");
-        return ["orphan-1"];
       },
       setupCronSchedulers: () => {
         calls.push("cron");
@@ -69,7 +68,7 @@ describe("initializeRequiredSubsystems", () => {
     });
 
     expect(calls).toEqual(["offline", "reconcile", "cron"]);
-    expect(result).toEqual({ cronHandles, interruptedJobIds: ["orphan-1"] });
+    expect(result).toEqual({ cronHandles });
     expect(readiness.snapshot()).toEqual({ status: "starting", phase: "cron-schedulers" });
   });
 
@@ -99,7 +98,7 @@ describe("initializeRequiredSubsystems", () => {
       initializeRequiredSubsystems({
         readiness,
         initializeOfflineStorage: async () => {},
-        reconcileJobs: async () => [],
+        reconcileJobs: async () => {},
         setupCronSchedulers: () => {
           throw new Error("cron setup failed");
         },

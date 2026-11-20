@@ -1,6 +1,8 @@
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
+import { cancellableTransaction } from "../execution/worker-scope.js";
 
-export const AMBIENT_WRITE_LOCK = 139399;
+export const AMBIENT_WRITE_LOCK = DATA_ADVISORY_LOCKS.ambientPublication;
 export class AmbientPublicationBusyError extends Error {
   constructor(message = "Another ambient publication or pointer change is running") {
     super(message);
@@ -50,16 +52,14 @@ const initialization = new WeakMap<postgres.Sql, Promise<void>>();
 export async function ensureAmbientSchema(sql: postgres.Sql): Promise<void> {
   let ready = initialization.get(sql);
   if (!ready) {
-    ready = sql
-      .begin(async (tx) => {
-        await tx.unsafe(`SET LOCAL statement_timeout='10000ms'`);
-        const [writer] = await tx.unsafe<{ locked: boolean }[]>(
-          `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
-        );
-        if (!writer.locked) throw new AmbientPublicationBusyError();
-        await tx.unsafe(ambientSchemaDDL);
-      })
-      .then(() => undefined);
+    ready = cancellableTransaction(sql, async (tx) => {
+      await tx.unsafe(`SET LOCAL statement_timeout='10000ms'`);
+      const [writer] = await tx.unsafe<{ locked: boolean }[]>(
+        `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
+      );
+      if (!writer.locked) throw new AmbientPublicationBusyError();
+      await tx.unsafe(ambientSchemaDDL);
+    });
     initialization.set(sql, ready);
     ready.catch(() => initialization.delete(sql));
   }

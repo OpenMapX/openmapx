@@ -229,18 +229,8 @@
       "optional": true
     },
     {
-      "source": "@infra:secrets/control-data-manager.key",
-      "target": "/run/secrets/openmapx-control-role-key",
-      "readOnly": true
-    },
-    {
-      "source": "@infra:secrets/control-verifiers.json",
-      "target": "/run/secrets/openmapx-control-verifiers",
-      "readOnly": true
-    },
-    {
-      "source": "@infra:control-private/data-manager",
-      "target": "/var/lib/openmapx/control-private",
+      "source": "@infra:state/data-manager/control",
+      "target": "/var/lib/openmapx/control",
       "readOnly": false
     }
   ],

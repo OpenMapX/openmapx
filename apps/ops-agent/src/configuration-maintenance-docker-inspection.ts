@@ -1,19 +1,19 @@
-/** Fixed production Docker inspector. Only execFile is an external-I/O seam;
- * no injected result/inspector can qualify the original maintenance final. */
-import { createHmac, type KeyObject, timingSafeEqual } from "node:crypto";
+/** Checks the containers a configuration maintenance replaced against the
+ * generation it committed. Only execFile is an external-I/O seam. */
+import { createHash, timingSafeEqual } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { dirname, isAbsolute, relative, sep } from "node:path";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
   maintenanceDockerComposeSchema as compose,
   maintenanceDockerContainerSchema as container,
 } from "../../../packages/core/src/build-artifacts/configuration-maintenance-docker-records";
-import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-store";
 import { inspectConfigurationReleaseImages } from "./configuration-release-images";
 import { verifyConfigurationRuntimeResources } from "./configuration-resource-inspection";
 import type { DockerRuntimeOptions } from "./docker-runtime";
+import type { MaintenanceFile } from "./maintenance";
 import type { OwnedServiceSnapshot } from "./owned-services";
 
 /** How long the helper waits for one recreated service's healthcheck. */
@@ -55,9 +55,8 @@ export async function awaitAppliedContainerHealth(options: {
 export async function inspectMaintenanceDockerRuntime(options: {
   stack: services.StackPaths;
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
-  owner: ConfigurationMaintenanceOwnerRecord;
+  owner: MaintenanceFile;
   containers: readonly OwnedServiceSnapshot[];
-  privateKey: KeyObject;
   signal: AbortSignal;
   /** Interim fixed-helper check only; the final producer always checks all targets. */
   handoffTargetId?: string;
@@ -85,7 +84,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
     checks = [],
     details = [],
     inspectedRevision =
-      owner.receipt.generation === "not_committed"
+      owner.record.generation === "not_committed"
         ? owner.plan.operation.expectedCurrentRevisionId
         : owner.plan.operation.revisionId,
     allIds = [
@@ -112,7 +111,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
       return response.stdout;
     },
     keyed = (value: string | Buffer) =>
-      createHmac("sha256", options.privateKey.export({ type: "pkcs8", format: "der" }))
+      createHash("sha256")
         .update("openmapx-private-maintenance-runtime-v1\0")
         .update(value)
         .digest("hex");
@@ -131,10 +130,10 @@ export async function inspectMaintenanceDockerRuntime(options: {
     if (!spec || current.length !== 1 || original.length !== 1 || current[0]!.state !== "running")
       throw Error("Original applied container expectation unavailable");
     const frozenImage =
-        id === "data-manager" && owner.receipt.generation === "committed"
+        id === "data-manager" && owner.record.generation === "committed"
           ? owner.plan.coordinatorImage
           : undefined,
-      release = owner.receipt.generation === "committed" ? owner.plan.release : undefined,
+      release = owner.record.generation === "committed" ? owner.plan.release : undefined,
       releaseReference = release?.serviceImages[id as keyof typeof release.serviceImages],
       download = release?.downloads.images.find((value) => value.reference === releaseReference),
       releaseImage =
@@ -148,8 +147,16 @@ export async function inspectMaintenanceDockerRuntime(options: {
               })
             )[0]
           : undefined,
+      // A committed generation records the image its containers run.
+      recorded =
+        owner.record.generation === "committed"
+          ? services.readGenerationImageIds(options.stack.infraDir, inspectedRevision)[id]
+          : undefined,
       expectedImageId =
-        releaseImage?.imageId ?? frozenImage?.imageId ?? original[0]!.provenance.imageId;
+        recorded ??
+        releaseImage?.imageId ??
+        frozenImage?.imageId ??
+        original[0]!.provenance.imageId;
     if (
       (frozenImage && spec.image !== frozenImage.imageReference) ||
       (release && (!download || !releaseImage || spec.image !== releaseReference))
@@ -334,7 +341,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
       expectedImageId,
     });
     // Every mount and mounted-file byte comparison above still runs. Bind
-    // their complete canonical evidence without repeating it in the signed owner.
+    // their complete canonical evidence without repeating it in the maintenance record.
     details.push({
       containerId: owned.containerId,
       mountCount: mounts.length,

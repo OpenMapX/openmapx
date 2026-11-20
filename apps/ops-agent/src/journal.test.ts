@@ -182,6 +182,32 @@ describe("durable ops job journal", () => {
     ]);
   });
 
+  it("marks a job a restart ended as interrupted, never one that failed by itself", async () => {
+    const path = join(root(), "data", "jobs-v1.json");
+    const journal = await openOpsJobJournal(path);
+    await journal.replace([
+      job({ state: "running" }),
+      job({
+        operationId: "job1_journalOperation1",
+        operationKey: "opk1_journalOperation1",
+        state: "failed",
+        errorClass: "recovery_required",
+        terminalAt: "2026-08-23T18:01:00.000Z",
+      }),
+    ]);
+    const restored = await openOpsJobJournal(path);
+    expect(
+      restored.records().map((entry) => [entry.operationId, entry.state, entry.interrupted]),
+    ).toEqual([
+      ["job1_journalOperation0", "failed", true],
+      ["job1_journalOperation1", "failed", undefined],
+    ]);
+    // Only a failed job carries the mark.
+    await expect(
+      restored.replace([{ ...job({ state: "running" }), interrupted: true }]),
+    ).rejects.toThrow();
+  });
+
   it("fails closed for symlink, hardlink, corrupt, and oversized journal files", async () => {
     const base = root();
     const target = join(base, "target");

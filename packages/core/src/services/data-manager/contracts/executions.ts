@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { controlOriginSchema } from "../../../ops/control-root-key";
 import { executionRefSchema } from "../../../ops/execution-ref";
 import { processDiagnosticsSchema } from "../../../ops/job-evidence";
 import { hardlinkApplySummarySchema } from "../../../ops/service-results";
@@ -41,12 +42,6 @@ const ordinaryInputs = [
   regional("search-index-build"),
   z.strictObject({ kind: z.literal("notable-places-build") }),
 ] as const;
-export const generationHardlinksInputSchema = z.strictObject({
-  kind: z.literal("generation-hardlinks"),
-  revisionId: dataRevisionSchema,
-  planDigest: dataFingerprintSchema,
-  coordinatorMode: dataCoordinatorModeSchema,
-});
 const maintenance = z.discriminatedUnion("action", [
   z.strictObject({ kind: z.literal("transit-maintenance"), action: z.literal("restart-primary") }),
   z.strictObject({
@@ -58,11 +53,53 @@ const maintenance = z.discriminatedUnion("action", [
       .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
   }),
 ]);
+/** Work data-manager runs in its own process. The three traffic kinds are short
+ * and periodic: they hold no agent lease and run beside other executions. The
+ * others are exclusive like every durable kind. */
+export const LOCAL_DATA_EXECUTION_KINDS = [
+  "traffic-live",
+  "traffic-maintenance",
+  "traffic-predicted",
+  "transit-proposal",
+  "data-reload",
+  "ambient-publication",
+  "generation-link",
+] as const;
+export type LocalDataExecutionKind = (typeof LOCAL_DATA_EXECUTION_KINDS)[number];
+export const SHORT_DATA_EXECUTION_KINDS: readonly string[] = [
+  "traffic-live",
+  "traffic-maintenance",
+  "traffic-predicted",
+] satisfies LocalDataExecutionKind[];
+const localInputs = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("traffic-live") }),
+  z.strictObject({
+    kind: z.literal("traffic-maintenance"),
+    task: z.enum(["extract-startup", "extract-guard", "ways-to-edges"]),
+  }),
+  z.strictObject({ kind: z.literal("traffic-predicted") }),
+  z.strictObject({ kind: z.literal("transit-proposal"), proposalId: z.uuid() }),
+  z.strictObject({ kind: z.literal("data-reload") }),
+  z.strictObject({
+    kind: z.literal("ambient-publication"),
+    action: z.enum(["build", "resume", "discard", "enable", "disable", "rollback"]),
+  }),
+  // A generation's hardlink plan, applied through `/link`. With a lease id it
+  // runs under the lease of the agent or host CLI operation that sent it, or
+  // under the prepared fence of that operation's maintenance; without one it
+  // leases data-manager itself.
+  z.strictObject({
+    kind: z.literal("generation-link"),
+    revisionId: dataRevisionSchema,
+    planDigest: dataFingerprintSchema,
+    leaseId: z.uuid().nullable(),
+  }),
+]);
 export const ordinaryDataExecutionInputSchema = z.discriminatedUnion("kind", ordinaryInputs);
 export const dataExecutionInputSchema = z.union([
   ordinaryDataExecutionInputSchema,
-  generationHardlinksInputSchema,
   maintenance,
+  localInputs,
 ]);
 export type DataExecutionInput = z.output<typeof dataExecutionInputSchema>;
 export function normalizeDataExecutionInput(value: unknown): DataExecutionInput {
@@ -145,7 +182,7 @@ export const dataExecutionResultSchema = z
       metrics: dataExecutionMetricsSchema,
     }),
     z.strictObject({
-      kind: z.literal("generation-hardlinks"),
+      kind: z.literal("generation-link"),
       hardlinks: hardlinkApplySummarySchema,
     }),
     z.strictObject({
@@ -153,6 +190,10 @@ export const dataExecutionResultSchema = z
       action: z.enum(["restart-primary", "reload-feed-proxy"]),
       changed: z.literal(true),
     }),
+    ...LOCAL_DATA_EXECUTION_KINDS.filter(
+      (kind): kind is Exclude<LocalDataExecutionKind, "generation-link"> =>
+        kind !== "generation-link",
+    ).map((kind) => z.strictObject({ kind: z.literal(kind) })),
   ])
   .refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 32 * 1024);
 export type DataExecutionResult = z.infer<typeof dataExecutionResultSchema>;
@@ -177,8 +218,8 @@ export const dataExecutionStatusSchema = z
       "overture-sync",
       "search-index-build",
       "notable-places-build",
-      "generation-hardlinks",
       "transit-maintenance",
+      ...LOCAL_DATA_EXECUTION_KINDS,
     ]),
     status: z.enum([
       "queued",
@@ -201,23 +242,39 @@ export const dataExecutionStatusSchema = z
       value.deadlineAt > value.admittedAt && (!value.result || value.result.kind === value.kind),
   );
 export type DataExecutionStatus = z.infer<typeof dataExecutionStatusSchema>;
+/**
+ * A child the agent or the host CLI runs on data-manager, as the caller its
+ * token authenticated states it. Data-manager cannot read the agent's lease
+ * store, so the caller names the child's lease row and what the row records; a
+ * child of a parent that holds no lease has no lease id, and its parent is
+ * its owner.
+ */
+export const dataControlDelegationSchema = z.strictObject({
+  leaseId: z.uuid().nullable(),
+  childKey: z.uuid(),
+  owner: executionRefSchema,
+  parent: executionRefSchema,
+  execution: executionRefSchema,
+  kind: z.string().min(1).max(128),
+  phase: z.string().min(1).max(64),
+  targets: z
+    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+    .max(256)
+    .refine((values) => values.every((value, i) => i === 0 || (values[i - 1] ?? value) < value)),
+  origin: controlOriginSchema,
+});
+export type DataControlDelegation = z.infer<typeof dataControlDelegationSchema>;
 export const startDataExecutionSchema = z.strictObject({
   operationKey: dataOperationKeySchema,
   input: ordinaryDataExecutionInputSchema,
   requestedDeadlineAt: dataEpochSchema.optional(),
+  delegation: dataControlDelegationSchema.optional(),
 });
+/** A generation's hardlink plan as the agent and the fixed lifecycles freeze it. */
 export const generationHardlinksPlanSchema = z.strictObject({
   plan: z.array(hardlinkEntrySchema).max(256),
   prune: z.literal(true),
 });
-export const startGenerationHardlinksExecutionSchema = z
-  .strictObject({
-    operationKey: dataOperationKeySchema,
-    requestedDeadlineAt: dataEpochSchema,
-    input: generationHardlinksInputSchema,
-    plan: generationHardlinksPlanSchema,
-  })
-  .refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 1024 * 1024);
 export const dataExecutionIdentitySchema = z.strictObject({
   id: z.uuid(),
   operationKey: dataOperationKeySchema,

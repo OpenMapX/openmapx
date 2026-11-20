@@ -1,6 +1,5 @@
-/** Server-capable terminal receipt digests and the maintenance recovery observation. */
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { z } from "zod";
+/** Server-capable terminal receipt digests. */
+import { createHash } from "node:crypto";
 import { canonicalJson } from "./canonical-json";
 import { type OpsJobStatus, parseBoundedOpsResult, parseOpsJobStatus } from "./contract";
 
@@ -29,47 +28,4 @@ export function controlTerminalReceiptDigest(input: OpsJobStatus): string {
     .update("openmapx-control-terminal-receipt-v1\0")
     .update(canonicalJson(fields))
     .digest("hex");
-}
-/** Observation only: this never authorizes forward work or changes the failed
- * canonical. A newer API must not mistake an older agent's 200 for recovery. */
-const maintenanceRecoveryProofSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal("configuration-maintenance-contained"),
-  operationId: z.string().regex(/^job1_[A-Za-z0-9_-]{16,64}$/),
-  operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  terminalDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  maintenanceId: z.uuid(),
-  candidateId: z.uuid(),
-  receiverEvidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  releasedAt: z.number().int().positive().safe(),
-});
-type MaintenanceRecoveryProof = z.infer<typeof maintenanceRecoveryProofSchema>;
-const recoveryDomain = "openmapx-maintenance-recovery-observation-v1\0";
-export function signMaintenanceRecoveryProof(
-  token: string,
-  input: MaintenanceRecoveryProof,
-): string {
-  const payload = Buffer.from(canonicalJson(maintenanceRecoveryProofSchema.parse(input))).toString(
-    "base64url",
-  );
-  return `${payload}.${createHmac("sha256", token).update(recoveryDomain).update(payload).digest("base64url")}`;
-}
-export function verifyMaintenanceRecoveryProof(
-  token: string,
-  proof: string,
-): MaintenanceRecoveryProof {
-  if (proof.length > 4096 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(proof))
-    throw Error("Invalid maintenance recovery observation");
-  const [payload, signature] = proof.split(".") as [string, string],
-    expected = createHmac("sha256", token).update(recoveryDomain).update(payload).digest(),
-    supplied = Buffer.from(signature, "base64url");
-  if (supplied.length !== expected.length || !timingSafeEqual(expected, supplied))
-    throw Error("Invalid maintenance recovery observation");
-  const fields = maintenanceRecoveryProofSchema.parse(
-    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(payload, "base64url"))),
-  );
-  if (Buffer.from(canonicalJson(fields)).toString("base64url") !== payload)
-    throw Error("Noncanonical maintenance recovery observation");
-  return fields;
 }

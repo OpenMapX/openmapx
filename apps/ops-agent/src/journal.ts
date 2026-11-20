@@ -1,9 +1,15 @@
 import { randomBytes } from "node:crypto";
-import { constants, realpathSync } from "node:fs";
+import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
-import { type ControlAdoption, controlAdoptionSchema } from "@openmapx/core/build-artifacts";
+import { basename, dirname, join } from "node:path";
 import {
+  type JournalExecution,
+  journalExecutionSchema,
+  type LeaseChildRef,
+  leaseChildRefSchema,
+} from "@openmapx/core/build-artifacts";
+import {
+  canonicalJson,
   OPS_KIND_POLICIES,
   OPS_PROTOCOL_VERSION,
   OPS_PUBLIC_ERROR_MESSAGES,
@@ -20,10 +26,8 @@ import {
   parseBoundedOpsResult,
   processDiagnosticsSchema,
   type RetainedExecutionAdmission,
-  validateRetainedConfigurationMaintenanceRecoveryControl,
   validateRetainedExecutionAdmission,
 } from "@openmapx/core/ops";
-import { services as coreServices } from "@openmapx/core/server";
 
 /** The file keeps its jobs-v1.json name; its contents are format version 2. */
 const JOURNAL_FILE_VERSION = 2;
@@ -47,7 +51,8 @@ const ERROR_CLASSES = new Set<OpsErrorClass>(
 );
 
 export interface PersistedOpsJob {
-  controlAdoption?: ControlAdoption;
+  /** A data-manager child: its row in the lease store, under data-manager's lease. */
+  leaseChild?: LeaseChildRef;
   executionVersion: 2;
   requestVersion: typeof OPS_PROTOCOL_VERSION;
   admittedAt: number;
@@ -76,36 +81,27 @@ export interface PersistedOpsJob {
   // Durable proof that a cancellation request moved this job into
   // `termination_pending`, retained through its terminal state.
   terminationRequestedAt?: string;
+  /** The job failed because the agent stopped while it ran, not by its own
+   * failure: its outcome is unknown. */
+  interrupted?: true;
+  /** The execution this operation runs as: what its admission adds to the
+   * operation, when its effect started, its settlement and its children. */
+  execution?: JournalExecution;
 }
 
 export interface OpsJobJournal {
   records(): readonly PersistedOpsJob[];
   replace(records: readonly PersistedOpsJob[]): Promise<void>;
 }
-const productionJournalIndexes = new WeakMap<
-  OpsJobJournal,
-  {
-    path: string;
-    read(): readonly PersistedOpsJob[];
-  }
->();
-/** A bounded locator view of this actual journal, never source authority. */
-export function readProductionCoordinatorJournalIndex(journal: OpsJobJournal, dataRoot: string) {
-  const owned = productionJournalIndexes.get(journal);
-  if (
-    !owned ||
-    owned.path !== coreServices.agentStatePaths(dirname(realpathSync(dataRoot))).journal
-  )
-    throw Error("Actual fixed ops-agent journal required");
-  const records = owned.read();
-  if (records.length > OPS_JOB_JOURNAL_MAX_ENTRIES) throw Error("Ops journal index limit");
-  return records;
-}
-
 export interface OpenOpsJobJournalOptions {
   now?: () => Date;
   maxEntries?: number;
   maxBytes?: number;
+}
+
+/** The part of a row's execution fixed at admission. */
+function admissionOf({ progress: _progress, ...admission }: JournalExecution) {
+  return admission;
 }
 
 function exactKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
@@ -127,7 +123,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   if (
     !exactKeys(raw, [
       "executionVersion",
-      "controlAdoption",
+      "leaseChild",
       "requestVersion",
       "admittedAt",
       "deadlineAt",
@@ -151,6 +147,8 @@ function parseJob(value: unknown): PersistedOpsJob {
       "errorClass",
       "terminalAt",
       "terminationRequestedAt",
+      "interrupted",
+      "execution",
     ]) ||
     raw.executionVersion !== 2 ||
     raw.requestVersion !== OPS_PROTOCOL_VERSION ||
@@ -168,12 +166,14 @@ function parseJob(value: unknown): PersistedOpsJob {
     !iso(raw.updatedAt) ||
     (raw.terminalAt !== undefined && !iso(raw.terminalAt)) ||
     (raw.terminationRequestedAt !== undefined && !iso(raw.terminationRequestedAt)) ||
+    (raw.interrupted !== undefined && (raw.interrupted !== true || raw.state !== "failed")) ||
     (raw.errorClass !== undefined &&
       (typeof raw.errorClass !== "string" || !ERROR_CLASSES.has(raw.errorClass as OpsErrorClass)))
   ) {
     throw new Error("invalid");
   }
-  if (raw.controlAdoption !== undefined) controlAdoptionSchema.parse(raw.controlAdoption);
+  if (raw.leaseChild !== undefined) leaseChildRefSchema.parse(raw.leaseChild);
+  if (raw.execution !== undefined) raw.execution = journalExecutionSchema.parse(raw.execution);
   const operation = opsOperationSchema.parse(raw.operation);
   if (
     opsOperationFingerprint(operation) !== raw.operationFingerprint ||
@@ -181,19 +181,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   ) {
     throw new Error("invalid");
   }
-  if (
-    operation.kind === "configurationMaintenance.settle" ||
-    (operation.kind === "configurationMaintenance.decide" && operation.decision === "abandon")
-  )
-    validateRetainedConfigurationMaintenanceRecoveryControl(
-      operation,
-      raw as unknown as RetainedExecutionAdmission,
-    );
-  else
-    validateRetainedExecutionAdmission(
-      operation.kind,
-      raw as unknown as RetainedExecutionAdmission,
-    );
+  validateRetainedExecutionAdmission(operation.kind, raw as unknown as RetainedExecutionAdmission);
   if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
   if (raw.diagnostics !== undefined) processDiagnosticsSchema.parse(raw.diagnostics);
   if (raw.progressResult !== undefined) {
@@ -226,19 +214,7 @@ function parseJob(value: unknown): PersistedOpsJob {
       throw new Error("invalid");
     parseBoundedOpsResult(operation.kind, raw.result);
   } else if (state === "failed" || state === "timed_out") {
-    // This finite metadata control can retain an accepted intent without any
-    // conclusive completion. Startup rejoins it to the authenticated private
-    // owner before lookup; parsing this projection grants no completion/ACK.
-    const unresolvedSettle =
-      operation.kind === "configurationMaintenance.settle" &&
-      state === "failed" &&
-      raw.errorClass === "recovery_required" &&
-      raw.failureResult === undefined;
-    if (
-      raw.result !== undefined ||
-      raw.errorClass === undefined ||
-      (raw.terminalAt === undefined && !unresolvedSettle)
-    )
+    if (raw.result !== undefined || raw.errorClass === undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
   } else if (
     raw.result !== undefined ||
@@ -390,7 +366,10 @@ export async function openOpsJobJournal(
           retained.operationFingerprint !== record.operationFingerprint ||
           retained.requestedDeadlineAt !== record.requestedDeadlineAt ||
           retained.deploymentBudgetMs !== record.deploymentBudgetMs ||
-          JSON.stringify(retained.parent) !== JSON.stringify(record.parent))
+          JSON.stringify(retained.parent) !== JSON.stringify(record.parent) ||
+          (retained.execution &&
+            canonicalJson(admissionOf(retained.execution)) !==
+              canonicalJson(record.execution ? admissionOf(record.execution) : null)))
       )
         throw Error("Retained execution identity is immutable");
     }
@@ -461,6 +440,7 @@ export async function openOpsJobJournal(
                 updatedAt: timestamp,
                 terminalAt: timestamp,
                 errorClass: "recovery_required" as const,
+                interrupted: true as const,
               }
             : entry,
         ),
@@ -471,9 +451,5 @@ export async function openOpsJobJournal(
   } catch {
     throw new Error("Ops job journal is unavailable");
   }
-  productionJournalIndexes.set(journal, {
-    path: join(realpathSync(dirname(path)), basename(resolve(path))),
-    read: () => current.map((entry) => structuredClone(entry)),
-  });
   return journal;
 }

@@ -23,7 +23,7 @@ vi.mock("../admin-job-ops", () => ({
   ),
 }));
 vi.mock("../admin-job-projection", () => ({
-  readProjection: (result: { opsProjection: unknown }) => result.opsProjection,
+  readProjection: (protocol: { operations: unknown }) => protocol.operations,
 }));
 
 import { executeAdminJobOperation } from "../admin-job-ops";
@@ -51,8 +51,8 @@ function jobContext(): JobContext {
     log: vi.fn(),
     setProgress: vi.fn(),
     checkpoint: vi.fn(),
-    checkpointResult: {
-      opsProjection: {
+    protocol: {
+      operations: {
         operations,
         steps: Object.fromEntries(
           Object.keys(operations).map((key) => [key, { operationKey: key }]),

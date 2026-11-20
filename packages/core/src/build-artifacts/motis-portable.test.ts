@@ -204,7 +204,7 @@ it.each([false, true])(
       inode: lstatSync(join(dataRoot, "motis", name)).ino,
       target: readlinkSync(join(dataRoot, "motis", name)),
     }));
-    await control.provisionControlInstallation(infraDir);
+    await control.provisionControlDirectories(infraDir);
     const ids = ["motis", "motis-feed-proxy", "motis-staging"],
       installation = control.openControlInstallation({
         infraDir,
@@ -241,7 +241,7 @@ it.each([false, true])(
             deadlineAt,
           }),
         },
-        authority = control.retainAdmittedControlExecution(installation, {
+        authority = await control.retainAdmittedControlExecution(installation, {
           execution,
           kind: operation.kind,
           operation,

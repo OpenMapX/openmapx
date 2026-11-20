@@ -36,9 +36,7 @@ describe("reconciling an execution closed by a restore", () => {
       const fence = vi.fn().mockResolvedValue(undefined);
       const store = {
         controlJournal: {
-          assertOwnedProxyRecoverySettled: vi.fn().mockRejectedValue(new Error("no evidence")),
-          repairTerminal: vi.fn().mockRejectedValue(new Error("no evidence")),
-          publishTerminal: vi.fn().mockRejectedValue(new Error("no evidence")),
+          verifyContainedTerminal: vi.fn().mockRejectedValue(new Error("no evidence")),
           fenceUnsettledProxyRecovery: fence,
         },
         listUnsettled: async () => [closedByRestore(status)],

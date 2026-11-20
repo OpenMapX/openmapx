@@ -463,6 +463,13 @@
       "when": 1794849042987,
       "tag": "0065_configuration_fence_drop_certificate",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795144783023,
+      "tag": "0066_update_system_job_rows",
+      "breakpoints": true
     }
   ]
 }

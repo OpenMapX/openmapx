@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
-import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createDataManagerTransport } from "@openmapx/core/data-manager-sdk";
 import * as ops from "@openmapx/core/ops";
@@ -44,7 +43,7 @@ it("starts an unavailable coordinator without recreation under actual existing o
           deadlineAt,
         }),
       };
-    const authority = control.retainAdmittedControlExecution(installation, {
+    const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       operation,
       kind: operation.kind,

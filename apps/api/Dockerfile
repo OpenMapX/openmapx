@@ -253,7 +253,7 @@ COPY packages/core/tsconfig.json ./packages/core/
 # root-owned, world-writable and sticky, like /tmp, so the API's uid creates
 # its own 0700 directory inside (see private-volume-directory.ts). Only the
 # API mounts it.
-RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config \
+RUN mkdir -p /app/custom_integrations \
       /var/lib/openmapx/erasure /app/infra/docker/.runtime-recovery && \
     chmod 1777 /app/infra/docker/.runtime-recovery
 USER node

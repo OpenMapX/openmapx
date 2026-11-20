@@ -227,7 +227,7 @@ export const artifactTransferResultSchemas = {
     .strictObject({
       claim: artifactStageClaimSchema,
       settlement: stageClaimSettlementSchema.nullable(),
-      /** Original signed publication and released-root observation, never a transfer-state inference. */
+      /** Original recorded publication and released-root observation, never a transfer-state inference. */
       publication: artifactPublicationResultSchema.optional(),
       validation: transferStageSchema.optional(),
     })

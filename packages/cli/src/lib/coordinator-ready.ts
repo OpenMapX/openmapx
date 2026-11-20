@@ -19,9 +19,9 @@ export async function ensureCliCoordinatorReady(options: {
   const authority = services.assertVerifiedLifecycleOwnership(options.ownership);
   if (!options.ownership.lease.serviceIds.includes("data-manager"))
     throw Error("Coordinator target ownership required");
-  const forward = () => {
-    assertControlExecutionForward(authority);
-    assertArtifactTargetLeaseForward(options.ownership.lease);
+  const forward = async () => {
+    await assertControlExecutionForward(authority);
+    await assertArtifactTargetLeaseForward(options.ownership.lease);
   };
   const ready = async () => {
     try {
@@ -30,17 +30,17 @@ export async function ensureCliCoordinatorReady(options: {
       return false;
     }
   };
-  forward();
+  await forward();
   if (await ready()) return;
   if (options.mode !== "ensure-running") throw Error("Configuration coordinator unavailable");
-  forward();
+  await forward();
   const code = await dockerComposeStream(["up", "-d", "--no-recreate", "data-manager"]);
   if (code !== 0) throw Error("Configuration coordinator Start failed");
   const until = Math.min(Date.now() + 30000, authority.execution.deadlineAt);
   while (!(await ready())) {
-    forward();
+    await forward();
     if (Date.now() >= until) throw Error("Configuration coordinator unavailable");
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  forward();
+  await forward();
 }

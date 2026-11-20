@@ -351,10 +351,9 @@ describe("per-caller route allowlist", () => {
   it("keeps the configuration fence and the hardlink receivers from the API's token", async () => {
     for (const operationId of [
       "prepareDataConfigurationFence",
-      "recoverUnadmittedConfigurationPreparation",
       "inspectDataConfigurationFence",
       "settleDataConfigurationFence",
-      "startGenerationHardlinksExecution",
+      "link",
     ] as const)
       expect(DATA_MANAGER_API_ROUTES[operationId], operationId).toBe(false);
     const { app } = await contractApp();
@@ -425,33 +424,4 @@ describe("per-caller route allowlist", () => {
       await app.close();
     }
   });
-});
-
-it("retains the durable-receiver prerequisite for internal control headers", async () => {
-  const app = await buildApp();
-  try {
-    for (const name of ["x-openmapx-control-delegation", "x-openmapx-parent-execution"]) {
-      for (const value of ["", "not-yet-admitted"]) {
-        const response = await app.inject({
-          url: "/protected",
-          headers: { authorization: `Bearer ${TOKEN}`, [name]: value },
-        });
-        expect(response.statusCode).toBe(503);
-      }
-      expect(
-        (
-          await app.inject({
-            url: "/protected",
-            headers: { authorization: `Bearer ${TOKEN}`, [name]: "x".repeat(4097) },
-          })
-        ).statusCode,
-      ).toBe(403);
-    }
-    expect(
-      (await app.inject({ url: "/protected", headers: { authorization: `Bearer ${TOKEN}` } }))
-        .statusCode,
-    ).toBe(200);
-  } finally {
-    await app.close();
-  }
 });

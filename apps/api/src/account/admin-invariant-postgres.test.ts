@@ -428,7 +428,7 @@ dbDescribe("atomic last administrator protection", () => {
       status: "running",
       createdBy: owner.id,
       payload: { operationKey },
-      result: { _immediateActorId: owner.id },
+      protocol: { immediate: { actorId: owner.id, intentDigest: "0".repeat(64) } },
     });
     await fixture.db.insert(transitCredentialPreview).values({
       id: previewId,

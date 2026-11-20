@@ -8,8 +8,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createControlRootOperationKey } from "../ops/control-root-key";
 import { executionFingerprint } from "../ops/execution-identity";
 import { DEFAULT_ARTIFACT_ARCHIVE_LIMITS, validateBuildBundle, writeBuildBundle } from "./archive";
-import * as control from "./control-authority";
 import { acquireArtifactTargetLease, closeArtifactTargetLeaseHandle } from "./target-lease";
+import * as control from "./test-fixtures/control";
 
 vi.mock("node:fs", async (original) => {
   const actual = await original<typeof import("node:fs")>();
@@ -75,7 +75,7 @@ async function fixture() {
     limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
     signal: new AbortController().signal,
   });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const installation = control.openControlInstallation({
     infraDir: root,
     role: "host-cli",
@@ -103,7 +103,7 @@ async function fixture() {
       deadlineAt,
       fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
     };
-  const authority = control.retainAdmittedControlExecution(installation, {
+  const authority = await control.retainAdmittedControlExecution(installation, {
       execution,
       kind: operation.kind,
       operation,
@@ -180,13 +180,7 @@ it("rejects undeclared staged files before beginning publication", async () => {
     reason: "invalid",
   });
   expect(readFileSync(join(f.dataRoot, "osrm-graph/old"), "utf8")).toBe("old graph");
-  expect(
-    control.readPrivateRecord(
-      control.executionAuthorityState(f.authority).installation,
-      "effect-started",
-      `${f.lease.owner.operationKey}.json`,
-    ),
-  ).toBeNull();
+  expect(await control.executionEffectStarted(f.authority)).toBe(false);
 }, 60000);
 
 it("restores directories and old metadata when build-record publication fails", async () => {

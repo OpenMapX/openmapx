@@ -1,6 +1,6 @@
 /** Concrete Full Update adapter shared by standalone and fixed CLI entrypoints. */
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import type { DataManagerTransport } from "@openmapx/core/data-manager-sdk";
@@ -16,7 +16,6 @@ import { ensureCliCoordinatorReady } from "./coordinator-ready";
 import { runOwnedDataStep } from "./data-execution";
 import { DataUpdateFailure, runDataUpdate } from "./data-update";
 import { cliAcquisitionOptions } from "./execution-deadline";
-import { readGeneratedHardlinkPlan } from "./hardlinks";
 import { log } from "./output";
 import { repoPaths } from "./paths";
 import { buildServices, ServiceBuildExecutionError } from "./service-builds";
@@ -32,8 +31,7 @@ export async function runCliDataUpdate(options: {
     installation: control.ControlInstallation | undefined;
   if (!context) {
     mkdirSync(join(paths.infraDir, "data"), { recursive: true });
-    if (!existsSync("/run/secrets/openmapx-control-verifiers"))
-      await control.provisionControlInstallation(paths.infraDir);
+    control.provisionControlDirectories(paths.infraDir);
     const registry = new services.ServiceRegistry({ rootDir: paths.root });
     await registry.load();
     const targets = registry
@@ -79,14 +77,14 @@ export async function runCliDataUpdate(options: {
         serviceIds: targets,
         defaultRegion: process.env.OPENMAPX_REGION,
       });
-      const authority = control.retainAdmittedControlExecution(installation, {
+      const authority = await control.retainAdmittedControlExecution(installation, {
         execution,
         operation,
         kind: operation.kind,
         admittedAt,
         requestedDeadlineAt: deadlineAt,
         serviceIds: targets,
-        reservations: [...plan.dataChildren, ...plan.finalizationChildren],
+        reservations: plan.dataChildren,
       });
       control.retainDataUpdatePlan(authority, plan);
       return await withHostDataControlContext(installation, authority, () =>
@@ -160,14 +158,6 @@ export async function runCliDataUpdate(options: {
         async prepare({ coordinatorMode }) {
           if (!lease) throw Error("Full Update finalization lease required");
           control.assertDataUpdateSources(authority);
-          control.retainGenerationHardlinksOwnerPlan(authority, {
-            version: 1,
-            parent: authority.execution,
-            revisionId: plan.finalRevisionId,
-            coordinatorMode,
-            plan: plan.hardlinks,
-            reservation: plan.finalizationChildren[0] ?? null,
-          });
           return services.withConfigurationGenerationWriter(
             paths.infraDir,
             (writer) =>
@@ -175,7 +165,9 @@ export async function runCliDataUpdate(options: {
                 { writer, lease: lease!, authority },
                 async (ownership) => {
                   control.assertDataUpdateSources(authority);
-                  if (plan.hardlinks.plan.length) {
+                  if (
+                    control.readGenerationHardlinkPlan(paths.infraDir, plan.revisionId).plan.length
+                  ) {
                     const registry = new services.ServiceRegistry({ rootDir: paths.root });
                     await registry.load();
                     const selected = services.readAppliedServiceIds(
@@ -198,16 +190,12 @@ export async function runCliDataUpdate(options: {
                     },
                     writer,
                   );
-                  if (
-                    ops.canonicalJson(readGeneratedHardlinkPlan().plan) !==
-                    ops.canonicalJson(plan.hardlinks.plan)
-                  )
-                    throw Error("Full Update hardlink plan changed");
-                  const hardlinks = await control.executeOwnedGenerationHardlinks({
-                    authority,
-                    lease: lease!,
+                  const hardlinks = await control.applyGenerationLinks({
                     infraDir: paths.infraDir,
+                    revisionId: rendered.revisionId,
                     transport: options.transport,
+                    issuer: authority.execution,
+                    leaseId: lease!.leaseId,
                     signal: cliAcquisitionOptions().signal,
                   });
                   return { revisionId: rendered.revisionId, coordinatorMode, hardlinks };
@@ -219,7 +207,7 @@ export async function runCliDataUpdate(options: {
       },
     );
     if (!managed) {
-      control.retainControlEffectReceipt(authority, {
+      await control.retainControlEffectReceipt(authority, {
         outcome: "committed",
         publication: "committed",
         receipt: { kind: "ops-result", result: { completed: true, dataWorkflow: receipt } },
@@ -227,7 +215,7 @@ export async function runCliDataUpdate(options: {
       if (lease) {
         await control.settleArtifactTargetLeaseChild(
           lease,
-          control.verifyControlEffectSettlement(context.installation, authority.execution),
+          await control.verifyControlEffectSettlement(context.installation, authority.execution),
         );
         await releaseOwned(lease);
       }

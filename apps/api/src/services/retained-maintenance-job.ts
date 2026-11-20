@@ -1,12 +1,10 @@
 /** Finite queued maintenance requests, retained in the existing admin job table. */
-import { createHmac, randomUUID } from "node:crypto";
-import { canonicalJson, readOpsTokenFile } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
+import { createHash, randomUUID } from "node:crypto";
+import { canonicalJson } from "@openmapx/core/ops";
 import { and, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-import { maintenanceJobAuthorization } from "./retained-maintenance-authorization";
 // Service/backup additions share admission identity only. Their existing
 // operation observers and coordinator recovery remain unchanged; they are not
 // added to the finite retainedMaintenanceJob handler-replay routing list.
@@ -26,6 +24,12 @@ export type RetainedMaintenanceJobType =
   | "service.bulk"
   | "backup.operation";
 export class MaintenanceRequestConflict extends Error {}
+function maintenanceRequestDigest(type: string, payload: unknown, actorId: string): string {
+  return createHash("sha256")
+    .update("openmapx-maintenance-request-v1\0")
+    .update(canonicalJson({ type, payload, actorId }))
+    .digest("hex");
+}
 export async function retainMaintenanceJob(
   type: RetainedMaintenanceJobType,
   payload: Record<string, unknown>,
@@ -35,11 +39,7 @@ export async function retainMaintenanceJob(
 ): Promise<string> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
     throw new MaintenanceRequestConflict("Invalid mutation key");
-  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
-  const digest = createHmac("sha256", token)
-    .update("openmapx-maintenance-request-v1\0")
-    .update(canonicalJson({ type, payload: intent, actorId }))
-    .digest("hex");
+  const digest = maintenanceRequestDigest(type, intent, actorId);
   return db.transaction(async (tx) => {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`maintenance:${actorId}:${key}`},0))`,
@@ -70,18 +70,7 @@ export async function retainMaintenanceJob(
       createdBy: dbActorId(actorId),
       payload: {
         ...payload,
-        _maintenanceRequest: {
-          actorId,
-          key,
-          digest,
-          authorization: maintenanceJobAuthorization(token, {
-            jobId: id,
-            type,
-            payload,
-            actorId,
-            key,
-          }),
-        },
+        _maintenanceRequest: { actorId, key, digest },
       },
     });
     return id;
@@ -98,11 +87,7 @@ export async function lookupMaintenanceJob(
 ): Promise<string | null> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
     throw new MaintenanceRequestConflict("Invalid mutation key");
-  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
-    digest = createHmac("sha256", token)
-      .update("openmapx-maintenance-request-v1\0")
-      .update(canonicalJson({ type, payload, actorId }))
-      .digest("hex");
+  const digest = maintenanceRequestDigest(type, payload, actorId);
   const rows = await db
     .select()
     .from(adminJob)

@@ -13,11 +13,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   opsOperationFingerprint,
-  sealTrustedConfigurationSnapshot,
+  prepareConfigurationCandidate,
+  type TrustedConfigurationPayload,
   type OpsOperation,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { provisionControlInstallation } from "@openmapx/core/build-artifacts";
+import { provisionControlDirectories } from "@openmapx/core/build-artifacts";
 import { CommunityRepositoryStore } from "../community-repositories";
 import type { DockerRuntimeOptions } from "../docker-runtime";
 import { createProductionRegistryResourceClaimer } from "../policy";
@@ -27,7 +28,8 @@ import {
   serviceActionAuthority,
 } from "../production-runtime";
 import { createTrustedConfigurationAuthorityLoader } from "../trusted-configuration-authority";
-import { createFileTrustedOpsDataSource } from "../trusted-config-source";
+import { configurationCandidateSource } from "../configuration-candidate-source";
+import { configurationPayloadSource } from "../data-transit-resource-source";
 import { dispatchOpsOperation, type OpsRuntime } from "../runtime";
 import { testExecution } from "./execution";
 import { createDefaultFixedCli, inspectReleaseAuthority } from "../administrative-runtime";
@@ -103,6 +105,9 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       serviceSecrets: [],
     },
     ownedServiceGenerations: [],
+    // The host's one local image, recorded as the CLI records what is present.
+    imageIds: async (references) =>
+      Object.fromEntries(Object.keys(references).map((id) => [id, `sha256:${"b".repeat(64)}`])),
   });
   services.writeServiceSelectionFile(infraDir, options.selectedRoots ?? [...(withCoordinator ? ["data-manager", "motis"] : ["motis"]),...(options.extraServiceIds??[])]);
   const composePath = services.currentConfigurationFile(infraDir, services.GENERATED_COMPOSE_FILE);
@@ -144,7 +149,10 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const unpulledImages = new Set<string>();
   let registryDown = false;
   const optionsForHelperLaunchResponseLoss = options.configurationHelperLaunchResponseLoss;
-  const helperContainers = new Map<string, unknown>();
+  const helperContainers = new Map<string, { Id: string; Image: string; State: { Running: boolean; ExitCode: number }; Config: { Labels: Record<string, string> } }>();
+  // Runs the helper a `docker run` started; resolves with its exit code.
+  let helperProcess: ((env: Record<string, string>) => Promise<number>) | undefined;
+  const helperById = (id: string) => [...helperContainers.values()].find((value) => value.Id === id);
   const releaseMetadata = options.configurationReleaseMetadata;
   const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args, options) => {
     calls.push([...args]);
@@ -154,9 +162,27 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       if (!name.startsWith("openmapx-configuration-handoff-") || !label.startsWith("openmapx.configuration-handoff=")) throw Error("Unexpected helper launch");
       if (helperContainers.has(name)) throw Error("Duplicate helper launch");
       const Id = "e".repeat(64);
-      helperContainers.set(name, { Id, Image: imageId, Config: { Labels: { "openmapx.configuration-handoff": label.split("=")[1] } } });
+      const container = { Id, Image: imageId, State: { Running: helperProcess !== undefined, ExitCode: 0 }, Config: { Labels: { "openmapx.configuration-handoff": label.split("=")[1]! } } };
+      helperContainers.set(name, container);
+      if (helperProcess) {
+        const env: Record<string, string> = {};
+        args.forEach((value, index) => {
+          const pair = args[index - 1] === "--env" ? value.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s) : null;
+          if (pair) env[pair[1]!] = pair[2]!;
+        });
+        void helperProcess(env).catch(() => 1).then((code) => {
+          container.State = { Running: false, ExitCode: code };
+        });
+      }
       stdout = Id;
       if (optionsForHelperLaunchResponseLoss) throw Error("Named lost Docker launch response");
+    } else if (args[0] === "ps" && args.includes("--filter")) {
+      const label = args[args.indexOf("--filter") + 1]!.replace(/^label=/, "").split("=");
+      stdout = [...helperContainers.values()].filter((value) => value.Config.Labels[label[0]!] === label[1]).map((value) => value.Id).join("\n");
+    } else if (args[0] === "container" && args[1] === "inspect" && args[3] === "{{json .State}}" && helperById(args[4]!)) {
+      stdout = JSON.stringify(helperById(args[4]!)!.State);
+    } else if (args[0] === "rm" && helperById(args[1]!)) {
+      for (const [name, value] of helperContainers) if (value.Id === args[1]) helperContainers.delete(name);
     } else if (args[0] === "container" && args[1] === "inspect" && helperContainers.has(args.at(-1)!)) {
       stdout = JSON.stringify(helperContainers.get(args.at(-1)!));
     } else if(configurationHelperVersion!==undefined && args[0]==="container" && args[1]==="inspect" && args[2]==="--format" && (["{{.Image}}","{{.Config.User}}","{{json .HostConfig.GroupAdd}}","{{json .Mounts}}"].includes(args[3]??"") || args[3]?.includes("range .Config.Env"))) {
@@ -247,11 +273,8 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     },
   });
   await repositories.recover();
-  const queue = join(root, "trusted-queue");
-  mkdirSync(queue, { mode: 0o700 });
-  mkdirSync(join(queue, ".claimed"), { mode: 0o700 });
   mkdirSync(join(infraDir, "data"), { mode: 0o700, recursive: true });
-  await provisionControlInstallation(infraDir);
+  await provisionControlDirectories(infraDir);
   const token = Buffer.alloc(32, 17).toString("base64url");
   let competingRevisionId: string | undefined;
   const defaultCli = options.defaultCliEntry ? createDefaultFixedCli(root, options.defaultCliEntry) : undefined;
@@ -265,7 +288,8 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       if (options.competeAfterDefaultCli) competingRevisionId = (await services.commitConfigurationGeneration({ infraDir, services: loaded,
         input: { ...services.readAppliedConfiguration(infraDir), domain: "example.test", selectedRoots: withCoordinator ? ["data-manager", "motis"] : ["motis"] } })).revisionId;
     } } : {}),
-    candidateSource: { directory: queue, token, ownerUid: statSync(queue).uid, ownerGid: statSync(queue).gid },
+    candidateSource: configurationCandidateSource(infraDir),
+    apiToken: token,
     docker: {
       execFile,
       fileExists: existsSync,
@@ -276,14 +300,10 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       },
     },
   });
+  mkdirSync(configurationCandidateSource(infraDir).directory, { recursive: true, mode: 0o700 });
   const runtime = await reopenRuntime();
   const authority = await loadAuthority();
-  const trustedData = createFileTrustedOpsDataSource({
-    directory: queue,
-    token,
-    allowedUids: [statSync(queue).uid],
-    expectedGid: statSync(queue).gid,
-  });
+  const trustedData = configurationPayloadSource;
   const createResourceClaimer = (ownerRuntime: OpsRuntime) => createProductionRegistryResourceClaimer({
     services: authority.services.map((s) => ({
       serviceId: s.manifest.id,
@@ -296,7 +316,6 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       const a = await loadAuthority();
       return {
         revisionId: configurationPolicyRevision(a.revisionId),
-        configurationAuthorityRevision: a.revisionId,
         services: a.services.map((s) => ({
           serviceId: s.manifest.id,
           enabled: s.enabled,
@@ -324,53 +343,57 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const context = async (
     operation: OpsOperation,
     signal: AbortSignal = new AbortController().signal,
+    payload?: TrustedConfigurationPayload,
   ) => {
     const claim = await claimer.claim(operation, opsOperationFingerprint(operation), signal, {
       role: "api",
       operationKey: testExecution().operationKey,
     });
     if (!claim) throw new Error("Admission denied");
-    return { execution: testExecution(), signal, emitLog() {}, claim };
+    return {
+      execution: testExecution(),
+      signal,
+      emitLog() {},
+      claim: payload
+        ? { ...claim, capability: { ...claim.capability, trustedConfiguration: payload } }
+        : claim,
+    };
   };
   let counter = 0;
   const select = async (selectedRoots: string[]) => {
     const inspection = { kind: "configuration.sources.inspect" } as const;
     const source = await dispatchOpsOperation(runtime, inspection, await context(inspection));
-    const sealed = sealTrustedConfigurationSnapshot({
+    const payload = {
+      domain: "example.test",
+      selectedRoots,
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    };
+    const sealed = prepareConfigurationCandidate({
       role: "api",
-      token,
       nonce: `nonce_ownership_${String(++counter).padStart(12, "0")}`,
       operationKey: testExecution().operationKey,
-      operationForRevision: (revisionId) => ({
+      operationForRevision: (revisionId, payloadDigest) => ({
         kind: "serviceSelection.apply",
         expectedSourceRevision: source.sourceRevision,
         coordinatorMode: "ensure-running",
         revisionId,
+        payloadDigest,
         expectedCurrentRevisionId: services.currentConfigurationGeneration(infraDir),
       }),
-      payload: {
-        domain: "example.test",
-        selectedRoots,
-        serviceConfigs: [],
-        integrationConfigs: [],
-        serviceSecrets: [],
-      },
+      payload,
     });
-    writeFileSync(join(queue, `${sealed.revisionId}.json`), sealed.bytes, { mode: 0o600 });
-    const ctx = await context(sealed.operation);
-    await ctx.claim.admission?.commit();
-    try {
-      return await dispatchOpsOperation(runtime, sealed.operation, ctx);
-    } finally {
-      await ctx.claim.admission?.release();
-    }
+    const ctx = await context(sealed.operation, undefined, payload);
+    return dispatchOpsOperation(runtime, sealed.operation, ctx);
   };
   const deselect = () => select([]);
   return {
     root,
     cleanupRoot,
-    queue,
     token,
+    /** The agent's own candidate store, which the API fills through typed operations. */
+    candidates: configurationCandidateSource(infraDir).directory,
     infraDir,
     loaded,
     initial,
@@ -395,6 +418,9 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       creatingProcess = value;
     },
     setRemovingProcess(value: typeof removingProcess) { removingProcess = value; },
+    /** Runs the configuration helper each helper `docker run` starts. */
+    setHelperProcess(value: typeof helperProcess) { helperProcess = value; },
+    helperContainers: () => [...helperContainers.values()],
     setInventoryProcess(value: typeof inventoryProcess) {
       inventoryProcess = value;
     },

@@ -23,6 +23,7 @@ import {
   opsKindRequiresControlAuthority,
   parseOpsResult,
   type TrustedConfigurationApplyOperation,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import {
   DAWARICH_TAR_MEDIA_TYPE,
@@ -487,6 +488,7 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
     recoveryTimeoutMs?: number;
     execution?: { requestedDeadlineAt: number };
     parentAssertion?: string;
+    payload?: TrustedConfigurationPayload;
   } = {},
 ): Promise<OpsSubmitResult<K>> {
   let firstError: unknown;
@@ -498,6 +500,7 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
         signal: options.signal,
         execution: options.execution,
         parentAssertion: options.parentAssertion,
+        payload: options.payload,
       });
     } catch (error) {
       firstError = error;
@@ -520,6 +523,7 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
     const recoverySignal = options.signal
       ? AbortSignal.any([AbortSignal.timeout(recoveryTimeoutMs), options.signal])
       : AbortSignal.timeout(recoveryTimeoutMs);
+    let unknownToAgent = false;
     for (;;) {
       try {
         const status = await client.lookup(operation, operationKey, {
@@ -548,14 +552,37 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
         if (lookupClass !== "not_found" && !isTransientTransportError(lookupError)) {
           throw new OpsObservationPending({ kind: operation.kind, operationKey }, "unavailable");
         }
-        if (recoverySignal.aborted)
-          throw new OpsObservationPending({ kind: operation.kind, operationKey }, "transport");
+        unknownToAgent = lookupClass === "not_found";
+        if (recoverySignal.aborted) break;
         try {
           await defaultSleep(250, recoverySignal);
         } catch {
-          throw new OpsObservationPending({ kind: operation.kind, operationKey }, "transport");
+          break;
         }
       }
+    }
+    // A request recorded as attempted that the agent still does not know never
+    // reached it. Send it again under its original key; the agent admits one
+    // operation per key and refuses the key with any other body.
+    if (
+      !options.admissionAlreadyAttempted ||
+      !unknownToAgent ||
+      OPS_KIND_POLICIES[operation.kind].execution !== "async"
+    )
+      throw new OpsObservationPending({ kind: operation.kind, operationKey }, "transport");
+    throwIfAborted(options.signal);
+    try {
+      return await client.execute(operation, {
+        operationKey,
+        signal: options.signal,
+        execution: options.execution,
+        parentAssertion: options.parentAssertion,
+        payload: options.payload,
+      });
+    } catch (error) {
+      if (isTransientTransportError(error))
+        throw new OpsObservationPending({ kind: operation.kind, operationKey }, "transport");
+      translateError(error);
     }
   }
 }

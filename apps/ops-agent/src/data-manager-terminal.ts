@@ -1,32 +1,12 @@
-import {
-  type ControlInstallation,
-  readDataControlTerminalObservation,
-  recordDataControlTerminalObservation,
-} from "@openmapx/core/build-artifacts";
-import { lookupDataExecution, unwrapDataManagerResponse } from "@openmapx/core/data-manager-sdk";
+import { readDataManagerTerminal } from "@openmapx/core/build-artifacts";
 import type { ExecutionRef } from "@openmapx/core/ops";
 import { configurationDataManagerTransport } from "./configuration-hardlinks-runtime";
 
 /**
- * The terminal status of a data-manager execution, as data-manager reports it
- * to the agent over its authenticated route. The first terminal answer is
- * recorded in the agent's own state and every later read returns that record.
+ * The terminal status of a data-manager execution, read from data-manager's
+ * authenticated route on every call. Data-manager keeps the row as long as any
+ * reader can ask for it; a missing or running execution is unknown.
  */
-export async function dataManagerTerminal(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  signal?: AbortSignal,
-) {
-  try {
-    return readDataControlTerminalObservation(installation, execution);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  const status = unwrapDataManagerResponse(
-    await lookupDataExecution(execution.operationKey, {
-      transport: configurationDataManagerTransport(),
-      signal,
-    }),
-  );
-  return recordDataControlTerminalObservation(installation, execution, status);
+export function dataManagerTerminal(execution: ExecutionRef, signal?: AbortSignal) {
+  return readDataManagerTerminal(execution, configurationDataManagerTransport(), signal);
 }

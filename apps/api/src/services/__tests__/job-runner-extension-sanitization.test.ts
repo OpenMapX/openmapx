@@ -19,18 +19,17 @@ const database = vi.hoisted(() => {
       update: vi.fn(() => ({
         set: vi.fn((value: Record<string, unknown>) => {
           const captured = { ...value };
-          if (
-            captured.result &&
-            typeof captured.result === "object" &&
-            "queryChunks" in captured.result
-          ) {
+          // A merged result or protocol is captured as the patch it writes.
+          for (const field of ["result", "protocol"] as const) {
+            const written = captured[field];
+            if (!written || typeof written !== "object" || !("queryChunks" in written)) continue;
             const query = new PgDialect().sqlToQuery(
-              captured.result as Parameters<PgDialect["sqlToQuery"]>[0],
+              written as Parameters<PgDialect["sqlToQuery"]>[0],
             );
             const patch = query.params.find(
               (param) => typeof param === "string" && param.startsWith("{"),
             );
-            if (typeof patch === "string") captured.result = JSON.parse(patch);
+            captured[field] = typeof patch === "string" ? JSON.parse(patch) : null;
           }
           updates.push(captured);
           const rows = [{ id: "unit-owned-job", status: "running", result: captured.result }];
@@ -58,10 +57,12 @@ vi.mock("../admin-job-state", async (actual) => ({
 // Projection-bearing checkpoints are merged by the owned-row transaction, which
 // the PostgreSQL suites cover; this suite records what the runner hands to it.
 vi.mock("../admin-job-checkpoint", () => ({
-  checkpointOwnedAdminJob: vi.fn(async (_id: string, _owner: unknown, result: object) => {
-    database.updates.push({ result });
-    return result;
-  }),
+  checkpointOwnedAdminJob: vi.fn(
+    async (_id: string, _owner: unknown, result: object, operations: object) => {
+      database.updates.push({ result, operations });
+      return { result, protocol: { operations } };
+    },
+  ),
 }));
 vi.mock("../admin-job-ops", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../admin-job-ops")>()),
@@ -101,6 +102,7 @@ type ExecuteJob = (
   type: string,
   payload: Record<string, unknown>,
   checkpoint: Record<string, unknown> | null,
+  protocol: unknown,
   signal: AbortSignal,
 ) => Promise<void>;
 
@@ -145,6 +147,7 @@ describe("extension job durable boundaries", () => {
       "extension.install",
       validPayload,
       null,
+      {},
       new AbortController().signal,
     );
 
@@ -180,18 +183,16 @@ describe("extension job durable boundaries", () => {
         ];
       }),
     );
-    const checkpoint = {
-      opsProjection: {
-        version: 3,
-        steps: {},
-        eventTotal: 0,
-        byteTotal: 0,
-        truncated: false,
-        operations,
-      },
+    const projection = {
+      version: 3 as const,
+      steps: {},
+      eventTotal: 0,
+      byteTotal: 0,
+      truncated: false,
+      operations,
     };
     jobRunner.register("extension.install", async (ctx) => {
-      await ctx.checkpoint(checkpoint);
+      await ctx.checkpoint({}, undefined, undefined, undefined, projection as never);
       return undefined;
     });
 
@@ -200,17 +201,14 @@ describe("extension job durable boundaries", () => {
       "extension.install",
       validPayload,
       null,
+      {},
       new AbortController().signal,
     );
 
-    const persisted = database.updates.find(
-      (update) =>
-        typeof update.result === "object" &&
-        update.result !== null &&
-        "opsProjection" in update.result,
-    )?.result as typeof checkpoint | undefined;
-    expect(Object.keys(persisted?.opsProjection.operations ?? {})).toEqual(Object.keys(operations));
-    expect(persisted?.opsProjection.operations).toMatchObject(operations);
+    const persisted = database.updates.find((update) => update.operations !== undefined)
+      ?.operations as typeof projection | undefined;
+    expect(Object.keys(persisted?.operations ?? {})).toEqual(Object.keys(operations));
+    expect(persisted?.operations).toMatchObject(operations);
   });
 
   it("redacts schemes containing URL-parser whitespace as a complete value", async () => {
@@ -225,6 +223,7 @@ describe("extension job durable boundaries", () => {
       "extension.install",
       validPayload,
       null,
+      {},
       new AbortController().signal,
     );
 
@@ -249,6 +248,7 @@ describe("extension job durable boundaries", () => {
       "extension.install",
       validPayload,
       null,
+      {},
       new AbortController().signal,
     );
 
@@ -277,6 +277,7 @@ describe("extension job durable boundaries", () => {
       "fixture.unrelated",
       payload,
       null,
+      {},
       new AbortController().signal,
     );
 

@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { provisionControlInstallation } from "@openmapx/core/build-artifacts";
+import { provisionControlDirectories } from "@openmapx/core/build-artifacts";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
 import { runsInAgent } from "../lib/agent-integrations";
 import { containerBindMounts } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
-import { dockerComposeStream } from "../lib/docker";
+import { dockerComposeStream, localImageIds, pulledImageIds } from "../lib/docker";
 import { assertCliExecutionAvailable } from "../lib/execution-deadline";
 import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
 import { leasedHostEffect } from "../lib/host-effect";
@@ -43,7 +42,6 @@ import { applyServiceSelection } from "../lib/service-selection";
 import { ensureTransitousApiKeysFile } from "../lib/transitous-api-keys";
 
 const {
-  agentStatePaths,
   prepareAgentStateDirectories,
   withConfigurationGenerationWriter,
   embeddedBuiltInIntegrationManifests,
@@ -65,6 +63,8 @@ export interface RenderRepoOptions {
   release?: coreServices.ReleaseManifest | null;
   /** A retained generation whose saved configuration to render instead of the applied one's. */
   configurationFrom?: string;
+  /** Pull the images this host lacks before the generation records them (`compose up`). */
+  pullMissingImages?: boolean;
 }
 
 export interface RenderRepoResult {
@@ -211,8 +211,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   coreServices.assertDeploymentEnvironmentFile(join(paths.infraDir, ".env"));
   coreServices.readAppliedReleaseSelection(paths.infraDir);
   assertCliDeploymentSecrets();
-  if (!existsSync("/run/secrets/openmapx-control-verifiers"))
-    await provisionControlInstallation(paths.infraDir);
+  provisionControlDirectories(paths.infraDir);
   return withConfigurationGenerationWriter(paths.infraDir, (writer) =>
     renderComposeWithWriter(opts, writer),
   );
@@ -246,8 +245,6 @@ export async function renderComposeWithWriter(
   // The agent's stores, owner-only, before the generation mounts one into
   // app-api.
   coreServices.prepareAgentStores(paths.infraDir);
-  const agentState = agentStatePaths(paths.infraDir);
-  ensurePlatformPrivateDirectory(agentState.trustedConfig);
   ensurePlatformPrivateDirectory(join(paths.infraDir, "catalog-pins"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);
@@ -393,6 +390,7 @@ export async function renderComposeWithWriter(
   assertCliExecutionAvailable();
   const committed = await writer.commit({
     release,
+    imageIds: opts.pullMissingImages ? pulledImageIds : localImageIds,
     ...(mounts ? { containerBindMounts: mounts } : {}),
     ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
     services,
@@ -517,6 +515,7 @@ export function registerComposeCommands(program: Command): void {
           domain: options.domain,
           services,
           release: release.manifest,
+          pullMissingImages: true,
         });
         enabledServiceIds = r.enabledServiceIds;
         log.ok(`Rendered ${r.servicesRendered} services → ${r.revisionId}`);

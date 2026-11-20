@@ -5,7 +5,12 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { db, sql } from "../db";
 import * as schema from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
-import { JobOwnershipLost, jobOwnership } from "./admin-job-state";
+import {
+  JobOwnershipLost,
+  jobOwnership,
+  openCandidateCondition,
+  readAdminJobProtocol,
+} from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 import type { ValidatedConfigurationCandidate } from "./prospective-configuration";
 import { getServiceRegistry } from "./service-registry";
@@ -344,17 +349,14 @@ export async function withAdministrativeConfigurationWriter<T>(
       locks.push(key);
     }
     const unresolved = await connection
-      .select({ id: schema.adminJob.id, result: schema.adminJob.result })
+      .select({ id: schema.adminJob.id, protocol: schema.adminJob.protocol })
       .from(schema.adminJob)
-      .where(
-        query`${schema.adminJob.result}->'_configurationCandidate' IS NOT NULL AND coalesce(${schema.adminJob.result}->'_configurationCandidate'->>'phase', 'unknown') NOT IN ('settled','discarded')`,
-      );
+      .where(openCandidateCondition());
     if (
       unresolved.some(
         (row) =>
           row.id !== job.jobId ||
-          (row.result as { _configurationCandidate?: { operationKey?: string } })
-            ?._configurationCandidate?.operationKey !== options.operationKey,
+          readAdminJobProtocol(row.protocol).candidate?.operationKey !== options.operationKey,
       )
     )
       throw rejected();

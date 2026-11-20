@@ -247,7 +247,7 @@ export async function recoverAgentIntegrations(
       continue;
     }
     const { transactionId } = entry.pending;
-    const projection = readProjection(options.ctx.checkpointResult);
+    const projection = readProjection(options.ctx.protocol, options.ctx.checkpointResult);
     const original = Object.values(projection.operations).find(
       (operation) =>
         operation.kind === "catalogIntegration.publish" &&

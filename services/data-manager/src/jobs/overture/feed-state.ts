@@ -1,14 +1,17 @@
 import { feedState } from "@openmapx/db-schema";
 import { and, eq } from "drizzle-orm";
-import { db } from "../../db/index.js";
+import { drizzle } from "drizzle-orm/postgres-js";
+import type postgres from "postgres";
 import { assertDataPublication } from "../execution/worker-scope.js";
 export async function writeOvertureFeedState(
+  sql: postgres.Sql,
   region: string,
   hash: string,
   log: { warn: (message: string, extra?: Record<string, unknown>) => void },
 ): Promise<void> {
   try {
-    assertDataPublication();
+    await assertDataPublication();
+    const db = drizzle(sql);
     const feedRegion = `overture-places-${region}`;
     const feedName = "overture-places";
     const existing = await db

@@ -9,9 +9,9 @@ import { executionRefSchema } from "../ops/execution-ref";
 import { configurationWriterLockPath } from "../services/configuration-ownership";
 import { readLockHolder } from "../services/recoverable-lock";
 import type { ValidatedBuildBundle } from "./archive";
-import * as control from "./control-authority";
 import { inspectArtifactPublication, publishValidatedBuild } from "./publication";
-import * as leases from "./target-lease";
+import * as control from "./test-fixtures/control";
+import * as leases from "./test-fixtures/control";
 
 const cleanup: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => {
@@ -81,12 +81,12 @@ it.each(["old-directory", "build-record"])(
         serviceIds: ["osrm"],
       });
     cleanup.push(() => control.closeControlInstallation(installation));
-    const authority = control.restoreAdmittedControlExecution(
+    const authority = await control.restoreAdmittedControlExecution(
       installation,
       executionRefSchema.parse(state.execution),
     );
-    expect(control.executionAuthorityState(authority).receiptDigest).toBe(state.admissionDigest);
-    control.cancelControlExecution(authority);
+    expect(authority.receiptDigest).toBe(state.admissionDigest);
+    await control.cancelControlExecution(authority);
     const lease = leases.restoreArtifactTargetLeaseForSettlement(authority);
     cleanup.push(() => leases.closeArtifactTargetLeaseHandle(lease));
     expect(lease.leaseId).toBe(state.leaseId);
@@ -114,8 +114,8 @@ it.each(["old-directory", "build-record"])(
       outcome: "not_committed",
       reason: "failed",
     });
-    expect(() => leases.verifyLocalArtifactTargetRootRelease(authority)).toThrow();
-    control.retainControlEffectReceipt(authority, {
+    await expect(leases.verifyLocalArtifactTargetRootRelease(authority)).rejects.toThrow();
+    await control.retainControlEffectReceipt(authority, {
       outcome: "contained",
       publication: "not_started",
       receipt: {
@@ -125,10 +125,10 @@ it.each(["old-directory", "build-record"])(
     });
     await leases.settleArtifactTargetLeaseChild(
       lease,
-      control.verifyControlEffectSettlement(installation, authority.execution),
+      await control.verifyControlEffectSettlement(installation, authority.execution),
     );
     await leases.releaseArtifactTargetLease(lease);
-    expect(leases.verifyLocalArtifactTargetRootRelease(authority).releasedAt).toBeGreaterThan(0);
+    await expect(leases.verifyLocalArtifactTargetRootRelease(authority)).resolves.toBeUndefined();
   },
   60000,
 );

@@ -16,8 +16,8 @@ export async function publishOwnedTransitSourceMutation(
 ): Promise<void> {
   if (!input.sourceMutation) return;
   if (dataExecutionWorkerContext() !== context) throw Error("Owned transit worker required");
-  context.assertForward();
-  assertArtifactTargetLeaseForward(ownedLease(context));
+  await context.assertForward();
+  await assertArtifactTargetLeaseForward(ownedLease(context));
   const retained = await context.record();
   if (
     retained.input.kind !== "transit-sync" ||
@@ -33,9 +33,9 @@ export async function publishOwnedTransitSourceMutation(
     },
     input.sourceMutation,
   );
-  await publishDataChange(() => {
-    context.assertForward();
-    assertArtifactTargetLeaseForward(ownedLease(context));
+  await publishDataChange(async () => {
+    await context.assertForward();
+    await assertArtifactTargetLeaseForward(ownedLease(context));
     mutation.persist();
   });
 }

@@ -83,7 +83,10 @@ vi.mock("../../db", async () => {
 });
 vi.mock("../../integration-host", () => ({ getAllIntegrations: () => [] }));
 vi.mock("../admin-job-ops", () => ({ executeAdminJobOperation: executeAdminOperation }));
-vi.mock("../admin-job-state", () => ({ jobOwnership: () => ({}) }));
+vi.mock("../admin-job-state", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../admin-job-state")>()),
+  jobOwnership: () => ({}),
+}));
 vi.mock("../administrative-configuration-writer-owner", () => ({
   withAdministrativeConfigurationJob: (_ctx: JobContext, run: () => Promise<unknown>) => run(),
   withAdministrativeConfigurationWriter: (_input: unknown, run: () => Promise<unknown>) => run(),
@@ -103,7 +106,7 @@ vi.mock("../platform-configuration-job", async (importOriginal) => ({
   platformJobMatchesPreview: () => true,
 }));
 vi.mock("../prospective-configuration", () => ({
-  resumeRetainedConfigurationCandidate: vi.fn(),
+  resumeConfigurationCandidate: vi.fn(),
   retainedConfigurationIntegrationIds: vi.fn(),
 }));
 vi.mock("../trusted-config-outcome", () => ({

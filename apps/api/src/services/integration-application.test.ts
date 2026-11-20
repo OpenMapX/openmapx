@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
@@ -170,9 +170,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPS_TRUSTED_CONFIG_DIR: host.queue,
-        OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
-        OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
         OPENMAPX_SECRETS_KEY: "71".repeat(32),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "binding-owned-admin",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
@@ -363,19 +360,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       // The original call has returned. Expire only its fixture observation lease;
       // keep the exact nonce, candidate, source and all production claim checks.
       await state.fixture
-        .sql`UPDATE admin_job SET result=jsonb_set(result,'{_observationLeaseUntil}',to_jsonb('2000-01-01T00:00:00.000Z'::text)) WHERE type='integration.binding.apply'`;
+        .sql`UPDATE admin_job SET protocol=jsonb_set(protocol,'{observationLeaseUntil}',to_jsonb('2000-01-01T00:00:00.000Z'::text)) WHERE type='integration.binding.apply'`;
       const resumed = await set(body, key);
       const diagnostic = await state.fixture
-        .sql`SELECT status,result->'_configurationCandidate'->>'phase' AS phase,result->'_execution' AS execution,result->'observation' AS observation,result->'integrationReload' AS reload,error FROM admin_job WHERE type='integration.binding.apply'`;
+        .sql`SELECT status,protocol->'candidate'->>'phase' AS phase,protocol->'execution' AS execution,result->'observation' AS observation,result->'integrationReload' AS reload,error FROM admin_job WHERE type='integration.binding.apply'`;
       expect(resumed.statusCode, JSON.stringify(diagnostic)).toBe(200);
       expect(resumed.json().runtime).toBe("applied");
       expect(reload).toHaveBeenCalledTimes(1);
       const rows = await state.fixture
-        .sql`SELECT id,status,result FROM admin_job WHERE type='integration.binding.apply'`;
+        .sql`SELECT id,status,result,protocol FROM admin_job WHERE type='integration.binding.apply'`;
       expect(rows).toHaveLength(1);
       expect(rows[0]!.id).toBe(original[0]!.id);
       expect(rows[0]!.status).toBe("success");
-      expect(rows[0]!.result._execution.version).toBe(2);
+      expect(rows[0]!.protocol.execution.version).toBe(2);
     }, 90000);
     it("keeps disabled integrations pending instead of claiming an active provider", async () => {
       await state.fixture
@@ -467,7 +464,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(original[0]!.result.integrationReload.state).toBe("attempted");
       await state.fixture.sql.unsafe(`DROP TRIGGER reject_credential_completion ON admin_job`);
       await state.fixture
-        .sql`UPDATE admin_job SET result=jsonb_set(result,'{_observationLeaseUntil}',to_jsonb('2000-01-01T00:00:00.000Z'::text)) WHERE type='configuration.apply'`;
+        .sql`UPDATE admin_job SET protocol=jsonb_set(protocol,'{observationLeaseUntil}',to_jsonb('2000-01-01T00:00:00.000Z'::text)) WHERE type='configuration.apply'`;
       const recovered = await credential("PUT", before.configurationRevision, key);
       expect(recovered.statusCode, recovered.body).toBe(200);
       expect(recovered.json().runtime).toBe("applied");

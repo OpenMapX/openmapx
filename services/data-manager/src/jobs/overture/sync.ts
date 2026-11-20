@@ -1,3 +1,4 @@
+import type postgres from "postgres";
 import { ingestOverture } from "./ingest.js";
 import { withOvertureOperationLock } from "./operation-lock.js";
 import { assertValidRegion, pullOverture, resolveOvertureRelease } from "./pull.js";
@@ -9,6 +10,7 @@ import {
 } from "./retention.js";
 
 export interface SyncOvertureRegionOptions {
+  sql: postgres.Sql;
   region: string;
   dataDir: string;
   release?: string;
@@ -66,6 +68,7 @@ async function syncOvertureRegionUnlocked(
 
   opts.onProgress?.("Rebuilding OSM↔Overture links from the regional OSM extract…");
   const result = await dependencies.rebuildLinks({
+    sql: opts.sql,
     region: opts.region,
     dataDir: opts.dataDir,
     release,
@@ -97,6 +100,7 @@ async function syncOvertureRegionUnlocked(
     `Regional Overture refresh complete; conflation ${result.status} (${result.linked} links).`,
   );
   const retention = await dependencies.finalizeReleaseFiles({
+    sql: opts.sql,
     dataDir: opts.dataDir,
     activeRelease: release,
     retain: overtureReleaseRetentionFromEnv(process.env.OVERTURE_RELEASE_RETENTION),

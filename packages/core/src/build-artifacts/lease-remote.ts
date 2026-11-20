@@ -1,11 +1,11 @@
 import type { OpsClient } from "../ops/client";
 import { type OpsOperation, type OpsResultFor, parseOpsResult } from "../ops/contract";
+import type { LeaseBackend } from "./lease-store";
 import { TargetBusyError } from "./lease-store";
-import type { LeaseBackend } from "./target-lease";
 
 export type LeaseOperation = Extract<
   OpsOperation,
-  { kind: "lease.acquire" | "lease.read" | "lease.update" | "lease.settleChild" }
+  { kind: "lease.acquire" | "lease.read" | "lease.update" }
 >;
 /** Sends one lease operation to the agent and returns its typed result. */
 export type LeaseSender = (operation: LeaseOperation) => Promise<unknown>;
@@ -64,7 +64,5 @@ export function remoteLeaseBackend(send: LeaseSender): LeaseBackend {
     release: async (input) => {
       await update(input.leaseId, { action: "release" });
     },
-    settleChild: async (settlement) =>
-      (await run({ kind: "lease.settleChild", settlement })).lease ?? undefined,
   };
 }

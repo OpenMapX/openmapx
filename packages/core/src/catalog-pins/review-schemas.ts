@@ -1,4 +1,4 @@
-/** Portable signed review evidence. A failed build never fabricates candidate evidence. */
+/** Portable review evidence. A failed build never fabricates candidate evidence. */
 import z from "zod/v4";
 import { executionRefSchema } from "../ops/execution-ref";
 
@@ -58,7 +58,6 @@ export const catalogValidationSchema = z.discriminatedUnion("status", [
 export const catalogValidationRecordSchema = z
   .strictObject({
     version: z.literal(1),
-    installationId: z.uuid(),
     sourceExecution: executionRefSchema,
     proposalDigest: digest,
     runtimeInputs: catalogRuntimeInputsSchema,
@@ -72,7 +71,6 @@ export const catalogValidationRecordSchema = z
   );
 export const catalogActivationRecordSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   parent: executionRefSchema,
   proposalId: z.uuid(),
   validationId: z.uuid(),
@@ -83,11 +81,7 @@ export const catalogActivationRecordSchema = z.strictObject({
   promotion: z.strictObject({
     execution: executionRefSchema,
     terminalReceiptDigest: digest,
-    adoption: z.strictObject({
-      leaseId: z.uuid(),
-      delegationId: z.uuid(),
-      phase: z.literal("ready"),
-    }),
+    leaseChild: z.strictObject({ leaseId: z.uuid(), childKey: z.uuid() }),
   }),
   approval: executionRefSchema,
 });
@@ -113,13 +107,6 @@ export function sameCatalogRuntimeInputs(
       JSON.stringify([...after.configuredKeys].sort())
   );
 }
-/** Fixed host-source codecs; these validate retained bytes and grant no authority. */
-export const catalogApprovalAdmissionSchema = z
-  .object({ parent: z.unknown(), operation: z.unknown() })
-  .passthrough();
-export const catalogPromotionEffectSchema = z
-  .object({ receipt: z.strictObject({ kind: z.literal("ops-result"), result: z.unknown() }) })
-  .passthrough();
 const catalogArtifactSchema = z.strictObject({
   path: z.string().min(1).max(4096),
   sha256: digest,
@@ -139,7 +126,6 @@ export const catalogCandidateManifestSchema = z.object({
 });
 export const currentCatalogValidationSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   sourceExecution: executionRefSchema,
   selected: z
     .strictObject({ proposalId: z.uuid(), validationId: z.uuid(), validationDigest: digest })

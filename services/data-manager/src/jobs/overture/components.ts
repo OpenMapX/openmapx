@@ -1,4 +1,4 @@
-import { sql } from "../../db/index.js";
+import type postgres from "postgres";
 import { assertValidOvertureSchema } from "./schema.js";
 
 /** Exact connected components, with graph state on disk rather than one
@@ -8,6 +8,7 @@ import { assertValidOvertureSchema } from "./schema.js";
  * Retry reconstructs the unlogged workspace from durable candidate edges.
  */
 export async function buildConflationComponents(
+  sql: postgres.Sql,
   schema: string,
   onProgress?: (message: string) => void,
 ): Promise<number> {

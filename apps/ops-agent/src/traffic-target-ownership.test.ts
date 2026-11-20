@@ -22,7 +22,7 @@ it.each(["succeeded", "canceled"] as const)(
     const root = mkdtempSync(join(tmpdir(), "omx-traffic-target-")),
       data = join(root, "data");
     mkdirSync(data, { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
         infraDir: root,
         role: "ops-agent",
@@ -117,7 +117,7 @@ it.each(["succeeded", "canceled"] as const)(
         expect(heldTargets(dirname(data)).includes("valhalla")).toBe(true);
         if (!status.fingerprint || !status.deadlineAt)
           throw Error("Original dated traffic identity required");
-        const authority = control.restoreAdmittedControlExecution(installation, {
+        const authority = await control.restoreAdmittedControlExecution(installation, {
           executor: "ops-agent",
           principal: "data-manager",
           executionId: admitted.operationId,
@@ -126,7 +126,7 @@ it.each(["succeeded", "canceled"] as const)(
           fingerprint: status.fingerprint,
           deadlineAt: status.deadlineAt,
         });
-        expect(() => control.assertControlExecutionForward(authority)).toThrow();
+        await expect(control.assertControlExecutionForward(authority)).rejects.toThrow();
         release();
         await expect
           .poll(async () => (await client.status(operation.kind, admitted.operationId)).state, {

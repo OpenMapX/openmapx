@@ -9,12 +9,10 @@ import {
   closeControlInstallation,
   controlDigest,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
   retainAdmittedControlExecution,
-  signControl,
 } from "@openmapx/core/build-artifacts";
 import {
-  CATALOG_VALIDATION_DOMAIN,
   catalogValidationRecordSchema,
   readCurrentCatalogValidation,
   withCatalogProposalDirectory,
@@ -25,7 +23,6 @@ import {
   executionFingerprint,
 } from "@openmapx/core/ops";
 import { expect, it } from "vitest";
-import { installationState } from "../../../../packages/core/src/build-artifacts/control-authority";
 import { publishCatalogValidationCurrent } from "../../src/jobs/transitous/catalog-validation-current";
 
 async function fixture(kind: "catalog.validate" | "transit-sync" | "download-fonts") {
@@ -34,7 +31,7 @@ async function fixture(kind: "catalog.validate" | "transit-sync" | "download-fon
     proposalId = randomUUID(),
     id = randomUUID();
   mkdirSync(join(dataDir, "motis/proposals", proposalId), { recursive: true, mode: 0o700 });
-  await provisionControlInstallation(root);
+  await provisionControlDirectories(root);
   const ids = ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
     installation = openControlInstallation({
       infraDir: root,
@@ -58,7 +55,7 @@ async function fixture(kind: "catalog.validate" | "transit-sync" | "download-fon
       deadlineAt,
       fingerprint: executionFingerprint({ kind, operationFingerprint, deadlineAt }),
     };
-  const authority = retainAdmittedControlExecution(installation, {
+  const authority = await retainAdmittedControlExecution(installation, {
       execution,
       kind,
       operation: input,
@@ -102,7 +99,6 @@ it("selects only original signed validation bytes, then invalidates before reuse
       };
     const record = catalogValidationRecordSchema.parse({
       version: 1,
-      installationId: f.installation.installationId,
       sourceExecution: f.execution,
       proposalDigest: d,
       runtimeInputs: inputs,
@@ -125,48 +121,36 @@ it("selects only original signed validation bytes, then invalidates before reuse
       },
     });
     withCatalogProposalDirectory(f.installation, f.proposalId, (dir) =>
-      dir.write(
-        `validation-${f.execution.executionId}.json`,
-        canonicalJson(
-          signControl(
-            installationState(f.installation).privateKey,
-            CATALOG_VALIDATION_DOMAIN,
-            record,
-          ),
-        ),
-      ),
+      dir.write(`validation-${f.execution.executionId}.json`, canonicalJson(record)),
     );
-    publishCatalogValidationCurrent(f.authority, f.lease, f.proposalId);
+    await publishCatalogValidationCurrent(f.authority, f.lease, f.proposalId);
     expect(readCurrentCatalogValidation(f.installation)?.selected).toEqual({
       proposalId: f.proposalId,
       validationId: f.execution.executionId,
       validationDigest: controlDigest(record),
     });
-    publishCatalogValidationCurrent(f.authority, f.lease);
+    await publishCatalogValidationCurrent(f.authority, f.lease);
     expect(readCurrentCatalogValidation(f.installation)?.selected).toBeNull();
   } finally {
     f.close();
   }
 });
-it("permits ordinary owned transit invalidation but not a different kind or a forged nominal owner", async () => {
+it("permits ordinary owned transit invalidation but not a different kind", async () => {
   const ordinary = await fixture("transit-sync");
   try {
-    publishCatalogValidationCurrent(ordinary.authority, ordinary.lease);
+    await publishCatalogValidationCurrent(ordinary.authority, ordinary.lease);
     expect(readCurrentCatalogValidation(ordinary.installation)?.sourceExecution).toEqual(
       ordinary.execution,
     );
-    expect(() =>
-      publishCatalogValidationCurrent({} as typeof ordinary.authority, ordinary.lease),
-    ).toThrow(/Unverified/);
-    expect(() =>
+    await expect(
       publishCatalogValidationCurrent(ordinary.authority, ordinary.lease, ordinary.proposalId),
-    ).toThrow(/Only the original validation/);
+    ).rejects.toThrow(/Only the original validation/);
   } finally {
     ordinary.close();
   }
   const foreign = await fixture("download-fonts");
   try {
-    expect(() => publishCatalogValidationCurrent(foreign.authority, foreign.lease)).toThrow(
+    await expect(publishCatalogValidationCurrent(foreign.authority, foreign.lease)).rejects.toThrow(
       /Original complete transit/,
     );
     expect(readCurrentCatalogValidation(foreign.installation)).toBeNull();

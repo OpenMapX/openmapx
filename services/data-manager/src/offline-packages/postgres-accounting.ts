@@ -1,4 +1,5 @@
 import type { CanonicalOfflinePackageRequest, OfflineMapPackageManifest } from "@openmapx/core";
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
 import { assertDataMutationAdmission } from "../jobs/execution/admission.js";
 import {
@@ -128,15 +129,15 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
   }
 
   private async lockPrincipal(tx: postgres.TransactionSql, principal: string): Promise<void> {
-    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${principal}, 604))`;
+    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${principal}, ${DATA_ADVISORY_LOCKS.offlineAccountingPrincipalSeed}))`;
   }
 
   private async lockGlobal(tx: postgres.TransactionSql): Promise<void> {
-    await tx`SELECT pg_advisory_xact_lock(606)`;
+    await tx`SELECT pg_advisory_xact_lock(${DATA_ADVISORY_LOCKS.offlineAccountingGlobal})`;
   }
 
   private async lockRequest(tx: postgres.TransactionSql, requestKey: string): Promise<void> {
-    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${requestKey}, 605))`;
+    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${requestKey}, ${DATA_ADVISORY_LOCKS.offlineAccountingRequestSeed}))`;
   }
 
   private async principalActiveCounts(

@@ -1,27 +1,24 @@
 import type {
-  configurationPrepareNonAdmissionSchema,
-  DataConfigurationFencePrepare,
+  DataConfigurationFencePrepareRequest,
   DataConfigurationFenceReceipt,
-  DataConfigurationFenceSettle,
+  DataConfigurationFenceSettleRequest,
+  DataControlDelegation,
   DataExecutionIdentity,
   DataExecutionInput,
   DataExecutionStatus,
-  startGenerationHardlinksExecutionSchema,
+  LocalDataExecutionKind,
+  linkRequestSchema,
 } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type postgres from "postgres";
 import type z from "zod/v4";
 import { requestPrincipal } from "../../auth.js";
 import type { DataManagerPrincipal } from "../../principals.js";
 import { registerDataManagerRoute } from "../../route-contract.js";
 
-/** The receiver checks the delegation or parent a caller names, after bearer
+/** The receiver checks the delegation a caller names, after bearer
  * authentication. A missing receiver never authorizes a compatibility worker. */
 export interface DataExecutionReceiver {
-  recoverUnadmittedPreparation?(
-    request: DataConfigurationFencePrepare,
-    rawHeaders: readonly string[],
-    transportPrincipal: DataManagerPrincipal,
-  ): Promise<z.infer<typeof configurationPrepareNonAdmissionSchema>>;
   observeReviewedTransit?(request: {
     key: string;
     countries: string[];
@@ -31,8 +28,19 @@ export interface DataExecutionReceiver {
   }): Promise<DataExecutionStatus | null>;
   admitLocal(
     input: DataExecutionInput,
-    options?: { sourceJobId?: string; triggeredBy?: string; idempotencyKey?: string },
+    options?: { triggeredBy?: string; idempotencyKey?: string },
   ): Promise<DataExecutionStatus>;
+  /** Admits in-process work as a durable execution. Admission is awaited; the
+   * completion settles once the execution is terminal, with the work's value
+   * or its failure. The work gets the execution's cancellable database handle. */
+  runLocal<T>(
+    input: Extract<
+      DataExecutionInput,
+      { kind: Exclude<LocalDataExecutionKind, "generation-link"> }
+    >,
+    work: (sql: postgres.Sql) => Promise<T>,
+    options?: { triggeredBy?: string },
+  ): Promise<{ status: DataExecutionStatus; completion: Promise<T> }>;
   admitMaintenance(
     action: "restart-primary" | "reload-feed-proxy",
     options?: { triggeredBy: "cron" },
@@ -44,21 +52,25 @@ export interface DataExecutionReceiver {
     options: {
       operationKey: string;
       requestedDeadlineAt?: number;
-      rawHeaders: readonly string[];
+      delegation?: DataControlDelegation;
       transportPrincipal: DataManagerPrincipal;
     },
   ): Promise<DataExecutionStatus>;
-  admitHardlinks(
-    request: z.infer<typeof startGenerationHardlinksExecutionSchema>,
-    rawHeaders: readonly string[],
+  /** Applies a generation's hardlink plan, or observes the application its
+   * operation key already names. `running` once the request has waited its
+   * share and the application has not ended. */
+  link(
+    request: z.infer<typeof linkRequestSchema>,
     transportPrincipal: DataManagerPrincipal,
-  ): Promise<DataExecutionStatus>;
+  ): Promise<
+    | { state: "applied"; linked: number; skipped: number; pruned: number }
+    | { state: "running"; status: DataExecutionStatus }
+  >;
   inspect(id: string): Promise<DataExecutionStatus | null>;
   lookup(operationKey: string): Promise<DataExecutionStatus | null>;
   requestCancel(identity: DataExecutionIdentity): Promise<DataExecutionStatus>;
   prepareFence(
-    input: DataConfigurationFencePrepare,
-    rawHeaders: readonly string[],
+    input: DataConfigurationFencePrepareRequest,
     transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt>;
   inspectFence(
@@ -67,8 +79,7 @@ export interface DataExecutionReceiver {
     transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt | null>;
   settleFence(
-    input: DataConfigurationFenceSettle,
-    rawHeaders: readonly string[],
+    input: DataConfigurationFenceSettleRequest,
     transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt>;
 }
@@ -88,26 +99,25 @@ export function registerDataExecutionApi(
   registerDataManagerRoute(app, "startDataExecution", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     const { input, ...admission } = request.body;
-    return reply.code(202).send(
-      await receiver.admit(input, {
-        ...admission,
-        rawHeaders: request.raw.rawHeaders,
-        transportPrincipal: principal(request),
-      }),
-    );
-  });
-  registerDataManagerRoute(app, "startGenerationHardlinksExecution", async (request, reply) => {
-    if (!receiver) return unavailable(reply);
     return reply
       .code(202)
-      .send(
-        await receiver.admitHardlinks(request.body, request.raw.rawHeaders, principal(request)),
-      );
+      .send(await receiver.admit(input, { ...admission, transportPrincipal: principal(request) }));
+  });
+  // Applies a generation's hardlink plan as a data job: under the lease the
+  // sender names, under the prepared fence of that sender's maintenance, or,
+  // without a lease, exclusively under data-manager's own. Busy and unavailable
+  // answers mean nothing was linked; a 500 means links may have changed.
+  registerDataManagerRoute(app, "link", async (request, reply) => {
+    if (!receiver) return unavailable(reply);
+    const outcome = await receiver.link(request.body, principal(request));
+    if (outcome.state === "running") return reply.code(202).send(outcome.status);
+    const { state: _state, ...counts } = outcome;
+    return { ok: true as const, ...counts };
   });
   registerDataManagerRoute(app, "prepareDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     try {
-      return await receiver.prepareFence(request.body, request.raw.rawHeaders, principal(request));
+      return await receiver.prepareFence(request.body, principal(request));
     } catch (error) {
       // The agent tells a busy refusal, which wrote nothing, from other conflicts by this name.
       if ((error as Error).message === "configuration_maintenance_busy")
@@ -115,18 +125,6 @@ export function registerDataExecutionApi(
       throw error;
     }
   });
-  registerDataManagerRoute(
-    app,
-    "recoverUnadmittedConfigurationPreparation",
-    async (request, reply) => {
-      if (!receiver?.recoverUnadmittedPreparation) return unavailable(reply);
-      return receiver.recoverUnadmittedPreparation(
-        request.body,
-        request.raw.rawHeaders,
-        principal(request),
-      );
-    },
-  );
   registerDataManagerRoute(app, "inspectDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     const receipt = await receiver.inspectFence(
@@ -142,7 +140,7 @@ export function registerDataExecutionApi(
     if (!receiver) return unavailable(reply);
     if (request.params.maintenanceId !== request.body.maintenanceId)
       return reply.code(409).send({ error: "Configuration maintenance identity conflict" });
-    return receiver.settleFence(request.body, request.raw.rawHeaders, principal(request));
+    return receiver.settleFence(request.body, principal(request));
   });
   registerDataManagerRoute(app, "lookupDataExecution", async (request, reply) => {
     if (!receiver) return unavailable(reply);

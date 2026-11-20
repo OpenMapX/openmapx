@@ -1,3 +1,4 @@
+import type postgres from "postgres";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ unsafe: vi.fn() }));
@@ -11,7 +12,9 @@ import {
   rebuildOvertureLinksUnlocked,
 } from "../../src/jobs/overture/rebuild-links.js";
 
+const sql = { unsafe: mocks.unsafe } as unknown as postgres.Sql;
 const OPTIONS = {
+  sql,
   region: "europe/germany/berlin",
   dataDir: "/data",
   release: "2026-07-22.0",
@@ -145,7 +148,7 @@ describe("rebuildOvertureLinks", () => {
       updated_at: "2026-07-28T00:04:00.000Z",
     });
 
-    const result = await getOvertureConflationState();
+    const result = await getOvertureConflationState(sql);
 
     expect(result).toEqual(
       expect.objectContaining({
@@ -182,7 +185,7 @@ describe("rebuildOvertureLinks", () => {
     expect(deps.validateFusedQuality).toHaveBeenCalled();
     expect(deps.publish).toHaveBeenCalled();
     expect(deps.cleanup).toHaveBeenCalled();
-    expect(deps.preflight).toHaveBeenCalledWith("overture_places");
+    expect(deps.preflight).toHaveBeenCalledWith(sql, "overture_places");
   });
 
   it("resumes scoring from its durable keyset cursor without extracting again", async () => {

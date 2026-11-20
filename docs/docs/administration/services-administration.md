@@ -418,7 +418,7 @@ and CPU (0.125–256 cores) limits. These are Docker `deploy.resources.limits`,
 not environment variables. Leaving a field unset preserves the manifest limit,
 including host interpolation. Clear a saved resource field to restore that limit. Host-owned fields are locked; both `SERVICE_*`
 overrides and the original variable referenced by a manifest take precedence.
-Saving uses the same validated, sealed prospective configuration as applying:
+Saving uses the same validated prospective configuration as applying:
 failed database reads, invalid values or an oversized snapshot refuse the entire
 change. Saving configuration does not rebuild prepared data.
 
@@ -491,7 +491,9 @@ hooks, including any running prune pass. Its shutdown deadline is 30 seconds;
 the shipped Compose manifest allows 45 seconds before Docker forces termination.
 Re-render and recreate the agent to adopt that Compose setting. A forced stop,
 process crash or power failure can still leave an operation whose outcome is
-unknown, or a lock whose holder cannot be proved gone.
+unknown, or a lock whose holder cannot be proved gone. The administrative job
+that requested such an operation ends failed with the error code
+`recovery_required`; the operation's services stay held until you resolve it.
 
 If a service reports a busy target, writer or lock after a crash, recover from the
 host:
@@ -516,7 +518,7 @@ host:
 
 Every clear and resolve is appended to
 `infra/docker/state/ops-agent/control-audit.jsonl` and printed. Do not delete the
-lease store, lock files or signed records by hand: a missing record proves
+lease store, lock files or control records by hand: a missing record proves
 neither cancellation nor containment, and an uncertain operation must stay held
 until it is resolved.
 

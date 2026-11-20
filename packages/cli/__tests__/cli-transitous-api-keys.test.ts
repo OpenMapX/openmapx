@@ -16,7 +16,7 @@ import { join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
-  provisionControlInstallation,
+  provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import {
   createCatalogPinSet,
@@ -239,7 +239,7 @@ it("uses actual active pin A while upstream is B and preserves unrelated credent
       lockedBy: "fixture",
     }),
   );
-  await provisionControlInstallation(infra);
+  await provisionControlDirectories(infra);
   const installation = openControlInstallation({
     infraDir: infra,
     role: "host-cli",

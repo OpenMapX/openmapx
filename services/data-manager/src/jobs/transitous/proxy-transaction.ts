@@ -111,14 +111,14 @@ async function validateAndReload(
   phase: "proxy-stage" | "proxy-commit" | "proxy-restore",
   reservedContinuation?: FreshDataChildReservation,
 ): Promise<void> {
-  assertTransitForward(ctx);
+  await assertTransitForward(ctx);
   await publishTransitChange(ctx, () => relinkFeedProxyConfig(ctx));
   await retainTransitPhaseCandidate(ctx, phase);
   await runTransitOwnedPhase(ctx, phase, reservedContinuation);
 }
 
 async function restoreAndReload(ctx: JobContext, state: ProxyTransactionState): Promise<void> {
-  assertTransitForward(ctx);
+  await assertTransitForward(ctx);
   const continuation = await reserveTransitProxyRecovery(
     ctx,
     createHash("sha256")
@@ -127,9 +127,9 @@ async function restoreAndReload(ctx: JobContext, state: ProxyTransactionState): 
       )
       .digest("hex"),
   );
-  await publishTransitChange(ctx, () => {
+  await publishTransitChange(ctx, async () => {
     restore(state.activeConfigPath, state.previousConfig);
-    assertTransitForward(ctx);
+    await assertTransitForward(ctx);
     restore(state.activeVarsPath, state.previousVars);
   });
   await validateAndReload(ctx, "proxy-restore", continuation);
@@ -147,10 +147,10 @@ export async function commitProxyTransaction(ctx: JobContext): Promise<void> {
   const state = ctx.state.proxyTransaction;
   if (state?.phase !== "staged") return;
   try {
-    assertTransitForward(ctx);
-    await publishTransitChange(ctx, () => {
+    await assertTransitForward(ctx);
+    await publishTransitChange(ctx, async () => {
       writeProxyFile(state.activeConfigPath, state.candidateConfig);
-      assertTransitForward(ctx);
+      await assertTransitForward(ctx);
       writeProxyFile(state.activeVarsPath, state.candidateVars);
     });
     await validateAndReload(ctx, "proxy-commit");
@@ -214,10 +214,10 @@ export const run: StageFn = async (ctx) => {
     };
     ctx.state.proxyTransaction = state;
     try {
-      assertTransitForward(ctx);
-      await publishTransitChange(ctx, () => {
+      await assertTransitForward(ctx);
+      await publishTransitChange(ctx, async () => {
         writeProxyFile(activeConfigPath, unionConfig);
-        assertTransitForward(ctx);
+        await assertTransitForward(ctx);
         writeProxyFile(activeVarsPath, unionVars);
       });
       await validateAndReload(ctx, "proxy-stage");

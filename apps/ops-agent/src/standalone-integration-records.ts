@@ -14,7 +14,6 @@ import z from "zod/v4";
 const inode = z.strictObject({ dev: z.string(), ino: z.string() });
 export const standaloneInspectionRecordSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   ownerId: z.string().min(1).max(128),
   source: standaloneInstallSourceSchema,
   inspection: standaloneInstallInspectionSchema,
@@ -26,7 +25,6 @@ export const standaloneInspectionRecordSchema = z.strictObject({
 });
 export const standaloneTransactionRecordSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   transactionId: z.uuid(),
   ownerId: z.string().min(1).max(128),
   installExecution: executionRefSchema,
@@ -40,7 +38,6 @@ export type StandaloneTransactionRecord = z.infer<typeof standaloneTransactionRe
 
 export const standaloneOwnershipRecordSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   transactionId: z.uuid(),
   integrationId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   ownerId: z.string().min(1).max(128),

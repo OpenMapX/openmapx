@@ -376,7 +376,10 @@ prepared. They become failed with the reason "restored from backup", because the
 process that owned them no longer exists and resuming them could repeat host
 changes. An unknown publication is recorded as not started and the unsettled
 child records are dropped, so the data manager's recovery pass cannot reopen the
-job. Finished jobs are untouched. If this step fails, the API stays stopped.
+job. The data manager deletes such a closed job three days after it finished,
+once its request key can no longer be reused, on the same retention as its other
+finished jobs. Finished jobs are untouched. If this step fails, the API stays
+stopped.
 
 **Do not restore while a configuration maintenance runs, and do not restore a
 snapshot taken during one.** An update or a configuration apply holds a

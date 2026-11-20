@@ -19,15 +19,13 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
   opsExecutionBudget,
+  prepareConfigurationCandidate,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { waitForOpsResult } from "../apps/api/src/services/ops-client";
-import {
-  consumePublishedTrustedConfiguration,
-  publishTrustedConfigurationSnapshot,
-} from "../apps/api/src/services/trusted-config-publisher";
 import {
   configurationHandoffRunArgs,
   inspectAgentContainer,
@@ -78,18 +76,6 @@ function agentMounts(root: string) {
       target: join(infra, name),
       readOnly: false,
     })),
-    ...["data-manager", "host-cli"].flatMap((role) => [
-      {
-        source: join(infra, "control-private/hidden-key"),
-        target: join(infra, `secrets/control-${role}.key`),
-        readOnly: true,
-      },
-      {
-        source: join(infra, "control-private/empty"),
-        target: join(infra, `control-private/${role}`),
-        readOnly: true,
-      },
-    ]),
   ];
 }
 
@@ -179,7 +165,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       for (const name of readdirSync(join(root, "infra"))) {
         if (name !== "docker") rmSync(join(root, "infra", name), { recursive: true, force: true });
       }
-      const keep = new Set([".env", "overrides", "control-private", ...RUNTIME_DIRECTORIES]);
+      const keep = new Set([".env", "overrides", ...RUNTIME_DIRECTORIES]);
       for (const name of readdirSync(join(root, "infra", "docker"))) {
         if (!keep.has(name))
           rmSync(join(root, "infra", "docker", name), { recursive: true, force: true });
@@ -280,8 +266,9 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       agent: Agent,
       operation: Extract<OpsOperation, { kind: K }>,
       identity = localRootIdentity(operation.kind),
+      payload?: TrustedConfigurationPayload,
     ): Promise<OpsResultFor<K>> {
-      const submitted = await agent.client.execute<K>(operation, identity);
+      const submitted = await agent.client.execute<K>(operation, { ...identity, payload });
       if (submitted.execution === "sync") return submitted.value;
       return waitForOpsResult<K>(agent.client, operation.kind, submitted, {
         execution: identity.execution,
@@ -297,29 +284,36 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       const identity = localRootIdentity("stack.render");
       const { operationKey } = identity;
       const before = services.currentConfigurationGeneration(infra);
-      const sealed = await publishTrustedConfigurationSnapshot({
-        directory: services.agentStatePaths(infra).trustedConfig,
-        token: agent.token,
-        ownerUid: uid,
-        ownerGid: gid,
+      const payload = {
+        domain: `${name}.example.test`,
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      };
+      const sealed = prepareConfigurationCandidate({
+        role: "api",
+        nonce: `nonce_${randomUUID().replaceAll("-", "")}`,
         operationKey,
-        operationForRevision: (revisionId) => ({
+        operationForRevision: (revisionId, payloadDigest) => ({
           kind: "stack.render",
           revisionId,
+          payloadDigest,
           expectedCurrentRevisionId: before,
           expectedSourceRevision: inspected.value.sourceRevision,
           coordinatorMode: "require-running",
         }),
-        payload: {
-          domain: `${name}.example.test`,
-          serviceConfigs: [],
-          integrationConfigs: [],
-          serviceSecrets: [],
-        },
+        payload,
       });
-      const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-        operate(agent, sealed.operation, identity),
-      );
+      let submission: PromiseSettledResult<unknown>;
+      try {
+        submission = {
+          status: "fulfilled",
+          value: await operate(agent, sealed.operation, identity, payload),
+        };
+      } catch (reason) {
+        submission = { status: "rejected", reason };
+      }
+      const consumed = { submission };
       expect(consumed.submission.status, await agent.logs()).toBe("fulfilled");
       const result =
         consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
@@ -357,16 +351,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       expect(listing.stdout.split("\n").filter(Boolean)).toEqual([
         "infra",
         "docker",
-        ...[
-          ".env",
-          "backups",
-          "catalog-pins",
-          "control-private",
-          "data",
-          "overrides",
-          "secrets",
-          "state",
-        ],
+        ...[".env", "backups", "catalog-pins", "data", "overrides", "secrets", "state"],
       ]);
       for (const absent of ["services", "packages", "apps", "integrations", ".git"]) {
         const probe = await agent.exec("test", "-e", join(root, absent));
@@ -434,16 +419,9 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       expect(facts.rootMounts[0]).toEqual(agentMounts(root)[0]);
       const helper = configurationHandoffRunArgs(facts, root, {
         handoffId: "11111111-1111-4111-8111-111111111111",
-        assertion: "agent-image-assertion",
-        execution: {
-          executor: "host-cli",
-          principal: "api",
-          executionId: "22222222-2222-4222-8222-222222222222",
-          operationKey: "opk1_agentimagehelper",
-          operationFingerprint: "b".repeat(64),
-          fingerprint: "c".repeat(64),
-          deadlineAt: Date.now() + 60_000,
-        },
+        maintenanceId: "22222222-2222-4222-8222-222222222222",
+        leaseId: "33333333-3333-4333-8333-333333333333",
+        leaseChild: "44444444-4444-4444-8444-444444444444",
       }).join("\n");
       expect(helper).not.toContain(`target=${root}\n`);
 

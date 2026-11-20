@@ -18,13 +18,12 @@ capacity for new work.
 
 ## Who is affected
 
-Installations upgrading from an earlier release. Records written by the earlier
-retention machinery are not converted: operations admitted with undated keys or
-without an origin are no longer readable, and retention indexes from the earlier
-release are left in place unused.
+Every installation. Records written by the earlier retention machinery are not
+converted: operations admitted with undated keys or without an origin are not
+readable.
 
 ## Required action
 
-Upgrade only when no operation is running or waiting for recovery, or install
-this release fresh. Keep host clocks synchronised: a clock set back by days can
+Install fresh, as `update-system-fresh-install.md` describes. Keep host clocks
+synchronised: a clock set back by days can
 admit an expired operation key again once its records have been pruned.

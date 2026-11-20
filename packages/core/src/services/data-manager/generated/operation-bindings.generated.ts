@@ -290,15 +290,6 @@ export async function proposeTransitBumpRequest<T>(
 ): Promise<T> {
   return proposeTransitBumpBound<T>(url, options);
 }
-const recoverUnadmittedConfigurationPreparationBound = bindDataManagerOperation(
-  "recoverUnadmittedConfigurationPreparation",
-);
-export async function recoverUnadmittedConfigurationPreparationRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return recoverUnadmittedConfigurationPreparationBound<T>(url, options);
-}
 const reloadDatasetsBound = bindDataManagerOperation("reloadDatasets");
 export async function reloadDatasetsRequest<T>(
   url: string,
@@ -354,15 +345,6 @@ export async function startDataExecutionRequest<T>(
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return startDataExecutionBound<T>(url, options);
-}
-const startGenerationHardlinksExecutionBound = bindDataManagerOperation(
-  "startGenerationHardlinksExecution",
-);
-export async function startGenerationHardlinksExecutionRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return startGenerationHardlinksExecutionBound<T>(url, options);
 }
 const syncTransitBound = bindDataManagerOperation("syncTransit");
 export async function syncTransitRequest<T>(

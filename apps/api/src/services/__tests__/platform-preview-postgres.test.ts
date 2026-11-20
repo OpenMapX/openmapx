@@ -644,7 +644,7 @@ dbDescribe("durable exact platform preview", () => {
       type: "platform.apply",
       status: "running",
       createdBy: actorId,
-      result: { _execution: execution },
+      protocol: { execution },
     });
     const [desired] = await fixture.db
       .select({ version: sql<string>`xmin::text` })
@@ -679,7 +679,7 @@ dbDescribe("durable exact platform preview", () => {
         await commitPlatformConfigurationIntent(input, tx);
         await tx
           .update(adminJob)
-          .set({ result: { _execution: input.execution, saved: true } })
+          .set({ result: { saved: true } })
           .where(eq(adminJob.id, input.jobId));
         throw Error("synthetic checkpoint rollback");
       }),
@@ -696,13 +696,15 @@ dbDescribe("durable exact platform preview", () => {
     expect(stored?.consumedByJobId).toBeNull();
     await fixture.db.transaction(async (tx) => {
       const receipt = await commitPlatformConfigurationIntent(input, tx);
-      const { assertConfigurationSavedRows } = await import(
-        "../configuration-maintenance-decision"
-      );
-      await assertConfigurationSavedRows(tx, [receipt]);
+      // The receipt names the row version the save wrote.
+      const [written] = await tx
+        .select({ version: sql<string>`xmin::text` })
+        .from(systemSettings)
+        .where(eq(systemSettings.key, "platformConfiguration"));
+      expect(receipt.rowVersion).toBe(written?.version);
       await tx
         .update(adminJob)
-        .set({ result: { _execution: input.execution, saved: true } })
+        .set({ result: { saved: true } })
         .where(eq(adminJob.id, input.jobId));
     });
     const [desired] = await fixture.db
@@ -773,7 +775,8 @@ dbDescribe("durable exact platform preview", () => {
       execution: input.execution,
       payload: {},
       signal: new AbortController().signal,
-      checkpointResult: { _execution: input.execution },
+      checkpointResult: {},
+      protocol: { execution: input.execution },
       log: async () => {},
       checkpoint: async () => {},
       setProgress: async () => {},

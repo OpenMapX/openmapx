@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { verifyFiniteControlEdge } from "./target-lease";
+import { verifyFiniteControlEdge } from "./lease-store";
 
 describe("finite catalog workflow edges", () => {
   it("allows validation's staging and restoration leaves without promotion/activation", () => {

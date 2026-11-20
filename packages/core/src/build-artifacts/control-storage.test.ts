@@ -26,11 +26,11 @@ afterEach(() => {
 });
 
 it("refuses a new admission before any record while the control filesystem is nearly full", async () => {
-  const control = await import("./control-authority");
+  const control = await import("./test-fixtures/control");
   const root = fs.mkdtempSync(join(tmpdir(), "omx-control-storage-"));
   roots.push(root);
   fs.mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
+  await control.provisionControlDirectories(root);
   const installation = control.openControlInstallation({
     infraDir: root,
     role: "host-cli",
@@ -65,17 +65,17 @@ it("refuses a new admission before any record while the control filesystem is ne
         serviceIds: ["osrm"],
       };
     space.low = true;
-    expect(() => control.retainAdmittedControlExecution(installation, input)).toThrow(
+    await expect(control.retainAdmittedControlExecution(installation, input)).rejects.toThrow(
       /nearly full/,
     );
     const record = join(
       root,
-      "control-private/host-cli/executions",
+      "state/host-cli/control/executions",
       `${execution.operationKey}.json`,
     );
     expect(fs.existsSync(record)).toBe(false);
     space.low = false;
-    control.retainAdmittedControlExecution(installation, input);
+    await control.retainAdmittedControlExecution(installation, input);
     expect(fs.existsSync(record)).toBe(true);
   } finally {
     control.closeControlInstallation(installation);

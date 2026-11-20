@@ -52,6 +52,38 @@ export async function dockerComposeStream(args: string[]): Promise<number> {
   return result.exitCode ?? 1;
 }
 
+/** The local image id each reference names now, by service id, for a generation to record. */
+export function localImageIds(
+  references: Readonly<Record<string, string>>,
+): Promise<Record<string, string>> {
+  return coreServices.inspectLocalImageIds(
+    references,
+    async (args) =>
+      (await execa("docker", args, { ...cliProcessOptions(), timeout: 15_000 })).stdout,
+  );
+}
+
+/**
+ * The local image id each reference names, after pulling the references this
+ * host lacks: a generation that is about to start its services records every
+ * image they run, also on a fresh installation. A reference that cannot be
+ * pulled (a local tag not built yet) stays unrecorded; starting it fails anyway.
+ */
+export async function pulledImageIds(
+  references: Readonly<Record<string, string>>,
+): Promise<Record<string, string>> {
+  const present = await localImageIds(references);
+  const missing = new Set(
+    Object.entries(references)
+      .filter(([serviceId]) => !Object.hasOwn(present, serviceId))
+      .map(([, reference]) => reference),
+  );
+  if (missing.size === 0) return present;
+  for (const reference of missing)
+    await execa("docker", ["pull", reference], { ...cliProcessOptions(), reject: false });
+  return localImageIds(references);
+}
+
 /** Whether the Docker daemon answers, to tell a failed command from a lost connection. */
 export async function dockerDaemonReachable(): Promise<boolean> {
   const result = await execa("docker", ["info", "--format", "{{.ID}}"], {

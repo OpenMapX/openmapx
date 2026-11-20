@@ -1,10 +1,10 @@
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import { sql } from "../../db/index.js";
-import { withDataSqlSettlement } from "../execution/worker-scope.js";
+import { dataWorkerSignal } from "../execution/worker-scope.js";
 
-// Stable, application-owned two-key advisory lock. Every operation that can
-// replace the Overture schema or its OSM snapshot uses the same lock.
-export const OVERTURE_LOCK_NAMESPACE = 1_330_466_120;
-export const OVERTURE_LOCK_KEY = 1;
+// Every operation that can replace the Overture schema or its OSM snapshot
+// uses the same lock.
+export const [OVERTURE_LOCK_NAMESPACE, OVERTURE_LOCK_KEY] = DATA_ADVISORY_LOCKS.overture;
 
 const LOCK_RETRY_MS = 250;
 
@@ -29,8 +29,10 @@ async function tryAcquire(connection: ReservedConnection): Promise<boolean> {
 
 // Another process may hold the lock. Each unsuccessful attempt gives its
 // connection back before the delay, so waiting never occupies a pool slot.
+// A cancelled worker stops waiting.
 async function acquireSession(): Promise<ReservedConnection> {
   for (;;) {
+    dataWorkerSignal()?.throwIfAborted();
     const connection = await sql.reserve();
     let locked: boolean;
     try {
@@ -63,10 +65,8 @@ export async function withOvertureOperationLock<T>(operation: () => Promise<T>):
       return await operation();
     } finally {
       try {
-        await withDataSqlSettlement(() =>
-          connection.unsafe(
-            `SELECT pg_advisory_unlock(${OVERTURE_LOCK_NAMESPACE}, ${OVERTURE_LOCK_KEY})`,
-          ),
+        await connection.unsafe(
+          `SELECT pg_advisory_unlock(${OVERTURE_LOCK_NAMESPACE}, ${OVERTURE_LOCK_KEY})`,
         );
       } finally {
         connection.release();

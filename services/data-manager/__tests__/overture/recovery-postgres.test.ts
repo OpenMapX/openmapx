@@ -16,9 +16,6 @@ vi.mock("../../src/db/index", () => ({
   get sql() {
     return state.fixture?.sql;
   },
-  get rawSql() {
-    return state.fixture?.sql;
-  },
 }));
 it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "reports missing inputs and the actual Overture lease without creating files",
@@ -90,13 +87,13 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const kind of ["overture-ingest", "overture-extract", "overture-conflate"] as const) {
         await expect(
           withOvertureOperationLock(() =>
-            assertOvertureRecoveryInputs(root, "europe/germany", kind, true),
+            assertOvertureRecoveryInputs(fixture.sql, root, "europe/germany", kind, true),
           ),
         ).rejects.toThrow(/Download/);
       }
       await expect(
         withOvertureOperationLock(() =>
-          assertOvertureRecoveryInputs(root, "europe/france", "overture-extract"),
+          assertOvertureRecoveryInputs(fixture.sql, root, "europe/france", "overture-extract"),
         ),
       ).rejects.toThrow(/Ingest this region/);
       expect(
@@ -112,12 +109,24 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await fixture.sql.unsafe("UPDATE overture_places.conflation_state SET status='completed'");
       await expect(
         withOvertureOperationLock(() =>
-          assertOvertureRecoveryInputs(root, "europe/germany", "overture-conflate", false),
+          assertOvertureRecoveryInputs(
+            fixture.sql,
+            root,
+            "europe/germany",
+            "overture-conflate",
+            false,
+          ),
         ),
       ).resolves.toBeNull();
       await expect(
         withOvertureOperationLock(() =>
-          assertOvertureRecoveryInputs(root, "europe/germany", "overture-conflate", true),
+          assertOvertureRecoveryInputs(
+            fixture.sql,
+            root,
+            "europe/germany",
+            "overture-conflate",
+            true,
+          ),
         ),
       ).rejects.toThrow(/OSM PBF/);
       const failedRead = vi

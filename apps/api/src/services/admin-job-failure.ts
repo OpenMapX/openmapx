@@ -19,7 +19,6 @@ export class ConfigurationPrerequisiteFailure extends AdminJobFailure {
         outcome: "not_committed",
         reason: "conflict",
         cleanupFailed: false,
-        publisherCleanupFailed: false,
         registryUpdateFailed: false,
       },
     });
@@ -27,12 +26,11 @@ export class ConfigurationPrerequisiteFailure extends AdminJobFailure {
   }
 }
 
-/** Internal admission bodies, ownership and proofs never cross the activity boundary. */
+/** A job's public result from its handler's checkpoint view: the handler's own
+ * keys stay in its protocol. The stored result holds only the public part. */
 export function publicAdminJobResult<T>(result: T): T {
   if (!result || typeof result !== "object" || Array.isArray(result)) return result;
-  return Object.fromEntries(
-    Object.entries(result).filter(([key]) => !key.startsWith("_") && key !== "opsProjection"),
-  ) as T;
+  return Object.fromEntries(Object.entries(result).filter(([key]) => !key.startsWith("_"))) as T;
 }
 
 export class JobObservationPending extends Error {

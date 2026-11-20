@@ -4,34 +4,29 @@ import { createHash } from "node:crypto";
 import { fsyncSync, lstatSync, mkdirSync, renameSync, rmdirSync, unlinkSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { z } from "zod";
-import { transferStageSchema } from "../ops/artifact-transfer";
 import { canonicalJson } from "../ops/canonical-json";
-import { type OpsJobStatus, opsOperationSchema } from "../ops/contract";
+import { opsOperationSchema } from "../ops/contract";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
   currentConfigurationGeneration,
   withConfigurationGenerationWriter,
 } from "../services/configuration-generation";
+import type { DataManagerTransport } from "../services/data-manager/transport";
 import type { ValidatedBuildBundle } from "./archive";
-import { inspectControlChildPublication } from "./child-phase";
+import { controlDigest } from "./control-records";
+import { hashArtifactFile, inspectArtifactTree } from "./copy-tree";
 import {
   beginControlEffect,
   cancelControlExecution,
-  childSettlementState,
-  controlDigest,
-  executionAuthorityState,
-  readPrivateRecord,
+  type ExecutionHandle,
+  executionEffectStarted,
+  inspectControlChildPublication,
   retainControlEffectReceipt,
-  retainControlTerminalCommitment,
-  retainControlTerminalStatus,
-  type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
-  writePrivateRecord,
-} from "./control-authority";
-import { signControl, verifyControl } from "./control-records";
-import { hashArtifactFile, inspectArtifactTree } from "./copy-tree";
+  verifyLocalArtifactTargetRootRelease,
+} from "./execution-record";
 import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
-import { inspectOwnedGenerationHardlinks } from "./generation-hardlinks-owner";
+import { inspectGenerationLinks } from "./generation-link";
 import {
   BUILD_RECORD_DIR,
   buildArtifactSpec,
@@ -48,11 +43,11 @@ import {
   readMotisPublicationLayout,
 } from "./motis-publication";
 import { capturePreparedBuildEvidence, incompletePreparedLayout } from "./prepared-evidence";
+import { readPrivateRecord, writePrivateRecord } from "./private-records";
 import {
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseReceiptOwner,
   type TargetLeaseAuthority,
-  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 export type ArtifactFilePublicationResult =
@@ -63,7 +58,7 @@ export interface ArtifactPublicationInput {
   stagingRoot: string;
   stageId: string;
   bundle: ValidatedBuildBundle;
-  authority: VerifiedExecutionAuthority;
+  authority: ExecutionHandle;
   lease: TargetLeaseAuthority;
   expectedFingerprint: string;
   materialization?: VerifiedPortableMotisMaterialization;
@@ -118,8 +113,7 @@ const journalSchema = z.strictObject({
   cleanupFailed: z.boolean(),
 });
 type Journal = z.infer<typeof journalSchema>;
-const DOMAIN = "openmapx-artifact-publication-v1",
-  MAX_METADATA = 16 * 1024 * 1024;
+const MAX_METADATA = 16 * 1024 * 1024;
 const TREE_LIMITS = {
   maximumEntries: 10000,
   maximumBytes: Number.MAX_SAFE_INTEGER,
@@ -252,7 +246,7 @@ export async function artifactPublicationFingerprint(
   }
 }
 function checkedOwner(input: ArtifactPublicationInput) {
-  const owner = executionAuthorityState(input.authority);
+  const owner = input.authority;
   if (
     owner.kind !== "artifactTransfer.import" ||
     input.lease.mode !== "owner" ||
@@ -274,25 +268,18 @@ function checkedOwner(input: ArtifactPublicationInput) {
     root.close();
     trusted.close();
   }
-  const admitted = readPrivateRecord(
-    owner.installation,
-    "executions",
-    `${owner.execution.operationKey}.json`,
-  ) as {
-    payload: {
-      operation: {
-        kind: string;
-        stageId?: string;
-        expectedSha256?: string;
-        expectedCurrentRevisionId?: string | null;
-      };
+  const admitted = owner as {
+    operation: {
+      kind: string;
+      stageId?: string;
+      expectedSha256?: string;
+      expectedCurrentRevisionId?: string | null;
     };
   };
   if (
-    controlDigest(admitted) !== owner.receiptDigest ||
-    admitted.payload.operation.kind !== owner.kind ||
-    admitted.payload.operation.stageId !== input.stageId ||
-    admitted.payload.operation.expectedSha256 !== input.bundle.archiveSha256
+    admitted.operation.kind !== owner.kind ||
+    admitted.operation.stageId !== input.stageId ||
+    admitted.operation.expectedSha256 !== input.bundle.archiveSha256
   )
     throw Error("Artifact stage admission mismatch");
   return { ...owner, origin: owner.origin };
@@ -303,7 +290,7 @@ function journalName(owner: ReturnType<typeof checkedOwner>) {
 function readJournal(owner: ReturnType<typeof checkedOwner>): Journal | null {
   try {
     const raw = readPrivateRecord(owner.installation, "observations", journalName(owner));
-    return verifyControl(owner.installation.installation.publicKey, DOMAIN, raw, journalSchema);
+    return journalSchema.parse(raw);
   } catch (error) {
     if (missing(error)) return null;
     throw error;
@@ -314,7 +301,7 @@ function writeJournal(owner: ReturnType<typeof checkedOwner>, journal: Journal) 
     owner.installation,
     "observations",
     journalName(owner),
-    signControl(owner.installation.privateKey, DOMAIN, journalSchema.parse(journal)),
+    journalSchema.parse(journal),
     false,
   );
 }
@@ -598,7 +585,7 @@ export async function publishValidatedBuild(
         return { outcome: "not_committed", reason: "failed", cleanupFailed: false };
       }
       input.signal?.throwIfAborted();
-      assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+      await assertArtifactTargetLeaseExecution(input.lease, owner.execution);
       if (controlDigest(snapshot(root, serviceId)) !== input.expectedFingerprint)
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       let bundle = input.bundle,
@@ -656,19 +643,15 @@ export async function publishValidatedBuild(
       } catch {
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       }
-      const original = readPrivateRecord(
-        owner.installation,
-        "executions",
-        `${owner.execution.operationKey}.json`,
-      ) as { payload: { operation: { expectedCurrentRevisionId: string | null } } };
+      const original = owner as { operation: { expectedCurrentRevisionId: string | null } };
       if (
         currentConfigurationGeneration(dirname(resolve(input.dataRoot))) !==
-          original.payload.operation.expectedCurrentRevisionId ||
+          original.operation.expectedCurrentRevisionId ||
         controlDigest(snapshot(root, serviceId)) !== input.expectedFingerprint
       )
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       input.signal?.throwIfAborted();
-      assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+      await assertArtifactTargetLeaseExecution(input.lease, owner.execution);
       if (
         manifest.dirs.some(
           (path) => directoryMetadata(source!.dir, path) !== sourceMetadata.get(path),
@@ -721,16 +704,12 @@ export async function publishValidatedBuild(
         cleanupFailed: false,
       };
       writeJournal(owner, journal);
-      const started = readPrivateRecord(
-        owner.installation,
-        "effect-started",
-        `${owner.execution.operationKey}.json`,
-      );
-      if (started === null) beginControlEffect(input.authority);
+      if (!(await executionEffectStarted(input.authority)))
+        await beginControlEffect(input.authority);
       try {
         for (const entry of journal.directories) {
           input.signal?.throwIfAborted();
-          assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+          await assertArtifactTargetLeaseExecution(input.lease, owner.execution);
           if (journal.motisLayout) assertMotisPublicationAliases(root, journal.motisLayout);
           if (entry.old) moveDirectory(root, targetPath(entry), backups, entry.backup, entry.old);
           moveDirectory(source.dir, entry.path, root, targetPath(entry), entry.next);
@@ -832,10 +811,10 @@ export async function publishValidatedBuild(
   });
 }
 
-/** Read the sole local publisher's signed, indexed commit evidence. Local consumers
+/** Read the sole local publisher's recorded, indexed commit evidence. Local consumers
  * use this to settle a stage; public receipt IDs or result strings are insufficient. */
-export function inspectArtifactPublication(authority: VerifiedExecutionAuthority) {
-  const state = executionAuthorityState(authority);
+export function inspectArtifactPublication(authority: ExecutionHandle) {
+  const state = authority;
   if (state.kind !== "artifactTransfer.import") throw Error("Original import authority required");
   const journal = readJournal({ ...state, origin: state.origin });
   if (!journal) return null;
@@ -853,8 +832,10 @@ export function inspectArtifactPublication(authority: VerifiedExecutionAuthority
 
 /** Remove only the empty owned rollback directory after proved restoration and
  * physical release. This permits a new deliberate import of the same stage. */
-export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionAuthority): void {
-  const state = executionAuthorityState(authority);
+export async function cleanupRestoredArtifactPublication(
+  authority: ExecutionHandle,
+): Promise<void> {
+  const state = authority;
   if (state.kind !== "artifactTransfer.import") throw Error("Original import authority required");
   const journal = readJournal({ ...state, origin: state.origin });
   if (
@@ -863,7 +844,7 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
     journal.executionDigest !== controlDigest(state.execution)
   )
     throw Error("Original restored publication required");
-  verifyLocalArtifactTargetRootRelease(authority);
+  await verifyLocalArtifactTargetRootRelease(authority);
   const root = new AnchoredDirectory(state.installation.dataRoot);
   let source: ReturnType<typeof directoryAt> | undefined, backups: AnchoredDirectory | undefined;
   try {
@@ -895,32 +876,37 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
 /** Close only this purpose's proved historical publication. The original
  * canonical status/digest/time remain unchanged even if delivery failed after
  * files committed; containment is a separate, source-verified fact. */
-export function inspectSettledArtifactImport(
-  authority: VerifiedExecutionAuthority,
-  status: OpsJobStatus,
-  terminalAt: number,
+export async function inspectSettledArtifactImport(
+  authority: ExecutionHandle,
+  links: { transport: DataManagerTransport; infraDir: string; revisionId: string | undefined },
 ) {
-  const owner = executionAuthorityState(authority);
+  const owner = authority;
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import required");
   const journal = readJournal({ ...owner, origin: owner.origin });
   if (!journal || !["committed", "restored"].includes(journal.phase))
     throw Error("Original settled import required");
-  verifyLocalArtifactTargetRootRelease(authority);
-  const effect = childSettlementState(
-    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
-  ).evidence;
+  await verifyLocalArtifactTargetRootRelease(authority);
+  const effect = await verifyControlEffectSettlement(
+    owner.installation.installation,
+    owner.execution,
+  );
   if (
     journal.phase === "committed"
       ? effect.outcome !== "committed" || effect.publication !== "committed"
       : effect.outcome === "unknown" || effect.publication !== "not_started"
   )
     throw Error("Original settled effect required");
+  // The import's hardlink application, read back from data-manager by its key.
   const followUp =
-    inspectOwnedGenerationHardlinks(authority) === "complete"
+    !links.revisionId ||
+    (await inspectGenerationLinks({
+      transport: links.transport,
+      infraDir: links.infraDir,
+      issuer: owner.execution,
+      revisionId: links.revisionId,
+    })) === "complete"
       ? ("complete" as const)
       : ("failed" as const);
-  retainControlTerminalCommitment(authority, status, terminalAt);
-  retainControlTerminalStatus(owner.installation.installation, owner.execution, status, terminalAt);
   if (journal.phase === "restored")
     return {
       outcome: "not_committed" as const,
@@ -938,63 +924,39 @@ export function inspectSettledArtifactImport(
 
 /** A transfer claim may be released only after this exact import never began
  * publication and the original whole target tree is physically released. */
-export function inspectUnstartedArtifactImport(authority: VerifiedExecutionAuthority) {
-  const owner = executionAuthorityState(authority);
+export async function inspectUnstartedArtifactImport(authority: ExecutionHandle) {
+  const owner = authority;
   if (owner.kind !== "artifactTransfer.import" || readJournal({ ...owner, origin: owner.origin }))
     throw Error("Unstarted original import required");
-  const started = readPrivateRecord(
-    owner.installation,
-    "effect-started",
-    `${owner.execution.operationKey}.json`,
+  if (await executionEffectStarted(authority)) throw Error("Import publication began");
+  const effect = await verifyControlEffectSettlement(
+    owner.installation.installation,
+    owner.execution,
   );
-  if (started !== null) throw Error("Import publication began");
-  const effect = childSettlementState(
-    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
-  ).evidence;
   if (
     !["failed_without_effect", "contained"].includes(effect.outcome) ||
     effect.publication !== "not_started"
   )
     throw Error("Unstarted import containment required");
-  verifyLocalArtifactTargetRootRelease(authority);
-  const admitted = readPrivateRecord(
-    owner.installation,
-    "executions",
-    `${owner.execution.operationKey}.json`,
-    65536,
-  ) as { payload: { operation: unknown } };
-  if (controlDigest(admitted) !== owner.receiptDigest)
-    throw Error("Original import admission changed");
-  const operation = opsOperationSchema.parse(admitted.payload.operation);
-  if (
-    operation.kind !== "artifactTransfer.import" ||
-    opsOperationFingerprint(operation) !== owner.execution.operationFingerprint
-  )
-    throw Error("Original import body required");
-  return operation;
+  await verifyLocalArtifactTargetRootRelease(authority);
+  return originalArtifactImportOperation(authority);
 }
 
 /** Actual fixed runtime has finished without starting publication. Freeze the
  * original issuer, prove every finite child unused, then retain nonissuance. */
-export function retainUnstartedArtifactImport(authority: VerifiedExecutionAuthority) {
-  const owner = executionAuthorityState(authority);
+export async function retainUnstartedArtifactImport(authority: ExecutionHandle) {
+  const owner = authority;
   if (owner.kind !== "artifactTransfer.import" || readJournal({ ...owner, origin: owner.origin }))
     throw Error("Unstarted import required");
-  const started = readPrivateRecord(
-    owner.installation,
-    "effect-started",
-    `${owner.execution.operationKey}.json`,
-  );
-  if (started !== null) throw Error("Import publication began");
-  if (
-    cancelControlExecution(authority).length ||
-    owner.reservations.some((slot) => {
-      const source = inspectControlChildPublication(authority, slot);
-      return source.binding !== null || source.publication.state !== "unissued";
-    })
-  )
+  if (await executionEffectStarted(authority)) throw Error("Import publication began");
+  if ((await cancelControlExecution(authority)).length)
     throw Error("Original import child remains attempted");
-  retainControlEffectReceipt(authority, {
+  for (const slot of owner.reservations) {
+    const source = await inspectControlChildPublication(authority, slot);
+    if (source.binding !== null || source.publication.state !== "unissued")
+      throw Error("Original import child remains attempted");
+  }
+  await retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",
     receipt: { kind: "not-started" },
@@ -1002,18 +964,10 @@ export function retainUnstartedArtifactImport(authority: VerifiedExecutionAuthor
 }
 
 /** Fixed original body projection; callers cannot substitute stage/owner IDs. */
-export function originalArtifactImportOperation(authority: VerifiedExecutionAuthority) {
-  const owner = executionAuthorityState(authority);
+export function originalArtifactImportOperation(authority: ExecutionHandle) {
+  const owner = authority;
   if (owner.kind !== "artifactTransfer.import") throw Error("Original import required");
-  const admitted = readPrivateRecord(
-    owner.installation,
-    "executions",
-    `${owner.execution.operationKey}.json`,
-    65536,
-  ) as { payload: { operation: unknown } };
-  if (controlDigest(admitted) !== owner.receiptDigest)
-    throw Error("Original import admission changed");
-  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  const operation = opsOperationSchema.parse(owner.operation);
   if (
     operation.kind !== "artifactTransfer.import" ||
     opsOperationFingerprint(operation) !== owner.execution.operationFingerprint
@@ -1022,22 +976,14 @@ export function originalArtifactImportOperation(authority: VerifiedExecutionAuth
   return operation;
 }
 
-export function originalArtifactValidationOperation(authority: VerifiedExecutionAuthority) {
-  const owner = executionAuthorityState(authority);
+export function originalArtifactValidationOperation(authority: ExecutionHandle) {
+  const owner = authority;
   if (
     owner.kind !== "artifactTransfer.validate" ||
     owner.installation.installation.role !== "ops-agent"
   )
     throw Error("Original validation required");
-  const admitted = readPrivateRecord(
-    owner.installation,
-    "executions",
-    `${owner.execution.operationKey}.json`,
-    65536,
-  ) as { payload: { operation: unknown } };
-  if (controlDigest(admitted) !== owner.receiptDigest)
-    throw Error("Original validation admission changed");
-  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  const operation = opsOperationSchema.parse(owner.operation);
   if (
     operation.kind !== "artifactTransfer.validate" ||
     opsOperationFingerprint(operation) !== owner.execution.operationFingerprint ||
@@ -1049,44 +995,18 @@ export function originalArtifactValidationOperation(authority: VerifiedExecution
 }
 /** This fixed private-only operation has no managed target or child. The live
  * store producer first proves its extraction is contained and cleaned. Match
- * its actual signed effect result before upgrading only the retained knowledge;
+ * its actual recorded effect result before upgrading only the retained knowledge;
  * the original public status tuple, deadline and timestamp remain unchanged. */
-export function retainArtifactValidationObservation(
-  authority: VerifiedExecutionAuthority,
-  status: OpsJobStatus,
-  terminalAt: number,
-  result: unknown,
-) {
-  const operation = originalArtifactValidationOperation(authority),
-    owner = executionAuthorityState(authority),
-    stage = transferStageSchema.parse(result);
-  if (
-    stage.stageId !== operation.stageId ||
-    stage.purpose !== "prepared-artifact" ||
-    !["ready", "failed"].includes(stage.state) ||
-    (stage.state === "failed" && stage.cleanup !== "complete")
-  )
-    throw Error("Original contained validation required");
-  const effect = childSettlementState(
-    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
-  ).evidence;
-  if (
-    effect.outcome !== "committed" ||
-    effect.publication !== "committed" ||
-    effect.terminalReceiptDigest !== controlDigest({ kind: "ops-result", result: stage })
-  )
-    throw Error("Original validation producer result required");
-  retainControlTerminalStatus(owner.installation.installation, owner.execution, status, terminalAt);
-}
-
-export function assertKnownArtifactStageReceipt(authority: VerifiedExecutionAuthority) {
-  const owner = executionAuthorityState(authority);
+export async function assertKnownArtifactStageReceipt(authority: ExecutionHandle) {
+  const owner = authority;
   if (!["artifactTransfer.import", "artifactTransfer.validate"].includes(owner.kind))
     throw Error("Original prepared purpose required");
-  const effect = childSettlementState(
-    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
-  ).evidence;
+  const effect = await verifyControlEffectSettlement(
+    owner.installation.installation,
+    owner.execution,
+  );
   if (effect.outcome === "unknown" || effect.publication === "unknown")
     throw Error("Prepared purpose remains unknown");
-  if (owner.kind === "artifactTransfer.import") verifyLocalArtifactTargetRootRelease(authority);
+  if (owner.kind === "artifactTransfer.import")
+    await verifyLocalArtifactTargetRootRelease(authority);
 }

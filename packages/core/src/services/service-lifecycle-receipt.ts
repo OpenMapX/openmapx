@@ -1,27 +1,23 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-// biome-ignore-start lint/suspicious/noImportCycles: Recovery reads original receipts only after initialization; nominal writer/lease checks already depend on this control graph.
+import { controlDigest } from "../build-artifacts/control-records";
+import { type ExecutionHandle, fixedChildSpawn } from "../build-artifacts/execution-record";
+import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import {
   closeControlInstallation,
-  executionAuthorityState,
-  fixedControlChildId,
+  controlIdentity,
   installationState,
   openControlInstallation,
   readPrivateRecord,
-  type VerifiedExecutionAuthority,
-  withPrivateEffectWriter,
   writePrivateRecord,
-} from "../build-artifacts/control-authority";
-import { controlDigest, signControl, verifyControl } from "../build-artifacts/control-records";
-import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
+} from "../build-artifacts/private-records";
 import {
   assertArtifactTargetLeaseContainmentOwner,
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseReceiptOwner,
   type TargetLeaseAuthority,
 } from "../build-artifacts/target-lease";
-// biome-ignore-end lint/suspicious/noImportCycles: Deferred original-source recovery checks.
 import { canonicalJson } from "../ops/canonical-json";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import {
@@ -76,25 +72,22 @@ export type VerifiedLifecycleOwnership = Readonly<{
   lease: TargetLeaseAuthority;
   [ownershipBrand]: true;
 }>;
-const ownerships = new WeakMap<VerifiedLifecycleOwnership, VerifiedExecutionAuthority>();
+const ownerships = new WeakMap<VerifiedLifecycleOwnership, ExecutionHandle>();
 const authorities = new AsyncLocalStorage<{
-  authority: VerifiedExecutionAuthority;
-  child?: { execution: ExecutionRef; publicKey: string };
+  authority: ExecutionHandle;
+  child?: { execution: ExecutionRef; childKey: string };
 }>();
 
 /** Source-only scope: child identity is checked against its existing private spawn challenge. */
 export function withServiceLifecycleReceiptAuthority<T>(
-  authority: VerifiedExecutionAuthority,
+  authority: ExecutionHandle,
   run: () => Promise<T>,
-  child?: { execution: ExecutionRef; publicKey: string },
+  child?: { execution: ExecutionRef; childKey: string },
 ): Promise<T> {
-  const state = executionAuthorityState(authority);
+  const state = authority;
   if (child) {
-    const id = fixedControlChildId(state.installation, child.publicKey, authority.execution);
-    const spawn = z
-      .object({ execution: executionRefSchema })
-      .parse(readPrivateRecord(state.installation, "spawns", `${id}.json`, 65536));
-    if (controlDigest(spawn.execution) !== controlDigest(child.execution))
+    const spawn = fixedChildSpawn(state.installation, child.childKey, child.execution);
+    if (controlDigest(spawn.parent) !== controlDigest(authority.execution))
       throw Error("Lifecycle child challenge mismatch");
   }
   return authorities.run({ authority, child }, run);
@@ -103,13 +96,12 @@ export async function withVerifiedLifecycleOwnership<T>(
   options: {
     writer: ConfigurationGenerationWriter;
     lease: TargetLeaseAuthority;
-    authority: VerifiedExecutionAuthority;
+    authority: ExecutionHandle;
   },
   run: (ownership: VerifiedLifecycleOwnership) => Promise<T>,
 ): Promise<T> {
   assertConfigurationGenerationWriter(options.writer);
-  assertArtifactTargetLeaseExecution(options.lease, options.authority.execution);
-  executionAuthorityState(options.authority);
+  await assertArtifactTargetLeaseExecution(options.lease, options.authority.execution);
   const ownership = Object.freeze({
     writer: options.writer,
     lease: options.lease,
@@ -123,12 +115,11 @@ export async function withVerifiedLifecycleOwnership<T>(
 }
 export function assertVerifiedLifecycleOwnership(
   ownership: VerifiedLifecycleOwnership,
-): VerifiedExecutionAuthority {
+): ExecutionHandle {
   const authority = ownerships.get(ownership);
   if (!authority) throw Error("Lifecycle ownership is unavailable");
   assertConfigurationGenerationWriter(ownership.writer);
   assertArtifactTargetLeaseReceiptOwner(ownership.lease, authority.execution);
-  executionAuthorityState(authority);
   return authority;
 }
 
@@ -143,16 +134,13 @@ const seedSchema = z.strictObject({
   coordinatorMode: z.enum(["ensure-running", "require-running"]),
   expectedRevisionId: revision,
   seedRevisionId: revision,
-  childPublicKey: z.string().min(1).max(256),
+  childId: z.string().min(1).max(256),
 });
 const envelopeSchema = z.strictObject({
-  seed: z.strictObject({ payload: seedSchema, signature: z.string().max(128) }),
+  seed: seedSchema,
   current: z.strictObject({
-    payload: z.strictObject({
-      seedDigest: z.string().regex(/^[a-f0-9]{64}$/),
-      receipt: serviceLifecycleReceiptSchema,
-    }),
-    signature: z.string().max(128),
+    seedDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    receipt: serviceLifecycleReceiptSchema,
   }),
 });
 const highWaterSchema = z.strictObject({
@@ -169,9 +157,6 @@ const highWaterSchema = z.strictObject({
     })
     .nullable(),
 });
-const seedDomain = "openmapx-service-lifecycle-seed-v1",
-  receiptDomain = "openmapx-service-lifecycle-receipt-v1",
-  highWaterDomain = "openmapx-service-lifecycle-high-water-v1";
 const highWaterName = (execution: ExecutionRef) =>
   `lifecycle-${executionRefSchema.parse(execution).operationKey}.json`;
 function assertDataRoot(dataRoot: string, trusted: string) {
@@ -221,42 +206,22 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
     scope = authorities.getStore();
   let close: (() => void) | undefined;
   const local = scope
-    ? executionAuthorityState(scope.authority).installation
+    ? scope.authority.installation
     : (() => {
         const installation = openControlInstallation({
           infraDir: dirname(dataRoot),
-          role: envelope.seed.payload.issuer,
+          role: envelope.seed.issuer,
         });
         close = () => closeControlInstallation(installation);
         return installationState(installation);
       })();
   try {
     assertDataRoot(dataRoot, local.dataRoot);
-    const seed = verifyControl(
-      local.publicKeys[envelope.seed.payload.issuer],
-      seedDomain,
-      envelope.seed,
-      seedSchema,
-    );
-    const seedDigest = controlDigest(envelope.seed),
-      publicKey =
-        envelope.current.payload.receipt.sequence === 0
-          ? local.publicKeys[seed.issuer]
-          : seed.childPublicKey;
-    const current = verifyControl(
-      publicKey,
-      receiptDomain,
-      envelope.current,
-      envelopeSchema.shape.current.shape.payload,
-    );
+    const seed = seedSchema.parse(envelope.seed);
+    const seedDigest = controlDigest(envelope.seed);
+    const current = envelopeSchema.shape.current.parse(envelope.current);
     const raw = readPrivateRecord(local, "observations", highWaterName(execution), 8192);
-    const signer = (raw as { payload?: { signer?: string } }).payload?.signer;
-    let water = verifyControl(
-      signer === "child" ? seed.childPublicKey : local.publicKeys[seed.issuer],
-      highWaterDomain,
-      raw,
-      highWaterSchema,
-    );
+    let water = highWaterSchema.parse(raw);
     const receipt = current.receipt;
     if (
       !same(seed.execution, execution) ||
@@ -273,12 +238,12 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
     )
       throw Error("Lifecycle receipt is unavailable");
     if (water.pending && allowRecovery && scope) {
-      const owner = executionAuthorityState(scope.authority),
+      const owner = scope.authority,
         pending = water.pending;
       if (
         !same(owner.execution, execution) ||
         owner.kind !== `service.${seed.action}` ||
-        owner.installation.installation.publicKey !== seed.childPublicKey ||
+        controlIdentity(owner.installation.installation) !== seed.childId ||
         water.signer !== "child" ||
         pending.sequence !== water.sequence + 1 ||
         receipt.sequence !== pending.sequence ||
@@ -291,22 +256,13 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
         receiptDigest: pending.receiptDigest,
         pending: null,
       };
-      withPrivateEffectWriter(owner, () => {
-        if (
-          controlDigest(
-            readPrivateRecord(local, "observations", highWaterName(execution), 8192),
-          ) !== controlDigest(raw) ||
-          controlDigest(readEnvelope(dataRoot, execution)) !== controlDigest(envelope)
-        )
-          throw Error("Lifecycle publication changed during recovery");
-        writePrivateRecord(
-          local,
-          "observations",
-          highWaterName(execution),
-          signControl(local.privateKey, highWaterDomain, repaired),
-          false,
-        );
-      });
+      if (
+        controlDigest(readPrivateRecord(local, "observations", highWaterName(execution), 8192)) !==
+          controlDigest(raw) ||
+        controlDigest(readEnvelope(dataRoot, execution)) !== controlDigest(envelope)
+      )
+        throw Error("Lifecycle publication changed during recovery");
+      writePrivateRecord(local, "observations", highWaterName(execution), repaired, false);
       water = repaired;
     }
     if (
@@ -337,7 +293,7 @@ export interface ServiceLifecycleReceiptStore {
     owner: {
       writer: ConfigurationGenerationWriter;
       lease: TargetLeaseAuthority;
-      authority: VerifiedExecutionAuthority;
+      authority: ExecutionHandle;
     },
   ): Promise<void>;
 }
@@ -353,27 +309,20 @@ export async function openServiceLifecycleReceipt(options: {
 }): Promise<ServiceLifecycleReceiptStore> {
   const scope = authorities.getStore();
   if (!scope) throw Error("Lifecycle receipt owner is required");
-  const state = executionAuthorityState(scope.authority),
+  const state = scope.authority,
     local = state.installation;
   assertDataRoot(options.dataRoot, local.dataRoot);
   if (!same(options.execution, scope.child?.execution ?? scope.authority.execution))
     throw Error("Lifecycle receipt execution mismatch");
-  const admitted = readPrivateRecord(
-    local,
-    "executions",
-    `${state.execution.operationKey}.json`,
-    65536,
-  ) as {
-    payload: {
-      operation: {
-        kind: string;
-        serviceId?: string;
-        expectedConfigurationRevisionId?: string;
-        noDeps?: boolean;
-      };
+  const admitted = state as {
+    operation: {
+      kind: string;
+      serviceId?: string;
+      expectedConfigurationRevisionId?: string;
+      noDeps?: boolean;
     };
   };
-  const operation = admitted.payload.operation;
+  const operation = admitted.operation;
   if (
     operation.kind !== `service.${options.action}` ||
     !operation.serviceId ||
@@ -420,25 +369,21 @@ export async function openServiceLifecycleReceipt(options: {
         followUp: "not_started",
         sequence: 0,
       });
-      const seed = signControl(
-        local.privateKey,
-        seedDomain,
-        seedSchema.parse({
-          version: 1,
-          issuer: local.installation.role,
-          root: scope.authority.execution,
-          execution: options.execution,
-          serviceIds,
-          action: options.action,
-          noDeps: options.noDeps,
-          coordinatorMode: options.coordinatorMode,
-          expectedRevisionId: options.expectedRevisionId,
-          seedRevisionId: options.seedRevisionId,
-          childPublicKey: scope.child?.publicKey ?? local.installation.publicKey,
-        }),
-      );
+      const seed = seedSchema.parse({
+        version: 1,
+        issuer: local.installation.role,
+        root: scope.authority.execution,
+        execution: options.execution,
+        serviceIds,
+        action: options.action,
+        noDeps: options.noDeps,
+        coordinatorMode: options.coordinatorMode,
+        expectedRevisionId: options.expectedRevisionId,
+        seedRevisionId: options.seedRevisionId,
+        childId: scope.child?.childKey ?? controlIdentity(local.installation),
+      });
       const seedDigest = controlDigest(seed),
-        current = signControl(local.privateKey, receiptDomain, { seedDigest, receipt });
+        current = { seedDigest, receipt };
       const envelope = envelopeSchema.parse({ seed, current }),
         bytes = canonicalJson(envelope);
       if (Buffer.byteLength(bytes) > 65536) throw Error("Lifecycle receipt budget exceeded");
@@ -446,7 +391,7 @@ export async function openServiceLifecycleReceipt(options: {
         local,
         "observations",
         highWaterName(options.execution),
-        signControl(local.privateKey, highWaterDomain, {
+        {
           version: 1,
           execution: options.execution,
           seedDigest,
@@ -454,7 +399,7 @@ export async function openServiceLifecycleReceipt(options: {
           receiptDigest: controlDigest(current),
           signer: "seed",
           pending: null,
-        }),
+        },
         true,
       );
       opened.directory.write(name, bytes, true);
@@ -472,106 +417,104 @@ export async function openServiceLifecycleReceipt(options: {
     existing.seedRevisionId !== options.seedRevisionId
   )
     throw Error("Lifecycle receipt identity conflict");
-  const write = (
+  const write = async (
     expectedSequence: number,
     next: ServiceLifecycleReceipt,
     writer: ConfigurationGenerationWriter,
     lease: TargetLeaseAuthority,
-    authority: VerifiedExecutionAuthority,
+    authority: ExecutionHandle,
   ) => {
-    const owner = executionAuthorityState(authority);
-    return withPrivateEffectWriter(owner, () => {
-      const current = inspect(options.dataRoot, options.execution);
-      const receipt = serviceLifecycleReceiptSchema.parse(next);
-      const transitions: Record<
-        ServiceLifecycleReceipt["phase"],
-        readonly ServiceLifecycleReceipt["phase"][]
-      > = {
-        prepared: ["pins_validated"],
-        pins_validated: [receipt.action === "update" ? "pulled" : "generation_committed"],
-        pulled: ["generation_committed"],
-        generation_committed: ["hardlinks_applied"],
-        hardlinks_applied: ["recreated"],
-        recreated: ["complete"],
-        complete: [],
-        failed: [],
-        unknown: [],
+    const owner = authority;
+    const current = inspect(options.dataRoot, options.execution);
+    const receipt = serviceLifecycleReceiptSchema.parse(next);
+    const transitions: Record<
+      ServiceLifecycleReceipt["phase"],
+      readonly ServiceLifecycleReceipt["phase"][]
+    > = {
+      prepared: ["pins_validated"],
+      pins_validated: [receipt.action === "update" ? "pulled" : "generation_committed"],
+      pulled: ["generation_committed"],
+      generation_committed: ["hardlinks_applied"],
+      hardlinks_applied: ["recreated"],
+      recreated: ["complete"],
+      complete: [],
+      failed: [],
+      unknown: [],
+    };
+    if (
+      !["failed", "unknown"].includes(receipt.phase) &&
+      !transitions[current.receipt.phase].includes(receipt.phase)
+    )
+      throw Error("Lifecycle phase transition conflict");
+    if (
+      receipt.finalRevisionId !== null &&
+      current.receipt.finalRevisionId === null &&
+      configurationGenerationWriterCommit(writer)?.revisionId !== receipt.finalRevisionId
+    )
+      throw Error("Lifecycle revision was not committed by its writer");
+    if (current.receipt.commit === "final_committed" && receipt.commit !== "final_committed")
+      throw Error("Lifecycle commit evidence cannot regress");
+    if (!["failed", "unknown"].includes(receipt.phase))
+      await assertArtifactTargetLeaseExecution(lease, authority.execution);
+    if (
+      !same(authority.execution, receipt.execution) ||
+      controlIdentity(owner.installation.installation) !== current.seed.childId ||
+      expectedSequence !== current.receipt.sequence ||
+      receipt.sequence !== expectedSequence + 1 ||
+      ["complete", "failed", "unknown"].includes(current.receipt.phase) ||
+      !same(receipt.execution, current.receipt.execution) ||
+      !same(receipt.serviceIds, current.receipt.serviceIds) ||
+      receipt.action !== current.receipt.action ||
+      receipt.noDeps !== current.receipt.noDeps ||
+      receipt.coordinatorMode !== current.receipt.coordinatorMode ||
+      receipt.expectedRevisionId !== current.receipt.expectedRevisionId ||
+      receipt.seedRevisionId !== current.receipt.seedRevisionId ||
+      (current.receipt.finalRevisionId !== null &&
+        current.receipt.finalRevisionId !== receipt.finalRevisionId)
+    )
+      throw Error("Lifecycle receipt checkpoint conflict");
+    const record = {
+      seedDigest: controlDigest(current.envelope.seed),
+      receipt,
+    };
+    const envelope = { seed: current.envelope.seed, current: record },
+      bytes = canonicalJson(envelope);
+    if (Buffer.byteLength(bytes) > 65536) throw Error("Lifecycle receipt budget exceeded");
+    const directory = directories(options.dataRoot);
+    try {
+      const before = directory.directory.fileIdentity(name);
+      const pending = {
+        ...current.water,
+        signer: "child" as const,
+        pending: { sequence: receipt.sequence, receiptDigest: controlDigest(record) },
       };
-      if (
-        !["failed", "unknown"].includes(receipt.phase) &&
-        !transitions[current.receipt.phase].includes(receipt.phase)
-      )
-        throw Error("Lifecycle phase transition conflict");
-      if (
-        receipt.finalRevisionId !== null &&
-        current.receipt.finalRevisionId === null &&
-        configurationGenerationWriterCommit(writer)?.revisionId !== receipt.finalRevisionId
-      )
-        throw Error("Lifecycle revision was not committed by its writer");
-      if (current.receipt.commit === "final_committed" && receipt.commit !== "final_committed")
-        throw Error("Lifecycle commit evidence cannot regress");
-      if (!["failed", "unknown"].includes(receipt.phase))
-        assertArtifactTargetLeaseExecution(lease, authority.execution);
-      if (
-        !same(authority.execution, receipt.execution) ||
-        owner.installation.installation.publicKey !== current.seed.childPublicKey ||
-        expectedSequence !== current.receipt.sequence ||
-        receipt.sequence !== expectedSequence + 1 ||
-        ["complete", "failed", "unknown"].includes(current.receipt.phase) ||
-        !same(receipt.execution, current.receipt.execution) ||
-        !same(receipt.serviceIds, current.receipt.serviceIds) ||
-        receipt.action !== current.receipt.action ||
-        receipt.noDeps !== current.receipt.noDeps ||
-        receipt.coordinatorMode !== current.receipt.coordinatorMode ||
-        receipt.expectedRevisionId !== current.receipt.expectedRevisionId ||
-        receipt.seedRevisionId !== current.receipt.seedRevisionId ||
-        (current.receipt.finalRevisionId !== null &&
-          current.receipt.finalRevisionId !== receipt.finalRevisionId)
-      )
-        throw Error("Lifecycle receipt checkpoint conflict");
-      const signed = signControl(owner.installation.privateKey, receiptDomain, {
-        seedDigest: controlDigest(current.envelope.seed),
-        receipt,
+      writePrivateRecord(
+        owner.installation,
+        "observations",
+        highWaterName(options.execution),
+        pending,
+        false,
+      );
+      directory.directory.write(name, bytes, false, () => {
+        assertConfigurationGenerationWriter(writer);
+        if (!sameInode(before, directory.directory.fileIdentity(name)))
+          throw Error("Lifecycle receipt inode changed");
       });
-      const envelope = { seed: current.envelope.seed, current: signed },
-        bytes = canonicalJson(envelope);
-      if (Buffer.byteLength(bytes) > 65536) throw Error("Lifecycle receipt budget exceeded");
-      const directory = directories(options.dataRoot);
-      try {
-        const before = directory.directory.fileIdentity(name);
-        const pending = {
-          ...current.water,
-          signer: "child" as const,
-          pending: { sequence: receipt.sequence, receiptDigest: controlDigest(signed) },
-        };
-        writePrivateRecord(
-          owner.installation,
-          "observations",
-          highWaterName(options.execution),
-          signControl(owner.installation.privateKey, highWaterDomain, pending),
-          false,
-        );
-        directory.directory.write(name, bytes, false, () => {
-          assertConfigurationGenerationWriter(writer);
-          if (!sameInode(before, directory.directory.fileIdentity(name)))
-            throw Error("Lifecycle receipt inode changed");
-        });
-        writePrivateRecord(
-          owner.installation,
-          "observations",
-          highWaterName(options.execution),
-          signControl(owner.installation.privateKey, highWaterDomain, {
-            ...pending,
-            sequence: receipt.sequence,
-            receiptDigest: controlDigest(signed),
-            pending: null,
-          }),
-          false,
-        );
-      } finally {
-        directory.close();
-      }
-    });
+      writePrivateRecord(
+        owner.installation,
+        "observations",
+        highWaterName(options.execution),
+        {
+          ...pending,
+          sequence: receipt.sequence,
+          receiptDigest: controlDigest(record),
+          pending: null,
+        },
+        false,
+      );
+    } finally {
+      directory.close();
+    }
   };
   return {
     async read() {
@@ -602,19 +545,17 @@ export async function readServiceLifecycleReceipt(options: {
 /**
  * Whether a recorded failure can be released by the process that recorded it.
  * Docker effects are awaited children, so once one has exited no writer of ours
- * survives; only a hardlink child issued to data-manager can outlive this process.
- * `hardlinkAttempt` is null only when the child was provably never issued. Anything
- * else, including an attempt that could not be read, keeps the fence.
+ * survives; only a hardlink application data-manager never answered for can
+ * still be running, and that keeps the fence.
  */
 export function lifecycleFailureHasNoSurvivor(
   receipt: ServiceLifecycleReceipt,
-  hardlinkAttempt: unknown,
+  hardlinkOutcomeUnknown: boolean,
 ): boolean {
-  return (receipt.phase === "failed" || receipt.phase === "unknown") && hardlinkAttempt === null;
+  return (receipt.phase === "failed" || receipt.phase === "unknown") && !hardlinkOutcomeUnknown;
 }
 
-function readOriginalStandaloneReceipt(authority: VerifiedExecutionAuthority) {
-  const owner = executionAuthorityState(authority);
+function readOriginalStandaloneReceipt(owner: ExecutionHandle) {
   if (
     owner.installation.installation.role !== "host-cli" ||
     owner.installation.fixedChildId ||
@@ -623,21 +564,21 @@ function readOriginalStandaloneReceipt(authority: VerifiedExecutionAuthority) {
   )
     throw Error("Original standalone host lifecycle required");
   return authorities.run(
-    { authority },
+    { authority: owner },
     () => inspect(owner.installation.dataRoot, owner.execution, true).receipt,
   );
 }
 
 /** The original producer's durable failure or unknown outcome, at any phase it stopped. */
-export function readFailedServiceLifecycleReceipt(authority: VerifiedExecutionAuthority) {
+export function readFailedServiceLifecycleReceipt(authority: ExecutionHandle) {
   const receipt = readOriginalStandaloneReceipt(authority);
-  if (!lifecycleFailureHasNoSurvivor(receipt, null))
+  if (!lifecycleFailureHasNoSurvivor(receipt, false))
     throw Error("Original failed lifecycle required");
   return receipt;
 }
 
 /** Original producer evidence only; never accepts a caller-supplied receipt. */
-export function readFailedServiceHardlinksReceipt(authority: VerifiedExecutionAuthority) {
+export function readFailedServiceHardlinksReceipt(authority: ExecutionHandle) {
   const receipt = readOriginalStandaloneReceipt(authority);
   if (
     receipt.phase !== "failed" ||

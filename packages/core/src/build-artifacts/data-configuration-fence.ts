@@ -3,40 +3,32 @@
  * is admitted. Only the operations agent prepares and settles it, authenticated
  * by its own data-manager token; both calls are idempotent on the same body.
  * The agent records the fence leaf in its lease store and settles it from the
- * receipt this returns. */
+ * receipt this returns. The row is data-manager's own record of that leaf: a
+ * preparation either inserts the prepared row or, refused before any change,
+ * a refused row, so a repeat of the same request gets the same answer. */
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
-import { executionFingerprint, type VerifiedParentExecution } from "../ops/execution-identity";
+import { executionFingerprint } from "../ops/execution-identity";
+import { DATA_ADVISORY_LOCKS } from "../services/data-manager/advisory-locks";
 import {
   type DataConfigurationFencePrepare,
+  type DataConfigurationFencePrepareRequest,
   type DataConfigurationFenceReceipt,
-  type DataConfigurationFenceSettle,
+  type DataConfigurationFenceSettleRequest,
   dataConfigurationFenceOutcomeSchema,
+  dataConfigurationFencePrepareRequestSchema,
   dataConfigurationFencePrepareSchema,
-  dataConfigurationFenceSettleSchema,
+  dataConfigurationFenceSettleRequestSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
-import { startGenerationHardlinksExecutionSchema } from "../services/data-manager/contracts/executions";
+import { type ControlInstallation, controlDigest } from "./control-records";
 import {
-  beginControlEffect,
-  type ControlInstallation,
+  type ControlDelegation,
   type ControlTransportPrincipal,
-  childSettlementState,
-  controlDigest,
-  executionAuthorityState,
   inspectRemoteDelegation,
-  installationState,
-  readPrivateRecord,
-  reserveControlTerminal,
-  restoreAdmittedControlExecution,
-  retainAdmittedControlExecution,
   retainedControlParent,
-  settleExecutionLifecycle,
-  type VerifiedExecutionAuthority,
-  verifyControlEffectSettlement,
-  withPrivateEffectWriter,
-  writePrivateRecord,
-} from "./control-authority";
-import { signControl } from "./control-records";
+} from "./execution-record";
+import { rootLeaseId } from "./lease-store";
+import { installationState } from "./private-records";
 
 export interface DataFenceSql {
   unsafe(
@@ -53,14 +45,15 @@ const fenceRowSchema = z.object({
   candidate_id: z.uuid(),
   plan_digest: z.string(),
   input: dataConfigurationFencePrepareSchema,
-  state: z.enum(["prepared", "settled"]),
+  state: z.enum(["prepared", "settled", "refused"]),
   outcome: dataConfigurationFenceOutcomeSchema.nullable(),
 });
 type FenceRow = z.infer<typeof fenceRowSchema>;
-/** Data jobs whose effects are unknown keep the data plane fenced: their
- * publication was not observed, or a legacy job was interrupted unfinished. */
+const FENCE_COLUMNS = "maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input";
+const FENCE_VALUES = "$1::uuid,$2::uuid,$3,$4::uuid,$5,$6::text::jsonb";
+/** Data jobs whose publication was not observed keep the data plane fenced. */
 const UNKNOWN_DATA_JOB =
-  "SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown' OR (execution_version IS NULL AND finished_at IS NULL AND status='interrupted') LIMIT 1";
+  "SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown' LIMIT 1";
 export class DataFenceBusy extends Error {
   readonly statusCode = 409;
   constructor() {
@@ -74,6 +67,8 @@ function forbidden(message: string): Error {
   return Object.assign(Error(message), { statusCode: 403 });
 }
 function receiptOf(row: FenceRow): DataConfigurationFenceReceipt {
+  // A refused preparation fenced nothing; it answers as busy.
+  if (row.state === "refused") throw new DataFenceBusy();
   const { serviceIds: _serviceIds, coordinatorMode: _coordinatorMode, ...binding } = row.input;
   return {
     ...binding,
@@ -82,20 +77,28 @@ function receiptOf(row: FenceRow): DataConfigurationFenceReceipt {
     state: row.state,
   };
 }
-declare const preparedGenerationBrand: unique symbol;
-export type VerifiedPreparedGenerationAdmission = Readonly<{ [preparedGenerationBrand]: true }>;
-const preparedGenerations = new WeakMap<
-  VerifiedPreparedGenerationAdmission,
-  {
-    installation: ControlInstallation;
-    request: ReturnType<typeof startGenerationHardlinksExecutionSchema.parse>;
-    headers: readonly string[];
-    principal: ControlTransportPrincipal;
-    parent: VerifiedParentExecution;
-    fenceDigest: string;
-    execution: ReturnType<typeof inspectRemoteDelegation>["execution"];
+/** What the agent's store shows about the lease a hardlink plan's sender
+ * names: `held` while that sender holds it live on data-manager, `unreadable`
+ * when the agent did not answer. */
+export type SenderLease = "held" | "not_held" | "unreadable";
+export async function inspectSenderLease(
+  installation: ControlInstallation,
+  leaseId: string,
+  sender: "ops-agent" | "host-cli",
+): Promise<SenderLease> {
+  const leases = installationState(installation).leases;
+  let lease: Awaited<ReturnType<typeof leases.read>>;
+  try {
+    lease = await leases.read(leaseId);
+  } catch {
+    return "unreadable";
   }
->();
+  return lease?.state === "held" &&
+    lease.owner.executor === sender &&
+    lease.targets.includes("data-manager")
+    ? "held"
+    : "not_held";
+}
 export function createDataConfigurationFenceStore(
   installation: ControlInstallation,
   sql: DataFenceSql,
@@ -105,10 +108,9 @@ export function createDataConfigurationFenceStore(
     throw Error("Fixed DM fence receiver required");
   let open = false;
   async function lock(tx: Tx) {
-    const rows = await tx.unsafe(
-      "SELECT pg_try_advisory_xact_lock($1::int,$2::int) AS held",
-      [0x4f4d58, 2],
-    );
+    const rows = await tx.unsafe("SELECT pg_try_advisory_xact_lock($1::int,$2::int) AS held", [
+      ...DATA_ADVISORY_LOCKS.dataAdmission,
+    ]);
     if (rows[0]?.held !== true) throw new DataFenceBusy();
   }
   async function row(tx: Tx, where: "maintenance_id" | "state", value: string) {
@@ -121,13 +123,13 @@ export function createDataConfigurationFenceStore(
   }
   function inspectDelegation(
     body: DataConfigurationFencePrepare,
-    rawHeaders: readonly string[],
+    value: ControlDelegation,
     transportPrincipal: ControlTransportPrincipal,
   ) {
     const kind = "configuration-maintenance.prepare";
     try {
       if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
-      const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
+      const delegation = inspectRemoteDelegation(installation, value, transportPrincipal);
       const operation = { kind, ...body };
       if (
         delegation.parent.executor !== "ops-agent" ||
@@ -146,191 +148,50 @@ export function createDataConfigurationFenceStore(
         canonicalJson(delegation.serviceIds) !== canonicalJson(body.serviceIds)
       )
         throw Error("Configuration fence delegation identity conflict");
-      return { delegation, operation };
+      return delegation.execution;
     } catch {
       // Classify verification failures before any fence SQL.
       throw forbidden("Agent configuration fence delegation rejected");
     }
-  }
-  /** Writes the leaf's own terminal effect record. */
-  function recordLeaf(
-    authority: VerifiedExecutionAuthority,
-    outcome: "committed" | "failed_without_effect",
-    receipt: unknown,
-  ) {
-    const state = executionAuthorityState(authority),
-      effect = {
-        identity: state.execution,
-        outcome,
-        publication: outcome === "committed" ? "committed" : "not_started",
-        terminalReceiptDigest: controlDigest(receipt),
-        receipt,
-      };
-    withPrivateEffectWriter(state, () => {
-      settleExecutionLifecycle(state);
-      writePrivateRecord(
-        local,
-        "effects",
-        `${state.execution.operationKey}.json`,
-        signControl(local.privateKey, "openmapx-control-settlement-v1", effect),
-        false,
-      );
-    });
-  }
-  /** Records the agent's fence leaf as this receiver's execution and runs the
-   * fence transition once. A repeated request returns the recorded result. */
-  async function withLeaf(
-    verified: ReturnType<typeof inspectDelegation>,
-    run: () => Promise<DataConfigurationFenceReceipt>,
-  ): Promise<DataConfigurationFenceReceipt> {
-    const { delegation } = verified;
-    // The fence holds the whole application closure the agent leased.
-    // Startup registers only the release's built-in services; installed
-    // community-extension services are known to the agent alone.
-    local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
-    let authority: VerifiedExecutionAuthority | undefined;
-    try {
-      authority = restoreAdmittedControlExecution(installation, delegation.execution);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    if (!authority) {
-      if (Date.now() >= delegation.execution.deadlineAt) throw new DataFenceBusy();
-      authority = retainAdmittedControlExecution(installation, {
-        execution: delegation.execution,
-        kind: delegation.kind,
-        operation: verified.operation,
-        admittedAt: Date.now(),
-        requestedDeadlineAt: delegation.execution.deadlineAt,
-        parent: delegation.verifiedParent,
-        serviceIds: delegation.serviceIds,
-      });
-    }
-    let prior: unknown;
-    try {
-      prior = readPrivateRecord(local, "effects", `${delegation.execution.operationKey}.json`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    if (prior !== undefined && prior !== null) {
-      const settled = childSettlementState(
-        verifyControlEffectSettlement(installation, delegation.execution),
-      ).evidence;
-      if (settled.outcome !== "committed") throw new DataFenceBusy();
-      const saved = await row(sql, "maintenance_id", verified.operation.maintenanceId);
-      if (!saved) throw new DataFenceBusy();
-      return receiptOf(saved);
-    }
-    reserveControlTerminal(authority);
-    beginControlEffect(authority);
-    let receipt: DataConfigurationFenceReceipt;
-    try {
-      receipt = await run();
-    } catch (error) {
-      // A busy refusal made no write: the leaf failed without effect.
-      if (error instanceof DataFenceBusy)
-        recordLeaf(authority, "failed_without_effect", {
-          kind: "data-configuration-fence-refused",
-          maintenanceId: verified.operation.maintenanceId,
-          reason: "busy",
-        });
-      throw error;
-    }
-    recordLeaf(authority, "committed", {
-      kind: "data-configuration-fence",
-      receipt: { ...receipt, sequence: 0, state: "prepared" },
-    });
-    return receipt;
   }
   async function assertAdmission(tx: Tx) {
     if (!open) throw new DataFenceBusy();
     if (await row(tx, "state", "prepared")) throw new DataFenceBusy();
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
   }
-  async function inspectGenerationAdmission(
-    value: unknown,
-    rawHeaders: readonly string[],
-    principal: ControlTransportPrincipal,
+  /** A generation's hardlink plan sent with the sender's lease id. Outside a
+   * maintenance it is admitted only under a lease the agent's store shows the
+   * sender holding on data-manager. While a fence is prepared only the
+   * maintenance's own plan runs: the agent sends it under the lease the
+   * maintenance owner holds, for the revision and plan the fence names. */
+  async function assertLinkAdmission(
     tx: Tx,
+    input: { revisionId: string; planDigest: string; leaseId: string },
+    sender: { caller: ControlTransportPrincipal; lease: SenderLease },
   ) {
-    const request = startGenerationHardlinksExecutionSchema.parse(value);
-    let delegation: ReturnType<typeof inspectRemoteDelegation>;
-    try {
-      delegation = inspectRemoteDelegation(installation, rawHeaders, principal);
-    } catch {
-      throw forbidden("Generation delegation required");
-    }
-    if (
-      delegation.kind !== "generation-hardlinks" ||
-      delegation.phase !== "hardlinks" ||
-      delegation.execution.operationKey !== request.operationKey ||
-      delegation.execution.operationFingerprint !== controlDigest(request.input) ||
-      request.input.planDigest !== controlDigest(request.plan) ||
-      request.plan.plan.some((entry) => !delegation.serviceIds.includes(entry.consumerService))
-    )
-      throw forbidden("Generation plan/delegation binding conflict");
+    const { caller } = sender;
+    if (caller !== "ops-agent" && caller !== "host-cli")
+      throw forbidden("Only the agent or the host CLI links under its own lease");
     if (!open) throw new DataFenceBusy();
     const fence = await row(tx, "state", "prepared");
-    if (!fence) return;
-    const receipt = receiptOf(fence);
-    // During maintenance only the maintenance owner's own hardlink leaf runs:
-    // the agent issued it under the maintenance owner the fence was prepared for.
-    if (
-      principal !== "ops-agent" ||
-      canonicalJson(delegation.owner) !== canonicalJson(receipt.ownerPrepare) ||
-      request.input.revisionId !== receipt.revisionId ||
-      request.input.planDigest !== receipt.hardlinkPlanDigest ||
-      request.input.coordinatorMode !== fence.input.coordinatorMode ||
-      delegation.serviceIds.some((id) => !fence.input.serviceIds.includes(id))
-    )
-      throw forbidden("Generation maintenance owner/revision/hash conflict");
+    if (fence) {
+      const receipt = receiptOf(fence);
+      if (
+        caller !== "ops-agent" ||
+        input.leaseId !== rootLeaseId(receipt.ownerPrepare) ||
+        input.revisionId !== receipt.revisionId ||
+        input.planDigest !== receipt.hardlinkPlanDigest
+      )
+        throw new DataFenceBusy();
+    } else if (sender.lease === "unreadable")
+      throw Object.assign(Error("The agent did not answer for the sender's lease"), {
+        statusCode: 503,
+      });
+    else if (sender.lease !== "held")
+      throw forbidden("The sender holds no live lease on data-manager under this id");
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
-    return { request, delegation, fenceDigest: controlDigest(fence) };
   }
   return {
-    /** Whether the original expired preparation was ever admitted, observed
-     * under the admission lock. An expired preparation can no longer be
-     * admitted, so a negative answer stays true. */
-    async recoverUnadmittedPreparation(
-      value: unknown,
-      rawHeaders: readonly string[],
-      transportPrincipal: ControlTransportPrincipal,
-    ) {
-      const input = dataConfigurationFencePrepareSchema.parse(value);
-      const { delegation } = inspectDelegation(input, rawHeaders, transportPrincipal);
-      if (Date.now() <= Math.max(delegation.execution.deadlineAt, delegation.owner.deadlineAt))
-        throw conflict("Original configuration preparation has not expired");
-      return sql.transaction(async (tx) => {
-        await lock(tx);
-        const admitted = await tx.unsafe(
-          "SELECT maintenance_id FROM data_manager.configuration_fence WHERE operation_key=$1 OR fence_id=$2::uuid OR maintenance_id=$3::uuid UNION ALL SELECT id FROM data_manager.jobs WHERE operation_key=$1 OR id=$2::uuid LIMIT 1",
-          [
-            delegation.execution.operationKey,
-            delegation.execution.executionId,
-            input.maintenanceId,
-          ],
-        );
-        if (admitted.length) throw conflict("Original configuration preparation was admitted");
-        // Any private trace of the execution means it may have been admitted.
-        for (const namespace of ["executions", "effects", "effect-started"]) {
-          try {
-            readPrivateRecord(local, namespace, `${delegation.execution.operationKey}.json`);
-            throw conflict("Original configuration preparation was admitted");
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-          }
-        }
-        return {
-          version: 2 as const,
-          kind: "configuration-prepare-not-admitted" as const,
-          leaseId: delegation.leaseId,
-          delegationId: delegation.delegationId,
-          child: delegation.execution,
-          input,
-          observedAt: Date.now(),
-        };
-      });
-    },
     /** Admission opens once the fence table is readable. */
     async startup() {
       open = false;
@@ -338,64 +199,7 @@ export function createDataConfigurationFenceStore(
       open = true;
     },
     assertAdmission,
-    async assertGenerationAdmission(
-      value: unknown,
-      rawHeaders: readonly string[],
-      principal: ControlTransportPrincipal,
-      parent?: VerifiedParentExecution,
-    ): Promise<VerifiedPreparedGenerationAdmission | undefined> {
-      const checked = await inspectGenerationAdmission(value, rawHeaders, principal, sql);
-      if (!checked) return undefined;
-      if (!parent) throw new DataFenceBusy();
-      const proof = Object.freeze({}) as VerifiedPreparedGenerationAdmission;
-      preparedGenerations.set(proof, {
-        installation,
-        request: checked.request,
-        headers: Object.freeze([...rawHeaders]),
-        principal,
-        parent,
-        fenceDigest: checked.fenceDigest,
-        execution: checked.delegation.execution,
-      });
-      return proof;
-    },
-    async assertPreparedGenerationAdmission(
-      tx: Tx,
-      proof: VerifiedPreparedGenerationAdmission,
-      input: unknown,
-      admission: {
-        operationKey: string;
-        requestedDeadlineAt?: number;
-        parent?: VerifiedParentExecution;
-        id?: string;
-        principal?: string;
-      },
-    ): Promise<void> {
-      const source = preparedGenerations.get(proof);
-      if (
-        !source ||
-        source.installation !== installation ||
-        source.parent !== admission.parent ||
-        canonicalJson(input) !== canonicalJson(source.request.input) ||
-        admission.operationKey !== source.request.operationKey ||
-        admission.requestedDeadlineAt !== source.request.requestedDeadlineAt ||
-        admission.id !== source.execution.executionId ||
-        admission.principal !== source.execution.principal
-      )
-        throw new DataFenceBusy();
-      const checked = await inspectGenerationAdmission(
-        source.request,
-        source.headers,
-        source.principal,
-        tx,
-      );
-      if (
-        !checked ||
-        checked.fenceDigest !== source.fenceDigest ||
-        canonicalJson(checked.delegation.execution) !== canonicalJson(source.execution)
-      )
-        throw new DataFenceBusy();
-    },
+    assertLinkAdmission,
     async withAdmission<T>(run: (tx: Tx) => Promise<T>): Promise<T> {
       return sql.transaction(async (tx) => {
         await lock(tx);
@@ -403,34 +207,40 @@ export function createDataConfigurationFenceStore(
         return run(tx);
       });
     },
-    /** Same body returns the recorded receipt; another body for the same
-     * maintenance is a conflict; unfinished or unknown data jobs refuse. */
+    /** Same body returns the recorded receipt, or busy again when it was
+     * refused; another body for the same maintenance is a conflict; unfinished
+     * or unknown data jobs refuse. */
     async prepare(
-      value: DataConfigurationFencePrepare,
-      rawHeaders: readonly string[],
+      value: DataConfigurationFencePrepareRequest,
       transportPrincipal: ControlTransportPrincipal,
     ) {
-      const input = dataConfigurationFencePrepareSchema.parse(value),
-        verified = inspectDelegation(input, rawHeaders, transportPrincipal),
-        execution = verified.delegation.execution,
-        assertSame = (existing: FenceRow) => {
+      const { delegation, ...input } = dataConfigurationFencePrepareRequestSchema.parse(value),
+        execution = inspectDelegation(input, delegation, transportPrincipal),
+        recorded = (existing: FenceRow) => {
           if (
             canonicalJson(existing.input) !== canonicalJson(input) ||
             existing.fence_id !== execution.executionId ||
             existing.operation_key !== execution.operationKey
           )
             throw conflict("Configuration fence conflict");
+          return receiptOf(existing);
         },
+        values = [
+          input.maintenanceId,
+          execution.executionId,
+          execution.operationKey,
+          input.candidateId,
+          input.planDigest,
+          canonicalJson(input),
+        ],
         existing = await row(sql, "maintenance_id", input.maintenanceId);
-      if (existing) assertSame(existing);
-      return withLeaf(verified, () =>
-        sql.transaction(async (tx) => {
+      if (existing) return recorded(existing);
+      if (Date.now() >= execution.deadlineAt) throw new DataFenceBusy();
+      try {
+        return await sql.transaction(async (tx) => {
           await lock(tx);
           const current = await row(tx, "maintenance_id", input.maintenanceId);
-          if (current) {
-            assertSame(current);
-            return receiptOf(current);
-          }
+          if (current) return recorded(current);
           await assertAdmission(tx);
           const active = await tx.unsafe(
             "SELECT id FROM data_manager.jobs WHERE finished_at IS NULL OR execution_state->>'publication'='unknown' LIMIT 1",
@@ -439,50 +249,62 @@ export function createDataConfigurationFenceStore(
             "SELECT id FROM data_manager.offline_package_jobs WHERE status='preparing' LIMIT 1",
           );
           if (active.length || transfers.length) throw new DataFenceBusy();
+          // Rows that ended more than 72 hours ago go with the next preparation.
+          await tx.unsafe(
+            "DELETE FROM data_manager.configuration_fence WHERE state<>'prepared' AND settled_at < now() - interval '72 hours'",
+          );
           const inserted = await tx.unsafe(
-            "INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6::text::jsonb,'prepared') RETURNING *",
-            [
-              input.maintenanceId,
-              execution.executionId,
-              execution.operationKey,
-              input.candidateId,
-              input.planDigest,
-              canonicalJson(input),
-            ],
+            `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},state) VALUES(${FENCE_VALUES},'prepared') RETURNING *`,
+            values,
           );
           return receiptOf(fenceRowSchema.parse(inserted[0]));
-        }),
-      );
+        });
+      } catch (error) {
+        if (!(error instanceof DataFenceBusy)) throw error;
+        // The refusal changed nothing; recording it gives a repeat of this
+        // request the same answer. A row another copy of the request wrote
+        // first answers instead.
+        await sql.unsafe(
+          `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},state,settled_at) VALUES(${FENCE_VALUES},'refused',now()) ON CONFLICT DO NOTHING`,
+          values,
+        );
+        const after = await row(sql, "maintenance_id", input.maintenanceId);
+        if (!after) throw error;
+        return recorded(after);
+      }
     },
-    /** The fence row of `maintenanceId`, for the agent only. */
+    /** The fence row of `maintenanceId`, for the agent and for the operator's
+     * `openmapx control resolve`. */
     async inspect(
       maintenanceId: string,
       expected: { candidateId: string },
       transportPrincipal: ControlTransportPrincipal,
     ) {
-      if (transportPrincipal !== "ops-agent") throw forbidden("Agent transport required");
+      if (transportPrincipal !== "ops-agent" && transportPrincipal !== "host-cli")
+        throw forbidden("Agent or host CLI transport required");
       const saved = await row(sql, "maintenance_id", maintenanceId);
-      if (!saved) return null;
+      if (!saved || saved.state === "refused") return null;
       if (saved.candidate_id !== expected.candidateId)
         throw Error("Configuration fence owner changed");
       return receiptOf(saved);
     },
-    /** Settles the prepared row once. The header is the agent's original
-     * prepare delegation; a repeated settle with the same outcome returns the
+    /** Settles the prepared row once. The delegation is the agent's original
+     * fence child; a repeated settle with the same outcome returns the
      * settled receipt, another outcome is a conflict. The host CLI's token
      * settles without a delegation: that is the operator resolving the
      * maintenance with `openmapx control resolve`. */
     async settle(
-      value: DataConfigurationFenceSettle,
-      rawHeaders: readonly string[],
+      value: DataConfigurationFenceSettleRequest,
       transportPrincipal: ControlTransportPrincipal,
     ) {
-      const input = dataConfigurationFenceSettleSchema.parse(value);
+      const { delegation: named, ...input } =
+        dataConfigurationFenceSettleRequestSchema.parse(value);
       let execution: z.infer<typeof fenceRowSchema>["input"]["ownerPrepare"] | undefined;
       if (transportPrincipal !== "host-cli")
         try {
-          if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
-          const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
+          if (transportPrincipal !== "ops-agent" || !named)
+            throw Error("Agent delegation required");
+          const delegation = inspectRemoteDelegation(installation, named, transportPrincipal);
           if (
             delegation.parent.executor !== "ops-agent" ||
             delegation.kind !== "configuration-maintenance.prepare" ||
@@ -497,7 +319,8 @@ export function createDataConfigurationFenceStore(
       // admission sees the row either prepared (busy) or settled (open).
       return sql.transaction(async (tx) => {
         const saved = await row(tx, "maintenance_id", input.maintenanceId);
-        if (!saved)
+        // A refused preparation fenced nothing, so there is nothing to settle.
+        if (!saved || saved.state === "refused")
           throw Object.assign(Error("Configuration maintenance identity is unknown"), {
             statusCode: 404,
           });

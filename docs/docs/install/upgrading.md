@@ -48,10 +48,10 @@ and is not part of this application update.
 
 Some releases change how the operations agent and Data Manager store their
 records of host operations and do not convert earlier records; their release
-notes mark the change as breaking. Upgrade to such a release only when Activity
-shows no running operation and none waiting for recovery. Finished operations'
-records are pruned 72 hours after their keys expire, so an upgrade does not need
-to wait for them.
+notes mark the change as breaking. Such a release needs a fresh installation
+with an empty API database and an empty `infra/docker/state`: do not upgrade an
+existing installation to it in place, and do not delete individual state files
+to make it start. The release that replaced the update system is one of them.
 
 ## 1. Optional: create a backup
 
@@ -161,8 +161,8 @@ as another uid or to take the user from a checkout root owns.
 For an existing installation, use **Admin → System → Updates**. Check the
 configured release and apply that exact candidate.
 The coordinated producer preserves Data Manager ownership, drains active work,
-retains its configuration decision and observes the original job across API and
-agent replacement. Keep the backup option enabled.
+records the update as one maintenance in the operations agent's state and
+observes the original job across API and agent replacement. Keep the backup option enabled.
 
 The host CLI can drive the same public administrative producer when only the panel is
 unavailable. If an agent/helper replacement or prerequisite actually failed, inspect
@@ -246,7 +246,9 @@ pnpm openmapx system update \
 ```
 
 An accepted job is observed by its original ID; unknown POST outcomes replay only
-the original key and body. A definite refusal stops. An expired preview requires a
+the original key and body. The job itself survives an API restart: the restarted
+API runs its steps again under the same operation keys, so a step that already
+reached the operations agent returns its original operation. A definite refusal stops. An expired preview requires a
 new receipt (and a new backup unless skipped), rather than silently reviewing a different candidate.
 Activity shows `platform.apply` for this workflow. After completion, verify the
 actual running image digests and health; selected pins alone do not prove a
@@ -287,17 +289,18 @@ the retry converges on them. The locks stay in place when the failure could not 
 recorded, or when a hardlink request had already been issued to Data Manager. A
 later command that finds a service locked names the operation holding it.
 
-A read-only traffic inspection failure is terminal. Data Manager also settles an
-interrupted legacy data job by observation, at startup and then every minute. It
-looks up each host operation the job recorded by its operation key, and it never
-resubmits or cancels one. A job that recorded no operation, or whose recorded
-operations have all finished, becomes `error` and stops blocking later data jobs.
-A job with an operation that is still running stays interrupted. So does a job
-whose operations the ops-agent cannot answer for, for example while the agent is
-down; it clears on the first pass after the agent answers. When the agent
-restarted mid-operation it reports the operation as failed with a
-recovery-required outcome, which does not prove the host effect ended, so the job
-stays interrupted until the operation's deadline plus 30 seconds has passed.
+A read-only traffic inspection failure is terminal. When Data Manager restarts
+during a traffic, catalog proposal, dataset reload or ambient publication job, the
+new process settles that job by observation, at startup and then every 10 seconds.
+It looks up each host operation the job attempted by its operation key, asks the
+agent to cancel one that is still running, and never resubmits one. Once every
+attempted operation has finished, or none was attempted, the job ends as
+`interrupted` and stops blocking later data jobs. While an operation is still
+running, or the ops-agent cannot answer for it, for example while the agent is
+down, the job keeps data work fenced. When the agent restarted mid-operation it
+reports the operation as failed with a recovery-required outcome, which does not
+prove the host effect ended, so the job waits until the operation's deadline plus
+30 seconds has passed.
 
 ### Operations whose outcome is unknown
 
@@ -372,6 +375,14 @@ the release the configured selection resolves to when the applied configuration
 pins none and product services are included; they keep existing pins. Exact
 helper pull failures never build a replacement image.
 
+Each configuration generation records the local image its services' tags named
+when it was applied. `compose up` pulls the images the host lacks before it writes
+its generation, so the first `compose up` of an installation using tags records
+its images too. A pulled tag therefore leaves
+running containers in place and under the operations agent's control until they
+are recreated: a Data Manager update cancelled after its image downloaded blocks
+no later configuration change.
+
 To reconcile the **entire** enabled stack while retaining the selected app
 release, use the CLI:
 
@@ -400,23 +411,23 @@ service name, list that hostname in `DATA_MANAGER_PLAINTEXT_HOSTS` (see
 dedicated hostname or port.
 :::
 
-### Closing an expired application-update preparation
+### An application update that never applied
 
-An application update can stay at preparation with `recovery_required` when
-Data Manager took its maintenance grant but then refused to admit it, or stopped
-in between. The previous application containers keep running.
+A prepared update that never starts applying ends on its own: once its
+preparation deadline passes, the operations agent settles Data Manager's
+configuration fence as unused and releases the update's services. Cancelling the
+**original** job in Activity before any step started does the same at once. The
+previous application containers keep running, and the job finishes without
+replacing containers or making a backup.
 
-Cancel the **original** job in Activity with a full administrator session. Once
-its original deadline has passed, cancellation settles it only after Data
-Manager and the operations agent confirm that nothing was admitted or changed;
-otherwise it stays pending. The job then finishes as **failed**, keeping its
-receipt and cancellation request, releases its ownership and discards its
-prepared configuration candidate. It does not resume the update, replace
-containers or make a backup.
+An update whose fence preparation got no answer from Data Manager stays at
+preparation with `recovery_required`. Check `pnpm openmapx control status`, then
+resolve the original operation with `pnpm openmapx control resolve`, as described
+under [Operations whose outcome is unknown](#operations-whose-outcome-is-unknown).
 
 Start a fresh checked update afterward; use `--no-backup` for CLI updates and
 their resumes when that is your selected policy, or disable the panel's backup
-option. Do not delete locks, clear database flags or replay the preparation grant.
+option. Do not delete locks, clear database flags or edit the agent's records.
 
 ## 5. Database migrations apply automatically
 

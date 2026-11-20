@@ -17,8 +17,7 @@ try {
     await program.parseAsync(process.argv);
   });
 } catch (error) {
-  if (!process.env.OPENMAPX_CONTROL_DELEGATION && !process.env.OPENMAPX_PARENT_EXECUTION)
-    throw error;
+  if (!process.env.OPENMAPX_CONTROL_CHILD) throw error;
   process.stderr.write("Fixed CLI command failed; inspect the original operation status.\n");
   process.exitCode = fixedCliCommandExitCode(error) ?? 1;
 }

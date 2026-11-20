@@ -16,9 +16,7 @@ export const DATA_MANAGER_API_ROUTES: {
   readonly [K in keyof typeof dataManagerOperations]: boolean;
 } = {
   startDataExecution: true,
-  startGenerationHardlinksExecution: false,
   prepareDataConfigurationFence: false,
-  recoverUnadmittedConfigurationPreparation: false,
   inspectDataConfigurationFence: false,
   settleDataConfigurationFence: false,
   lookupDataExecution: true,

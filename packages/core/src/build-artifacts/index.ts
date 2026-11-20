@@ -4,116 +4,17 @@ export { DataExecutionPartialResult } from "./data-execution-outcome";
 
 export * from "./archive";
 export {
-  bindControlChildPhase,
-  type ControlChildReservation,
-  consumeControlChildDispatch,
-  type FreshControlChildDispatch,
-  issueControlChildPhase,
-  lookupControlChildPhase,
-  lookupControlChildPhaseAttempt,
-  lookupControlChildPhaseBinding,
-} from "./child-phase";
-export {
-  assertConfigurationHandoffHostSources,
-  captureConfigurationHandoffHostSources,
   configurationHostFields,
   observeConfigurationSources,
   verifyConfigurationReleaseSourceWitness,
   verifyConfigurationSourceWitness,
 } from "./configuration-source-witness";
-export {
-  type ArtifactDelegationAssertion,
-  agentStoreLeases,
-  assertControlExecutionForward,
-  assertControlStorageAvailable,
-  assertFreshControlRoot,
-  attestParentExecution,
-  beginControlEffect,
-  beginFixedCliExecution,
-  CONTROL_RECOVERY_INSTRUCTIONS,
-  type ControlAdoption,
-  type ControlChildPhase,
-  ControlExecutionFencedError,
-  type ControlExecutionOrigin,
-  type ControlInstallation,
-  type ControlPlannedChild,
-  type ControlRecipient,
-  cancelControlExecution,
-  closeControlInstallation,
-  controlAdoptionSchema,
-  controlChildOperationKey,
-  controlHeaders,
-  controlInstallationDataRoot,
-  controlRegisteredServiceIds,
-  controlRolePublicKey,
-  executionAuthorityState,
-  fixedCliArguments,
-  inspectConfigurationPreEffectRefusal,
-  inspectRemoteDelegation,
-  loadControlStartup,
-  localFeedCredentialTemplateMac,
-  markFeedProxyReloadAttempted,
-  observeCoordinatorPullForMaintenance,
-  observedCoordinatorPullBaseline,
-  openControlInstallation,
-  openFixedChildInstallation,
-  ownedCoordinatorPullBaseline,
-  ownedStagedCoordinatorBaseline,
-  prepareFixedControlChild,
-  provisionControlInstallation,
-  readConfigurationHandoffSpawnIntent,
-  readDataControlTerminalObservation,
-  readFixedCliSpawnIntent,
-  readOpsControlTerminalObservation,
-  readPrivateRecord,
-  readVerifiedStagedCoordinatorOwnership,
-  recordDataControlTerminalObservation,
-  recordOpsControlTerminalObservation,
-  repairControlJournalTerminal,
-  replaceControlRegisteredServiceIds,
-  reserveControlTerminal,
-  restoreAdmittedControlExecution,
-  restoreConfigurationPreEffectTerminal,
-  retainAdmittedControlExecution,
-  retainConfigurationPreEffectRefusal,
-  retainControlEffectReceipt,
-  retainControlPreparedTerminal,
-  retainControlTerminalCommitment,
-  retainControlTerminalStatus,
-  retainedControlAdoptionAssertion,
-  retainedControlParent,
-  retainFixedCliSpawnIntent,
-  type VerifiedChildSettlement,
-  type VerifiedControlPeer,
-  type VerifiedCoordinatorPullBaseline,
-  type VerifiedExecutionAuthority,
-  type VerifiedRecoveryAuthority,
-  type VerifiedStagedCoordinatorOwnerBaseline,
-  type VerifiedStagedCoordinatorOwnership,
-  verifiedCoordinatorPullBaselineState,
-  verifiedRemoteParentExecution,
-  verifiedRetainedControlParent,
-  verifiedStagedCoordinatorOwnerBaselineState,
-  verifiedStagedCoordinatorOwnershipState,
-  verifyControlEffectSettlement,
-  verifyControlPeer,
-  verifyControlRecoveryAuthority,
-  verifyCoordinatorPullAdmissionSource,
-  verifyFixedCliControlPeer,
-  verifyMaintenanceCoordinatorPrerequisite,
-  verifyParentExecution,
-  verifyRetainedLocalControlPeer,
-  writePrivateRecord,
-} from "./control-authority";
-export { controlDigest, signControl, verifyControl } from "./control-records";
-export {
-  type CoordinatorPullBaseline,
-  coordinatorPullBaselineSchema,
-} from "./coordinator-pull-records";
+export { type ControlInstallation, controlDigest } from "./control-records";
 export {
   createDataConfigurationFenceStore,
   type DataFenceSql,
-  type VerifiedPreparedGenerationAdmission,
+  inspectSenderLease,
+  type SenderLease,
 } from "./data-configuration-fence";
 export { retainedDataDatabaseTimestamp } from "./data-database-time";
 export * from "./data-evidence";
@@ -121,15 +22,19 @@ export {
   assertDataTransitCandidateForExecution,
   assertOwnedDataTransitCandidate,
   inspectDataTransitCandidate,
-  publishedDataTransitCandidate,
+  markFeedProxyReloadAttempted,
   retainOwnedDataTransitCandidate,
 } from "./data-execution-candidate";
 export {
   type ContainedDataExecution,
   createDataExecutionControlJournal,
   type DataExecutionControlJournal,
+  dataChildRecord,
+  dataExecutionChildren,
+  dataExecutionHoldsLease,
   dataTerminalReceiptDigest,
 } from "./data-execution-journal";
+export { assertDataManagerTerminal, readDataManagerTerminal } from "./data-manager-terminal";
 export {
   assertDataUpdateSources,
   planDataUpdate,
@@ -138,6 +43,59 @@ export {
   verifyDataUpdatePrerequisites,
 } from "./data-update";
 export { type DataUpdatePlan, dataUpdatePlanSchema } from "./data-update-records";
+export {
+  assertControlExecutionForward,
+  attestParentExecution,
+  beginControlEffect,
+  beginFixedCliExecution,
+  bindControlChildPhase,
+  type ControlAdmissionInput,
+  type ControlDelegation,
+  ControlExecutionFencedError,
+  type ControlExecutionOrigin,
+  type ControlPlannedChild,
+  type ControlTransportPrincipal,
+  cancelControlExecution,
+  type ExecutionHandle,
+  executionEffectStarted,
+  executionReceipt,
+  fixedCliArguments,
+  inspectConfigurationPreEffectRefusal,
+  inspectRemoteDelegation,
+  type LeaseChildRef,
+  leaseChildRefSchema,
+  lookupControlChildPhase,
+  lookupControlChildPhaseAttempt,
+  lookupControlChildPhaseBinding,
+  openFixedChildInstallation,
+  readFixedCliSpawnIntent,
+  restoreAdmittedControlExecution,
+  retainAdmittedControlExecution,
+  retainConfigurationPreEffectRefusal,
+  retainControlChildEvidence,
+  retainControlEffectReceipt,
+  retainedControlParent,
+  retainFixedCliSpawnIntent,
+  settleExecution,
+  type VerifiedControlPeer,
+  verifiedRetainedControlParent,
+  verifyControlEffectSettlement,
+  verifyControlPeer,
+  verifyFixedCliControlPeer,
+  verifyLocalArtifactTargetRootRelease,
+  verifyLocalControlPeer,
+  verifyMaintenanceCoordinatorPrerequisite,
+} from "./execution-record";
+export {
+  assertExecutionRowCapacity,
+  type ExecutionRow,
+  executionProgressSchema,
+  type JournalExecution,
+  journalExecution,
+  journalExecutionRow,
+  journalExecutionSchema,
+  type OwningExecutionRows,
+} from "./execution-rows";
 export {
   commitFeedProxyValidationFailure,
   feedProxyValidationCompletionDigest,
@@ -165,7 +123,6 @@ export {
 } from "./fixed-data-execution";
 export {
   type FixedServiceLifecyclePlan,
-  lifecycleHardlinkReservation,
   ownedServiceLifecycleFinalRevisionId,
   planFixedServiceUpdate,
   readFixedServiceLifecyclePlan,
@@ -173,14 +130,15 @@ export {
   serviceLifecycleFinalRevisionId,
 } from "./fixed-service-lifecycle";
 export {
-  executeOwnedGenerationHardlinks,
-  type GenerationHardlinksOwnerPlan,
-  inspectOwnedGenerationHardlinks,
-  planGenerationHardlinksOwner,
-  readGenerationHardlinksOwnerPlan,
-  readOwnedGenerationHardlinkPlan,
-  retainGenerationHardlinksOwnerPlan,
-} from "./generation-hardlinks-owner";
+  applyGenerationLinks,
+  GenerationLinkFailed,
+  GenerationLinkNotApplied,
+  GenerationLinkUnknown,
+  generationLinkOperationKey,
+  inspectGenerationLinks,
+  linkGeneration,
+  readGenerationHardlinkPlan,
+} from "./generation-link";
 export {
   type LeaseOperation,
   type LeaseSender,
@@ -188,6 +146,13 @@ export {
   remoteLeaseBackend,
 } from "./lease-remote";
 export * from "./lease-store";
+export {
+  type ControlChildPhase,
+  type ControlChildReservation,
+  type ControlRecipient,
+  controlChildOperationKey,
+} from "./lease-store";
+export * from "./maintenance-file";
 export * from "./manifest";
 export {
   CANDIDATE_MANIFEST_FILENAME,
@@ -201,5 +166,28 @@ export {
 } from "./motis-candidate";
 export { inspectControlAdmission, inspectDataExecutionAdmission } from "./peer-admission";
 export * from "./prepared-evidence";
+export {
+  agentStoreLeases,
+  assertControlStorageAvailable,
+  assertFreshControlRoot,
+  CONTROL_RECOVERY_INSTRUCTIONS,
+  closeControlInstallation,
+  controlIdentity,
+  controlInstallationDataRoot,
+  controlPrivateRoot,
+  controlRegisteredServiceIds,
+  keepExecutionRowsIn,
+  loadControlStartup,
+  localFeedCredentialTemplateDigest,
+  openControlInstallation,
+  provisionControlDirectories,
+  readPrivateRecord,
+  replaceControlRegisteredServiceIds,
+  writePrivateRecord,
+} from "./private-records";
 export * from "./target-lease";
-export { verifyConfigurationMaintenanceRootClosure as assertConfigurationMaintenanceRootClosure } from "./target-lease";
+export {
+  consumeControlChildDispatch,
+  type FreshControlChildDispatch,
+  issueControlChildPhase,
+} from "./target-lease";

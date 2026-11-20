@@ -20,11 +20,6 @@ import {
 import type { ConfigurationCandidateSource } from "./configuration-candidate-source";
 import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
 import { installConfigurationHardlinksRuntime } from "./configuration-hardlinks-runtime";
-import { registerConfigurationMaintenanceSource } from "./configuration-maintenance-runtime";
-import {
-  assertOwnedMaintenanceRecreateRuntime,
-  assertStagedCoordinatorReleaseWrite,
-} from "./configuration-maintenance-store";
 import { installConfigurationReleaseImagesRuntime } from "./configuration-release-images-pull";
 import { installCoreServiceRuntime } from "./core-service-runtime";
 import {
@@ -34,16 +29,16 @@ import {
 } from "./docker-runtime";
 import { installImageStageRuntime } from "./image-stage-runtime";
 import { type IntegrationStore, installIntegrationRuntime } from "./integration-store";
+import {
+  assertOwnedMaintenanceRecreateRuntime,
+  registerConfigurationMaintenanceSource,
+} from "./maintenance-source";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
-import { installPlatformConfigurationRuntime } from "./platform-configuration-runtime";
 import { serviceActionForOperation } from "./policy";
 import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
 import { decideServiceAction, type ServiceAuthority } from "./service-action-policy";
 import { installServiceLifecycleRuntime } from "./service-lifecycle-runtime";
-import {
-  assertAdmittedCoordinatorPullRuntime,
-  installServicePullRuntime,
-} from "./service-pull-runtime";
+import { installServicePullRuntime } from "./service-pull-runtime";
 import { resolveBootstrapEnabledServiceIds } from "./startup-authority";
 import { installTransitCredentialsRuntime } from "./transit-credentials-runtime";
 import { createTransitousLockRuntime } from "./transitous-lock-runtime";
@@ -63,6 +58,8 @@ export interface ProductionOpsRuntimeOptions {
   docker?: Pick<DockerRuntimeOptions, "execFile" | "followLogs" | "fileExists">;
   runFixedCli?: FixedCliRunner;
   candidateSource?: ConfigurationCandidateSource;
+  /** The API's token, which keys the backup prune proof and the transit credentials revision. */
+  apiToken?: string;
 }
 const registeredServiceSources = new WeakMap<
   OpsRuntime,
@@ -93,14 +90,7 @@ function installReleaseCapabilityBoundary(
     action: (writer: services.ConfigurationGenerationWriter) => Promise<T>,
   ): Promise<T> => {
     try {
-      return await services.withConfigurationGenerationWriter(
-        infraDir,
-        async (writer) => {
-          await assertStagedCoordinatorReleaseWrite(runtime, signal);
-          return action(writer);
-        },
-        signal,
-      );
+      return await services.withConfigurationGenerationWriter(infraDir, action, signal);
     } catch (error) {
       if (
         error instanceof services.ConfigurationGenerationError &&
@@ -134,6 +124,18 @@ function installReleaseCapabilityBoundary(
         allowMissingSelected: true,
         expectedCurrentRevisionId: current,
         release: null,
+        imageIds: (references) =>
+          services.inspectLocalImageIds(
+            references,
+            async (args) =>
+              (
+                await execFile("docker", args, {
+                  signal: context.signal,
+                  timeout: 15000,
+                  maxBuffer: 4096,
+                })
+              ).stdout,
+          ),
         signal: context.signal,
       });
       return { releaseId: operation.releaseId, cleared: true as const };
@@ -286,7 +288,7 @@ export async function createProductionOpsRuntime(
   });
   installBackupPruneRuntime(runtime, {
     infraDir: options.stack.infraDir,
-    token: options.candidateSource?.token,
+    token: options.apiToken,
   });
   const releaseEffects = installReleaseCapabilityBoundary(
     runtime,
@@ -300,7 +302,7 @@ export async function createProductionOpsRuntime(
   createTransitousLockRuntime(runtime, { rootDir: options.rootDir });
   installTransitCredentialsRuntime(runtime, {
     rootDir: options.rootDir,
-    sourceToken: options.candidateSource?.token,
+    sourceToken: options.apiToken,
     stack: options.stack,
     ownedServices: owned,
     execFile: options.docker?.execFile,
@@ -312,7 +314,6 @@ export async function createProductionOpsRuntime(
     execFile: options.docker?.execFile,
   });
   installCatalogApprovalRuntime(runtime, { rootDir: options.rootDir });
-  installPlatformConfigurationRuntime(runtime, { infraDir: options.stack.infraDir });
   installConfigurationReleaseImagesRuntime(runtime, {
     infraDir: options.stack.infraDir,
     execFile: options.docker?.execFile ?? runContainedProcess,
@@ -376,13 +377,7 @@ export async function createProductionOpsRuntime(
         await options.loadAuthority(),
         options.stack.infraDir,
       );
-      const frozen =
-        operation.serviceId === "data-manager" &&
-        (operation.kind === "service.recreate" || operation.kind === "service.recreateIsolated") &&
-        operation.maintenanceId
-          ? await assertOwnedMaintenanceRecreateRuntime(runtime, operation, context)
-          : undefined;
-      const snapshot = (frozen ?? (await owned.inspectOwnedServices(context.signal))).find(
+      const snapshot = (await owned.inspectOwnedServices(context.signal)).find(
         (s) => s.serviceId === operation.serviceId,
       );
       const encoded = context.claim.capability.values.ownedService;
@@ -407,15 +402,21 @@ export async function createProductionOpsRuntime(
         operation.serviceId === "data-manager" &&
         (operation.kind === "service.recreate" || operation.kind === "service.recreateIsolated")
       )
-        await assertOwnedMaintenanceRecreateRuntime(runtime, operation, context);
+        assertOwnedMaintenanceRecreateRuntime(operation, context);
       else if (
         !decision.available ||
         (decision.execution !== "direct" &&
           !(operation.kind === "service.image.stage" && decision.workflow === "image-stage"))
       ) {
-        if (operation.kind === "service.pull" && operation.serviceId === "data-manager")
-          await assertAdmittedCoordinatorPullRuntime(runtime, operation, context);
-        else throw new Error("Service action denied");
+        // A coordinator update's own pull; its handler checks it against the candidate.
+        if (
+          !(
+            operation.kind === "service.pull" &&
+            operation.serviceId === "data-manager" &&
+            operation.candidateId
+          )
+        )
+          throw new Error("Service action denied");
       }
       return handler(operation, context);
     };

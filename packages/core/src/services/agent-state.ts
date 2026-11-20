@@ -1,4 +1,4 @@
-import { chmodSync, lstatSync, mkdirSync, renameSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { atomicWrite } from "../release-files";
 
@@ -11,7 +11,7 @@ export function writeAgentStateFile(infraDir: string, name: string, contents: st
 
 /**
  * Where the operations agent keeps its own state: the job journal and the
- * trusted-configuration snapshot queue it shares with app-api.
+ * configuration candidates app-api hands it.
  *
  * It lives in `infra/docker/state/ops-agent`, beside `infra/docker/data`
  * rather than inside it: data-manager mounts the whole data directory
@@ -20,7 +20,8 @@ export function writeAgentStateFile(infraDir: string, name: string, contents: st
 export interface AgentStatePaths {
   directory: string;
   journal: string;
-  trustedConfig: string;
+  /** Prepared configuration candidates, written only by the agent. */
+  configurationCandidates: string;
   /** The community service repositories the agent installed. */
   community: string;
   /** The integrations the agent installed; app-api mounts it read-only. */
@@ -34,7 +35,7 @@ export function agentStatePaths(infraDir: string): AgentStatePaths {
   return {
     directory,
     journal: join(directory, "jobs-v1.json"),
-    trustedConfig: join(directory, "trusted-config"),
+    configurationCandidates: join(directory, "configuration-candidates"),
     community: join(directory, "community"),
     customIntegrations: join(directory, "custom-integrations"),
     traefikDynamic: join(directory, "traefik", "dynamic"),
@@ -52,26 +53,12 @@ function entryKind(path: string): "missing" | "directory" | "other" {
 }
 
 /**
- * Prepares the agent's state directories: the trusted-configuration queue
- * app-api mounts and Traefik's dynamic configuration. Run under the writer
- * lock by every configuration generation commit, and by the agent at startup.
- *
- * The queue must be a real directory of this user, owner-only. Compose would
- * mount whatever a symlink here names, so anything else at the path is moved
- * aside, never followed, and replaced by a fresh directory.
+ * Prepares the agent's state directory and Traefik's dynamic configuration.
+ * Run under the writer lock by every configuration generation commit, and by
+ * the agent at startup.
  */
 export function prepareAgentStateDirectories(infraDir: string): void {
-  const current = agentStatePaths(infraDir);
-  mkdirSync(current.directory, { recursive: true, mode: 0o700 });
-  const queue = current.trustedConfig;
-  const kind = entryKind(queue);
-  if (kind !== "directory" || lstatSync(queue).uid !== process.geteuid?.()) {
-    if (kind !== "missing") {
-      renameSync(queue, `${queue}.rejected-${process.pid}-${Date.now()}`);
-    }
-    mkdirSync(queue, { mode: 0o700 });
-  }
-  chmodSync(queue, 0o700);
+  mkdirSync(agentStatePaths(infraDir).directory, { recursive: true, mode: 0o700 });
   ensureTraefikDynamicDirectory(infraDir);
 }
 

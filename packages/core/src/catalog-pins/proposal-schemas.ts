@@ -16,7 +16,6 @@ export const catalogProposalSchema = catalogProposalInputSchema.extend({
 });
 export const catalogProposalEnvelopePayloadSchema = z.strictObject({
   version: z.literal(1),
-  installationId: z.uuid(),
   proposal: catalogProposalSchema,
 });
 export type CatalogProposalInput = z.infer<typeof catalogProposalInputSchema>;

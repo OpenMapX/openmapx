@@ -9,12 +9,11 @@ export const integrationRuntimeEvidenceSchema = z.strictObject({
 export type IntegrationRuntimeEvidence = z.infer<typeof integrationRuntimeEvidenceSchema>;
 export const integrationHostApplyEvidenceSchema = z.union([
   ...configurationApplyResultSchema.options.map((schema) =>
-    schema.extend({ publisherCleanupFailed: z.boolean(), registryUpdateFailed: z.boolean() }),
+    schema.extend({ registryUpdateFailed: z.boolean() }),
   ),
   z.strictObject({
     outcome: z.literal("unknown"),
     reason: z.literal("transport_or_result"),
-    publisherCleanupFailed: z.boolean(),
     registryUpdateFailed: z.boolean(),
   }),
 ]);

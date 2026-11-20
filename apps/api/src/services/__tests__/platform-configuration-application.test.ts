@@ -70,14 +70,14 @@ const input = {
     alternateLogin: false,
   },
 };
-const context = (checkpointResult?: Record<string, unknown>): JobContext => ({
+const context = (protocol?: JobContext["protocol"]): JobContext => ({
   jobId: "job-1",
   payload: {},
   signal: new AbortController().signal,
   log: vi.fn().mockResolvedValue(undefined),
   setProgress: vi.fn().mockResolvedValue(undefined),
   checkpoint: vi.fn().mockResolvedValue(undefined),
-  ...(checkpointResult ? { checkpointResult } : {}),
+  ...(protocol ? { protocol } : {}),
 });
 const release = { releaseId: "release-checked", manifestDigest: "a".repeat(64) };
 
@@ -135,7 +135,11 @@ describe("platform change with a release selection", () => {
     previewRelease = release;
 
     await runPlatformConfigurationChange(
-      context({ _configurationCandidate: { operationKey: "opk1_x" } }),
+      context({
+        candidate: { operationKey: "opk1_x", phase: "candidate_prepared" } as NonNullable<
+          JobContext["protocol"]
+        >["candidate"],
+      }),
       input,
     ).catch(() => undefined);
 

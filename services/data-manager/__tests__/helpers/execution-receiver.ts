@@ -1,4 +1,5 @@
 import type { DataExecutionStatus } from "@openmapx/core/data-manager-contracts";
+import type postgres from "postgres";
 import type { DataExecutionReceiver } from "../../src/jobs/execution/api.js";
 /** Unit observer collaborator only. Real SQL/authority/HTTP acceptance uses the
  * owned fixtures under src/jobs/execution, never this adapter. */
@@ -24,11 +25,17 @@ export function receiverFixture(patch: Partial<DataExecutionReceiver> = {}): Dat
   };
   return {
     admitLocal: async () => dataReceipt(),
+    // Runs the work inline, as the durable runtime would once admitted. Unit
+    // work here never reaches a database.
+    runLocal: async (input, work) => ({
+      status: dataReceipt({ kind: input.kind }),
+      completion: work({} as postgres.Sql),
+    }),
     admitMaintenance: unsupported,
     subscribe: () => () => {},
     legacyResult: () => undefined,
     admit: unsupported,
-    admitHardlinks: unsupported,
+    link: unsupported,
     inspect: async () => dataReceipt(),
     lookup: unsupported,
     requestCancel: unsupported,

@@ -1,10 +1,11 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync, statSync } from "node:fs";
-import { connect, createServer } from "node:net";
+import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey, OpsClientError } from "@openmapx/core/ops";
+import { sql as expression } from "drizzle-orm";
+import { integer, pgSchema } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
@@ -14,65 +15,19 @@ import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
 import { preserveTransitPending } from "../transitous/owned-ops.js";
 import { buildJobContext } from "../transitous/pipeline.js";
-import { removePrunedDataRows } from "./prune-rows.js";
 import { createDataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore } from "./store.js";
-import { publishDataChange, withDataSqlCancellation } from "./worker-scope.js";
+import { cancellableTransaction, openCancellableSql, publishDataChange } from "./worker-scope.js";
 
-/** Relay real PostgreSQL traffic; hold only the separate CancelRequest packet.
- * This makes the active-query/worker-finality ordering observable without
- * replacing the driver, query promises, backend or SQL cancellation. */
-async function heldPostgresCancellation(url: string) {
-  const target = new URL(url),
-    host = target.hostname,
-    port = Number(target.port),
-    held: Array<() => void> = [];
-  let released = false,
-    packets = 0;
-  const server = createServer((client) => {
-    const upstream = connect({ host, port });
-    upstream.on("error", () => client.destroy());
-    client.on("error", () => upstream.destroy());
-    upstream.pipe(client);
-    let first = Buffer.alloc(0);
-    const initial = (chunk: Buffer) => {
-      first = Buffer.concat([first, chunk]);
-      if (first.length < 8) return;
-      client.removeListener("data", initial);
-      client.pause();
-      const forward = () => {
-        upstream.write(first);
-        client.pipe(upstream);
-        client.resume();
-      };
-      if (first.readInt32BE(0) === 16 && first.readInt32BE(4) === 80877102) {
-        packets++;
-        if (!released) {
-          held.push(forward);
-          return;
-        }
-      }
-      forward();
-    };
-    client.on("data", initial);
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  if (!address || typeof address === "string") throw Error("PG relay address missing");
-  target.hostname = "127.0.0.1";
-  target.port = String(address.port);
-  return {
-    url: target.toString(),
-    packets: () => packets,
-    release() {
-      released = true;
-      for (const send of held.splice(0)) send();
-    },
-    close: () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      ),
-  };
+/** Opens each worker's handle as production does: a pool of its own on `url`. */
+function workerHandles(url: string, control: postgres.Sql) {
+  return (signal: AbortSignal) =>
+    openCancellableSql(
+      (applicationName) =>
+        postgres(url, { max: 4, connection: { application_name: applicationName } }),
+      control,
+      signal,
+    );
 }
 
 describe.skipIf(
@@ -88,7 +43,7 @@ describe.skipIf(
       drizzle(sql);
       const root = mkdtempSync(join(tmpdir(), "omx-runtime-"));
       mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
           infraDir: root,
           role: "data-manager",
@@ -172,9 +127,7 @@ describe.skipIf(
             })
           ).status,
         ).toBe(terminal?.status.status);
-        const proof = await journal.repairTerminal(terminal!.execution);
-        expect(proof.execution).toEqual(terminal!.execution);
-        await journal.publishTerminal(terminal!.execution);
+        await journal.verifyContainedTerminal(terminal!.execution);
         await expect(
           runtime.admit(
             { kind: "download-fonts" },
@@ -186,7 +139,6 @@ describe.skipIf(
         await runtime.close();
         if (!id && key) id = (await store.lookup(key))?.status.id;
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -199,7 +151,7 @@ describe.skipIf(
     const sql = postgres(url, { max: 4 });
     const root = mkdtempSync(join(tmpdir(), "omx-runtime-lost-reply-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const agent = control.agentStoreLeases(root, "ops-agent");
     // Four lost replies span about four seconds, as an agent restart would.
     let lostReplies = 4;
@@ -258,7 +210,6 @@ describe.skipIf(
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -270,7 +221,7 @@ describe.skipIf(
     const sql = postgres(url, { max: 4 }),
       root = mkdtempSync(join(tmpdir(), "omx-data-completion-gap-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     let installation = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
@@ -309,7 +260,6 @@ describe.skipIf(
         .poll(async () => (await store.inspect(id!))?.status.publication, { timeout: 15000 })
         .toBe("unknown");
       await runtime.close();
-      journal.close();
       control.closeControlInstallation(installation);
       installation = control.openControlInstallation({
         infraDir: root,
@@ -334,32 +284,26 @@ describe.skipIf(
       expect((await store.inspect(id))?.finishedAt).not.toBeNull();
       expect(dispatches).toBe(1);
       expect(heldTargets(root).includes("data-manager")).toBe(false);
-      const recovered = await store.inspect(id);
-      expect(
-        control.readDataControlTerminalObservation(installation, recovered!.execution).status,
-      ).toEqual(recovered!.status);
       await runtime.reconcile();
       expect(dispatches).toBe(1);
     } finally {
       await runtime.close();
       if (!id && key) id = (await store.lookup(key))?.status.id;
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
     }
   }, 60000);
   it.each(["before-commit", "during-commit"] as const)(
-    "cancels the actual owned PostgreSQL transaction (%s)",
+    "cancels a worker transaction through its handle (%s)",
     async (mode) => {
       const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
       if (!url) throw Error("Owned PostgreSQL required");
       const sql = postgres(url, { max: 5 }),
-        workerSql = withDataSqlCancellation(sql),
         root = mkdtempSync(join(tmpdir(), "omx-data-transaction-"));
       mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
           infraDir: root,
           role: "data-manager",
@@ -406,9 +350,10 @@ describe.skipIf(
       if (mode === "during-commit") await lockerReady;
       const runtime = createDataExecutionRuntime({
         store,
-        dispatch: async () => {
+        openSql: workerHandles(url, sql),
+        dispatch: async (_input, context) => {
           await publishDataChange(() =>
-            workerSql.begin(async (tx) => {
+            cancellableTransaction(context.sql, async (tx) => {
               const pid = await tx`SELECT pg_backend_pid() AS pid`;
               workerPid = Number(pid[0]?.pid);
               await tx.unsafe(`INSERT INTO data_manager.${child} VALUES(1,1)`);
@@ -435,7 +380,10 @@ describe.skipIf(
               async () => {
                 const rows =
                   await sql`SELECT query,wait_event_type FROM pg_stat_activity WHERE pid=${workerPid}`;
-                return rows[0]?.query === "COMMIT" && rows[0]?.wait_event_type === "Lock";
+                return (
+                  String(rows[0]?.query).toUpperCase() === "COMMIT" &&
+                  rows[0]?.wait_event_type === "Lock"
+                );
               },
               { timeout: 10000 },
             )
@@ -454,15 +402,17 @@ describe.skipIf(
             .toBe("canceled");
           expect((await store.inspect(id))?.status.publication).toBe("not_started");
         } else {
+          // The cancelled COMMIT no longer runs: its connection is idle, or the
+          // ended worker pool has closed it.
           await expect
             .poll(
               async () => {
                 const rows = await sql`SELECT state FROM pg_stat_activity WHERE pid=${workerPid}`;
-                return rows[0]?.state;
+                return rows[0]?.state ?? "closed";
               },
               { timeout: 15000 },
             )
-            .toBe("idle");
+            .toMatch(/^(idle|closed)$/);
           expect((await store.inspect(id))?.status).toMatchObject({
             status: "cancel_pending",
             publication: "unknown",
@@ -481,7 +431,6 @@ describe.skipIf(
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
         await sql.unsafe(`DROP TABLE data_manager.${child}`);
         await sql.unsafe(`DROP TABLE data_manager.${parent}`);
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -497,7 +446,7 @@ describe.skipIf(
     drizzle(sql);
     const root = mkdtempSync(join(tmpdir(), "omx-data-partial-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     let installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
@@ -539,7 +488,6 @@ describe.skipIf(
       await expect.poll(async () => (await store.inspect(id!))?.status.publication).toBe("unknown");
       expect((await store.inspect(id))?.finishedAt).toBeNull();
       await runtime.close();
-      journal.close();
       control.closeControlInstallation(installation);
       installation = control.openControlInstallation({
         infraDir: root,
@@ -564,14 +512,10 @@ describe.skipIf(
       });
       expect(retained?.triggeredBy).toBe("cron");
       expect(retained?.finishedAt).not.toBeNull();
-      expect(
-        control.readDataControlTerminalObservation(installation, retained!.execution).status,
-      ).toEqual(retained!.status);
       expect(dispatches).toBe(1);
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -585,7 +529,7 @@ describe.skipIf(
     const root = mkdtempSync(join(tmpdir(), "omx-transit-publication-")),
       data = join(root, "data");
     mkdirSync(data, { mode: 0o700 });
-    await control.provisionControlInstallation(root);
+    await control.provisionControlDirectories(root);
     const installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
@@ -635,12 +579,9 @@ describe.skipIf(
       id = admitted.id;
       await expect
         .poll(
-          async () => {
-            const { existsSync } = await import("node:fs");
-            return existsSync(
-              join(root, "control-private/data-manager/observations", `worker-${key}.json`),
-            );
-          },
+          async () =>
+            (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id!}`)[0]
+              ?.execution_completion != null,
           { timeout: 15000 },
         )
         .toBe(true);
@@ -651,7 +592,6 @@ describe.skipIf(
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -667,7 +607,7 @@ describe.skipIf(
       const root = mkdtempSync(join(tmpdir(), "omx-data-prune-")),
         data = join(root, "data");
       mkdirSync(data, { mode: 0o700 });
-      await control.provisionControlInstallation(root);
+      await control.provisionControlDirectories(root);
       const installation = control.openControlInstallation({
           infraDir: root,
           role: "data-manager",
@@ -708,14 +648,11 @@ describe.skipIf(
         await runtime.close();
         const record = await store.inspect(id);
         expect(record?.reservations).toHaveLength(8);
-        const cells = record!.reservations.map((slot) =>
-          join(
-            root,
-            "control-private/data-manager/observations",
-            `phase-${key}-${slot.ordinal}.json`,
-          ),
-        );
-        expect(cells.every((path) => requireExists(path))).toBe(true);
+        // The execution's row, on its job row, holds a cell per reservation, and
+        // no row file is written.
+        const [stored] = await sql`SELECT execution_progress FROM data_manager.jobs WHERE id=${id}`;
+        expect(stored?.execution_progress?.children).toHaveLength(8);
+        expect(requireExists(join(root, "state/data-manager/control/executions"))).toBe(false);
         vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
         if (phase === "startup")
           clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
@@ -723,9 +660,8 @@ describe.skipIf(
           readiness: new DataManagerReadiness(),
           controlInstallation: installation,
           initializeOfflineStorage: async () => {},
-          reconcileJobs: async () => [],
+          reconcileJobs: async () => {},
           setupCronSchedulers: () => ({ stop() {} }) as never,
-          removePrunedRows: (keys) => removePrunedDataRows(sql, keys),
         });
         stopRetention = startup.stopControlPrune;
         if (phase === "periodic") {
@@ -736,7 +672,6 @@ describe.skipIf(
           await stopRetention?.();
         }
         expect(await store.inspect(id)).toBeNull();
-        expect(cells.every((path) => !requireExists(path))).toBe(true);
         await expect(
           store.admit(
             { kind: "transit-sync", countries: ["de"] },
@@ -749,7 +684,6 @@ describe.skipIf(
         clock?.mockRestore();
         await runtime.close();
         if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        journal.close();
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -762,349 +696,211 @@ describe.skipIf(
 describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
-)("locked production Drizzle and postgres query cancellation", () => {
-  it.each([
-    ["execute", "already-aborted"],
-    ["forEach", "already-aborted"],
-    ["execute", "consume-after-abort"],
-    ["forEach", "consume-after-abort"],
-  ] as const)(
-    "R2-I2 awaits actual eager SQL containment (%s, %s)",
-    async (method, mode) => {
-      const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
-      if (!url) throw Error("Explicit owned PostgreSQL required");
-      const sql = postgres(url, { max: 5 }),
-        proxy = await heldPostgresCancellation(url),
-        workerRaw = postgres(proxy.url, { max: 1 });
-      const db = drizzle(withDataSqlCancellation(workerRaw)),
-        suffix = randomUUID().replaceAll("-", ""),
-        table = `fix2_eager_${suffix}`,
-        prior = `fix2_prior_${suffix}`,
-        fn = `fix2_hit_${suffix}`;
-      await sql.unsafe(`CREATE TABLE data_manager.${table}(hits int NOT NULL)`);
-      await sql.unsafe(`INSERT INTO data_manager.${table} VALUES(0)`);
-      await sql.unsafe(`CREATE TABLE data_manager.${prior}(value int NOT NULL)`);
-      await sql.unsafe(
-        `CREATE FUNCTION data_manager.${fn}() RETURNS int LANGUAGE plpgsql AS $$ BEGIN UPDATE data_manager.${table} SET hits=hits+1; RETURN 1; END $$`,
-      );
-      const root = mkdtempSync(join(tmpdir(), "omx-eager-sql-"));
-      mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
-      const installation = control.openControlInstallation({
+)("worker database handle cancellation", () => {
+  async function workerFixture(prefix: string) {
+    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+    if (!url) throw Error("Owned PostgreSQL required");
+    const sql = postgres(url, { max: 4 }),
+      root = mkdtempSync(join(tmpdir(), prefix));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlDirectories(root);
+    const installation = control.openControlInstallation({
         infraDir: root,
         role: "data-manager",
         serviceIds: ["data-manager"],
-      });
-      const journal = control.createDataExecutionControlJournal(installation, sql),
-        store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
-      let start = () => {},
-        consume = () => {},
-        ready = () => {},
-        unlock = () => {},
-        locked = () => {};
-      const startGate = new Promise<void>((resolve) => {
-          start = resolve;
-        }),
-        consumeGate = new Promise<void>((resolve) => {
-          consume = resolve;
-        }),
-        readyGate = new Promise<void>((resolve) => {
-          ready = resolve;
-        });
-      const lockGate = new Promise<void>((resolve) => {
-          unlock = resolve;
-        }),
-        lockReady = new Promise<void>((resolve) => {
-          locked = resolve;
-        });
-      const locker =
-        mode === "consume-after-abort"
-          ? sql.begin(async (tx) => {
-              await tx.unsafe(`LOCK TABLE data_manager.${table} IN ACCESS EXCLUSIVE MODE`);
-              locked();
-              await lockGate;
-            })
-          : Promise.resolve();
-      if (mode === "consume-after-abort") await lockReady;
-      let querySettled = false,
-        queryRejected = false,
-        callbacks = 0,
-        fluentIdentity = false;
-      const active = async () =>
-        Number(
-          (
-            await sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${"%" + fn + "%"} AND state='active' AND wait_event_type='Lock'`
-          )[0]?.count,
-        );
-      const runtime = createDataExecutionRuntime({
-        store,
-        dispatch: async (_input, context) => {
-          await publishDataChange(async () => {
-            await db.$client.unsafe(`INSERT INTO data_manager.${prior} VALUES(1)`);
-          });
-          ready();
-          await startGate;
-          try {
-            const query = db.$client.unsafe(`SELECT data_manager.${fn}()`);
-            const eager =
-              method === "execute"
-                ? query.execute()
-                : query.forEach(() => {
-                    callbacks++;
-                  });
-            fluentIdentity = Object.is(eager, query);
-            if (mode === "consume-after-abort") await consumeGate;
-            await eager;
-          } catch (error) {
-            queryRejected = true;
-            throw error;
-          } finally {
-            querySettled = true;
-          }
-          context.signal.throwIfAborted();
-          return { kind: "download-fonts", completed: true };
-        },
-      });
-      let id: string | undefined;
-      try {
-        const deadline = Date.now() + 60000,
-          operationKey = createControlRootOperationKey({
-            notAfter: deadline,
-            nonce: randomBytes(16),
-          });
-        const admitted = await runtime.admit(
-          { kind: "download-fonts" },
-          { operationKey, requestedDeadlineAt: deadline },
-        );
-        id = admitted.id;
-        await readyGate;
-        const held = () => heldTargets(root).includes("data-manager");
-        expect(held()).toBe(true);
-        if (mode === "consume-after-abort") {
-          start();
-          await expect.poll(active, { timeout: 5000 }).toBe(1);
-        }
-        await runtime.requestCancel({ id, operationKey, fingerprint: admitted.fingerprint });
-        start();
-        consume();
-        if (mode === "consume-after-abort") {
-          await expect
-            .poll(
-              async () => {
-                const row = await store.inspect(id!);
-                return {
-                  active: await active(),
-                  querySettled,
-                  cancelPackets: proxy.packets(),
-                  status: row?.status.status,
-                  finished: row?.finishedAt !== null,
-                  fence: held(),
-                };
-              },
-              { timeout: 5000 },
-            )
-            .toEqual({
-              active: 1,
-              querySettled: false,
-              cancelPackets: 1,
-              status: "cancel_pending",
-              finished: false,
-              fence: true,
-            });
-          expect(held()).toBe(true);
-        }
-        proxy.release();
-        await expect.poll(() => querySettled, { timeout: 5000 }).toBe(true);
-        expect(queryRejected).toBe(true);
-        expect(fluentIdentity).toBe(true);
-        unlock();
-        await locker;
-        await expect
-          .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
-          .toBe("canceled");
-        // A direct query behind the eager request on its one real connection is
-        // a completion barrier, so an unobserved late write cannot evade the hit check.
-        await workerRaw`SELECT 1`;
-        expect((await sql.unsafe(`SELECT hits FROM data_manager.${table}`))[0]?.hits).toBe(0);
-        expect((await sql.unsafe(`SELECT value FROM data_manager.${prior}`))[0]?.value).toBe(1);
-        expect(callbacks).toBe(0);
-        // Durable terminal SQL precedes asynchronous physical lease release.
-        // The worker connection's barrier above does not await that release.
-        await expect.poll(held, { timeout: 5000 }).toBe(false);
-      } finally {
-        proxy.release();
-        start();
-        consume();
-        unlock();
-        await locker;
-        await workerRaw`SELECT 1`;
-        await runtime.close();
-        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        await workerRaw.end();
-        await proxy.close();
-        journal.close();
-        control.closeControlInstallation(installation);
-        await sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
-        await sql.unsafe(`DROP TABLE data_manager.${table}`);
-        await sql.unsafe(`DROP TABLE data_manager.${prior}`);
-        await sql.end();
-        rmSync(root, { recursive: true, force: true });
-      }
-    },
-    60000,
-  );
-  it.each([
-    "mapped-held",
-    "mapped-aborted",
-    "values-then",
-    "values-catch",
-    "values-finally",
-    "raw-finally",
-  ] as const)(
-    "contains the actual mapped/fluent query (%s)",
-    async (mode) => {
-      const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
-      if (!url) throw Error("Owned PostgreSQL required");
-      const sql = postgres(url, { max: 8 }),
-        workerSql = withDataSqlCancellation(sql);
-      const { sql: expression } = await import("drizzle-orm");
-      const { pgSchema, integer } = await import("drizzle-orm/pg-core");
-      const db = drizzle(workerSql),
-        suffix = randomUUID().replaceAll("-", ""),
-        tableName = `fix1_query_${suffix}`,
-        fn = `fix1_hit_${suffix}`;
-      const table = pgSchema("data_manager").table(tableName, {
-        id: integer("id"),
-        hits: integer("hits"),
-      });
-      await sql.unsafe(
-        `CREATE TABLE data_manager.${tableName}(id int PRIMARY KEY,hits int NOT NULL)`,
-      );
-      await sql.unsafe(`INSERT INTO data_manager.${tableName} VALUES(1,0)`);
-      await sql.unsafe(
-        `CREATE FUNCTION data_manager.${fn}() RETURNS integer LANGUAGE plpgsql AS $$ BEGIN UPDATE data_manager.${tableName} SET hits=hits+1 WHERE id=1; RETURN 1; END $$`,
-      );
-      const root = mkdtempSync(join(tmpdir(), "omx-fix1-mapped-"));
-      mkdirSync(join(root, "data"), { mode: 0o700 });
-      await control.provisionControlInstallation(root);
-      const installation = control.openControlInstallation({
-        infraDir: root,
-        role: "data-manager",
-        serviceIds: ["data-manager"],
-      });
-      const journal = control.createDataExecutionControlJournal(installation, sql),
-        store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
-      let workerReady = () => {},
-        letQueryStart = () => {},
-        locked = () => {},
-        unlock = () => {};
-      const ready = new Promise<void>((resolve) => {
-          workerReady = resolve;
-        }),
-        start = new Promise<void>((resolve) => {
-          letQueryStart = resolve;
-        });
-      const lockReady = new Promise<void>((resolve) => {
-          locked = resolve;
-        }),
-        lockHeld = new Promise<void>((resolve) => {
-          unlock = resolve;
-        });
-      const locker =
-        mode === "mapped-held"
-          ? sql.begin(async (tx) => {
-              await tx.unsafe(`LOCK TABLE data_manager.${tableName} IN ACCESS EXCLUSIVE MODE`);
-              locked();
-              await lockHeld;
-            })
-          : Promise.resolve();
-      if (mode === "mapped-held") await lockReady;
-      let querySettled = false,
-        queryRejected = false,
-        fluentIdentity = true,
-        finalized = 0;
-      const runtime = createDataExecutionRuntime({
-        store,
-        dispatch: async (_input, context) => {
-          workerReady();
-          await start;
-          try {
-            if (mode.startsWith("mapped")) {
-              await db
-                .select({ seen: expression<number>`data_manager.${expression.identifier(fn)}()` })
-                .from(table);
-            } else {
-              const query = workerSql.unsafe(`SELECT data_manager.${fn}() AS seen`);
-              const fluent = mode === "raw-finally" ? query.raw() : query.values();
-              fluentIdentity = Object.is(fluent, query);
-              if (mode === "values-catch")
-                await fluent.catch((error) => {
-                  throw error;
-                });
-              else if (mode.endsWith("finally"))
-                await fluent.finally(() => {
-                  finalized++;
-                });
-              else await fluent.then((value) => value);
-            }
-          } catch (error) {
-            queryRejected = true;
-            throw error;
-          } finally {
-            querySettled = true;
-          }
-          context.signal.throwIfAborted();
-          return { kind: "download-fonts", completed: true };
-        },
-      });
-      let id: string | undefined;
-      try {
-        const deadline = Date.now() + 60000,
-          key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
-        const admitted = await runtime.admit(
-          { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
-        );
-        id = admitted.id;
-        await ready;
-        if (mode === "mapped-held") {
-          letQueryStart();
-          await expect
-            .poll(
-              async () =>
-                (
-                  await sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${"%" + tableName + "%"} AND wait_event_type='Lock'`
-                )[0]?.count,
-              { timeout: 10000 },
-            )
-            .toBe(1);
-        }
-        await runtime.requestCancel({ id, operationKey: key, fingerprint: admitted.fingerprint });
-        letQueryStart();
-        await expect.poll(() => querySettled, { timeout: 5000 }).toBe(true);
-        expect(queryRejected).toBe(true);
-        expect(fluentIdentity).toBe(true);
-        if (mode.endsWith("finally")) expect(finalized).toBe(1);
-        unlock();
-        await locker;
-        expect((await sql.unsafe(`SELECT hits FROM data_manager.${tableName}`))[0]?.hits).toBe(0);
-        await expect
-          .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
-          .toBe("canceled");
-      } finally {
-        letQueryStart();
-        unlock();
-        await locker;
-        await runtime.close();
-        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-        await sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
-        await sql.unsafe(`DROP TABLE data_manager.${tableName}`);
-        journal.close();
+      }),
+      journal = control.createDataExecutionControlJournal(installation, sql);
+    return {
+      sql,
+      store: createPostgresDataExecutionStore(sql, { controlJournal: journal }),
+      openSql: workerHandles(url, sql),
+      async close() {
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
-      }
-    },
-    60000,
-  );
+      },
+    };
+  }
+  async function admitFonts(runtime: ReturnType<typeof createDataExecutionRuntime>) {
+    const deadline = Date.now() + 60000,
+      operationKey = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
+    const admitted = await runtime.admit(
+      { kind: "download-fonts" },
+      { operationKey, requestedDeadlineAt: deadline },
+    );
+    return { id: admitted.id, operationKey, fingerprint: admitted.fingerprint };
+  }
+  /** The PostgreSQL or driver code a query failed with; Drizzle keeps it on the cause. */
+  const outcome = (query: PromiseLike<unknown>) =>
+    Promise.resolve(query).then(
+      () => "completed",
+      (error: { code?: string; cause?: { code?: string } }) =>
+        error.code ?? error.cause?.code ?? "rejected",
+    );
+
+  it("cancels a running statement through the worker's handle and refuses later queries", async () => {
+    const fixture = await workerFixture("omx-worker-sql-");
+    const marker = `omx_sleep_${randomUUID().replaceAll("-", "")}`;
+    let statement: string | undefined, later: string | undefined;
+    const runtime = createDataExecutionRuntime({
+      store: fixture.store,
+      openSql: fixture.openSql,
+      dispatch: async (_input, context) => {
+        statement = await outcome(context.sql.unsafe(`SELECT pg_sleep(30), '${marker}'`));
+        later = await outcome(context.sql`SELECT 1`);
+        context.signal.throwIfAborted();
+        return { kind: "download-fonts", completed: true };
+      },
+    });
+    const sleeping = async () =>
+      Number(
+        (
+          await fixture.sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${`%${marker}%`} AND state='active' AND pid<>pg_backend_pid()`
+        )[0]?.count,
+      );
+    let id: string | undefined;
+    try {
+      const identity = await admitFonts(runtime);
+      id = identity.id;
+      await expect.poll(sleeping, { timeout: 10000 }).toBe(1);
+      const cancelledAt = Date.now();
+      await runtime.requestCancel(identity);
+      await expect
+        .poll(async () => (await fixture.store.inspect(identity.id))?.status.status, {
+          timeout: 15000,
+        })
+        .toBe("canceled");
+      expect(Date.now() - cancelledAt).toBeLessThan(15000);
+      expect(statement).toBe("57014");
+      expect(later).toBe("CONNECTION_ENDED");
+      expect(await sleeping()).toBe(0);
+      expect((await fixture.store.inspect(identity.id))?.status.publication).toBe("not_started");
+    } finally {
+      await runtime.close();
+      if (id) await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      await fixture.close();
+    }
+  }, 60000);
+  it("cancels the statements a worker queued beyond its connections once they start", async () => {
+    const fixture = await workerFixture("omx-worker-queued-");
+    const marker = `omx_queued_${randomUUID().replaceAll("-", "")}`;
+    let statements: string[] = [];
+    const runtime = createDataExecutionRuntime({
+      store: fixture.store,
+      openSql: fixture.openSql,
+      dispatch: async (_input, context) => {
+        // Six statements on a handle of four connections: two wait for a connection.
+        statements = await Promise.all(
+          Array.from({ length: 6 }, (_, n) =>
+            outcome(context.sql.unsafe(`SELECT pg_sleep(30), '${marker}', ${n}`)),
+          ),
+        );
+        context.signal.throwIfAborted();
+        return { kind: "download-fonts", completed: true };
+      },
+    });
+    const sleeping = async () =>
+      Number(
+        (
+          await fixture.sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${`%${marker}%`} AND state='active' AND pid<>pg_backend_pid()`
+        )[0]?.count,
+      );
+    let id: string | undefined;
+    try {
+      const identity = await admitFonts(runtime);
+      id = identity.id;
+      await expect.poll(sleeping, { timeout: 10000 }).toBe(4);
+      await runtime.requestCancel(identity);
+      await expect
+        .poll(async () => (await fixture.store.inspect(identity.id))?.status.status, {
+          timeout: 15000,
+        })
+        .toBe("canceled");
+      expect(statements).toEqual(Array(6).fill("57014"));
+      expect(await sleeping()).toBe(0);
+    } finally {
+      await runtime.close();
+      if (id) await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      await fixture.close();
+    }
+  }, 60000);
+  it("cancels a Drizzle query on the worker's handle while it waits for a lock", async () => {
+    const fixture = await workerFixture("omx-worker-drizzle-");
+    const suffix = randomUUID().replaceAll("-", ""),
+      tableName = `worker_query_${suffix}`,
+      fn = `worker_hit_${suffix}`;
+    const table = pgSchema("data_manager").table(tableName, {
+      id: integer("id"),
+      hits: integer("hits"),
+    });
+    await fixture.sql.unsafe(
+      `CREATE TABLE data_manager.${tableName}(id int PRIMARY KEY,hits int NOT NULL)`,
+    );
+    await fixture.sql.unsafe(`INSERT INTO data_manager.${tableName} VALUES(1,0)`);
+    await fixture.sql.unsafe(
+      `CREATE FUNCTION data_manager.${fn}() RETURNS integer LANGUAGE plpgsql AS $$ BEGIN UPDATE data_manager.${tableName} SET hits=hits+1 WHERE id=1; RETURN 1; END $$`,
+    );
+    let locked = () => {},
+      unlock = () => {};
+    const lockReady = new Promise<void>((resolve) => {
+        locked = resolve;
+      }),
+      lockHeld = new Promise<void>((resolve) => {
+        unlock = resolve;
+      });
+    const locker = fixture.sql.begin(async (tx) => {
+      await tx.unsafe(`LOCK TABLE data_manager.${tableName} IN ACCESS EXCLUSIVE MODE`);
+      locked();
+      await lockHeld;
+    });
+    await lockReady;
+    let query: string | undefined;
+    const runtime = createDataExecutionRuntime({
+      store: fixture.store,
+      openSql: fixture.openSql,
+      dispatch: async (_input, context) => {
+        query = await outcome(
+          drizzle(context.sql)
+            .select({ seen: expression<number>`data_manager.${expression.identifier(fn)}()` })
+            .from(table),
+        );
+        context.signal.throwIfAborted();
+        return { kind: "download-fonts", completed: true };
+      },
+    });
+    let id: string | undefined;
+    try {
+      const identity = await admitFonts(runtime);
+      id = identity.id;
+      await expect
+        .poll(
+          async () =>
+            (
+              await fixture.sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${`%${tableName}%`} AND wait_event_type='Lock'`
+            )[0]?.count,
+          { timeout: 10000 },
+        )
+        .toBe(1);
+      await runtime.requestCancel(identity);
+      await expect.poll(() => query, { timeout: 5000 }).toBe("57014");
+      unlock();
+      await locker;
+      await expect
+        .poll(async () => (await fixture.store.inspect(identity.id))?.status.status, {
+          timeout: 15000,
+        })
+        .toBe("canceled");
+      expect(
+        (await fixture.sql.unsafe(`SELECT hits FROM data_manager.${tableName}`))[0]?.hits,
+      ).toBe(0);
+    } finally {
+      unlock();
+      await locker;
+      await runtime.close();
+      if (id) await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      await fixture.sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
+      await fixture.sql.unsafe(`DROP TABLE data_manager.${tableName}`);
+      await fixture.close();
+    }
+  }, 60000);
 });

@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "./canonical-json";
 import { OPS_KIND_POLICIES, type OpsOperationKind } from "./contract";
@@ -66,9 +66,15 @@ const futureBudgets: Readonly<Record<string, number>> = {
   "overture-sync": 24 * 3600_000,
   "search-index-build": 24 * 3600_000,
   "notable-places-build": 24 * 3600_000,
-  "generation-hardlinks": 10 * 60_000,
   "configuration-maintenance.prepare": 60_000,
   "transit-maintenance": 120_000,
+  "traffic-live": 15 * 60_000,
+  "traffic-maintenance": 2 * 3600_000,
+  "traffic-predicted": 2 * 3600_000,
+  "transit-proposal": 3600_000,
+  "data-reload": 10 * 60_000,
+  "ambient-publication": 24 * 3600_000,
+  "generation-link": 10 * 60_000,
   "system.update": 48 * 3600_000,
 };
 /** Future policies are budgets only; they register no executable operations. */
@@ -157,29 +163,20 @@ const apiAssertionSchema = z.strictObject({
   requestedDeadlineAt: z.number().int().nonnegative().safe(),
   attemptId: z.uuid(),
 });
-/** Fixed API bearer/HMAC edge only. Role-signed parent/lease verification belongs to 06.1. */
+/** The API job a child operation belongs to, sent by the API over its own authenticated request. */
 const apiParentAssertions = new WeakMap<object, Readonly<z.infer<typeof apiAssertionSchema>>>();
 /** Source observation only: a parsed/restored parent cannot substitute for the
- * exact live API HMAC/body binding verified on this request. */
+ * exact binding verified on this request. */
 export function verifiedApiJobParentBinding(parent: VerifiedParentExecution | undefined) {
   const actual = parent && apiParentAssertions.get(parent);
   if (!actual) throw Error("Actual verified API job parent binding required");
   return actual;
 }
 export function verifyApiJobParentExecution(
-  assertion: string,
-  token: string,
+  payload: string,
   child: { operationKey: string; operationFingerprint: string; requestedDeadlineAt?: number },
 ): VerifiedParentExecution {
-  if (assertion.length > 4096 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(assertion))
-    throw Error("Invalid parent assertion");
-  const [payload, signature] = assertion.split(".") as [string, string];
-  const expected = createHmac("sha256", token)
-    .update("openmapx-api-job-parent-v1\0")
-    .update(payload)
-    .digest();
-  const supplied = Buffer.from(signature, "base64url");
-  if (supplied.length !== expected.length || !timingSafeEqual(expected, supplied))
+  if (payload.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(payload))
     throw Error("Invalid parent assertion");
   const fields = apiAssertionSchema.parse(
     JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(payload, "base64url"))),
@@ -199,7 +196,7 @@ export function verifyApiJobParentExecution(
     fingerprint: fields.parentFingerprint,
     deadlineAt: fields.parentDeadlineAt,
     attemptId: fields.attemptId,
-    assertionDigest: createHash("sha256").update(assertion).digest("hex"),
+    assertionDigest: createHash("sha256").update(payload).digest("hex"),
   });
   verifiedParents.add(parent);
   apiParentAssertions.set(parent, Object.freeze(fields));

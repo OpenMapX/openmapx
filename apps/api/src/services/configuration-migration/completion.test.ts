@@ -7,7 +7,6 @@ const application = {
   enabledServiceIds: ["motis"],
   followUp: "complete" as const,
   cleanupFailed: false,
-  publisherCleanupFailed: false,
   registryUpdateFailed: false,
 };
 describe("migration completion", () => {
